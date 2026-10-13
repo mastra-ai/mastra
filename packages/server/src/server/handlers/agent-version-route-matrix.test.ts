@@ -121,15 +121,20 @@ describe('agent version route matrix', () => {
   });
 
   it('uses the canonical body selector shape for tools and Responses', () => {
-    expect(agentVersionOverridesSchema.safeParse({ self: { label: 'candidate' } }).success).toBe(true);
-    expect(executeAgentToolBodySchema.safeParse({ data: {}, versions: { self: { label: 'candidate' } } }).success).toBe(
+    expect(agentVersionOverridesSchema.safeParse({ agents: { 'stored-agent': { label: 'candidate' } } }).success).toBe(
       true,
     );
+    expect(
+      executeAgentToolBodySchema.safeParse({
+        data: {},
+        versions: { agents: { 'stored-agent': { label: 'candidate' } } },
+      }).success,
+    ).toBe(true);
     expect(
       createResponseBodySchema.safeParse({
         agent_id: 'stored-agent',
         input: 'hello',
-        versions: { self: { label: 'candidate' } },
+        versions: { agents: { 'stored-agent': { label: 'candidate' } } },
       }).success,
     ).toBe(true);
 
@@ -145,7 +150,10 @@ describe('agent version route matrix', () => {
         ? { source: 'build', kind: 'finished', summary: 'done' }
         : { message: 'hello' };
       expect(
-        route!.bodySchema!.safeParse({ ...requiredBody, versions: { self: { label: 'candidate' } } }).success,
+        route!.bodySchema!.safeParse({
+          ...requiredBody,
+          versions: { agents: { 'stored-agent': { label: 'candidate' } } },
+        }).success,
         path,
       ).toBe(true);
     }
@@ -185,8 +193,8 @@ describe('continuation version reconciliation', () => {
   });
 
   it.each([
-    ['label', { self: { label: 'candidate' } }],
-    ['status', { self: { status: 'published' as const } }],
+    ['label', { agents: { 'stored-agent': { label: 'candidate' } } }],
+    ['status', { agents: { 'stored-agent': { status: 'published' as const } } }],
   ])('rejects a mutable %s root selector before loading a run', async (_kind, versions) => {
     const { mastra, getWorkflowRunById } = createWorkflowMastra({});
     const error = await readHttpError(
@@ -198,7 +206,7 @@ describe('continuation version reconciliation', () => {
         error: {
           code: 'INVALID_VERSION_SELECTOR',
           message: 'Continuation root selectors must use an immutable versionId',
-          details: { source: 'versions.self' },
+          details: { source: 'versions.agents.stored-agent' },
         },
       },
     });
@@ -214,7 +222,6 @@ describe('continuation version reconciliation', () => {
         agentId: 'stored-agent',
         runId: 'run-1',
         versions: {
-          self: { versionId: 'version-1' },
           agents: { 'stored-agent': { versionId: 'version-1' } },
         },
       }),
@@ -298,7 +305,7 @@ describe('continuation version reconciliation', () => {
         mastra,
         agentId: 'stored-agent',
         runId: 'legacy-run',
-        versions: { self: { versionId: 'root-v1' } },
+        versions: { agents: { 'stored-agent': { versionId: 'root-v1' } } },
       }),
     ).resolves.toMatchObject({
       versionOptions: { versionId: 'root-v1' },
@@ -331,7 +338,7 @@ describe('continuation version reconciliation', () => {
         mastra,
         agentId: 'stored-agent',
         runId: 'run-1',
-        versions: { self: { versionId: 'version-2' } },
+        versions: { agents: { 'stored-agent': { versionId: 'version-2' } } },
       }),
     );
     expect(error).toEqual({
@@ -351,7 +358,7 @@ describe('continuation version reconciliation', () => {
     });
   });
 
-  it('rejects disagreeing continuation root sources before loading the run', async () => {
+  it('rejects the removed self selector before loading the run', async () => {
     const { mastra, getWorkflowRunById } = createWorkflowMastra({});
     const error = await readHttpError(
       resolveContinuationVersioning({
@@ -369,8 +376,8 @@ describe('continuation version reconciliation', () => {
       body: {
         error: {
           code: 'INVALID_VERSION_SELECTOR',
-          message: 'Version selector sources disagree',
-          details: { sources: ['versions.self', 'versions.agents.stored-agent'] },
+          message: 'Use versions.agents[agentId] instead of versions.self',
+          details: { source: 'versions' },
         },
       },
     });
@@ -399,7 +406,7 @@ describe('continuation version reconciliation', () => {
         mastra,
         agentId: 'stored-agent',
         runId: 'run-1',
-        versions: { self: { versionId: 'version-1' } },
+        versions: { agents: { 'stored-agent': { versionId: 'version-1' } } },
       }),
     );
     expect(error).toEqual({

@@ -95,8 +95,7 @@ function versionSelectorsEqual(left: AgentVersionIdentifier, right: AgentVersion
   return 'status' in left && 'status' in right && right.status === left.status;
 }
 
-function versionSelectorConflict(): MastraClientError {
-  const message = 'Agent version selector sources conflict.';
+function versionSelectorConflict(message = 'Agent version selector sources conflict.'): MastraClientError {
   const body: VersionLabelApiError = {
     error: {
       code: 'INVALID_VERSION_SELECTOR',
@@ -118,38 +117,51 @@ function invalidResolvedVersionContinuation(): never {
   throw new Error('The server returned invalid resolved agent version continuation metadata');
 }
 
-function getResolvedVersionOverrides(response: unknown): ResolvedVersionContinuation | undefined {
-  const value = (response as { resolvedVersionOverrides?: unknown } | undefined)?.resolvedVersionOverrides;
-  if (value === undefined) return undefined;
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return invalidResolvedVersionContinuation();
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
 
-  const input = value as Record<string, unknown>;
-  const self = input.self as { versionId?: unknown } | undefined;
-  if (
-    self !== undefined &&
-    (!self || typeof self !== 'object' || typeof self.versionId !== 'string' || !self.versionId)
-  ) {
+function getResolvedVersionOverrides(response: unknown, rootAgentId: string): ResolvedVersionContinuation | undefined {
+  const value = isRecord(response) ? response.resolvedVersionOverrides : undefined;
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) return invalidResolvedVersionContinuation();
+
+  const input = value;
+  if (input.self !== undefined || input.defaultLabel !== undefined) {
     return invalidResolvedVersionContinuation();
   }
-  const selfVersionId = self?.versionId;
   const agentsInput = input.agents;
-  if (agentsInput !== undefined && (!agentsInput || typeof agentsInput !== 'object' || Array.isArray(agentsInput))) {
+  if (agentsInput !== undefined && !isRecord(agentsInput)) {
     return invalidResolvedVersionContinuation();
   }
-  const agents: Record<string, { versionId: string }> = {};
-  for (const [agentId, selector] of Object.entries((agentsInput as Record<string, unknown> | undefined) ?? {})) {
-    const versionId = (selector as { versionId?: unknown } | undefined)?.versionId;
-    if (typeof versionId !== 'string' || !versionId) return invalidResolvedVersionContinuation();
-    agents[agentId] = { versionId };
+  const agentEntries: [string, { versionId: string }][] = [];
+  for (const [agentId, selector] of Object.entries(agentsInput ?? {})) {
+    if (
+      !agentId ||
+      !isRecord(selector) ||
+      typeof selector.versionId !== 'string' ||
+      !selector.versionId ||
+      selector.label !== undefined ||
+      selector.status !== undefined
+    ) {
+      return invalidResolvedVersionContinuation();
+    }
+    agentEntries.push([agentId, { versionId: selector.versionId }]);
   }
+  const agents = Object.fromEntries(agentEntries);
   const defaultStatus = input.defaultStatus;
   if (defaultStatus !== undefined && defaultStatus !== 'draft' && defaultStatus !== 'published') {
     return invalidResolvedVersionContinuation();
   }
   const rootUnversioned = input.rootUnversioned;
   const versionContinuationToken = input.versionContinuationToken;
-  if (selfVersionId) {
-    if (rootUnversioned !== undefined || versionContinuationToken !== undefined) {
+  if (
+    versionContinuationToken !== undefined &&
+    (typeof versionContinuationToken !== 'string' || !versionContinuationToken)
+  ) {
+    return invalidResolvedVersionContinuation();
+  }
+  if (Object.hasOwn(agents, rootAgentId)) {
+    if (rootUnversioned !== undefined) {
       return invalidResolvedVersionContinuation();
     }
   } else if (rootUnversioned !== true || typeof versionContinuationToken !== 'string' || !versionContinuationToken) {
@@ -159,23 +171,27 @@ function getResolvedVersionOverrides(response: unknown): ResolvedVersionContinua
   }
 
   const resolved: VersionOverrides = {
-    ...(typeof selfVersionId === 'string' ? { self: { versionId: selfVersionId } } : {}),
     ...(Object.keys(agents).length > 0 ? { agents } : {}),
     ...(defaultStatus ? { defaultStatus } : {}),
   };
-  if (Object.keys(resolved).length === 0) return invalidResolvedVersionContinuation();
   return {
     versions: resolved,
     ...(typeof versionContinuationToken === 'string' ? { versionContinuationToken } : {}),
   };
 }
 
-function getResolvedVersionOverridesFromHeaders(headers: Headers): ResolvedVersionContinuation | undefined {
+function getResolvedVersionOverridesFromHeaders(
+  headers: Headers,
+  rootAgentId: string,
+): ResolvedVersionContinuation | undefined {
   const encoded = headers.get(RESOLVED_VERSION_OVERRIDES_HEADER);
   if (!encoded) return undefined;
 
   try {
-    return getResolvedVersionOverrides({ resolvedVersionOverrides: JSON.parse(decodeURIComponent(encoded)) });
+    return getResolvedVersionOverrides(
+      { resolvedVersionOverrides: JSON.parse(decodeURIComponent(encoded)) },
+      rootAgentId,
+    );
   } catch {
     return invalidResolvedVersionContinuation();
   }
@@ -185,9 +201,10 @@ function getResolvedVersionOverridesFromHeaders(headers: Headers): ResolvedVersi
 function pinRecursiveVersionOptions<T extends { requestContext?: RequestContext | Record<string, any> }>(
   params: T,
   response: unknown,
+  rootAgentId: string,
   markAsTrustedResourceContinuation = true,
 ): T {
-  const resolved = getResolvedVersionOverrides(response);
+  const resolved = getResolvedVersionOverrides(response, rootAgentId);
   if (!resolved) return params;
 
   return pinRecursiveResolvedVersionOptions(params, resolved, markAsTrustedResourceContinuation);
@@ -456,7 +473,7 @@ async function executeToolCallAndRespond<OUTPUT>({
           ? newMessages
           : [...(Array.isArray(params.messages) ? params.messages : []), ...newMessages];
 
-        const pinnedParams = pinRecursiveVersionOptions(params, response);
+        const pinnedParams = pinRecursiveVersionOptions(params, response, agentId);
         const respondOptions: StreamParamsBaseWithoutMessages<OUTPUT> & {
           structuredOutput?: StructuredOutputOptions<OUTPUT>;
         } = {
@@ -592,36 +609,30 @@ export class Agent extends BaseResource {
       versions?: VersionOverrides;
       [TRUSTED_RECURSIVE_VERSION_OVERRIDES]?: true;
     };
+    if (versionedParams.versions && 'self' in versionedParams.versions) {
+      throw versionSelectorConflict('versions.self is no longer supported. Use versions.agents[agentId] instead.');
+    }
     if (versionedParams[TRUSTED_RECURSIVE_VERSION_OVERRIDES]) {
       const recursiveParams = { ...versionedParams };
       delete recursiveParams[TRUSTED_RECURSIVE_VERSION_OVERRIDES];
       return recursiveParams;
     }
 
-    const callSelector = versionedParams.versions?.self;
     const rootMapSelector = versionedParams.versions?.agents?.[this.agentId];
-    const selectedSelector = this.version ?? callSelector ?? rootMapSelector;
+    const selectedSelector = this.version ?? rootMapSelector;
     if (!selectedSelector) return params;
 
     if (
-      [this.version, callSelector, rootMapSelector].some(
-        selector => selector && !versionSelectorsEqual(selectedSelector, selector),
-      )
+      [this.version, rootMapSelector].some(selector => selector && !versionSelectorsEqual(selectedSelector, selector))
     ) {
       throw versionSelectorConflict();
     }
 
-    const { agents: suppliedAgents, ...versionPolicy } = versionedParams.versions ?? {};
-    const dependencyAgents = suppliedAgents
-      ? Object.fromEntries(Object.entries(suppliedAgents).filter(([agentId]) => agentId !== this.agentId))
-      : undefined;
-
     return {
       ...params,
       versions: {
-        ...versionPolicy,
-        ...(dependencyAgents && Object.keys(dependencyAgents).length > 0 ? { agents: dependencyAgents } : {}),
-        self: selectedSelector,
+        ...versionedParams.versions,
+        agents: { ...versionedParams.versions?.agents, [this.agentId]: selectedSelector },
       },
     } as T;
   }
@@ -1518,7 +1529,7 @@ export class Agent extends BaseResource {
           // Recursive call to generateLegacy with updated messages
           // Using type assertion to handle the complex overload types
           return (this.generateLegacy as any)({
-            ...pinRecursiveVersionOptions(params, response),
+            ...pinRecursiveVersionOptions(params, response, this.agentId),
             messages: updatedMessages,
           });
         }
@@ -2538,7 +2549,7 @@ export class Agent extends BaseResource {
     try {
       let messages: UIMessage[] = [];
       let streamRunId: string | undefined = processedParams.runId;
-      let resolvedVersionOverrides = getResolvedVersionOverridesFromHeaders(response.headers);
+      let resolvedVersionOverrides = getResolvedVersionOverridesFromHeaders(response.headers, this.agentId);
 
       // Use tee() to split the stream into two branches
       const [streamForController, streamForProcessing] = response.body.tee();
@@ -2866,7 +2877,8 @@ export class Agent extends BaseResource {
         onStreamChunk: chunk => {
           if (chunk.type === 'resolved-version-overrides') {
             resolvedVersionOverrides =
-              getResolvedVersionOverrides({ resolvedVersionOverrides: chunk.payload }) ?? resolvedVersionOverrides;
+              getResolvedVersionOverrides({ resolvedVersionOverrides: chunk.payload }, this.agentId) ??
+              resolvedVersionOverrides;
           }
           if (!streamRunId && typeof chunk.runId === 'string') {
             streamRunId = chunk.runId;
@@ -3760,7 +3772,7 @@ export class Agent extends BaseResource {
       throw new Error('No response body');
     }
 
-    const resolvedVersionOverrides = getResolvedVersionOverridesFromHeaders(response.headers);
+    const resolvedVersionOverrides = getResolvedVersionOverridesFromHeaders(response.headers, this.agentId);
 
     try {
       let toolCalls: ToolInvocation[] = [];

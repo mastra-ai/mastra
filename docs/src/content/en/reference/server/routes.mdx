@@ -53,7 +53,7 @@ GET /api/agents/my-agent?versionId=abc123
 GET /api/agents/my-agent?label=candidate
 ```
 
-Combining `status`, `versionId`, and `label` returns `INVALID_VERSION_SELECTOR`. Other JSON execution routes accept the root selector through `versions.self` in the request body instead of query parameters. See [Editor versioning](/reference/editor/versioning#select-an-agent-version) for selector behavior and the public error envelope.
+Combining `status`, `versionId`, and `label` returns `INVALID_VERSION_SELECTOR`. Other JSON execution routes accept the root selector through `versions.agents[agentId]` in the request body instead of query parameters. See [Editor versioning](/reference/editor/versioning#select-an-agent-version) for selector behavior and the public error envelope.
 
 ### Generate request body
 
@@ -73,16 +73,16 @@ Combining `status`, `versionId`, and `label` returns `INVALID_VERSION_SELECTOR`.
   requestContext?: Record<string, unknown>; // Request context
   output?: ZodSchema;                      // Structured output schema
   versions?: {
-    self?: { versionId: string } | { label: string } | { status: 'draft' | 'published' };
+    defaultLabel?: string;
     agents?: Record<string, { versionId: string } | { label: string } | { status: 'draft' | 'published' }>;
     defaultStatus?: 'draft' | 'published';
   };
 }
 ```
 
-`versions.self` selects the root agent for this execution only. `versions.agents` selects delegated sub-agents. If a query selector and `versions.self` are both present, they must identify the same target.
+`versions.agents[agentId]` selects an individual agent, including the root. If a query selector and an explicit root entry are both present, they must identify the same target. `versions.defaultLabel` selects a label across the configured agent graph. Per-agent entries take precedence over `defaultLabel`, followed by `defaultStatus` and the existing system default. A root-only selector doesn't change sub-agent defaults.
 
-New executions resolve these selectors once and record immutable root and explicit sub-agent version IDs with the run. Resume, approval, retry, and recovery routes consume those pins instead of looking up a label again. They reject mutable `label` or `status` selectors with `INVALID_VERSION_SELECTOR` and a different exact ID with `PINNED_VERSION_CONFLICT`. Repeating the pinned `versionId` is allowed.
+New executions resolve these selectors once and record immutable root and sub-agent version IDs with the run. Resume, approval, retry, and recovery routes consume those pins instead of looking up a label again. They reject mutable `label`, `defaultLabel`, or `status` selectors with `INVALID_VERSION_SELECTOR` and a different exact ID with `PINNED_VERSION_CONFLICT`. Repeating the pinned `versionId` is allowed.
 
 ### Generate response
 

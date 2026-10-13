@@ -40,12 +40,15 @@ import type { Context } from '../types';
 import { convertInstructionsToString } from '../utils';
 import {
   AGENT_VERSION_PINS_CONTEXT_KEY,
-  ensureDefaultVersionStatus,
+  freezeCallerVersionOverrides,
   getAgentForContinuation,
   getAgentFromSystem,
   normalizeRequestContextVersionOverrides,
   parseVersionSelector,
+  parseResolvedAgentIds,
   replaceVersionOverrides,
+  resolveExecutionVersioning,
+  stashVersionOverrides,
 } from './agents';
 import { getPublicOrigin } from './auth';
 import {
@@ -64,6 +67,7 @@ type A2AAgentVersionPins = {
   root?: A2AAgentVersionSelection;
   agents?: Record<string, A2AAgentVersionSelection>;
   defaultStatus?: 'draft' | 'published';
+  resolvedAgentIds?: string[];
 };
 
 function parseA2AAgentVersionPins(value: unknown, ownerAgentId: string): A2AAgentVersionPins | undefined {
@@ -121,13 +125,21 @@ function parseA2AAgentVersionPins(value: unknown, ownerAgentId: string): A2AAgen
         parseSelection(selection, agentId),
       ]),
     );
-    if (agents[ownerAgentId]) {
+    if (
+      agents[ownerAgentId] &&
+      (!root ||
+        agents[ownerAgentId].versionId !== root.versionId ||
+        (agents[ownerAgentId].selectedLabel &&
+          root.selectedLabel &&
+          agents[ownerAgentId].selectedLabel !== root.selectedLabel))
+    ) {
       throw createVersionLabelApiError(
         'VERSION_LABEL_INTEGRITY_ERROR',
         'The stored A2A task contains its root agent in dependency version pins.',
         { agentId: ownerAgentId },
       );
     }
+    delete agents[ownerAgentId];
   }
   if (input.defaultStatus !== undefined && input.defaultStatus !== 'draft' && input.defaultStatus !== 'published') {
     throw createVersionLabelApiError(
@@ -138,7 +150,18 @@ function parseA2AAgentVersionPins(value: unknown, ownerAgentId: string): A2AAgen
   }
   const defaultStatus =
     input.defaultStatus === 'draft' || input.defaultStatus === 'published' ? input.defaultStatus : undefined;
-  if (!root && (!agents || Object.keys(agents).length === 0) && !defaultStatus) {
+  const resolvedAgentIds = parseResolvedAgentIds(input.resolvedAgentIds);
+  if (
+    resolvedAgentIds &&
+    ((root && !resolvedAgentIds.includes(root.agentId)) ||
+      Object.keys(agents ?? {}).some(id => !resolvedAgentIds.includes(id)))
+  ) {
+    throw createVersionLabelApiError(
+      'VERSION_LABEL_INTEGRITY_ERROR',
+      'The stored A2A task contains pins outside its resolved graph.',
+    );
+  }
+  if (!root && (!agents || Object.keys(agents).length === 0) && !defaultStatus && !resolvedAgentIds) {
     throw createVersionLabelApiError(
       'VERSION_LABEL_INTEGRITY_ERROR',
       'The stored A2A task contains invalid agent version pins.',
@@ -149,6 +172,7 @@ function parseA2AAgentVersionPins(value: unknown, ownerAgentId: string): A2AAgen
     ...(root ? { root } : {}),
     ...(agents && Object.keys(agents).length > 0 ? { agents } : {}),
     ...(defaultStatus ? { defaultStatus } : {}),
+    ...(resolvedAgentIds ? { resolvedAgentIds } : {}),
   };
 }
 
@@ -1285,6 +1309,7 @@ function getTaskArtifactUpdates({ previous, next }: { previous: Task; next: Task
 }
 
 async function executeMessageSend({
+  versions,
   requestId,
   message,
   currentData,
@@ -1296,6 +1321,7 @@ async function executeMessageSend({
   requestContext,
   resume,
 }: {
+  versions?: ReturnType<typeof freezeCallerVersionOverrides>;
   requestId: number | string;
   message: MessageSendParams['message'];
   currentData: Task;
@@ -1319,6 +1345,7 @@ async function executeMessageSend({
           requestContext,
         })
       : await agent.generate([convertToCoreMessage(message)], {
+          versions,
           runId: currentData.id,
           requestContext,
           memory,
@@ -1439,6 +1466,7 @@ async function executeMessageSend({
 }
 
 export async function handleMessageSend({
+  versions,
   requestId,
   params,
   taskStore,
@@ -1449,6 +1477,7 @@ export async function handleMessageSend({
   logger,
   requestContext,
 }: {
+  versions?: ReturnType<typeof freezeCallerVersionOverrides>;
   requestId: number | string;
   params: MessageSendParams;
   taskStore: InMemoryTaskStore;
@@ -1532,6 +1561,7 @@ export async function handleMessageSend({
   });
 
   const execution = executeMessageSend({
+    versions,
     requestId,
     message,
     currentData,
@@ -1770,6 +1800,7 @@ export async function handleDeleteTaskPushNotificationConfig({
 }
 
 export async function* handleMessageStream({
+  versions,
   requestId,
   params,
   taskStore,
@@ -1781,6 +1812,7 @@ export async function* handleMessageStream({
   requestContext,
   abortSignal,
 }: {
+  versions?: ReturnType<typeof freezeCallerVersionOverrides>;
   requestId: number | string;
   params: MessageSendParams;
   taskStore: InMemoryTaskStore;
@@ -1888,6 +1920,7 @@ export async function* handleMessageStream({
           abortSignal: taskAbortController.signal,
         })
       : await agent.stream([convertToCoreMessage(message)], {
+          versions,
           runId: taskId,
           requestContext,
           abortSignal: taskAbortController.signal,
@@ -2417,9 +2450,7 @@ async function getAgentForA2ATaskContinuation({
 }): Promise<Agent | undefined> {
   const pins = parseA2AAgentVersionPins(taskStore.getAgentVersionPins({ agentId, taskId }), agentId);
   const contextVersions = normalizeRequestContextVersionOverrides(requestContext);
-  const rootSelectors = [versionOptions, contextVersions?.self, contextVersions?.agents?.[agentId]].filter(
-    selector => selector !== undefined,
-  );
+  const rootSelectors = [versionOptions, contextVersions?.agents?.[agentId]].filter(selector => selector !== undefined);
   if (rootSelectors.some(selector => !('versionId' in selector))) {
     throw createVersionLabelApiError(
       'INVALID_VERSION_SELECTOR',
@@ -2428,6 +2459,13 @@ async function getAgentForA2ATaskContinuation({
     );
   }
   const requestedRootVersionIds = rootSelectors.map(selector => ('versionId' in selector ? selector.versionId : ''));
+  if (contextVersions?.defaultLabel !== undefined) {
+    throw createVersionLabelApiError(
+      'PINNED_VERSION_CONFLICT',
+      'A2A task continuations cannot select a mutable default label.',
+      { agentId, taskId },
+    );
+  }
   if (new Set(requestedRootVersionIds).size > 1) {
     throw createVersionLabelApiError(
       'INVALID_VERSION_SELECTOR',
@@ -2466,7 +2504,7 @@ async function getAgentForA2ATaskContinuation({
       versionOptions: { versionId: requestedVersionId },
       requestContext,
     });
-    ensureDefaultVersionStatus(requestContext, { versionId: requestedVersionId });
+    stashVersionOverrides(requestContext, { agents: { [agentId]: { versionId: requestedVersionId } } }, agent);
     return agent;
   }
 
@@ -2530,6 +2568,8 @@ async function getAgentForA2ATaskContinuation({
         }
       : undefined,
   );
+  requestContext.set(AGENT_VERSION_PINS_CONTEXT_KEY, pins);
+  requestContext.set('mastra__agentVersionPinsDelegated', true);
   return getAgentFromSystem({
     mastra,
     agentId,
@@ -2593,7 +2633,7 @@ export async function getAgentExecutionHandler({
         mastra,
         agentId,
         runId: continuationRunId,
-        versions: versionOptions ? { self: versionOptions } : undefined,
+        versions: versionOptions ? { agents: { [agentId]: versionOptions } } : undefined,
         requestContext,
       }));
     } else if (existingTask) {
@@ -2607,11 +2647,12 @@ export async function getAgentExecutionHandler({
       });
       if (!agent) {
         agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext });
-        ensureDefaultVersionStatus(requestContext, versionOptions);
+        stashVersionOverrides(requestContext, undefined, agent);
       }
     } else {
-      agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext });
-      ensureDefaultVersionStatus(requestContext, versionOptions);
+      const execution = resolveExecutionVersioning({ mastra, agentId, query: versionOptions, requestContext });
+      agent = await getAgentFromSystem({ mastra, agentId, versionOptions: execution.versionOptions, requestContext });
+      stashVersionOverrides(requestContext, execution.delegatedVersions, agent);
     }
   }
   const {
@@ -2631,6 +2672,7 @@ export async function getAgentExecutionHandler({
     switch (method) {
       case 'message/send': {
         const result = await handleMessageSend({
+          versions: freezeCallerVersionOverrides(agent!, undefined, versionOptions),
           requestId,
           params: protocolParams as MessageSendParams,
           taskStore,
@@ -2645,6 +2687,7 @@ export async function getAgentExecutionHandler({
       }
       case 'message/stream': {
         const result = await handleMessageStream({
+          versions: freezeCallerVersionOverrides(agent!, undefined, versionOptions),
           requestId,
           taskStore,
           params: protocolParams as MessageSendParams,

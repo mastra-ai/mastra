@@ -185,8 +185,7 @@ describe('Responses Resource', () => {
       store: false,
     });
     const versions: VersionOverrides = {
-      self: { label: 'pr-101' },
-      agents: { researcher: { versionId: 'researcher-v2' } },
+      agents: { 'support-agent': { label: 'pr-101' }, researcher: { versionId: 'researcher-v2' } },
       defaultStatus: 'draft',
     };
     const params: CreateResponseParams = {

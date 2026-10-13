@@ -40,6 +40,7 @@ export type ResponseAgentVersionPins = {
   root?: ResponseAgentVersionSelection;
   agents?: Record<string, ResponseAgentVersionSelection>;
   defaultStatus?: 'draft' | 'published';
+  resolvedAgentIds?: string[];
 };
 
 export type ResponseTurnRecordMetadata = {
@@ -129,12 +130,42 @@ export function parseResponseAgentVersionPins(value: unknown): ResponseAgentVers
       agents[agentId] = selection;
     }
   }
+  if (root && agents?.[root.agentId]) {
+    const duplicate = agents[root.agentId]!;
+    if (
+      root.versionId !== duplicate.versionId ||
+      (root.selectedLabel && duplicate.selectedLabel && root.selectedLabel !== duplicate.selectedLabel)
+    )
+      return null;
+    delete agents[root.agentId];
+  }
 
-  if (!root && (!agents || Object.keys(agents).length === 0) && value.defaultStatus === undefined) {
+  let resolvedAgentIds: string[] | undefined;
+  if (value.resolvedAgentIds !== undefined) {
+    if (
+      !Array.isArray(value.resolvedAgentIds) ||
+      value.resolvedAgentIds.length === 0 ||
+      !value.resolvedAgentIds.every(id => typeof id === 'string' && id.length > 0)
+    )
+      return null;
+    resolvedAgentIds = [...new Set(value.resolvedAgentIds)].sort();
+    if (
+      (root && !resolvedAgentIds.includes(root.agentId)) ||
+      Object.keys(agents ?? {}).some(id => !resolvedAgentIds!.includes(id))
+    )
+      return null;
+  }
+  if (
+    !root &&
+    (!agents || Object.keys(agents).length === 0) &&
+    value.defaultStatus === undefined &&
+    !resolvedAgentIds
+  ) {
     return null;
   }
   return {
     ...(root ? { root } : {}),
+    ...(resolvedAgentIds ? { resolvedAgentIds } : {}),
     ...(agents && Object.keys(agents).length > 0 ? { agents } : {}),
     ...(value.defaultStatus === 'draft' || value.defaultStatus === 'published'
       ? { defaultStatus: value.defaultStatus }

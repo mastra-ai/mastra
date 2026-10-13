@@ -23,7 +23,6 @@ import { agentVersionOverridesSchema } from '../schemas/agents';
 import { filterSchema, includeSchema, messageOrderBySchema } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import {
-  ensureDefaultVersionStatus,
   getAgentFromSystem,
   normalizeRequestContextVersionOverrides,
   normalizeVersionOverrides,
@@ -176,11 +175,12 @@ async function prepareControllerExecutionContext({
   }
 
   const { versionOptions: explicitRoot, delegatedVersions } = resolveExecutionVersioning({
+    mastra,
     agentId: currentAgent.id,
     versions: normalized,
     requestContext: executionContext,
   });
-  const resolutionSelector = explicitRoot ?? { status: delegatedVersions?.defaultStatus ?? 'published' };
+  const resolutionSelector = explicitRoot;
   const resolvedAgent = await getAgentFromSystem({
     mastra,
     agentId: currentAgent.id,
@@ -189,12 +189,18 @@ async function prepareControllerExecutionContext({
   });
   const resolvedVersionId = resolvedAgent.toRawConfig()?.resolvedVersionId;
   let executionVersions = delegatedVersions;
-  if (typeof resolvedVersionId === 'string' && resolvedVersionId.length > 0) {
-    executionVersions = { ...executionVersions, self: { versionId: resolvedVersionId } };
+  if (
+    typeof resolvedVersionId === 'string' &&
+    resolvedVersionId.length > 0 &&
+    executionVersions?.agents?.[currentAgent.id]
+  ) {
+    executionVersions = {
+      ...executionVersions,
+      agents: { ...executionVersions?.agents, [currentAgent.id]: { versionId: resolvedVersionId } },
+    };
   }
 
-  stashVersionOverrides(executionContext, executionVersions);
-  ensureDefaultVersionStatus(executionContext, explicitRoot ?? resolutionSelector);
+  stashVersionOverrides(executionContext, executionVersions, resolvedAgent);
   return executionContext;
 }
 

@@ -142,8 +142,7 @@ describe('Agent signal routes', () => {
         ifIdle: expect.objectContaining({
           streamOptions: expect.objectContaining({
             versions: {
-              self: { label: 'pr-101' },
-              agents: { researcher: { versionId: 'researcher-v2' } },
+              agents: { 'test-agent': { label: 'pr-101' }, researcher: { versionId: 'researcher-v2' } },
               defaultStatus: 'draft',
             },
           }),
@@ -848,14 +847,12 @@ describe('Agent signal routes', () => {
           },
           maxSteps: 3,
           versions: {
-            self: { label: 'candidate' },
-            agents: { researcher: { label: 'candidate' } },
+            agents: { 'test-agent': { label: 'candidate' }, researcher: { label: 'candidate' } },
           },
           requestContext: {
             tenantId: 'tenant-1',
             mastra__versions: {
-              self: { label: 'candidate' },
-              agents: { researcher: { label: 'candidate' } },
+              agents: { 'test-agent': { label: 'candidate' }, researcher: { label: 'candidate' } },
             },
           },
         },
@@ -922,7 +919,7 @@ describe('Agent signal routes', () => {
       threadId: 'thread-resolver',
       ifIdle: {
         streamOptions: {
-          versions: { self: { label: 'candidate' } },
+          versions: { agents: { 'test-agent': { label: 'candidate' } } },
           clientTools: staleClientTools,
           clientToolsResolver,
         },
@@ -933,7 +930,7 @@ describe('Agent signal routes', () => {
     const signalBody = (mockRequest.mock.calls[0] as any[])[1].body;
     expect(signalBody.ifIdle.streamOptions.clientToolsResolver).toBeUndefined();
     expect(signalBody.ifIdle.streamOptions.clientTools).toEqual(processClientTools(freshClientTools as any));
-    expect(signalBody.ifIdle.streamOptions.versions).toEqual({ self: { label: 'candidate' } });
+    expect(signalBody.ifIdle.streamOptions.versions).toEqual({ agents: { 'test-agent': { label: 'candidate' } } });
 
     const subscribed = await agent.subscribeToThread({
       resourceId: 'resource-resolver',
@@ -2223,6 +2220,7 @@ describe('Agent Voice Resource', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    global.fetch = vi.fn();
     client = new MastraClient(clientOptions);
     agent = client.getAgent('test-agent');
   });
@@ -2266,27 +2264,25 @@ describe('Agent Voice Resource', () => {
 
     await versionedAgent.generate('hello', {
       versions: {
-        self: { label: 'pr-101' },
-        agents: { researcher: { versionId: 'researcher-v2' } },
+        agents: { 'test-agent': { label: 'pr-101' }, researcher: { versionId: 'researcher-v2' } },
         defaultStatus: 'draft',
       },
     } as any);
 
     const body = JSON.parse((global.fetch as any).mock.calls[0][1].body);
     expect(body.versions).toEqual({
-      self: { label: 'pr-101' },
-      agents: { researcher: { versionId: 'researcher-v2' } },
+      agents: { 'test-agent': { label: 'pr-101' }, researcher: { versionId: 'researcher-v2' } },
       defaultStatus: 'draft',
     });
   });
 
-  it('should normalize an identical legacy root-map selector into versions.self', async () => {
+  it('preserves graph defaults while merging an explicit resource selector into the root agent map', async () => {
     const versionedAgent = client.getAgent('test-agent', { label: 'pr-101' });
     mockFetchResponse({ finishReason: 'stop' });
 
     await versionedAgent.generate('hello', {
       versions: {
-        self: { label: 'pr-101' },
+        defaultLabel: 'candidate',
         agents: {
           'test-agent': { label: 'pr-101' },
           researcher: { versionId: 'researcher-v2' },
@@ -2296,18 +2292,17 @@ describe('Agent Voice Resource', () => {
 
     const body = JSON.parse((global.fetch as any).mock.calls[0][1].body);
     expect(body.versions).toEqual({
-      self: { label: 'pr-101' },
-      agents: { researcher: { versionId: 'researcher-v2' } },
+      defaultLabel: 'candidate',
+      agents: { 'test-agent': { label: 'pr-101' }, researcher: { versionId: 'researcher-v2' } },
     });
   });
 
-  it('should reject a conflicting legacy root-map selector before sending', async () => {
-    const agent = client.getAgent('test-agent');
+  it('should reject a conflicting explicit root-map selector before sending', async () => {
+    const agent = client.getAgent('test-agent', { versionId: 'version-1' });
 
     await expect(
       agent.generate('hello', {
         versions: {
-          self: { versionId: 'version-1' },
           agents: { 'test-agent': { versionId: 'version-2' } },
         },
       } as any),
@@ -2323,7 +2318,7 @@ describe('Agent Voice Resource', () => {
 
     await expect(
       versionedAgent.generate('hello', {
-        versions: { self: { versionId: 'version-2' } },
+        versions: { agents: { 'test-agent': { versionId: 'version-2' } } },
       } as any),
     ).rejects.toMatchObject({
       status: 400,
@@ -2333,6 +2328,15 @@ describe('Agent Voice Resource', () => {
         },
       },
     } satisfies Partial<MastraClientError>);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects the removed self selector from an untyped caller instead of silently falling back', async () => {
+    const versions = { defaultStatus: 'published' as const, self: { label: 'candidate' } };
+    await expect(client.getAgent('test-agent').generate('hello', { versions })).rejects.toMatchObject({
+      status: 400,
+      body: { error: { code: 'INVALID_VERSION_SELECTOR' } },
+    });
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
@@ -2347,8 +2351,7 @@ describe('Agent Voice Resource', () => {
       data: { city: 'Lagos' },
       requestContext: { tenantId: 'tenant-1' },
       versions: {
-        self: { label: 'pr-101' },
-        agents: { researcher: { versionId: 'researcher-v2' } },
+        agents: { 'test-agent': { label: 'pr-101' }, researcher: { versionId: 'researcher-v2' } },
         defaultStatus: 'draft',
       },
     });
@@ -2359,8 +2362,7 @@ describe('Agent Voice Resource', () => {
       data: { city: 'Lagos' },
       requestContext: { tenantId: 'tenant-1' },
       versions: {
-        self: { label: 'pr-101' },
-        agents: { researcher: { versionId: 'researcher-v2' } },
+        agents: { 'test-agent': { label: 'pr-101' }, researcher: { versionId: 'researcher-v2' } },
         defaultStatus: 'draft',
       },
     });
@@ -3106,47 +3108,48 @@ describe('Agent - Storage Duplicate Messages Issue', () => {
     expect(messagesInSecondCall[1].role).toBe('tool');
   });
 
-  it('pins generate client-tool turns to the server-resolved root and dependency versions', async () => {
-    const clientTool = createTool({
-      id: 'clientTool',
-      description: 'A client-side tool',
-      execute: vi.fn().mockResolvedValue('Tool result'),
-      inputSchema: undefined,
-    });
-    const resolvedVersionOverrides = {
-      self: { versionId: 'root-v1' },
-      agents: { researcher: { versionId: 'researcher-v1' } },
-      defaultStatus: 'published',
-    };
-    mockRequest
-      .mockResolvedValueOnce({
-        finishReason: 'tool-calls',
-        resolvedVersionOverrides,
-        toolCalls: [{ payload: { toolName: 'clientTool', args: {}, toolCallId: 'tool-1' } }],
-        response: { messages: [{ role: 'assistant', content: '' }] },
-      })
-      .mockResolvedValueOnce({ finishReason: 'stop', response: { messages: [] } });
+  it.each([undefined, 'graph-token-json'])(
+    'pins generate client-tool turns to the server-resolved graph with token %s',
+    async versionContinuationToken => {
+      const clientTool = createTool({
+        id: 'clientTool',
+        description: 'A client-side tool',
+        execute: vi.fn().mockResolvedValue('Tool result'),
+        inputSchema: undefined,
+      });
+      const resolvedVersionOverrides = {
+        agents: { 'test-agent-id': { versionId: 'root-v1' }, researcher: { versionId: 'researcher-v1' } },
+        defaultStatus: 'published',
+      };
+      mockRequest
+        .mockResolvedValueOnce({
+          finishReason: 'tool-calls',
+          resolvedVersionOverrides: { ...resolvedVersionOverrides, versionContinuationToken },
+          toolCalls: [{ payload: { toolName: 'clientTool', args: {}, toolCallId: 'tool-1' } }],
+          response: { messages: [{ role: 'assistant', content: '' }] },
+        })
+        .mockResolvedValueOnce({ finishReason: 'stop', response: { messages: [] } });
 
-    await agent.generate('Test message', {
-      clientTools: { clientTool },
-      versions: {
-        self: { label: 'candidate' },
-        agents: { researcher: { label: 'candidate' } },
-      },
-      requestContext: {
-        mastra__versions: {
-          self: { label: 'candidate' },
-          agents: { researcher: { label: 'candidate' } },
+      await agent.generate('Test message', {
+        clientTools: { clientTool },
+        versions: {
+          agents: { 'test-agent-id': { label: 'candidate' }, researcher: { label: 'candidate' } },
         },
-      },
-    });
+        requestContext: {
+          mastra__versions: {
+            agents: { 'test-agent-id': { label: 'candidate' }, researcher: { label: 'candidate' } },
+          },
+        },
+      });
 
-    expect(mockRequest).toHaveBeenCalledTimes(2);
-    expect(mockRequest.mock.calls[1][1].body).toMatchObject({
-      versions: resolvedVersionOverrides,
-      requestContext: { mastra__versions: resolvedVersionOverrides },
-    });
-  });
+      expect(mockRequest).toHaveBeenCalledTimes(2);
+      expect(mockRequest.mock.calls[1][1].body).toMatchObject({
+        versions: resolvedVersionOverrides,
+        requestContext: { mastra__versions: resolvedVersionOverrides },
+      });
+      expect(mockRequest.mock.calls[1][1].body.versionContinuationToken).toBe(versionContinuationToken);
+    },
+  );
 
   it('replaces a bound label with the server-resolved version for recursive generate client-tool turns', async () => {
     const versionedAgent = new Agent(mockClientOptions, 'test-agent-id', { label: 'candidate' });
@@ -3157,7 +3160,7 @@ describe('Agent - Storage Duplicate Messages Issue', () => {
       execute: vi.fn().mockResolvedValue('Tool result'),
       inputSchema: undefined,
     });
-    const resolvedVersionOverrides = { self: { versionId: 'root-v1' } };
+    const resolvedVersionOverrides = { agents: { 'test-agent-id': { versionId: 'root-v1' } } };
     mockRequest
       .mockResolvedValueOnce({
         finishReason: 'tool-calls',
@@ -3170,46 +3173,53 @@ describe('Agent - Storage Duplicate Messages Issue', () => {
     await versionedAgent.generate('Test message', { clientTools: { clientTool } });
 
     expect(mockRequest).toHaveBeenCalledTimes(2);
-    expect(mockRequest.mock.calls[0][1].body.versions).toEqual({ self: { label: 'candidate' } });
+    expect(mockRequest.mock.calls[0][1].body.versions).toEqual({ agents: { 'test-agent-id': { label: 'candidate' } } });
     expect(mockRequest.mock.calls[1][1].body.versions).toEqual(resolvedVersionOverrides);
   });
 
-  it('uses the server token to preserve an unversioned root on recursive generate client-tool turns', async () => {
-    const versionedAgent = new Agent(mockClientOptions, 'test-agent-id', { label: 'candidate' });
-    versionedAgent['request'] = mockRequest as (typeof versionedAgent)['request'];
-    const clientTool = createTool({
-      id: 'clientTool',
-      description: 'A client-side tool',
-      execute: vi.fn().mockResolvedValue('Tool result'),
-      inputSchema: undefined,
-    });
-    const exactVersions = {
-      agents: { researcher: { versionId: 'researcher-v1' } },
-      defaultStatus: 'published' as const,
-    };
-    mockRequest
-      .mockResolvedValueOnce({
-        finishReason: 'tool-calls',
-        resolvedVersionOverrides: {
-          ...exactVersions,
-          rootUnversioned: true,
-          versionContinuationToken: 'rootless-token-json',
-        },
-        toolCalls: [{ payload: { toolName: 'clientTool', args: {}, toolCallId: 'tool-1' } }],
-        response: { messages: [{ role: 'assistant', content: '' }] },
-      })
-      .mockResolvedValueOnce({ finishReason: 'stop', response: { messages: [] } });
+  it.each([true, false])(
+    'uses the server token to preserve an unversioned root with pinned dependencies %s',
+    async hasVersionedDependency => {
+      const versionedAgent = new Agent(mockClientOptions, 'test-agent-id', { label: 'candidate' });
+      versionedAgent['request'] = mockRequest as (typeof versionedAgent)['request'];
+      const clientTool = createTool({
+        id: 'clientTool',
+        description: 'A client-side tool',
+        execute: vi.fn().mockResolvedValue('Tool result'),
+        inputSchema: undefined,
+      });
+      const exactVersions = hasVersionedDependency
+        ? {
+            agents: { researcher: { versionId: 'researcher-v1' } },
+            defaultStatus: 'published' as const,
+          }
+        : {};
+      mockRequest
+        .mockResolvedValueOnce({
+          finishReason: 'tool-calls',
+          resolvedVersionOverrides: {
+            ...exactVersions,
+            rootUnversioned: true,
+            versionContinuationToken: 'rootless-token-json',
+          },
+          toolCalls: [{ payload: { toolName: 'clientTool', args: {}, toolCallId: 'tool-1' } }],
+          response: { messages: [{ role: 'assistant', content: '' }] },
+        })
+        .mockResolvedValueOnce({ finishReason: 'stop', response: { messages: [] } });
 
-    await versionedAgent.generate('Test message', { clientTools: { clientTool } });
+      await versionedAgent.generate('Test message', { clientTools: { clientTool } });
 
-    expect(mockRequest).toHaveBeenCalledTimes(2);
-    expect(mockRequest.mock.calls[0][1].body.versions).toEqual({ self: { label: 'candidate' } });
-    expect(mockRequest.mock.calls[1][1].body).toMatchObject({
-      versions: exactVersions,
-      versionContinuationToken: 'rootless-token-json',
-    });
-    expect(mockRequest.mock.calls[1][1].body.versions).not.toHaveProperty('self');
-  });
+      expect(mockRequest).toHaveBeenCalledTimes(2);
+      expect(mockRequest.mock.calls[0][1].body.versions).toEqual({
+        agents: { 'test-agent-id': { label: 'candidate' } },
+      });
+      expect(mockRequest.mock.calls[1][1].body).toMatchObject({
+        versions: exactVersions,
+        versionContinuationToken: 'rootless-token-json',
+      });
+      expect(mockRequest.mock.calls[1][1].body.versions).not.toHaveProperty('self');
+    },
+  );
 
   it('pins generateLegacy client-tool turns to the server-resolved versions', async () => {
     const clientTool = createTool({
@@ -3219,8 +3229,7 @@ describe('Agent - Storage Duplicate Messages Issue', () => {
       inputSchema: undefined,
     });
     const resolvedVersionOverrides = {
-      self: { versionId: 'root-v1' },
-      agents: { researcher: { versionId: 'researcher-v1' } },
+      agents: { 'test-agent-id': { versionId: 'root-v1' }, researcher: { versionId: 'researcher-v1' } },
       defaultStatus: 'published',
     };
     mockRequest
@@ -3236,10 +3245,9 @@ describe('Agent - Storage Duplicate Messages Issue', () => {
       messages: 'Test message',
       clientTools: { clientTool },
       versions: {
-        self: { label: 'candidate' },
-        agents: { researcher: { label: 'candidate' } },
+        agents: { 'test-agent-id': { label: 'candidate' }, researcher: { label: 'candidate' } },
       },
-      requestContext: { mastra__versions: { self: { label: 'candidate' } } },
+      requestContext: { mastra__versions: { agents: { 'test-agent-id': { label: 'candidate' } } } },
     });
 
     expect(mockRequest).toHaveBeenCalledTimes(2);
@@ -3258,7 +3266,7 @@ describe('Agent - Storage Duplicate Messages Issue', () => {
       execute: vi.fn().mockResolvedValue('Tool result'),
       inputSchema: undefined,
     });
-    const resolvedVersionOverrides = { self: { versionId: 'root-v1' } };
+    const resolvedVersionOverrides = { agents: { 'test-agent-id': { versionId: 'root-v1' } } };
     mockRequest
       .mockResolvedValueOnce({
         finishReason: 'tool-calls',
@@ -3271,7 +3279,7 @@ describe('Agent - Storage Duplicate Messages Issue', () => {
     await versionedAgent.generateLegacy({ messages: 'Test message', clientTools: { clientTool } });
 
     expect(mockRequest).toHaveBeenCalledTimes(2);
-    expect(mockRequest.mock.calls[0][1].body.versions).toEqual({ self: { label: 'candidate' } });
+    expect(mockRequest.mock.calls[0][1].body.versions).toEqual({ agents: { 'test-agent-id': { label: 'candidate' } } });
     expect(mockRequest.mock.calls[1][1].body.versions).toEqual(resolvedVersionOverrides);
   });
 
@@ -3546,56 +3554,58 @@ describe('Agent.processStreamResponse client-tool synthetic chunks', () => {
     expect(mockRequest).toHaveBeenCalledTimes(2);
   });
 
-  it('pins recursive modern stream client-tool turns to the server-resolved versions', async () => {
-    const agent = new Agent(mockClientOptions, 'test-agent-id', { label: 'candidate' });
-    const resolvedVersionOverrides = {
-      self: { versionId: 'root-v1' },
-      agents: { researcher: { versionId: 'researcher-v1' } },
-      defaultStatus: 'published' as const,
-    };
-    const firstResponse = makeStreamingResponse([
-      { type: 'resolved-version-overrides', payload: resolvedVersionOverrides },
-      { type: 'step-start', runId: 'run-v1', payload: { messageId: 'msg-1' } },
-      {
-        type: 'tool-call',
-        runId: 'run-v1',
-        payload: { toolCallId: 'tool-call-1', toolName: 'testTool', args: { x: 1 } },
-      },
-      { type: 'finish', runId: 'run-v1', payload: { stepResult: { reason: 'tool-calls' } } },
-    ]);
-    const secondResponse = makeStreamingResponse([
-      { type: 'step-start', runId: 'run-v2', payload: { messageId: 'msg-2' } },
-      { type: 'finish', runId: 'run-v2', payload: { stepResult: { reason: 'stop' } } },
-    ]);
-    const request = vi.fn().mockResolvedValueOnce(firstResponse).mockResolvedValueOnce(secondResponse);
-    agent['request'] = request as (typeof agent)['request'];
-
-    const streamResponse = await agent.stream([{ role: 'user', content: 'hi' }], {
-      clientTools: {
-        testTool: {
-          id: 'testTool',
-          description: 'A test tool',
-          execute: vi.fn().mockResolvedValue({ ok: true }),
+  it.each([undefined, 'graph-token-modern'])(
+    'pins recursive modern stream client-tool turns with graph token %s',
+    async versionContinuationToken => {
+      const agent = new Agent(mockClientOptions, 'test-agent-id', { label: 'candidate' });
+      const resolvedVersionOverrides = {
+        agents: { 'test-agent-id': { versionId: 'root-v1' }, researcher: { versionId: 'researcher-v1' } },
+        defaultStatus: 'published' as const,
+      };
+      const firstResponse = makeStreamingResponse([
+        { type: 'resolved-version-overrides', payload: { ...resolvedVersionOverrides, versionContinuationToken } },
+        { type: 'step-start', runId: 'run-v1', payload: { messageId: 'msg-1' } },
+        {
+          type: 'tool-call',
+          runId: 'run-v1',
+          payload: { toolCallId: 'tool-call-1', toolName: 'testTool', args: { x: 1 } },
         },
-      },
-      versions: { agents: { researcher: { label: 'candidate' } } },
-      requestContext: { tenantId: 'tenant-1' },
-    });
-    await streamResponse.processDataStream({ onChunk: vi.fn() });
+        { type: 'finish', runId: 'run-v1', payload: { stepResult: { reason: 'tool-calls' } } },
+      ]);
+      const secondResponse = makeStreamingResponse([
+        { type: 'step-start', runId: 'run-v2', payload: { messageId: 'msg-2' } },
+        { type: 'finish', runId: 'run-v2', payload: { stepResult: { reason: 'stop' } } },
+      ]);
+      const request = vi.fn().mockResolvedValueOnce(firstResponse).mockResolvedValueOnce(secondResponse);
+      agent['request'] = request as (typeof agent)['request'];
 
-    expect(request).toHaveBeenCalledTimes(2);
-    expect(request.mock.calls[0][1].body.versions).toEqual({
-      self: { label: 'candidate' },
-      agents: { researcher: { label: 'candidate' } },
-    });
-    expect(request.mock.calls[1][1].body).toMatchObject({
-      versions: resolvedVersionOverrides,
-      requestContext: {
-        tenantId: 'tenant-1',
-        mastra__versions: resolvedVersionOverrides,
-      },
-    });
-  });
+      const streamResponse = await agent.stream([{ role: 'user', content: 'hi' }], {
+        clientTools: {
+          testTool: {
+            id: 'testTool',
+            description: 'A test tool',
+            execute: vi.fn().mockResolvedValue({ ok: true }),
+          },
+        },
+        versions: { agents: { researcher: { label: 'candidate' } } },
+        requestContext: { tenantId: 'tenant-1' },
+      });
+      await streamResponse.processDataStream({ onChunk: vi.fn() });
+
+      expect(request).toHaveBeenCalledTimes(2);
+      expect(request.mock.calls[0][1].body.versions).toEqual({
+        agents: { 'test-agent-id': { label: 'candidate' }, researcher: { label: 'candidate' } },
+      });
+      expect(request.mock.calls[1][1].body).toMatchObject({
+        versions: resolvedVersionOverrides,
+        requestContext: {
+          tenantId: 'tenant-1',
+          mastra__versions: resolvedVersionOverrides,
+        },
+      });
+      expect(request.mock.calls[1][1].body.versionContinuationToken).toBe(versionContinuationToken);
+    },
+  );
 
   it('uses the server token to preserve an unversioned root on recursive modern streams', async () => {
     const agent = new Agent(mockClientOptions, 'test-agent-id', { label: 'candidate' });
@@ -3766,59 +3776,61 @@ describe('Agent.processStreamResponse client-tool synthetic chunks', () => {
     expect(request.mock.calls[1][1].body.versions).not.toHaveProperty('self');
   });
 
-  it('pins recursive legacy stream client-tool turns to the server-resolved versions', async () => {
-    const agent = new Agent(mockClientOptions, 'test-agent-id', { label: 'candidate' });
-    const resolvedVersionOverrides = {
-      self: { versionId: 'root-v1' },
-      agents: { researcher: { versionId: 'researcher-v1' } },
-      defaultStatus: 'published' as const,
-    };
-    const firstResponse = makeLegacyStreamingResponse(
-      [
-        formatDataStreamPart('start_step', { messageId: 'msg-1' }),
-        formatDataStreamPart('tool_call', {
-          toolCallId: 'tool-call-1',
-          toolName: 'testTool',
-          args: { x: 1 },
-        }),
-        formatDataStreamPart('finish_message', { finishReason: 'tool-calls' }),
-      ],
-      resolvedVersionOverrides,
-    );
-    const secondResponse = makeLegacyStreamingResponse([
-      formatDataStreamPart('start_step', { messageId: 'msg-2' }),
-      formatDataStreamPart('finish_message', { finishReason: 'stop' }),
-    ]);
-    const request = vi.fn().mockResolvedValueOnce(firstResponse).mockResolvedValueOnce(secondResponse);
-    agent['request'] = request as (typeof agent)['request'];
+  it.each([undefined, 'graph-token-legacy'])(
+    'pins recursive legacy stream client-tool turns with graph token %s',
+    async versionContinuationToken => {
+      const agent = new Agent(mockClientOptions, 'test-agent-id', { label: 'candidate' });
+      const resolvedVersionOverrides = {
+        agents: { 'test-agent-id': { versionId: 'root-v1' }, researcher: { versionId: 'researcher-v1' } },
+        defaultStatus: 'published' as const,
+      };
+      const firstResponse = makeLegacyStreamingResponse(
+        [
+          formatDataStreamPart('start_step', { messageId: 'msg-1' }),
+          formatDataStreamPart('tool_call', {
+            toolCallId: 'tool-call-1',
+            toolName: 'testTool',
+            args: { x: 1 },
+          }),
+          formatDataStreamPart('finish_message', { finishReason: 'tool-calls' }),
+        ],
+        { ...resolvedVersionOverrides, versionContinuationToken },
+      );
+      const secondResponse = makeLegacyStreamingResponse([
+        formatDataStreamPart('start_step', { messageId: 'msg-2' }),
+        formatDataStreamPart('finish_message', { finishReason: 'stop' }),
+      ]);
+      const request = vi.fn().mockResolvedValueOnce(firstResponse).mockResolvedValueOnce(secondResponse);
+      agent['request'] = request as (typeof agent)['request'];
 
-    const streamResponse = await agent.streamLegacy({
-      messages: [{ role: 'user', content: 'hi' }],
-      clientTools: {
-        testTool: {
-          id: 'testTool',
-          description: 'A test tool',
-          execute: vi.fn().mockResolvedValue({ ok: true }),
+      const streamResponse = await agent.streamLegacy({
+        messages: [{ role: 'user', content: 'hi' }],
+        clientTools: {
+          testTool: {
+            id: 'testTool',
+            description: 'A test tool',
+            execute: vi.fn().mockResolvedValue({ ok: true }),
+          },
         },
-      },
-      versions: { agents: { researcher: { label: 'candidate' } } },
-      requestContext: { tenantId: 'tenant-1' },
-    });
-    await streamResponse.processDataStream();
+        versions: { agents: { researcher: { label: 'candidate' } } },
+        requestContext: { tenantId: 'tenant-1' },
+      });
+      await streamResponse.processDataStream();
 
-    expect(request).toHaveBeenCalledTimes(2);
-    expect(request.mock.calls[0][1].body.versions).toEqual({
-      self: { label: 'candidate' },
-      agents: { researcher: { label: 'candidate' } },
-    });
-    expect(request.mock.calls[1][1].body).toMatchObject({
-      versions: resolvedVersionOverrides,
-      requestContext: {
-        tenantId: 'tenant-1',
-        mastra__versions: resolvedVersionOverrides,
-      },
-    });
-  });
+      expect(request).toHaveBeenCalledTimes(2);
+      expect(request.mock.calls[0][1].body.versions).toEqual({
+        agents: { 'test-agent-id': { label: 'candidate' }, researcher: { label: 'candidate' } },
+      });
+      expect(request.mock.calls[1][1].body).toMatchObject({
+        versions: resolvedVersionOverrides,
+        requestContext: {
+          tenantId: 'tenant-1',
+          mastra__versions: resolvedVersionOverrides,
+        },
+      });
+      expect(request.mock.calls[1][1].body.versionContinuationToken).toBe(versionContinuationToken);
+    },
+  );
 
   it('uses the server token to preserve an unversioned root on recursive legacy streams', async () => {
     const agent = new Agent(mockClientOptions, 'test-agent-id', { label: 'candidate' });

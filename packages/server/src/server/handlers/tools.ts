@@ -17,13 +17,7 @@ import {
 import { optionalRunIdSchema } from '../schemas/common';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
-import {
-  ensureDefaultVersionStatus,
-  getAgentFromSystem,
-  parseVersionSelector,
-  resolveExecutionVersioning,
-  stashVersionOverrides,
-} from './agents';
+import { getAgentFromSystem, parseVersionSelector, resolveExecutionVersioning, stashVersionOverrides } from './agents';
 import { handleError } from './error';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
 import { validateBody } from './utils';
@@ -360,14 +354,14 @@ export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Agent ID is required' });
       }
       const { versionOptions, delegatedVersions } = resolveExecutionVersioning({
+        mastra,
         agentId,
         versions,
         query: { versionId, label, status },
         requestContext,
       });
       const agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext });
-      stashVersionOverrides(requestContext, delegatedVersions);
-      ensureDefaultVersionStatus(requestContext, versionOptions);
+      stashVersionOverrides(requestContext, delegatedVersions, agent);
 
       const agentTools = await agent.listTools({ requestContext });
 

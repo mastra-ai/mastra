@@ -6,11 +6,13 @@ const responseAgentVersionSelectorSchema = z.union([
   z.object({ status: z.enum(['draft', 'published']), versionId: z.never().optional(), label: z.never().optional() }),
 ]);
 
-const responseAgentVersionOverridesSchema = z.object({
-  self: responseAgentVersionSelectorSchema.optional(),
-  agents: z.record(z.string(), responseAgentVersionSelectorSchema).optional(),
-  defaultStatus: z.enum(['draft', 'published']).optional(),
-});
+const responseAgentVersionOverridesSchema = z
+  .object({
+    defaultLabel: z.string().optional(),
+    agents: z.record(z.string(), responseAgentVersionSelectorSchema).optional(),
+    defaultStatus: z.enum(['draft', 'published']).optional(),
+  })
+  .strict();
 
 export const responseIdPathParams = z.object({
   responseId: z.string().describe('Unique identifier for the stored response'),

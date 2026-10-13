@@ -139,14 +139,16 @@ export const agentVersionSelectorSchema = z
 const typedAgentVersionSelectorSchema = typedPermissive<VersionSelector>(agentVersionSelectorSchema);
 
 /** Canonical public version overrides shared by every agent execution surface. */
-export const agentVersionOverridesSchema = z.object({
-  self: typedAgentVersionSelectorSchema.optional(),
-  agents: z.record(z.string(), typedAgentVersionSelectorSchema).optional(),
-  defaultStatus: z.enum(['draft', 'published']).optional(),
-});
+export const agentVersionOverridesSchema = z
+  .object({
+    defaultLabel: z.string().optional(),
+    agents: z.record(z.string(), typedAgentVersionSelectorSchema).optional(),
+    defaultStatus: z.enum(['draft', 'published']).optional(),
+  })
+  .strict();
 
 /** Version overrides for execution surfaces whose target lives in the agent map. */
-export const agentDependencyVersionOverridesSchema = agentVersionOverridesSchema.omit({ self: true });
+export const agentDependencyVersionOverridesSchema = agentVersionOverridesSchema;
 
 /**
  * Query params for agent reads and executions. At most one selector may be

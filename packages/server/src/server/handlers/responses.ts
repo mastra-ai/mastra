@@ -15,10 +15,11 @@ import type { CreateResponseBody, DeleteResponse, ResponseObject } from '../sche
 import { createRoute } from '../server-adapter/routes/route-builder';
 import {
   AGENT_VERSION_PINS_CONTEXT_KEY,
-  ensureDefaultVersionStatus,
+  freezeCallerVersionOverrides,
   getAgentFromSystem,
   normalizeRequestContextVersionOverrides,
   replaceVersionOverrides,
+  resolveExecutionVersionSelector,
   resolveExecutionVersioning,
   stashVersionOverrides,
 } from './agents';
@@ -125,11 +126,7 @@ function captureResponseAgentVersionPins({
     (responseMetadata.agentVersionId
       ? { agentId: responseMetadata.agentId, versionId: responseMetadata.agentVersionId }
       : undefined);
-  if (
-    root &&
-    (root.agentId !== responseMetadata.agentId ||
-      (responseMetadata.agentVersionId && root.versionId !== responseMetadata.agentVersionId))
-  ) {
+  if (root && root.agentId !== responseMetadata.agentId) {
     throw createVersionLabelApiError(
       'VERSION_LABEL_INTEGRITY_ERROR',
       'The response execution produced conflicting root agent version pins.',
@@ -159,10 +156,11 @@ function captureResponseAgentVersionPins({
   }
   const defaultStatus = overrideDefaultStatus ?? pins?.defaultStatus;
 
-  if (!root && !pins?.agents && defaultStatus === undefined) return undefined;
+  if (!root && !pins?.agents && defaultStatus === undefined && !pins?.resolvedAgentIds) return undefined;
   return {
     ...(root ? { root } : {}),
     ...(pins?.agents ? { agents: pins.agents } : {}),
+    ...(pins?.resolvedAgentIds ? { resolvedAgentIds: pins.resolvedAgentIds } : {}),
     ...(defaultStatus === 'draft' || defaultStatus === 'published' ? { defaultStatus } : {}),
   };
 }
@@ -411,6 +409,7 @@ async function resolveAgentMemoryStore({
  * Executes a non-streaming Responses API request through the resolved Mastra agent.
  */
 async function executeGenerate({
+  versions,
   agent,
   resolvedModel,
   modelOverride,
@@ -422,6 +421,7 @@ async function executeGenerate({
   abortSignal,
   threadContext,
 }: {
+  versions?: CreateResponseBody['versions'];
   agent: Agent;
   resolvedModel: ResolvedAgentModel;
   modelOverride?: string;
@@ -437,6 +437,7 @@ async function executeGenerate({
   const structuredOutput = createStructuredOutput(text);
   const modelOption = modelOverride ? { model: modelOverride } : {};
   const commonOptions = {
+    versions: freezeCallerVersionOverrides(agent, versions),
     instructions,
     requestContext,
     abortSignal,
@@ -449,6 +450,7 @@ async function executeGenerate({
   if (resolvedModel.specificationVersion === 'v1') {
     if (threadContext) {
       return (await agent.generateLegacy(input, {
+        ...(versions ? { versions: freezeCallerVersionOverrides(agent, versions) } : {}),
         instructions,
         requestContext,
         abortSignal,
@@ -461,6 +463,7 @@ async function executeGenerate({
     }
 
     return (await agent.generateLegacy(input, {
+      ...(versions ? { versions: freezeCallerVersionOverrides(agent, versions) } : {}),
       instructions,
       requestContext,
       abortSignal,
@@ -477,6 +480,7 @@ async function executeGenerate({
  * Executes a streaming Responses API request through the resolved Mastra agent.
  */
 async function executeStream({
+  versions,
   agent,
   resolvedModel,
   modelOverride,
@@ -488,6 +492,7 @@ async function executeStream({
   abortSignal,
   threadContext,
 }: {
+  versions?: CreateResponseBody['versions'];
   agent: Agent;
   resolvedModel: ResolvedAgentModel;
   modelOverride?: string;
@@ -503,6 +508,7 @@ async function executeStream({
   const structuredOutput = createStructuredOutput(text);
   const modelOption = modelOverride ? { model: modelOverride } : {};
   const commonOptions = {
+    versions: freezeCallerVersionOverrides(agent, versions),
     instructions,
     requestContext,
     abortSignal,
@@ -515,6 +521,7 @@ async function executeStream({
   if (resolvedModel.specificationVersion === 'v1') {
     if (threadContext) {
       return (await agent.streamLegacy(input, {
+        ...(versions ? { versions: freezeCallerVersionOverrides(agent, versions) } : {}),
         instructions,
         requestContext,
         abortSignal,
@@ -527,6 +534,7 @@ async function executeStream({
     }
 
     return (await agent.streamLegacy(input, {
+      ...(versions ? { versions: freezeCallerVersionOverrides(agent, versions) } : {}),
       instructions,
       requestContext,
       abortSignal,
@@ -697,7 +705,7 @@ async function finalizeResponse({
     responseId,
     metadata: {
       ...responseMetadata,
-      ...(agentVersionPins ? { agentVersionPins } : {}),
+      ...(agentVersionPins ? { agentVersionPins, agentVersionId: agentVersionPins.root?.versionId } : {}),
     },
     completedState,
     messages: responseMessages,
@@ -781,12 +789,30 @@ async function prepareCreateResponseRequest({
   if (!targetAgentId) {
     throw new HTTPException(400, { message: 'Responses requests require an agent_id' });
   }
-  const { versionOptions, delegatedVersions } = resolveExecutionVersioning({
+  const executionVersioning = resolveExecutionVersioning({
+    mastra: previousResponseTurnRecord ? undefined : mastra,
     agentId: targetAgentId,
     versions: body.versions,
     requestContext,
   });
+  const { delegatedVersions } = executionVersioning;
+  if (previousResponseTurnRecord && delegatedVersions?.defaultLabel !== undefined) {
+    throw createVersionLabelApiError(
+      'PINNED_VERSION_CONFLICT',
+      'Response continuations cannot select a mutable default label.',
+    );
+  }
+  const versionOptions = previousResponseTurnRecord
+    ? resolveExecutionVersionSelector({
+        rootAgentId: targetAgentId,
+        bodyRootAgent: body.versions?.agents?.[targetAgentId],
+        requestContext,
+      })
+    : executionVersioning.versionOptions;
   const contextVersionOverrides = normalizeRequestContextVersionOverrides(requestContext);
+  // The root map entry is handled above; dependency assertions apply to other graph members only.
+  const dependencyIds = (versions: typeof delegatedVersions) =>
+    Object.keys(versions?.agents ?? {}).filter(id => id !== targetAgentId);
   const persistedVersionPins = previousResponseTurnRecord?.metadata.agentVersionPins;
   if (persistedVersionPins?.agents?.[targetAgentId]) {
     throw createVersionLabelApiError(
@@ -842,8 +868,7 @@ async function prepareCreateResponseRequest({
 
   if (previousResponseTurnRecord && !persistedVersionPins) {
     const hasLegacyDependencyAssertions =
-      Object.keys(delegatedVersions?.agents ?? {}).length > 0 ||
-      Object.keys(contextVersionOverrides?.agents ?? {}).length > 0;
+      dependencyIds(delegatedVersions).length > 0 || dependencyIds(contextVersionOverrides).length > 0;
     const hasLegacyDefaultStatusAssertion =
       delegatedVersions?.defaultStatus !== undefined || contextVersionOverrides?.defaultStatus !== undefined;
     if (hasLegacyDependencyAssertions || hasLegacyDefaultStatusAssertion) {
@@ -859,6 +884,12 @@ async function prepareCreateResponseRequest({
   }
 
   if (persistedVersionPins) {
+    if (delegatedVersions?.defaultLabel !== undefined || contextVersionOverrides?.defaultLabel !== undefined) {
+      throw createVersionLabelApiError(
+        'PINNED_VERSION_CONFLICT',
+        'Response continuations cannot select a mutable default label.',
+      );
+    }
     for (const requestedDefaultStatus of [delegatedVersions?.defaultStatus, contextVersionOverrides?.defaultStatus]) {
       if (requestedDefaultStatus !== undefined && requestedDefaultStatus !== persistedVersionPins.defaultStatus) {
         throw createVersionLabelApiError(
@@ -875,8 +906,8 @@ async function prepareCreateResponseRequest({
     }
 
     const requestedDependencyAgentIds = new Set([
-      ...Object.keys(delegatedVersions?.agents ?? {}),
-      ...Object.keys(contextVersionOverrides?.agents ?? {}),
+      ...dependencyIds(delegatedVersions),
+      ...dependencyIds(contextVersionOverrides),
     ]);
     for (const dependencyAgentId of requestedDependencyAgentIds) {
       const pin = persistedVersionPins.agents?.[dependencyAgentId];
@@ -932,9 +963,10 @@ async function prepareCreateResponseRequest({
   });
   if (persistedVersionPins) {
     replaceVersionOverrides(requestContext, effectiveDelegatedVersions);
+    requestContext.set(AGENT_VERSION_PINS_CONTEXT_KEY, persistedVersionPins);
+    requestContext.set('mastra__agentVersionPinsDelegated', true);
   } else {
-    stashVersionOverrides(requestContext, effectiveDelegatedVersions);
-    ensureDefaultVersionStatus(requestContext, effectiveVersionOptions);
+    stashVersionOverrides(requestContext, effectiveDelegatedVersions, agent);
   }
   const resolvedModel = await agent.getModel({
     requestContext,
@@ -1189,6 +1221,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
 
       if (!body.stream) {
         const result = await executeGenerate({
+          versions: body.versions,
           agent,
           resolvedModel,
           modelOverride: body.model,
@@ -1222,6 +1255,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
       }
 
       const streamResult = await executeStream({
+        versions: body.versions,
         agent,
         resolvedModel,
         modelOverride: body.model,

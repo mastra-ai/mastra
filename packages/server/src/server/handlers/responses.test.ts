@@ -1239,7 +1239,7 @@ describe('Responses Handlers', () => {
       model: 'openai/gpt-5',
       agent_id: 'test-agent',
       input: 'First turn',
-      versions: { self: { label: 'candidate' } },
+      versions: { agents: { 'test-agent': { label: 'candidate' } } },
       store: true,
       stream: false,
     })) as Response;
@@ -1261,7 +1261,7 @@ describe('Responses Handlers', () => {
       agent_id: 'test-agent',
       input: 'Continue with the same exact selector',
       previous_response_id: firstCreated.id,
-      versions: { self: { versionId: 'version-1' } },
+      versions: { agents: { 'test-agent': { versionId: 'version-1' } } },
       store: false,
       stream: false,
     });
@@ -1278,7 +1278,7 @@ describe('Responses Handlers', () => {
           agent_id: 'test-agent',
           input: 'Attempt to replace the pin',
           previous_response_id: firstCreated.id,
-          versions: { self: selector },
+          versions: { agents: { 'test-agent': selector } },
           store: false,
           stream: false,
         });
@@ -1297,7 +1297,10 @@ describe('Responses Handlers', () => {
   });
 
   it('hydrates a rootless structured continuation from the registered base agent', async () => {
-    const baseGenerate = vi.spyOn(agent, 'generate').mockResolvedValue(createGenerateResult({ text: 'base response' }));
+    const baseGenerate = vi.spyOn(agent, 'generate').mockImplementation(async (_messages, options) => {
+      options?.requestContext?.set('mastra__agentVersionPins', { resolvedAgentIds: [agent.id] });
+      return createGenerateResult({ text: 'base response' });
+    });
 
     const firstResponse = (await CREATE_RESPONSE_ROUTE.handler({
       ...createTestServerContext({ mastra }),
@@ -1383,7 +1386,7 @@ describe('Responses Handlers', () => {
       agent_id: agent.id,
       input: 'Continue with the exact root',
       previous_response_id: firstCreated.id,
-      versions: { self: { versionId: 'root-v1' } },
+      versions: { agents: { 'test-agent': { versionId: 'root-v1' } } },
       store: false,
       stream: false,
     });
@@ -1739,7 +1742,10 @@ describe('Responses Handlers', () => {
     await expect(error!.getResponse().json()).resolves.toMatchObject({
       error: {
         code: 'VERSION_LABEL_INTEGRITY_ERROR',
-        details: { agentId: agent.id, previousResponseId: firstCreated.id },
+        details:
+          _case === 'rootless'
+            ? { agentId: agent.id, previousResponseId: firstCreated.id }
+            : { responseId: firstCreated.id },
       },
     });
   });

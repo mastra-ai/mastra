@@ -4641,7 +4641,6 @@ describe('A2A Handler', () => {
       );
       expect(mockTaskStore.getAgentVersionPins({ agentId: 'test-agent', taskId: 'legacy-completed-task' })).toEqual({
         root: { agentId: 'test-agent', versionId: 'version-1' },
-        defaultStatus: 'draft',
       });
     });
 

@@ -2,8 +2,8 @@ import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, expectTypeOf, beforeEach, it, vi } from 'vitest';
 
 import { MastraClient } from '../client';
-import { MastraClientError } from '../types';
 import type { Body } from '../route-types.generated';
+import { MastraClientError } from '../types';
 import type { SendNotificationInput, VersionOverrides } from '../types';
 import { agentControllerMessageText, isKnownAgentControllerEvent } from './agent-controller';
 import type {
@@ -167,8 +167,7 @@ describe('AgentController Resource', () => {
     const session = client.getAgentController('code').session('user-1');
     const requestContext = { userId: 'u-42' };
     const versions: VersionOverrides = {
-      self: { label: 'candidate' },
-      agents: { researcher: { versionId: 'researcher-v2' } },
+      agents: { code: { label: 'candidate' }, researcher: { versionId: 'researcher-v2' } },
       defaultStatus: 'published',
     };
 
@@ -219,7 +218,7 @@ describe('AgentController Resource', () => {
     const session = client.getAgentController('code').session('user-1');
     const continuationOptions = {
       requestContext: { userId: 'u-42' },
-      versions: { self: { label: 'candidate' } },
+      versions: { agents: { code: { label: 'candidate' } } },
     };
 
     mockJson({ ok: true });

@@ -810,7 +810,7 @@ response.processDataStream({
 
 ### Shape client tool output for the model
 
-Client tools support `toModelOutput` to control what the model receives, including multimodal content such as images. Because client tools execute locally, the mapping also runs on the client after `execute` completes. The transformed output is sent back to the server alongside the raw result, so the raw result stays available for storage and application logic.
+Client tools support `toModelOutput` to control what the model receives, including multimodal content such as images. Because client tools execute locally, the mapping also runs on the client after `execute` completes. The client sends both the transformed output and the raw result to the server. Storage and application logic can still use the raw result.
 
 ```typescript
 const screenshotTool = createTool({
@@ -1206,7 +1206,7 @@ console.log(diff.changes) // Fields that changed between versions
 
 ### React SDK
 
-In the React SDK, pass the canonical selector through `versions.self`. The hook preserves whether you selected a
+In the React SDK, select the root through `versions.agents[agentId]`. The hook preserves whether you selected a
 label or an exact version and exposes the server-resolved immutable version for the current run:
 
 ```typescript title="Version targeting with React SDK"
@@ -1216,7 +1216,7 @@ function Chat() {
   const { messages, sendMessage, runVersionIdentity } = useChat({
     agentId: 'support-agent',
     versions: {
-      self: { label: 'candidate' },
+      agents: { 'support-agent': { label: 'candidate' } },
     },
   })
 
@@ -1227,6 +1227,10 @@ function Chat() {
 Use `{ versionId: 'abc-123' }` instead of `{ label: 'candidate' }` to select one exact version. A `versions` value
 passed to `sendMessage()` overrides the hook-level value for that new run. Mastra doesn't resend a mutable selector
 for continuations such as tool approvals.
+
+To select the same label across the configured agent graph, use `versions: { defaultLabel: 'candidate' }`. Explicit
+`versions.agents` entries take precedence over that default for their agent. Selecting only the root doesn't change
+the versions chosen for its sub-agents.
 
 When trusted resolution metadata arrives, `runVersionIdentity` contains the requested selector and the exact root
 version selected at run start:

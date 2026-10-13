@@ -118,12 +118,14 @@ describe('agent version label runtime', () => {
       agentId: 'runtime-agent',
       messages: 'run candidate',
       label: 'candidate',
-      versions: { self: { label: 'candidate' } },
+      versions: { agents: { 'runtime-agent': { label: 'candidate' } } },
     });
     expect(firstRun.text).toBe('version-one');
     expect(resolvedVersionIds).toEqual([versionIds.v1]);
     expect(selectedLabels).toEqual(['candidate']);
-    expect(firstRunContext.requestContext.get(MASTRA_VERSIONS_KEY)).toEqual({ defaultStatus: 'published' });
+    expect(firstRunContext.requestContext.get(MASTRA_VERSIONS_KEY)).toEqual({
+      agents: { 'runtime-agent': { versionId: versionIds.v1 } },
+    });
 
     await SET_AGENT_VERSION_LABEL_ROUTE.handler({
       ...context(),
@@ -137,7 +139,7 @@ describe('agent version label runtime', () => {
       ...context(),
       agentId: 'runtime-agent',
       messages: 'run candidate again',
-      versions: { self: { label: 'candidate' } },
+      versions: { agents: { 'runtime-agent': { label: 'candidate' } } },
     });
     expect(secondRun.text).toBe('version-two');
     expect(resolvedVersionIds).toEqual([versionIds.v1, versionIds.v2]);
@@ -164,7 +166,7 @@ describe('agent version label runtime', () => {
         agentId: 'runtime-agent',
         messages: 'conflicting run',
         label: 'candidate',
-        versions: { self: { versionId: versionIds.v1 } },
+        versions: { agents: { 'runtime-agent': { versionId: versionIds.v1 } } },
       }),
     );
     expect(mismatch).toMatchObject({
@@ -179,7 +181,7 @@ describe('agent version label runtime', () => {
         ...legacyContext,
         agentId: 'runtime-agent',
         messages: 'duplicate legacy selector',
-        versions: { self: { versionId: versionIds.v1 } },
+        versions: { agents: { 'runtime-agent': { versionId: versionIds.v1 } } },
       }),
     );
     expect(canonicalWithLegacy).toMatchObject({
@@ -205,7 +207,7 @@ describe('agent version label runtime', () => {
         agentId: 'runtime-agent',
         messages: 'invalid label',
         label: 'Uppercase',
-        versions: { self: { versionId: versionIds.v1 } },
+        versions: { agents: { 'runtime-agent': { versionId: versionIds.v1 } } },
       }),
     );
     expect(invalidLabelBeforeComparison).toMatchObject({
@@ -215,7 +217,7 @@ describe('agent version label runtime', () => {
   });
 
   it('applies the canonical selector resolver to every new-run execution route', async () => {
-    const invalidVersions = { self: { versionId: versionIds.v1, label: 'candidate' } };
+    const invalidVersions = { agents: { 'runtime-agent': { versionId: versionIds.v1, label: 'candidate' } } };
     const routeCalls = [
       () =>
         STREAM_GENERATE_ROUTE.handler({
@@ -255,7 +257,7 @@ describe('agent version label runtime', () => {
         ...legacyContext,
         agentId: 'runtime-agent',
         messages: 'legacy',
-        versions: { self: { versionId: versionIds.v1 } },
+        versions: { agents: { 'runtime-agent': { versionId: versionIds.v1 } } },
       }),
     );
     expect(legacyFailure).toMatchObject({
@@ -270,7 +272,7 @@ describe('agent version label runtime', () => {
         ...context(),
         agentId: 'runtime-agent',
         messages: 'missing label',
-        versions: { self: { label: 'missing' } },
+        versions: { agents: { 'runtime-agent': { label: 'missing' } } },
       }),
     );
     expect(missing).toMatchObject({

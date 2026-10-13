@@ -50,6 +50,8 @@ For an agent execution, Mastra resolves selected versions throughout the configu
 
 Completed client-tool continuations sent through `sendToolApproval({ messages, approved: true })` recover a compact run identity after the completed message stream is trimmed. The default PubSub keeps up to 1,000 completed identities in process for five minutes. A restart or eviction can end that window early. Use a PubSub implementation with retained history when continuations must cross server instances. Missing or expired identities reject the continuation instead of selecting a newer version. Suspended durable runs retain their pins in saved run state without this temporary window.
 
+Recursive client-tool calls through the JavaScript SDK carry an opaque `versionContinuationToken` that preserves the resolved graph, including code-defined agents without a stored version. These tokens expire five minutes after creation. Without a configured shared server cache, tokens are held in one process with a limit of 1,000 entries. A restart or eviction can end that window early. Use a shared server cache when requests can reach different server instances. Missing or expired tokens reject the continuation instead of selecting newer versions.
+
 ### Storage and deployment limits
 
 Custom labels apply to agents only, not prompt blocks, skills, or other versioned resources. Built-in InMemory storage supports labels for the lifetime of the process. Filesystem storage retains labeled versions across restarts, but coordinates writes only within one process. Use one writer process for each filesystem storage path.
@@ -59,6 +61,10 @@ LibSQL, Turso, PostgreSQL, and PostgreSQL VNext persist custom labels. PostgreSQ
 Upgrade core, editor, and the selected storage adapter together before enabling labels, and update server and client packages before using their label APIs. Mixing older database writers with label-aware writers can bypass labeled-version deletion protection.
 
 Run pinning doesn't add persisted trace or evaluation provenance, or a historical evaluation interface.
+
+For legacy AI SDK v4 execution, set version selectors on the Mastra instance, in request context, or in explicit `generateLegacy()` and `streamLegacy()` call options. Version selectors inside `defaultGenerateOptionsLegacy` or `defaultStreamOptionsLegacy` aren't applied before the run's versions are pinned.
+
+AgentController session routes carry version selectors through request context. An agent's `defaultOptions.versions` can override those selectors for the same agent or shared default. Avoid conflicting agent-level defaults when selecting versions through these session routes.
 
 ## Code source
 
@@ -96,7 +102,7 @@ curl http://localhost:4111/api/agents/support-agent?versionId=abc-123
 curl http://localhost:4111/api/agents/support-agent?label=candidate
 ```
 
-The agent read and execution routes reject selectors that combine `status`, `versionId`, and `label`. On the generate route, a query selector and `versions.self` request-body selector must also identify the same target when both are present. Selector errors use the [version-label error envelope](#errors) instead of choosing one value by precedence.
+The agent read and execution routes reject selectors that combine `status`, `versionId`, and `label`. A query selector and an explicit `versions.agents[agentId]` request-body selector must also identify the same target when both are present. An explicit root selector takes precedence over `versions.defaultLabel` for that agent without changing the graph default. Selector errors use the [version-label error envelope](#errors) instead of choosing between conflicting explicit selectors.
 
 :::note
 
@@ -204,7 +210,7 @@ If your `agents` function returns dependencies dynamically, keep that graph stab
 
 An explicit `versionId`, explicit `label`, or `defaultLabel` fails closed when Mastra can't resolve the requested stored version. A missing default label doesn't fall through to `defaultStatus`. Status-based selection can still fall back to the code-defined agent when no stored override exists.
 
-Continuation endpoints don't re-resolve labels or statuses. Omitting a continuation selector uses the persisted pin, and repeating the same exact `versionId` is idempotent. A `label` or `status` selector returns `INVALID_VERSION_SELECTOR`; a different exact ID returns `PINNED_VERSION_CONFLICT`.
+Continuation endpoints don't re-resolve labels or statuses. Omitting a continuation selector uses the persisted pin, and repeating the same exact `versionId` is idempotent. A mutable selector or a different exact ID rejects the continuation with `INVALID_VERSION_SELECTOR` or `PINNED_VERSION_CONFLICT`.
 
 ## Stored-agent REST API
 

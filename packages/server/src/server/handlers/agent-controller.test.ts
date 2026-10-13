@@ -540,7 +540,9 @@ describe('agent-controller routes', () => {
 
       const okFile = { data: 'aGVsbG8=', mediaType: 'image/png' };
       expect(schema.safeParse({ message: 'hi', files: [okFile] }).success).toBe(true);
-      expect(schema.safeParse({ message: 'hi', versions: { self: { label: 'candidate' } } }).success).toBe(true);
+      expect(
+        schema.safeParse({ message: 'hi', versions: { agents: { 'test-agent': { label: 'candidate' } } } }).success,
+      ).toBe(true);
 
       // Single file over the 14MB base64 cap (10MB binary).
       const oversized = { data: 'a'.repeat(14 * 1024 * 1024 + 1), mediaType: 'image/png' };
@@ -653,7 +655,6 @@ describe('agent-controller routes', () => {
         resourceId: 'user-versioned',
         message: 'hello candidate',
         versions: {
-          self: { label: 'candidate' },
           agents: { 'test-agent': { label: 'candidate' } },
         },
         requestContext,
@@ -664,13 +665,13 @@ describe('agent-controller routes', () => {
         { label: 'candidate' },
         requestContext,
       );
-      expect(requestContext.get('mastra__versions')).toEqual({
-        self: { versionId: 'version-1' },
-        agents: {},
-        defaultStatus: 'published',
-      });
+      expect(requestContext.get('mastra__versions')).toEqual({ agents: { 'test-agent': { versionId: 'version-1' } } });
       expect(spy).toHaveBeenCalledWith({ content: 'hello candidate', requestContext });
     });
+
+    // Session currently transports HTTP selectors through RequestContext, below
+    // agent.defaultOptions.versions in Core's existing execution precedence.
+    it.todo('keeps a controller HTTP root selector ahead of conflicting agent defaultOptions versions');
 
     it('rejects request-context dependency/default selectors that an active controller message would ignore', async () => {
       const session = await getRouteSession('user-active-version');
@@ -730,9 +731,9 @@ describe('agent-controller routes', () => {
       });
     });
 
-    it('preserves the public envelope when controller selector sources disagree', async () => {
+    it('preserves the public envelope when canonical and legacy controller selectors are mixed', async () => {
       const requestContext = makeRequestContext();
-      requestContext.set('mastra__versions', { self: { versionId: 'version-1' } });
+      requestContext.set('agentVersionId', 'version-1');
 
       const error = await readHttpError(
         SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
@@ -740,7 +741,7 @@ describe('agent-controller routes', () => {
           controllerId: 'code',
           resourceId: 'user-disagree-version',
           message: 'conflicting selector',
-          versions: { self: { versionId: 'version-2' } },
+          versions: { agents: { 'test-agent': { versionId: 'version-2' } } },
           requestContext,
         } as any),
       );
@@ -749,16 +750,16 @@ describe('agent-controller routes', () => {
         body: {
           error: {
             code: 'INVALID_VERSION_SELECTOR',
-            message: 'Version selector sources disagree',
+            message: 'Canonical version selectors cannot be combined with legacy agentVersionId',
             details: {
-              sources: ['versions.self', 'requestContext.mastra__versions.self'],
+              sources: ['versions.agents.test-agent', 'requestContext.agentVersionId'],
             },
           },
         },
       });
     });
 
-    it('rejects disagreeing canonical and legacy controller root selectors', async () => {
+    it('rejects the removed self selector in controller requests', async () => {
       const error = await readHttpError(
         SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
           mastra,
@@ -777,8 +778,8 @@ describe('agent-controller routes', () => {
         body: {
           error: {
             code: 'INVALID_VERSION_SELECTOR',
-            message: 'Version selector sources disagree',
-            details: { sources: ['versions.self', 'versions.agents.test-agent'] },
+            message: 'Use versions.agents[agentId] instead of versions.self',
+            details: { source: 'versions' },
           },
         },
       });

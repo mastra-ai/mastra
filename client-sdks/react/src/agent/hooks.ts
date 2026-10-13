@@ -280,13 +280,15 @@ const isObject = (value: unknown): value is Record<string, unknown> => typeof va
 const isResolvedVersionOverridesChunk = (value: unknown): boolean =>
   isObject(value) && value.type === 'resolved-version-overrides';
 
-const getResolvedRootVersionId = (value: unknown): string | undefined => {
+const getResolvedRootVersionId = (value: unknown, agentId: string): string | undefined => {
   if (!isObject(value)) return undefined;
 
   const metadata = value.type === 'resolved-version-overrides' ? value.payload : value.resolvedVersionOverrides;
-  if (!isObject(metadata) || !isObject(metadata.self)) return undefined;
+  if (!isObject(metadata) || !isObject(metadata.agents)) return undefined;
 
-  const versionId = metadata.self.versionId;
+  const selector = metadata.agents[agentId];
+  if (!isObject(selector)) return undefined;
+  const versionId = selector.versionId;
   return typeof versionId === 'string' && versionId.length > 0 ? versionId : undefined;
 };
 
@@ -435,9 +437,13 @@ export const useChat = ({
 
   _onRunVersionIdentityRef.current = onRunVersionIdentity;
 
-  const createRunVersionResolution = (versions?: VersionOverrides): RunVersionResolution => ({
-    ...(versions?.self ? { requested: copyVersionSelector(versions.self) } : {}),
-  });
+  const createRunVersionResolution = (versions?: VersionOverrides): RunVersionResolution => {
+    const requested =
+      versions?.agents?.[agentId] ??
+      (versions?.defaultLabel !== undefined ? { label: versions.defaultLabel } : undefined) ??
+      (versions?.defaultStatus !== undefined ? { status: versions.defaultStatus } : undefined);
+    return requested ? { requested: copyVersionSelector(requested) } : {};
+  };
 
   const publishCapturedRunVersionIdentity = (resolution: RunVersionResolution) => {
     if (!resolution.identity || resolution.published) return;
@@ -503,7 +509,7 @@ export const useChat = ({
       return;
     }
 
-    const resolvedVersionId = getResolvedRootVersionId(value);
+    const resolvedVersionId = getResolvedRootVersionId(value, agentId);
     if (!resolvedVersionId) return;
 
     const identity: AgentRunVersionIdentity = { requested: resolution.requested, resolvedVersionId };

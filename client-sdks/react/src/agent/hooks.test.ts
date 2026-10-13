@@ -1885,8 +1885,7 @@ describe('useChat version selection', () => {
       ['network', networkMock],
     ] as const)('preserves the label selector in %s mode', async (mode, requestMock) => {
       const versions = {
-        self: { label: 'candidate' },
-        agents: { researcher: { versionId: 'researcher-v1' } },
+        agents: { 'test-agent': { label: 'candidate' }, researcher: { versionId: 'researcher-v1' } },
       } as const;
       const { result } = renderHook(() => useChat({ agentId: 'test-agent', versions }), { wrapper });
 
@@ -1898,7 +1897,7 @@ describe('useChat version selection', () => {
     });
 
     it('preserves the label selector in a message-started run', async () => {
-      const versions = { self: { label: 'candidate' } } as const;
+      const versions = { agents: { 'test-agent': { label: 'candidate' } } } as const;
       const { result } = renderHook(
         () =>
           useChat({
@@ -1922,7 +1921,7 @@ describe('useChat version selection', () => {
     });
 
     it('preserves the label selector in a signal-started run', async () => {
-      const versions = { self: { label: 'candidate' } } as const;
+      const versions = { agents: { 'test-agent': { label: 'candidate' } } } as const;
       sendMessageMock.mockRejectedValueOnce({ status: 404 });
       const { result } = renderHook(
         () =>
@@ -1947,10 +1946,10 @@ describe('useChat version selection', () => {
     });
 
     it.each([
-      ['ENTITY_NOT_FOUND', 404, { self: { label: 'removed' } }],
-      ['LABEL_NOT_FOUND', 404, { self: { label: 'removed' } }],
-      ['VERSION_NOT_FOUND', 404, { self: { versionId: 'removed-version' } }],
-      ['VERSION_LABELS_UNSUPPORTED', 501, { self: { label: 'unsupported' } }],
+      ['ENTITY_NOT_FOUND', 404, { agents: { 'test-agent': { label: 'removed' } } }],
+      ['LABEL_NOT_FOUND', 404, { agents: { 'test-agent': { label: 'removed' } } }],
+      ['VERSION_NOT_FOUND', 404, { agents: { 'test-agent': { versionId: 'removed-version' } } }],
+      ['VERSION_LABELS_UNSUPPORTED', 501, { agents: { 'test-agent': { label: 'unsupported' } } }],
     ] as const)('does not retry a stable %s rejection through another signal route', async (code, status, versions) => {
       const selectorError = {
         status,
@@ -1994,7 +1993,7 @@ describe('useChat version selection', () => {
       ['network', networkMock],
     ] as const)('uses the exact selector instead of the hook-level label in %s mode', async (mode, requestMock) => {
       const { result } = renderHook(
-        () => useChat({ agentId: 'test-agent', versions: { self: { label: 'candidate' } } }),
+        () => useChat({ agentId: 'test-agent', versions: { agents: { 'test-agent': { label: 'candidate' } } } }),
         { wrapper },
       );
 
@@ -2002,18 +2001,18 @@ describe('useChat version selection', () => {
         await result.current.sendMessage({
           mode,
           message: 'hi',
-          versions: { self: { versionId: 'root-v1' } },
+          versions: { agents: { 'test-agent': { versionId: 'root-v1' } } },
         });
       });
 
       expect(requestMock).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ versions: { self: { versionId: 'root-v1' } } }),
+        expect.objectContaining({ versions: { agents: { 'test-agent': { versionId: 'root-v1' } } } }),
       );
     });
 
     it('uses the exact selector for a message-started run', async () => {
-      const versions = { self: { versionId: 'root-v1' } } as const;
+      const versions = { agents: { 'test-agent': { versionId: 'root-v1' } } } as const;
       const { result, unmount } = renderHook(
         () =>
           useChat({
@@ -2037,7 +2036,7 @@ describe('useChat version selection', () => {
     });
 
     it('uses the exact selector for a signal-started run', async () => {
-      const versions = { self: { versionId: 'root-v1' } } as const;
+      const versions = { agents: { 'test-agent': { versionId: 'root-v1' } } } as const;
       sendMessageMock.mockRejectedValueOnce({ status: 404 });
       const { result, unmount } = renderHook(
         () =>
@@ -2063,19 +2062,82 @@ describe('useChat version selection', () => {
   });
 
   describe('when trusted resolution metadata arrives', () => {
+    it.each([
+      { versions: { defaultLabel: 'candidate', defaultStatus: 'draft' } as const, requested: { label: 'candidate' } },
+      { versions: { defaultStatus: 'draft' } as const, requested: { status: 'draft' } },
+    ])('uses the effective graph default $requested for the root identity', async ({ versions, requested }) => {
+      nextStreamChunks = [
+        { type: 'resolved-version-overrides', payload: { agents: { 'test-agent': { versionId: 'root-v1' } } } },
+      ];
+      const { result } = renderHook(() => useChat({ agentId: 'test-agent', versions }), { wrapper });
+      await act(async () => {
+        await result.current.sendMessage({ mode: 'stream', message: 'hi' });
+      });
+      expect(result.current.runVersionIdentity).toEqual({ requested, resolvedVersionId: 'root-v1' });
+    });
+
+    it('does not display a dependency version as the code-only root version', async () => {
+      nextStreamChunks = [
+        {
+          type: 'resolved-version-overrides',
+          payload: {
+            agents: { researcher: { versionId: 'researcher-v1' } },
+            rootUnversioned: true,
+            versionContinuationToken: 'graph-token',
+          },
+        },
+      ];
+      const { result } = renderHook(
+        () => useChat({ agentId: 'test-agent', versions: { defaultStatus: 'published' } }),
+        { wrapper },
+      );
+      await act(async () => {
+        await result.current.sendMessage({ mode: 'stream', message: 'hi' });
+      });
+      expect(result.current.runVersionIdentity).toBeUndefined();
+    });
+
+    it('uses the current agent entry instead of a dependency and preserves an explicit selector over the graph default', async () => {
+      nextStreamChunks = [
+        {
+          type: 'resolved-version-overrides',
+          payload: {
+            agents: { researcher: { versionId: 'researcher-v1' }, 'test-agent': { versionId: 'root-v1' } },
+            versionContinuationToken: 'graph-token',
+          },
+        },
+      ];
+      const { result } = renderHook(
+        () =>
+          useChat({
+            agentId: 'test-agent',
+            versions: { defaultLabel: 'candidate', agents: { 'test-agent': { label: 'production' } } },
+          }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage({ mode: 'stream', message: 'hi' });
+      });
+
+      expect(result.current.runVersionIdentity).toEqual({
+        requested: { label: 'production' },
+        resolvedVersionId: 'root-v1',
+      });
+    });
+
     it('exposes the first exact root identity with the requested selector', async () => {
       nextStreamChunks = [
         {
           type: 'resolved-version-overrides',
           payload: {
-            self: { versionId: 'root-v1' },
-            agents: { researcher: { versionId: 'researcher-v1' } },
+            agents: { 'test-agent': { versionId: 'root-v1' }, researcher: { versionId: 'researcher-v1' } },
             versionContinuationToken: 'opaque-token',
           },
         },
         {
           type: 'resolved-version-overrides',
-          payload: { self: { versionId: 'root-v2' } },
+          payload: { agents: { 'test-agent': { versionId: 'root-v2' } } },
         },
       ];
       const onRunVersionIdentity = vi.fn();
@@ -2083,7 +2145,7 @@ describe('useChat version selection', () => {
         () =>
           useChat({
             agentId: 'test-agent',
-            versions: { self: { label: 'candidate' } },
+            versions: { agents: { 'test-agent': { label: 'candidate' } } },
             onRunVersionIdentity,
           }),
         { wrapper },
@@ -2104,14 +2166,14 @@ describe('useChat version selection', () => {
         {
           type: 'resolved-version-overrides',
           payload: {
-            self: { versionId: 'root-v1' },
+            agents: { 'test-agent': { versionId: 'root-v1' } },
             versionContinuationToken: 'opaque-token',
           },
         },
       ];
       const onChunk = vi.fn();
       const { result } = renderHook(
-        () => useChat({ agentId: 'test-agent', versions: { self: { label: 'candidate' } } }),
+        () => useChat({ agentId: 'test-agent', versions: { agents: { 'test-agent': { label: 'candidate' } } } }),
         { wrapper },
       );
 
@@ -2126,11 +2188,11 @@ describe('useChat version selection', () => {
       nextStreamChunks = [
         {
           type: 'resolved-version-overrides',
-          payload: { self: { versionId: 'root-v1' }, versionContinuationToken: 'opaque-token' },
+          payload: { agents: { 'test-agent': { versionId: 'root-v1' } }, versionContinuationToken: 'opaque-token' },
         },
         {
           type: 'resolved-version-overrides',
-          payload: { self: { versionId: 'root-v2' } },
+          payload: { agents: { 'test-agent': { versionId: 'root-v2' } } },
         },
       ];
       const onRunVersionIdentity = vi.fn();
@@ -2138,7 +2200,7 @@ describe('useChat version selection', () => {
         () =>
           useChat({
             agentId: 'test-agent',
-            versions: { self: { label: 'candidate' } },
+            versions: { agents: { 'test-agent': { label: 'candidate' } } },
             onRunVersionIdentity,
           }),
         { wrapper },
@@ -2160,7 +2222,7 @@ describe('useChat version selection', () => {
         response: { uiMessages: [] },
         finishReason: 'stop',
         resolvedVersionOverrides: {
-          self: { versionId: 'root-v1' },
+          agents: { 'test-agent': { versionId: 'root-v1' } },
           versionContinuationToken: 'opaque-token',
         },
       });
@@ -2169,7 +2231,7 @@ describe('useChat version selection', () => {
         () =>
           useChat({
             agentId: 'test-agent',
-            versions: { self: { versionId: 'requested-root-v1' } },
+            versions: { agents: { 'test-agent': { versionId: 'requested-root-v1' } } },
             onRunVersionIdentity,
           }),
         { wrapper },
@@ -2189,12 +2251,12 @@ describe('useChat version selection', () => {
       nextNetworkChunks = [
         {
           type: 'resolved-version-overrides',
-          payload: { self: { versionId: 'root-v1' }, versionContinuationToken: 'opaque-token' },
+          payload: { agents: { 'test-agent': { versionId: 'root-v1' } }, versionContinuationToken: 'opaque-token' },
         },
       ];
       const onNetworkChunk = vi.fn();
       const { result } = renderHook(
-        () => useChat({ agentId: 'test-agent', versions: { self: { label: 'candidate' } } }),
+        () => useChat({ agentId: 'test-agent', versions: { agents: { 'test-agent': { label: 'candidate' } } } }),
         { wrapper },
       );
 
@@ -2219,7 +2281,7 @@ describe('useChat version selection', () => {
             resourceId: 'resource-1',
             threadId: 'thread-1',
             enableThreadSignals: true,
-            versions: { self: { label: 'candidate' } },
+            versions: { agents: { 'test-agent': { label: 'candidate' } } },
             onRunVersionIdentity,
           }),
         { wrapper },
@@ -2230,7 +2292,7 @@ describe('useChat version selection', () => {
         await result.current.sendMessage({ mode: 'stream', message: 'hi', threadId: 'thread-1' });
         await subscriptionChunkHandler?.({
           type: 'resolved-version-overrides',
-          payload: { self: { versionId: 'root-v1' }, versionContinuationToken: 'opaque-token' },
+          payload: { agents: { 'test-agent': { versionId: 'root-v1' } }, versionContinuationToken: 'opaque-token' },
         });
       });
 
@@ -2274,7 +2336,7 @@ describe('useChat version selection', () => {
             resourceId: 'resource-1',
             threadId: 'thread-1',
             enableThreadSignals: true,
-            versions: { self: { label: 'candidate' } },
+            versions: { agents: { 'test-agent': { label: 'candidate' } } },
           }),
         { wrapper },
       );
@@ -2290,7 +2352,7 @@ describe('useChat version selection', () => {
           mode: 'stream',
           message: 'new run',
           threadId: 'thread-1',
-          versions: { self: { label: 'next' } },
+          versions: { agents: { 'test-agent': { label: 'next' } } },
         });
       });
       await act(async () => {
@@ -2302,7 +2364,7 @@ describe('useChat version selection', () => {
           mode: 'stream',
           message: 'continue new run',
           threadId: 'thread-1',
-          versions: { self: { label: 'deleted-old-target' } },
+          versions: { agents: { 'test-agent': { label: 'deleted-old-target' } } },
         });
       });
 
@@ -2332,7 +2394,7 @@ describe('useChat version selection', () => {
             resourceId: 'resource-1',
             threadId: 'thread-1',
             enableThreadSignals: true,
-            versions: { self: { label: 'candidate' } },
+            versions: { agents: { 'test-agent': { label: 'candidate' } } },
           }),
         { wrapper },
       );
@@ -2344,14 +2406,14 @@ describe('useChat version selection', () => {
           mode: 'stream',
           message: 'after fast run',
           threadId: 'thread-1',
-          versions: { self: { label: 'next' } },
+          versions: { agents: { 'test-agent': { label: 'next' } } },
         });
       });
 
       const nextRequest = sendMessageMock.mock.calls[1]?.[0];
       expect(nextRequest).not.toHaveProperty('runId');
       expect(nextRequest).toMatchObject({
-        ifIdle: { streamOptions: { versions: { self: { label: 'next' } } } },
+        ifIdle: { streamOptions: { versions: { agents: { 'test-agent': { label: 'next' } } } } },
       });
       unmount();
     });
@@ -2369,7 +2431,7 @@ describe('useChat version selection', () => {
             resourceId: 'resource-1',
             threadId: 'thread-1',
             enableThreadSignals: true,
-            versions: { self: { label: 'candidate' } },
+            versions: { agents: { 'test-agent': { label: 'candidate' } } },
           }),
         { wrapper },
       );
@@ -2379,7 +2441,7 @@ describe('useChat version selection', () => {
         await result.current.sendMessage({ mode: 'stream', message: 'start', threadId: 'thread-1' });
         await subscriptionChunkHandler?.({
           type: 'resolved-version-overrides',
-          payload: { self: { versionId: 'root-v1' } },
+          payload: { agents: { 'test-agent': { versionId: 'root-v1' } } },
         });
         await subscriptionChunkHandler?.({ type: 'start', runId: 'run-1', payload: { messageId: 'message-1' } });
       });
@@ -2393,7 +2455,7 @@ describe('useChat version selection', () => {
           mode: 'stream',
           message: 'while active',
           threadId: 'thread-1',
-          versions: { self: { label: 'next' } },
+          versions: { agents: { 'test-agent': { label: 'next' } } },
         });
       });
       const activeRequest = sendMessageMock.mock.calls[1]?.[0];
@@ -2410,20 +2472,20 @@ describe('useChat version selection', () => {
           mode: 'stream',
           message: 'after idle',
           threadId: 'thread-1',
-          versions: { self: { label: 'next' } },
+          versions: { agents: { 'test-agent': { label: 'next' } } },
         });
       });
       const idleRequest = sendMessageMock.mock.calls[2]?.[0];
       expect(idleRequest).not.toHaveProperty('runId');
       expect(idleRequest).toMatchObject({
-        ifIdle: { streamOptions: { versions: { self: { label: 'next' } } } },
+        ifIdle: { streamOptions: { versions: { agents: { 'test-agent': { label: 'next' } } } } },
       });
       expect(result.current.runVersionIdentity).toBeUndefined();
 
       await act(async () => {
         await subscriptionChunkHandler?.({
           type: 'resolved-version-overrides',
-          payload: { self: { versionId: 'root-v2' } },
+          payload: { agents: { 'test-agent': { versionId: 'root-v2' } } },
         });
       });
       expect(result.current.runVersionIdentity).toEqual({
@@ -2447,7 +2509,7 @@ describe('useChat version selection', () => {
             resourceId: 'resource-1',
             threadId: 'thread-1',
             enableThreadSignals: true,
-            versions: { self: { label: 'candidate' } },
+            versions: { agents: { 'test-agent': { label: 'candidate' } } },
           }),
         { wrapper },
       );
@@ -2457,7 +2519,7 @@ describe('useChat version selection', () => {
         await result.current.sendMessage({ mode: 'stream', message: 'start', threadId: 'thread-1' });
         await subscriptionChunkHandler?.({
           type: 'resolved-version-overrides',
-          payload: { self: { versionId: 'root-v1' } },
+          payload: { agents: { 'test-agent': { versionId: 'root-v1' } } },
         });
         await subscriptionChunkHandler?.({ type: 'start', runId: 'run-1', payload: { messageId: 'message-1' } });
       });
@@ -2471,7 +2533,7 @@ describe('useChat version selection', () => {
           mode: 'stream',
           message: 'while active',
           threadId: 'thread-1',
-          versions: { self: { label: 'next' } },
+          versions: { agents: { 'test-agent': { label: 'next' } } },
         });
       });
       const activeRequest = sendSignalMock.mock.calls[1]?.[0];
@@ -2488,20 +2550,20 @@ describe('useChat version selection', () => {
           mode: 'stream',
           message: 'after idle',
           threadId: 'thread-1',
-          versions: { self: { label: 'next' } },
+          versions: { agents: { 'test-agent': { label: 'next' } } },
         });
       });
       const idleRequest = sendSignalMock.mock.calls[2]?.[0];
       expect(idleRequest).not.toHaveProperty('runId');
       expect(idleRequest).toMatchObject({
-        ifIdle: { streamOptions: { versions: { self: { label: 'next' } } } },
+        ifIdle: { streamOptions: { versions: { agents: { 'test-agent': { label: 'next' } } } } },
       });
       expect(result.current.runVersionIdentity).toBeUndefined();
 
       await act(async () => {
         await subscriptionChunkHandler?.({
           type: 'resolved-version-overrides',
-          payload: { self: { versionId: 'root-v2' } },
+          payload: { agents: { 'test-agent': { versionId: 'root-v2' } } },
         });
       });
       expect(result.current.runVersionIdentity).toEqual({
@@ -2517,7 +2579,7 @@ describe('useChat version selection', () => {
       type GenerateResponse = {
         response: { uiMessages: never[] };
         finishReason: string;
-        resolvedVersionOverrides: { self: { versionId: string } };
+        resolvedVersionOverrides: { agents: { 'test-agent': { versionId: string } } };
       };
       let resolveFirst: (response: GenerateResponse) => void = () => {};
       let resolveSecond: (response: GenerateResponse) => void = () => {};
@@ -2542,7 +2604,7 @@ describe('useChat version selection', () => {
         firstSend = result.current.sendMessage({
           mode: 'generate',
           message: 'first',
-          versions: { self: { label: 'first' } },
+          versions: { agents: { 'test-agent': { label: 'first' } } },
         });
         await Promise.resolve();
       });
@@ -2551,7 +2613,7 @@ describe('useChat version selection', () => {
         secondSend = result.current.sendMessage({
           mode: 'generate',
           message: 'second',
-          versions: { self: { label: 'second' } },
+          versions: { agents: { 'test-agent': { label: 'second' } } },
         });
         await Promise.resolve();
       });
@@ -2560,7 +2622,7 @@ describe('useChat version selection', () => {
         resolveFirst({
           response: { uiMessages: [] },
           finishReason: 'stop',
-          resolvedVersionOverrides: { self: { versionId: 'root-v1' } },
+          resolvedVersionOverrides: { agents: { 'test-agent': { versionId: 'root-v1' } } },
         });
         await firstSend;
       });
@@ -2570,7 +2632,7 @@ describe('useChat version selection', () => {
         resolveSecond({
           response: { uiMessages: [] },
           finishReason: 'stop',
-          resolvedVersionOverrides: { self: { versionId: 'root-v2' } },
+          resolvedVersionOverrides: { agents: { 'test-agent': { versionId: 'root-v2' } } },
         });
         await secondSend;
       });
@@ -2612,7 +2674,7 @@ describe('useChat version selection', () => {
         firstSend = result.current.sendMessage({
           mode: 'stream',
           message: 'first',
-          versions: { self: { label: 'first' } },
+          versions: { agents: { 'test-agent': { label: 'first' } } },
         });
         await waitFor(() => expect(firstChunkHandler).toBeDefined());
       });
@@ -2621,7 +2683,7 @@ describe('useChat version selection', () => {
         secondSend = result.current.sendMessage({
           mode: 'stream',
           message: 'second',
-          versions: { self: { label: 'second' } },
+          versions: { agents: { 'test-agent': { label: 'second' } } },
         });
         await waitFor(() => expect(secondChunkHandler).toBeDefined());
       });
@@ -2629,7 +2691,7 @@ describe('useChat version selection', () => {
       await act(async () => {
         await firstChunkHandler?.({
           type: 'resolved-version-overrides',
-          payload: { self: { versionId: 'root-v1' } },
+          payload: { agents: { 'test-agent': { versionId: 'root-v1' } } },
         });
         finishFirstStream();
         await firstSend;
@@ -2639,7 +2701,7 @@ describe('useChat version selection', () => {
       await act(async () => {
         await secondChunkHandler?.({
           type: 'resolved-version-overrides',
-          payload: { self: { versionId: 'root-v2' } },
+          payload: { agents: { 'test-agent': { versionId: 'root-v2' } } },
         });
         finishSecondStream();
         await secondSend;
@@ -2653,13 +2715,15 @@ describe('useChat version selection', () => {
 
   describe('when the chat scope changes', () => {
     it('clears the prior thread identity instead of showing it as history', async () => {
-      nextStreamChunks = [{ type: 'resolved-version-overrides', payload: { self: { versionId: 'root-v1' } } }];
+      nextStreamChunks = [
+        { type: 'resolved-version-overrides', payload: { agents: { 'test-agent': { versionId: 'root-v1' } } } },
+      ];
       const { result, rerender } = renderHook(
         ({ threadId }: { threadId: string }) =>
           useChat({
             agentId: 'test-agent',
             threadId,
-            versions: { self: { label: 'candidate' } },
+            versions: { agents: { 'test-agent': { label: 'candidate' } } },
           }),
         { wrapper, initialProps: { threadId: 'thread-1' } },
       );
@@ -2677,7 +2741,7 @@ describe('useChat version selection', () => {
   describe('when a selected run continues after tool approval', () => {
     it('does not add the mutable selector to the continuation', async () => {
       const { result } = renderHook(
-        () => useChat({ agentId: 'test-agent', versions: { self: { label: 'candidate' } } }),
+        () => useChat({ agentId: 'test-agent', versions: { agents: { 'test-agent': { label: 'candidate' } } } }),
         { wrapper },
       );
 
@@ -2691,7 +2755,7 @@ describe('useChat version selection', () => {
 
     it('does not add the mutable selector to stream decline or resume calls', async () => {
       const { result } = renderHook(
-        () => useChat({ agentId: 'test-agent', versions: { self: { label: 'candidate' } } }),
+        () => useChat({ agentId: 'test-agent', versions: { agents: { 'test-agent': { label: 'candidate' } } } }),
         { wrapper },
       );
       await act(async () => {
@@ -2706,7 +2770,7 @@ describe('useChat version selection', () => {
 
     it('does not add the mutable selector to generate approval continuations', async () => {
       const { result } = renderHook(
-        () => useChat({ agentId: 'test-agent', versions: { self: { label: 'candidate' } } }),
+        () => useChat({ agentId: 'test-agent', versions: { agents: { 'test-agent': { label: 'candidate' } } } }),
         { wrapper },
       );
       await act(async () => {
@@ -2721,7 +2785,7 @@ describe('useChat version selection', () => {
 
     it('does not add the mutable selector to network approval continuations', async () => {
       const { result } = renderHook(
-        () => useChat({ agentId: 'test-agent', versions: { self: { label: 'candidate' } } }),
+        () => useChat({ agentId: 'test-agent', versions: { agents: { 'test-agent': { label: 'candidate' } } } }),
         { wrapper },
       );
       await act(async () => {

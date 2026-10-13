@@ -7,7 +7,7 @@ Added version selectors and trusted resolved run identity to `useChat`. Existing
 ```tsx
 const { sendMessage, runVersionIdentity } = useChat({
   agentId: 'support-agent',
-  versions: { self: { label: 'candidate' } },
+  versions: { agents: { 'support-agent': { label: 'candidate' } } },
 });
 
 sendMessage({ message: 'Check this candidate.' });

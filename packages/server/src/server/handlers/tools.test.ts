@@ -716,7 +716,7 @@ describe('Tools Handlers', () => {
         agentId: 'test-agent',
         toolId: mockTool.id,
         data: { input: 'hello' },
-        versions: { self: { label: 'candidate' } },
+        versions: { agents: { 'test-agent': { label: 'candidate' } } },
       });
       expect(execution).toEqual({ version: 'candidate' });
       expect(executeCandidateTool).toHaveBeenCalledOnce();
