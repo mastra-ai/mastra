@@ -1125,10 +1125,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             .strict()
             .safeParse(body);
           if (!parsed.success) {
-            return c.json(
-              { error: `Expected only globalDefault, one of: ${THINKING_LEVEL_VALUES.join(', ')}` },
-              400,
-            );
+            return c.json({ error: `Expected only globalDefault, one of: ${THINKING_LEVEL_VALUES.join(', ')}` }, 400);
           }
           const { globalDefault } = parsed.data;
           try {
