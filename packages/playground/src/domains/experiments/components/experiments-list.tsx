@@ -254,7 +254,9 @@ export function ExperimentsList({
         )}
       </DataList.Top>
 
-      {filteredData.length === 0 ? <DataList.NoMatch message="No experiments match your filters" /> : null}
+      {filteredData.length === 0 && !hasNextPage ? (
+        <DataList.NoMatch message="No experiments match your filters" />
+      ) : null}
 
       {filteredData.map((exp, index) => {
         const dsName = exp.datasetId

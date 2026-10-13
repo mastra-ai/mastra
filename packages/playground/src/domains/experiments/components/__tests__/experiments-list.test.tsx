@@ -98,6 +98,26 @@ describe('ExperimentsList', () => {
     });
   });
 
+  describe('when no loaded experiment matches and more pages can still load', () => {
+    it('does not claim that no experiment matches', () => {
+      renderList(
+        <ExperimentsList experiments={experiments} isLoading={false} search="no-such-experiment" hasNextPage />,
+      );
+
+      expect(screen.queryByText('No experiments match your filters')).toBeNull();
+    });
+  });
+
+  describe('when no experiment matches and every page is loaded', () => {
+    it('says that no experiment matches the filters', () => {
+      renderList(
+        <ExperimentsList experiments={experiments} isLoading={false} search="no-such-experiment" hasNextPage={false} />,
+      );
+
+      expect(screen.getByText('No experiments match your filters')).toBeDefined();
+    });
+  });
+
   describe('when a search term matches an experiment name', () => {
     it('shows only the matching experiment', () => {
       renderList(<ExperimentsList experiments={experiments} isLoading={false} search="model-b" />);
