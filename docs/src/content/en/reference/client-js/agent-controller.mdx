@@ -161,7 +161,7 @@ Pass `options.requestContext` to merge custom context into the run's request con
 
 ### `steer(message, options?)`
 
-Injects a message into the in-flight run without starting a new turn. Pass a string, or `{ content, files }` to attach files in the same shape as `sendMessage()`.
+Aborts the in-flight run, then sends the message as a new turn. Pass a string, or `{ content, files }` to attach files in the same shape as `sendMessage()`.
 
 ### `followUp(message, options?)`
 
