@@ -27,13 +27,14 @@ type Settings = Record<string, unknown>;
 class BuildingSandbox extends FactorySandbox<Settings> {
   readonly provider = 'recording';
   statuses: FactorySandboxBuild['status'][] = ['building', 'ready'];
+  failedError = 'boom';
   readonly gets: string[] = [];
   readonly builds: FactorySandboxBuilds<Settings> = {
     start: async () => ({ buildId: 'build-1', status: 'building', templateId: 'tpl-1' }),
     get: async (_ctx, _settings, buildId) => {
       this.gets.push(buildId);
       const status = this.statuses.length > 1 ? this.statuses.shift()! : this.statuses[0]!;
-      return { buildId, status, templateId: 'tpl-1', ...(status === 'failed' ? { error: 'boom' } : {}) };
+      return { buildId, status, templateId: 'tpl-1', ...(status === 'failed' ? { error: this.failedError } : {}) };
     },
   };
   create(): never {
@@ -177,6 +178,30 @@ describe('factory-environment-build workflow', () => {
       reason: 'boom',
     });
     expect((await seed.projects.getById({ id: project.id }))?.activeTemplateId).toBeNull();
+  });
+
+  it('redacts credentials in a failed build before returning or logging it', async () => {
+    const project = await seedProject(seed);
+    const sandbox = new BuildingSandbox();
+    sandbox.statuses = ['failed'];
+    sandbox.failedError = 'clone https://x-access-token:secret-1@github.com/acme/api failed with ghs_secret2';
+    const logged: string[] = [];
+    const logger = { info: (msg: string, meta?: Record<string, unknown>) => logged.push(msg + JSON.stringify(meta)) };
+    let mastra: Mastra | undefined;
+    const runner = new EnvironmentBuildRunner(
+      { ...depsFor(seed, sandbox), logger },
+      { getMastra: () => mastra, logger },
+    );
+    mastra = bootMastra(runner);
+
+    const run = await mastra.getWorkflow(ENVIRONMENT_BUILD_WORKFLOW_ID).createRun();
+    const result = await run.start({ inputData: { projectId: project.id, trigger: 'manual' } });
+
+    expect(result.status === 'success' && result.result.reason).toBe(
+      'clone https://***@github.com/acme/api failed with ***',
+    );
+    expect(logged.some(line => line.includes('environment build did not complete'))).toBe(true);
+    expect(logged.join('\n')).not.toMatch(/secret-1|ghs_secret2/);
   });
 
   it('gives up with unknown once the wait runs out', async () => {

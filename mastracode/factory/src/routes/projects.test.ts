@@ -1451,6 +1451,16 @@ describe('ProjectRoutes', () => {
         expect((await mastra.schedules.get(scheduleIdFor(project.id)))?.status).toBe('paused');
       });
 
+      it('treats disabling a schedule that never existed as a no-op, with no cron', async () => {
+        const { app, project, mastra } = await seedBuilding();
+
+        const disabled = await patch(app, project.id, { buildTriggers: { schedule: { enabled: false } } });
+
+        expect(disabled.status).toBe(200);
+        expect(((await disabled.json()) as any).environment.buildTriggers.schedule).toMatchObject({ enabled: false });
+        expect(await mastra.schedules.get(scheduleIdFor(project.id))).toBeNull();
+      });
+
       it('saves a setting without building; Build now picks the new settings up', async () => {
         const { app, project, sandbox } = await seedBuilding();
         const changed = await patch(app, project.id, { settings: { cpuCount: 4 } });

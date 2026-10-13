@@ -396,10 +396,10 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
 
   /**
    * Pins the active template to a finished build, but only while that build is
-   * still the project's last one. Overlapping runs (two settings edits in a
-   * row, Build now during a push build) can finish out of order; the write and
-   * the `last_build_id` check run in one transaction so a stale run never
-   * overwrites a newer build's pin. Resolves false when the pin was skipped.
+   * still the project's last one. Overlapping runs (Build now during a push
+   * build) can finish out of order; the write and the `last_build_id` check
+   * run in one transaction so a stale run never overwrites a newer build's
+   * pin. Resolves false when the pin was skipped.
    */
   async pinActiveTemplate({
     id,

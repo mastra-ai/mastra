@@ -62,6 +62,11 @@ export function redactCredentials(message: string): string {
   return message.replace(/\/\/[^/\s@]+@/g, '//***@').replace(/\b(?:gh[pousr]|github_pat)_[A-Za-z0-9_]+/g, '***');
 }
 
+/** An error's message with credentials redacted, safe to log, store or return. */
+export function errorReason(error: unknown): string {
+  return redactCredentials(error instanceof Error ? error.message : String(error));
+}
+
 /**
  * The context an environment build (or a read of its status) hands the
  * provider: the same list form a session boots with, under the build's own
@@ -177,7 +182,7 @@ export async function runEnvironmentBuild(
   const release = (changes: Parameters<EnvironmentBuildDeps['projects']['releaseBuildStart']>[0]['changes'] = {}) =>
     deps.projects.releaseBuildStart({ id: initial.id, token, changes, now: now() });
   const failed = async (error: unknown, changes: Parameters<typeof release>[0]) => {
-    const reason = redactCredentials(error instanceof Error ? error.message : String(error));
+    const reason = errorReason(error);
     await release(changes);
     deps.logger?.info('environment build failed', { factoryProjectId: initial.id, trigger: input.trigger, reason });
     return { outcome: 'failed', reason } satisfies EnvironmentBuildOutcome;
@@ -252,7 +257,7 @@ export async function runEnvironmentBuild(
     deps.logger?.info('environment build started but not recorded', {
       factoryProjectId: project.id,
       buildId: started.buildId,
-      reason: redactCredentials(error instanceof Error ? error.message : String(error)),
+      reason: errorReason(error),
     });
   }
   return outcome;
