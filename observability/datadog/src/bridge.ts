@@ -182,6 +182,8 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
   private flushGraceMs: number;
   /** True when spans or evaluations were handed to dd-trace since the last flush() */
   private pendingSend = false;
+  /** Grace wait in progress, shared by flush() calls that overlap it */
+  private graceWait: Promise<void> | null = null;
 
   constructor(config: DatadogBridgeConfig = {}) {
     super(config);
@@ -699,13 +701,20 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
   /**
    * `llmobs.flush()` returns before the background writer's HTTP request
    * completes and dd-trace gives nothing to await, so wait a bounded time
-   * instead. Only waits once per batch of new data, so the repeated flushes
-   * during shutdown don't stack.
+   * instead. Starts one wait per batch of new data, so the repeated flushes
+   * during shutdown don't stack. A flush that overlaps a running wait joins
+   * it, so no caller resolves before the data it produced had its wait.
    */
   private async waitForBackgroundSend(): Promise<void> {
-    if (!this.pendingSend || !(this.flushGraceMs > 0) || !Number.isFinite(this.flushGraceMs)) return;
-    this.pendingSend = false;
-    await new Promise(resolve => setTimeout(resolve, this.flushGraceMs));
+    if (!(this.flushGraceMs > 0) || !Number.isFinite(this.flushGraceMs)) return;
+    if (this.pendingSend) {
+      this.pendingSend = false;
+      const wait: Promise<void> = new Promise<void>(resolve => setTimeout(resolve, this.flushGraceMs)).finally(() => {
+        if (this.graceWait === wait) this.graceWait = null;
+      });
+      this.graceWait = wait;
+    }
+    await this.graceWait;
   }
 
   async shutdown(): Promise<void> {

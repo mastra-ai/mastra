@@ -1271,6 +1271,43 @@ describe('DatadogExporter', () => {
       expect(await settled(shuttingDown)).toBe(true);
       expect(mockDisable).toHaveBeenCalled();
     });
+
+    it('makes an overlapping flush join the running grace wait instead of resolving early', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key', flushGraceMs: 500 });
+      const span = createMockSpan({ traceId: 'trace-grace', isRootSpan: true });
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_STARTED, span));
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      const first = exporter.flush();
+      await vi.advanceTimersByTimeAsync(100);
+      const second = exporter.flush();
+      await vi.advanceTimersByTimeAsync(399);
+      expect(await settled(first)).toBe(false);
+      expect(await settled(second)).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await settled(first)).toBe(true);
+      expect(await settled(second)).toBe(true);
+    });
+
+    it('does not disable llmobs when shutdown overlaps a running grace wait', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key', flushGraceMs: 500 });
+      const span = createMockSpan({ traceId: 'trace-grace', isRootSpan: true });
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_STARTED, span));
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      const flushing = exporter.flush();
+      await vi.advanceTimersByTimeAsync(100);
+      const shuttingDown = exporter.shutdown();
+      await vi.advanceTimersByTimeAsync(399);
+      expect(await settled(shuttingDown)).toBe(false);
+      expect(mockDisable).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await settled(flushing)).toBe(true);
+      expect(await settled(shuttingDown)).toBe(true);
+      expect(mockDisable).toHaveBeenCalled();
+    });
   });
 
   describe('model info for LLM spans', () => {

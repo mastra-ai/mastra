@@ -956,6 +956,25 @@ describe('DatadogBridge', () => {
 
       expect(await settled(bridge.flush())).toBe(true);
     });
+
+    it('makes an overlapping flush join the running grace wait before flushing the APM exporter', async () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false, flushGraceMs: 500 });
+      const spanResult = bridge.createSpan(createMockSpanOptions())!;
+      const span = createMockSpan({ id: spanResult.spanId, traceId: spanResult.traceId });
+      await bridge.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      const first = bridge.flush();
+      await vi.advanceTimersByTimeAsync(100);
+      const second = bridge.flush();
+      await vi.advanceTimersByTimeAsync(399);
+      expect(await settled(second)).toBe(false);
+      expect(mockExporterFlush).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await settled(first)).toBe(true);
+      expect(await settled(second)).toBe(true);
+      expect(mockExporterFlush).toHaveBeenCalled();
+    });
   });
 
   describe('releaseSpan', () => {
