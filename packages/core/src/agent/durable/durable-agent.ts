@@ -3141,9 +3141,7 @@ export class DurableAgent<
     // so an absent value there marks a pre-upgrade snapshot whose resume adopts the
     // supplied scopes. Warm registry entries only exist for runs this (post-upgrade)
     // process started, so an absent live value simply means the run held no scopes.
-    const snapshotScopes = coldSnapshot
-      ? rehydratedScopes
-      : (entry.requestContext?.get(MASTRA_SCOPES_KEY) ?? []);
+    const snapshotScopes = coldSnapshot ? rehydratedScopes : (entry.requestContext?.get(MASTRA_SCOPES_KEY) ?? []);
     const resumeScopesSnapshot: AgentScopesSnapshot = {
       resourceId: memoryInfo?.resourceId,
       threadId: memoryInfo?.threadId,
