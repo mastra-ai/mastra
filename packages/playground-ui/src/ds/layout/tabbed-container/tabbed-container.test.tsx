@@ -112,6 +112,22 @@ describe('TabbedContainer', () => {
     expect(screen.getByLabelText<HTMLInputElement>('Search runs').value).toBe('weather');
   });
 
+  it('swaps the search controls with the table, so two tabs never show their controls at once', () => {
+    renderTables();
+    const runsControls = screen
+      .getByLabelText('Search runs')
+      .closest<HTMLElement>('[data-slot="tabbed-container-controls"]');
+    const scoresControls = screen
+      .getByLabelText('Search scores')
+      .closest<HTMLElement>('[data-slot="tabbed-container-controls"]');
+    expect(runsControls?.hidden).toBe(false);
+    expect(scoresControls?.hidden).toBe(true);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Scores' }));
+    expect(runsControls?.hidden).toBe(true);
+    expect(scoresControls?.hidden).toBe(false);
+  });
+
   it('keeps an empty multi-filter inactive', () => {
     render(
       <TabbedContainer defaultTab="runs">
