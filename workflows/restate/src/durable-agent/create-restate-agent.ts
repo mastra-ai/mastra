@@ -168,7 +168,7 @@ export interface RestateAgent<OUTPUT = undefined> {
   [key: string]: any;
 }
 
-function isInngestAgentRestate(obj: unknown): obj is RestateAgent {
+function isRestateAgentGuard(obj: unknown): obj is RestateAgent {
   return (
     typeof obj === 'object' &&
     obj !== null &&
@@ -178,7 +178,7 @@ function isInngestAgentRestate(obj: unknown): obj is RestateAgent {
 }
 
 export function isRestateAgent(obj: unknown): obj is RestateAgent {
-  return isInngestAgentRestate(obj);
+  return isRestateAgentGuard(obj);
 }
 
 export function createRestateAgent<TOutput = undefined>(
