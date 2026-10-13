@@ -4301,7 +4301,7 @@ describe('Agent - network - tool approval and suspension', () => {
       const guardedTool = createTool({
         id: 'guardedTool',
         description: 'A tool that requires approval.',
-        inputSchema: z.object({ query: z.string() }),
+        inputSchema: z.object({ query: z.string(), limit: z.number().default(10) }),
         requireApproval: true,
         beforeApproval,
         execute,
@@ -4329,6 +4329,7 @@ describe('Agent - network - tool approval and suspension', () => {
       }
 
       expect(beforeApproval).toHaveBeenCalledTimes(1);
+      expect(beforeApproval).toHaveBeenCalledWith({ query: 'guarded', limit: 10 }, expect.anything());
       expect(chunks.map(chunk => chunk.type)).not.toContain('tool-execution-approval');
       const executionEnd = chunks.find(chunk => chunk.type === 'tool-execution-end');
       expect(executionEnd?.payload?.result).toBe(JSON.stringify({ error: 'Order not found' }));

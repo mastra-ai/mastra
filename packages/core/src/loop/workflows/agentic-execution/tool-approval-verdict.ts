@@ -1,8 +1,10 @@
 import type { IMastraLogger } from '../../../logger';
 import type { RequestContext } from '../../../request-context';
+import type { StandardSchemaWithJSON } from '../../../schema';
 import type { RequireToolApproval } from '../../../tools';
 import { getBeforeApprovalFn, getNeedsApprovalFn } from '../../../tools/toolchecks';
 import type { ToolApprovalContext, ToolBeforeHookResult } from '../../../tools/types';
+import { validateToolInput } from '../../../tools/validation';
 
 export function buildToolApprovalContext({
   toolName,
@@ -97,6 +99,15 @@ export async function runBeforeApprovalHook({
 }): Promise<ToolBeforeHookResult | undefined> {
   const beforeApproval = getBeforeApprovalFn(tool);
   if (!beforeApproval) return undefined;
+
+  // Raw Tool instances (network loop) still carry `inputSchema`; built CoreTools validate inside
+  // their own beforeApproval wrapper. Invalid input skips the hook so execute reports the error.
+  const inputSchema = (tool as { inputSchema?: unknown } | undefined)?.inputSchema;
+  if (inputSchema) {
+    const validation = validateToolInput(inputSchema as StandardSchemaWithJSON, input, context.toolName);
+    if (validation.error) return undefined;
+    input = validation.data;
+  }
 
   const { requestContext } = buildToolApprovalContext({
     toolName: context.toolName,

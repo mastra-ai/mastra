@@ -169,4 +169,42 @@ describe('createToolCallStep beforeApproval hook (#26772)', () => {
     expect(execute).not.toHaveBeenCalled();
     expect(result).toEqual({ result: 'Order missing not found', ...inputData });
   });
+
+  describe('input passed to the hook from a createTool schema', () => {
+    const buildRefundTool = (beforeApproval: Mock) => {
+      const tool = createTool({
+        id: 'issue_refund',
+        description: 'Issue a refund',
+        inputSchema: z.object({ orderId: z.string(), amount: z.number().default(5) }),
+        requireApproval: true,
+        beforeApproval,
+        execute: vi.fn(),
+      });
+      return new CoreToolBuilder({
+        originalTool: tool,
+        options: { name: 'issue_refund', requestContext: new RequestContext(), requireApproval: true } as any,
+      }).build();
+    };
+
+    it('receives schema-parsed input with defaults applied', async () => {
+      const beforeApproval = vi.fn().mockResolvedValue(undefined);
+
+      await makeStep(buildRefundTool(beforeApproval)).execute(
+        makeExecuteParams(suspend, { inputData: { ...inputData, args: { orderId: 'a' } } }),
+      );
+
+      expect(beforeApproval).toHaveBeenCalledWith({ orderId: 'a', amount: 5 }, expect.anything());
+    });
+
+    it('is skipped for input that fails the schema, leaving validation to execute', async () => {
+      const beforeApproval = vi.fn().mockResolvedValue({ proceed: false, output: 'rejected' });
+
+      const result = await makeStep(buildRefundTool(beforeApproval)).execute(
+        makeExecuteParams(suspend, { inputData: { ...inputData, args: { orderId: 123 } } }),
+      );
+
+      expect(beforeApproval).not.toHaveBeenCalled();
+      expect(result).toBe('suspended');
+    });
+  });
 });

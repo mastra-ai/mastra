@@ -1183,15 +1183,30 @@ export class CoreToolBuilder extends MastraBase {
       requireApproval = true;
     }
 
+    const originalBeforeApproval =
+      'beforeApproval' in this.originalTool && typeof this.originalTool.beforeApproval === 'function'
+        ? (this.originalTool.beforeApproval as BeforeApprovalFn)
+        : undefined;
+    // The hook is typed against the parsed input, so validate with the same schema execute uses.
+    // Invalid input skips the hook; execute reports the validation error after the approval gate.
+    const beforeApproval: BeforeApprovalFn | undefined = originalBeforeApproval
+      ? (input, context) => {
+          const { data, error } = validateToolInput(
+            (inputValidationSchema ?? originalSchema) as StandardSchemaWithJSON | undefined,
+            input,
+            this.options.name,
+          );
+          if (error) return undefined;
+          return originalBeforeApproval(data, context);
+        }
+      : undefined;
+
     const definition = {
       type: 'function' as const,
       description: this.originalTool.description,
       requireApproval,
       needsApprovalFn,
-      beforeApproval:
-        'beforeApproval' in this.originalTool && typeof this.originalTool.beforeApproval === 'function'
-          ? (this.originalTool.beforeApproval as BeforeApprovalFn)
-          : undefined,
+      beforeApproval,
       hasSuspendSchema: !!this.getSuspendSchema(),
       execute: this.originalTool.execute
         ? this.createExecute(

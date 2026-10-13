@@ -94,7 +94,8 @@ export type BeforeApprovalContext = NeedsApprovalContext & {
  * Per-tool hook that runs after the call is known to require approval but before the
  * run suspends for it. Return `{ proceed: false, output }` to reject the call: the run
  * does not pause, the tool does not execute, and `output` is returned to the model as
- * the tool result. Return nothing to continue to the approval gate.
+ * the tool result. Return nothing to continue to the approval gate. `input` is validated
+ * against the tool's `inputSchema`; calls whose input fails validation skip the hook.
  */
 export type BeforeApprovalFn<TInput = any, TOutput = unknown> = (
   input: TInput,
