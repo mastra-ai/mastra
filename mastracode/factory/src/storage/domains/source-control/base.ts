@@ -560,7 +560,6 @@ interface ProjectRepositoryDbRow extends Record<string, unknown> {
 /** The environment columns on `factory_projects` the backfill reads and writes. */
 interface EnvironmentProjectRow extends Record<string, unknown> {
   id: string;
-  sandbox_working_directory: string | null;
   environment_backfilled_at: Date | null;
 }
 
@@ -839,15 +838,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
             );
           }
 
-          const oldest = projectLinks[0];
-          await this.ops.updateMany(
-            FACTORY_PROJECTS,
-            { id: project.id },
-            {
-              sandbox_working_directory: project.sandbox_working_directory ?? oldest?.sandbox_workdir ?? null,
-              environment_backfilled_at: new Date(),
-            },
-          );
+          await this.ops.updateMany(FACTORY_PROJECTS, { id: project.id }, { environment_backfilled_at: new Date() });
         } catch {
           failedProjects.push(project.id);
         }
