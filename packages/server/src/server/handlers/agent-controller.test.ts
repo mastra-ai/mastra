@@ -642,38 +642,49 @@ describe('agent-controller routes', () => {
       expect(schema.safeParse({ message: 'hi', files: [large, large, large] }).success).toBe(false);
     });
 
-    it('resolves a message label once and forwards its immutable version pin', async () => {
-      const session = await getRouteSession('user-versioned');
-      const spy = vi.spyOn(session, 'sendMessage').mockResolvedValue(undefined);
-      const requestContext = makeRequestContext();
-      const selectedAgent = makeAgent();
-      selectedAgent.__setRawConfig({ resolvedVersionId: 'version-1', selectedVersionLabel: 'candidate' });
-      const applyStoredOverrides = vi.fn().mockResolvedValue(selectedAgent);
-      vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+    it.each([
+      ['message', SEND_AGENT_CONTROLLER_MESSAGE_ROUTE, 'sendMessage'],
+      ['steer', STEER_AGENT_CONTROLLER_SESSION_ROUTE, 'steer'],
+    ] as const)(
+      'resolves an HTTP %s label once and preserves its pin, author, and context',
+      async (_name, route, method) => {
+        const session = await getRouteSession('user-versioned');
+        const spy = vi.spyOn(session, method).mockResolvedValue(undefined);
+        const requestContext = makeRequestContext();
+        const selectedAgent = makeAgent();
+        selectedAgent.__setRawConfig({ resolvedVersionId: 'version-1', selectedVersionLabel: 'candidate' });
+        const applyStoredOverrides = vi.fn().mockResolvedValue(selectedAgent);
+        vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
 
-      await SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
-        mastra,
-        controllerId: 'code',
-        resourceId: 'user-versioned',
-        message: 'hello candidate',
-        versions: {
-          agents: { 'test-agent': { label: 'candidate' } },
-        },
-        requestContext,
-      } as any);
+        await route.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-versioned',
+          message: 'hello candidate',
+          versions: {
+            agents: { 'test-agent': { label: 'candidate' } },
+          },
+          requestContext,
+        } as any);
 
-      expect(applyStoredOverrides).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 'test-agent' }),
-        { label: 'candidate' },
-        requestContext,
-      );
-      expect(requestContext.get('mastra__versions')).toEqual({ agents: { 'test-agent': { versionId: 'version-1' } } });
-      expect(spy).toHaveBeenCalledWith({
-        content: 'hello candidate',
-        requestContext,
-        versions: { agents: { 'test-agent': { versionId: 'version-1' } } },
-      });
-    });
+        expect(applyStoredOverrides).toHaveBeenCalledTimes(1);
+        expect(applyStoredOverrides).toHaveBeenCalledWith(
+          expect.objectContaining({ id: 'test-agent' }),
+          { label: 'candidate' },
+          requestContext,
+        );
+        expect(requestContext.get('mastra__versions')).toEqual({
+          agents: { 'test-agent': { versionId: 'version-1' } },
+        });
+        expect(spy).toHaveBeenCalledWith({
+          content: 'hello candidate',
+          requestContext,
+          versions: { agents: { 'test-agent': { versionId: 'version-1' } } },
+          author: { id: 'user-123' },
+        });
+        expect(spy.mock.calls[0]?.[0].requestContext).toBe(requestContext);
+      },
+    );
 
     it.each([
       ['message', SEND_AGENT_CONTROLLER_MESSAGE_ROUTE],
