@@ -8,12 +8,11 @@ import { useTableVariant } from './table-context';
 import { cn } from '@/lib/utils';
 import { formatDate } from '@/utils/date-format';
 
-export type TableCellTone = 'ink' | 'muted' | 'negative';
+export type TableCellTone = 'ink' | 'muted';
 
 const tableCellToneClasses: Record<TableCellTone, string> = {
   ink: 'text-foreground',
   muted: 'text-muted-foreground',
-  negative: 'text-destructive-foreground',
 };
 
 export interface CellProps extends Omit<React.ComponentProps<'td'>, 'align'> {

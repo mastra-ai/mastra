@@ -376,7 +376,7 @@ function CreditRow({ credit }: { credit: Credit }) {
   return (
     <Table.Row>
       <Table.Cell>{credit.type}</Table.Cell>
-      <Table.Cell align="end" tone={credit.amount < 0 ? 'negative' : 'ink'}>
+      <Table.Cell align="end" tone={credit.amount < 0 ? 'muted' : 'ink'}>
         {formatCreditAmount(credit.amount)}
       </Table.Cell>
       <Table.Cell>
@@ -988,7 +988,7 @@ export const InsetColumnPicker: Story = {
                   <Table.Cell
                     key={column.id}
                     align={column.align}
-                    tone={column.id === 'amount' && credit.amount < 0 ? 'negative' : undefined}
+                    tone={column.id === 'amount' && credit.amount < 0 ? 'muted' : undefined}
                   >
                     {column.cell(credit)}
                   </Table.Cell>
@@ -1026,7 +1026,7 @@ export const InsetRowButtons: Story = {
                 <Table.Cell>
                   <Table.RowButton onClick={() => setSelected(credit)}>{credit.type}</Table.RowButton>
                 </Table.Cell>
-                <Table.Cell align="end" tone={credit.amount < 0 ? 'negative' : undefined}>
+                <Table.Cell align="end" tone={credit.amount < 0 ? 'muted' : undefined}>
                   {formatCreditAmount(credit.amount)}
                 </Table.Cell>
                 <Table.Cell>

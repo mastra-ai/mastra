@@ -119,7 +119,7 @@ Renders `th` (the same component as `Th`). The alignment below applies to inset 
 Renders `td` (the same component as `Cell`). In inset mode it renders children directly, without the legacy flex wrapper. The props below apply to inset tables.
 
 - `align?: 'start' | 'center' | 'end'`, default `'start'`. Use `'end'` for numbers, matching the column's head.
-- `tone?: 'ink' | 'muted' | 'negative'`, default `'ink'`. Leave data cells at `'ink'`; see **Text color** below for when `'muted'` applies. Use `'negative'` for amounts below zero.
+- `tone?: 'ink' | 'muted'`, default `'ink'`. Leave data cells at `'ink'`; see **Text color** below for when `'muted'` applies.
 
 ### `Table.RowButton`
 
@@ -172,7 +172,7 @@ The following sizing rules apply to the inset variant.
 - The first column, which names the row, stays full strength and every other column uses `tone="muted"`.
 - Secondary text inside a cell, such as a caption under a title, uses `Txt tone="muted"`.
 
-**Negative amounts are red.** Format money with `formatFullNumber(value, { currency: 'USD' })` from `@mastra/playground-ui/utils/cost`, which keeps the minus sign (`-$12.40`), and set `tone="negative"` on the cell when the value is below zero. Color reinforces the sign; never rely on it alone, so keep the minus.
+**Negative amounts are muted, not red.** Format money with `formatFullNumber(value, { currency: 'USD' })` from `@mastra/playground-ui/utils/cost`, which keeps the minus sign (`-$12.40`), and set `tone="muted"` on the cell when the value is below zero. Usage and charges are normal activity, not errors, so they must not look like a problem. The minus sign carries the meaning; the lighter gray only helps it scan.
 
 **Text stays on one line.** Cells do not wrap, so a short value such as `18 vCPU-hours` never breaks. When a cell holds prose, wrap it in your own element that allows wrapping, and give it a minimum width:
 

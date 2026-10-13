@@ -133,12 +133,12 @@ export function CreditHistory({ credits }: { credits: Credit[] }) {
 
 - `Table` takes `variant="inset"` for the DataList surface. Omit `variant` to preserve the existing default appearance and sizing. `columnDividers` draws lines between columns in inset mode.
 - `Table.Head` takes `align` (`start`, `center`, or `end`).
-- `Table.Cell` takes `align` and `tone` (`ink`, `muted`, or `negative`).
+- `Table.Cell` takes `align` and `tone` (`ink` or `muted`).
 - Every column is the same color. Use `Txt tone="muted"` only for secondary text inside a cell, such as a second line, or mute every column except the first.
 - `Table.SortButton` goes inside a sortable `Table.Head` and shows the sort arrow.
 - `Table.RowLink` makes the whole row a link. `Table.RowButton` makes it a button, for opening a drawer or dialog. Pass `render={<Link to="…" />}` for a router link.
 - `Table.Pagination` goes below the table: Previous, numbered pages, and Next. It takes a zero-based `page`, `pageCount`, and `onPageChange`. The caller supplies the current page’s rows, from a local slice or a server query.
-- Text is left-aligned; numbers are right-aligned with `align="end"` on the head and cells. Negative amounts keep their minus sign and use `tone="negative"`, which renders them red.
+- Text is left-aligned; numbers are right-aligned with `align="end"` on the head and cells. Negative amounts keep their minus sign and use `tone="muted"`; never red, since usage isn't an error.
 - Rows are at least 36px tall and grow with their content. Cells stay on one line unless you wrap their text in an element with `whitespace-normal`.
 
 Use `Table` for data people read and compare, such as billing history or usage. Use `DataList` for lists of entities people click into, such as agents or traces, which need row keyboard navigation, sticky or reorderable columns, or virtualization. Search and filters go in an `ActionRow` above either one. Choose based on the rows rendered at once, not the total dataset size; large server-paginated datasets can use Table.
