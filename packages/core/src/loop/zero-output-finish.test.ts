@@ -80,7 +80,7 @@ describe('zero-output finishReason "other"', () => {
     expect(errorChunk.payload.error.message).toContain('finishReason "other"');
   });
 
-  it('still continues the loop when finishReason "other" comes with output', async () => {
+  it('terminates after output when finishReason "other" has no tool calls', async () => {
     let call = 0;
     const model: ModelManagerModelConfig = {
       id: 'other-with-output',
@@ -111,8 +111,8 @@ describe('zero-output finishReason "other"', () => {
 
     const chunks = await runLoop({ models: [model] });
 
-    // 'other' with output is non-terminal: the loop continues and finishes on 'stop'.
-    expect(call).toBe(2);
+    // A non-standard finish reason without tool calls must not resend the request.
+    expect(call).toBe(1);
     expect(chunks.some(chunk => chunk.type === 'error')).toBe(false);
     expect(chunks.some(chunk => chunk.type === 'finish')).toBe(true);
   });

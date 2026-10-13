@@ -3179,8 +3179,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         finishReason !== 'error' &&
         finishReason !== 'length' &&
         finishReason !== 'content-filter';
-      const shouldContinue =
-        shouldRetry || (!tripwireTriggered && (hasPendingToolCalls || !TERMINAL_FINISH_REASONS.includes(finishReason)));
+      const shouldContinue = shouldRetry || (!tripwireTriggered && hasPendingToolCalls);
 
       // Fail abandoned provider calls before creating snapshots so persisted history
       // cannot retain pending calls after a terminal error. Only target this step's IDs.
