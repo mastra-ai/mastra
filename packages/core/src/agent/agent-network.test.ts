@@ -4494,6 +4494,86 @@ describe('Agent - network - tool approval and suspension', () => {
       expect(toolResult?.result).toContain('scoped info');
     });
 
+    it('adopts supplied scopes when resuming a pre-upgrade network snapshot that recorded none', async () => {
+      const networkAgent = new Agent({
+        id: 'pre-upgrade-network-agent',
+        name: 'Pre-upgrade Network Agent',
+        instructions: 'Use the suspending-tool when asked to collect info.',
+        model: createRoutingMockModel('suspendingTool', 'tool', JSON.stringify({ initialQuery: 'legacy' })),
+        tools: { suspendingTool },
+        memory,
+      });
+      const mastra = new Mastra({ agents: { networkAgent }, storage, logger: false });
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Collect information with initial query "legacy"', {
+        memory: { thread: 'legacy-thread', resource: 'legacy-resource' },
+      });
+      for await (const _chunk of anStream) {
+        // drain until suspension
+      }
+
+      // Simulate a run suspended before the scopes upgrade: strip the recorded scope set.
+      const workflowsStore = await mastra.getStorage()!.getStore('workflows');
+      const snapshot: any = await workflowsStore!.loadWorkflowSnapshot({
+        workflowName: 'agent-loop-main-workflow',
+        runId: anStream.runId,
+      });
+      delete snapshot.requestContext?.[MASTRA_SCOPES_KEY];
+      await workflowsStore!.persistWorkflowSnapshot({
+        workflowName: 'agent-loop-main-workflow',
+        runId: anStream.runId,
+        snapshot,
+      });
+
+      // Previously this threw AGENT_SCOPES_CONFLICT; a pre-upgrade run adopts the scopes.
+      const resumeStream = await registeredAgent.resumeNetwork(
+        { userResponse: 'legacy info' },
+        { runId: anStream.runId, requestContext: new RequestContext([[MASTRA_SCOPES_KEY, ['org:a']]]) },
+      );
+      let toolResult: any;
+      for await (const chunk of resumeStream) {
+        if (chunk.type === 'tool-execution-end') toolResult = chunk.payload?.result;
+      }
+      expect(toolResult?.result).toContain('legacy info');
+    });
+
+    it('records an empty scope set on network runs so a scopeless resume still rejects added scopes', async () => {
+      const networkAgent = new Agent({
+        id: 'stamped-network-agent',
+        name: 'Stamped Network Agent',
+        instructions: 'Use the suspending-tool when asked to collect info.',
+        model: createRoutingMockModel('suspendingTool', 'tool', JSON.stringify({ initialQuery: 'stamped' })),
+        tools: { suspendingTool },
+        memory,
+      });
+      const mastra = new Mastra({ agents: { networkAgent }, storage, logger: false });
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Collect information with initial query "stamped"', {
+        memory: { thread: 'stamped-thread', resource: 'stamped-resource' },
+      });
+      for await (const _chunk of anStream) {
+        // drain until suspension
+      }
+
+      // The snapshot records the (empty) scope set unconditionally, so the resume can tell
+      // "held no scopes" from a pre-upgrade snapshot.
+      const workflowsStore = await mastra.getStorage()!.getStore('workflows');
+      const snapshot: any = await workflowsStore!.loadWorkflowSnapshot({
+        workflowName: 'agent-loop-main-workflow',
+        runId: anStream.runId,
+      });
+      expect(snapshot.requestContext?.[MASTRA_SCOPES_KEY]).toEqual([]);
+
+      await expect(
+        registeredAgent.resumeNetwork(
+          { userResponse: 'nope' },
+          { runId: anStream.runId, requestContext: new RequestContext([[MASTRA_SCOPES_KEY, ['org:a']]]) },
+        ),
+      ).rejects.toMatchObject({ id: 'AGENT_SCOPES_CONFLICT' });
+    });
+
     it('keeps resume identity precedence when no scopes are involved', async () => {
       const networkAgent = new Agent({
         id: 'unscoped-network-agent',

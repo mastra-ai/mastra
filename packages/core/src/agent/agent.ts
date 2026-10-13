@@ -8045,7 +8045,11 @@ export class Agent<
     return {
       resourceId: input?.threadResourceId,
       threadId: input?.threadId,
-      scopes: scopes ?? [],
+      // `network()` records the run's scope set unconditionally ([] included), so a recorded
+      // empty set is authoritative: a resume may not add scopes. An ABSENT key marks a run
+      // suspended before the scopes upgrade — it adopts the supplied scopes, the same trust
+      // posture as a fresh run (identity stays pinned by the snapshot's resource/thread above).
+      scopes: Array.isArray(scopes) ? scopes : undefined,
     };
   }
 
@@ -9029,7 +9033,18 @@ export class Agent<
       },
       { callScopes: options?.scopes, defaultScopes: defaultNetworkOptions?.scopes },
     );
-    const requestContextToUse = mergedOptions.requestContext;
+    let requestContextToUse = mergedOptions.requestContext;
+    // Persist the run's scope set unconditionally — [] included — so a resume can tell
+    // "held no scopes" (recorded [], re-supplied scopes are rejected) from a pre-upgrade
+    // snapshot (key absent, supplied scopes are adopted). The derived run context omits
+    // the key when the run has no non-identity scopes, so stamp a marked empty set on a
+    // copy (never the caller's context) before the workflow run snapshots it. Mirrors
+    // prepareForDurableExecution's persisted-entries stamp.
+    if (!Array.isArray(requestContextToUse.get(MASTRA_SCOPES_KEY))) {
+      const stamped = new RequestContext(Array.from(requestContextToUse.entries())) as typeof requestContextToUse;
+      setRunAgentScopes(stamped, []);
+      requestContextToUse = stamped;
+    }
 
     const runId = mergedOptions?.runId || this.#mastra?.generateId() || globalThis.crypto.randomUUID();
 
@@ -9105,7 +9120,9 @@ export class Agent<
       {
         callScopes: options?.scopes,
         defaultScopes: defaultNetworkOptions?.scopes,
-        // Without a readable snapshot the run held no known scopes, so a resume may not add any.
+        // Without a stored snapshot at all there is nothing to resume against, so a resume
+        // may not add scopes. Key-absent-on-snapshot (pre-upgrade) adopts — see
+        // #getNetworkSnapshotScopes.
         snapshot: (await this.#getNetworkSnapshotScopes(runId)) ?? { scopes: [] },
       },
     );
