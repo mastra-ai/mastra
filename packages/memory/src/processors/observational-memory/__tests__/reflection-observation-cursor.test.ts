@@ -54,7 +54,7 @@ it('preserves the just-persisted observation cursor when reflection reads detach
       threadTitle: false,
     },
     reflection: {
-      model: modelWithObservations('* User is testing durable observation cursors'),
+      model: modelWithObservations('* User is testing reflection snapshot cursors'),
       observationTokens: 200,
     },
   });

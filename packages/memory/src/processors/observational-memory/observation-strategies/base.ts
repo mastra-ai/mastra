@@ -1,6 +1,5 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import type { MessageHistory } from '@mastra/core/processors';
-import { maxObservationCursor } from '@mastra/core/storage';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
 import xxhash from 'xxhash-wasm';
 
@@ -42,6 +41,23 @@ const hasherPromise = xxhash();
 
 /** Recompose-and-retry rounds for an observation commit that hit a retired or changed head. */
 const MAX_HEAD_COMMIT_RETRIES = 3;
+
+/**
+ * Later of two observation cursors (the cursor never moves backward).
+ *
+ * Kept memory-local instead of importing core's `maxObservationCursor`:
+ * `@mastra/memory` supports core versions whose storage entry predates that
+ * export, and a named import of a missing export throws at module load —
+ * before any older-core fallback can run.
+ */
+function laterObservationCursor(
+  a: Date | string | null | undefined,
+  b: Date | string | null | undefined,
+): Date | undefined {
+  if (!a) return b ? new Date(b) : undefined;
+  if (!b) return new Date(a);
+  return new Date(Math.max(new Date(a).getTime(), new Date(b).getTime()));
+}
 
 const OBSERVATION_LIFECYCLE_MARKERS = new Set([
   'data-om-observation-start',
@@ -213,9 +229,11 @@ export abstract class ObservationStrategy {
             activeObservations: processed.observations,
             observationTokenCount: processed.observationTokens,
             // `committedRecord` can be a detached pre-commit copy (SQL adapters), so its cursor
-            // misses what this cycle just persisted. Reflection must carry the persisted cursor,
-            // or the new generation starts behind it and re-selects just-observed messages.
-            lastObservedAt: maxObservationCursor(committedRecord.lastObservedAt, processed.lastObservedAt),
+            // misses what this cycle just persisted. Keep the reflection snapshot consistent
+            // with storage: current adapters re-read the stored row when creating the
+            // generation (their persisted cursor stays correct), but the stale snapshot still
+            // feeds reflection decisions and any adapter that trusts `currentRecord`.
+            lastObservedAt: laterObservationCursor(committedRecord.lastObservedAt, processed.lastObservedAt),
           },
           observationTokens: processed.observationTokens,
           threadId,
