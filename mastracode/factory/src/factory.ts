@@ -21,7 +21,6 @@
 
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
-import { buildMode } from '@mastra/code-sdk/agents/modes/build';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { AgentControllerChannels } from '@mastra/core/channels';
@@ -81,11 +80,7 @@ import {
 import { readFactorySessionScope, resolveFactorySessionAddress } from './rules/binding-context.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import type { FactoryRuleActor } from './rules/index.js';
-import {
-  FACTORY_THINKING_RESOLUTION,
-  FactoryPhaseStateProcessor,
-  reportMemorySettingsUnavailable,
-} from './rules/processor.js';
+import { FactoryPhaseStateProcessor, reportMemorySettingsUnavailable } from './rules/processor.js';
 import { createReviewSourceTool, resolveReviewSourceUiOrigin } from './rules/review-source-tool.js';
 import { createTerminalStageCleanup } from './rules/terminal-cleanup.js';
 import { createFactoryTransitionTools } from './rules/tools.js';
@@ -97,6 +92,7 @@ import type { MastraFactorySandboxConfig } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
+import { FACTORY_MODES, FACTORY_THINKING_RESOLUTION } from './session/build-only-mode.js';
 import { hydrateSessionDefaultModel } from './session/default-model-hydration.js';
 import { createSourceControlSessionLookup } from './session/factory-session.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
@@ -990,15 +986,14 @@ export class MastraFactory {
     );
 
     // Build the real production controller (agents, tools, memory, OM, MCP,
-    // providers) — the terminal app's, minus modes: Factory sessions only run
-    // Build, so threads left in Plan or Fast fall back to it. Agent state lives in
+    // providers) — the terminal app's, minus modes. Agent state lives in
     // the storage backend's Mastra store alongside the Factory app tables —
     // one shared database for all users, separated by `resourceId` scoping.
     const prepared = await timedPhase('prepare.controllerMount', () =>
       prepareAgentControllerMount({
         controllerId: CONTROLLER_ID,
         coAuthor: { name: 'mastra-platform[bot]' },
-        modes: [buildMode],
+        modes: FACTORY_MODES,
         thinkingResolution: FACTORY_THINKING_RESOLUTION,
         workspace: createWorkspaceFactory({
           ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),

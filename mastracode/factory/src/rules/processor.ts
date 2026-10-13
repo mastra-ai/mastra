@@ -1,5 +1,4 @@
 import { resolveRequestThinkingLevel } from '@mastra/code-sdk/agents/model';
-import type { ThinkingResolutionOptions } from '@mastra/code-sdk/agents/model';
 import type { ThinkingLevel } from '@mastra/code-sdk/providers/openai-codex';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent/message-list';
@@ -14,6 +13,7 @@ import type {
 
 import { boardForWorkItem, resolveBoardToolRule, workItemPhaseSemantics } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { FACTORY_THINKING_RESOLUTION } from '../session/build-only-mode.js';
 import type { FactoryRunBindingRecord, WorkItemsStorage, WorkItemRow } from '../storage/domains/work-items/base.js';
 import { findSessionRunBinding, getFactorySessionCoordinates } from './binding-context.js';
 import type { FactoryTransitionService } from './transition-service.js';
@@ -94,8 +94,6 @@ type ActivePhaseSnapshotValue = ActivePhaseSnapshotBase & {
 };
 
 type PhaseSnapshotValue = ActivePhaseSnapshotValue | { bindingId?: string; status: 'none' };
-
-export const FACTORY_THINKING_RESOLUTION = { applyModeDefaults: false } satisfies ThinkingResolutionOptions;
 
 function reviewRuntimeFromRequestContext(requestContext: ComputeStateSignalArgs['requestContext']): RuntimeSnapshot {
   if (!requestContext || typeof requestContext.get !== 'function') {

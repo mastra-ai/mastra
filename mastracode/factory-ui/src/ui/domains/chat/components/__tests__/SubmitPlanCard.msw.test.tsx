@@ -128,7 +128,7 @@ describe('SubmitPlanCard', () => {
       renderCard({ onRespond });
 
       await screen.findByText('Ship dark mode');
-      await user.click(screen.getByRole('button', { name: 'Approve the plan and switch to build' }));
+      await user.click(screen.getByRole('button', { name: 'Approve the plan and build it' }));
 
       expect(onRespond).toHaveBeenCalledWith({
         action: 'approved',
@@ -155,7 +155,7 @@ describe('SubmitPlanCard', () => {
 
       expect(await screen.findByLabelText('Loading plan')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Copy plan' })).toBeDisabled();
-      expect(screen.getByRole('button', { name: 'Approve the plan and switch to build' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Approve the plan and build it' })).toBeDisabled();
       expect(screen.getByRole('button', { name: 'Reject the plan' })).toBeDisabled();
       expect(onRespond).not.toHaveBeenCalled();
 
@@ -163,7 +163,7 @@ describe('SubmitPlanCard', () => {
       releasePlan?.();
       await screen.findByText('Ship dark mode');
       expect(screen.getByRole('button', { name: 'Copy plan' })).toBeEnabled();
-      expect(screen.getByRole('button', { name: 'Approve the plan and switch to build' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Approve the plan and build it' })).toBeEnabled();
       expect(screen.getByRole('button', { name: 'Reject the plan' })).toBeEnabled();
     });
 
@@ -177,7 +177,7 @@ describe('SubmitPlanCard', () => {
       expect(await screen.findByRole('note')).toHaveTextContent('The plan could not be loaded');
 
       // A plan that was never shown must not be approvable.
-      expect(screen.getByRole('button', { name: 'Approve the plan and switch to build' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Approve the plan and build it' })).toBeDisabled();
 
       const reject = screen.getByRole('button', { name: 'Reject the plan' });
       expect(reject).toBeEnabled();
@@ -200,7 +200,7 @@ describe('SubmitPlanCard', () => {
       // The absolute path was mapped to a workspace-relative path the file route accepts.
       expect(requests).toHaveLength(1);
       expect(requests[0].get('path')).toBe('.artifacts/plans/add-dark-mode.md');
-      expect(screen.getByRole('button', { name: 'Approve the plan and switch to build' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Approve the plan and build it' })).toBeEnabled();
     });
 
     it('does not fetch an absolute path outside the workspace artifacts root', async () => {
@@ -214,7 +214,7 @@ describe('SubmitPlanCard', () => {
 
       expect(await screen.findByRole('note')).toHaveTextContent('The plan could not be loaded');
       expect(requests).toHaveLength(0);
-      expect(screen.getByRole('button', { name: 'Approve the plan and switch to build' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Approve the plan and build it' })).toBeDisabled();
       expect(screen.getByRole('button', { name: 'Reject the plan' })).toBeEnabled();
     });
 
@@ -228,7 +228,7 @@ describe('SubmitPlanCard', () => {
 
       await screen.findByText('Blank plan');
       // A plan with no visible body must not be approvable.
-      expect(screen.getByRole('button', { name: 'Approve the plan and switch to build' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Approve the plan and build it' })).toBeDisabled();
       expect(screen.getByRole('button', { name: 'Reject the plan' })).toBeEnabled();
     });
 

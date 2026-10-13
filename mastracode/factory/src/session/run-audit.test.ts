@@ -74,17 +74,6 @@ describe('Factory run lifecycle audit', () => {
     await expect(listSessionOpenRuns(session)).resolves.toEqual([OPEN_RUN]);
   });
 
-  it('given a started run, when its start and end are audited, then neither names the agent after a mode', async () => {
-    const { start, emit, events } = await setup();
-    await start();
-    emit('complete');
-
-    await vi.waitFor(async () => expect(await events()).toHaveLength(2));
-    const recorded = await events();
-    expect(recorded.map(event => event.action).sort()).toEqual(['factory.run.ended', 'factory.run.started']);
-    for (const event of recorded) expect(event.metadata).not.toHaveProperty('agentName');
-  });
-
   it('accepts ledger entries written before ownership was recorded', async () => {
     const { session, settings } = makeSession();
     settings[FACTORY_OPEN_RUNS_SETTING] = [OPEN_RUN];

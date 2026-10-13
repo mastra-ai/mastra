@@ -31,6 +31,8 @@ export function thinkingLevelOptionsForModel(
 
 export type ThinkingLevelOrigin = 'session' | 'global';
 
+export const GLOBAL_THINKING_SOURCE_LABEL = 'global default';
+
 export interface EffectiveThinkingLevel {
   level: ThinkingLevelSetting;
   origin: ThinkingLevelOrigin;

@@ -28,7 +28,7 @@ import { settingsSectionPath } from '../../settings/settingsSections';
 import type { SlashCommand, SlashCommandOption } from '../services/commands';
 import { findCommand, parseSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { THINKING_LEVEL_LABELS } from '../services/thinkingLevels';
+import { GLOBAL_THINKING_SOURCE_LABEL, THINKING_LEVEL_LABELS } from '../services/thinkingLevels';
 import { useChatModels } from './useChatModels';
 import { useChatPermissions } from './useChatPermissions';
 import { useChatSessionContext } from './useChatSessionContext';
@@ -36,6 +36,10 @@ import { useChatRuntime } from './useChatRuntime';
 import { useChatTranscript } from './useChatTranscript';
 
 const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
+
+function describeGlobalDefault(level: string): string {
+  return `${level} (${GLOBAL_THINKING_SOURCE_LABEL})`;
+}
 
 export function useChatCommandRegistry(prefillComposer: (draft: string) => void) {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -207,17 +211,18 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
             await updateSettingsMutation.mutateAsync({ thinkingLevel: null });
             try {
               const { globalDefault } = await ensureThinkingConfig();
-              pushNotice(`Thinking level set to default: ${globalDefault} (global default).`);
+              pushNotice(`Thinking level set to default: ${describeGlobalDefault(globalDefault)}.`);
             } catch {
               pushNotice('Thinking level set to default. Current default is unavailable.');
             }
             return;
           }
           const [settings, { globalDefault }] = await Promise.all([ensureSettings(), ensureThinkingConfig()]);
+          const defaultLevel = describeGlobalDefault(globalDefault);
           pushNotice(
             settings.thinkingLevel
-              ? `Thinking level: ${settings.thinkingLevel} (session override). Default: ${globalDefault} (global default).`
-              : `Thinking level: ${globalDefault} (global default).`,
+              ? `Thinking level: ${settings.thinkingLevel} (session override). Default: ${defaultLevel}.`
+              : `Thinking level: ${defaultLevel}.`,
           );
         } catch (error) {
           prefillComposer(originalText);
