@@ -116,7 +116,7 @@ export async function captureSessionFilesystem(
     // and leaves the previous listing in place.
     const multiRepo = layout.repos.length > 1;
     const environment = multiRepo ? peekSessionEnvironment(sourceSession.sessionId) : undefined;
-    const ownRepo = entry.workdirRepo!.toLowerCase();
+    const ownRepo = entry.ownRepo.toLowerCase();
     // The boot records the state at its end, after every setup command; until
     // then a secondary checkout compares against its own `origin/HEAD`.
     const baseBranchFor = (repo: SessionLayoutRepository): string => {

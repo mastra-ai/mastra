@@ -75,6 +75,30 @@ describe('session sandbox memo', () => {
     await expect(resolveSessionWorkdir('sess-1', sandbox, 'acme/api')).resolves.toBe('/home/user/api');
   });
 
+  it('never memoizes a sibling resolved first on a cold memo', async () => {
+    const executeCommand = vi.fn(async () => ({ exitCode: 0, stdout: '/home/user\n', stderr: '' }));
+    const sandbox = { id: 'sb-1', provider: 'e2b', executeCommand } as unknown as WorkspaceSandbox;
+    getSessionSandbox('sess-1', 'acme/api', () => sandbox);
+
+    await expect(resolveSessionWorkdir('sess-1', sandbox, 'acme/docs')).resolves.toBe('/home/user/docs');
+    expect(peekSessionSandbox('sess-1')?.workdir).toBe('/home/user/api');
+    await expect(resolveSessionWorkdir('sess-1', sandbox, 'acme/api')).resolves.toBe('/home/user/api');
+    expect(executeCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('never memoizes a sibling resolved first under a declared remote workingDirectory', async () => {
+    const sandbox = {
+      id: 'sb-1',
+      provider: 'e2b',
+      workingDirectory: '/workspace',
+      executeCommand: vi.fn(),
+    } as unknown as WorkspaceSandbox;
+    getSessionSandbox('sess-1', 'acme/api', () => sandbox);
+
+    await expect(resolveSessionWorkdir('sess-1', sandbox, 'acme/docs')).resolves.toBe('/workspace/docs');
+    expect(peekSessionSandbox('sess-1')?.workdir).toBe('/workspace/api');
+  });
+
   it('uses a remote sandbox declared workingDirectory without probing', async () => {
     const executeCommand = vi.fn(async () => ({ exitCode: 0, stdout: '/home/user\n', stderr: '' }));
     const sandbox = {

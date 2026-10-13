@@ -530,7 +530,7 @@ async function sessionSandbox(session: SourceControlSession): Promise<SessionSan
     sandbox,
     filesystem: new SandboxFilesystem({ sandbox, workdir: layout.root }),
     layout,
-    baseBranches: repositoryBaseBranches(session, layout, entry.workdirRepo!),
+    baseBranches: repositoryBaseBranches(session, layout, entry.ownRepo),
   };
 }
 

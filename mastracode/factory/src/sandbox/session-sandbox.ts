@@ -129,8 +129,8 @@ interface SessionSandboxEntry {
    * treat an unresolved workdir as "nothing materialized".
    */
   workdir?: string;
-  /** The repository `workdir` was derived for: the memo answers only that repository. */
-  workdirRepo?: string;
+  /** The session's own repository, the only one `workdir` is ever recorded for. */
+  ownRepo: string;
   /** Environment repositories in position order; the session's own repository is among them. */
   repos?: string[];
 }
@@ -159,8 +159,8 @@ export interface SessionLayout {
 
 /** The layout of a memoized session, `undefined` until its workdir resolved. */
 export function sessionLayout(entry: SessionSandboxEntry | undefined): SessionLayout | undefined {
-  if (!entry?.workdir || !entry.workdirRepo) return undefined;
-  const slugs = entry.repos?.length ? entry.repos : [entry.workdirRepo];
+  if (!entry?.workdir) return undefined;
+  const slugs = entry.repos?.length ? entry.repos : [entry.ownRepo];
   if (slugs.length === 1) {
     return { root: entry.workdir, repos: [{ slug: slugs[0]!, dir: entry.workdir, prefix: '' }] };
   }
@@ -168,7 +168,7 @@ export function sessionLayout(entry: SessionSandboxEntry | undefined): SessionLa
   return {
     root,
     repos: slugs.map(slug => {
-      const dir = slug.toLowerCase() === entry.workdirRepo!.toLowerCase() ? entry.workdir! : repoDirUnder(root, slug);
+      const dir = slug.toLowerCase() === entry.ownRepo.toLowerCase() ? entry.workdir! : repoDirUnder(root, slug);
       return { slug, dir, prefix: `${path.posix.basename(dir)}/` };
     }),
   };
@@ -196,7 +196,8 @@ export function getSessionSandbox(
   const local = deriveLocalWorkdir(sandbox, repoFullName);
   const entry: SessionSandboxEntry = {
     sandbox,
-    ...(local ? { workdir: local, workdirRepo: repoFullName } : {}),
+    ownRepo: repoFullName,
+    ...(local ? { workdir: local } : {}),
     ...(repos ? { repos } : {}),
   };
   sessionSandboxes.set(sessionId, entry);
@@ -220,18 +221,20 @@ export async function resolveSessionWorkdir(
   repoFullName: string,
 ): Promise<string> {
   const entry = sessionSandboxes.get(sessionId);
-  if (entry?.workdir && entry.sandbox === sandbox) {
-    if (entry.workdirRepo === repoFullName) return entry.workdir;
-    return repoDirUnder(path.posix.dirname(entry.workdir), repoFullName);
+  const memo = entry && entry.sandbox === sandbox ? entry : undefined;
+  if (memo && memo.ownRepo !== repoFullName) {
+    // Passive readers take `workdir` as the session's own checkout, so a
+    // sibling never lands in the memo: resolve the own checkout (cold memo
+    // included) and answer the sibling beside it.
+    const own = await resolveSessionWorkdir(sessionId, sandbox, memo.ownRepo);
+    return repoDirUnder(path.posix.dirname(own), repoFullName);
   }
+  if (memo?.workdir) return memo.workdir;
   const workdir =
     deriveLocalWorkdir(sandbox, repoFullName) ??
     deriveRemoteRepoDir(sandbox, repoFullName) ??
     repoDirUnder(await probeHome(sandbox), repoFullName);
-  if (entry && entry.sandbox === sandbox) {
-    entry.workdir = workdir;
-    entry.workdirRepo = repoFullName;
-  }
+  if (memo) memo.workdir = workdir;
   return workdir;
 }
 
