@@ -10,7 +10,11 @@ export async function writeTransaction<T>(
     await transaction.commit();
     return result;
   } catch (error) {
-    await transaction.rollback();
+    try {
+      await transaction.rollback();
+    } catch {
+      // The owned client records storage faults; preserve the operation's original error.
+    }
     throw error;
   }
 }
