@@ -3180,6 +3180,26 @@ describe('PlatformSandbox', () => {
       );
     });
 
+    it('logs the same template hash for definitions differing only by family', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const hashes: unknown[] = [];
+      for (const family of ['repo-a', 'repo-b']) {
+        const sandbox = new PlatformSandbox({
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          template: Template().setWorkdir('/workspace/repo').runCmd('pnpm build').withFamily(family),
+          fetch: vi.fn().mockResolvedValueOnce(json({ id: `sbx_${family}`, createdAt: '2026-06-26T00:00:00.000Z' })),
+        });
+        const spy = vi.spyOn((sandbox as any).logger, 'info');
+        await sandbox._start();
+        const [, fields] = spy.mock.calls.find(([message]) => message === 'platform-workspace start complete')!;
+        hashes.push((fields as { templateHash?: unknown }).templateHash);
+      }
+      expect(hashes[0]).toMatch(/^[0-9a-f]{16}$/);
+      expect(hashes[1]).toBe(hashes[0]);
+    });
+
     it('logs a pending template boot with the id the platform is still building', async () => {
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       const fetchMock = vi.fn().mockResolvedValueOnce(
