@@ -1433,6 +1433,11 @@ export class SessionStream {
   readonly #consumerFailureWaiters = new Set<(error: unknown) => void>();
   /** Set once the live subscription's run loop has failed; cleared on attach. */
   #consumerFailure: { error: unknown } | null = null;
+  /**
+   * Run id whose trailing chunks the live subscription drops after an abort.
+   * Cleared by a later run, by an explicit resume of that run, or on attach/teardown.
+   */
+  #abortedRunId: string | null = null;
 
   constructor(private readonly getSessionRun: () => { sessionId: string; runId: string | null }) {}
 
@@ -1521,6 +1526,28 @@ export class SessionStream {
     this.#key = key;
     this.#binding = { resourceId, threadId };
     this.#consumerFailure = null;
+    this.#abortedRunId = null;
+  }
+
+  /** Record that `runId` was aborted on `subscription`, so its trailing chunks are dropped. */
+  markAbortedRun({
+    subscription,
+    runId,
+  }: {
+    subscription: AgentThreadSubscription<any, true>;
+    runId: string | null;
+  }): void {
+    if (this.#subscription === subscription) this.#abortedRunId = runId;
+  }
+
+  /** The run id `subscription` is dropping chunks for, or null. */
+  abortedRunId({ subscription }: { subscription: AgentThreadSubscription<any, true> }): string | null {
+    return this.#subscription === subscription ? this.#abortedRunId : null;
+  }
+
+  /** Stop dropping chunks for the aborted run (only if it is `runId`, when given). */
+  clearAbortedRun({ runId }: { runId?: string } = {}): void {
+    if (runId === undefined || this.#abortedRunId === runId) this.#abortedRunId = null;
   }
 
   /** Agent that owns `subscription`, when it is the live subscription. */
@@ -1574,6 +1601,7 @@ export class SessionStream {
     this.#agent = null;
     this.#key = null;
     this.#binding = null;
+    this.#abortedRunId = null;
     this.#notifyTeardown();
   }
 
@@ -1593,6 +1621,7 @@ export class SessionStream {
     this.#agent = null;
     this.#key = null;
     this.#binding = null;
+    this.#abortedRunId = null;
     this.#notifyTeardown();
   }
 }
@@ -5977,6 +6006,9 @@ export class Session<TState = unknown> {
     let resumedSubscriptionBoundary: { promise: Promise<void>; cancel: () => void } | undefined;
     if (sourceIsActive()) {
       await this.thread.ensureSubscription(threadId, agent, requestContext, resourceId, sourceIsActive);
+      // A tool call can stay parked after its run was aborted. Resuming it reuses
+      // the aborted run id, so stop dropping that run's chunks on this subscription.
+      this.stream.clearAbortedRun({ runId: suspension.runId });
       if (sourceIsActive())
         resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter({ toolCallId, resolveOnToolEnd });
     }
