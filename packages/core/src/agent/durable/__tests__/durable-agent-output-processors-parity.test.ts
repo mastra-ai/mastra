@@ -64,6 +64,8 @@ const MAX_STEPS = 3;
 const STEPS = 1;
 const OUTPUT_ID = 'out-a';
 const FINAL_TEXT = 'finished 1 steps';
+const RETRY_REASON = 'Response quality too low, please improve';
+const RETRY_METADATA = { source: 't45-retry-probe' };
 
 /** Recorded `plain-none-*` contracts at the audit pin; identical on durable and evented. */
 const PLAIN_CONTRACTS: Record<RecordedMode, Record<string, unknown>> = {
@@ -256,7 +258,7 @@ function createOutputProbe(id: string, mode: ProbeMode, handles: ProbeHandles): 
     processor.processOutputStep = ({ text, retryCount, abort, messageList }) => {
       record('processOutputStep', { retryCount });
       if (text?.includes('retry this response')) {
-        abort(undefined, { retry: true });
+        abort(RETRY_REASON, { retry: true, metadata: RETRY_METADATA });
       }
       return messageList;
     };
@@ -677,6 +679,22 @@ describe('T45 output processors (plain, durable, evented)', () => {
       expect(turn.text, `${engine}: accepted final text`).toBe(FINAL_TEXT);
       expect(turn.fullOutput.text, `${engine}: final output text`).toBe(FINAL_TEXT);
       expect(turn.streamedText, `${engine}: streamed attempts`).toBe(`retry this response${FINAL_TEXT}`);
+      const retryStepFinishIndex = turn.chunkPayloads.findIndex(payload => {
+        if (!payload || typeof payload !== 'object' || !('stepResult' in payload)) return false;
+        const stepResult = payload.stepResult;
+        return (
+          !!stepResult && typeof stepResult === 'object' && 'reason' in stepResult && stepResult.reason === 'retry'
+        );
+      });
+      expect(retryStepFinishIndex, `${engine}: retry step-finish payload`).toBeGreaterThanOrEqual(0);
+      expect(turn.chunkPayloads[retryStepFinishIndex], `${engine}: retry metadata`).toMatchObject({
+        processorRetryFeedback: RETRY_REASON,
+        stepResult: {
+          retryReason: RETRY_REASON,
+          retryMetadata: RETRY_METADATA,
+          retryProcessorId: OUTPUT_ID,
+        },
+      });
       expect(chunksOfType(turn, 'data-signal'), `${engine}: retry signals`).toBe(1);
       const signalIndex = turn.chunkTypes.indexOf('data-signal');
       expect(signalIndex, `${engine}: retry signal position`).toBeGreaterThanOrEqual(0);
