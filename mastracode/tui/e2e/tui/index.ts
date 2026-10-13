@@ -140,6 +140,7 @@ import { omThresholdPersistenceScenario } from './om-threshold-persistence.js';
 import { onboardingOmFollowsLoginScenario } from './onboarding-om-follows-login.js';
 import { openaiStrictSchemaScenario } from './openai-strict-schema.js';
 import { packFallbackScenario } from './pack-fallback.js';
+import { packFlagStartupScenario } from './pack-flag-startup.js';
 import { permissionRequestHookScenario } from './permission-request-hook.js';
 import { persistentGoalCommandsScenario } from './persistent-goal-commands.js';
 import { persistentGoalJudgeDecisionScenario } from './persistent-goal-judge-decision.js';
@@ -450,6 +451,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'account-rotation': accountRotationScenario,
   'account-routing-targeted': accountRoutingTargetedScenario,
   'pack-fallback': packFallbackScenario,
+  'pack-flag-startup': packFlagStartupScenario,
   'multi-account-login': multiAccountLoginScenario,
   'streaming-render-stability': streamingRenderStabilityScenario,
   'streaming-tool-args': streamingToolArgsScenario,

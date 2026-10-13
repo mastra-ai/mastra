@@ -1,7 +1,12 @@
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
-import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { CollapsibleBox, useCollapsibleBox } from '@mastra/playground-ui/components/CollapsibleBox';
+import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { Minimize2 } from 'lucide-react';
 import type { ReactNode } from 'react';
+
+/** Spacing between the sections of a comparison cell, shared by every cell so rows line up. */
+export const sectionStackClass = 'grid content-start gap-5';
 
 export interface ComparisonSectionProps {
   title: string;
@@ -9,40 +14,48 @@ export interface ComparisonSectionProps {
   actions?: ReactNode;
   /** Colors the heading, used to signal a failed run. */
   tone?: 'default' | 'negative';
-  defaultOpen?: boolean;
+  /** Clips long content with a fade until expanded. Off for short, always-visible blocks like metric lists. */
+  collapsible?: boolean;
   children: ReactNode;
 }
 
 /**
- * Single collapsible treatment shared by every block of a comparison cell, so
- * output, scores, errors and metadata read as one consistent column and can be
- * folded away when a row gets noisy.
+ * Block of a comparison cell: a small heading above the content, which is clipped
+ * with a fade when long, like the span input/output panels.
  */
 export function ComparisonSection({
   title,
   actions,
   tone = 'default',
-  defaultOpen = true,
+  collapsible = true,
   children,
 }: ComparisonSectionProps) {
+  const box = useCollapsibleBox({ collapsedHeight: 160 });
+
   return (
-    <Collapsible defaultOpen={defaultOpen} className="grid gap-2">
-      <div className="flex min-h-6 items-center justify-between gap-2">
-        <CollapsibleTrigger
-          className={cn(
-            'flex items-center gap-1.5',
-            tone === 'negative' ? 'text-destructive-foreground' : 'text-foreground',
-            'text-subheading',
-          )}
-        >
-          <DisclosureChevron direction="right" className="size-4" />
+    <section className="grid min-w-0 gap-2">
+      <div className="flex h-7 items-center justify-between gap-2">
+        <DataPanel.SectionHeading className={cn(tone === 'negative' && 'text-destructive-foreground')}>
           {title}
-        </CollapsibleTrigger>
-        {actions}
+        </DataPanel.SectionHeading>
+        <div className="ml-auto flex items-center gap-1">{actions}</div>
       </div>
-      <CollapsibleContent role="region" aria-label={title}>
-        {children}
-      </CollapsibleContent>
-    </Collapsible>
+      <div role="region" aria-label={title} className="min-w-0">
+        {collapsible ? (
+          <CollapsibleBox state={box} expandLabel="Expand">
+            {children}
+          </CollapsibleBox>
+        ) : (
+          children
+        )}
+        {collapsible && box.isExpanded && box.isClipped && (
+          <div className="flex justify-center pt-1">
+            <Button size="sm" variant="ghost" icon={<Minimize2 />} onClick={() => box.setExpanded(false)}>
+              Collapse
+            </Button>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }

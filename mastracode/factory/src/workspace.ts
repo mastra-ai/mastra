@@ -209,9 +209,28 @@ export class FactorySkillSource implements SkillSource {
     }
     const entries = await this.fallback.readdir(skillPath);
     if (this.#fallbackSkillRoots.has(path.normalize(skillPath))) {
-      return entries.filter(entry => !FACTORY_SKILL_NAMES.has(entry.name));
+      const reserved = await this.#reservedNames();
+      return entries.filter(entry => !reserved.has(entry.name));
     }
     return entries;
+  }
+
+  /**
+   * Names the Factory mount serves: bundled skills plus the app's local skills.
+   * Repository skills with these names are hidden so they cannot collide with
+   * Factory's copy. Recomputed per scan so skill refreshes pick up local changes.
+   */
+  async #reservedNames(): Promise<Set<string>> {
+    const reserved = new Set(FACTORY_SKILL_NAMES);
+    if (!this.#localSource) return reserved;
+    try {
+      for (const entry of await this.#localSource.readdir('')) {
+        if (entry.type === 'directory') reserved.add(entry.name);
+      }
+    } catch {
+      // A missing or unreadable local root reserves only the bundled names.
+    }
+    return reserved;
   }
 
   realpath(skillPath: string): Promise<string> {
@@ -580,7 +599,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // (installation tokens 403 on integration-restricted endpoints); git
       // clone/checkout keep using the minted installation token. Resolved per
       // start so the installed credential never outlives rotation.
-      const patKind = await resolveGithubPatKind('default');
+      const patKind = await resolveGithubPatKind();
       const ghCliToken =
         (await getGithubPat(() => githubProvider.integrationStorage, session.orgId, patKind)) ??
         (await getRepositoryToken());
@@ -700,13 +719,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       if (!token) throw new Error('Repository access did not include a bearer token for the Factory session');
       return token;
     };
-    const resolveGithubPatKind = async (fallback: GithubPatKind): Promise<GithubPatKind> => {
+    const resolveGithubPatKind = async (): Promise<GithubPatKind> => {
       if (!workItems) return 'default';
       try {
         return isActiveReviewBinding(await findSessionBinding(), session.orgId) ? 'reviewer' : 'default';
       } catch {
-        // Preserve the installed role when binding storage is temporarily unavailable.
-        return fallback;
+        // An unreadable binding cannot prove review authority, so fall back to the worker role.
+        return 'default';
       }
     };
     const githubTokenInjector = (registered: GithubTokenRegistration, generation: number) => (token: string) => {
@@ -747,7 +766,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           if (!registered) return;
 
           const previousPatKind = registered.patKind;
-          const patKind = await resolveGithubPatKind(previousPatKind);
+          const patKind = await resolveGithubPatKind();
           if (githubTokenInjectors.get(workspaceId) !== registered) return;
 
           if (patKind !== previousPatKind) {
@@ -896,7 +915,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // role-aware PAT behavior without applying GitHub credentials to other
       // source-control providers.
       if (githubProvider) {
-        const setupPatKind = await resolveGithubPatKind('default');
+        const setupPatKind = await resolveGithubPatKind();
         const setupGhToken =
           (await getGithubPat(() => githubProvider.integrationStorage, session.orgId, setupPatKind)) ?? token;
         target.setEnv?.(env => ({ ...env, GH_TOKEN: setupGhToken }));

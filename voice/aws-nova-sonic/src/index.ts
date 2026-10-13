@@ -1204,10 +1204,9 @@ export class NovaSonicVoice extends MastraVoice<
         isInterrupted = true;
       }
     } catch {
-      // Not valid JSON — fall back to substring check
-      if (/interrupted/i.test(text)) {
-        isInterrupted = true;
-      }
+      // Not JSON: ordinary transcript text. Real barge-ins also arrive as
+      // contentEnd with stopReason INTERRUPTED, so plain text that merely
+      // contains the word "interrupted" must not be treated as one.
     }
 
     if (isInterrupted) {

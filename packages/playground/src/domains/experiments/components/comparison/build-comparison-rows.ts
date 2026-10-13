@@ -9,6 +9,8 @@ export interface ComparisonScore {
 export interface ComparisonSide {
   /** False when the experiment never ran this item (e.g. dataset version drift). */
   present: boolean;
+  /** The experiment's target type, which decides the shape of `output`. */
+  targetType: DatasetExperimentResult['targetType'] | null;
   output: unknown;
   metadata: Record<string, unknown> | null;
   comment: string | null;
@@ -18,14 +20,24 @@ export interface ComparisonSide {
   scores: ComparisonScore[];
 }
 
+export type ComparisonRole = 'baseline' | 'contender';
+
+/** One experiment's side of a row. */
+export interface ComparisonColumn extends ComparisonSide {
+  experimentId: string;
+  role: ComparisonRole;
+  /** This side minus the baseline, per scorer (null when either has no score). Null on the baseline itself. */
+  deltas: Record<string, number | null> | null;
+  /** This side's run duration minus the baseline's, in ms. Null on the baseline or when either is unknown. */
+  durationDeltaMs: number | null;
+}
+
 export interface ComparisonRow {
   itemId: string;
   input: unknown;
   groundTruth: unknown;
-  baseline: ComparisonSide;
-  contender: ComparisonSide;
-  /** Contender minus baseline, per scorer. Null when either side has no score. */
-  deltas: Record<string, number | null>;
+  /** One side per compared experiment, in `experimentIds` order (baseline first). */
+  sides: ComparisonColumn[];
 }
 
 /**
@@ -36,16 +48,15 @@ export type ScoresByItemId = Record<string, Array<Pick<ClientScoreRowData, 'scor
 
 interface BuildComparisonRowsParams {
   comparison: CompareExperimentsResponse | undefined;
-  baselineId: string;
-  contenderId: string;
-  baselineResults?: DatasetExperimentResult[];
-  contenderResults?: DatasetExperimentResult[];
-  baselineScores?: ScoresByItemId;
-  contenderScores?: ScoresByItemId;
+  /** Compared experiment ids, baseline first. */
+  experimentIds: string[];
+  resultsById?: Record<string, DatasetExperimentResult[] | undefined>;
+  scoresById?: Record<string, ScoresByItemId | undefined>;
 }
 
 const absentSide: ComparisonSide = {
   present: false,
+  targetType: null,
   output: null,
   metadata: null,
   comment: null,
@@ -83,6 +94,7 @@ const buildSide = (
 
   return {
     present: true,
+    targetType: detail?.targetType ?? null,
     output: comparisonResult.output,
     metadata: detail?.metadata ?? null,
     comment: detail?.comment ?? null,
@@ -95,47 +107,65 @@ const buildSide = (
   };
 };
 
+const deltasAgainst = (baseline: ComparisonSide, side: ComparisonSide): Record<string, number | null> => {
+  const deltas: Record<string, number | null> = {};
+  for (const scorerId of new Set([...baseline.scores, ...side.scores].map(score => score.scorerId))) {
+    const baselineValue = baseline.scores.find(score => score.scorerId === scorerId)?.value ?? null;
+    const sideValue = side.scores.find(score => score.scorerId === scorerId)?.value ?? null;
+    deltas[scorerId] = baselineValue != null && sideValue != null ? sideValue - baselineValue : null;
+  }
+  return deltas;
+};
+
+/** Run duration of one side in ms, or null when either timestamp is missing. */
+export function sideDurationMs(side: Pick<ComparisonSide, 'startedAt' | 'completedAt'>): number | null {
+  if (!side.startedAt || !side.completedAt) return null;
+  return new Date(side.completedAt).getTime() - new Date(side.startedAt).getTime();
+}
+
+const durationDeltaAgainst = (baseline: ComparisonSide, side: ComparisonSide): number | null => {
+  const baselineMs = sideDurationMs(baseline);
+  const sideMs = sideDurationMs(side);
+  return baselineMs != null && sideMs != null ? sideMs - baselineMs : null;
+};
+
 /**
- * Joins the pairwise comparison payload with the per-experiment result rows and
- * scorer runs so each column can render output, metadata, comment, error,
- * timings and scorer reasons for a single item. The join key is `itemId`.
+ * Joins the comparison payload with the per-experiment result rows and scorer runs so each
+ * column can render output, metadata, comment, error, timings and scorer reasons for a single
+ * item. The join key is `itemId`. The first of `experimentIds` is the baseline; every other
+ * side carries its deltas against it.
  */
 export const buildComparisonRows = ({
   comparison,
-  baselineId,
-  contenderId,
-  baselineResults,
-  contenderResults,
-  baselineScores,
-  contenderScores,
+  experimentIds,
+  resultsById,
+  scoresById,
 }: BuildComparisonRowsParams): ComparisonRow[] => {
   if (!comparison) return [];
 
-  const baselineIndex = indexByItemId(baselineResults);
-  const contenderIndex = indexByItemId(contenderResults);
+  const indexes = new Map(experimentIds.map(id => [id, indexByItemId(resultsById?.[id])]));
 
   return comparison.items.map(item => {
-    const baseline = buildSide(item.results[baselineId], baselineIndex.get(item.itemId), baselineScores?.[item.itemId]);
-    const contender = buildSide(
-      item.results[contenderId],
-      contenderIndex.get(item.itemId),
-      contenderScores?.[item.itemId],
+    const sides = experimentIds.map(experimentId =>
+      buildSide(
+        item.results[experimentId],
+        indexes.get(experimentId)?.get(item.itemId),
+        scoresById?.[experimentId]?.[item.itemId],
+      ),
     );
-
-    const deltas: Record<string, number | null> = {};
-    for (const scorerId of new Set([...baseline.scores, ...contender.scores].map(score => score.scorerId))) {
-      const baselineValue = baseline.scores.find(score => score.scorerId === scorerId)?.value ?? null;
-      const contenderValue = contender.scores.find(score => score.scorerId === scorerId)?.value ?? null;
-      deltas[scorerId] = baselineValue != null && contenderValue != null ? contenderValue - baselineValue : null;
-    }
+    const [baseline] = sides;
 
     return {
       itemId: item.itemId,
       input: item.input,
       groundTruth: item.groundTruth,
-      baseline,
-      contender,
-      deltas,
+      sides: sides.map((side, index) => ({
+        ...side,
+        experimentId: experimentIds[index],
+        role: index === 0 ? 'baseline' : 'contender',
+        deltas: index === 0 ? null : deltasAgainst(baseline, side),
+        durationDeltaMs: index === 0 ? null : durationDeltaAgainst(baseline, side),
+      })),
     };
   });
 };
