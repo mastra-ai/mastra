@@ -2,4 +2,10 @@
 '@mastra/core': patch
 ---
 
-Updated the Groq, xAI, Together AI, DeepInfra, Cerebras and Alibaba providers to their AI SDK v7 packages, as DeepSeek already is. Mistral and Perplexity stay on v6: Mistral v7 drops reasoning effort for models outside its built-in list, and Perplexity v7 calls a different API.
+xAI models now accept `xhigh` reasoning effort. Groq, xAI, Together AI, DeepInfra, Cerebras and Alibaba models now run on the AI SDK v7 provider packages, like DeepSeek.
+
+```ts
+await agent.generate('Prove that there are infinitely many primes.', {
+  providerOptions: { xai: { reasoningEffort: 'xhigh' } },
+});
+```
