@@ -1,5 +1,5 @@
 ---
-'@mastra/code-sdk': major
+'@mastra/code-sdk': minor
 ---
 
 Removed cross-scope credential fallback in deployed sessions so each session uses only Factory or user credentials.
