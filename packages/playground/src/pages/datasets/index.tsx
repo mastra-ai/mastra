@@ -1,3 +1,4 @@
+import { CreateButton } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -8,8 +9,8 @@ import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-
 import { useInfiniteDatasets, useExperiments } from '@mastra/react/hooks/datasets';
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { HeaderCreateAction } from '@/components/ui/header-create-action';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { CreateDatasetDialog } from '@/domains/datasets/components/create-dataset-dialog';
 import { DatasetsList } from '@/domains/datasets/components/datasets-list/datasets-list';
 import { DatasetsListSkeleton } from '@/domains/datasets/components/datasets-list/datasets-list-skeleton';
 import { getDatasetTagOptions } from '@/domains/datasets/components/datasets-list/helpers';
@@ -59,12 +60,20 @@ export default function Datasets() {
   const error = errorDatasets || (needsExperimentsForFilter ? errorExperiments : undefined);
 
   const navigate = useNavigate();
-  const openCreatePage = () => void navigate('/datasets/new');
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const openCreateDialog = () => setIsCreateOpen(true);
 
   const headerCreateAction = (
-    <HeaderCreateAction href="/datasets/new" tooltip="Create a dataset">
-      New dataset
-    </HeaderCreateAction>
+    <>
+      <CreateButton tooltip="Create a dataset" variant="ghost" size="sm" onClick={openCreateDialog}>
+        New dataset
+      </CreateButton>
+      <CreateDatasetDialog
+        open={isCreateOpen}
+        onOpenChange={setIsCreateOpen}
+        onSuccess={datasetId => void navigate(`/datasets/${datasetId}`)}
+      />
+    </>
   );
 
   if (error && is401UnauthorizedError(error)) {
@@ -99,7 +108,7 @@ export default function Datasets() {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={headerCreateAction}>
         <h1 className="sr-only">Datasets</h1>
-        <NoDatasetsInfo onCreateClick={openCreatePage} />
+        <NoDatasetsInfo onCreateClick={openCreateDialog} />
       </PageLayout>
     );
   }

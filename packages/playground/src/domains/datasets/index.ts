@@ -22,7 +22,8 @@ export { DatasetsList, type DatasetsListProps } from './components/datasets-list
 export { DATASET_EXPERIMENT_OPTIONS, getDatasetTagOptions } from './components/datasets-list/helpers';
 export { NoDatasetsInfo } from './components/datasets-list/no-datasets-info';
 export { DatasetsToolbar, type DatasetsToolbarProps } from './components/datasets-toolbar';
-export { CreateDatasetForm } from './components/create-dataset-form';
+export { CreateDatasetDialog } from './components/create-dataset-dialog';
+export type { CreateDatasetDialogProps } from './components/create-dataset-dialog';
 export { CreateDatasetFromItemsDialog } from './components/create-dataset-from-items-dialog';
 export { AddItemsToDatasetDialog } from './components/add-items-to-dataset-dialog';
 export { DuplicateDatasetDialog } from './components/duplicate-dataset-dialog';

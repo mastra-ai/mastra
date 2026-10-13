@@ -1,13 +1,13 @@
 'use client';
 
+import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { FileDropBackdrop } from '@mastra/playground-ui/components/FileDropBackdrop';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { Upload } from 'lucide-react';
-import { useCallback, useRef, useState } from 'react';
+import { FileSpreadsheet, Upload } from 'lucide-react';
+import { useRef } from 'react';
 
 export interface CSVUploadStepProps {
   onFileSelect: (file: File) => void;
@@ -15,122 +15,53 @@ export interface CSVUploadStepProps {
   error?: string | null;
 }
 
-/**
- * File upload dropzone for CSV import.
- * Supports click-to-upload and drag-drop.
- */
+/** Picks a CSV from the file picker, or from a file dropped anywhere on the window. */
 export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [isDragOver, setIsDragOver] = useState(false);
 
-  // Handle click on dropzone
-  const handleClick = useCallback(() => {
-    if (!isParsing) {
-      inputRef.current?.click();
-    }
-  }, [isParsing]);
-
-  // Handle file input change
-  const handleFileChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) {
-        onFileSelect(file);
-      }
-      // Reset input so same file can be selected again
-      e.target.value = '';
-    },
-    [onFileSelect],
-  );
-
-  // Handle drag over
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(true);
-  }, []);
-
-  // Handle drag leave
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(false);
-  }, []);
-
-  // Handle drop
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setIsDragOver(false);
-
-      if (isParsing) return;
-
-      const file = e.dataTransfer.files?.[0];
-      if (file && file.name.endsWith('.csv')) {
-        onFileSelect(file);
-      }
-    },
-    [isParsing, onFileSelect],
-  );
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) onFileSelect(file);
+    // Reset so the same file can be picked again.
+    e.target.value = '';
+  };
 
   return (
-    <Field invalid={Boolean(error)} className="flex flex-col gap-3">
-      <FieldLabel className="sr-only">CSV file</FieldLabel>
-      <Input
-        ref={inputRef}
-        name="csv-file"
-        type="file"
-        accept=".csv"
-        onChange={handleFileChange}
-        className="hidden"
-        disabled={isParsing}
-      />
-
-      <div
-        onClick={handleClick}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        className={cn(
-          'flex flex-col items-center justify-center gap-3',
-          'min-h-[160px] rounded-lg border-2 border-dashed p-4',
-          'cursor-pointer transition-colors',
-          // Default state
-          'border-border bg-background',
-          // Drag over state
-          isDragOver && 'border-success-edge bg-success-subtle',
-          // Error state
-          error && 'border-destructive-edge bg-destructive-subtle',
-          // Disabled during parsing
-          isParsing && 'cursor-wait opacity-60',
-        )}
-      >
+    <FileDropBackdrop
+      disabled={isParsing}
+      accept=".csv,text/csv"
+      label="Drop CSV to import"
+      description="The file opens in the CSV import"
+      onFilesDrop={([file]) => onFileSelect(file)}
+    >
+      <Field invalid={Boolean(error)} className="flex flex-col gap-3">
+        <FieldLabel className="sr-only">CSV file</FieldLabel>
+        <Input
+          ref={inputRef}
+          name="csv-file"
+          type="file"
+          accept=".csv"
+          onChange={handleFileChange}
+          className="hidden"
+          disabled={isParsing}
+        />
         {isParsing ? (
-          <>
-            <Spinner />
-            <Txt as="span" tone="muted">
-              Parsing CSV...
-            </Txt>
-          </>
+          <EmptyState iconSlot={<Spinner />} titleSlot="Parsing CSV..." />
         ) : (
-          <>
-            <Icon className="text-muted-foreground">
-              <Upload className="h-8 w-8" />
-            </Icon>
-            <div className="flex flex-col items-center gap-1">
-              <Txt as="span" variant="subheading" tone="faint">
-                Click to upload or drag and drop
-              </Txt>
-              <Txt as="span" variant="caption" tone="muted">
-                CSV files only
-              </Txt>
-            </div>
-          </>
+          <EmptyState
+            iconSlot={<FileSpreadsheet />}
+            titleSlot="Drop a CSV file anywhere on this window"
+            descriptionSlot="Or choose one from your computer."
+            actionSlot={
+              <Button onClick={() => inputRef.current?.click()}>
+                <Upload />
+                Choose a file
+              </Button>
+            }
+          />
         )}
-      </div>
-
-      <FieldError>{error}</FieldError>
-    </Field>
+        <FieldError>{error}</FieldError>
+      </Field>
+    </FileDropBackdrop>
   );
 }

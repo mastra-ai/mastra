@@ -8,6 +8,12 @@ import DatasetsPage from '..';
 import { emptyScorers } from './fixtures/query-loading';
 import { buildDataset, buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
 import {
+  CREATED_DATASET_ID,
+  createdDataset,
+  emptyAgents,
+  emptyWorkflows,
+} from '@/domains/datasets/components/create-dataset-dialog/__tests__/fixtures/create-dataset-dialog';
+import {
   buildListExperimentsResponse,
   experiments,
 } from '@/domains/experiments/components/__tests__/fixtures/experiments';
@@ -28,6 +34,10 @@ const useDatasets = (datasets = [buildDataset()]) => {
   );
 };
 
+const givenDatasetCreation = () => {
+  server.use(http.post(`${TEST_BASE_URL}/api/datasets`, () => HttpResponse.json(createdDataset)));
+};
+
 function LocationProbe() {
   const location = useLocation();
   return <div data-testid="location">{`${location.pathname}${location.search}`}</div>;
@@ -41,7 +51,7 @@ const renderPage = (initialEntry = '/datasets') =>
         <LocationProbe />
         <Routes>
           <Route path="/datasets" element={<DatasetsPage />} />
-          <Route path="/datasets/new" element={<div>Create dataset page</div>} />
+          <Route path="/datasets/:datasetId" element={<div>Dataset detail page</div>} />
         </Routes>
       </LinkComponentProvider>
     </TooltipProvider>,
@@ -50,7 +60,12 @@ const renderPage = (initialEntry = '/datasets') =>
 
 beforeEach(() => {
   listRequests = [];
-  server.use(http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(emptyScorers)));
+  server.use(
+    http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(emptyScorers)),
+    // The create dataset dialog's form loads agents and workflows once opened.
+    http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(emptyAgents)),
+    http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(emptyWorkflows)),
+  );
 });
 
 describe('Datasets page', () => {
@@ -89,33 +104,69 @@ describe('Datasets page', () => {
     });
   });
 
-  describe('header create action', () => {
+  describe('when the New dataset button is clicked', () => {
     beforeEach(() => useDatasets());
 
-    it('shows a New dataset link to the create page in the header slot', async () => {
+    it('opens the create dataset dialog', async () => {
       renderPage();
 
-      const link = await screen.findByRole('link', { name: 'New dataset' });
-      expect(link.getAttribute('href')).toBe('/datasets/new');
+      fireEvent.click(await screen.findByRole('button', { name: 'New dataset' }));
+
+      expect(await screen.findByRole('heading', { name: 'Create dataset' })).not.toBeNull();
     });
+  });
 
-    it('navigates to the create page when pressing C', async () => {
+  describe('when C is pressed', () => {
+    beforeEach(() => useDatasets());
+
+    it('opens the create dataset dialog', async () => {
       renderPage();
 
-      await screen.findByRole('link', { name: 'New dataset' });
+      await screen.findByRole('button', { name: 'New dataset' });
       fireEvent.keyDown(window, { key: 'c' });
 
-      expect(await screen.findByText('Create dataset page')).not.toBeNull();
+      expect(await screen.findByRole('heading', { name: 'Create dataset' })).not.toBeNull();
+    });
+  });
+
+  describe('when a dataset is created from the dialog without items', () => {
+    beforeEach(() => {
+      useDatasets();
+      givenDatasetCreation();
+    });
+
+    it('navigates to the new dataset', async () => {
+      renderPage();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'New dataset' }));
+      await screen.findByRole('heading', { name: 'Create dataset' });
+      fireEvent.change(screen.getByRole('textbox', { name: /^Name/ }), { target: { value: 'My dataset' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+      await screen.findByRole('heading', { name: 'Choose a schema' });
+      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+      await screen.findByRole('heading', { name: 'Add items' });
+      fireEvent.click(screen.getByRole('button', { name: 'Create dataset' }));
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toBe(`/datasets/${CREATED_DATASET_ID}`));
+      expect(screen.getByText('Dataset detail page')).not.toBeNull();
     });
   });
 
   describe('when there are no datasets', () => {
-    it('still shows the New dataset link in the header slot', async () => {
-      useDatasets([]);
+    beforeEach(() => useDatasets([]));
+
+    it('still shows the New dataset button in the header slot', async () => {
       renderPage();
 
-      const link = await screen.findByRole('link', { name: 'New dataset' });
-      expect(link.getAttribute('href')).toBe('/datasets/new');
+      expect(await screen.findByRole('button', { name: 'New dataset' })).not.toBeNull();
+    });
+
+    it('opens the create dataset dialog from the empty state', async () => {
+      renderPage();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Create Dataset' }));
+
+      expect(await screen.findByRole('heading', { name: 'Create dataset' })).not.toBeNull();
     });
   });
 });

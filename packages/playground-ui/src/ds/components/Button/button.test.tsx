@@ -215,6 +215,49 @@ describe('Button', () => {
     });
   });
 
+  describe('when a disabled button explains itself', () => {
+    const tooltipTrigger = (name: string) => screen.getByRole('button', { name }).parentElement;
+
+    it('wraps the button in a focusable tooltip trigger', () => {
+      render(
+        <TooltipProvider>
+          <Button disabled disabledTooltip="Enter a name first">
+            Create
+          </Button>
+        </TooltipProvider>,
+      );
+
+      // A disabled <button> gets neither hover nor focus, so the wrapper carries the tooltip.
+      expect(tooltipTrigger('Create')?.hasAttribute('data-base-ui-tooltip-trigger')).toBe(true);
+      expect(tooltipTrigger('Create')?.tabIndex).toBe(0);
+      expect(screen.getByRole('button', { name: 'Create' }).hasAttribute('disabled')).toBe(true);
+    });
+
+    it('leaves an enabled button unwrapped', () => {
+      render(
+        <TooltipProvider>
+          <Button disabledTooltip="Never shown">Create</Button>
+        </TooltipProvider>,
+      );
+
+      expect(tooltipTrigger('Create')?.hasAttribute('data-base-ui-tooltip-trigger')).toBe(false);
+    });
+
+    it('prefers the disabled explanation over the regular tooltip', () => {
+      render(
+        <TooltipProvider>
+          <Button disabled tooltip="Create a dataset" disabledTooltip="Enter a name first">
+            Create
+          </Button>
+        </TooltipProvider>,
+      );
+
+      const button = screen.getByRole('button', { name: 'Create' });
+      expect(button.hasAttribute('data-base-ui-tooltip-trigger')).toBe(false);
+      expect(button.parentElement?.hasAttribute('data-base-ui-tooltip-trigger')).toBe(true);
+    });
+  });
+
   // Stand-in for react-router's Link: navigates from `to`, not `href`.
   const RouterLink = React.forwardRef<HTMLAnchorElement, { to?: string; children?: React.ReactNode }>(
     ({ to, children, ...rest }, ref) => (

@@ -493,6 +493,48 @@ describe('Dialog submit action', () => {
       expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Save' }).disabled).toBe(true);
     });
   });
+
+  describe('when a disabled action explains itself', () => {
+    it('wraps the action in a focusable tooltip trigger', () => {
+      render(
+        <Dialog defaultOpen>
+          <DialogContent>
+            <DialogTitle>Rename</DialogTitle>
+            <DialogFooter>
+              <DialogAction onConfirm={vi.fn()} disabled disabledTooltip="Enter a name first">
+                Save
+              </DialogAction>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>,
+      );
+
+      const trigger = screen.getByRole('button', { name: 'Save' }).parentElement;
+      expect(trigger?.hasAttribute('data-base-ui-tooltip-trigger')).toBe(true);
+      expect(trigger?.tabIndex).toBe(0);
+    });
+  });
+
+  describe('when the dialog is pending but the action itself is enabled', () => {
+    it('does not show the disabled explanation', () => {
+      render(
+        <Dialog defaultOpen pending>
+          <DialogContent>
+            <DialogTitle>Rename</DialogTitle>
+            <DialogFooter>
+              <DialogAction onConfirm={vi.fn()} disabledTooltip="Enter a name first">
+                Save
+              </DialogAction>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>,
+      );
+
+      const button = screen.getByRole<HTMLButtonElement>('button', { name: 'Save' });
+      expect(button.disabled).toBe(true);
+      expect(button.parentElement?.hasAttribute('data-base-ui-tooltip-trigger')).toBe(false);
+    });
+  });
 });
 
 describe('Dialog on a phone viewport', () => {

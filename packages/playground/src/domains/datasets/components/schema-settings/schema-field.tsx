@@ -1,10 +1,7 @@
 'use client';
 
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { Switch } from '@mastra/playground-ui/components/Switch';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import type { JSONSchema7 } from 'json-schema';
+import { Field, FieldError } from '@mastra/playground-ui/components/Field';
 import { useState, useEffect, useRef } from 'react';
 
 interface SchemaFieldProps {
@@ -12,68 +9,44 @@ interface SchemaFieldProps {
   value: Record<string, unknown> | null | undefined;
   onChange: (schema: Record<string, unknown> | null) => void;
   error?: string;
-  /** Schema to auto-populate when field is enabled */
-  sourceSchema?: JSONSchema7 | null;
-  /** Whether to auto-populate from sourceSchema when enabled */
-  autoPopulate?: boolean;
 }
 
-/**
- * Schema field with toggle and JSON editor.
- * Toggle enables/disables the schema (null = disabled).
- * JSON parsing errors shown inline.
- * Supports auto-population from sourceSchema when autoPopulate is true.
- */
-export function SchemaField({ label, value, onChange, error, sourceSchema, autoPopulate = false }: SchemaFieldProps) {
-  const isEnabled = value !== null && value !== undefined;
-  const [jsonText, setJsonText] = useState(() => (value ? JSON.stringify(value, null, 2) : ''));
-  const [parseError, setParseError] = useState<string | null>(null);
-  // Track if we've already auto-populated to avoid repeated population on re-enable
-  const hasAutoPopulatedRef = useRef(false);
-  // Track whether the latest value change originated from local editing
-  const isLocalEditRef = useRef(false);
+const format = (value: Record<string, unknown> | null | undefined) => (value ? JSON.stringify(value, null, 2) : '');
 
-  // Sync jsonText when value changes from outside (e.g., import)
+/**
+ * JSON editor for one schema. An empty editor means no schema (null).
+ * JSON parsing errors are shown inline and keep the last valid schema.
+ */
+export function SchemaField({ label, value, onChange, error }: SchemaFieldProps) {
+  const [jsonText, setJsonText] = useState(() => format(value));
+  const [parseError, setParseError] = useState<string | null>(null);
+  // The schema this editor last produced; anything else comes from outside (e.g. import from a source).
+  const lastEmittedRef = useRef(value ?? null);
+
   useEffect(() => {
-    if (isLocalEditRef.current) {
-      isLocalEditRef.current = false;
-      return;
-    }
-    if (value) {
-      setJsonText(JSON.stringify(value, null, 2));
-      setParseError(null);
-    }
+    if ((value ?? null) === lastEmittedRef.current) return;
+    lastEmittedRef.current = value ?? null;
+    setJsonText(format(value));
+    setParseError(null);
   }, [value]);
 
-  // Reset auto-populate flag when sourceSchema changes (new source selected)
-  useEffect(() => {
-    hasAutoPopulatedRef.current = false;
-  }, [sourceSchema]);
-
-  const handleToggle = (checked: boolean) => {
-    if (checked) {
-      // Auto-populate from sourceSchema if available and not yet populated
-      if (autoPopulate && sourceSchema && !hasAutoPopulatedRef.current) {
-        hasAutoPopulatedRef.current = true;
-        onChange(sourceSchema as Record<string, unknown>);
-      } else {
-        // Enable with default empty object schema
-        onChange({ type: 'object', properties: {} });
-      }
-    } else {
-      // Disable by setting null
-      onChange(null);
-    }
+  const emit = (schema: Record<string, unknown> | null) => {
+    lastEmittedRef.current = schema;
+    onChange(schema);
   };
 
   const handleJsonChange = (text: string) => {
     setJsonText(text);
+    if (text.trim() === '') {
+      setParseError(null);
+      emit(null);
+      return;
+    }
     try {
       const parsed = JSON.parse(text);
-      if (typeof parsed === 'object' && parsed !== null) {
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
         setParseError(null);
-        isLocalEditRef.current = true;
-        onChange(parsed);
+        emit(parsed);
       } else {
         setParseError('Schema must be a JSON object');
       }
@@ -85,24 +58,16 @@ export function SchemaField({ label, value, onChange, error, sourceSchema, autoP
   const errorMessage = parseError ?? error;
 
   return (
-    <div className="space-y-3">
-      <Field orientation="horizontal">
-        <Switch checked={isEnabled} onCheckedChange={handleToggle} />
-        <FieldLabel size="smaller">{label}</FieldLabel>
-      </Field>
-
-      {isEnabled && (
-        <Field invalid={Boolean(errorMessage)}>
-          <FieldLabel className="sr-only">{`${label} JSON`}</FieldLabel>
-          <CodeEditor
-            value={jsonText}
-            onChange={handleJsonChange}
-            showCopyButton={false}
-            className={cn('h-48 rounded-md border', errorMessage && 'border-destructive-indicator')}
-          />
-          <FieldError>{errorMessage}</FieldError>
-        </Field>
-      )}
-    </div>
+    <Field invalid={Boolean(errorMessage)}>
+      <CodeEditor
+        aria-label={label}
+        value={jsonText}
+        onChange={handleJsonChange}
+        placeholder="Leave empty for no schema"
+        showCopyButton={false}
+        className="h-48"
+      />
+      <FieldError>{errorMessage}</FieldError>
+    </Field>
   );
 }

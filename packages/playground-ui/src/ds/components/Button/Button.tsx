@@ -144,6 +144,8 @@ export interface ButtonProps
   icon?: React.ReactNode;
   iconEnd?: React.ReactNode;
   tooltip?: React.ReactNode;
+  /** Explains why the button is disabled. Shown instead of `tooltip`, and only while `disabled`. */
+  disabledTooltip?: React.ReactNode;
   /** Side of the trigger the tooltip opens on. Defaults to `top`. */
   tooltipPosition?: 'top' | 'right' | 'bottom' | 'left';
   /** @deprecated Pass the element through `render` instead: `render={<Link href="/x" />}`. */
@@ -256,6 +258,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       icon,
       iconEnd,
       tooltip,
+      disabledTooltip,
       tooltipPosition,
       'aria-label': ariaLabelProp,
       type,
@@ -355,6 +358,16 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
         {content}
       </BaseButton>
     );
+
+    // A disabled <button> receives neither hover nor focus, so a focusable wrapper carries the tooltip.
+    if (disabled && disabledTooltip) {
+      return (
+        <Tooltip>
+          <TooltipTrigger render={<span tabIndex={0} className="inline-flex" />}>{button}</TooltipTrigger>
+          <TooltipContent side={tooltipPosition}>{disabledTooltip}</TooltipContent>
+        </Tooltip>
+      );
+    }
 
     if (tooltip) {
       return (
