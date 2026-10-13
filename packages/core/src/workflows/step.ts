@@ -45,10 +45,20 @@ export type ExecuteFunctionParams<
   getInitData<T>(): T extends Workflow<any, any, any, any, any, any, any, any>
     ? InferStandardSchemaOutput<T['inputSchema']>
     : T;
+  /**
+   * @deprecated Use `await getStepResultAsync(step)` instead. `getStepResult` will be removed in a future major release.
+   */
   getStepResult<TOutput>(step: string): TOutput;
+  /**
+   * @deprecated Use `await getStepResultAsync(step)` instead. `getStepResult` will be removed in a future major release.
+   */
   getStepResult<TStep extends Step<string, any, any, any, any, any, EngineType>>(
     step: TStep,
   ): InferStandardSchemaOutput<TStep['outputSchema']>;
+  getStepResultAsync<TOutput>(step: string): Promise<TOutput>;
+  getStepResultAsync<TStep extends Step<string, any, any, any, any, any, EngineType>>(
+    step: TStep,
+  ): Promise<InferStandardSchemaOutput<TStep['outputSchema']>>;
   suspend: unknown extends TSuspend
     ? (suspendPayload?: TSuspend, suspendOptions?: SuspendOptions) => InnerOutput | Promise<InnerOutput>
     : (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => InnerOutput | Promise<InnerOutput>;
@@ -191,3 +201,6 @@ export const getStepResult = (stepResults: Record<string, StepResult<any, any, a
 
   return result?.status === 'success' ? result.output : null;
 };
+
+export const getStepResultAsync = async (stepResults: Record<string, StepResult<any, any, any, any>>, step: any) =>
+  getStepResult(stepResults, step);
