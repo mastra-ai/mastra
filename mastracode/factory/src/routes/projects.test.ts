@@ -821,6 +821,26 @@ describe('ProjectRoutes', () => {
         body: JSON.stringify(body),
       });
 
+    it.each([null, '/custom-workspace'])(
+      'preserves the project workdir %s across source-control initialization',
+      async workdir => {
+        const { seed, project, app, github, links } = await seedEnvironment();
+        expect((await patch(app, project.id, { sandboxWorkingDirectory: '/initial-workspace' })).status).toBe(200);
+        expect((await patch(app, project.id, { sandboxWorkingDirectory: workdir })).status).toBe(200);
+
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          await seed.sourceControl.init();
+          const response = await app.request(`/web/factory/projects/${project.id}/environment`);
+          expect(response.status).toBe(200);
+          expect(await response.json()).toMatchObject({ environment: { sandboxWorkingDirectory: workdir } });
+          expect(await seed.projects.getById({ id: project.id })).toMatchObject({ sandboxWorkingDirectory: workdir });
+        }
+        expect(await github.projectRepositories.get({ orgId: 'org-1', id: links[0]!.id })).toMatchObject({
+          sandboxWorkdir: '/workspace',
+        });
+      },
+    );
+
     it('reads the provider schema and empty settings with the ordered repositories, and writes settings, order and membership', async () => {
       const { seed, project, links, app, github } = await seedEnvironment();
 
