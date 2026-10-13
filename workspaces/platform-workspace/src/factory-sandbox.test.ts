@@ -155,6 +155,30 @@ describe('PlatformFactorySandbox', () => {
     expect((bare as any)._idleTimeoutMinutes).toBe(5);
   });
 
+  it('resolves the idle timeout as setting, then provider default, then host option, then built-in', () => {
+    const ctx = listContext();
+    const client = { accessToken: 'sk_test', projectId: 'proj_1' };
+    const idle = (sandbox: PlatformFactorySandbox, settings = {}) =>
+      (sandbox.create(ctx, settings) as any)._idleTimeoutMinutes;
+    const advertised = (sandbox: PlatformFactorySandbox) =>
+      (describeFactorySandbox(sandbox).settingsSchema.properties?.idleTimeoutMinutes as { default?: unknown }).default;
+
+    const host = new PlatformFactorySandbox({ ...client, idleTimeoutMinutes: 30 });
+    expect(idle(host)).toBe(30);
+    expect(advertised(host)).toBe(30);
+
+    const hostAndDefaults = new PlatformFactorySandbox({
+      ...client,
+      idleTimeoutMinutes: 30,
+      defaults: { idleTimeoutMinutes: 15 },
+    });
+    expect(idle(hostAndDefaults)).toBe(15);
+    expect(advertised(hostAndDefaults)).toBe(15);
+    expect(idle(hostAndDefaults, { idleTimeoutMinutes: 10 })).toBe(10);
+
+    expect(idle(new PlatformFactorySandbox(client))).toBe(5);
+  });
+
   describe('builds', () => {
     function buildFetch(
       results: Array<{ status: 'ready' | 'pending' | 'failed'; templateId: string; error?: string }>,
@@ -202,22 +226,34 @@ describe('PlatformFactorySandbox', () => {
       expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
-    it('recomputes the template after a restart and reports a moved template as unknown', async () => {
-      const { fetchMock } = buildFetch([{ status: 'failed', templateId: 'tpl_1', error: 'pnpm install exited 1' }]);
+    it('reports a build this process did not start as unknown without submitting a build', async () => {
+      const { fetchMock } = buildFetch([{ status: 'ready', templateId: 'tpl_1' }]);
       const fresh = buildSandbox(fetchMock as unknown as typeof fetch);
       const ctx = listContext();
 
-      expect(await fresh.builds!.get(ctx, {}, 'tpl_1')).toEqual({
+      const read = await fresh.builds!.get(ctx, {}, 'tpl_old_head');
+      expect(read.buildId).toBe('tpl_old_head');
+      expect(read.status).toBe('unknown');
+      expect(read.error).toContain('tpl_old_head');
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(ctx.resolveHead).not.toHaveBeenCalled();
+    });
+
+    it('reports a failed build through the builder that started it', async () => {
+      const { fetchMock } = buildFetch([
+        { status: 'pending', templateId: 'tpl_1' },
+        { status: 'failed', templateId: 'tpl_1', error: 'pnpm install exited 1' },
+      ]);
+      const sandbox = buildSandbox(fetchMock as unknown as typeof fetch);
+      const ctx = listContext();
+
+      await sandbox.builds!.start(ctx, {});
+      expect(await sandbox.builds!.get(ctx, {}, 'tpl_1')).toEqual({
         buildId: 'tpl_1',
         templateId: 'tpl_1',
         status: 'failed',
         error: 'pnpm install exited 1',
       });
-      expect(ctx.resolveHead).toHaveBeenCalled();
-
-      const moved = await fresh.builds!.get(ctx, {}, 'tpl_0');
-      expect(moved.status).toBe('unknown');
-      expect(moved.error).toContain('tpl_1');
     });
 
     it('builds the resources-only template for a session without repositories', async () => {
