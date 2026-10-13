@@ -176,16 +176,47 @@ describe('Session.respondToPersistedToolApproval', () => {
     session.run.nextOperation();
     const activeRun = session.run.ensureAbortController();
     session.run.setRunId({ runId: 'active-run' });
-    vi.spyOn(session.machinery.getAgent(), 'sendToolApproval').mockRejectedValueOnce(new Error('no suspended run'));
+    const sendToolApproval = vi
+      .spyOn(session.machinery.getAgent(), 'sendToolApproval')
+      .mockRejectedValueOnce(new Error('no suspended run'));
 
     await expect(session.respondToPersistedToolApproval({ toolCallId: 'call-1', approved: true })).rejects.toThrow(
       'no suspended run',
     );
 
+    expect(sendToolApproval).toHaveBeenCalledTimes(1);
     expect(session.run.isRunning()).toBe(true);
     expect(session.run.getRunId()).toBe('active-run');
     expect(activeRun.signal.aborted).toBe(false);
 
     activeRun.abort();
   }, 30_000);
+
+  it.each([true, false])(
+    'keeps a run armed by another operation while a failing answer was pending (approved=%s) (#26870)',
+    async approved => {
+      const env = backend();
+      const session = await env.parkThenRestart();
+
+      let newerRun: AbortController | undefined;
+      vi.spyOn(session.machinery.getAgent(), 'sendToolApproval').mockImplementationOnce(async () => {
+        // Stop drops the controller this answer armed; a new message then arms its own run.
+        session.run.requestAbort();
+        newerRun = session.run.ensureAbortController();
+        throw new Error('no suspended run');
+      });
+
+      await expect(session.respondToPersistedToolApproval({ toolCallId: 'call-1', approved })).rejects.toThrow(
+        'no suspended run',
+      );
+
+      expect(newerRun).toBeDefined();
+      expect(session.run.getAbortSignal()).toBe(newerRun!.signal);
+      expect(newerRun!.signal.aborted).toBe(false);
+      expect(await env.suspendedRuns(session)).toHaveLength(1);
+
+      newerRun!.abort();
+    },
+    30_000,
+  );
 });
