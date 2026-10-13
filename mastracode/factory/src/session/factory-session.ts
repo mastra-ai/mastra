@@ -193,10 +193,10 @@ export type FactorySourceRepositoryResult =
  * `inEnvironment` link of the factory (decision D1); a work item that targets
  * a repository names its link through `projectRepositoryId`, which must be an
  * environment link of the same factory. Session start no longer picks a
- * repository to work in, the sandbox holds every environment repository; the
- * link keeps the PR tools, subscriptions, audit and the work item's
- * repository check on one repository until FACT-342 moves them to
- * `sessionRepositories`.
+ * repository to work in, the sandbox holds every environment repository. The
+ * PR tools default to this link, and subscriptions, audit and the work item's
+ * repository check still read it; moving them to the per-repository
+ * `sessionRepositories` rows is a follow-up.
  *
  * The owner is whichever integration owns source control, matched by the
  * handle's own `integrationId` — nothing here is provider-specific.

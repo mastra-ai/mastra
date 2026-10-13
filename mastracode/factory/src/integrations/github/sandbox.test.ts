@@ -11,7 +11,7 @@ import type {
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
 import {
-  checkedOutBranch,
+  hasLocalBranch,
   checkoutSessionBranch,
   configureGitIdentity,
   createPullRequest,
@@ -1081,18 +1081,22 @@ describe('pushRepositoryBranch', () => {
   });
 });
 
-describe('checkedOutBranch', () => {
-  it('returns the branch name, and null for a detached HEAD', async () => {
-    const onBranch = new FakeSandbox(script =>
-      script.includes('--abbrev-ref') ? { exitCode: 0, stdout: 'feat/x\n', stderr: '' } : OK,
-    );
-    await expect(checkedOutBranch(onBranch, '/workspace/hello')).resolves.toBe('feat/x');
-    expect(onBranch.executions[0]!.args).toEqual(['-C', '/workspace/hello', 'rev-parse', '--abbrev-ref', 'HEAD']);
-
-    const detached = new FakeSandbox(script =>
-      script.includes('--abbrev-ref') ? { exitCode: 0, stdout: 'HEAD\n', stderr: '' } : OK,
-    );
-    await expect(checkedOutBranch(detached, '/workspace/hello')).resolves.toBeNull();
+describe('hasLocalBranch', () => {
+  it('answers from show-ref and fails on any other git error', async () => {
+    const exists = new FakeSandbox(() => OK);
+    await expect(hasLocalBranch(exists, '/workspace/hello', 'feat/x')).resolves.toBe(true);
+    expect(exists.executions[0]!.args).toEqual([
+      '-C',
+      '/workspace/hello',
+      'show-ref',
+      '--verify',
+      '--quiet',
+      'refs/heads/feat/x',
+    ]);
+    const missing = new FakeSandbox(() => ({ exitCode: 1, stdout: '', stderr: '' }));
+    await expect(hasLocalBranch(missing, '/workspace/hello', 'feat/x')).resolves.toBe(false);
+    const broken = new FakeSandbox(() => ({ exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' }));
+    await expect(hasLocalBranch(broken, '/workspace/hello', 'feat/x')).rejects.toThrow();
   });
 });
 

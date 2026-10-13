@@ -129,8 +129,8 @@ interface SessionSandboxEntry {
    * treat an unresolved workdir as "nothing materialized".
    */
   workdir?: string;
-  /** The repository `workdir` was derived for: the memo answers only that repository. */
-  workdirRepo?: string;
+  /** The session's own repository, the only one `workdir` is ever recorded for. */
+  ownRepo: string;
 }
 
 const sessionSandboxes = new Map<string, SessionSandboxEntry>();
@@ -150,7 +150,7 @@ export function getSessionSandbox(
   if (existing) return existing;
   const sandbox = construct();
   const local = deriveLocalWorkdir(sandbox, repoFullName);
-  const entry: SessionSandboxEntry = { sandbox, ...(local ? { workdir: local, workdirRepo: repoFullName } : {}) };
+  const entry: SessionSandboxEntry = { sandbox, ownRepo: repoFullName, ...(local ? { workdir: local } : {}) };
   sessionSandboxes.set(sessionId, entry);
   return entry;
 }
@@ -172,18 +172,20 @@ export async function resolveSessionWorkdir(
   repoFullName: string,
 ): Promise<string> {
   const entry = sessionSandboxes.get(sessionId);
-  if (entry?.workdir && entry.sandbox === sandbox) {
-    if (entry.workdirRepo === repoFullName) return entry.workdir;
-    return repoDirUnder(path.posix.dirname(entry.workdir), repoFullName);
+  const memo = entry && entry.sandbox === sandbox ? entry : undefined;
+  if (memo && memo.ownRepo !== repoFullName) {
+    // Passive readers take `workdir` as the session's own checkout, so a
+    // sibling never lands in the memo: resolve the own checkout (cold memo
+    // included) and answer the sibling beside it.
+    const own = await resolveSessionWorkdir(sessionId, sandbox, memo.ownRepo);
+    return repoDirUnder(path.posix.dirname(own), repoFullName);
   }
+  if (memo?.workdir) return memo.workdir;
   const workdir =
     deriveLocalWorkdir(sandbox, repoFullName) ??
     deriveRemoteRepoDir(sandbox, repoFullName) ??
     repoDirUnder(await probeHome(sandbox), repoFullName);
-  if (entry && entry.sandbox === sandbox) {
-    entry.workdir = workdir;
-    entry.workdirRepo = repoFullName;
-  }
+  if (memo) memo.workdir = workdir;
   return workdir;
 }
 

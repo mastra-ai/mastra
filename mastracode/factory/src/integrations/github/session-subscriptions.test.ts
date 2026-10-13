@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   subscribe: vi.fn(async (_input: { sessionScope: string }) => ({ created: true })),
   unsubscribe: vi.fn(async (_input: { sessionScope: string }) => ({ removed: true })),
   getPullRequest: vi.fn(async ({ repo }: { owner: string; repo: string; pull_number: number }) => ({
-    data: { base: { repo: { id: repo === 'docs' ? 98 : 99 } }, head: { ref: 'feat/from-pr' } },
+    data: { base: { repo: { id: repo === 'docs' ? 98 : 99 } }, head: { ref: 'factory/issue-1' } },
   })),
   upsertSessionRepository: vi.fn(async () => undefined),
   getRepositoryAccess: vi.fn(async () => ({
@@ -441,8 +441,27 @@ describe('GitHub subscription entry points', () => {
       projectRepositoryId: 'project-repository-2',
       changeRequestId: '7',
       changeRequestUrl: 'https://github.com/mastra-ai/docs/pull/7',
-      fallbackBranch: 'feat/from-pr',
+      fallbackBranch: 'factory/issue-1',
     });
+  });
+
+  it('subscribes to an unrelated pull request without touching the session repository row', async () => {
+    const requestContext = authenticatedRequestContext('/worktrees/a', { factoryProjectId: 'resource-1' });
+    mocks.getPullRequest.mockResolvedValueOnce({
+      data: { base: { repo: { id: 98 } }, head: { ref: 'someone/else' } },
+    });
+
+    await expect(
+      subscribeCurrentSessionToPullRequest(
+        requestContext,
+        'https://github.com/mastra-ai/docs/pull/8',
+        'explicit-tool',
+        githubStub,
+      ),
+    ).resolves.toBe(8);
+
+    expect(mocks.subscribe).toHaveBeenCalledWith(expect.objectContaining({ changeRequestId: '8' }), integrationStorage);
+    expect(mocks.upsertSessionRepository).not.toHaveBeenCalled();
   });
 
   it('resolves a bare number against the session own link, and demands a URL without one', async () => {

@@ -414,7 +414,7 @@ describe('createSourceControlTools', () => {
   });
 
   describe('environment repositories', () => {
-    function fakeSandbox(currentBranch: Record<string, string> = {}) {
+    function fakeSandbox(checkouts: { missingBranch?: string[]; remotes?: Record<string, string> } = {}) {
       const executions: Array<{ command: string; args: string[]; options?: { env?: Record<string, string> } }> = [];
       const sandbox = {
         id: 'sandbox-1',
@@ -422,9 +422,13 @@ describe('createSourceControlTools', () => {
         workingDirectory: '/home/user',
         executeCommand: vi.fn(async (command: string, args: string[], options?: { env?: Record<string, string> }) => {
           executions.push({ command, args, options });
-          if (args.includes('--abbrev-ref')) {
-            const workdir = args[args.indexOf('-C') + 1]!;
-            return { exitCode: 0, stdout: `${currentBranch[workdir] ?? 'factory/issue-1'}\n`, stderr: '' };
+          const workdir = args[args.indexOf('-C') + 1]!;
+          if (args.includes('show-ref')) {
+            return { exitCode: checkouts.missingBranch?.includes(workdir) ? 1 : 0, stdout: '', stderr: '' };
+          }
+          if (args.includes('get-url')) {
+            const remote = checkouts.remotes?.[workdir] ?? `https://gitlab.com/acme/${workdir.split('/').pop()}.git`;
+            return { exitCode: 0, stdout: `${remote}\n`, stderr: '' };
           }
           return { exitCode: 0, stdout: '', stderr: '' };
         }),
@@ -515,10 +519,10 @@ describe('createSourceControlTools', () => {
       );
     });
 
-    it('pushes HEAD to the session branch in another environment repository', async () => {
+    it('pushes HEAD to the session branch in another environment repository that never created it', async () => {
       const setup = await fixture();
       const built = await tools(setup);
-      const { sandbox, pushes, executions } = fakeSandbox({ '/home/user/other': 'develop' });
+      const { sandbox, pushes, executions } = fakeSandbox({ missingBranch: ['/home/user/other'] });
 
       const result = await (built.source_control_push_branch!.execute as any)(
         { repository: 'acme/other' },
@@ -538,6 +542,40 @@ describe('createSourceControlTools', () => {
       await expect(setup.storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).resolves.toMatchObject([
         { projectRepositoryId: 'repo-link-2', branch: 'factory/issue-1' },
       ]);
+    });
+
+    it('pushes the local session branch whatever is checked out, in its own or another repository', async () => {
+      const setup = await fixture();
+      const built = await tools(setup);
+      // The agent sits on a scratch branch (own) or switched back to main
+      // (sibling); the session branch exists locally in both checkouts.
+      const { sandbox, pushes } = fakeSandbox();
+
+      await (built.source_control_push_branch!.execute as any)({}, { workspace: { sandbox } });
+      await (built.source_control_push_branch!.execute as any)(
+        { repository: 'acme/other' },
+        { workspace: { sandbox } },
+      );
+
+      expect(pushes().map(push => push.args)).toEqual([
+        ['-C', '/home/user/repo', 'push', '-u', 'origin', 'factory/issue-1'],
+        ['-C', '/home/user/other', 'push', '-u', 'origin', 'factory/issue-1'],
+      ]);
+    });
+
+    it('refuses to push another repository whose directory holds a different checkout', async () => {
+      const setup = await fixture();
+      const built = await tools(setup);
+      // The boot skipped acme/other for a directory-name collision.
+      const { sandbox, pushes } = fakeSandbox({
+        remotes: { '/home/user/other': 'https://gitlab.com/elsewhere/other.git' },
+      });
+
+      await expect(
+        (built.source_control_push_branch!.execute as any)({ repository: 'acme/other' }, { workspace: { sandbox } }),
+      ).rejects.toThrow('There is no checkout of acme/other in this session.');
+      expect(pushes()).toHaveLength(0);
+      await expect(setup.storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).resolves.toEqual([]);
     });
 
     it('rejects a repository outside the environment, naming the valid slugs, and pushes nothing', async () => {
