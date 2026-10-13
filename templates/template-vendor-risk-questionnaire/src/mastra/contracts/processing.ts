@@ -35,6 +35,8 @@ export const processingRunSchema = z
     stopReason: reasonSchema.nullable(),
     createdAt: z.iso.datetime(),
     updatedAt: z.iso.datetime(),
+    // Optional for runs saved before active processing time was tracked separately.
+    clock: z.object({ elapsedMs: z.int().nonnegative(), startedAt: z.iso.datetime().nullable() }).strict().optional(),
   })
   .strict();
 export const usageRecordSchema = z

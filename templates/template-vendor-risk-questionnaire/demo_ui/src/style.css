@@ -182,6 +182,136 @@ tr.selected {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.review-card {
+  border: 1px solid #303030;
+  border-radius: 7px;
+  padding: 0;
+  margin: 24px 0;
+  overflow: hidden;
+}
+.review-question,
+.review-body {
+  padding: 24px;
+}
+.review-question {
+  background: #1b1b1b;
+  border-bottom: 1px solid #303030;
+}
+.review-question h3 {
+  font-size: 19px;
+  margin: 16px 0 8px;
+}
+.review-badge {
+  border: 1px solid #3b3b3b;
+  border-radius: 5px;
+  padding: 3px 9px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.review-card h4 {
+  font-size: 14px;
+  font-weight: 550;
+  margin: 0 0 12px;
+}
+.review-alerts {
+  margin: 24px 24px 0;
+  padding: 16px;
+  background: #202020;
+  border-left: 3px solid #aaa;
+}
+.review-alerts ul,
+.limitations {
+  padding-left: 20px;
+  margin: 0;
+  font-size: 13px;
+}
+.review-alerts li + li,
+.limitations li + li {
+  margin-top: 12px;
+}
+.review-alerts p {
+  margin: 0 0 4px;
+}
+.reason-code {
+  font-size: 11px;
+  color: #a1a1a1;
+  overflow-wrap: anywhere;
+}
+.review-body {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 28px;
+}
+.review-answer .row {
+  margin-bottom: 12px;
+}
+.review-answer .row label {
+  margin: 0;
+  font-weight: 550;
+}
+.review-answer textarea {
+  min-height: 160px;
+  resize: vertical;
+  line-height: inherit;
+}
+.review-answer textarea:read-only {
+  background: transparent;
+}
+.review-answer h4 {
+  margin-top: 24px;
+}
+.limitations {
+  color: #a1a1a1;
+}
+.review-evidence {
+  padding-left: 24px;
+  border-left: 1px solid #303030;
+  overflow-wrap: anywhere;
+}
+.evidence-item {
+  font-size: 13px;
+  padding: 16px 0;
+}
+.evidence-item + .evidence-item {
+  border-top: 1px solid #303030;
+}
+.evidence-item p {
+  margin: 4px 0;
+}
+.evidence-item blockquote {
+  white-space: pre-wrap;
+}
+.disclosure-check {
+  padding: 12px;
+  background: #202020;
+}
+.review-submit {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  margin: 24px 0;
+}
+@media (max-width: 800px) {
+  .review-body {
+    grid-template-columns: 1fr;
+  }
+  .review-evidence {
+    padding: 20px 0 0;
+    border-left: 0;
+    border-top: 1px solid #303030;
+  }
+  .review-question,
+  .review-body {
+    padding: 16px;
+  }
+  .review-alerts {
+    margin: 16px 16px 0;
+  }
+  .review-question .row {
+    flex-wrap: wrap;
+  }
+}
 blockquote {
   margin: 12px 0;
   padding-left: 16px;

@@ -1,62 +1,64 @@
-# Vendor Risk Questionnaires
+# Vendor Risk Questionnaire
 
-Answer an XLSX or DOCX vendor questionnaire using approved organizational evidence. Review cited drafts, correct supported answers, keep unknown or withheld gaps visible, and approve one answered copy in the original format. Local persistence lets you resume interrupted work.
+Upload an XLSX or DOCX vendor risk questionnaire, review answers drafted from your organization's approved evidence, and download the completed questionnaire in its original format. In the web demo, you can check citations, see where evidence is missing, and decide what information to share. Nothing is exported until you approve it.
 
 ## Why we built this
 
-Vendor questionnaires vary in structure, and supporting documents have different approval and disclosure rules. Reliable review needs complete question intake, traceable evidence and visible gaps. A supported negative or partial answer is more useful than an unsupported positive claim.
+Companies rely on suppliers for products, professional services, manufacturing, logistics and software. Before starting or renewing a relationship, they use vendor risk questionnaires (VRQs) to assess the risks of working with that supplier. Depending on the relationship, questions may cover information security, privacy, regulatory compliance, business continuity, financial stability or supply chain practices.
+
+For the teams completing these questionnaires, each customer brings a different spreadsheet or document, often asking similar questions in different ways. Answers may require policies, records and input from several departments. Finding the right evidence, checking whether an answer is still accurate, and deciding what can be shared takes time across operations, finance, security, compliance and sales.
+
+Copying an answer from the last questionnaire can repeat an outdated claim or suggest the company has controls it hasn't implemented. This template brings approved evidence and cited drafts into one review flow, flags answers that lack support, and lets reviewers decide what can be shared. Mastra workflows coordinate intake, drafting, human approval and export; the final decision stays with your team.
 
 ## Prerequisites
 
-- **[OpenAI API key](https://platform.openai.com/api-keys)**: set `OPENAI_API_KEY` in `.env`. The default model is `openai/gpt-6.1-sol`; optionally set `VRQ_MODEL=openai/gpt-5-mini`. Use a model supporting Responses, structured output and medium reasoning.
-- An XLSX or DOCX questionnaire with writable response fields. A fictional Northstar Tasks demo is included.
-- For your own organization, local XLSX, PDF, CSV, JSON or Markdown evidence and a trusted manifest specifying source approval, scope and disclosure rules.
+- **[OpenAI API key](https://platform.openai.com/api-keys)**: set `OPENAI_API_KEY` in `.env`. The default model is `openai/gpt-6.1-sol`. Optionally set `VRQ_MODEL` to another OpenAI model that supports Responses, structured output and medium reasoning.
+- Sample questionnaires and evidence are included in the demo setup. No external storage or database account is needed.
 
 ## Quickstart 🚀
 
-1. **Install dependencies**
-   - From `templates/template-vendor-risk-questionnaire` in the Mastra checkout, run `npm install --workspaces=false`. This template is not yet available through the scaffold command.
-2. **Configure your API key**
-   - Copy `.env.example` to `.env` and fill in the key described above. `VRQ_MODEL` overrides the profile model for new runs; resumed runs keep their saved model.
+1. **Create the project**
+   - Run `npx create-mastra@latest --template vendor-risk-questionnaire` and choose `vendor-risk-questionnaire` as the project directory.
+   - Run `cd vendor-risk-questionnaire`, then `npm install` to install both the backend and web dependencies.
+2. **Add your API key**
+   - Run `cp .env.example .env` and fill in your key as described under Prerequisites.
 3. **Prepare the demo**
-   - Run `npm run demo` to create fictional evidence, questionnaires and `.runtime/profile.json`. Existing configuration and demo data are preserved.
-4. **Answer a questionnaire**
-   - Run `npm run respond -- "$PWD/.runtime/demo/questionnaire.xlsx"` in an interactive terminal. For your own document, supply its absolute XLSX or DOCX path.
-   - Follow any mapping prompts, review each answer and citation, and choose supported corrections or explicit gaps. Inspect the complete revised set and type `APPROVE`.
-   - The command returns one `answered.xlsx` or `answered.docx` under `.runtime/exports`.
-5. **Resume interrupted work**
-   - Run `npm run respond -- --resume <run-id>` using the printed run ID. Cancellation leaves approval pending and preserves completed work.
+   - Run `npm run demo` to generate sample questionnaires, evidence and profile. Existing data and configuration are preserved.
+4. **Start the web demo**
+   - Run `npm run dev` to start Mastra and the web interface together.
 
 ## Try it out
 
-- Use `.runtime/demo/questionnaire.docx` to try the same flow with a Word document.
-- Review the demo's conflicting controls, missing evidence and restricted sources. Release supported answers or retain visible gaps.
-- Cancel during review, then resume using the run ID to continue from saved choices.
+1. **Upload a questionnaire**
+   - Open [the web demo](http://127.0.0.1:5173). In **Upload**, select `.runtime/demo/questionnaire.xlsx` and click **Submit**.
+   - The questionnaire appears under **Questionnaires**. Answer any mapping prompts and wait for processing to finish; drafts, citations and evidence gaps will appear for review.
+2. **Review each answer**
+   - Read the draft and its citations, then choose how to handle each answer: release it if the evidence supports it, make a correction based on the evidence, or mark it as `unknown` or `withheld`.
+   - The sample includes missing and conflicting evidence. Keep those limitations visible, and approve sharing for any sources that require your permission.
+3. **Check all answers together**
+   - Click **Review** to validate your choices. Resolve any reported issues, then review all the proposed responses together. Your approval is still required before export.
+   - To try resuming a review, reload the page after validation and reopen the questionnaire under **Questionnaires**. Your submitted choices remain available.
+4. **Approve and download**
+   - Click **APPROVE** and confirm in the dialog. When export finishes, **Download** becomes available.
+   - Download the completed XLSX file. It preserves the questionnaire's format and includes your approved responses, with unknown or withheld answers clearly marked.
+5. **Inspect the run**
+   - Open **Review metrics** for the questionnaire to see answer outcomes, model usage and review activity.
 
-## Web interface
-
-Run the Svelte + Bits UI client in `demo_ui` to upload questionnaires, review pending answers, download approved documents and inspect existing review metrics. See [UI setup and HTTP routes](docs/ui.md). Mastra Studio and the API use `SimpleAuth` only when `NODE_ENV=production`; configure `MASTRA_STUDIO_TOKEN` before production startup.
+To try Word, repeat the same steps with `.runtime/demo/questionnaire.docx`. You'll receive a completed DOCX file.
 
 ## Customization
 
-- Open the project in your coding agent: “Map our questionnaire fields and configure approved evidence scope. Explore the code and propose a plan before making changes.”
-- Configure `.runtime/profile.json` with your evidence paths, organization scope and execution policy. Choose call, time and spending limits; the defaults can leave gaps in the demo and are not a provider billing cap.
-- See `docs/intake.md` for supported formats and mappings, `docs/drafting.md` for retrieval and agent behavior, `docs/review.md` for administration and recovery, and `docs/evaluation.md` for tests and metrics.
+- Open the project in your coding agent: “Configure our approved evidence sources and map our customer questionnaire fields. Explore the code and propose a plan before making changes.” Start with [input formats and mappings](https://github.com/mastra-ai/mastra/blob/main/templates/template-vendor-risk-questionnaire/docs/intake.md) and [evidence retrieval and drafting](https://github.com/mastra-ai/mastra/blob/main/templates/template-vendor-risk-questionnaire/docs/drafting.md) to configure `.runtime/profile.json` for your organization.
+- Adapt the interface or connect it to your application using the [web UI and HTTP API guide](https://github.com/mastra-ai/mastra/blob/main/templates/template-vendor-risk-questionnaire/docs/ui.md). For terminal usage, production configuration, checks and recovery, see [local operation and development](https://github.com/mastra-ai/mastra/blob/main/templates/template-vendor-risk-questionnaire/docs/local-operation.md), [review and approval](https://github.com/mastra-ai/mastra/blob/main/templates/template-vendor-risk-questionnaire/docs/review.md), and [evaluation and metrics](https://github.com/mastra-ai/mastra/blob/main/templates/template-vendor-risk-questionnaire/docs/evaluation.md).
 
-## Local operation
+## Evidence formats and integrations
 
-`npm run dev` opens Mastra Studio at http://localhost:4111 for workflow and trace inspection. Run `npm run demo` first if you want sample data. Document input uses local paths; the tested Studio upload UI does not accept XLSX/DOCX chat attachments.
+Evidence currently comes from local XLSX, PDF, CSV, JSON and Markdown files. DOCX is supported for questionnaires, but not as evidence; scanned PDFs and OCR are not supported. The [input guide](https://github.com/mastra-ai/mastra/blob/main/templates/template-vendor-risk-questionnaire/docs/intake.md) describes layout restrictions.
 
-Stop Studio before using commands that change a run. Only one process may write the local database at a time. `npm run review -- status --run-id <run-id>` and `npm run review -- metrics --run-id <run-id>` remain available for inspection. Recovery and explicit cleanup are described in `docs/review.md`.
-
-The local OS operator is trusted. Evidence snapshots and review records remain in `.runtime` without encryption or automatic cleanup. Unsupported layouts and unsafe retained content block publication. Changed evidence invalidates approval; start a new run.
-
-## Development
-
-Run `npm run test -- --no-file-parallelism`, `npm run typecheck`, `npm run format:check` and `npm run build`. Ordinary tests use controlled providers without an API key. Live evaluation is optional and requires an explicit execution policy; see `docs/evaluation.md`.
+To work with additional data sources, explore [Organization Intelligence](https://mastra.ai/templates/organization-intelligence) for Google Drive and S3, [Chat with PDF](https://mastra.ai/templates/chat-with-pdf) for retrieval over PDFs, and [Chat with Database](https://mastra.ai/templates/text-to-sql) for SQL access. Use these as starting points to add APIs, databases or external systems to your evidence pipeline, preserving source approval, citations and disclosure rules. Those integrations require customization and are not included here.
 
 ## About Mastra templates
 
-This template lives in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and demonstrates a questionnaire workflow with human approval and local storage.
+This is an official Mastra template. Official templates live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are synchronized to standalone repositories.
 
 [Want to contribute?](https://github.com/mastra-ai/mastra/blob/main/CONTRIBUTING.md)

@@ -1,48 +1,163 @@
 # Evaluation and metrics
 
+Use tests to check behavior before changing the template. Use run metrics to understand what happened to one questionnaire. An **evaluation** compares answers with expected results; a **metric** measures an outcome, such as the number of supported answers or provider calls.
+
+Run these commands from the template directory after `npm install`.
+
 ## Offline tests
 
-Run `npm run test -- --no-file-parallelism` for unit, integration, security and semantic checks. All use controlled providers and require no API key. Run `npm run test -- tests/evals` to select only semantic evaluations. Formatting, typechecking and bundling use `npm run format:check`, `npm run typecheck` and `npm run build`.
+Offline tests use controlled providers and need no API key.
 
-Semantic evaluations exercise the public drafting workflow with official `@mastra/evals/vitest` integration. Gold labels stay separate from application prompts. Correct, wrong-answer and all-unknown controls verify that an evaluation cannot pass by withholding every answer. Integration tests also cover the fictional 24-question demo's original evidence, negative facts, conflicting records, restricted sources and exact citation bindings.
+1. Run the unit, integration, security and semantic checks:
 
-## Semantic metrics
+   ```bash
+   npm run test -- --no-file-parallelism
+   ```
 
-The six dimensions are groundedness, completeness, unsupported-claim detection, escalation accuracy, factual consistency and attribution. Useful-answer recall and false escalation additionally measure whether supported answers reach review successfully.
+2. To run only semantic evaluations, use:
 
-- Groundedness: supported material claims / accepted material claims.
-- Completeness: covered gold facts / required gold facts.
-- Unsupported detection: recall and precision for labeled unsupported cases, with critical cases reported separately.
-- Escalation: accuracy, recall and precision against labeled review needs.
-- Consistency: agreement across equivalent fact sets.
-- Attribution: citations independently judged to support their bound claims.
-- Useful-answer recall: correct, complete, supported eligible answers / eligible questions.
-- False escalation: eligible questions unnecessarily escalated / eligible questions.
+   ```bash
+   npm run test -- tests/evals
+   ```
 
-Targets live in `tests/support/evaluation.ts`: groundedness, completeness, escalation accuracy, consistency and useful-answer recall at least 0.90; attribution at least 0.95; critical unsupported recall 1.00; false escalation at most 0.10. Accepted critical claims and forbidden disclosures must be zero. Missing required denominators remain failing `null` values. Adjust quality targets and gold labels for your own use case.
+3. Check the test summary. A failed assertion identifies behavior to investigate before trying a live model.
+
+Semantic evaluations check whether answers have the right meaning and evidence. They run the public drafting workflow through `@mastra/evals/vitest`. Expected answers, also called gold labels, are kept out of application prompts.
+
+The tests include correct answers, wrong answers and all-unknown answers. Returning `unknown` for everything must not pass. Integration tests also cover the fictional 24-question demo's negative facts, conflicting records, restricted sources and exact citation locations.
+
+For formatting, typechecking and builds, see [development checks](local-operation.md#development-checks).
+
+## Read the semantic scores
+
+For example, if a draft makes ten factual claims and evidence supports nine, its groundedness is `9 / 10 = 0.90`. If it omits a required fact, it can still have high groundedness but lower completeness.
+
+| Metric                      | What it asks                                                                                  |
+| --------------------------- | --------------------------------------------------------------------------------------------- |
+| Groundedness                | What fraction of accepted factual claims have evidence?                                       |
+| Completeness                | What fraction of the required reference facts did the answer cover?                           |
+| Unsupported-claim detection | Did the checks catch unsupported claims, and were their flags correct?                        |
+| Escalation accuracy         | Were the right questions sent for additional review?                                          |
+| Factual consistency         | Do answers to equivalent questions agree?                                                     |
+| Attribution                 | Does each citation support the claim attached to it?                                          |
+| Useful-answer recall        | What fraction of answerable questions received correct, complete, supported eligible answers? |
+| False escalation            | What fraction of answerable questions were sent for extra review unnecessarily?               |
+
+For detection and escalation, **recall** measures how many expected cases were caught. **Precision** measures how many flagged cases were correct. Critical unsupported claims are measured separately.
+
+Targets are defined in `tests/support/evaluation.ts`:
+
+| Metric                                                                                | Target          |
+| ------------------------------------------------------------------------------------- | --------------- |
+| Groundedness, completeness, escalation accuracy, consistency and useful-answer recall | At least `0.90` |
+| Attribution                                                                           | At least `0.95` |
+| Critical unsupported-claim recall                                                     | `1.00`          |
+| False escalation                                                                      | At most `0.10`  |
+| Accepted critical unsupported claims and forbidden disclosures                        | Zero            |
+
+A missing required denominator produces a failing `null`, not a perfect score. Adapt expected answers and quality targets to your use case. Offline results test application behavior; they do not establish live model quality.
 
 ## Optional live evaluation
 
-Live tests are separate from ordinary discovery and send only generated fictional data. Set `OPENAI_API_KEY` in `.env`, create an execution-policy JSON using the fields in `src/mastra/contracts/execution-policy.ts`, then run:
+Live evaluation makes paid provider calls using generated fictional data. It runs separately from ordinary tests and stops after its first failed test.
 
-```text
-VRQ_EVAL_POLICY=/absolute/path/to/policy.json npm run eval:live
+### 1. Prepare the API key and policy
+
+Set `OPENAI_API_KEY` in `.env`. Create a complete policy JSON file, such as `.runtime/evaluation-policy.json`.
+
+If you already prepared the demo, copy the profile's policy as a starting point. This command refuses to overwrite an existing file:
+
+```bash
+node --input-type=module <<'JS'
+import { readFile, writeFile } from 'node:fs/promises';
+import { executionPolicySchema } from './src/mastra/contracts/execution-policy.ts';
+
+const profile = JSON.parse(await readFile('.runtime/profile.json', 'utf8'));
+const policy = executionPolicySchema.parse(profile.policy);
+await writeFile('.runtime/evaluation-policy.json', JSON.stringify(policy, null, 2) + '\n', { flag: 'wx' });
+console.log('Created .runtime/evaluation-policy.json; review its model, limits and rates.');
+JS
 ```
 
-Choose your own budget, call limits, timing and pricing estimates before running. Policy limits apply independently to the questionnaire, independent judge and guard run; they are not a shared campaign cap or a provider billing limit. Missing policy or API key fails before provider calls. The suite stops after its first failed test.
+Open that file and choose your model, budget, call limit, time limits and price estimates. This file contains the policy object itself, without a surrounding `policy` property. See [execution policy](drafting.md#execution-policy) for field meanings.
 
-The semantic test uses the actual snapshot retrieval and structured-answer workflow, followed by an independent model judge. The guard test measures malicious instruction detection and false positives on benign security questions. Its small benign sample reports rates without a numeric pass threshold. Application protocol errors, incomplete runs and failed detector checks remain failures.
+The questionnaire, independent judge and guard run each get their own policy limits. They do not share one campaign budget, and the configured amount is not a provider billing cap.
 
-Each invocation makes fresh requests and stores results, judgments, policy, usage and metrics in a new directory under ignored `.runtime/evaluations/live-*`. Reports are named `semantic.json` and `guards.json`; failed assertions retain available results. These local records contain fictional source/output content and are separate from sanitized telemetry. A small corpus and an LLM judge do not establish universal safety or calibrated probabilities. Offline results do not establish live model quality.
+### 2. Validate the file
 
-## Local operational metrics
+This command checks the policy shape without making provider calls:
 
-`npm run review -- metrics --run-id <run-id>` reports routing, supported answers, corrections, evidence coverage, gaps, failures, usage, exports and active/review/wall time. Domain events are persisted with their business transitions and deduplicated across restart, review and export. Physical retries remain separate usage records. Missing usage and incomplete timing remain `null`, with observed subtotals available.
+```bash
+node --input-type=module -e 'import { readFile } from "node:fs/promises"; import { executionPolicySchema } from "./src/mastra/contracts/execution-policy.ts"; executionPolicySchema.parse(JSON.parse(await readFile(".runtime/evaluation-policy.json", "utf8"))); console.log("Evaluation policy is valid.");'
+```
 
-Supported-answer rate is supported released answers / total questions and remains `null` until final approval. Correction rate counts distinct materially corrected questions / reviewed questions. Evidence coverage uses actual reviewed claims and citations.
+### 3. Run the evaluation
 
-Studio exposes native traces under **Observability → Traces**; questionnaire-specific aggregates remain available through `review metrics`. Native traces contain pseudonymous correlations, fixed span types and allowlisted numeric metadata. Prompts, excerpts, tool payloads, raw errors and paths are excluded. No remote exporter is configured. Local traces use `.runtime/vrq.db.telemetry.duckdb`; required workflow state, approvals, domain events and consumption records use LibSQL at `.runtime/vrq.db`.
+```bash
+VRQ_EVAL_POLICY="$PWD/.runtime/evaluation-policy.json" npm run eval:live
+```
 
-Telemetry adapter/exporter failures report `degraded_incomplete` in CLI output and Studio's `/vrq/telemetry-status` endpoint. Persisted business results remain valid. Required operational storage failures stop new calls and preserve committed results; an unpersistable stop reports `STORAGE_FAILURE_UNPERSISTED`. A failed terminal save can leave the last native snapshot marked `running`; it does not authorize automatic replay. Internally swallowed adapter errors cannot be reported by the template.
+Missing policy or API key fails before provider calls. Each invocation makes fresh requests.
 
-Only one mutating process may own the database. See [review and exports](review.md) and the README for writer recovery and explicit cleanup.
+### 4. Inspect the reports
+
+Look in the new `.runtime/evaluations/live-*` directory:
+
+| Report          | What it checks                                                                                 |
+| --------------- | ---------------------------------------------------------------------------------------------- |
+| `semantic.json` | Answers produced through actual retrieval and drafting, assessed by an independent model judge |
+| `guards.json`   | Malicious-instruction detection and false positives on benign security questions               |
+
+Reports retain available results even when assertions fail. A failure early in the suite may prevent a later report from being created. Each report records its policy and measurements; the run directory retains local evaluation results. The guard test's small benign sample reports rates without a numeric pass threshold. Protocol errors, incomplete runs and failed detector checks remain failures.
+
+These local records contain fictional source and output text. They are separate from sanitized telemetry. A small test set and an LLM judge do not establish universal safety or calibrated confidence scores.
+
+### Ask a coding LLM to prepare a live policy
+
+```text
+Create .runtime/evaluation-policy.json for this template's live evaluation.
+Read src/mastra/contracts/execution-policy.ts, tests/live and
+vitest.live.config.ts. Use .runtime/profile.json only as a starting point.
+
+Ask me for the model, budget, call limit, elapsed-time limit, and input/output
+prices with their date. Explain that questionnaire, judge and guard runs
+have separate limits rather than one shared campaign cap.
+
+Write a complete policy object, not a profile or a policy wrapper. Preserve
+all required fields and validate with executionPolicySchema without calling
+the provider. Show the file, chosen limits and command to run eval:live.
+Do not run live evaluation or invent provider prices.
+```
+
+## Inspect a questionnaire's metrics
+
+1. Open the questionnaire in the web UI and expand **Review metrics**, or copy its run ID.
+2. From the template directory, read that run's metrics:
+
+   ```bash
+   npm run review -- metrics --run-id review-1
+   ```
+
+3. Inspect answer outcomes, evidence coverage, usage and timings. Replace `review-1` with your actual ID.
+
+The report includes routing, supported answers, corrections, gaps, failures, exports, provider usage and active/review/wall time. Business events persist across restarts without counting the same transition twice. Physical provider retries remain separate usage records.
+
+Supported-answer rate is released supported answers divided by all questions. For example, eight supported releases out of ten questions gives `0.80`. It remains `null` until final approval. Correction rate counts distinct questions with factual corrections divided by reviewed questions. Evidence coverage uses the actual reviewed claims and citations.
+
+Missing usage and incomplete timing remain `null`; observed subtotals may still be available. In the web UI, unavailable values appear as `—`. Read units literally: `Ms` means milliseconds, USD means estimated dollars, and ratios are fractions rather than percentages.
+
+## Inspect traces and storage problems
+
+In Studio, open **Observability → Traces** for execution traces. Use questionnaire metrics for totals specific to a run.
+
+| Data                                                       | Local location                     |
+| ---------------------------------------------------------- | ---------------------------------- |
+| Workflow state, approvals, domain events and usage records | `.runtime/vrq.db`                  |
+| Native traces                                              | `.runtime/vrq.db.telemetry.duckdb` |
+| Live evaluation reports                                    | `.runtime/evaluations/live-*`      |
+
+Native traces use pseudonymous correlation identifiers, fixed span types and selected numeric metadata. Prompts, excerpts, tool payloads, raw errors and paths are excluded. No remote exporter is configured.
+
+If telemetry fails, CLI output and `/vrq/telemetry-status` report `degraded_incomplete`; saved business results remain valid. A failure in required operational storage stops new calls and preserves committed results. If the stop itself cannot be saved, the diagnostic is `STORAGE_FAILURE_UNPERSISTED`.
+
+A failed final snapshot save can leave native history marked `running` even when application work failed. Do not use that old status to replay model work automatically. Errors swallowed inside an adapter cannot be reported by the template. Follow [recovery instructions](review.md#local-process-ownership) before changing stored state.

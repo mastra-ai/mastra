@@ -8,8 +8,10 @@ import { loadManifest } from '../evidence/snapshot.ts';
 export async function loadEvidenceProfile(runtimeRoot = resolve('.runtime')) {
   const root = resolve(runtimeRoot),
     path = resolve(root, 'profile.json');
-  const rootStat = await lstat(root),
-    stat = await lstat(path);
+  const [rootStat, stat] = await Promise.all([lstat(root), lstat(path)]).catch(error => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new Error('PROFILE_NOT_CONFIGURED');
+    throw error;
+  });
   if (
     rootStat.isSymbolicLink() ||
     !rootStat.isDirectory() ||

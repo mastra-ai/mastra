@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { realpath, rm, readFile, writeFile, readdir, mkdir, symlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -15,6 +15,8 @@ import { prepareDemo } from '../../scripts/generate-demo.ts';
 import { createIntakeWorkflow } from '../../src/mastra/workflows/vendor-risk-intake.ts';
 import { Mastra } from '@mastra/core';
 import { defaultExecutionPolicy } from '../../src/mastra/contracts/execution-policy.ts';
+import { openDatabase } from '../../src/mastra/persistence/database.ts';
+import { processingElapsedMs } from '../../src/mastra/processing/clock.ts';
 
 import { temporaryDirectory, cleanupDirectory } from '../fixtures/support.ts';
 let root: string;
@@ -32,6 +34,116 @@ async function documentText(path: string) {
     .join('\n');
 }
 describe('Persistent review and approved exports', () => {
+  it.each(['legacy', 'current'])('excludes human waiting time from %s runs without resetting usage', async version => {
+    const f = await reviewFixture(root, {}, [], { maxRunElapsedMs: 1800000 });
+    try {
+      const db = await openDatabase(f.url);
+      const run = {
+        ...f.status.run,
+        createdAt: new Date(Date.now() - 7200000).toISOString(),
+        updatedAt: new Date(Date.now() - 6600000).toISOString(),
+      };
+      if (version === 'legacy') delete run.clock;
+      else run.clock = { elapsedMs: 600000, startedAt: null };
+      try {
+        await db.execute({
+          sql: 'UPDATE vrq_processing SET run_json=? WHERE run_id=?',
+          args: [JSON.stringify(run), f.runId],
+        });
+      } finally {
+        db.close();
+      }
+      const pending = (await submitReview(decision(f, { decisionId: 'preview', finalApproval: false }), f.options))!;
+      expect(pending.state).toBe('awaiting_review');
+      expect(pending.projection?.supported).toBe(1);
+      const approved = (await submitReview(
+        decision(f, {
+          expectedRevision: pending.revision,
+          expectedDigest: pending.digest,
+        }),
+        f.options,
+      ))!;
+      expect(approved.state).toBe('approved');
+      const store = await openProcessingStore(f.url);
+      try {
+        const status = (await store.status(f.runId))!;
+        expect(status.run.clock?.startedAt).toBeNull();
+        expect(processingElapsedMs(status.run)).toBeGreaterThanOrEqual(600000);
+        expect(processingElapsedMs(status.run)).toBeLessThan(1800000);
+        expect(status.run.stopReason).toBeNull();
+        expect(status.run.policy).toEqual(f.status.run.policy);
+        expect(status.run.policyDigest).toBe(f.status.run.policyDigest);
+        expect(status.usage.slice(0, f.status.usage.length)).toEqual(f.status.usage);
+        expect(status.usage.length).toBeGreaterThan(f.status.usage.length);
+      } finally {
+        await store.close();
+      }
+    } finally {
+      await f.mastra.shutdown();
+    }
+  });
+  it('accumulates time across failed review attempts and still enforces the processing limit', async () => {
+    const f = await reviewFixture(root, {}, [], { maxRunElapsedMs: 60000 });
+    const review = await openReviewStore(f.url);
+    let store: Awaited<ReturnType<typeof openProcessingStore>> | undefined;
+    try {
+      const first = await review.claimDecision(decision(f));
+      if ('replay' in first) throw new Error('Unexpected replay');
+      vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 30000);
+      await review.failDecision(f.runId, first.token);
+      vi.restoreAllMocks();
+      const second = await review.claimDecision(decision(f, { decisionId: 'retry' }));
+      if ('replay' in second) throw new Error('Unexpected replay');
+      store = await openProcessingStore(f.url, { token: second.token, revision: f.state.revision });
+      vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 31000);
+      expect(await store.reserve(f.runId, f.questions[0]!.id, 'verification', 1, 1)).toEqual({ failure: 'TIME_LIMIT' });
+      await review.failDecision(f.runId, second.token);
+      vi.restoreAllMocks();
+      const status = (await store.status(f.runId))!;
+      expect(status.run.stopReason).toBe('TIME_LIMIT');
+      expect(status.run.clock?.startedAt).toBeNull();
+      expect(processingElapsedMs(status.run)).toBeGreaterThanOrEqual(61000);
+      expect(status.usage).toEqual(f.status.usage);
+      await expect(submitReview(decision(f), f.options)).rejects.toThrow('EXHAUSTED_REVIEW_REQUIRES_TRUSTED_GAPS');
+    } finally {
+      vi.restoreAllMocks();
+      await store?.close();
+      review.close();
+      await f.mastra.shutdown();
+    }
+  });
+  it('completes drafting and review for 24 questions within the default execution policy', async () => {
+    const f = await reviewFixture(
+      root,
+      {
+        questions: Array.from({ length: 24 }, (_, i) => ({
+          text: `Does production workforce group ${i + 1} require MFA?`,
+        })),
+      },
+      [],
+      defaultExecutionPolicy,
+    );
+    try {
+      expect(f.state.state).toBe('awaiting_review');
+      expect(f.status.run.stopReason).toBeNull();
+      expect(f.status.results).toHaveLength(24);
+      expect(f.status.results.every(result => result.status === 'draft_eligible')).toBe(true);
+      const approved = await submitReview(decision(f), f.options);
+      expect(approved?.state).toBe('approved');
+      expect(approved?.projection?.supported).toBe(24);
+      const store = await openProcessingStore(f.url);
+      try {
+        const final = (await store.status(f.runId))!;
+        expect(final.usage.length).toBeGreaterThan(100);
+        expect(final.usage.length).toBeLessThan(defaultExecutionPolicy.maxPhysicalCalls);
+        expect(final.run.stopReason).toBeNull();
+      } finally {
+        store.close();
+      }
+    } finally {
+      await f.mastra.shutdown();
+    }
+  });
   it.each([['elapsed-time', { maxRunElapsedMs: 1 }, 'TIME_LIMIT']] as const)(
     'approves_only_trusted_gap_sets_after_%s_exhaustion',
     async (_name, policy, reason) => {

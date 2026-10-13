@@ -36,7 +36,7 @@ export const defaultExecutionPolicy = executionPolicySchema.parse({
   serviceTier: 'default',
   concurrency: 4,
   budgetUsd: 5,
-  maxPhysicalCalls: 100,
+  maxPhysicalCalls: 1000,
   maxRunElapsedMs: 1800000,
   callTimeoutMs: 60000,
   maxInputTokens: 8000,

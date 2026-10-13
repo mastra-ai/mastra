@@ -1,31 +1,13 @@
-import { createWorkflow, createStep, createWorkflowStateReader } from '@mastra/core/workflows';
+import { createWorkflow, createWorkflowStateReader } from '@mastra/core/workflows';
 import { draftInputSchema } from './vendor-risk-drafts/contracts.ts';
 import { createDraftWorkflow } from './vendor-risk-drafts.ts';
 import type { DraftWorkflowOptions } from './vendor-risk-drafts/runtime.ts';
 import { createReviewStep } from './vendor-risk-questionnaire/steps/review.ts';
 import { createExportStep } from './vendor-risk-questionnaire/steps/export.ts';
 import { documentResultSchema } from '../contracts/completion.ts';
-import { openIntakeStore } from '../persistence/store.ts';
-import { databaseUrl } from '../persistence/database.ts';
+import { createCanonicalIntakeStep } from './vendor-risk-questionnaire/steps/canonical-intake.ts';
 
 export function createQuestionnaireWorkflow(options: DraftWorkflowOptions = {}) {
-  const canonical = createStep({
-    id: 'canonical-intake',
-    inputSchema: draftInputSchema,
-    outputSchema: draftInputSchema,
-    execute: async ({ inputData }) => {
-      const store = await openIntakeStore(options.databaseUrl ?? databaseUrl);
-      try {
-        const intake = await store.readIntake(inputData.runId),
-          evidence = await store.readEvidence(inputData.runId);
-        if (!intake || !evidence || intake.input.organizationId !== evidence.scope.organizationId)
-          throw new Error('CANONICAL_INTAKE_REQUIRED');
-        return inputData;
-      } finally {
-        store.close();
-      }
-    },
-  });
   return createWorkflow({
     id: 'vendor-risk-questionnaire',
     description:
@@ -34,7 +16,7 @@ export function createQuestionnaireWorkflow(options: DraftWorkflowOptions = {}) 
     outputSchema: documentResultSchema,
     options: { autoRestartActiveRuns: false },
   })
-    .then(canonical)
+    .then(createCanonicalIntakeStep(options))
     .then(createDraftWorkflow(options))
     .then(createReviewStep(options))
     .then(createExportStep(options))

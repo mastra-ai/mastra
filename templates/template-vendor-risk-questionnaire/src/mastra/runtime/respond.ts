@@ -1,3 +1,4 @@
+import { checkCancellation, executionSignal, runCancellable } from './cancellation.ts';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { IntakeCoordinator } from '../intake/adapters.ts';
@@ -150,7 +151,12 @@ export async function prepareResponse(options: RespondOptions) {
     }
     io.show(`Run ID: ${runId}. Resume with npm run respond -- --resume ${runId}`);
     const checkpoint = saved.checkpoint;
-    const context = { limits: defaultLimits, signal: AbortSignal.timeout(defaultLimits.timeoutMs) };
+    checkCancellation(runId);
+    const signal = executionSignal(runId);
+    const context = {
+      limits: defaultLimits,
+      signal: AbortSignal.any([AbortSignal.timeout(defaultLimits.timeoutMs), ...(signal ? [signal] : [])]),
+    };
     if (!(await store.readIntake(runId))) {
       const source = saved.source;
       const coordinator = new IntakeCoordinator(),
@@ -176,7 +182,7 @@ export async function prepareResponse(options: RespondOptions) {
         for (const existing of q.untrustedExistingResponse ?? []) {
           if (consent.includes(canonicalJson(existing.locator))) continue;
           io.show(terminalText(`Untrusted prefilled target for ${q.id}: ${existing.text}`));
-          if ((await answer(io, 'Replace this exact inspected value? Type REPLACE: ')) !== 'REPLACE')
+          if ((await answer(io, 'Replace this exact inspected value? Type REPLACE: ')).toUpperCase() !== 'REPLACE')
             throw new Error('PREFILLED_REPLACEMENT_DECLINED');
           consent.push(canonicalJson(existing.locator));
           await checkpoints.save(checkpoint);
@@ -184,6 +190,7 @@ export async function prepareResponse(options: RespondOptions) {
       await store.persistIntake(runId, imported.input, imported.mapping, source);
     }
     // Intake registers a plan, which may still need building after an interruption.
+    checkCancellation(runId);
     await prepareCompletion(options.databaseUrl, runId, checkpoint.consent);
     if (!(await store.readEvidence(runId))) {
       const evidence = await buildEvidenceSnapshot({
@@ -196,20 +203,23 @@ export async function prepareResponse(options: RespondOptions) {
       });
       await store.persistEvidence(evidence.record, evidence.sources);
     }
+    checkCancellation(runId);
     if (!state) {
       const workflowRunId = `respond-${runId}`,
         snapshot = await workflow.getWorkflowRunById(workflowRunId),
         run = await workflow.createRun({ runId: workflowRunId });
-      const result = snapshot
-        ? await run.restart()
-        : await run.start({
-            inputData: {
-              runId,
-              evidenceRoot: profile.evidenceRoot,
-              manifestPath: profile.manifestPath,
-              policy: profile.policy,
-            },
-          });
+      const result = await runCancellable(runId, run, () =>
+        snapshot
+          ? run.restart()
+          : run.start({
+              inputData: {
+                runId,
+                evidenceRoot: profile.evidenceRoot,
+                manifestPath: profile.manifestPath,
+                policy: profile.policy,
+              },
+            }),
+      );
       if (result.status !== 'suspended') throw new Error('DRAFT_WORKFLOW_INCOMPLETE');
       state = await review.read(runId);
     }

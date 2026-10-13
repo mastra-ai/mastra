@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { limitsSchema } from '../contracts/limits.ts';
 import type { InputLimits } from '../contracts/limits.ts';
 import type { Diagnostic } from '../contracts/diagnostic.ts';
+import { resolveProjectRoot } from '../runtime/paths.ts';
 
 export interface InputSourceSnapshot {
   sourceId: string;
@@ -107,7 +108,7 @@ export async function runParser<T>(
   // Native TypeScript workers remain separate from the Mastra bundle, allowing hard termination.
   const sourceWorker = new URL('./parser-worker.ts', import.meta.url);
   const workerPath = fileURLToPath(sourceWorker).includes('/.mastra/')
-    ? resolve(process.cwd(), 'src/mastra/intake/parser-worker.ts')
+    ? resolve(resolveProjectRoot(), 'src/mastra/intake/parser-worker.ts')
     : sourceWorker;
   return new Promise<T>((accept, reject) => {
     const worker = new Worker(workerPath, {

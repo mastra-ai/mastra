@@ -12,7 +12,8 @@ import {
   operator,
   context,
 } from '../fixtures/support.ts';
-import { docxFixture } from '../fixtures/office.ts';
+import { docxFixture, xlsxFixture } from '../fixtures/office.ts';
+import { questionnaireRows } from '../fixtures/corpus.ts';
 import { reviewFixture, decision, attachParent } from '../support/review.ts';
 import { draftingFixture, controlledProvider, executeDraft, jsonStream, userText } from '../support/drafting.ts';
 import * as completionPersistence from '../../src/mastra/persistence/completion.ts';
@@ -27,7 +28,7 @@ import { openReviewStore } from '../../src/mastra/persistence/review.ts';
 import { openDatabase } from '../../src/mastra/persistence/database.ts';
 import { IntakeCoordinator } from '../../src/mastra/intake/adapters.ts';
 import { canonicalJson, sha256 } from '../../src/mastra/intake/source.ts';
-import { respond, terminalText } from '../../src/mastra/runtime/respond.ts';
+import { prepareResponse, respond, terminalText } from '../../src/mastra/runtime/respond.ts';
 
 let root: string;
 beforeEach(async () => {
@@ -95,6 +96,37 @@ it('requires_explicit_prefilled_target_replacement_and_exact_docx_spans', async 
   expect(text).toContain('Describe access controls.');
   expect(text).not.toContain('Untrusted existing response');
 });
+it.each(['xlsx', 'docx'] as const)(
+  'requires an explanation field in legacy %s demos and accepts current samples',
+  async format => {
+    for (const legacy of [true, false]) {
+      const rows = questionnaireRows().map(row => (legacy ? row.slice(0, 7) : row));
+      const bytes =
+        format === 'xlsx' ? xlsxFixture([{ name: 'Vendor inquiry', rows }]) : docxFixture([{ table: rows }]);
+      const snapshot = source(bytes, `questionnaire.${format}`);
+      const coordinator = new IntakeCoordinator();
+      const inspection = await coordinator.inspect(snapshot, context());
+      const mapping = inspection.mappingCandidates[0]!;
+      const imported = await coordinator.import(snapshot, mapping, operator, context());
+      const consent = imported.input.questions.flatMap(
+        q => q.untrustedExistingResponse?.map(t => canonicalJson(t.locator)) ?? [],
+      );
+      const plan = buildWritePlan(bytes, imported.input, mapping, consent);
+      if (legacy) {
+        await expect(plan).rejects.toMatchObject({
+          issues: expect.arrayContaining([
+            expect.objectContaining({ code: 'custom', params: { code: 'EXPLANATION_FIELD_REQUIRED' } }),
+          ]),
+        });
+      } else {
+        const result = await plan;
+        expect(result.questions).toHaveLength(rows.length - 1);
+        expect(result.questions.every(q => q.targets.some(t => t.role === 'explanation'))).toBe(true);
+        expect(result.questions.every(q => q.targets.some(t => t.role === 'evidence'))).toBe(true);
+      }
+    }
+  },
+);
 it('preserves_unrelated_xml_properties_and_untouched_package_entries', async () => {
   for (const format of ['xlsx', 'docx'] as const) {
     const part = format === 'xlsx' ? 'xl/worksheets/sheet1.xml' : 'word/document.xml';
@@ -222,6 +254,53 @@ async function respondFixture(
   };
   return { ...fixture, ...attached, provider, sourcePath, profile, f };
 }
+it.each(['REPLACE', 'replace', '  RePlAcE  ', 'yes', '', 'cancel'])(
+  'prefilled replacement accepts explicit confirmation regardless of case: %j',
+  async confirmation => {
+    const f = await respondFixture('xlsx', 'prefilled-confirmation');
+    await writeFile(
+      f.sourcePath,
+      alterZip(await readFile(f.sourcePath), 'xl/worksheets/sheet1.xml', xml =>
+        xml.replace(
+          '<c r="G2" t="inlineStr"><is><t xml:space="preserve"></t>',
+          '<c r="G2" t="inlineStr"><is><t xml:space="preserve">Untrusted prior answer</t>',
+        ),
+      ),
+    );
+    const lines: string[] = [];
+    const ask = vi.fn(async () => confirmation);
+    try {
+      const result = prepareResponse({
+        ...f,
+        databaseUrl: f.url,
+        models: f.provider.factory,
+        io: { show: s => lines.push(s), ask },
+      });
+      const accepted = confirmation.trim().toUpperCase() === 'REPLACE';
+      if (accepted) {
+        const prepared = await result;
+        expect(prepared.state.questions).toHaveLength(1);
+        expect(f.provider.calls.some(call => call.phase === 'draft')).toBe(true);
+      } else {
+        await expect(result).rejects.toThrow(
+          confirmation === 'cancel' ? 'OPERATOR_CANCELLED' : 'PREFILLED_REPLACEMENT_DECLINED',
+        );
+        expect(f.provider.calls).toHaveLength(0);
+      }
+      expect(ask).toHaveBeenCalledTimes(1);
+      expect(lines).toContain('Untrusted prefilled target for Q1: Untrusted prior answer');
+      const runId = /Run ID: ([^. ]+)/.exec(lines.find(s => s.startsWith('Run ID:'))!)![1]!;
+      const checkpoints = await openRespondStore(f.url);
+      try {
+        expect((await checkpoints.read(runId))!.checkpoint.consent).toHaveLength(accepted ? 1 : 0);
+      } finally {
+        checkpoints.close();
+      }
+    } finally {
+      await f.mastra.shutdown();
+    }
+  },
+);
 it('respond_resumes_missing_initialization_checkpoints_before_provider_work', async () => {
   for (const interruption of ['completion', 'evidence'] as const) {
     const f = await respondFixture('xlsx', `initialize-${interruption}`),

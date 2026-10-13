@@ -1,3 +1,4 @@
+import { checkCancellation } from '../runtime/cancellation.ts';
 import { mkdir, mkdtemp, lstat, realpath, readdir, readFile, writeFile, rename, rm } from 'node:fs/promises';
 import { resolve, relative, isAbsolute } from 'node:path';
 import { documentPublicationSchema } from '../contracts/completion.ts';
@@ -66,6 +67,7 @@ export interface ExportOptions extends ReviewOptions {
   fault?: (stage: 'write' | 'state') => Promise<void>;
 }
 export async function publishExport(runId: string, options: ExportOptions) {
+  checkCancellation(runId);
   const review = await openReviewStore(options.databaseUrl),
     processing = await openProcessingStore(options.databaseUrl);
   let state: ReviewState | undefined, temp: string | undefined;
@@ -98,6 +100,7 @@ export async function publishExport(runId: string, options: ExportOptions) {
       const output = await readFile(resolve(destination, manifest.files[0]!.name));
       validateDocument(original, output, plan, state.projection!);
       await screenRetainedPackage(output, plan.format, evidence);
+      checkCancellation(runId);
       if (state.state === 'exported') return { state, manifest, path: resolve(destination, manifest.files[0]!.name) };
       return {
         state: await review.finishExport(runId, state.claimToken!, manifest),
@@ -132,7 +135,9 @@ export async function publishExport(runId: string, options: ExportOptions) {
     await prepareCompletion(options.databaseUrl, runId);
     const latest = await review.read(runId);
     if (latest?.claimToken !== state.claimToken || latest.digest !== state.digest) throw new Error('STALE_EXPORT');
+    checkCancellation(runId);
     state = await review.prepareExport(runId, state.claimToken!, manifest);
+    checkCancellation(runId);
     await rename(temp, destination);
     temp = undefined;
     await options.fault?.('state');

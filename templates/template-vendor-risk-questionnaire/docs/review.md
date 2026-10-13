@@ -1,46 +1,111 @@
-# Review and document response
+# Review and approval
 
-Use `npm run respond -- /absolute/path/questionnaire.xlsx` (or `.docx`) for intake, drafting, readable review and one returned file. Use `npm run respond -- --resume <run-id>` after interruption. The command saves its source checkpoint before presenting the run ID. Known verified layouts proceed automatically; exceptions receive specific mapping prompts. Every prefilled replacement requires `REPLACE`. Responses, qualifications, safe reasons and citations appear in a consolidated review. Choose `release`, `correct`, `unknown` or `withheld` for each question, then inspect the complete revised set and type `APPROVE`. Cancellation, EOF, invalid noninteractive input and stale review state never approve.
+Review decides which answers and evidence may appear in the completed questionnaire. Drafting alone never approves an export.
 
-Source/mapping progress, prefilled decisions and individual question review choices survive cancellation. Resuming a validated unchanged review set reuses its checks. Changed factual content still requires fresh native security and independent support verification within the original budget. Terminal escape controls are removed from displayed document text.
+For setup, use the [web UI guide](ui.md) or [terminal walkthrough](local-operation.md). Most users can complete review there without creating JSON files or running the administration commands below.
 
-The lower-level commands below remain administration and inspection interfaces. They are unnecessary for the primary respond journey.
+## Choose what to share
 
-## Studio intake
+Read each original question, draft, citation and limitation before choosing:
 
-`npm run demo` explicitly prepares the fictional sample files and evidence profile. Existing data is preserved; partial or unsafe data stops preparation with a diagnostic. Then run `npm run dev` to open Studio. Preparation makes no provider request or answer approval.
+| Choice     | When to use it                                        | Example                                                                       |
+| ---------- | ----------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `release`  | The evidence supports the draft and you may share it  | Release a policy statement supported by the cited approved policy             |
+| `correct`  | You need to change the draft using available evidence | Narrow “all accounts” to the employee accounts actually covered by the source |
+| `unknown`  | No supported answer is available for release          | The question asks for a recovery test result, but no test record is available |
+| `withheld` | You will not disclose the answer                      | The supporting evidence is restricted                                         |
 
-Configure `.runtime/profile.json` once with absolute local evidence root/manifest paths, scope and execution policy. Demo preparation writes the fictional profile only when absent; custom profiles and state are preserved. Source eligibility remains manifest-driven and topic retrieval remains bounded to the eligible snapshot.
+`correct` is an interactive choice. In a JSON decision, a correction uses `disposition: "release"` plus a `correction` object matching the full draft schema. It is not a separate JSON disposition.
 
-The tested stable Studio 1.33.0 rejects XLSX/DOCX chat attachments. In Studio select **vendor-risk-intake**, using an absolute local questionnaire path:
+Corrections must satisfy the original question's length and choice limits and pass fresh security and independent support checks. A gap (`unknown` or `withheld`) carries a safe reason, without factual corrections, citations or limitations.
 
-```json
-{
-  "runId": "review-1",
-  "sourcePath": "/path/to/template/.runtime/demo/questionnaire.xlsx",
-  "sourceId": "questionnaire-source",
-  "questionnaireId": "questionnaire-1",
-  "title": "Fictional vendor review"
-}
+## Terminal review
+
+1. Start a questionnaire from the template directory:
+
+   ```bash
+   npm run respond -- "$PWD/.runtime/demo/questionnaire.xlsx"
+   ```
+
+2. Save the printed run ID. Answer mapping prompts if needed. Enter `REPLACE` only for prefilled destinations you intend to replace.
+3. Read every draft and choose one of the actions above.
+4. Inspect the complete revised answer set. Type `APPROVE` to authorize export.
+5. Open the returned `answered.xlsx` or `answered.docx` and inspect the result.
+
+The command saves the source checkpoint before displaying the run ID. Mapping progress, replacement choices and individual review choices survive terminal cancellation. To continue a saved run, replace `review-1` with that ID:
+
+```bash
+npm run respond -- --resume review-1
 ```
 
-The inspection pauses even when one mapping candidate exists. Review all regions and exclusions, then resume with `{ "mapping": <confirmed mapping object>, "confirm": true }`. The mapping is bound to the exact source hash. Unsupported layouts or changed source bytes fail rather than guess. The result supplies input for **vendor-risk-questionnaire**:
+Cancellation, end-of-input, invalid noninteractive input and stale review state never approve answers. An unchanged validated review can reuse its checks. Changed facts require new checks within the original budget. Terminal control characters are removed from displayed document text.
 
-```json
-{
-  "runId": "review-1",
-  "evidenceRoot": "/path/to/template/.runtime/demo/evidence",
-  "manifestPath": "/path/to/template/.runtime/demo/manifest.json"
-}
+## Source sharing rules
+
+The evidence manifest controls source eligibility and disclosure. Approval for LLM use and permission to share with the customer are separate decisions.
+
+| Source disclosure | Review behavior                                                  |
+| ----------------- | ---------------------------------------------------------------- |
+| `shareable`       | Eligible supported content can be released through normal review |
+| `review_required` | Explicitly authorize each source used by that question           |
+| `restricted`      | Content cannot be released; choose a safe gap                    |
+
+In JSON, `releaseDocumentIds` lists the source IDs whose disclosure you explicitly authorize for that question. Each must belong to that question's citations. Security-blocked questions cannot be released either.
+
+Changing source bytes, validity or manifest policy invalidates approval and requires a fresh intake, evidence snapshot and run. Approval cannot bypass protected-content checks on the original questionnaire.
+
+## Studio intake and review
+
+Studio is useful for inspecting workflows or supplying an advanced mapping. Use the web UI for file uploads; Studio intake takes a local path.
+
+1. Run `npm run demo`, then `npm run dev:mastra`.
+2. Open [Mastra Studio](http://127.0.0.1:4111) and select **vendor-risk-intake**.
+3. Enter this input, replacing the source path with the actual absolute path and using a new run ID:
+
+   ```json
+   {
+     "runId": "review-1",
+     "sourcePath": "/absolute/path/to/template/.runtime/demo/questionnaire.xlsx",
+     "sourceId": "questionnaire-source",
+     "questionnaireId": "questionnaire-1",
+     "title": "Fictional vendor review"
+   }
+   ```
+
+4. Inspect the paused **confirm-input-mapping** step. Confirm the mapping even if only one candidate exists. Follow the [explicit mapping walkthrough](intake.md#submit-an-explicit-mapping-through-studio).
+5. Use the intake result as input to **vendor-risk-questionnaire**. It includes the run ID, evidence paths and policy. A minimal input looks like this:
+
+   ```json
+   {
+     "runId": "review-1",
+     "evidenceRoot": "/absolute/path/to/template/.runtime/demo/evidence",
+     "manifestPath": "/absolute/path/to/template/.runtime/demo/manifest.json"
+   }
+   ```
+
+6. Wait for the parent to pause at **review-answer-set**, after the draft child finishes. Stop Studio before using CLI commands that change this run.
+
+Demo preparation preserves existing profiles and makes no provider calls. The configured limits can leave gaps in the 24-question demo. Start a new run to use different limits; never reset usage on an existing run.
+
+## Inspect and submit review JSON
+
+Use this route for administration or a custom integration. The web and terminal flows already build decisions for you.
+
+### 1. Read the current state
+
+```bash
+npm run review -- status --run-id review-1
 ```
 
-The parent uses the bounded **vendor-risk-drafts** child, then suspends once at **review-answer-set**, outside the parallel loop. The default finite budget can leave gaps in the 24-question demo. Changing the execution policy requires a fresh run; never reset reservations on an existing run.
+This makes no model calls. It returns questions, drafts, reasons for review and the current review identifiers. Keep the output and decision files private because they can contain supporting evidence.
 
-## Inspect and submit review
+A **revision** is the saved review version. A **digest** is a fingerprint of its contents. Copy these values from the current status; guessing or reusing old values causes rejection.
 
-`npm run review -- status --run-id review-1` reads the restricted local review record without model calls. It includes original questions, drafts, escalation reasons, immutable digests and revision. Supporting text is local operator data; keep the terminal and decision files private.
+### 2. Prepare a decision file
 
-Create a decision file outside any customer artifact directory. Copy the current `revision`, `digest`, `policyDigest` and organization from status. Include exactly one disposition for every question, even ordinary supported drafts. The decision schema rejects unknown fields such as client-supplied reviewer privileges.
+Create `.runtime/decision.json`, outside the customer export directory. Copy `organizationId`, `revision`, `digest` and `policyDigest` from status into the corresponding fields below.
+
+This example shows only two questions. Replace the placeholder digests and include exactly one disposition for **every** question in your run before submitting:
 
 ```json
 {
@@ -64,85 +129,172 @@ Create a decision file outside any customer artifact directory. Copy the current
       "releaseDocumentIds": []
     }
   ],
-  "finalApproval": true
+  "finalApproval": false
 }
 ```
 
-The shortened example requires the remaining question dispositions before submission. `release` uses an eligible supported draft. A factual `correction` must satisfy the complete draft schema, eligible source/locator bindings, response constraints and independent support verification. `review_required` source disclosure requires explicit `releaseDocumentIds` scoped to that question's citations. `restricted` disclosure and security-blocked questions cannot be released; use safe `unknown` or `withheld` gaps. Gap dispositions cannot carry factual corrections, citations or limitations. Protected original content blocks same-format publication and requires a corrected source.
+`finalApproval: false` validates and saves the reviewed set without authorizing export. Reviewer identity comes from the server's OS user and is recorded with the decision time. Do not add reviewer privileges or unknown fields to the JSON.
 
-```text
-npm run review -- submit --run-id review-1 --decision /path/to/decision.json
+### 3. Validate and inspect
+
+With the dev server stopped, run:
+
+```bash
+npm run review -- submit --run-id review-1 --decision "$PWD/.runtime/decision.json"
 npm run review -- status --run-id review-1
-npm run review -- resume --run-id review-1
 ```
 
-Submission and export use the configured evidence profile. To override its paths, supply both `--root` and `--manifest`; a partial override fails. Status, resume and cleanup do not require a profile.
+Review the saved result and any issues. Changed release text consumes checks within the original budget; unchanged checks may be reused.
 
-`finalApproval: false` records a reviewed set while keeping approval pending. A subsequent decision must use the returned revision/digest. New release text is checked within the original physical-call budget; unchanged checks can be reused. Actor identity comes from the server's actual OS user, with decision time recorded in the audit. No model can manufacture it.
+### 4. Approve the complete set
 
-After the physical-call, spend or elapsed-time limit is exhausted, approve a complete gap set using only `unknown` with `No releasable supported answer is available.` or `withheld` with `Evidence is withheld.`. This path makes no provider calls and preserves the original limits and usage ledger. It writes explicit gaps into response fields. Retained original content still requires local disclosure screening; unsafe content blocks publication even when all answers are gaps. Custom reasons, corrections and releases fail because their required checks cannot run within the exhausted budget. Local protected-content checks and current source/policy validation still apply, and the output is marked `delivered_with_gaps` only after explicit final approval.
+When you are ready to approve:
 
-The identical decision ID/payload returns its saved outcome without repeating checks. A conflicting replay or competing stale revision fails. Submitting changed content revokes previous approval before checks; protected/unsupported changes leave review pending. Changes to source bytes, validity or manifest policy invalidate the run's approval and require a fresh intake/snapshot/run.
+1. Update the file with a new `decisionId` and the latest revision and digests from status.
+2. Include the complete reviewed set and set `finalApproval` to `true`.
+3. Submit, check the state, and resume the parent workflow:
+
+   ```bash
+   npm run review -- submit --run-id review-1 --decision "$PWD/.runtime/decision.json"
+   npm run review -- status --run-id review-1
+   npm run review -- resume --run-id review-1
+   ```
+
+The state must be `approved` before resume. Successful publication produces an `exported` state and one answered document.
+
+Submit and export use the configured evidence profile. An override must provide both `--root` and `--manifest`. Status, resume and cleanup do not require a profile.
+
+Replaying an identical decision ID and payload returns the saved result without repeating checks. Reusing an ID with changed content or submitting a stale revision fails. Changed content revokes an earlier approval before validation; unsupported or protected changes leave review pending.
+
+### Ask a coding LLM to prepare a decision file
+
+Use this prompt only with a coding LLM authorized to inspect the local review data:
+
+```text
+Prepare .runtime/decision.json for run [run ID]. Do not submit it.
+
+Read src/mastra/contracts/review.ts and src/mastra/contracts/answer.ts.
+Read the current run with npm run review -- status --run-id [run ID].
+Use its exact organizationId, revision, digest, policyDigest and question IDs.
+
+Ask me for a disposition for every question and for any source disclosure
+permission. Do not choose releases, fabricate supporting evidence, or grant
+permission on my behalf. If I request a correction, use the complete draft
+schema and preserve valid citation bindings and question constraints.
+
+Include every question exactly once. Set finalApproval to false. Validate
+with reviewDecisionSchema, then show a readable summary of my choices and
+any unresolved issues. Explain that schema validation does not replace the
+server's source, support, security or stale-state checks. Do not submit,
+approve, resume, export, or alter source evidence.
+```
+
+## Finish when the budget is exhausted
+
+If call, cost or elapsed-time limits prevent further checks, the template can still export a complete set of explicit gaps after your approval.
+
+Time spent waiting for your decision does not count toward the processing limit. Drafting and automated review checks share that allowance, including failed review attempts. `EXHAUSTED_REVIEW_REQUIRES_TRUSTED_GAPS` means the remaining allowance cannot support the submitted review; it requires the gap-only choices below. Retrying does not reset usage.
+
+1. Choose a gap for every question.
+2. Use these exact supported reasons:
+
+   | Disposition | `safeReason`                                   |
+   | ----------- | ---------------------------------------------- |
+   | `unknown`   | `No releasable supported answer is available.` |
+   | `withheld`  | `Evidence is withheld.`                        |
+
+3. Review the complete set and approve it through the normal flow.
+
+This path makes no provider calls and preserves the original usage record. Custom reasons, corrections and releases require checks that cannot run after the budget is exhausted. Local protected-content checks and source/policy validation still apply. Unsafe retained source content can block export even when all answers are gaps. Successful publication is marked `delivered_with_gaps`.
 
 ## Restart and retry
 
-Restart Studio and reopen the existing parent run. The local command restores the stored public Mastra workflow snapshot, then resumes **review-answer-set** using the approved revision/digest. It never restarts the draft child to reopen review. Studio can also resume this step with `{ "approvalId": <approved decision ID>, "revision": <approved revision>, "digest": <approved digest> }`; submitting these fields alone cannot approve a set.
+To reopen review after a restart, use the existing parent run. The CLI restores its saved Mastra workflow state and resumes **review-answer-set** with the approved revision and digest. It does not restart drafting.
 
-Export writes are staged and content-validated before atomic publication. Only the validated single document receives an exported status and internal publication record. Retry after an export file/state failure with:
+Studio can also resume that step with `approvalId`, `revision` and `digest` from an approved decision. Supplying these values cannot itself approve a set.
 
-```text
+If an approved export failed while writing files or saving state:
+
+```bash
 npm run review -- export --run-id review-1
 ```
 
-If the files were published before the state write failed, retry validates every file and reconciles status. Existing documents with mismatching content or hashes are rejected. A process killed during a claimed operation leaves a durable claim. Once the old process has stopped and the claim is at least two minutes old, explicitly recover it using the token shown by status:
+Export validates the staged document before publishing it. A retry checks existing files and reconciles state if publication finished before the state write. Mismatching content or hashes are rejected.
 
-```text
-npm run review -- recover-claim --run-id review-1 --claim-token <current token>
-```
+### Recover an interrupted operation
 
-Then retry the applicable decision/export operation. Recovery does not replenish usage or restore stale approval.
+A process killed during review or export can leave a saved **claim**, indicating that it owned the operation.
+
+1. Confirm the old process has stopped.
+2. Read `review status` and copy its claim token.
+3. Wait until the claim is at least two minutes old.
+4. Replace `TOKEN_FROM_STATUS` with that exact token:
+
+   ```bash
+   npm run review -- recover-claim --run-id review-1 --claim-token TOKEN_FROM_STATUS
+   ```
+
+5. Retry the applicable review or export operation.
+
+Claim recovery does not restore stale approval or replenish usage. If the database writer lock blocks commands, follow [local process ownership](#local-process-ownership) first.
 
 ## Answered document
 
-New runs publish exactly one `answered.xlsx` or `answered.docx` in the original input format. The parent workflow returns `{ path, manifest }` after publication; the CLI uses that result directly. Reopening an exported run validates the existing file before returning it. Application code writes literal values into the exact source-bound response destinations. The immutable original is preserved. Existing explanation fields retain safe reasons and limitations; existing evidence fields retain safe citation labels and locators. Full supporting attribution stays in the restricted local review/audit when no evidence field exists.
+Each successful run publishes exactly one `answered.xlsx` or `answered.docx`, preserving the original format. The original source is kept unchanged.
 
-Unknown and withheld remain explicit. Choice destinations require a compatible explanation field so qualifications and gaps cannot disappear. Missing, protected, merged, ambiguous, overlapping or fixed-layout targets fail before provider work where detectable. Prefilled targets require explicit hash-bound replacement consent. Reviewed content is checked again for representability; nothing is truncated.
+Answers go into the mapped response destinations. Explanation fields receive reasons and limitations; evidence fields receive approved citation labels and locations. If the questionnaire has no evidence field, full supporting attribution stays in the local review and audit records.
 
-The complete retained package is checked locally, including hidden content, headers/footers, comments and metadata. It is never sent wholesale to a model or detector. Unsupported binary/XML payloads and protected original content block release and require a corrected source. Approval cannot bypass these checks or authorize silent redaction of unrelated material.
+Unknown and withheld answers remain explicit. Choice fields need a compatible explanation field so qualifications and gaps are not lost. Missing, protected, merged, overlapping, ambiguous or fixed-layout destinations can block completion. Prefilled destinations need explicit replacement consent. Answers are checked for fit again after review and are never silently truncated.
 
-Publication stores version-2 source/mapping/plan/projection/approval/output bindings internally. Only one answered file is staged and atomically published; no customer manifest or JSON/PDF/CSV/Markdown companion is created. Retry validates the persisted bindings and output hash, reconciles an interrupted state update, and preserves approval and completed work.
+The template checks retained document content locally, including hidden content, headers, footers, comments and metadata. It does not send the whole package to a model. Unsupported binary/XML content or protected original text blocks publication and requires a corrected source. Approval does not authorize silent removal of unrelated material.
+
+The parent returns `{ path, manifest }` for the published file. The manifest is an internal record binding the source, mapping, completion plan, approved answers and output hash; it is not an extra customer file. No JSON, PDF, CSV or Markdown companion is exported. Reopening a published run validates the existing output.
 
 ## Explicit cleanup
 
-Cleanup selects one run and previews all its runtime revisions, records and snapshot directories. Shared immutable source blobs, original evidence, environment credentials and unrelated runs are preserved.
+Cleanup removes one run's selected runtime records, revisions, files and workflow snapshots. Shared original source blobs, original evidence, `.env` and unrelated runs are preserved. There is no automatic cleanup.
 
-```text
-npm run review -- cleanup-preview --run-id review-1
-```
+1. Stop the dev server and preview the selected run:
 
-Read the preview and save only the following confirmation fields in a local file:
+   ```bash
+   npm run review -- cleanup-preview --run-id review-1
+   ```
 
-```json
-{
-  "runId": "review-1",
-  "revision": 1,
-  "previewDigest": "<exact preview digest>",
-  "confirm": true
-}
-```
+2. Read the preview. If you want to remove those items, copy its current revision and digest into `.runtime/cleanup-confirmation.json`:
 
-```text
-npm run review -- cleanup --run-id review-1 --confirmation /path/to/confirmation.json
-```
+   ```json
+   {
+     "runId": "review-1",
+     "revision": 1,
+     "previewDigest": "<exact preview digest>",
+     "confirm": true
+   }
+   ```
 
-Preview alone deletes nothing. Missing confirmation, stale previews or symlink escapes fail. Cleanup removes selected application records/files and Mastra snapshots through public APIs. It does not delete evidence source files, `.env`, shared source bytes or external project controls. There is no automatic cleanup or encrypted-at-rest guarantee.
+3. Replace the example values before running:
 
-## Domain metrics and tracing
+   ```bash
+   npm run review -- cleanup --run-id review-1 --confirmation "$PWD/.runtime/cleanup-confirmation.json"
+   ```
 
-`npm run review -- metrics --run-id review-1` reports durable processing, review, export and usage metrics. See `docs/evaluation.md` for definitions, local storage and telemetry failure behavior. Operator status includes restricted answer and audit records.
+Preview deletes nothing. Missing confirmation, an outdated preview or paths escaping through symlinks fail. This cleanup differs from the UI's **Remove**, which hides a run and disables its HTTP access while retaining audit records and local files.
 
 ## Local process ownership
 
-Stop Studio before running CLI commands that submit review, resume, export or clean up data. One mutating process holds `.runtime/vrq.db.writer`; a second process fails before native database operations reach the driver. `review status` and `review metrics` use query-only connections and can inspect state while Studio owns the writer lease.
+Only one process can write the database. Stop Studio and the web backend before CLI commands that submit, resume, export or clean up. `review status` and `review metrics` use read-only connections and can run alongside the server.
 
-After a crash, inspect `.runtime/vrq.db.writer/owner.json` and confirm that its PID has exited. Run `npm run recover:writer -- --token <token>` with the recorded token. Recovery refuses a live process or changed token. Then inspect durable business and workflow state before deciding on any further work. A required terminal snapshot fault can leave native history `running` while application state is `failed`; never use that old native history to automatically restart or replay model work.
+After a crash:
+
+1. Read `.runtime/vrq.db.writer/owner.json`.
+2. Confirm that its recorded process ID has exited.
+3. Copy its token and run:
+
+   ```bash
+   npm run recover:writer -- --token TOKEN_FROM_OWNER_FILE
+   ```
+
+4. Inspect the saved run state before resuming work.
+
+Recovery refuses a live process or changed token. A failed final snapshot write may leave native history `running` while application state is `failed`; that history must not automatically restart model work.
+
+For processing, review, export and usage measurements, see [evaluation and metrics](evaluation.md).

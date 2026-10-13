@@ -22,6 +22,7 @@ import { ProcessingFailure } from '../processing/failure.ts';
 import { processingDiagnosticSchema } from '../contracts/processing-diagnostic.ts';
 import type { ProcessingDiagnostic } from '../contracts/processing-diagnostic.ts';
 import { telemetryId } from '../observability/privacy.ts';
+import { processingClock, processingElapsedMs } from '../processing/clock.ts';
 
 export async function openProcessingStore(
   url = databaseUrl,
@@ -165,6 +166,7 @@ export async function openProcessingStore(
             if (old.stopReason && old.stopReason !== 'STORAGE_FAILURE') return old;
             const resumed = {
               ...old,
+              clock: processingClock(old, true),
               state: 'processing' as const,
               stopReason: null,
               updatedAt: new Date().toISOString(),
@@ -191,6 +193,7 @@ export async function openProcessingStore(
             stopReason: null,
             createdAt: now,
             updatedAt: now,
+            clock: { elapsedMs: 0, startedAt: now },
           });
           await tx.execute({
             sql: 'INSERT INTO vrq_processing (run_id,run_json) VALUES (?,?)',
@@ -223,7 +226,7 @@ export async function openProcessingStore(
           const p = run.policy,
             cost = (inputReserved * p.rates.inputUsdPerMillion + p.maxOutputTokens * p.rates.outputUsdPerMillion) / 1e6;
           const reason =
-            Date.now() - Date.parse(run.createdAt) >= p.maxRunElapsedMs
+            processingElapsedMs(run) >= p.maxRunElapsedMs
               ? 'TIME_LIMIT'
               : records.length >= p.maxPhysicalCalls ||
                   records.reduce((sum, r) => sum + r.estimatedUsd, 0) + cost > p.budgetUsd
@@ -253,7 +256,7 @@ export async function openProcessingStore(
             sql: 'INSERT INTO vrq_usage (id,run_id,usage_json) VALUES (?,?,?)',
             args: [record.id, runId, canonicalJson(record)],
           });
-          return { record, remainingRunMs: p.maxRunElapsedMs - (Date.now() - Date.parse(run.createdAt)) } as const;
+          return { record, remainingRunMs: p.maxRunElapsedMs - processingElapsedMs(run) } as const;
         });
       }),
     settle: (
@@ -364,7 +367,12 @@ export async function openProcessingStore(
         if (!run) throw new Error('Missing run.');
         await writeTransaction(client, async tx => {
           const now = new Date().toISOString();
-          await saveRun(tx, { ...run, state: run.stopReason ? 'failed' : 'awaiting_review', updatedAt: now });
+          await saveRun(tx, {
+            ...run,
+            clock: processingClock(run, false),
+            state: run.stopReason ? 'failed' : 'awaiting_review',
+            updatedAt: now,
+          });
           await persistDomainEvent(tx, runId, 'processing-finished', { kind: 'processing_finished', at: now });
         });
       }),

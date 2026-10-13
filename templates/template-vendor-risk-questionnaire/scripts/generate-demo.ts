@@ -2,7 +2,7 @@ import { lstat, mkdir, readdir, rename, rm, mkdtemp, writeFile } from 'node:fs/p
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { loadEvidenceProfile, validateEvidenceProfile } from '../src/mastra/runtime/profile.ts';
-import { generateCorpus, demoProfile } from '../tests/fixtures/corpus.ts';
+import { generateCorpus, demoProfile, demoQuestionnaireRows } from '../tests/fixtures/corpus.ts';
 
 export async function prepareDemo(root = resolve('.runtime')) {
   await mkdir(root, { recursive: true });
@@ -46,7 +46,7 @@ export async function prepareDemo(root = resolve('.runtime')) {
   }
   const temporary = await mkdtemp(resolve(root, '.demo-'));
   try {
-    await generateCorpus(temporary);
+    await generateCorpus(temporary, demoQuestionnaireRows());
     await rename(temporary, destination);
     await writeProfile();
     return 'created';

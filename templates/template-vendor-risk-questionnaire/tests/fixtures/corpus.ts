@@ -60,9 +60,21 @@ export function questionnaireRows(): string[][] {
     ]),
   ];
 }
-export async function generateCorpus(root: string) {
+export function demoQuestionnaireRows(): string[][] {
+  return [
+    ['Reference', 'Inquiry', 'Guidance', 'Buyer response', 'Explanation', 'Evidence'],
+    ...demoQuestions.map(([, question], i) => [
+      `VRQ-${String(i + 1).padStart(3, '0')}`,
+      question,
+      'Answer for Northstar Tasks production; distinguish policy from operational evidence.',
+      '',
+      '',
+      '',
+    ]),
+  ];
+}
+export async function generateCorpus(root: string, rows = questionnaireRows()) {
   await mkdir(resolve(root, 'evidence'), { recursive: true });
-  const rows = questionnaireRows();
   await writeFile(resolve(root, 'questionnaire.xlsx'), xlsxFixture([{ name: 'Vendor inquiry', rows }]));
   await writeFile(resolve(root, 'questionnaire.docx'), docxFixture([{ table: rows }]));
   const docs: Array<{

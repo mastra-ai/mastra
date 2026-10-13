@@ -1,53 +1,197 @@
-# Questionnaire UI
+# Web UI and HTTP API
 
-`demo_ui` contains a Svelte 5 and Bits UI client. It communicates with Mastra over HTTP and uses the existing local evidence profile, questionnaire workflow, review validation and domain metrics.
+Use the web demo to upload a questionnaire, review draft answers and download the approved file. The Svelte client in `demo_ui` calls Mastra's HTTP API and uses the same evidence profile and review checks as the terminal flow.
 
 ## Run locally
 
-Configure `.env` and `.runtime/profile.json` as described in the README. From the template directory, run:
+From the template directory:
 
-```sh
-npm run dev
-```
+1. Install both the backend and UI dependencies:
 
-In another terminal:
+   ```bash
+   npm install
+   ```
 
-```sh
-npm install --prefix demo_ui --workspaces=false
-npm run dev --prefix demo_ui
-```
+2. Create `.env` if you haven't configured it yet, then open it and set `OPENAI_API_KEY`:
 
-Open `http://127.0.0.1:5173`. Vite forwards `/vrq` to `http://127.0.0.1:4111`; set `MASTRA_URL` in the UI environment to change that target.
+   ```bash
+   cp .env.example .env
+   ```
 
-Upload an XLSX or DOCX questionnaire, up to 10 MiB. The browser sends the selected local file directly to the API. The server persists the original bytes in its runtime database before starting the questionnaire workflow. Known mappings follow the same intake as `respond`; other mappings and prefilled replacements require answers to the existing operator prompts. The questionnaire list refreshes every three seconds while the page is visible.
+3. Prepare the fictional sample files and start both applications:
 
-Open a questionnaire to inspect original questions, drafts, review reasons, limitations and citations. Select a disposition for every question. Corrections keep their source bindings and undergo the existing support and security checks. Explicitly select any sources that require disclosure approval. Submit the review, inspect the validated complete answer set, then approve it. An answered document becomes downloadable only after publication; download revalidates the publication and evidence.
+   ```bash
+   npm run demo
+   npm run dev
+   ```
 
-Review metrics displays the existing `readDomainMetrics` response for the selected run. Five summary values remain visible; the other groups expand individually in a compact two-column layout (one column on mobile). It preserves metric names and units (`Ms`, tokens, USD and ratios), shows unavailable values as `—`, and does not generate additional metrics or seed data.
+4. Open [the web demo](http://127.0.0.1:5173). [Mastra Studio](http://127.0.0.1:4111) is available for workflow and trace inspection.
+
+The demo files are `.runtime/demo/questionnaire.xlsx` and `.runtime/demo/questionnaire.docx`. If the file picker hides `.runtime`, enter the full path or enable hidden files.
+
+`npm run dev` starts both processes in one terminal. Ctrl+C stops both; if either exits, the other stops too. The UI requires port 5173 and reports a conflict if another process owns it.
+
+To start them separately, run `npm run dev:mastra` and `npm run dev:ui` in separate terminals. Stop existing servers before switching to the combined command. For terminal-only use, see [local operation](local-operation.md).
+
+## Upload, review and download
+
+1. In **Upload**, select the sample `questionnaire.xlsx`, then select **Submit**. Uploads accept XLSX or DOCX files up to 10 MiB.
+2. Open the new item under **Questionnaires**. If mapping prompts appear, use the [field-mapping walkthrough](intake.md#upload-and-map-in-the-frontend). Confirm any intended prefilled replacement with `REPLACE`.
+3. Wait for drafting to finish. The list refreshes every three seconds while the page is visible.
+4. Read each question, draft, limitation and citation. Choose whether to release the answer, correct it, mark it unknown or withhold it. Explicitly select any cited sources that require sharing permission.
+5. Select **Review** to validate your choices. Resolve reported issues and inspect the complete validated answer set.
+6. Select **APPROVE** and confirm in the dialog when you are ready to authorize export.
+7. After publication, select **Download**. Open the answered file and check its responses and any explicit gaps.
+
+For example, if a question asks for a test result but the available evidence contains only a policy, choose `unknown` instead of releasing an unsupported result. See [review choices](review.md#choose-what-to-share).
+
+The server stores the uploaded original bytes before starting the workflow. Corrections keep their citation bindings and pass support and security checks. Saved review choices survive a reload. Download validates the publication and evidence again; approval alone does not make an invalid file downloadable.
+
+### Read the review cards
+
+Each card separates the original question, review notes, answer and cited evidence. Review notes explain each diagnostic code. Evidence shows the quoted text, source location and sharing policy without exposing technical hashes.
+
+The answer field is always visible when a draft exists. Editing it selects **Release edited answer**; choosing **Release original draft** restores the original text. **Mark as unknown** and **Withhold answer** exclude the draft from the export. Sharing a source that requires review also needs its permission checkbox. **Review** validates these choices; only the complete validated set can be approved. Any further edits require another review.
+
+`INVALID_ATTRIBUTION` means a quotation does not match the text at its cited location. For example, a citation to a JSON field containing `false` cannot quote a combination of that field, the organization and the date. Earlier versions reported this as `INVALID_MAPPING` during review. The demo cannot repair citation bindings by editing answer text, so it offers **Mark as unknown** or **Withhold answer** for these drafts. A custom review client can submit a corrected citation through the [review decision contract](review.md#inspect-and-submit-review-json); the server still validates it against the original source.
+
+## Cancel or remove a questionnaire
+
+**Cancel execution** stops active processing, including a run waiting for a mapping answer. The state changes to `cancelling` while work settles, then to `cancelled`.
+
+Cancelled runs remain available for inspection and metrics. They cannot be resumed, reviewed or downloaded through the UI. Upload the source again to start a new run.
+
+To remove an inactive questionnaire:
+
+1. Select **Remove** in the questionnaire list.
+2. Read and confirm the dialog.
+3. Check that the questionnaire is no longer listed.
+
+Removal persists across restarts and disables all questionnaire HTTP routes for that run. It retains underlying audit records and local files. Use [explicit cleanup](review.md#explicit-cleanup) to remove selected runtime data. An active run must finish cancelling before it can be removed.
+
+## Read review metrics
+
+Open **Review metrics** on a questionnaire. Five summary values remain visible; expand the other groups for details.
+
+The UI displays the existing `readDomainMetrics` data without generating extra metrics or sample values. `Ms` means milliseconds, token fields count tokens, USD values are estimated dollars, and ratios are fractions. `—` means unavailable, not zero. See [metric definitions](evaluation.md#inspect-a-questionnaires-metrics).
 
 ## Production
 
-Set `NODE_ENV=production` and a nonempty `MASTRA_STUDIO_TOKEN` when starting Mastra. `SimpleAuth` protects Studio and the API in production; a missing token prevents startup. Development and tests remain unauthenticated. Mastra dev sets `MASTRA_DEV=true`, which also disables authentication even though the CLI sets `NODE_ENV=production` internally. The UI requests the token when the API returns 401 and keeps it only in memory. Never put the token in a `VITE_*` variable.
+Production requires a built backend, a built UI, authentication and a web server that forwards API requests to Mastra. A **reverse proxy** is the server configuration that forwards those requests while serving the UI from the same website.
 
-Build the UI with `npm run build --prefix demo_ui`. Serve `demo_ui/dist` from a web server and proxy `/vrq` to Mastra on the same origin, forwarding the Authorization header. The preview command also supports the local proxy. To include Studio in the Mastra production build, use `npm run build -- --studio`.
+### 1. Configure the backend
 
-Keep one Mastra writer process. After restart, pending intake can be resumed from its checkpoint. Interrupted model work requires the existing operator recovery procedure; the UI never automatically restarts it or resets its budget. Approved runs can retry publication. Review remains bound to its revision and digest, so stale decisions are rejected.
+Stop the dev server. In the backend environment, set:
+
+- `OPENAI_API_KEY` for model calls.
+- `NODE_ENV=production`.
+- A nonempty secret `MASTRA_STUDIO_TOKEN` for Studio and API access.
+
+Keep `.runtime/profile.json`, evidence files and writable runtime storage available to the backend. Run one Mastra writer process.
+
+`SimpleAuth` protects Studio and the API in production. A missing token prevents startup. Development and tests are unauthenticated. `mastra dev` sets `MASTRA_DEV=true`, which disables this authentication even though that CLI sets `NODE_ENV=production` internally. Use the production start command below, with `MASTRA_DEV` unset.
+
+### 2. Build and start Mastra
+
+From the template directory, with the environment above configured:
+
+```bash
+npm run build
+npm run start
+```
+
+To include Studio in the production build, use `npm run build -- --studio` for the build step.
+
+### 3. Build and serve the UI
+
+```bash
+npm run build --prefix demo_ui
+```
+
+Configure your web server to serve `demo_ui/dist` and forward `/vrq` requests to Mastra on the same origin. Preserve the request path and the `Authorization` header. The web server must accept the questionnaire upload size, including multipart overhead.
+
+For local Vite development and preview, `/vrq` is already proxied to `http://127.0.0.1:4111`. Set `MASTRA_URL` in the UI environment to change that target. A deployed static build needs its own web-server proxy configuration.
+
+### 4. Verify authentication and upload
+
+Open the deployed UI. It asks for the token when the API returns `401` and keeps the token only in memory. Upload a sample file and check that review is available after processing. Never put the token in a `VITE_*` variable, because those values can be exposed in client code.
+
+After a backend restart, pending intake can resume from its checkpoint. Interrupted model work requires the [operator recovery procedure](review.md#restart-and-retry); the UI does not automatically restart it or reset the budget. Approved runs can retry publication. Outdated review revisions and digests are rejected.
+
+### Ask a coding LLM for the deployment configuration
+
+```text
+Prepare deployment configuration for the vendor-risk-questionnaire template.
+
+Target host or platform: [target]
+Web server or proxy: [choice, or ask me]
+Public hostname: [hostname]
+Mastra internal address: [address]
+Persistent runtime and evidence paths: [paths]
+
+Read package.json, demo_ui/package.json, demo_ui/vite.config.ts,
+src/mastra/server/auth.ts, src/mastra/runtime/paths.ts and docs/ui.md.
+Generate configuration files appropriate for my chosen host. Ask for missing
+hosting details before selecting paths or services. Serve demo_ui/dist and
+proxy /vrq to Mastra on the same origin, preserving paths and Authorization.
+Allow 10 MiB file uploads plus multipart overhead.
+
+Use one production Mastra writer process with persistent storage. Set
+NODE_ENV=production, leave MASTRA_DEV unset, and reference OPENAI_API_KEY
+and MASTRA_STUDIO_TOKEN through the host's secret configuration. Do not put
+secrets in VITE_* variables, the browser bundle or committed files.
+
+Show build/start commands and checks for unauthenticated rejection,
+authenticated access and upload. Explain any host-specific requirements.
+Create reviewable configuration files; do not deploy or run a questionnaire.
+```
 
 ## HTTP routes
 
-All routes are registered through Mastra `apiRoutes` and inherit its production authentication.
+All routes are registered through Mastra `apiRoutes` and inherit its production authentication. `:runId` means the ID returned when you upload a questionnaire.
 
-| Method | Route                                 | Operation                                                                         |
-| ------ | ------------------------------------- | --------------------------------------------------------------------------------- |
-| POST   | `/vrq/questionnaires`                 | Multipart `file` upload; returns 202 and `runId`                                  |
-| GET    | `/vrq/questionnaires`                 | Persisted questionnaires and current processing state                             |
-| GET    | `/vrq/questionnaires/:runId`          | Review, saved dispositions, source disclosure and pending intake prompt           |
-| POST   | `/vrq/questionnaires/:runId/input`    | Answer the current prompt using its `id` and `answer`                             |
-| POST   | `/vrq/questionnaires/:runId/review`   | Validate the existing review decision schema; final approval resumes the workflow |
-| POST   | `/vrq/questionnaires/:runId/resume`   | Resume intake or retry an approved publication                                    |
-| GET    | `/vrq/questionnaires/:runId/download` | Validated answered XLSX or DOCX                                                   |
-| GET    | `/vrq/questionnaires/:runId/metrics`  | Existing domain metrics                                                           |
+| Method | Route                                 | Operation                                                             |
+| ------ | ------------------------------------- | --------------------------------------------------------------------- |
+| POST   | `/vrq/questionnaires`                 | Upload multipart `file`; returns `202` and `runId`                    |
+| GET    | `/vrq/questionnaires`                 | List saved questionnaires and processing state                        |
+| GET    | `/vrq/questionnaires/:runId`          | Read review, saved choices, disclosure details and any pending prompt |
+| DELETE | `/vrq/questionnaires/:runId`          | Remove an inactive run from the UI and HTTP access                    |
+| POST   | `/vrq/questionnaires/:runId/cancel`   | Cancel processing or a pending intake prompt                          |
+| POST   | `/vrq/questionnaires/:runId/input`    | Answer the current prompt using its `id` and `answer`                 |
+| POST   | `/vrq/questionnaires/:runId/review`   | Validate a review decision; final approval resumes publication        |
+| POST   | `/vrq/questionnaires/:runId/resume`   | Resume intake or retry approved publication                           |
+| GET    | `/vrq/questionnaires/:runId/download` | Download the validated answered XLSX or DOCX                          |
+| GET    | `/vrq/questionnaires/:runId/metrics`  | Read saved domain metrics                                             |
 
-`202` means work was accepted. Poll the detail route for completion or its persisted error. `409` includes stale revisions, busy runs and invalid publication state; `400` indicates invalid input.
+### Try an upload from the terminal
 
-Run `npm run check --prefix demo_ui`, `npm run build --prefix demo_ui`, `npm run typecheck` and `npm run test -- tests/integration/http.test.ts` to check changes.
+With `npm run dev` running, open a second terminal in the template directory:
+
+```bash
+curl --fail-with-body \
+  -F "file=@$PWD/.runtime/demo/questionnaire.xlsx" \
+  http://127.0.0.1:4111/vrq/questionnaires
+```
+
+This starts a real questionnaire run and can make provider calls. Copy the returned `runId`, then replace `RUN_ID` below:
+
+```bash
+curl --fail-with-body http://127.0.0.1:4111/vrq/questionnaires/RUN_ID
+```
+
+Check the detail response for progress, a pending mapping prompt or a saved error. You can finish review in the web UI. Production requests also require `Authorization: Bearer YOUR_TOKEN`.
+
+`202` means work was accepted, not completed. `400` means invalid input. `409` can mean a stale review, a busy run or a state that does not allow publication. Read the current detail before retrying; do not resubmit an old approval blindly.
+
+For a custom review client, use the [review decision contract](review.md#inspect-and-submit-review-json). The multipart upload endpoint accepts a file and interactive mapping answers, not a JSON mapping object.
+
+## Check UI changes
+
+Run the checks relevant to your changes:
+
+```bash
+npm run check --prefix demo_ui
+npm run build --prefix demo_ui
+npm run typecheck
+npm run test -- tests/integration/http.test.ts
+```

@@ -1,57 +1,142 @@
-# Grounded draft processing
+# Evidence retrieval and drafting
 
-Drafting consumes a persisted questionnaire intake and approved evidence snapshot. Before model work, the backend checks source bytes, validity, transfer permission and snapshot identity against the trusted manifest. Original wording and response constraints remain authoritative.
+The template reads each question, finds relevant approved evidence, and drafts an answer with citations. A citation points back to the exact source text. You still review and approve the answers before export.
 
-## Start and inspect
+Complete [local setup](local-operation.md) or start the [web demo](ui.md) first. For your own evidence, configure the [evidence profile and manifest](local-operation.md#configure-your-organizations-evidence).
 
-Run `npm run respond -- /absolute/path/to/questionnaire.xlsx` (or `.docx`) for intake, drafting and review. Resume with `npm run respond -- --resume <run-id>`. The command retains completed results and usage reservations across interruptions.
+## Follow one question through drafting
 
-`npm run review -- status --run-id <run-id>` inspects a persisted review once drafting reaches that checkpoint. Changed sources or policy require a new run. See `docs/review.md` for administration and recovery.
+Suppose the questionnaire asks: “Does your access policy require multi-factor authentication?”
 
-## Mastra Studio
+1. **Read the question.** The interpretation phase identifies the subject and any product, environment or time limits. It keeps the original wording and instructions.
+2. **Find evidence.** The backend searches the run's approved evidence snapshot for relevant passages.
+3. **Check the input.** Local checks and model-based detectors screen questions and evidence for secrets, personal information and malicious instructions.
+4. **Draft an answer.** The answer agent receives the question and selected passages. It has no tools or direct filesystem access.
+5. **Verify support.** The template checks citation locations and excerpts. A separate verifier checks whether the evidence supports the claims. Consistency checks compare equivalent questions.
+6. **Send the result to review.** You inspect the draft, its sources and any reported limitations.
 
-Run `npm run dev`, open [Mastra Studio](http://localhost:4111), and select **vendor-risk-drafts** after completing intake:
+For example, a policy saying “Employees must use MFA” can support a claim about the policy. It does not prove that every employee account currently has MFA enabled. That operational claim needs operational evidence. If support is missing, the answer stays unknown or needs review.
+
+## Start and inspect a run
+
+1. From the template directory, run:
+
+   ```bash
+   npm run respond -- "$PWD/.runtime/demo/questionnaire.xlsx"
+   ```
+
+2. Save the printed run ID. Once drafting reaches review, inspect it from another terminal. Replace `review-1` with that ID:
+
+   ```bash
+   npm run review -- status --run-id review-1
+   ```
+
+3. Continue reviewing in the original terminal. After an interruption, use:
+
+   ```bash
+   npm run respond -- --resume review-1
+   ```
+
+Completed results and recorded usage remain saved. A failure for one question does not erase completed answers for other questions. Authentication, model compatibility, storage and run-limit failures stop new work.
+
+### Use Studio to inspect only drafting
+
+After [completing intake](intake.md#submit-an-explicit-mapping-through-studio), open **vendor-risk-drafts** in [Mastra Studio](http://127.0.0.1:4111). Use the run ID and evidence paths from intake:
 
 ```json
 {
   "runId": "review-1",
-  "evidenceRoot": "/path/to/evidence",
-  "manifestPath": "/path/to/manifest.json"
+  "evidenceRoot": "/absolute/path/to/evidence",
+  "manifestPath": "/absolute/path/to/manifest.json"
 }
 ```
 
-Output contains original-order drafts and review reasons. `awaiting_review` means drafts are ready for human review. The **vendor-risk-questionnaire** parent adds the persistent review checkpoint and approved export.
+Replace both paths before running. Results retain the original question order. `awaiting_review` means drafting has reached review. For the full review and export flow, run the **vendor-risk-questionnaire** parent workflow instead of running the draft child separately.
 
-## Interpretation and retrieval
+## Understand review reasons
 
-Interpretation uses immutable question and instruction spans. Model choices reference exact source text; trusted code reconstructs order and subparts. Missing, repeated, stale or foreign identities fail validation. Domain, product, environment and time qualifiers remain separate applicability dimensions. Ambiguous qualifiers require review. Repeated instructions appear once in the prompt registry while each question retains its source binding.
+| Route                      | Meaning                                                                | Your next action                                                |
+| -------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `draft_eligible`           | The draft passed the checks needed for review                          | Read its claims and citations before releasing it               |
+| `review_required`          | Evidence, applicability, response format or disclosure needs attention | Resolve the issue, correct the draft, or choose an explicit gap |
+| `security_review_required` | Security checks blocked normal release                                 | Inspect the reason; a blocked answer cannot be released         |
 
-The backend uses a run-scoped Mastra Workspace BM25 index. It searches the selected source span and a lexical query derived from all immutable subparts, with up to three hits each. The second query removes common instruction words and configured organization/product names, with limited plural normalization. Results are deduplicated by excerpt identity. Negative facts, conflicting records and source qualifications remain distinct. Retrieval is lexical and can miss relevant paraphrases or contradictions.
-
-Raw text, locators and hashes remain citation authority. A separate context projection carries exact JSON paths, branch/ancestor qualifications and table row/column relationships. Contextual sibling values cannot be cited through another field's raw anchor. The complete enriched excerpt must fit its 4,000-byte context limit; an oversized candidate produces `SOURCE_UNAVAILABLE` without truncation. Canonical intake, other questions and original citation validation remain available.
-
-## Screening and answering
-
-Questions and each selected excerpt pass local secret/PII checks. Native injection and PII detectors screen the complete interpretation catalogue and assembled answer context before transfer. The answer context includes question metadata, instructions, applicability and all selected excerpts. Detector errors fail closed. Screening assembled content remains fallible, including when malicious text is mixed with benign material.
-
-The answer agent receives one structured request with no tools. Unexpected tool calls are rejected. The full provider input, including native schema/system overhead, must fit the configured envelope. Snapshot bytes are checked again after screening. Drafts pass native detectors and an independent support verifier before becoming eligible for review. Consistency checks compare equivalent questions without replacing their drafts.
-
-Citations must match eligible source versions, hashes, locators and literal excerpts. Policy evidence proves policy, not operational execution. Unsupported claims, missing evidence, incompatible responses, restricted disclosures and ambiguous applicability require review. Unknown answers remain explicit. The routes are `draft_eligible`, `review_required` and `security_review_required`; none grants final release.
-
-Successful siblings remain persisted when a question fails. Global authentication, model compatibility, storage or configured run-limit failures stop new work. Diagnostics retain only bounded categories, hashed correlations and counts; raw validation messages and rejected outputs are excluded from telemetry. See [evaluation and metrics](evaluation.md).
+None of these routes grants final approval. Missing evidence, conflicting records and unclear scope remain visible. [Review and approval](review.md) explains the available choices.
 
 ## Execution policy
 
-Choose budget, call count and elapsed-time limits for your use case. Supply the complete validated policy through the Studio workflow's `policy` field or `.runtime/profile.json` for the respond command. `VRQ_MODEL` in `.env` overrides the profile model for new runs and sets the default when Studio input omits `policy`. An explicit Studio policy and saved runs retain their model. Restart Studio after changing `.env`. Defaults are examples, not a recommended spend allowance. Every detector, interpretation, answer, verification and retry call contributes to usage; the default 100 calls can leave gaps in the 24-question demo.
+The execution policy sets the model and limits for one run, including its later review checks. Configure it before starting work.
 
-`budgetUsd`, `maxPhysicalCalls` and `maxRunElapsedMs` accept user-selected positive finite values. `rates` accepts an ISO date and nonnegative input/output prices per million tokens. Update the example rates for your chosen model and provider account; `VRQ_MODEL` does not update prices automatically. Concurrency, per-call input/output size, retries and detector attempts retain bounded validation to protect local execution.
+1. Open `.runtime/profile.json` and find `policy`.
+2. Choose your spending estimate, maximum provider calls and maximum elapsed time. Keep the other required policy fields.
+3. Check the model and its input/output price estimates. Changing `VRQ_MODEL` does not update prices automatically.
+4. Validate the profile with the [local configuration check](local-operation.md#configure-your-organizations-evidence).
+5. Start a new run. Saved runs keep their original policy and usage.
 
-Usage reconciles once per physical call. Missing or malformed usage retains a conservative reservation; reasoning is included in output usage. Estimated cost is not a provider billing cap. A persisted run retains its original policy through review; use a new run to change it.
+The template's defaults are examples, not recommended spending allowances:
 
-## Extend a phase
+| Field              | Example default | What it limits                                                 |
+| ------------------ | --------------- | -------------------------------------------------------------- |
+| `budgetUsd`        | `5`             | Estimated cost calculated from configured token prices         |
+| `maxPhysicalCalls` | `1000`          | Provider calls, including detectors, retries and review checks |
+| `maxRunElapsedMs`  | `1800000`       | Elapsed time: 30 minutes                                       |
+| `concurrency`      | `4`             | Concurrent work                                                |
+| `callTimeoutMs`    | `60000`         | Time allowed for an individual call                            |
+| `maxInputTokens`   | `8000`          | Per-call input, including schema and system overhead           |
+| `maxOutputTokens`  | `4000`          | Per-call output allowance                                      |
 
-Agent definitions live under `src/mastra/agents`; workflow steps and runtime composition live under `src/mastra/workflows/vendor-risk-drafts`. Use `generatePhase(agent, options, context, prompt, schema)` for business phases. It binds backend authority, validates the response before exposing it to native consumers, and calls Mastra `Agent.generate` with strict structured output, one step, no tools and no additional native retries. Direct Studio agent prompts or forged request context cannot authorize provider execution.
+Existing profiles retain their own values. For example, to use a 10-minute elapsed limit for future runs, change only `policy.maxRunElapsedMs` to `600000`. Do not replace the complete policy with a one-field object.
 
-Keep schema refinements in the supplied schema. `compatibleResponseSchema(question)` enforces the original length and choice constraints for both generated drafts and reviewer corrections. Citation eligibility, current source bytes and reviewer authority remain execution checks.
+`budgetUsd`, `maxPhysicalCalls` and `maxRunElapsedMs` must be positive; call counts and millisecond limits are integers. `rates` needs an ISO date and nonnegative input/output prices per million tokens. Other limits and thresholds have bounded ranges in `src/mastra/contracts/execution-policy.ts`.
 
-The provider boundary retains stream completion checks, duplicate JSON-key rejection, sanitized diagnostics and physical-attempt accounting. It accepts the installed router's flat and nested usage formats; malformed or absent usage stays uncertain. Application retries remain in this boundary so every physical attempt is recorded. Native injection and PII processors keep their own strict detector behavior and share the payload attempt limit.
+Every physical provider attempt counts. Missing or malformed usage keeps a conservative reservation, and reasoning tokens count toward output usage. These estimates are not a provider billing cap. Reaching a limit may leave gaps, including in the sample questionnaire.
+
+The elapsed-time allowance covers drafting and automated review checks. It pauses while the questionnaire waits for a human decision and resumes when review validation starts. Failed review attempts still consume processing time; retries preserve the remaining time, cost and call allowance. An interrupted active operation conservatively counts elapsed time until its claim is recovered. Older runs awaiting review use their saved drafting completion time to exclude the human wait.
+
+For new terminal and web runs, `.env`'s `VRQ_MODEL` overrides the profile model. In Studio it sets the default when input omits `policy`; an explicit Studio policy keeps its own model. Restart the server after changing `.env`. Changing any saved run's policy requires a new run, not resetting its usage.
+
+### Ask a coding LLM to change the policy
+
+```text
+Update the execution policy for future vendor-risk-questionnaire runs.
+
+Model: [supported OpenAI model ID]
+Estimated budget in USD: [amount]
+Maximum physical provider calls: [count]
+Maximum elapsed time in minutes: [minutes]
+Input/output prices per million tokens and their date: [values]
+
+Read src/mastra/contracts/execution-policy.ts, src/mastra/runtime/profile.ts,
+and my .runtime/profile.json. Preserve all required fields and unrelated
+profile settings. Convert minutes to milliseconds. Validate against
+executionPolicySchema and run the local profile configuration check.
+Do not invent prices. If values are missing, ask me for them.
+
+Explain whether VRQ_MODEL overrides the model I selected. Show the final
+configuration and validation result. Do not modify saved run policies,
+reset usage, start model calls or approve answers.
+```
+
+## Retrieval details and limitations
+
+The backend uses Mastra Workspace BM25, a keyword-based search over the run's eligible evidence. It searches the original question span and a second query derived from its subparts, taking up to three hits from each. The second query removes common instruction words and configured organization/product names and applies limited plural normalization. Duplicate excerpts are removed.
+
+Keyword search can miss paraphrases or contradictions. Search scores rank results; they are not probabilities that an answer is correct. Negative facts and conflicting records remain separate evidence.
+
+Each excerpt keeps its raw text, location and source hash. Additional context preserves JSON nesting and table relationships, but one field's citation cannot stand in for another field's value. The complete enriched excerpt must fit a 4,000-byte context limit. An oversized candidate produces `SOURCE_UNAVAILABLE` instead of being truncated.
+
+The backend checks source bytes, validity, LLM permission and snapshot identity before model work, and checks snapshot bytes again after screening. Detectors screen the interpretation catalogue and assembled answer context. Detector errors block further processing; a successful check still cannot guarantee detection of every malicious input.
+
+Citations must match an eligible source's version, hash, locator and literal excerpt. These exact-match checks establish where text came from; the independent verifier assesses whether it supports the answer. Raw validation errors and rejected outputs are excluded from telemetry. See [evaluation and metrics](evaluation.md).
+
+## Extend a processing phase
+
+Agent definitions live in `src/mastra/agents`. Workflow steps and runtime setup live in `src/mastra/workflows/vendor-risk-drafts`.
+
+1. Read the existing phase and its schema.
+2. Put deterministic response rules in the schema. `compatibleResponseSchema(question)` enforces question length and choice constraints for both drafts and reviewer corrections.
+3. Call business phases through `generatePhase(agent, options, context, prompt, schema)`. It validates output, authorizes provider work and uses structured output with one step and no tools.
+4. Keep current-source, citation eligibility and reviewer authorization checks in execution code.
+5. Run focused offline tests before any live evaluation.
+
+The provider wrapper checks stream completion and duplicate JSON keys, sanitizes diagnostics and counts each physical attempt. Keep application retries there so usage remains accurate. Native injection and personal-information detectors share the payload attempt limit. Direct Studio agent prompts cannot authorize provider execution.

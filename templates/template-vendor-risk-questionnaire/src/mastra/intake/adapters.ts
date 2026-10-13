@@ -72,6 +72,25 @@ function rejected(s: InputSourceSnapshot, error: unknown): NormalizationResult {
   };
 }
 const roleFields = ['response', 'explanation', 'evidence', 'yes', 'no', 'not_applicable'] as const;
+const headerFields = new Map<string, keyof ConfirmedInputMapping['regions'][number]['fields']>([
+  ['Reference', 'id'],
+  ['Inquiry', 'question'],
+  ['Response kind', 'type'],
+  ['Allowed values', 'options'],
+  ['Domain', 'section'],
+  ['Guidance', 'instructions'],
+  ['Buyer response', 'response'],
+  ['Explanation', 'explanation'],
+  ['Evidence', 'evidence'],
+]);
+function recognizedTableFields(header: Cell[] | undefined) {
+  const roles = header?.map(cell => (cell?.formula ? undefined : headerFields.get(cell?.text)));
+  if (!roles?.includes('question') || roles.some(role => !role) || new Set(roles).size !== roles.length)
+    return undefined;
+  return mappingSchema.shape.regions.element.shape.fields.parse(
+    Object.fromEntries(roles.map((role, column) => [role, column])),
+  );
+}
 export function officeAdapter(format: 'xlsx' | 'docx'): QuestionnaireInputAdapter {
   const descriptor = {
     key: format,
@@ -106,38 +125,24 @@ export function officeAdapter(format: 'xlsx' | 'docx'): QuestionnaireInputAdapte
         const p = await load(s, c);
         const regions = inputRegions(s, p);
         const candidates: ConfirmedInputMapping[] = [];
-        // The documented sample profile is exact and optional. Other layouts require operator mapping.
+        // Recognized headers can be omitted or reordered. Ambiguous layouts require operator mapping.
         const mapped: ConfirmedInputMapping['regions'] = [];
         const exclusions: ConfirmedInputMapping['exclusions'] = [];
         for (const r of p.regions) {
           const first = r.rows[0];
-          if (
-            (r.kind === 'sheet' || r.kind === 'table') &&
-            [
-              'Reference|Inquiry|Response kind|Allowed values|Domain|Guidance|Buyer response',
-              'Reference|Inquiry|Response kind|Allowed values|Domain|Guidance|Buyer response|Explanation|Evidence',
-            ].includes(first?.map(c => c?.text).join('|') ?? '')
-          ) {
+          const fields = recognizedTableFields(first);
+          if ((r.kind === 'sheet' || r.kind === 'table') && fields) {
             mapped.push({
               regionId: r.id,
               startRow: (r.rowIndices[0] ?? 0) + 1,
               endRow: r.rowIndices.at(-1) ?? 0,
-              fields: {
-                id: 0,
-                question: 1,
-                type: 2,
-                options: 3,
-                section: 4,
-                instructions: 5,
-                response: 6,
-                ...(first!.length === 9 ? { explanation: 7, evidence: 8 } : {}),
-              },
+              fields,
             });
             exclusions.push({
               regionId: r.id,
               startRow: r.rowIndices[0] ?? 0,
               endRow: r.rowIndices[0] ?? 0,
-              reason: 'Documented sample header.',
+              reason: 'Recognized table header.',
             });
           } else if (
             format === 'docx' &&

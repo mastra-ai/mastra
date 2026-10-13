@@ -1,3 +1,5 @@
+import { checkCancellation } from '../runtime/cancellation.ts';
+import { processingElapsedMs } from '../processing/clock.ts';
 import { renderedValues } from '../completion/document.ts';
 import { prepareCompletion } from '../persistence/completion.ts';
 import { generatePhase } from '../agents/runtime.ts';
@@ -11,7 +13,7 @@ import { validateEvidenceCitation } from '../evidence/snapshot.ts';
 import { openProcessingStore } from '../persistence/processing.ts';
 import type { ProcessingStore } from '../persistence/processing.ts';
 import { openReviewStore } from '../persistence/review.ts';
-import { canonicalJson } from '../intake/source.ts';
+import { canonicalJson, IntakeFailure } from '../intake/source.ts';
 import { checkLocalContent } from '../processing/local-filter.ts';
 import { createScreening } from '../processing/security.ts';
 import { createProvider } from '../processing/model.ts';
@@ -70,7 +72,15 @@ async function verifyReviewedText(
     payload = {
       question: questionPayload(question),
       interpretation: result.interpretation,
-      draft,
+      draft: {
+        ...draft,
+        // Citation hashes are verified against the source before this call. Keep
+        // them out of content screening, where digit sequences can look like PII.
+        citations: draft.citations.map(({ sourceSha256: _sourceHash, locator, ...citation }) => {
+          const { sourceSha256: _locatorHash, ...coordinates } = locator;
+          return { ...citation, locator: coordinates };
+        }),
+      },
       externalReason,
       excerpts: draft.citations.map(c => ({
         text: c.supportingExcerpt,
@@ -164,7 +174,7 @@ export async function submitReview(raw: ReviewDecision, options: ReviewOptions) 
     const exhaustion =
       status.run.stopReason === 'BUDGET_EXHAUSTED' || status.run.stopReason === 'TIME_LIMIT'
         ? status.run.stopReason
-        : !status.run.stopReason && Date.now() - Date.parse(status.run.createdAt) >= status.run.policy.maxRunElapsedMs
+        : !status.run.stopReason && processingElapsedMs(status.run) >= status.run.policy.maxRunElapsedMs
           ? 'TIME_LIMIT'
           : !status.run.stopReason &&
               (status.usage.length >= status.run.policy.maxPhysicalCalls ||
@@ -229,7 +239,14 @@ export async function submitReview(raw: ReviewDecision, options: ReviewOptions) 
       )
         throw new Error('UNSUPPORTED_REVIEW');
       for (const c of draft.citations) {
-        await validateEvidenceCitation(evidence, c, options.evidenceRoot, sourceContext());
+        try {
+          await validateEvidenceCitation(evidence, c, options.evidenceRoot, sourceContext());
+        } catch (error) {
+          // At this boundary, an invalid mapping refers to a citation, not the questionnaire fields.
+          if (error instanceof IntakeFailure && error.code === 'INVALID_MAPPING')
+            throw new Error('INVALID_ATTRIBUTION');
+          throw error;
+        }
         const doc = evidence.documents.find(doc => doc.id === c.documentId)!;
         if (
           doc.disclosure === 'restricted' ||
@@ -319,6 +336,7 @@ export async function submitReview(raw: ReviewDecision, options: ReviewOptions) 
       if (chunk) await screen(chunk, 'export');
     }
     await revalidateEvidence(store, raw.runId, options);
+    checkCancellation(raw.runId);
     return await review.finishDecision(raw, token, projection, claim.payloadHash, userInfo().username);
   } catch (error) {
     if (token) await review.failDecision(raw.runId, token);

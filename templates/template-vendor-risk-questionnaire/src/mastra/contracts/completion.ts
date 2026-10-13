@@ -95,6 +95,7 @@ export const writePlanSchema = z
         c.addIssue({
           code: 'custom',
           message: 'Choice destinations require an explanation field for qualifications and gaps.',
+          params: { code: 'EXPLANATION_FIELD_REQUIRED' },
         });
     }
     for (const [i, t] of targets.entries()) {

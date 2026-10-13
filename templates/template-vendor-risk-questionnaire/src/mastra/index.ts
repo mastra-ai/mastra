@@ -1,41 +1,45 @@
-import { defaultLimits } from './contracts/limits.ts';
-import { studioAuth } from './server/auth.ts';
-import { questionnaireRoutes } from './server/routes.ts';
-import { createLocalObservability, SafeLogger } from './observability/privacy.ts';
-import { questionInterpretationAgent } from './agents/question-interpretation.ts';
-import { evidenceAnswerAgent } from './agents/evidence-answer.ts';
-import { supportVerifierAgent } from './agents/support-verifier.ts';
-import { answerConsistencyAgent } from './agents/answer-consistency.ts';
-import { ProcessingFailure } from './processing/failure.ts';
 import { Mastra } from '@mastra/core';
 import { mkdirSync } from 'node:fs';
-import { storage, runtimeRoot, telemetryHealth } from './persistence/database.ts';
-import { vendorRiskQuestionnaire } from './workflows/vendor-risk-questionnaire.ts';
-import { vendorRiskIntake } from './workflows/vendor-risk-intake.ts';
+import { answerConsistencyAgent } from './agents/answer-consistency.ts';
+import { evidenceAnswerAgent } from './agents/evidence-answer.ts';
+import { questionInterpretationAgent } from './agents/question-interpretation.ts';
+import { supportVerifierAgent } from './agents/support-verifier.ts';
+import { defaultLimits } from './contracts/limits.ts';
+import { createLocalObservability, SafeLogger } from './observability/privacy.ts';
+import { runtimeRoot, storage } from './persistence/database.ts';
+import { ProcessingFailure } from './processing/failure.ts';
+import { studioAuth } from './server/auth.ts';
+import { questionnaireRoutes, telemetryRoute } from './server/routes.ts';
 import { vendorRiskDrafts } from './workflows/vendor-risk-drafts.ts';
+import { vendorRiskIntake } from './workflows/vendor-risk-intake.ts';
+import { vendorRiskQuestionnaire } from './workflows/vendor-risk-questionnaire.ts';
 
 const auth = studioAuth();
+
 mkdirSync(runtimeRoot, { recursive: true });
 await storage.init().catch(() => {
   throw new ProcessingFailure('STORAGE_FAILURE');
 });
+
 export const mastra = new Mastra({
-  logger: new SafeLogger(),
-  observability: createLocalObservability(),
+  agents: {
+    questionInterpretationAgent,
+    evidenceAnswerAgent,
+    supportVerifierAgent,
+    answerConsistencyAgent,
+  },
+  workflows: {
+    vendorRiskIntake,
+    vendorRiskDrafts,
+    vendorRiskQuestionnaire,
+  },
   storage,
-  agents: { questionInterpretationAgent, evidenceAnswerAgent, supportVerifierAgent, answerConsistencyAgent },
   server: {
     host: '127.0.0.1',
     auth,
     bodySizeLimit: defaultLimits.maxBytes + 65536,
-    apiRoutes: [
-      ...questionnaireRoutes,
-      {
-        path: '/vrq/telemetry-status',
-        method: 'GET',
-        handler: () => Response.json({ telemetry: telemetryHealth.status }),
-      },
-    ],
+    apiRoutes: [...questionnaireRoutes, telemetryRoute],
   },
-  workflows: { vendorRiskDrafts, vendorRiskQuestionnaire, vendorRiskIntake },
+  logger: new SafeLogger(),
+  observability: createLocalObservability(),
 });

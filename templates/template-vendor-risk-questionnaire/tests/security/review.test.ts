@@ -11,6 +11,7 @@ import { publishExport } from '../../src/mastra/exports/publication.ts';
 import { openDatabase } from '../../src/mastra/persistence/database.ts';
 import { openReviewStore } from '../../src/mastra/persistence/review.ts';
 import { openProcessingStore } from '../../src/mastra/persistence/processing.ts';
+import { checkLocalContent } from '../../src/mastra/processing/local-filter.ts';
 
 let root: string;
 beforeEach(async () => {
@@ -20,6 +21,106 @@ afterEach(async () => {
   await cleanupDirectory(root);
 });
 describe('Review authority and release security', () => {
+  it('reports invalid citation attribution and allows a reviewed gap without changing source bindings', async () => {
+    const f = await reviewFixture(root);
+    try {
+      const draft = f.status.results[0]!.draft!;
+      const d = decision(f, { finalApproval: false });
+      d.dispositions[0]!.correction = {
+        ...draft,
+        citations: draft.citations.map(citation => ({
+          ...citation,
+          supportingExcerpt: `Scope: production; ${citation.supportingExcerpt}`,
+        })),
+      };
+      const calls = f.provider.calls.length;
+      await expect(submitReview(d, f.options)).rejects.toThrow('INVALID_ATTRIBUTION');
+      expect(f.provider.calls).toHaveLength(calls);
+      const store = await openReviewStore(f.url);
+      try {
+        const rejected = (await store.read(f.runId))!;
+        expect(rejected.state).toBe('awaiting_review');
+        expect(rejected.projection).toBeNull();
+        expect(rejected.results[0]!.draft).toEqual(draft);
+      } finally {
+        store.close();
+      }
+      const gaps = decision(f, {
+        decisionId: 'review-gaps',
+        finalApproval: false,
+        dispositions: [
+          {
+            questionId: f.questions[0]!.id,
+            disposition: 'unknown',
+            safeReason: 'No releasable supported answer is available.',
+            releaseDocumentIds: [],
+          },
+        ],
+      });
+      const pending = (await submitReview(gaps, f.options))!;
+      expect(pending.state).toBe('awaiting_review');
+      expect(pending.projection?.answers[0]?.value).toBe('unknown');
+      const approved = (await submitReview(
+        {
+          ...gaps,
+          decisionId: 'approve-gaps',
+          expectedRevision: pending.revision,
+          expectedDigest: pending.digest,
+          finalApproval: true,
+        },
+        f.options,
+      ))!;
+      expect(approved.state).toBe('approved');
+      expect(approved.projection?.evidence).toEqual([]);
+    } finally {
+      await f.mastra.shutdown();
+    }
+  });
+  it('validates citation hashes locally without treating them as reviewer content', async () => {
+    const f = await reviewFixture(root, {
+      format: 'docx',
+      text: 'control Production workforce MFA is required. Record revision 0.',
+    });
+    try {
+      const draft = f.status.results[0]!.draft!;
+      const sourceHash = draft.citations[0]!.sourceSha256;
+      // This real source digest contains a numeric sequence matched by the PII preset.
+      await expect(checkLocalContent(sourceHash, 'diagnostic')).rejects.toThrow('SECURITY_BLOCKED');
+      const d = decision(f, { finalApproval: false });
+      const text = 'Production workforce MFA is required for access.';
+      d.dispositions[0]!.correction = {
+        ...draft,
+        text,
+        claims: draft.claims.map(claim => ({ ...claim, text })),
+      };
+      const before = f.provider.calls.length;
+      const tampered = structuredClone(d);
+      const citation = tampered.dispositions[0]!.correction!.citations[0]!;
+      citation.sourceSha256 = 'a'.repeat(64);
+      citation.locator.sourceSha256 = citation.sourceSha256;
+      await expect(submitReview(tampered, f.options)).rejects.toThrow('SOURCE_CHANGED');
+      expect(f.provider.calls).toHaveLength(before);
+
+      const unsafe = structuredClone(d);
+      unsafe.dispositions[0]!.correction!.text = 'sk-proj-PROTECTEDREVIEWCANARY0123456789';
+      await expect(submitReview(unsafe, f.options)).rejects.toThrow('SECURITY_BLOCKED');
+      expect(f.provider.calls).toHaveLength(before);
+
+      const reviewed = await submitReview(d, f.options);
+      expect(reviewed?.state).toBe('awaiting_review');
+      expect(reviewed?.projection?.answers[0]?.text).toBe(text);
+      const requests = f.provider.calls
+        .slice(before)
+        .map(({ call }) => userText(call))
+        .join('\n');
+      expect(requests).toContain(text);
+      expect(requests).toContain(draft.citations[0]!.supportingExcerpt);
+      expect(requests).not.toContain(sourceHash);
+      expect(requests).not.toContain('PROTECTEDREVIEWCANARY');
+    } finally {
+      await f.mastra.shutdown();
+    }
+  });
   it('persists_sql_payloads_as_data_without_query_or_authority_changes', async () => {
     const payload = "'; DROP TABLE vrq_intakes; UPDATE vrq_review SET state_json='approved'; --";
     const f = await reviewFixture(root, { questions: [{ text: `Describe this literal SQL example: ${payload}` }] }),

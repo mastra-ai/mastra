@@ -6,6 +6,19 @@ import { writeTransaction } from './transaction.ts';
 import { canonicalJson, sha256 } from '../intake/source.ts';
 import { reviewStateSchema, reviewDecisionSchema } from '../contracts/review.ts';
 import type { ReviewState, ReviewDecision, Projection, ExportManifest } from '../contracts/review.ts';
+import { processingRunSchema } from '../contracts/processing.ts';
+import { processingClock } from '../processing/clock.ts';
+
+// Called inside the review claim transaction, so competing decisions cannot restart or pause the clock.
+async function setReviewClock(db: Pick<Client, 'execute'>, runId: string, active: boolean) {
+  const rows = await db.execute({ sql: 'SELECT run_json FROM vrq_processing WHERE run_id = ?', args: [runId] });
+  if (!rows.rows[0]) return;
+  const run = processingRunSchema.parse(JSON.parse(String(rows.rows[0].run_json)));
+  await db.execute({
+    sql: 'UPDATE vrq_processing SET run_json = ? WHERE run_id = ?',
+    args: [canonicalJson({ ...run, clock: processingClock(run, active && !run.stopReason) }), runId],
+  });
+}
 
 export async function openReviewStore(url = databaseUrl, underlying?: Client) {
   const client = await openDatabase(url, undefined, underlying);
@@ -78,6 +91,7 @@ export async function openReviewStore(url = databaseUrl, underlying?: Client) {
           claimAt: new Date().toISOString(),
         };
         await save(tx, claimed);
+        await setReviewClock(tx, d.runId, true);
         const validated = await tx.execute({
           sql: 'SELECT revision,dispositions_json FROM vrq_review_payloads WHERE run_id = ?',
           args: [d.runId],
@@ -109,6 +123,7 @@ export async function openReviewStore(url = databaseUrl, underlying?: Client) {
           claimAt: null,
         });
         await save(tx, next);
+        await setReviewClock(tx, d.runId, false);
         await tx.execute({
           sql: 'INSERT INTO vrq_review_payloads (run_id,revision,dispositions_json) VALUES (?,?,?) ON CONFLICT(run_id) DO UPDATE SET revision=excluded.revision,dispositions_json=excluded.dispositions_json',
           args: [d.runId, next.revision, canonicalJson(d.dispositions)],
@@ -137,7 +152,8 @@ export async function openReviewStore(url = databaseUrl, underlying?: Client) {
     failDecision: async (runId: string, token: string, invalidated = false) =>
       writeTransaction(client, async tx => {
         const s = await read(tx, runId);
-        if (s?.claimToken === token)
+        if (s?.claimToken === token) {
+          await setReviewClock(tx, runId, false);
           await save(tx, {
             ...s,
             state: invalidated ? 'invalidated' : 'awaiting_review',
@@ -147,11 +163,13 @@ export async function openReviewStore(url = databaseUrl, underlying?: Client) {
             claimToken: null,
             claimAt: null,
           });
+        }
       }),
     invalidate: async (runId: string) =>
       writeTransaction(client, async tx => {
         const s = await read(tx, runId);
-        if (s)
+        if (s) {
+          await setReviewClock(tx, runId, false);
           await save(tx, {
             ...s,
             state: 'invalidated',
@@ -161,6 +179,7 @@ export async function openReviewStore(url = databaseUrl, underlying?: Client) {
             claimToken: null,
             claimAt: null,
           });
+        }
       }),
     claimExport: async (runId: string) =>
       writeTransaction(client, async tx => {
@@ -217,6 +236,8 @@ export async function openReviewStore(url = databaseUrl, underlying?: Client) {
         const s = await read(tx, runId);
         if (!s || s.claimToken !== expectedToken || !s.claimAt || Date.now() - Date.parse(s.claimAt) < 120000)
           throw new Error('CLAIM_NOT_ABANDONED');
+        // An abandoned active operation conservatively retains its elapsed time.
+        await setReviewClock(tx, runId, false);
         await save(tx, {
           ...s,
           state: s.state === 'exporting' ? 'approved' : 'awaiting_review',

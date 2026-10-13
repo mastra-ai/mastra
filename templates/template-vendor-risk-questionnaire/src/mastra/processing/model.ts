@@ -1,3 +1,4 @@
+import { executionSignal } from '../runtime/cancellation.ts';
 import { normalizeModelFinish } from './model-protocol.ts';
 import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import { z } from 'zod';
@@ -93,6 +94,12 @@ export function boundedModel(options: {
     });
 
   async function executeCall(callOptions: ModelCall): Promise<ModelStream> {
+    const jobSignal = executionSignal(runId);
+    jobSignal?.throwIfAborted();
+    const signal = AbortSignal.any([
+      ...(callOptions.abortSignal ? [callOptions.abortSignal] : []),
+      ...(jobSignal ? [jobSignal] : []),
+    ]);
     try {
       store.assertAdmission();
     } catch {
@@ -139,6 +146,7 @@ export function boundedModel(options: {
     }
 
     for (let retry = 0; ; retry++) {
+      signal.throwIfAborted();
       if (
         detector &&
         options.detectorAttempts &&
@@ -159,8 +167,8 @@ export function boundedModel(options: {
       options.onAttempt?.();
       const controller = new AbortController();
       const abort = () => controller.abort();
-      callOptions.abortSignal?.addEventListener('abort', abort, { once: true });
-      if (callOptions.abortSignal?.aborted) abort();
+      signal.addEventListener('abort', abort, { once: true });
+      if (signal.aborted) abort();
       let timer: ReturnType<typeof setTimeout> | undefined;
       let reader: ReadableStreamDefaultReader<ModelPart> | undefined;
       let observed: { inputTokens: number; outputTokens: number; reasoningTokens?: number } | undefined;
@@ -169,6 +177,7 @@ export function boundedModel(options: {
 
       const collectResponse = async () => {
         store.assertAdmission();
+        signal.throwIfAborted();
         const response = await provider.doStream({
           ...callOptions,
           abortSignal: controller.signal,
@@ -184,6 +193,7 @@ export function boundedModel(options: {
 
         for (;;) {
           const next = await reader.read();
+          signal.throwIfAborted();
           if (next.done) break;
           const part = next.value;
           if (++partCount > policy.maxOutputTokens * 2) throw new ProcessingFailure('TOKEN_LIMIT');
@@ -279,6 +289,7 @@ export function boundedModel(options: {
           await diagnostic(failureCategory, error.code, 'origin', { ...envelope, ...schemaIssues });
         await store.settle(reservation, observed, error.code);
         if (globalFailures.includes(error.code)) await store.stop(runId, error.code);
+        signal.throwIfAborted();
         if (!detector && error.transient && retry < policy.transientRetries) {
           await new Promise(resolve => setTimeout(resolve, Math.min(100 * 2 ** retry, 400)));
           continue;
@@ -288,7 +299,7 @@ export function boundedModel(options: {
       } finally {
         clearTimeout(timer);
         controller.abort();
-        callOptions.abortSignal?.removeEventListener('abort', abort);
+        signal.removeEventListener('abort', abort);
         void reader?.cancel().catch(() => {});
       }
     }
