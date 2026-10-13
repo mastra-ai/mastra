@@ -2,6 +2,7 @@ import { knowledgeAgentImportMemoryResourceId, type Knowledge } from '@mastra/co
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type {
+  KnowledgeActivityEvent,
   KnowledgeImportRun,
   KnowledgeImportRunStatus,
   KnowledgeImportTriggerKind,
@@ -266,6 +267,13 @@ const SESSION_ADDRESS_RE = /^resource:[^:]+:thread:([^:]+)$/;
 const SESSION_NAME_CONCURRENCY = 8;
 /** Sessions probed for a visible captured record at once. */
 const SESSION_PROBE_CONCURRENCY = 8;
+
+/** Authorized visible events returned per activity page. */
+const ACTIVITY_PAGE_SIZE = 25;
+/** Events fetched per `listActivity` batch while filling a visible page. */
+const ACTIVITY_BATCH = 100;
+/** Hard scan cap so a huge hidden or filtered backlog cannot spin the request. */
+const ACTIVITY_SCAN_CAP = 1000;
 
 /** The thread id of a session (`resource:<project>:thread:<id>`) scope address. */
 function sessionThreadId(address: string | undefined): string | undefined {
@@ -1539,10 +1547,12 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           ) {
             return c.json({ error: 'invalid_activity_filters' }, 400);
           }
-          const fetched = await view.store.listActivity({ scopeIds: [selected.id], limit: 100 });
+          const cursor = c.req.query('cursor');
+          if (cursor && cursor.length > 128) return c.json({ error: 'invalid_activity_cursor' }, 400);
           // Visibility is re-checked here before any window shaping: a row whose target
           // is not visible in the selected scope is skipped entirely, so no action/type/
-          // id/time metadata leaks even when an adapter's activity read is lax about it.
+          // id/time metadata leaks even when an adapter's activity read is lax about it —
+          // and a hidden or filtered backlog can never displace visible events from the page.
           const nodeVisibility = new Map<string, Promise<boolean>>();
           const isNodeVisible = (nodeId: string): Promise<boolean> => {
             let cached = nodeVisibility.get(nodeId);
@@ -1556,44 +1566,66 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             }
             return cached;
           };
-          const visibility = await Promise.all(
-            fetched.map(async event => {
-              if (event.contextScopeId && event.contextScopeId !== selected.id) return false;
-              if (event.targetType === 'node') return isNodeVisible(event.targetId);
-              const record = await view.store.getRecord({ id: event.targetId, includeDeleted: true });
-              if (!record) return false;
-              const recordScopeIds = await view.store.getRecordScopeIds(event.targetId);
-              return (
-                isKnowledgeScopeVisible(recordScopeIds, [selected.id]) && (await isNodeVisible(record.nodeId))
-              );
-            }),
-          );
-          const events = fetched.filter((_, index) => visibility[index]);
+          const isEventVisible = async (event: KnowledgeActivityEvent): Promise<boolean> => {
+            if (event.contextScopeId && event.contextScopeId !== selected.id) return false;
+            if (action && event.action !== action) return false;
+            if (from && event.createdAt < from) return false;
+            if (to && event.createdAt > to) return false;
+            if (sourceType && (sourceType === 'importer') !== Boolean(event.importRunId)) return false;
+            if (event.targetType === 'node') return isNodeVisible(event.targetId);
+            const record = await view.store.getRecord({ id: event.targetId, includeDeleted: true });
+            if (!record) return false;
+            const recordScopeIds = await view.store.getRecordScopeIds(event.targetId);
+            return isKnowledgeScopeVisible(recordScopeIds, [selected.id]) && (await isNodeVisible(record.nodeId));
+          };
+          // Newest-first scan: fill one visible page plus a lookahead row, bounded by
+          // the scan cap. When the cap stops the walk early, the scan position comes
+          // back as the cursor so the client can continue without skipping events.
+          const collected: KnowledgeActivityEvent[] = [];
+          let after = cursor;
+          let scanned = 0;
+          let exhausted = false;
+          while (collected.length <= ACTIVITY_PAGE_SIZE && scanned < ACTIVITY_SCAN_CAP) {
+            const batch = await view.store.listActivity({ scopeIds: [selected.id], after, limit: ACTIVITY_BATCH });
+            if (batch.length === 0) {
+              exhausted = true;
+              break;
+            }
+            for (const event of batch) {
+              after = event.id;
+              scanned += 1;
+              if (await isEventVisible(event)) collected.push(event);
+              if (collected.length > ACTIVITY_PAGE_SIZE || scanned >= ACTIVITY_SCAN_CAP) break;
+            }
+          }
+          const events = collected.slice(0, ACTIVITY_PAGE_SIZE);
+          const lastVisible = events.at(-1);
+          const nextCursor =
+            collected.length > ACTIVITY_PAGE_SIZE && lastVisible
+              ? lastVisible.id
+              : !exhausted && scanned >= ACTIVITY_SCAN_CAP && after
+                ? after
+                : undefined;
           const addresses = await scopeAddressIndex(view.store, [
             selected.id,
             ...events.flatMap(event => (event.contextScopeId ? [event.contextScopeId] : [])),
           ]);
           const projected = await Promise.all(
-            events
-              .filter(event => !action || event.action === action)
-              .filter(event => !from || event.createdAt >= from)
-              .filter(event => !to || event.createdAt <= to)
-              .filter(event => !sourceType || (sourceType === 'importer') === Boolean(event.importRunId))
-              .map(async event => {
-                const run = event.importRunId ? await view.store.getImportRun(event.importRunId) : undefined;
-                const eventScopeIds = event.contextScopeId ? [event.contextScopeId] : [selected.id];
-                return {
-                  id: event.id,
-                  action: event.action,
-                  recordType: event.targetType,
-                  scope: addressPath(eventScopeIds, addresses),
-                  sourceType: run ? ('importer' as const) : ('system' as const),
-                  ...(run ? { sourceId: run.importerId, importRunId: run.id } : {}),
-                  createdAt: event.createdAt.toISOString(),
-                };
-              }),
+            events.map(async event => {
+              const run = event.importRunId ? await view.store.getImportRun(event.importRunId) : undefined;
+              const eventScopeIds = event.contextScopeId ? [event.contextScopeId] : [selected.id];
+              return {
+                id: event.id,
+                action: event.action,
+                recordType: event.targetType,
+                scope: addressPath(eventScopeIds, addresses),
+                sourceType: run ? ('importer' as const) : ('system' as const),
+                ...(run ? { sourceId: run.importerId, importRunId: run.id } : {}),
+                createdAt: event.createdAt.toISOString(),
+              };
+            }),
           );
-          return c.json({ events: projected });
+          return c.json({ events: projected, ...(nextCursor ? { nextCursor } : {}) });
         },
       }),
     ];
