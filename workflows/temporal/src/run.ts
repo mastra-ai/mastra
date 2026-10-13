@@ -1,4 +1,5 @@
 import type { RequestContext } from '@mastra/core/di';
+import { MASTRA_AUTH_TOKEN_KEY } from '@mastra/core/request-context';
 import { Run } from '@mastra/core/workflows';
 import type {
   Step,
@@ -52,7 +53,7 @@ export class TemporalRun<
     const input = await this._validateInput(args.inputData);
     const initialState = await this._validateInitialState(args.initialState);
     await this._validateRequestContext(args.requestContext as RequestContext<unknown> | undefined);
-    const requestContext = args.requestContext ? Object.fromEntries(args.requestContext.entries()) : {};
+    const requestContext = this.serializeRequestContext(args.requestContext as RequestContext<unknown> | undefined);
 
     await this.persistSnapshot({ status: 'running', input, state: initialState, requestContext });
 
@@ -107,6 +108,12 @@ export class TemporalRun<
   async cancel() {
     await this.client.workflow.getHandle(this.runId).cancel();
     await super.cancel();
+  }
+
+  private serializeRequestContext(requestContext?: RequestContext<unknown>) {
+    const serialized = requestContext?.toJSON() ?? {};
+    delete serialized[MASTRA_AUTH_TOKEN_KEY];
+    return serialized;
   }
 
   private async persistSnapshot({
@@ -206,7 +213,7 @@ export class TemporalRun<
     const input = await this._validateInput(args.inputData);
     const initialState = await this._validateInitialState(args.initialState);
     await this._validateRequestContext(args.requestContext as RequestContext<unknown> | undefined);
-    const requestContext = args.requestContext ? Object.fromEntries(args.requestContext.entries()) : {};
+    const requestContext = this.serializeRequestContext(args.requestContext as RequestContext<unknown> | undefined);
 
     await this.persistSnapshot({ status: 'running', input, state: initialState, requestContext });
 

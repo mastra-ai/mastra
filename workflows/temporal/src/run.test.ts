@@ -1,4 +1,5 @@
 import { Mastra } from '@mastra/core/mastra';
+import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '@mastra/core/request-context';
 import { MockStore } from '@mastra/core/storage';
 import { createStep } from '@mastra/core/workflows';
 import type { Client } from '@temporalio/client';
@@ -108,6 +109,47 @@ describe('TemporalRun', () => {
       status: 'running',
       payload: { value: 1 },
     });
+  });
+
+  it('does not persist framework auth tokens in Temporal request context snapshots or dispatch args', async () => {
+    const storage = new MockStore();
+    const result = {
+      status: 'success',
+      input: { value: 1 },
+      result: { value: 2 },
+      state: {},
+      steps: {},
+    };
+    const handle = { result: vi.fn().mockResolvedValue(result) };
+    const start = vi.fn().mockResolvedValue(handle);
+    const schema = z.object({ value: z.number() });
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: schema, outputSchema: schema },
+      { client: { workflow: { start } } as unknown as Client, taskQueue: 'test-queue' },
+    ).commit();
+    new Mastra({ workflows: { workflow }, storage, logger: false });
+    const run = await workflow.createRun({ runId: 'test-run', resourceId: 'resource-1' });
+    const requestContext = new RequestContext();
+    requestContext.set('tenant', 'acme');
+    requestContext.set(MASTRA_AUTH_TOKEN_KEY, 'live-bearer-token');
+
+    await run.start({ inputData: { value: 1 }, requestContext });
+
+    expect(start).toHaveBeenCalledWith(
+      'testWorkflow',
+      expect.objectContaining({
+        args: [
+          expect.objectContaining({
+            requestContext: { tenant: 'acme' },
+          }),
+        ],
+      }),
+    );
+    const runs = await workflow.listWorkflowRuns();
+    expect((runs.runs[0]?.snapshot as any).requestContext).toEqual({ tenant: 'acme' });
+    expect(JSON.stringify(runs)).not.toContain('live-bearer-token');
+    const persisted = await workflow.getWorkflowRunById('test-run');
+    expect(JSON.stringify(persisted)).not.toContain('live-bearer-token');
   });
 
   it('does not execute stream runs with the local workflow engine', async () => {
