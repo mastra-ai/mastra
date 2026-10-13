@@ -199,6 +199,34 @@ describe('UpstashTransport', () => {
 
       expect(getPushedLog().time).toBe(now);
     });
+
+    it('should not mutate object input when adding a timestamp', async () => {
+      const record = { msg: 'caller-owned' };
+      transport.write(record as any);
+      await transport._flush();
+
+      expect(record).toEqual({ msg: 'caller-owned' });
+      expect(getPushedLog()).toEqual({ msg: 'caller-owned', time: now });
+    });
+
+    it('should not mutate object input with a null timestamp', async () => {
+      const record = { msg: 'null time', time: null };
+      transport.write(record as any);
+      await transport._flush();
+
+      expect(record.time).toBeNull();
+      expect(getPushedLog().time).toBe(now);
+    });
+
+    it('should send frozen records and pass the original chunk through', async () => {
+      const record = Object.freeze({ msg: 'frozen' });
+      const callback = vi.fn();
+      transport._transform(record as any, 'utf8', callback);
+      await transport._flush();
+
+      expect(callback).toHaveBeenCalledWith(null, record);
+      expect(getPushedLog()).toEqual({ msg: 'frozen', time: now });
+    });
   });
 
   describe('error handling', () => {
