@@ -12,7 +12,9 @@ import { UpgradeTicketStore } from './upgrade-tickets';
  * as Hono's `cors.origin` option.
  */
 export type BrowserStreamOrigin =
-  string | string[] | ((origin: string, c: Context) => Promise<string | undefined | null> | string | undefined | null);
+  | string
+  | string[]
+  | ((origin: string, c: Context) => Promise<string | undefined | null> | string | undefined | null);
 
 /**
  * Hono-specific browser stream configuration.

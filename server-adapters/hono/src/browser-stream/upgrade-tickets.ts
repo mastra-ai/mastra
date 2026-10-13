@@ -45,7 +45,8 @@ export interface IssuedUpgradeTicket {
 }
 
 export type UpgradeTicketIssueResult =
-  ({ ok: true } & IssuedUpgradeTicket) | { ok: false; reason: 'rate-limited' | 'capacity' };
+  | ({ ok: true } & IssuedUpgradeTicket)
+  | { ok: false; reason: 'rate-limited' | 'capacity' };
 
 /** 256 bits of base64url, so the ticket can't be guessed or enumerated. */
 function createTicketValue(): string {
