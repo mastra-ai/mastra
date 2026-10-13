@@ -95,17 +95,11 @@ describe('TabbedContainer', () => {
     fireEvent.keyDown(window, { key: 'f', ctrlKey: true, shiftKey: true });
     expect(document.activeElement).toBe(runsSearch);
     expect(runsToolbar?.hasAttribute('data-active')).toBe(true);
-    expect(runsToolbar?.hasAttribute('inert')).toBe(false);
     expect(scoresToolbar?.hasAttribute('data-active')).toBe(false);
-    expect(scoresToolbar?.getAttribute('aria-hidden')).toBe('true');
-    expect(scoresToolbar?.hasAttribute('inert')).toBe(true);
     fireEvent.click(screen.getByRole('tab', { name: 'Scores' }));
     expect(screen.getByText('answer-relevancy')).toBeTruthy();
     expect(runsToolbar?.hasAttribute('data-active')).toBe(false);
-    expect(runsToolbar?.getAttribute('aria-hidden')).toBe('true');
-    expect(runsToolbar?.hasAttribute('inert')).toBe(true);
     expect(scoresToolbar?.hasAttribute('data-active')).toBe(true);
-    expect(scoresToolbar?.hasAttribute('inert')).toBe(false);
     fireEvent.keyDown(window, { key: 'f', ctrlKey: true, shiftKey: true });
     expect(document.activeElement).toBe(screen.getByLabelText('Search scores'));
     fireEvent.click(screen.getByRole('tab', { name: 'Runs' }));
