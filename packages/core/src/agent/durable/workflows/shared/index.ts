@@ -37,4 +37,4 @@ export {
   storeMessageListState,
 } from './message-list-state';
 
-export { resolveDurableToolCallConcurrency } from './tool-call-concurrency';
+export { canDurableToolCallRunAfterSuspend, resolveDurableToolCallConcurrency } from './tool-call-concurrency';

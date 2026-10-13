@@ -38,6 +38,7 @@ import {
   baseIterationStateSchema,
   durableOptionsSchema,
   createBaseIterationStateUpdate,
+  canDurableToolCallRunAfterSuspend,
   resolveDurableToolCallConcurrency,
   executeDurableAgentScorers,
   dehydrateSnapshotTranscripts,
@@ -512,8 +513,15 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         // is shared across runs, so this must be a resolver — never a mutated
         // shared options object.
         .foreach(toolCallStep, {
-          // Siblings of a suspending tool call still run (#26514).
-          continueAfterSuspend: true,
+          // Plain siblings of a suspending tool call still run (#26514).
+          continueAfterSuspend: (toolCall, { getInitData }) => {
+            const state = getInitData() as IterationState | undefined;
+            return canDurableToolCallRunAfterSuspend({
+              options: state?.options,
+              toolsMetadata: state?.toolsMetadata,
+              toolCall: toolCall as DurableToolCallInput,
+            });
+          },
           concurrency: ({ inputData, getInitData }) => {
             const state = getInitData() as IterationState | undefined;
             return resolveDurableToolCallConcurrency({

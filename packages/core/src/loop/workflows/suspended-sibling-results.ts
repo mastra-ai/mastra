@@ -11,6 +11,7 @@ import { STEP_TOOLS_KEY, TOOL_PAYLOAD_TRANSFORM_KEY } from '../run-scope-keys';
 import { readToolResultFromMessageList } from '../shared/read-tool-result';
 import { commitToolResult, computeModelOutputProviderMetadata } from '../shared/steps/tool-result-commit-core';
 import { applyToolPayloadTransformToChunk } from '../shared/tool-payload-transform';
+import { deserializeToolError, getSubAgentErrorResult } from './errors';
 
 /** The per-iteration foreach entry shape persisted at `suspendPayload.__workflow_meta.foreachOutput`. */
 interface ForeachEntry {
@@ -68,6 +69,7 @@ export async function commitSuspendedSiblingToolResults(deps: {
   const { messageList, scopeCtx } = deps;
 
   const completed: NonNullable<ForeachEntry['output']>[] = [];
+  const errored: NonNullable<ForeachEntry['output']>[] = [];
   for (const stepResult of Object.values(deps.executionSteps ?? {})) {
     const result = stepResult as {
       status?: string;
@@ -80,21 +82,40 @@ export async function commitSuspendedSiblingToolResults(deps: {
       const output = entry?.output;
       if (entry?.status !== 'success' || !output?.toolCallId || !output.toolName) continue;
       // Mirror llmMappingStep's exclusions: provider-executed results are
-      // handled by llm-execution-step; errored/aborted/denied calls carry no
-      // committable result; `result === undefined` has nothing to commit.
-      if (output.providerExecuted || output.aborted || output.error !== undefined) continue;
-      if (output.result === undefined) continue;
+      // handled by llm-execution-step; aborted/denied calls carry no
+      // committable result; errored calls are saved as `output-error` below.
+      if (output.providerExecuted || output.aborted) continue;
       if (output.approval?.approved === false) continue;
+      if (output.error !== undefined) {
+        errored.push(output);
+        continue;
+      }
+      if (output.result === undefined) continue;
       // Already committed (e.g. a prior cycle's llmMappingStep ran before a
       // later re-suspension) — committing again would be redundant.
       if (readToolResultFromMessageList(messageList, output.toolCallId) !== undefined) continue;
       completed.push(output);
     }
   }
-  if (!completed.length) return false;
+  if (!completed.length && !errored.length) return false;
 
   const stepTools = readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as ToolSet | undefined;
   let committedAny = false;
+
+  // Same as llmMappingStep: the error arrives as a plain {name,message,stack}
+  // after serialization, so reify it to keep the message readable.
+  for (const toolCall of errored) {
+    const reifiedError = deserializeToolError(toolCall.error);
+    commitToolResult({
+      messageList,
+      outcome: { kind: 'error', errorText: reifiedError.message, result: getSubAgentErrorResult(reifiedError) },
+      toolCallId: toolCall.toolCallId!,
+      toolName: toolCall.toolName!,
+      toolArgs: toolCall.args,
+      providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
+    });
+    committedAny = true;
+  }
 
   for (const toolCall of completed) {
     try {
