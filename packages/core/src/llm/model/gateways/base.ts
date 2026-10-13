@@ -22,7 +22,7 @@ export interface ModelProviderOverride {
 }
 
 /** Prices in USD per 1 million tokens, one per token kind. */
-export type ModelPricingRates = {
+export interface ModelPricingRates {
   input?: number;
   output?: number;
   cache_read?: number;
@@ -30,16 +30,20 @@ export type ModelPricingRates = {
   reasoning?: number;
   input_audio?: number;
   output_audio?: number;
-};
+}
+
+/** Rates that apply once the input reaches `tier.size` tokens (long-context pricing). */
+export interface ModelPricingTier extends ModelPricingRates {
+  tier: { type?: 'context'; size: number };
+}
 
 /**
  * What one model costs. Same shape as a models.dev model's `cost`, so prices can be copied
- * from models.dev or a provider's price page as they are. `tiers` holds the rates that apply
- * once the input reaches `tier.size` tokens (long-context pricing).
+ * from models.dev or a provider's price page as they are.
  */
-export type ModelPricing = ModelPricingRates & {
-  tiers?: Array<ModelPricingRates & { tier: { type?: 'context'; size: number } }>;
-};
+export interface ModelPricing extends ModelPricingRates {
+  tiers?: ModelPricingTier[];
+}
 
 export interface ProviderConfig {
   url?: string;

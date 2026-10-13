@@ -150,7 +150,7 @@ export async function loadGatewayPricing(): Promise<void> {
         const providers = await gateway.fetchProviders();
         for (const [providerId, config] of Object.entries(providers ?? {})) {
           for (const [modelId, cost] of Object.entries(config?.pricing ?? {})) {
-            (gatewayCosts[providerId] ??= { models: {} }).models[modelId] = { cost };
+            (gatewayCosts[providerId] ??= { models: {} }).models[modelId] = { cost: cost as Record<string, unknown> };
           }
         }
         gatewayLoadAttempts.set(gateway, Infinity);

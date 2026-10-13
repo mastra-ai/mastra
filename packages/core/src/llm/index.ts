@@ -209,6 +209,7 @@ export type {
   ProviderConfig,
   ModelPricing,
   ModelPricingRates,
+  ModelPricingTier,
   GatewayLanguageModel,
   MastraModelGatewayInterface,
   GatewayAuthRequest,

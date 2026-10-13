@@ -4,6 +4,7 @@ export {
   type ProviderConfig,
   type ModelPricing,
   type ModelPricingRates,
+  type ModelPricingTier,
   type GatewayLanguageModel,
   type GatewayAuthRequest,
   type GatewayAuthResult,
