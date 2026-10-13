@@ -19,4 +19,4 @@ Agent scopes support:
   ```
 
 - A conflicting `resource:` or `thread:` scope returns a 400 error.
-- The server marks itself as reserving agent scopes; agents refuse caller-supplied scopes while a server without this mark is registered.
+- With an older `@mastra/server` registered, agent calls that pass scopes — from the call or the request context — fail with `AGENT_SCOPES_SERVER_OUTDATED` (HTTP 400). Scopes configured on the agent itself still work. Upgrade the server to lift the restriction.

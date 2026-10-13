@@ -3039,8 +3039,10 @@ export class DurableAgent<
           id: 'AGENT_SCOPES_INVALID',
           domain: ErrorDomain.AGENT,
           category: ErrorCategory.SYSTEM,
+          // Corrupted persisted state is a system fault, not a caller error: no
+          // `details.status`, so server handlers surface it as HTTP 500.
           text: `DurableAgent "${this.name}" resume(${runId}): persisted run scopes are malformed; expected an array of strings.`,
-          details: { agentName: this.name, runId, status: 400 },
+          details: { agentName: this.name, runId },
         });
       }
       rehydratedScopes = persistedScopes ?? [];

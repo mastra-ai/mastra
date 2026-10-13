@@ -1,7 +1,9 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { buildContinuationOpts } from '../../loop/shared/stream-until-idle-helpers';
+import { buildContinuationOpts, resolveScope } from '../../loop/shared/stream-until-idle-helpers';
+import { RequestContext } from '../../request-context';
+import { resolveAgentScopes } from '../scopes';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory';
 import { MockStore } from '../../storage';
@@ -1336,5 +1338,73 @@ describe('Agent.streamUntilIdle', () => {
     // Delayed promises from the initial turn resolve through the proxy.
     const text = await result.text;
     expect(text).toBe('hello world');
+  });
+});
+
+describe('resolveScope scope parity with resolveAgentScopes', () => {
+  const memoryAgent = (scopes?: string[]) => ({
+    getMemory: async () => new MockMemory() as any,
+    getScopes: async () => scopes,
+  });
+
+  it('matches the main resolver when only non-identity scopes plus memory identity are supplied', async () => {
+    const mergedOptions = {
+      scopes: ['org:acme'],
+      memory: { thread: 'thread-legacy', resource: 'user-legacy' },
+    };
+
+    const scope = await resolveScope(memoryAgent(), mergedOptions);
+
+    // Same inputs as Agent#resolveScopedRunOptions passes (requestContext, agentScopes, callScopes, memory).
+    const expected = resolveAgentScopes({
+      requestContext: new RequestContext(),
+      agentScopes: [],
+      callScopes: mergedOptions.scopes,
+      memory: mergedOptions.memory,
+    });
+
+    expect(scope).not.toBeNull();
+    expect(scope!.threadId).toBe(expected.threadId);
+    expect(scope!.resourceId).toBe(expected.resourceId);
+    expect(scope!.threadId).toBe('thread-legacy');
+    expect(scope!.resourceId).toBe('user-legacy');
+    expect(scope!.scopeKey).toBe(`${expected.threadId}|${expected.resourceId}`);
+  });
+
+  it('matches the main resolver when identity comes from scopes and agent config supplies org scope', async () => {
+    const mergedOptions = {
+      scopes: ['thread:t-9', 'resource:r-9'],
+      memory: undefined,
+    };
+
+    const scope = await resolveScope(memoryAgent(['org:acme']), mergedOptions);
+
+    const expected = resolveAgentScopes({
+      requestContext: new RequestContext(),
+      agentScopes: ['org:acme'],
+      callScopes: mergedOptions.scopes,
+      memory: undefined,
+    });
+
+    expect(scope).not.toBeNull();
+    expect(scope!.threadId).toBe(expected.threadId);
+    expect(scope!.resourceId).toBe(expected.resourceId);
+    expect(scope!.scopeKey).toBe('t-9|r-9');
+  });
+
+  it('ignores a top-level threadId exactly like the main resolver call shape does', async () => {
+    // Modern AgentExecutionOptions has no top-level threadId; if one leaks into
+    // mergedOptions it must not alter identity in either resolver path.
+    const mergedOptions = {
+      scopes: ['org:acme'],
+      threadId: 'rogue-top-level-thread',
+      memory: { thread: 'thread-real' },
+    };
+
+    const scope = await resolveScope(memoryAgent(), mergedOptions);
+
+    expect(scope).not.toBeNull();
+    expect(scope!.threadId).toBe('thread-real');
+    expect(scope!.scopeKey).toBe('thread-real|');
   });
 });
