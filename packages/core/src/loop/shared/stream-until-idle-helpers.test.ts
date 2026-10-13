@@ -206,4 +206,81 @@ describe('runIdleLoop adopts tasks started by a prior wrapper (#26841)', () => {
     }
     expect(continuation).not.toHaveBeenCalled();
   });
+
+  it('drops another resource’s live task events on an unscoped stream', async () => {
+    const bg = makeBgStream();
+    const continuation = vi.fn(async () => ({
+      fullStream: streamOf(textChunks('continuation answer')),
+      runId: 'run-2',
+    }));
+
+    // Keep the first turn open so the wrapper is provably live when the
+    // foreign event arrives on the wildcard subscription.
+    let releaseFirstTurn!: () => void;
+    const firstStream = new ReadableStream<any>({
+      start(controller) {
+        controller.enqueue({ type: 'text-delta', payload: { text: 'first answer' } });
+        releaseFirstTurn = () => {
+          controller.enqueue({ type: 'finish', payload: {} });
+          controller.close();
+        };
+      },
+    });
+
+    const ctx = await runIdleLoop(
+      makeAgent(),
+      {},
+      { activeStreams: new Map(), bgManager: { listTasks: vi.fn(), stream: () => bg.stream } as any },
+      async () => ({ fullStream: firstStream, runId: 'run-1' }),
+      continuation,
+      (_first: unknown, loopCtx: any) => loopCtx,
+    );
+
+    // Terminal payloads carry the task result — delivering this would
+    // disclose another resource's result on this caller's stream.
+    bg.push(completedChunk('task-other-resource'));
+    // Let the subscription handler process the event before the turn ends.
+    await new Promise(resolve => setImmediate(resolve));
+    releaseFirstTurn();
+
+    const chunks = await drain(ctx.combinedStream);
+    expect(chunks.filter(c => c?.type === 'background-task-completed')).toEqual([]);
+    expect(continuation).not.toHaveBeenCalled();
+  });
+
+  it('continues event-only when the adoption lookup hangs, and ignores a late result', async () => {
+    vi.useFakeTimers();
+    try {
+      const bg = makeBgStream();
+      const continuation = vi.fn(async () => ({
+        fullStream: streamOf(textChunks('continuation answer')),
+        runId: 'run-2',
+      }));
+      let resolveLookup!: (value: { tasks: Array<{ id: string }>; total: number }) => void;
+      const listTasks = vi.fn(
+        () =>
+          new Promise<{ tasks: Array<{ id: string }>; total: number }>(resolve => {
+            resolveLookup = resolve;
+          }),
+      );
+
+      const ctx = await runIdleLoopWithDeps({ listTasks, bgStream: bg.stream, streamForContinuation: continuation });
+      const drainPromise = drain(ctx.combinedStream);
+
+      // The lookup never resolves within the bound: the wrapper must fall
+      // back to event-only tracking and close instead of hanging.
+      await vi.advanceTimersByTimeAsync(5_001);
+      const chunks = await drainPromise;
+      const texts = chunks.filter(c => c.type === 'text-delta').map(c => c.payload.text);
+      expect(texts).toContain('first answer');
+
+      // A late lookup result must be ignored — no phantom running task, no
+      // continuation on an already-closed wrapper.
+      resolveLookup({ tasks: [{ id: 'task-late' }], total: 1 });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(continuation).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

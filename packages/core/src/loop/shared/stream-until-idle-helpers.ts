@@ -19,6 +19,9 @@ import { deepMerge } from '../../utils';
 // Constants
 // ---------------------------------------------------------------------------
 
+/** Upper bound on the startup task-adoption lookup; past it the wrapper tracks events only. */
+const ADOPT_LOOKUP_TIMEOUT_MS = 5_000;
+
 export const TERMINAL_BG_CHUNKS = new Set([
   'background-task-completed',
   'background-task-failed',
@@ -538,6 +541,16 @@ export async function runIdleLoop<
 
         const taskId = (chunk.payload as { taskId?: string } | undefined)?.taskId;
 
+        // An unscoped wrapper (no thread or resource id) subscribes with
+        // wildcard filters, so it would receive every resource's task events
+        // for this agent — terminal payloads include the task result. Same
+        // semantics as the adoption gate below: unscoped streams own nothing
+        // cross-resource, so only deliver events for tasks this wrapper
+        // observed itself.
+        if (!threadId && !resourceId && taskId && !runningTaskIds.has(taskId) && !settledTaskIds.has(taskId)) {
+          continue;
+        }
+
         const terminalKey = taskId && TERMINAL_BG_CHUNKS.has(chunk.type) ? `${taskId}:${chunk.type}` : undefined;
         if (terminalKey && processedTerminalKeys.has(terminalKey)) {
           continue;
@@ -581,6 +594,11 @@ export async function runIdleLoop<
   // settle); `settledTaskIds` keeps a task whose terminal chunk already
   // arrived from being re-added off a stale storage snapshot.
   const bgManager = deps.bgManager;
+  // The storage contract defines no timeout for listTasks; a hung adapter
+  // must not hold isProcessing forever (blocking continuations and the idle
+  // timer). After the bound, continue with event-only tracking and ignore a
+  // late lookup result.
+  let adoptionAbandoned = false;
   const adoptPriorTasks = (async () => {
     try {
       // Adoption requires an authorized scope. Task filters drop undefined
@@ -596,6 +614,7 @@ export async function runIdleLoop<
         resourceId,
         status: ['running', 'pending'],
       });
+      if (adoptionAbandoned) return;
       for (const task of tasks) {
         if (!settledTaskIds.has(task.id)) runningTaskIds.add(task.id);
       }
@@ -630,8 +649,20 @@ export async function runIdleLoop<
       }
     }
     // The adoption lookup must land before the first idle evaluation, or
-    // tryClose below could close the wrapper while an adopted task still runs.
-    await adoptPriorTasks;
+    // tryClose below could close the wrapper while an adopted task still
+    // runs — but the wait is bounded so a hung storage adapter cannot block
+    // the wrapper forever.
+    await Promise.race([
+      adoptPriorTasks,
+      new Promise<void>(resolve => {
+        const timer = setTimeout(() => {
+          adoptionAbandoned = true;
+          resolve();
+        }, ADOPT_LOOKUP_TIMEOUT_MS);
+        (timer as { unref?: () => void }).unref?.();
+        void adoptPriorTasks.finally(() => clearTimeout(timer));
+      }),
+    ]);
     isProcessing = false;
     if (runningTaskIds.size === 0 && pendingCompletions.length > 0) {
       void processIfIdle();
