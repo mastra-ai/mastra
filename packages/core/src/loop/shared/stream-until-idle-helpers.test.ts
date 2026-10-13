@@ -158,4 +158,52 @@ describe('runIdleLoop adopts tasks started by a prior wrapper (#26841)', () => {
     const texts = chunks.filter(c => c.type === 'text-delta').map(c => c.payload.text);
     expect(texts).toContain('continuation answer');
   });
+
+  it('adopts nothing when the stream has no thread or resource scope (cross-resource disclosure)', async () => {
+    const bg = makeBgStream();
+    const continuation = vi.fn(async () => ({
+      fullStream: streamOf(textChunks('continuation answer')),
+      runId: 'run-2',
+    }));
+
+    // An agent-wide lookup ({ agentId } only) would return every resource's
+    // running/pending tasks — adopting them lets another resource's task
+    // completion drive a continuation on this stream, disclosing its result.
+    const listTasks = vi.fn(async () => ({ tasks: [{ id: 'task-other-resource' }], total: 1 }));
+
+    // Memory exists but the caller provided no thread or resource ids.
+    const ctx = await runIdleLoop(
+      makeAgent(),
+      {},
+      {
+        activeStreams: new Map(),
+        bgManager: { listTasks, stream: () => bg.stream } as any,
+      },
+      async () => ({ fullStream: streamOf(textChunks('first answer')), runId: 'run-1' }),
+      continuation,
+      (_first: unknown, loopCtx: any) => loopCtx,
+    );
+
+    // Read until the first turn's text arrives; by then the (concurrent)
+    // adoption pass has settled, since the first idle evaluation awaits it.
+    const reader = ctx.combinedStream.getReader();
+    const chunks: any[] = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      if (value?.type === 'text-delta') break;
+    }
+
+    // No authorized scope → no adoption lookup at all, and the wrapper closes
+    // after the first turn instead of waiting on another resource's task.
+    expect(listTasks).not.toHaveBeenCalled();
+    expect(continuation).not.toHaveBeenCalled();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+    expect(continuation).not.toHaveBeenCalled();
+  });
 });

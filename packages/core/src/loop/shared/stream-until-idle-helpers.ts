@@ -583,6 +583,13 @@ export async function runIdleLoop<
   const bgManager = deps.bgManager;
   const adoptPriorTasks = (async () => {
     try {
+      // Adoption requires an authorized scope. Task filters drop undefined
+      // keys, so without a thread or resource id the lookup would return
+      // EVERY running/pending task for the agent — adopting them would let
+      // another resource's task completion drive a continuation on this
+      // stream and disclose its result. An unscoped stream therefore adopts
+      // nothing: it only tracks tasks whose events it observes itself.
+      if (!threadId && !resourceId) return;
       const { tasks } = await bgManager.listTasks({
         agentId: agent.id,
         threadId,
