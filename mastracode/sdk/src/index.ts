@@ -426,6 +426,12 @@ export interface MastraCodeConfig {
    * TUI settings file never leaks into server sessions. Default: false.
    */
   disableSettingsOmSeed?: boolean;
+  /**
+   * Custom instructions for thread-title generation, passed to Memory's
+   * `generateTitle.instructions`. Hosts use this to control title style or
+   * language. When omitted, core's default title instructions apply.
+   */
+  titleInstructions?: string;
   /** Override the plugin manager. Primarily useful for tests or embedding. */
   pluginManager?: PluginManager;
   /**
@@ -898,6 +904,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     config?.memory === undefined
       ? getDynamicMemory(storage, vector, config?.settingsPath, {
           disableSettingsOmSeed: config?.disableSettingsOmSeed,
+          titleInstructions: config?.titleInstructions,
         })
       : undefined;
   const memory =
