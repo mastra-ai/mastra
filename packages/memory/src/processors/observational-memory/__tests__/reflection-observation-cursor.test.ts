@@ -76,7 +76,11 @@ it('preserves the just-persisted observation cursor when reflection reads detach
   expect(result.observed).toBe(true);
   expect(result.reflected).toBe(true);
   expect(reflect).toHaveBeenCalledOnce();
+  // The regression under test (snapshot consistency): the record handed to
+  // createReflectionGeneration must carry the cursor this cycle persisted.
   expect(reflect.mock.calls[0]?.[0].currentRecord.lastObservedAt).toEqual(observedAt);
+  // Durable-cursor sanity, NOT the regression: current adapters re-read the
+  // stored row when creating the generation, so this held even without the fix.
   expect(result.record.lastObservedAt).toEqual(observedAt);
 });
 
