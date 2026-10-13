@@ -23,7 +23,7 @@ async function makeFileStore(url: string, encryption?: FactorySecretEncryption) 
   return { backend, domain };
 }
 
-async function seedLegacyRawApiKeyRow(url: string): Promise<void> {
+async function seedLegacyRawApiKeyRow(url: string, apiKey = 'sk-ant-api03-raw-legacy-key'): Promise<void> {
   // Simulate a pre-encryption deployment: the row's api_key is the bare
   // secret string, exactly as `upsert` wrote it before this change.
   const { backend, domain } = await makeFileStore(url);
@@ -36,7 +36,7 @@ async function seedLegacyRawApiKeyRow(url: string): Promise<void> {
     'custom_providers',
     { org_id: 'org-1', provider_id: 'legacy-llm' },
     {
-      api_key: 'sk-ant-api03-raw-legacy-key',
+      api_key: apiKey,
     },
   );
   await backend.close();
@@ -254,6 +254,18 @@ describe('CustomProvidersStorage', () => {
     const row = await backend.ops.findOne<{ api_key: string }>('custom_providers', { provider_id: 'legacy-llm' });
     expect(row!.api_key).toMatch(/^mastra:factory-secret:v1:/);
     expect(row!.api_key).not.toContain('raw-legacy-key');
+  });
+
+  it.each(['12345', 'null', '{}'])('keeps a JSON-valid raw api_key %s as a string through every boot', async rawKey => {
+    const url = `file:${join(mkdtempSync(join(tmpdir(), 'factory-cp-')), 'json-valid.db')}`;
+    await seedLegacyRawApiKeyRow(url, rawKey);
+
+    for (const encryption of [undefined, createFactorySecretEncryption({ primary: testKey })]) {
+      const { backend, domain } = await makeFileStore(url, encryption);
+      const [provider] = await domain.list({ orgId: 'org-1' });
+      expect(provider!.apiKey).toBe(rawKey);
+      await backend.close();
+    }
   });
 });
 

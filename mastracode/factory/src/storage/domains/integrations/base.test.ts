@@ -172,6 +172,10 @@ describe('IntegrationStorage enabling secretEncryption', () => {
       const { backend, store } = await boot(encryption);
       expect(await store.settings.get('org-1', '__org__')).toEqual({ pat: 'ghp_fake' });
       expect((await store.connections.get('org-1'))!.data).toEqual(connection);
+      const settingsRow = await backend.ops.findOne<{ config: string }>('integration_settings', { org_id: 'org-1' });
+      const connectionRow = await backend.ops.findOne<{ data: string }>('integration_connections', { org_id: 'org-1' });
+      expect(settingsRow!.config).toMatch(/^mastra:factory-secret:v1:/);
+      expect(connectionRow!.data).toMatch(/^mastra:factory-secret:v1:/);
       await backend.close();
     }
   });
