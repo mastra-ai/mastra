@@ -446,7 +446,12 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         throw new Error('Session factory does not match the repository link.');
       }
       const factoryProjectId = connection.factoryProjectId;
-      const existing = await this.sessions.getForBranch(input);
+      // Mirrors base.ts: reuse is keyed by the link; another link's branch is a unique violation below.
+      const existing = await this.sessions.getForBranch({
+        projectRepositoryId: input.projectRepositoryId,
+        userId: input.userId,
+        branch: input.branch,
+      });
       if (existing) return existing;
       // Both checks stay synchronous with the push below so concurrent creates see each other, as a unique index would.
       if (this.sessionsRows.some(row => row.sessionId === input.sessionId)) {

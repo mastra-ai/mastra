@@ -822,6 +822,13 @@ describe('SourceControlStorage', () => {
       expect(session.factoryProjectId).toBe('project-1');
       expect((await store.sessions.create(sessionInput('s-1', first.id))).id).toBe(session.id);
       await expect(store.sessions.create(sessionInput('s-2', second.id))).rejects.toBeInstanceOf(UniqueViolationError);
+      // Callers pass the factory too; it must not widen reuse to another link's session.
+      expect(
+        (await store.sessions.create({ ...sessionInput('s-1', first.id), factoryProjectId: 'project-1' })).id,
+      ).toBe(session.id);
+      await expect(
+        store.sessions.create({ ...sessionInput('s-2', second.id), factoryProjectId: 'project-1' }),
+      ).rejects.toBeInstanceOf(UniqueViolationError);
       await expect(
         store.sessions.create({ ...sessionInput('s-3', first.id, 'user-1', 'y'), factoryProjectId: 'project-2' }),
       ).rejects.toThrow(/does not match/);
