@@ -1,13 +1,23 @@
 import chalk from 'chalk';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { halfBlockPanel } from '../surface.js';
+import { halfBlockPanel, toolBlock } from '../surface.js';
 
 const level = chalk.level;
 
 describe('halfBlockPanel', () => {
   afterEach(() => {
     chalk.level = level;
+  });
+
+  it.each([2, 3] as const)('keeps ordinary tool titles distinct from their output at color level %i', colorLevel => {
+    chalk.level = colorLevel;
+    const [, title, body] = toolBlock('•', 'read file', ['file contents'], 30);
+    const titleBg = title!.match(/\x1b\[48;[\d;]+m/)?.[0];
+    const bodyBg = body!.match(/\x1b\[48;[\d;]+m/)?.[0];
+    expect(titleBg).toBeDefined();
+    expect(bodyBg).toBeDefined();
+    expect(titleBg).not.toBe(bodyBg);
   });
 
   it('draws the body and both edges in the same truecolor shade', () => {

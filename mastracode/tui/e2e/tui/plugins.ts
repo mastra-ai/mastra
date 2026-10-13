@@ -598,6 +598,11 @@ export const pluginsStreamingToolOutputScenario: McE2eScenario = {
     await runtime.waitForScreenText(/E2E plugin progress visible before completion/i, terminal, 10_000);
     await runtime.waitForScreenText(/Streaming plugin tool completed/i, terminal, 10_000);
 
+    terminal.write('\x05'); // Ctrl+E: expand the subagent-style plugin block.
+    await runtime.waitForScreenText(/subagent\s+e2e-plugin/i, terminal, 10_000);
+    await runtime.waitForScreenText(/stream progress/i, terminal, 10_000);
+    await runtime.waitForScreenText(/"done": true/i, terminal, 10_000);
+
     terminal.keyCtrlC();
   },
   verifyAimockRequests(requests) {

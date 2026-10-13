@@ -2,6 +2,7 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
 
 import { MessageList } from '../agent/message-list';
+import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { PrefillErrorHandler } from './prefill-error-handler';
 import { ProviderHistoryCompat } from './provider-history-compat';
 import {
@@ -10,9 +11,11 @@ import {
   ECONNRESET_RETRY_MAX_DELAY_MS,
   defaultStabilityErrorProcessors,
   isECONNRESETError,
+  isMalformedFunctionCallError,
   STABILITY_ERROR_PROCESSOR_IDS,
 } from './stability-defaults';
 import { StreamErrorRetryProcessor } from './stream-error-retry-processor';
+import { UnsupportedFileHandler } from './unsupported-file-handler';
 import type { ProcessAPIErrorArgs } from './index';
 
 /**
@@ -50,25 +53,37 @@ function makeApiError(statusCode: number, isRetryable = false): APICallError {
   });
 }
 
+function makeAgentStreamError(rawFinishReason?: string): MastraError {
+  return new MastraError({
+    id: 'AGENT_STREAM_ERROR',
+    domain: ErrorDomain.AGENT,
+    category: ErrorCategory.SYSTEM,
+    text: 'Agent stream finished with finishReason "error" but no error payload was provided',
+    details: { runId: 'run-1', ...(rawFinishReason && { rawFinishReason }) },
+  });
+}
+
 describe('STABILITY_ERROR_PROCESSOR_IDS', () => {
-  it('matches the ids declared by the three default processor classes, in order', () => {
+  it('matches the ids declared by the four default processor classes, in order', () => {
     expect([...STABILITY_ERROR_PROCESSOR_IDS]).toEqual([
       new ProviderHistoryCompat().id,
       new PrefillErrorHandler().id,
+      new UnsupportedFileHandler().id,
       new StreamErrorRetryProcessor().id,
     ]);
   });
 });
 
 describe('defaultStabilityErrorProcessors', () => {
-  it('returns the three stability processors in order', () => {
+  it('returns the four stability processors in order', () => {
     const processors = defaultStabilityErrorProcessors();
 
-    expect(processors).toHaveLength(3);
+    expect(processors).toHaveLength(4);
     expect(processors.map(p => p.id)).toEqual([...STABILITY_ERROR_PROCESSOR_IDS]);
     expect(processors[0]).toBeInstanceOf(ProviderHistoryCompat);
     expect(processors[1]).toBeInstanceOf(PrefillErrorHandler);
-    expect(processors[2]).toBeInstanceOf(StreamErrorRetryProcessor);
+    expect(processors[2]).toBeInstanceOf(UnsupportedFileHandler);
+    expect(processors[3]).toBeInstanceOf(StreamErrorRetryProcessor);
   });
 
   it('returns distinct arrays and distinct instances on each call', () => {
@@ -79,6 +94,7 @@ describe('defaultStabilityErrorProcessors', () => {
     expect(first[0]).not.toBe(second[0]);
     expect(first[1]).not.toBe(second[1]);
     expect(first[2]).not.toBe(second[2]);
+    expect(first[3]).not.toBe(second[3]);
   });
 
   it('returns processors with `processAPIError`, as the error lane requires', () => {
@@ -90,10 +106,12 @@ describe('defaultStabilityErrorProcessors', () => {
   });
 });
 
+const retryProcessorOf = (processors: ReturnType<typeof defaultStabilityErrorProcessors>) =>
+  processors.find(processor => processor.id === 'stream-error-retry-processor') as StreamErrorRetryProcessor;
+
 describe('default stability StreamErrorRetryProcessor policy', () => {
   function retryProcessor() {
-    // The defaults order is [provider-history-compat, prefill-error-handler, stream-error-retry-processor].
-    return defaultStabilityErrorProcessors()[2];
+    return retryProcessorOf(defaultStabilityErrorProcessors());
   }
 
   it('does not retry a bad-request (400) error by default', async () => {
@@ -108,7 +126,7 @@ describe('default stability StreamErrorRetryProcessor policy', () => {
   });
 
   it('retries a bad-request (400) error exactly once when the caller opts into `retryBadRequests`', async () => {
-    const processor = defaultStabilityErrorProcessors({ retryBadRequests: true })[2];
+    const processor = retryProcessorOf(defaultStabilityErrorProcessors({ retryBadRequests: true }));
     const error = makeApiError(400);
 
     await expect(processor.processAPIError(makeArgs({ error, retryCount: 0 }))).resolves.toEqual({ retry: true });
@@ -122,6 +140,26 @@ describe('default stability StreamErrorRetryProcessor policy', () => {
     await expect(processor.processAPIError(makeArgs({ error, retryCount: 0 }))).resolves.toEqual({ retry: true });
     await expect(processor.processAPIError(makeArgs({ error, retryCount: 1 }))).resolves.toEqual({ retry: true });
     await expect(processor.processAPIError(makeArgs({ error, retryCount: 2 }))).resolves.toBeUndefined();
+  });
+
+  it('retries a Gemini MALFORMED_FUNCTION_CALL finish twice, then stops', async () => {
+    const processor = retryProcessor();
+    const error = makeAgentStreamError('MALFORMED_FUNCTION_CALL');
+
+    await expect(processor.processAPIError(makeArgs({ error, retryCount: 0 }))).resolves.toEqual({ retry: true });
+    await expect(processor.processAPIError(makeArgs({ error, retryCount: 1 }))).resolves.toEqual({ retry: true });
+    await expect(processor.processAPIError(makeArgs({ error, retryCount: 2 }))).resolves.toBeUndefined();
+  });
+
+  it('does not retry an AGENT_STREAM_ERROR with any other raw finish reason', async () => {
+    const processor = retryProcessor();
+
+    await expect(
+      processor.processAPIError(makeArgs({ error: makeAgentStreamError('SAFETY'), retryCount: 0 })),
+    ).resolves.toBeUndefined();
+    await expect(
+      processor.processAPIError(makeArgs({ error: makeAgentStreamError(), retryCount: 0 })),
+    ).resolves.toBeUndefined();
   });
 
   it('never retries a known terminal authorization error (401)', async () => {
@@ -141,7 +179,7 @@ describe('default stability StreamErrorRetryProcessor policy', () => {
   });
 
   it('retries an unknown error when the caller opts into `retryUnknownErrors`', async () => {
-    const processor = defaultStabilityErrorProcessors({ retryUnknownErrors: true })[2];
+    const processor = retryProcessorOf(defaultStabilityErrorProcessors({ retryUnknownErrors: true }));
     const error = new Error('completely unknown failure');
 
     await expect(
@@ -185,5 +223,29 @@ describe('ECONNRESET policy constants and matcher', () => {
     expect(isECONNRESETError(null)).toBe(false);
     expect(isECONNRESETError(new Error('rate limited'))).toBe(false);
     expect(isECONNRESETError(Object.assign(new Error('boom'), { code: 'ETIMEDOUT' }))).toBe(false);
+  });
+});
+
+describe('isMalformedFunctionCallError', () => {
+  it('matches an AGENT_STREAM_ERROR whose raw finish reason is MALFORMED_FUNCTION_CALL', () => {
+    expect(isMalformedFunctionCallError(makeAgentStreamError('MALFORMED_FUNCTION_CALL'))).toBe(true);
+    expect(
+      isMalformedFunctionCallError({
+        id: 'AGENT_STREAM_ERROR',
+        details: { rawFinishReason: 'MALFORMED_FUNCTION_CALL' },
+      }),
+    ).toBe(true);
+  });
+
+  it('does not match other errors', () => {
+    expect(isMalformedFunctionCallError(undefined)).toBe(false);
+    expect(isMalformedFunctionCallError(null)).toBe(false);
+    expect(isMalformedFunctionCallError(new Error('MALFORMED_FUNCTION_CALL'))).toBe(false);
+    expect(isMalformedFunctionCallError(makeAgentStreamError('SAFETY'))).toBe(false);
+    expect(isMalformedFunctionCallError(makeAgentStreamError())).toBe(false);
+    expect(
+      isMalformedFunctionCallError({ id: 'OTHER_ERROR', details: { rawFinishReason: 'MALFORMED_FUNCTION_CALL' } }),
+    ).toBe(false);
+    expect(isMalformedFunctionCallError({ id: 'AGENT_STREAM_ERROR' })).toBe(false);
   });
 });

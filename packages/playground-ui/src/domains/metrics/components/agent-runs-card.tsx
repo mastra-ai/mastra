@@ -51,7 +51,6 @@ export function AgentRunsCard({ onTimeRangeClick }: AgentRunsCardProps) {
           series={SERIES}
           height="fill"
           xLabels="edges"
-          showYAxis={false}
           valueFormatter={formatCount}
           onBucketClick={onTimeRangeClick && (row => onTimeRangeClick(bucketWindow(Number(row.ts), stepHours)))}
           isLoading={isLoading}

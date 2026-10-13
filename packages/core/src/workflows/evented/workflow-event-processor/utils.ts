@@ -1,13 +1,13 @@
 import type { StepFlowEntry, Workflow } from '../..';
 import type { Mastra } from '../../../mastra';
+import type { StepExecutionParentWorkflow } from '../../../worker/types';
 import { getEntryId, getEntryWorkflow } from '../../step-entry';
 import type { SingleStepEntry } from '../../types';
 import { isSingleStepEntry } from '../../utils';
-import type { ParentWorkflow } from '.';
 
 export function getNestedWorkflow(
   mastra: Mastra,
-  { workflowId, executionPath, parentWorkflow, runId }: ParentWorkflow,
+  { workflowId, executionPath, parentWorkflow, runId }: StepExecutionParentWorkflow,
 ): Workflow | null {
   let workflow: Workflow | null = null;
 
@@ -28,11 +28,13 @@ export function getNestedWorkflow(
   // same workflow id (e.g. parent + sub-agent each owning their own
   // `agentic-loop` instance with distinct closures) resolve to the right
   // closure-bound instance instead of whichever one happened to register last.
+  // Public workflows are looked up by id: descriptors carry the workflow's
+  // `id`, which can differ from the key it is registered under.
   workflow =
     workflow ??
     (mastra.__hasInternalWorkflow(workflowId, runId)
       ? mastra.__getInternalWorkflow(workflowId, runId)
-      : mastra.getWorkflow(workflowId));
+      : mastra.getWorkflowById(workflowId));
   const stepGraph = workflow.stepGraph;
   let parentStep = stepGraph[executionPath[0]!];
   if (parentStep?.type === 'parallel' || parentStep?.type === 'conditional') {
@@ -49,6 +51,23 @@ export function getNestedWorkflow(
   }
 
   return null;
+}
+
+/**
+ * Reduces a parent-workflow descriptor chain to the fields `getNestedWorkflow`
+ * reads, so a step dispatched to another process doesn't carry the parents'
+ * step results, inputs and step graphs.
+ */
+export function toStepExecutionParentWorkflow(
+  parentWorkflow: StepExecutionParentWorkflow | undefined,
+): StepExecutionParentWorkflow | undefined {
+  if (!parentWorkflow) {
+    return undefined;
+  }
+
+  const { workflowId, runId, executionPath } = parentWorkflow;
+  const grandparent = toStepExecutionParentWorkflow(parentWorkflow.parentWorkflow);
+  return { workflowId, runId, executionPath, ...(grandparent ? { parentWorkflow: grandparent } : {}) };
 }
 
 /**
@@ -81,7 +100,16 @@ export function getStepEntry(workflow: Workflow, executionPath: number[]): Singl
  */
 export function getStepId(workflow: Workflow, executionPath: number[]): string | null {
   const entry = getStepEntry(workflow, executionPath);
-  return entry ? getEntryId(entry) : null;
+  if (entry) {
+    return getEntryId(entry);
+  }
+
+  let controlEntry = workflow.stepGraph[executionPath[0]!];
+  if (controlEntry?.type === 'parallel' || controlEntry?.type === 'conditional') {
+    controlEntry = controlEntry.steps[executionPath[1]!];
+  }
+
+  return controlEntry?.type === 'sleep' || controlEntry?.type === 'sleepUntil' ? controlEntry.id : null;
 }
 
 export function isExecutableStep(step: StepFlowEntry<any>) {

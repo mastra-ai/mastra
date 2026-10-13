@@ -20,7 +20,6 @@ import type {
 } from '@agentclientprotocol/sdk';
 import type { AgentController, AgentControllerMode, Session } from '@mastra/core/agent-controller';
 import { AuthStorage, getOAuthProviders, PROVIDER_DEFAULT_MODELS } from '../auth/storage.js';
-import { seedProviderOMDefault } from '../onboarding/om-settings.js';
 import { getCatalogThinkingLevels, runCatalogThinkingLevel } from '../thinking-catalog.js';
 import { isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
@@ -208,11 +207,6 @@ export class MastraCodeAcpAgent implements Agent {
         throw needsTerminal();
       },
     });
-    try {
-      seedProviderOMDefault(methodId);
-    } catch (error) {
-      process.stderr.write(`[acp] memory model unchanged after sign-in: ${error}\n`);
-    }
   }
 
   newSession(request: NewSessionRequest): Promise<NewSessionResponse> {

@@ -621,16 +621,22 @@ function traceOrder(plan: TrustedTraceQueryTracesPlan): TraceOrder {
   };
 }
 
+/**
+ * Keyset cursor on a trace's sort value. Applied after each trace is reduced to one sort value:
+ * filtering root rows first would let a trace with several roots (or unmerged copies with
+ * different `endedAt`) come back on a later page under a root that sorts after the cursor.
+ */
 function keysetCursorCondition(
   plan: TrustedTraceQueryTracesPlan,
   order: TraceOrder,
   parameters: ParameterBuilder,
+  column: string,
 ): string {
   if (plan.paginationMode !== 'keyset' || !plan.cursor) return '';
   const comparison = order.direction === 'ASC' ? '>' : '<';
   const sortValue = parameters.add(plan.cursor.sortValue, "DateTime64(3, 'UTC')");
   const traceId = parameters.add(plan.cursor.traceId, 'String');
-  return `(${order.field} ${comparison} ${sortValue} OR (${order.field} = ${sortValue} AND traceId > ${traceId}))`;
+  return `(${column} ${comparison} ${sortValue} OR (${column} = ${sortValue} AND traceId > ${traceId}))`;
 }
 
 /**
@@ -649,7 +655,7 @@ export function compileClickHouseTraceQueryKeys(plan: TrustedTraceQueryTracesPla
     parameters,
     QUERY_TRACES_SCOPE,
   );
-  const cursor = keysetCursorCondition(plan, order, parameters);
+  const cursor = keysetCursorCondition(plan, order, parameters, 'sortValue');
   const pick = order.direction === 'DESC' ? 'max' : 'min';
   const limit =
     plan.paginationMode === 'page'
@@ -660,8 +666,8 @@ export function compileClickHouseTraceQueryKeys(plan: TrustedTraceQueryTracesPla
 per_trace AS (
   SELECT traceId, ${pick}(${order.field}) AS sortValue,
     ${pick === 'max' ? 'argMax' : 'argMin'}((dedupeKey, startedAt), ${order.field}) AS root
-  FROM candidates${cursor ? `\n  WHERE ${cursor}` : ''}
-  GROUP BY traceId
+  FROM candidates
+  GROUP BY traceId${cursor ? `\n  HAVING ${cursor}` : ''}
 )
 SELECT traceId, root.1 AS dedupeKey, sortValue, root.2 AS rootStartedAt, count() OVER () AS __total
 FROM per_trace
@@ -781,19 +787,21 @@ LIMIT ${limit}`,
 
   const order = traceOrder(plan);
   const ctes = compileClickHouseTraceCandidates(plan, TRACE_LIST_SELECT, parameters, QUERY_TRACES_SCOPE);
-  const cursor = keysetCursorCondition(plan, order, parameters);
-  // `root_scope` can hold unmerged copies of a root; keep the copy that sorts first.
-  const orderBy = `ORDER BY ${order.field} ${order.direction}, traceId ASC
-LIMIT 1 BY traceId`;
+  const cursor = keysetCursorCondition(plan, order, parameters, order.field);
+  // `root_scope` can hold several rows per trace; keep the one that sorts first, then apply
+  // the cursor to it.
+  const orderBy = `ORDER BY ${order.field} ${order.direction}, traceId ASC`;
   const limit =
     plan.paginationMode === 'page'
       ? `LIMIT ${parameters.add(plan.perPage, 'UInt64')} OFFSET ${parameters.add(plan.page * plan.perPage, 'UInt64')}`
       : `LIMIT ${parameters.add(plan.limit + 1, 'UInt64')}`;
+  const perTrace = `SELECT *
+FROM candidates
+${orderBy}
+LIMIT 1 BY traceId`;
   return {
     query: `WITH ${ctes.join(',\n')}
-SELECT *
-FROM candidates${cursor ? `\nWHERE ${cursor}` : ''}
-${orderBy}
+${cursor ? `SELECT *\nFROM (\n${perTrace}\n)\nWHERE ${cursor}\n${orderBy}` : perTrace}
 ${limit}`,
     query_params: parameters.params,
     sharedSnapshot: true,

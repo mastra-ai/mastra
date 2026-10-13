@@ -1,60 +1,30 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Bot, Boxes, Search, Settings, Workflow } from 'lucide-react';
+import { Bot, Search, Settings, Workflow } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { PageHeader } from '../page-header';
 import { AppShell } from './app-shell';
 import { MainCard } from './main-card';
 import { Breadcrumb, Crumb } from '@/ds/components/Breadcrumb';
+import { LogoWithoutText } from '@/ds/components/Logo';
 import { PageLayout } from '@/ds/components/PageLayout';
-import { Sidebar, SidebarProvider, useSidebar } from '@/ds/components/Sidebar';
+import { Sidebar, SidebarProvider } from '@/ds/components/Sidebar';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
-function DemoSidebarBrand() {
-  const { state, isMobile } = useSidebar();
-
-  if (state === 'collapsed') {
-    return (
-      <div className="flex justify-center pt-2">
-        <div className="relative grid size-9 place-items-center">
-          <Boxes
-            className={cn(
-              'size-5 shrink-0 transition-opacity duration-150',
-              !isMobile && 'group-hover/sidebar:opacity-0',
-            )}
-          />
-          {!isMobile && (
-            <div className="absolute inset-0 opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100">
-              <Sidebar.Trigger />
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex items-center gap-2 px-3 py-2">
-      <Boxes className="size-5 shrink-0" />
-      <span className="text-subheading text-foreground">Workspace</span>
-      {!isMobile && <Sidebar.Trigger />}
-    </div>
-  );
-}
-
 function DemoSidebar() {
   return (
     <Sidebar>
-      <DemoSidebarBrand />
+      <Sidebar.Header collapsedLogo={<LogoWithoutText className="size-6" />}>
+        <Sidebar.Brand logo={<LogoWithoutText className="size-6" />} title="Workspace" />
+        <Sidebar.Trigger />
+      </Sidebar.Header>
       <Sidebar.Nav>
-        <Sidebar.NavSection>
-          <Sidebar.NavList>
-            <Sidebar.NavLink link={{ name: 'Agents', url: '#agents', icon: <Bot /> }} isActive />
-            <Sidebar.NavLink link={{ name: 'Workflows', url: '#workflows', icon: <Workflow /> }} />
-          </Sidebar.NavList>
-        </Sidebar.NavSection>
+        <Sidebar.NavList>
+          <Sidebar.NavLink link={{ name: 'Agents', url: '#agents', icon: <Bot /> }} isActive />
+          <Sidebar.NavLink link={{ name: 'Workflows', url: '#workflows', icon: <Workflow /> }} />
+        </Sidebar.NavList>
       </Sidebar.Nav>
       <Sidebar.Footer>
         <Sidebar.NavList>

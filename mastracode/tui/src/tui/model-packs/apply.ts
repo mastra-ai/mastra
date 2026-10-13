@@ -1,8 +1,11 @@
 import { MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
-import { listBuiltinModePacks, resolveModePackFallbackChain, type ModePack } from '@mastra/code-sdk/onboarding/packs';
+import {
+  listResolvableModePacks,
+  resolvePackSelection,
+  type PackSelection,
+} from '@mastra/code-sdk/onboarding/pack-activation';
 import {
   loadSettings,
-  resolveModePackModels,
   resolveThreadActiveModelPackId,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
   type GlobalSettings,
@@ -10,24 +13,12 @@ import {
 import type { AgentControllerThinkingLevel } from '@mastra/core/agent-controller';
 import type { TUIState } from '../state.js';
 
+// Pack listing/selection resolution lives in the SDK (onboarding/pack-activation)
+// and is shared with the headless CLI's --pack flag; re-exported for the TUI.
+export { listResolvableModePacks };
+
 interface ModelPackContext {
   state: Pick<TUIState, 'controller' | 'session'>;
-}
-
-interface PackSelection {
-  modelId: string;
-  subagentModels: Record<string, string>;
-  observerModelId?: string;
-  reflectorModelId?: string;
-  modelRoute: {
-    entries: Array<{
-      id: string;
-      label: string;
-      modelId: string;
-      accountId?: string;
-      memoryModelId?: string;
-    }>;
-  };
 }
 
 const packApplicationVersions = new WeakMap<object, number>();
@@ -80,69 +71,6 @@ function modelRoutesMatch(current: unknown, expected: PackSelection['modelRoute'
   });
 }
 
-export function listResolvableModePacks(settings: GlobalSettings): ModePack[] {
-  return [
-    ...listBuiltinModePacks(),
-    ...settings.customModelPacks.map(pack => ({
-      id: `custom:${pack.name}`,
-      name: pack.name,
-      description: 'Saved custom pack',
-      models: {
-        build: pack.models.build ?? '',
-        plan: pack.models.plan ?? '',
-        fast: pack.models.fast ?? '',
-        ...(pack.models.memory ? { memory: pack.models.memory } : {}),
-      },
-    })),
-  ];
-}
-
-function resolvePackSelection(settings: GlobalSettings, packId: string, modeId: string): PackSelection | undefined {
-  const packs = listResolvableModePacks(settings);
-  const packsById = new Map(packs.map(pack => [pack.id, pack]));
-  const pack = packsById.get(packId);
-  if (!pack) return undefined;
-
-  const packModels = resolveModePackModels(settings, pack);
-  const modelId = packModels[modeId];
-  if (!modelId) return undefined;
-
-  const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
-  const subagentModels = Object.fromEntries(
-    Object.entries(subagentModeMap).flatMap(([agentType, subagentModeId]) => {
-      const subagentModelId = packModels[subagentModeId];
-      return subagentModelId ? [[agentType, subagentModelId]] : [];
-    }),
-  );
-
-  const routeIds = resolveModePackFallbackChain(settings.models.packFallbacks, packId, settings.customModelPacks);
-  const entries = routeIds.flatMap(routeId => {
-    const routePack = packsById.get(routeId);
-    if (!routePack) return [];
-    const routeModels = resolveModePackModels(settings, routePack);
-    const routeModelId = routeModels[modeId];
-    if (!routeModelId) return [];
-    const accountId = settings.models.packAccountPreferences?.[routeId]?.[routeModelId];
-    return [
-      {
-        id: routeId,
-        label: routePack.name,
-        modelId: routeModelId,
-        ...(accountId ? { accountId } : {}),
-        ...(routeModels.memory ? { memoryModelId: routeModels.memory } : {}),
-      },
-    ];
-  });
-
-  const memoryModelId = packModels.memory;
-  return {
-    modelId,
-    subagentModels,
-    ...(memoryModelId ? { observerModelId: memoryModelId, reflectorModelId: memoryModelId } : {}),
-    modelRoute: { entries },
-  };
-}
-
 export async function applyPackToSession(
   ctx: ModelPackContext,
   packId: string,
@@ -182,14 +110,6 @@ export async function applyPackToSession(
       if (!application.isCurrent()) return cancelled();
       for (const [agentType, modelId] of Object.entries(selection.subagentModels)) {
         await ctx.state.session.subagents.model.set({ modelId, agentType });
-        if (!application.isCurrent()) return cancelled();
-      }
-      if (selection.observerModelId) {
-        await ctx.state.session.om.observer.switchModel({ modelId: selection.observerModelId });
-        if (!application.isCurrent()) return cancelled();
-      }
-      if (selection.reflectorModelId) {
-        await ctx.state.session.om.reflector.switchModel({ modelId: selection.reflectorModelId });
         if (!application.isCurrent()) return cancelled();
       }
       await ctx.state.session.state.set({

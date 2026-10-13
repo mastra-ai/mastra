@@ -689,6 +689,14 @@ describe('ClickHouse advanced trace query', () => {
     expect(compiled.query).toContain('traceId > {trace_query_4:String}');
     expect(compiled.query).toContain('ORDER BY endedAt DESC, traceId ASC');
     expect(Object.values(compiled.query_params).at(-1)).toBe(3);
+    // The cursor applies to each trace's first row, not to root rows, so a trace with several
+    // roots can't return on a later page.
+    expect(compiled.query.indexOf('LIMIT 1 BY traceId')).toBeLessThan(compiled.query.indexOf('endedAt < {'));
+
+    const keys = compileClickHouseTraceQueryKeys(after);
+    expect(keys.query).toMatch(/GROUP BY traceId\n {2}HAVING \(sortValue < \{trace_query_\d+:DateTime64/);
+    expect(keys.query).toMatch(/sortValue = \{trace_query_\d+:DateTime64\(3, 'UTC'\)\} AND traceId > \{/);
+    expect(keys.query).not.toMatch(/WHERE \(endedAt </);
   });
 
   it('compiles grouped queries as distinct non-null thread IDs', () => {

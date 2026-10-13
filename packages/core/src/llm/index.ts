@@ -78,6 +78,7 @@ export type {
 } from './model/base.types';
 export type {
   TripwireProperties,
+  IdentifiedModelConfig,
   MastraModelConfig,
   OpenAICompatibleConfig,
   WidenModelId,

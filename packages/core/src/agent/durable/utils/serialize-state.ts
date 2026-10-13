@@ -158,6 +158,7 @@ export function serializeDurableState(params: {
   threadExists?: boolean;
   savePerStep?: boolean;
   observationalMemory?: boolean;
+  fixedMemory?: boolean;
 }): SerializableDurableState {
   return {
     memoryConfig: params.memoryConfig,
@@ -166,6 +167,7 @@ export function serializeDurableState(params: {
     threadExists: params.threadExists,
     savePerStep: params.savePerStep,
     observationalMemory: params.observationalMemory,
+    fixedMemory: params.fixedMemory,
   };
 }
 
@@ -264,10 +266,26 @@ export function serializeClientTools(
 }
 
 /**
+ * Collect the tool names from call-time toolsets so a cross-process worker can
+ * detect that they are unavailable.
+ */
+export function serializeToolsetToolNames(
+  toolsets: Record<string, Record<string, unknown> | undefined> | undefined,
+): string[] | undefined {
+  if (!toolsets) return undefined;
+  const names = new Set<string>();
+  for (const toolset of Object.values(toolsets)) {
+    for (const name of Object.keys(toolset ?? {})) names.add(name);
+  }
+  return names.size > 0 ? [...names] : undefined;
+}
+
+/**
  * Extract serializable options from agent execution options
  */
 export function serializeDurableOptions(options: {
   clientTools?: SerializableDurableOptions['clientTools'];
+  toolsetToolNames?: string[];
   maxSteps?: number;
   toolChoice?: any;
   activeTools?: string[];
@@ -311,6 +329,7 @@ export function serializeDurableOptions(options: {
 
   return {
     clientTools: options.clientTools,
+    toolsetToolNames: options.toolsetToolNames,
     maxSteps: options.maxSteps,
     toolChoice: serializedToolChoice,
     activeTools: options.activeTools,
