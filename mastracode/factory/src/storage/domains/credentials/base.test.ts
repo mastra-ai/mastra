@@ -5,9 +5,14 @@
  * TTL cleanup on read.
  */
 
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { createFactorySecretEncryption } from '../../../secret-encryption.js';
 import type { FactorySecretEncryption } from '../../../secret-encryption.js';
 import { ModelCredentialsStorage } from './base.js';
 
@@ -182,5 +187,34 @@ describe('ModelCredentialsStorage', () => {
       key: 'sk-secret',
     });
     expect(decrypt).toHaveBeenCalledWith(envelope);
+  });
+});
+
+describe('ModelCredentialsStorage enabling secretEncryption', () => {
+  it('encrypts credentials written without encryption and reads back the original object', async () => {
+    const url = `file:${join(mkdtempSync(join(tmpdir(), 'factory-creds-')), 'enable-encryption.db')}`;
+    const tenant = { orgId: 'org-1', userId: 'user-1' };
+    const credential = { type: 'api_key' as const, key: 'sk-fake-model-key' };
+    const boot = async (encryption?: FactorySecretEncryption) => {
+      const backend = new LibSQLFactoryStorage({ id: 'credentials-migration-test', url });
+      const store = backend.registerDomain(new ModelCredentialsStorage(encryption));
+      await backend.init();
+      return { backend, store };
+    };
+
+    {
+      const { backend, store } = await boot();
+      await store.setCredential(tenant, 'openai', credential);
+      await backend.close();
+    }
+
+    const encryption = createFactorySecretEncryption({ primary: { id: 'v1', key: new Uint8Array(32).fill(7) } });
+    for (let i = 0; i < 2; i++) {
+      const { backend, store } = await boot(encryption);
+      expect(await store.getCredential(tenant, 'openai')).toEqual(credential);
+      const row = await backend.ops.findOne<{ data: string }>('model_provider_credentials', { provider: 'openai' });
+      expect(row!.data).toMatch(/^mastra:factory-secret:v1:/);
+      await backend.close();
+    }
   });
 });
