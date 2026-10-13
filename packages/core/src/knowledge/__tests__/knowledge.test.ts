@@ -90,6 +90,29 @@ describe('Knowledge', () => {
     expect(lazy).toMatchObject({ changed: true, accessEpoch: 2 });
   });
 
+  it('fills missing scope parameters through the configured vouch hook', async () => {
+    const scopes = { 'agent:$agentId:public': { access: [{ principal: 'team:$orgId', role: 'readonly' as const }] } };
+    const input = { address: 'agent:weather:public', contextualScopeAddress: 'resource:weather' };
+    const seen: Array<{ address: string; parameter: string }> = [];
+    const vouched = new Knowledge({
+      storage: new InMemoryStore({ id: 'vouched' }),
+      structure: { scopes: [{ address: 'team:acme', name: 'Acme team' }] },
+      scopes,
+      vouch: request => {
+        seen.push(request);
+        return request.parameter === 'orgId' ? 'acme' : undefined;
+      },
+    });
+    const unvouched = new Knowledge({ storage: new InMemoryStore({ id: 'unvouched' }), scopes });
+
+    await expect(unvouched.materializeScope(input)).rejects.toThrow(
+      'Missing host-vouched Knowledge scope parameter: orgId',
+    );
+    await vouched.reconcile();
+    await expect(vouched.materializeScope(input)).resolves.toMatchObject({ changed: true });
+    expect(seen).toEqual([{ address: 'agent:weather:public', parameter: 'orgId' }]);
+  });
+
   it('adds parent edges declared after first boot to existing static scopes', async () => {
     const storage = new InMemoryStore({ id: 'static-structure-growth' });
     const org = { address: 'org:acme', name: 'Acme' };

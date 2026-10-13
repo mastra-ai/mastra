@@ -1,7 +1,7 @@
 import type { MastraCompositeStore } from '../storage';
 import type { KnowledgeStructurePlan } from '../storage/domains/knowledge';
 import type { KnowledgeImporterDefinition } from './imports';
-import type { KnowledgeScopeTypesConfig } from './reconcile';
+import type { KnowledgeScopeTypesConfig, KnowledgeScopeVouch } from './reconcile';
 
 export interface KnowledgeConfig {
   id?: string;
@@ -15,4 +15,10 @@ export interface KnowledgeConfig {
   /** Registered Knowledge importers. */
   importers?: readonly KnowledgeImporterDefinition[];
   storage?: MastraCompositeStore;
+  /**
+   * Supplies a scope-template parameter the run did not provide (e.g. `$orgId`) from
+   * host-trusted state. Receives only the scope address and parameter name, never the
+   * request context. A vouched scope anchors the run; it never grants ownership.
+   */
+  vouch?: KnowledgeScopeVouch;
 }

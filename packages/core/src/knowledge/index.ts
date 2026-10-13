@@ -58,6 +58,7 @@ export class Knowledge extends MastraBase {
   #storagePromise?: Promise<KnowledgeStorage>;
   #structure?: KnowledgeStructurePlan;
   #scopeTypes?: KnowledgeScopeTypesConfig;
+  #vouch?: KnowledgeConfig['vouch'];
   #importers = new KnowledgeImporterRegistry();
   #importerRunner = new KnowledgeImporterRunner(this, () => this.logger);
   #reconcilePromise?: Promise<KnowledgeStructureReconcileResult>;
@@ -72,6 +73,7 @@ export class Knowledge extends MastraBase {
     this.description = config.description;
     this.#structure = config.structure ? validateKnowledgeStructurePlan(structuredClone(config.structure)) : undefined;
     this.#scopeTypes = validateKnowledgeScopeTypes(structuredClone(config.scopes));
+    this.#vouch = config.vouch;
     for (const importer of config.importers ?? []) {
       this.registerImporter(importer);
     }
@@ -268,8 +270,10 @@ export class Knowledge extends MastraBase {
   }
 
   async materializeScope(input: MaterializeKnowledgeScopeInput): Promise<KnowledgeStructureReconcileResult> {
-    const snapshot = structuredClone(input);
-    const plan = materializeKnowledgeScopePlan(this.#scopeTypes, snapshot);
+    // The vouch hook is host configuration, never per-call input.
+    const { vouch: _ignored, ...rest } = input;
+    const snapshot = structuredClone(rest);
+    const plan = materializeKnowledgeScopePlan(this.#scopeTypes, { ...snapshot, vouch: this.#vouch });
     const existing = this.#materializePromises.get(snapshot.address);
     if (existing) {
       if (JSON.stringify(existing.plan) !== JSON.stringify(plan)) {
