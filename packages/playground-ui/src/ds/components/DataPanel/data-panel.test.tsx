@@ -317,4 +317,89 @@ describe('DataPanel', () => {
       expect(screen.queryByRole('separator')).toBeNull();
     });
   });
+
+  describe('when variant is inline', () => {
+    it('renders a named region in place instead of a dialog', () => {
+      const { container } = render(
+        <DataPanel variant="inline" title="Span details">
+          <DataPanel.Content>Panel body</DataPanel.Content>
+        </DataPanel>,
+      );
+
+      const region = screen.getByRole('region', { name: 'Span details' });
+      expect(region.getAttribute('data-variant')).toBe('inline');
+      expect(container.contains(region)).toBe(true);
+      expect(region.contains(screen.getByText('Panel body'))).toBe(true);
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(document.querySelector(POPUP)).toBeNull();
+    });
+
+    it('does not mark the body as drawer content', () => {
+      render(
+        <DataPanel variant="inline" title="Span details">
+          <DataPanel.Content>
+            <span>Selectable body</span>
+          </DataPanel.Content>
+        </DataPanel>,
+      );
+
+      expect(screen.getByText('Selectable body').closest('[data-drawer-content]')).toBeNull();
+    });
+
+    it('applies className to the card and exposes the description', () => {
+      render(
+        <DataPanel variant="inline" title="Span details" description="Details of the selected span" className="w-96">
+          <DataPanel.Content>Panel body</DataPanel.Content>
+        </DataPanel>,
+      );
+
+      const region = screen.getByRole('region', { name: 'Span details' });
+      expect(region.className).toContain('w-96');
+      const describedBy = region.getAttribute('aria-describedby');
+      expect(describedBy && document.getElementById(describedBy)?.textContent).toBe('Details of the selected span');
+    });
+
+    it('calls the close button onClick', () => {
+      const onClose = vi.fn();
+
+      render(
+        <TooltipProvider>
+          <DataPanel variant="inline" title="Span details">
+            <DataPanel.Header>
+              <DataPanel.Heading>Span</DataPanel.Heading>
+              <DataPanel.HeaderActions>
+                <DataPanel.CloseButton icon="x" onClick={onClose} />
+              </DataPanel.HeaderActions>
+            </DataPanel.Header>
+            <DataPanel.Content>Panel body</DataPanel.Content>
+          </DataPanel>
+        </TooltipProvider>,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Close Panel' }));
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('opens a nested Select', async () => {
+      render(
+        <DataPanel variant="inline" title="Span details">
+          <DataPanel.Content>
+            <Select defaultValue="apple">
+              <SelectTrigger>
+                <SelectValue placeholder="Pick one" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="apple">Apple</SelectItem>
+                <SelectItem value="banana">Banana</SelectItem>
+              </SelectContent>
+            </Select>
+          </DataPanel.Content>
+        </DataPanel>,
+      );
+
+      fireEvent.click(screen.getByRole('combobox'));
+
+      expect(await screen.findByRole('option', { name: 'Banana' })).toBeDefined();
+    });
+  });
 });
