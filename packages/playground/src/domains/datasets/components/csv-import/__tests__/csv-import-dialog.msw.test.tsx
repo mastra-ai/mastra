@@ -49,14 +49,9 @@ function renderDialog() {
 const heading = (name: string) => screen.findByRole('heading', { name });
 const click = (name: string | RegExp) => fireEvent.click(screen.getByRole('button', { name }));
 
-// A disabled button cannot take focus, so its explanation lives on a focusable wrapper.
-async function expectDisabledBecause(name: string | RegExp, reason: string) {
+function expectDisabled(name: string | RegExp) {
   const target = screen.getByRole<HTMLButtonElement>('button', { name });
   expect(target.disabled).toBe(true);
-  act(() => {
-    (target.parentElement as HTMLElement).focus();
-  });
-  expect(await screen.findByText(reason)).toBeDefined();
 }
 
 type DragEventType = 'dragenter' | 'dragover' | 'drop';
@@ -147,7 +142,7 @@ describe('CSVImportDialog', () => {
       expect(openPicker).toHaveBeenCalledTimes(1);
     });
 
-    it('keeps Next disabled until a column is mapped to Input, and says why', async () => {
+    it('keeps Next disabled until a column is mapped to Input', async () => {
       givenDataset(buildCsvDataset());
       renderDialog();
 
@@ -156,7 +151,7 @@ describe('CSVImportDialog', () => {
       click('Next');
       await heading('Map Columns');
 
-      await expectDisabledBecause('Next', 'Map at least one column to Input');
+      expectDisabled('Next');
     });
   });
 
@@ -186,7 +181,7 @@ describe('CSVImportDialog', () => {
   });
 
   describe('when the CSV has no data rows', () => {
-    it('keeps Import disabled, and says why', async () => {
+    it('keeps Import disabled', async () => {
       const { batchBodies } = givenDataset(buildCsvDataset());
       renderDialog();
 
@@ -194,7 +189,7 @@ describe('CSVImportDialog', () => {
       click('Next');
       await heading('Review Validation');
 
-      await expectDisabledBecause('Import 0 Rows', 'No valid rows to import');
+      expectDisabled('Import 0 Rows');
       expect(batchBodies).toEqual([]);
     });
   });

@@ -432,7 +432,7 @@ export function CSVImportFlow({
         return (
           <>
             <Button onClick={onCancel}>{cancelLabel}</Button>
-            <DialogAction onConfirm={() => setStep('preview')} disabled disabledTooltip="Upload a CSV file to continue">
+            <DialogAction onConfirm={() => setStep('preview')} disabled>
               Next
             </DialogAction>
           </>
@@ -450,11 +450,7 @@ export function CSVImportFlow({
         return (
           <>
             <Button onClick={() => setStep('preview')}>Back</Button>
-            <DialogAction
-              onConfirm={handleValidateMapping}
-              disabled={!columnMapping.isInputMapped}
-              disabledTooltip="Map at least one column to Input"
-            >
+            <DialogAction onConfirm={handleValidateMapping} disabled={!columnMapping.isInputMapped}>
               {hasSchemas ? 'Validate' : 'Next'}
             </DialogAction>
           </>
@@ -464,11 +460,7 @@ export function CSVImportFlow({
         return (
           <>
             <Button onClick={() => setStep('mapping')}>Back</Button>
-            <DialogAction
-              onConfirm={handleImport}
-              disabled={!schemaValidation || schemaValidation.validCount === 0}
-              disabledTooltip="No valid rows to import"
-            >
+            <DialogAction onConfirm={handleImport} disabled={!schemaValidation || schemaValidation.validCount === 0}>
               {importLabel
                 ? importLabel(schemaValidation?.validCount ?? 0)
                 : schemaValidation?.invalidCount

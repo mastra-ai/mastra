@@ -58,7 +58,7 @@ export function DetailsStep({ name, description, onNameChange, onDescriptionChan
         </DialogBody>
         <DialogFooter>
           <DialogCancel>Cancel</DialogCancel>
-          <DialogAction type="submit" disabled={!hasName} disabledTooltip="Enter a dataset name to continue">
+          <DialogAction type="submit" disabled={!hasName}>
             Next
           </DialogAction>
         </DialogFooter>

@@ -183,21 +183,17 @@ export function DialogAction({
   holdSeconds = 1.5,
   onConfirm,
   disabled,
-  disabledTooltip,
   type = 'button',
   ...props
 }: DialogActionProps) {
   const { intent, pending } = useDialogContext();
   const isDisabled = disabled || pending;
-  // The explanation describes the caller's precondition, not a pending dialog.
-  const explanation = disabled ? disabledTooltip : undefined;
   if (onConfirm && confirmation === 'hold') {
     return (
       <HoldAction
         key={`${isDisabled}-${holdSeconds}`}
         holdSeconds={holdSeconds}
         {...props}
-        disabledTooltip={explanation}
         disabled={isDisabled}
         onConfirm={onConfirm}
       />
@@ -211,7 +207,6 @@ export function DialogAction({
       type={type}
       variant={intent === 'destructive' ? 'destructive' : 'primary'}
       disabled={isDisabled}
-      disabledTooltip={explanation}
       onClick={onConfirm}
     />
   );

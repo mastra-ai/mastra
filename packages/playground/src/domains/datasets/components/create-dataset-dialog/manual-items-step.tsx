@@ -163,11 +163,7 @@ export function ManualItemsStep({ pending, onBack, onSubmit }: ManualItemsStepPr
         <Button onClick={onBack} disabled={pending}>
           Back
         </Button>
-        <DialogAction
-          onConfirm={handleSubmit}
-          disabled={hasEmptyInput}
-          disabledTooltip="Fill in the input of every item"
-        >
+        <DialogAction onConfirm={handleSubmit} disabled={hasEmptyInput}>
           {pending ? 'Creating...' : submitLabel}
         </DialogAction>
       </DialogFooter>

@@ -84,14 +84,9 @@ function pickSource(name: string) {
   fireEvent.click(screen.getByRole('option', { name }), { detail: 1 });
 }
 
-// A disabled button cannot take focus, so its explanation lives on a focusable wrapper.
-async function expectDisabledBecause(name: string | RegExp, reason: string) {
+function expectDisabled(name: string | RegExp) {
   const target = button(name);
   expect(target.disabled).toBe(true);
-  act(() => {
-    (target.parentElement as HTMLElement).focus();
-  });
-  expect(await screen.findByText(reason)).toBeDefined();
 }
 
 async function fillDetails(name = 'My dataset') {
@@ -137,14 +132,14 @@ async function uploadAndMapCsv() {
 
 describe('CreateDatasetDialog', () => {
   describe('when the dialog opens', () => {
-    it('starts with an empty name and Next disabled, and says why', async () => {
+    it('starts with an empty name and Next disabled', async () => {
       const { createBodies } = givenServer();
       renderDialog();
 
       await heading('Create dataset');
 
       expect(screen.getByLabelText<HTMLInputElement>(/^Name/).value).toBe('');
-      await expectDisabledBecause('Next', 'Enter a dataset name to continue');
+      expectDisabled('Next');
       expect(createBodies).toEqual([]);
     });
 
@@ -592,7 +587,7 @@ describe('CreateDatasetDialog', () => {
       expect(onSuccess).not.toHaveBeenCalled();
     });
 
-    it('keeps the action disabled until every row has an input, and says why', async () => {
+    it('keeps the action disabled until every row has an input', async () => {
       givenServer();
       renderDialog();
 
@@ -602,7 +597,7 @@ describe('CreateDatasetDialog', () => {
       typeIn('Item 1 input', '"filled"');
       click('Add another item');
 
-      await expectDisabledBecause('Create dataset with 2 items', 'Fill in the input of every item');
+      expectDisabled('Create dataset with 2 items');
     });
 
     it('goes back to the choice of how to add items', async () => {
@@ -710,7 +705,7 @@ describe('CreateDatasetDialog', () => {
       await heading('Import CSV');
 
       expect(screen.getByText('Step 3 of 3')).toBeDefined();
-      await expectDisabledBecause('Next', 'Upload a CSV file to continue');
+      expectDisabled('Next');
     });
 
     it('goes back to the "Add items" step from the upload step', async () => {
