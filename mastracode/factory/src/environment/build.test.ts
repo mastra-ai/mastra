@@ -8,7 +8,8 @@ import type {
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { environmentBuildContext, redactCredentials, runEnvironmentBuild } from './build.js';
+import { resolveProjectEnvironment } from '../workspace.js';
+import { environmentBuildContext, environmentBuildInputs, redactCredentials, runEnvironmentBuild } from './build.js';
 import type { EnvironmentBuildDeps } from './build.js';
 
 const SHA_A = 'a'.repeat(40);
@@ -84,6 +85,17 @@ async function seedProject(seed: FactoryStorageTestSeed, slugs: string[]) {
     });
   }
   return { project, github };
+}
+
+/** Records `buildId` as the last build, ready on `heads` with the project's current template inputs. */
+async function recordBuild(seed: FactoryStorageTestSeed, projectId: string, buildId: string, heads: Record<string, string>) {
+  const project = await seed.projects.getById({ id: projectId });
+  const environment = await resolveProjectEnvironment(seed.sourceControl.forIntegration('github'), project!);
+  await seed.projects.update({
+    orgId: 'org-1',
+    id: projectId,
+    input: { lastBuildId: buildId, activeTemplateHeads: heads, lastBuildInputs: environmentBuildInputs(environment) },
+  });
 }
 
 function depsFor(
@@ -172,11 +184,7 @@ describe('runEnvironmentBuild', () => {
   it('skips a schedule when the last build is ready and no head moved, builds when one did', async () => {
     const { project } = await seedProject(seed, ['acme/api']);
     const sandbox = new BuildingSandbox();
-    await seed.projects.update({
-      orgId: 'org-1',
-      id: project.id,
-      input: { lastBuildId: 'build-0', activeTemplateHeads: { 'acme/api': SHA_A } },
-    });
+    await recordBuild(seed, project.id, 'build-0', { 'acme/api': SHA_A });
 
     await expect(
       runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'schedule' }),
@@ -188,6 +196,26 @@ describe('runEnvironmentBuild', () => {
     await expect(
       runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'schedule' }),
     ).resolves.toMatchObject({ outcome: 'started', buildId: 'build-1', heads: { 'acme/api': SHA_B } });
+  });
+
+  it('rebuilds on schedule when a template input changed even though no head moved', async () => {
+    const { project, github } = await seedProject(seed, ['acme/api']);
+    const sandbox = new BuildingSandbox();
+    const [link] = await github.projectRepositories.listByProject({ orgId: 'org-1', factoryProjectId: project.id });
+    const edits = [
+      () => seed.projects.update({ orgId: 'org-1', id: project.id, input: { sandboxSettings: { cpuCount: 4 } } }),
+      () => seed.projects.update({ orgId: 'org-1', id: project.id, input: { workspaceSetupCommand: 'make' } }),
+      () =>
+        github.projectRepositories.update({ orgId: 'org-1', id: link!.id, input: { setupCommand: 'pnpm install' } }),
+    ];
+    for (const [index, edit] of edits.entries()) {
+      await recordBuild(seed, project.id, `build-ready-${index}`, { 'acme/api': SHA_A });
+      await edit();
+      await expect(
+        runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'schedule' }),
+      ).resolves.toMatchObject({ outcome: 'started' });
+    }
+    expect(sandbox.starts).toHaveLength(edits.length);
   });
 
   it('rebuilds on schedule when the last build failed or is unknown to the provider', async () => {
@@ -327,6 +355,38 @@ describe('runEnvironmentBuild', () => {
     await expect(
       runEnvironmentBuild(depsFor(seed, new BuildingSandbox(), now), { projectId: project.id, trigger: 'manual' }),
     ).resolves.toEqual({ outcome: 'failed', reason: 'no head for acme/api@main' });
+  });
+
+  it('keeps tracking a running build when reading heads or its status fails', async () => {
+    const { project } = await seedProject(seed, ['acme/api']);
+    const sandbox = new BuildingSandbox();
+    await seed.projects.update({
+      orgId: 'org-1',
+      id: project.id,
+      input: { lastBuildId: 'build-0', lastBuildHeads: { 'acme/api': SHA_A } },
+    });
+
+    heads.byBranch.clear();
+    await expect(
+      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'schedule' }),
+    ).resolves.toMatchObject({ outcome: 'failed' });
+    heads.byBranch.set('acme/api@main', SHA_A);
+    sandbox.statusOf = () => {
+      throw new Error('provider timed out');
+    };
+    await expect(
+      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'schedule' }),
+    ).resolves.toEqual({ outcome: 'failed', reason: 'provider timed out' });
+
+    const stored = await seed.projects.getById({ id: project.id });
+    expect(stored).toMatchObject({ lastBuildId: 'build-0', lastBuildHeads: { 'acme/api': SHA_A } });
+    expect(stored?.lastBuildAttemptedAt?.toISOString()).toBe(clock.toISOString());
+    // A later trigger still sees the running build instead of starting a second one.
+    sandbox.statusOf = () => 'building';
+    await expect(
+      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'manual' }),
+    ).resolves.toEqual({ outcome: 'skipped', reason: 'in_progress', buildId: 'build-0' });
+    expect(sandbox.starts).toEqual([]);
   });
 });
 

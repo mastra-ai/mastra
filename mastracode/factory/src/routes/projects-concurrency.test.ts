@@ -328,3 +328,93 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
     });
   },
 );
+
+describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
+  'environment build claims across independent %s clients',
+  backend => {
+    async function withClients(
+      run: (env: {
+        clients: FactoryProjectsStorage[];
+        projectId: string;
+        /** Holds the first `factory_projects` read until `release` resolves or 300ms pass. */
+        holdFirstProjectRead: (release: Promise<unknown>) => Promise<void>;
+      }) => Promise<void>,
+    ) {
+      const directory = await mkdtemp(join(tmpdir(), 'factory-build-'));
+      const url = `file:${join(directory, 'build.db')}`;
+      const backends = ['left', 'right'].map(id =>
+        backend === 'postgres'
+          ? new PgFactoryStorage({ id, connectionString: postgresUrl! })
+          : new LibSQLFactoryStorage({ id, url }),
+      );
+      let projectId: string | undefined;
+      try {
+        const clients: FactoryProjectsStorage[] = [];
+        for (const storage of backends) {
+          clients.push(storage.registerDomain(new FactoryProjectsStorage()));
+          await storage.init();
+        }
+        const project = await clients[0]!.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Builds' } });
+        projectId = project.id;
+        // Ops created inside and outside transactions share one prototype per backend.
+        const prototype = Object.getPrototypeOf(backends[0]!.ops) as { findOne: (...args: unknown[]) => unknown };
+        const original = prototype.findOne;
+        const holdFirstProjectRead = (release: Promise<unknown>) => {
+          const held = Promise.withResolvers<void>();
+          let holding = true;
+          vi.spyOn(prototype, 'findOne').mockImplementation(async function (this: unknown, ...args: unknown[]) {
+            const row = await original.apply(this, args);
+            if (args[0] === 'factory_projects' && holding) {
+              holding = false;
+              held.resolve();
+              await Promise.race([release, new Promise(resolve => setTimeout(resolve, 300))]);
+            }
+            return row;
+          });
+          return held.promise;
+        };
+        await run({ clients, projectId: project.id, holdFirstProjectRead });
+      } finally {
+        vi.restoreAllMocks();
+        try {
+          if (projectId) await backends[0]!.ops.deleteMany('factory_projects', { id: projectId });
+        } finally {
+          await Promise.all(backends.map(storage => storage.close()));
+          await rm(directory, { recursive: true, force: true });
+        }
+      }
+    }
+
+    it('lets only one of two concurrent push claims win', async () => {
+      await withClients(async ({ clients, projectId, holdFirstProjectRead }) => {
+        const now = new Date('2026-10-13T12:00:00Z');
+        const secondDone = Promise.withResolvers<void>();
+        const held = holdFirstProjectRead(secondDone.promise);
+        const first = clients[0]!.claimBuildAttempt({ id: projectId, debounceMinutes: 10, now });
+        await held;
+        const second = clients[1]!
+          .claimBuildAttempt({ id: projectId, debounceMinutes: 10, now })
+          .finally(() => secondDone.resolve());
+        expect((await Promise.all([first, second])).filter(Boolean)).toHaveLength(1);
+      });
+    });
+
+    it('never lets a stale build overwrite a newer build pin', async () => {
+      await withClients(async ({ clients, projectId, holdFirstProjectRead }) => {
+        const [stale, fresh] = clients as [FactoryProjectsStorage, FactoryProjectsStorage];
+        await stale.update({ orgId: 'org-1', id: projectId, input: { lastBuildId: 'build-1' } });
+        const freshDone = Promise.withResolvers<void>();
+        const held = holdFirstProjectRead(freshDone.promise);
+        const stalePin = stale.pinActiveTemplate({ id: projectId, buildId: 'build-1', templateId: 'tpl-1', heads: {} });
+        await held;
+        const freshPin = (async () => {
+          await fresh.update({ orgId: 'org-1', id: projectId, input: { lastBuildId: 'build-2' } });
+          return fresh.pinActiveTemplate({ id: projectId, buildId: 'build-2', templateId: 'tpl-2', heads: {} });
+        })().finally(() => freshDone.resolve());
+        await Promise.all([stalePin, freshPin]);
+        vi.restoreAllMocks();
+        expect(await fresh.getById({ id: projectId })).toMatchObject({ lastBuildId: 'build-2', activeTemplateId: 'tpl-2' });
+      });
+    });
+  },
+);

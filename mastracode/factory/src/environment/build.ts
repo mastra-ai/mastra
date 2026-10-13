@@ -7,6 +7,8 @@
  * waits on the provider.
  */
 
+import { createHash } from 'node:crypto';
+
 import type { FactorySandbox, FactorySandboxContext } from '@mastra/core/workspace';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { FactoryProject, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
@@ -80,6 +82,26 @@ export function environmentBuildContext(
 }
 
 /**
+ * Fingerprint of everything a build bakes into the template besides the
+ * repository heads: provider settings, the repositories and their order,
+ * their setup commands, the workspace setup command and the working
+ * directory. A schedule or push skips a ready build only while this matches.
+ */
+export function environmentBuildInputs(environment: SessionEnvironment): string {
+  const inputs = {
+    settings: environment.settings,
+    workspaceSetupCommand: environment.workspaceSetupCommand ?? null,
+    workingDirectory: environment.workingDirectory ?? null,
+    repos: environment.repos.map(repo => ({
+      repositoryId: repo.repositoryId,
+      templateBranch: repo.templateBranch,
+      setupCommand: repo.setupCommand ?? null,
+    })),
+  };
+  return createHash('sha256').update(JSON.stringify(inputs)).digest('hex');
+}
+
+/**
  * The current head of every environment repository's template branch, keyed
  * by slug. The template clones the repository default branch (a link's own
  * branch is the session's base, checked out after boot), so that is the
@@ -104,11 +126,12 @@ export async function resolveEnvironmentHeads(
  * Start a build for `projectId` when `trigger` calls for one. `push` first
  * wins the leading-edge debounce claim; every trigger skips while the last
  * build is still running; `schedule` and `push` also skip when the last build
- * is ready and no head moved; `manual` otherwise always builds. Saving
- * settings never builds. A provider that throws yields `failed` with the attempt still
- * recorded, so the next trigger sees a fresh attempt time, and the last build
- * id cleared, so a later `schedule` or `push` cannot mistake the previous
- * ready build for the current template.
+ * is ready and neither a head nor any other template input changed; `manual`
+ * otherwise always builds. Saving settings never builds. Any error yields
+ * `failed` with the attempt still recorded, so the next trigger sees a fresh
+ * attempt time. Only a failed `builds.start` clears the last build id, so a
+ * later `schedule` or `push` cannot mistake the previous ready build for the
+ * current template; an error before that keeps a running build's id.
  */
 export async function runEnvironmentBuild(
   deps: EnvironmentBuildDeps,
@@ -133,10 +156,12 @@ export async function runEnvironmentBuild(
   const environment = await resolveProjectEnvironment(deps.sourceControl.storage, project);
   if (environment.repos.length === 0) return { outcome: 'skipped', reason: 'no_environment' };
 
+  let startAttempted = false;
   try {
     const heads = await resolveEnvironmentHeads(deps.sourceControl, project, environment);
     const ctx = environmentBuildContext(project, environment, heads, deps.sourceControl.versionControl);
     const settings = environment.settings;
+    const buildInputs = environmentBuildInputs(environment);
 
     if (project.lastBuildId) {
       const last = await builds.get(ctx, settings, project.lastBuildId);
@@ -149,12 +174,14 @@ export async function runEnvironmentBuild(
       if (
         (input.trigger === 'schedule' || input.trigger === 'push') &&
         last.status === 'ready' &&
-        !headsChanged(project.activeTemplateHeads, heads)
+        !headsChanged(project.activeTemplateHeads, heads) &&
+        project.lastBuildInputs === buildInputs
       ) {
         return { outcome: 'skipped', reason: 'unchanged' };
       }
     }
 
+    startAttempted = true;
     const started = await builds.start(ctx, settings);
     await deps.projects.update({
       orgId: project.orgId,
@@ -162,6 +189,7 @@ export async function runEnvironmentBuild(
       input: {
         lastBuildId: started.buildId,
         lastBuildHeads: heads,
+        lastBuildInputs: buildInputs,
         ...(input.trigger === 'push' ? {} : { lastBuildAttemptedAt: now() }),
       },
     });
@@ -183,8 +211,7 @@ export async function runEnvironmentBuild(
       orgId: project.orgId,
       id: project.id,
       input: {
-        lastBuildId: null,
-        lastBuildHeads: null,
+        ...(startAttempted ? { lastBuildId: null, lastBuildHeads: null, lastBuildInputs: null } : {}),
         ...(input.trigger === 'push' ? {} : { lastBuildAttemptedAt: now() }),
       },
     });

@@ -81,7 +81,6 @@ export interface FactoryEnvironmentPayload {
   repositories: FactoryEnvironmentRepository[];
   buildTriggers?: FactoryEnvironmentBuildTriggers;
   build?: FactoryEnvironmentLastBuild | null;
-  /** On a PATCH response: this update changed the template and a build was started for it. */
 }
 
 export interface FactoryEnvironmentResponse {
