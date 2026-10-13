@@ -11,7 +11,7 @@ export function ComparisonItemPayload({ label, value }: ComparisonItemPayloadPro
   if (value == null) return null;
 
   return (
-    <ComparisonSection title={label}>
+    <ComparisonSection title={label} framed>
       <ComparisonPayload value={value} />
     </ComparisonSection>
   );
