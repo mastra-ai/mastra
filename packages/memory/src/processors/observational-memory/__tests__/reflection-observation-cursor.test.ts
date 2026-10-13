@@ -143,6 +143,7 @@ it('passes the later committed cursor to reflection when another writer already 
   // The cycle was already covered, so nothing of ours landed — but reflection still runs
   // against the head and must see the head's later cursor, not this cycle's message timestamp.
   expect(result.observed).toBe(true);
+  expect(result.reflected).toBe(true);
   expect(reflect).toHaveBeenCalledOnce();
   expect(reflect.mock.calls[0]?.[0].currentRecord.lastObservedAt).toEqual(committedCursor);
   expect(result.record.lastObservedAt).toEqual(committedCursor);
