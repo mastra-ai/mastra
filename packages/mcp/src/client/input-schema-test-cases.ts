@@ -15,6 +15,12 @@ export const MALFORMED_INPUT_SCHEMAS: [string, unknown][] = [
   ['non-schema $defs entry', { type: 'object', $defs: { A: ['not-a-schema'] } }],
   ['non-array prefixItems', { type: 'object', properties: { a: { prefixItems: 'x' } } }],
   ['non-schema behind a jsonSchema wrapper', { jsonSchema: { type: 'object', properties: { a: 1 } } }],
+  ['string minimum', { type: 'object', properties: { a: { type: 'number', minimum: '5' } } }],
+  ['negative maxLength', { type: 'object', properties: { a: { type: 'string', maxLength: -1 } } }],
+  ['zero multipleOf', { type: 'object', properties: { a: { type: 'number', multipleOf: 0 } } }],
+  ['non-string pattern', { type: 'object', properties: { a: { type: 'string', pattern: 5 } } }],
+  ['non-boolean uniqueItems', { type: 'object', properties: { a: { type: 'array', uniqueItems: 'yes' } } }],
+  ['non-array dependentRequired entry', { type: 'object', dependentRequired: { a: 'b' } }],
 ];
 
 /** Input schemas both the cf-worker validator and the structural fallback must accept. */
@@ -31,4 +37,13 @@ export const VALID_INPUT_SCHEMAS: [string, unknown][] = [
   ['duplicate and empty enums', { type: 'object', properties: { a: { enum: ['x', 'x'] }, b: { enum: [] } } }],
   ['a Python-style pattern', { type: 'object', properties: { a: { type: 'string', pattern: '^(?P<x>\\d+)$' } } }],
   ['a non-URI $id', { $id: 'my tool schema', type: 'object' }],
+  [
+    'numeric and length limits',
+    {
+      type: 'object',
+      properties: { a: { type: 'number', minimum: 0, exclusiveMaximum: 1.5, multipleOf: 0.5 } },
+      dependentRequired: { a: ['b'] },
+      minProperties: 0,
+    },
+  ],
 ];

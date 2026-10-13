@@ -3660,10 +3660,7 @@ describe('InternalMastraMCPClient - malformed input schemas (issue #23731)', () 
     );
   });
 
-  it.each([
-    ...MALFORMED_INPUT_SCHEMAS,
-    ['string minimum', { type: 'object', properties: { a: { type: 'number', minimum: '5' } } }],
-  ])('skips a tool with a %s input schema', async (_, inputSchema) => {
+  it.each(MALFORMED_INPUT_SCHEMAS)('skips a tool with a %s input schema', async (_, inputSchema) => {
     const { client } = createClientWithTools([validTool, { name: 'bad', inputSchema }]);
 
     expect(Object.keys(await client.tools())).toEqual(['get_candles']);

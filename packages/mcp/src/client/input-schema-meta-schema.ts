@@ -204,12 +204,47 @@ const SCHEMA_KEYWORDS = [
 ];
 
 const isStringArray = (value: unknown) => Array.isArray(value) && value.every(item => typeof item === 'string');
+const isNumber = (value: unknown) => typeof value === 'number';
+const isCount = (value: unknown) => Number.isInteger(value) && (value as number) >= 0;
+const isString = (value: unknown) => typeof value === 'string';
+const isBoolean = (value: unknown) => typeof value === 'boolean';
+
+/** Value types the meta-schema requires for the keywords that do not hold subschemas. */
+const KEYWORD_VALUE_CHECKS: Record<string, [(value: unknown) => boolean, string]> = {
+  multipleOf: [value => isNumber(value) && (value as number) > 0, 'a positive number'],
+  ...Object.fromEntries(
+    ['maximum', 'exclusiveMaximum', 'minimum', 'exclusiveMinimum'].map(k => [k, [isNumber, 'a number']]),
+  ),
+  ...Object.fromEntries(
+    ['maxLength', 'minLength', 'maxItems', 'minItems', 'maxProperties', 'minProperties'].map(k => [
+      k,
+      [isCount, 'a non-negative integer'],
+    ]),
+  ),
+  ...Object.fromEntries(
+    [
+      '$id',
+      '$schema',
+      '$ref',
+      '$comment',
+      'title',
+      'description',
+      'pattern',
+      'format',
+      'contentMediaType',
+      'contentEncoding',
+    ].map(k => [k, [isString, 'a string']]),
+  ),
+  ...Object.fromEntries(['readOnly', 'writeOnly', 'uniqueItems'].map(k => [k, [isBoolean, 'a boolean']])),
+  examples: [Array.isArray, 'an array'],
+  enum: [Array.isArray, 'an array'],
+  required: [isStringArray, 'an array of strings'],
+};
 
 /**
- * Fallback for runtimes where the cf-worker validator cannot be imported. Checks the structural
- * rules of {@link INPUT_SCHEMA_META_SCHEMA} that decide whether providers accept a schema: every
- * subschema is an object or boolean, and `type`, `required`, `enum` and the subschema keywords
- * have the right shape.
+ * Fallback for runtimes where the cf-worker validator cannot be imported. Applies the same rules as
+ * {@link INPUT_SCHEMA_META_SCHEMA}: every subschema is an object or boolean, and every known
+ * keyword has a value of the right type.
  */
 function getStructuralInputSchemaError(schema: object): string | undefined {
   const seen = new Set<object>();
@@ -224,13 +259,23 @@ function getStructuralInputSchemaError(schema: object): string | undefined {
     seen.add(value);
 
     const record = value as Record<string, unknown>;
-    const { type, required, enum: enumValues } = record;
+    const { type, dependentRequired } = record;
     const types = Array.isArray(type) ? type : [type];
     if (type !== undefined && (types.length === 0 || !types.every(t => SCHEMA_TYPES.has(t as string)))) {
       return `${path}/type: must be a JSON Schema type name or a non-empty array of them`;
     }
-    if (required !== undefined && !isStringArray(required)) return `${path}/required: must be an array of strings`;
-    if (enumValues !== undefined && !Array.isArray(enumValues)) return `${path}/enum: must be an array`;
+    for (const [keyword, [isValid, expected]] of Object.entries(KEYWORD_VALUE_CHECKS)) {
+      if (record[keyword] !== undefined && !isValid(record[keyword])) return `${path}/${keyword}: must be ${expected}`;
+    }
+    if (
+      dependentRequired !== undefined &&
+      (!dependentRequired ||
+        typeof dependentRequired !== 'object' ||
+        Array.isArray(dependentRequired) ||
+        !Object.values(dependentRequired).every(isStringArray))
+    ) {
+      return `${path}/dependentRequired: must be an object of string arrays`;
+    }
 
     for (const keyword of SCHEMA_MAP_KEYWORDS) {
       const schemas = record[keyword];
