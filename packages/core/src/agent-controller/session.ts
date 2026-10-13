@@ -6208,6 +6208,9 @@ export class Session<TState = unknown> {
     } finally {
       observer?.cancel();
       resumedSubscriptionBoundary?.cancel();
+      // The resumed segment's `start` consumes the record. Drop it when the
+      // resume ends without one, so no later `start` passes as this resume.
+      if (resumedSubscriptionBoundary) this.stream.takeResumedRun({ runId: suspension.runId });
     }
   }
 

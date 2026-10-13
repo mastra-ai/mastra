@@ -135,35 +135,47 @@ function settleWithin<T>(promise: Promise<T>, ms: number): Promise<T | 'timeout'
   });
 }
 
+/**
+ * Abort while the slow tool runs, so `ask_user` parks after the abort. The
+ * prompt parked after the abort, so register it from `listSuspendedRuns()`, as
+ * a host would after a reload. Resolves to the parked run id.
+ */
+async function parkAfterAbort({
+  session,
+  agent,
+  events,
+  releaseSlowTool,
+  slowToolStarted,
+}: Awaited<ReturnType<typeof createHarness>>): Promise<string> {
+  void session.sendMessage({ content: 'Ask my name' }).catch(() => {});
+  await slowToolStarted;
+
+  session.abort();
+  releaseSlowTool();
+  await vi.waitFor(() => expect(events).toContainEqual({ type: 'agent_end', reason: 'aborted' }));
+  let runId: string | undefined;
+  await vi.waitFor(async () => {
+    const { runs } = await agent.listSuspendedRuns({});
+    runId = runs.find(run => run.toolCalls.some(toolCall => toolCall.toolCallId === 'call-ask'))?.runId;
+    expect(runId).toBeDefined();
+  });
+
+  session.suspensions.register({
+    toolCallId: 'call-ask',
+    runId: runId!,
+    toolName: 'ask_user',
+    threadId: session.thread.requireId(),
+    resourceId: session.identity.getResourceId(),
+  });
+  events.length = 0;
+  return runId!;
+}
+
 describe('resuming a tool call that parked after its run was aborted (#26871)', () => {
   it('Given a run aborted while a sibling tool call still parks, When the parked call is answered, Then the resumed run reaches the session and settles', async () => {
-    const { session, agent, events, releaseSlowTool, slowToolStarted, getCallCount } =
-      await createHarness('abort-then-resume');
-
-    void session.sendMessage({ content: 'Ask my name' }).catch(() => {});
-    await slowToolStarted;
-
-    // Stop while the slow tool runs; `ask_user` parks after the abort.
-    session.abort();
-    releaseSlowTool();
-    await vi.waitFor(() => expect(events).toContainEqual({ type: 'agent_end', reason: 'aborted' }));
-    let runId: string | undefined;
-    await vi.waitFor(async () => {
-      const { runs } = await agent.listSuspendedRuns({});
-      runId = runs.find(run => run.toolCalls.some(toolCall => toolCall.toolCallId === 'call-ask'))?.runId;
-      expect(runId).toBeDefined();
-    });
-
-    // The prompt parked after the abort, so the host registers it from
-    // `listSuspendedRuns()`, as it would after a reload.
-    session.suspensions.register({
-      toolCallId: 'call-ask',
-      runId: runId!,
-      toolName: 'ask_user',
-      threadId: session.thread.requireId(),
-      resourceId: session.identity.getResourceId(),
-    });
-    events.length = 0;
+    const harness = await createHarness('abort-then-resume');
+    const { session, events, getCallCount } = harness;
+    await parkAfterAbort(harness);
 
     const answered = await settleWithin(
       session.respondToToolSuspension({ toolCallId: 'call-ask', resumeData: 'Ada' }).then(() => 'answered' as const),
@@ -176,5 +188,29 @@ describe('resuming a tool call that parked after its run was aborted (#26871)', 
     expect(events.filter(event => event.type === 'agent_end')).toEqual([{ type: 'agent_end', reason: 'complete' }]);
     expect(events.filter(event => event.type === 'error')).toEqual([]);
     expect(session.run.isRunning()).toBe(false);
+  });
+
+  it('Given a resume of the aborted run that fails to send, Then it leaves no resume record behind and a retry still settles', async () => {
+    const harness = await createHarness('abort-then-failed-resume');
+    const { session, agent, events, getCallCount } = harness;
+    const runId = await parkAfterAbort(harness);
+    vi.spyOn(agent, 'sendStreamResume').mockRejectedValueOnce(new Error('no suspended run'));
+
+    await session.respondToToolSuspension({ toolCallId: 'call-ask', resumeData: 'Ada' });
+
+    expect(events.some(event => event.type === 'error' && event.error.message === 'no suspended run')).toBe(true);
+    // A later `start` of the aborted run must not pass as this failed resume.
+    expect(session.stream.takeResumedRun({ runId })).toBe(false);
+
+    events.length = 0;
+    const answered = await settleWithin(
+      session.respondToToolSuspension({ toolCallId: 'call-ask', resumeData: 'Ada' }).then(() => 'answered' as const),
+      5_000,
+    );
+
+    expect(answered).toBe('answered');
+    expect(getCallCount()).toBe(2);
+    expect(events.filter(event => event.type === 'agent_end')).toEqual([{ type: 'agent_end', reason: 'complete' }]);
+    expect(session.stream.takeResumedRun({ runId })).toBe(false);
   });
 });

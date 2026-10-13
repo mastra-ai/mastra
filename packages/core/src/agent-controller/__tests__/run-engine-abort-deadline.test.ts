@@ -190,6 +190,32 @@ describe('SessionRunEngine — abort deadline', () => {
     expect(session.run.isRunning()).toBe(false);
   });
 
+  it('Given an aborted subscribed run and no resume recorded for it, Then a later `start` of that run is still ignored (#26871)', async () => {
+    const { engine, events, session } = createHarness();
+
+    const subscription = {
+      stream: (async function* () {
+        yield chunk({ type: 'start', payload: {}, runId: 'run-1' });
+        yield chunk({ type: 'text-start', payload: { id: 't1' }, runId: 'run-1' });
+        session.run.requestAbort();
+        yield chunk({ type: 'abort', payload: {}, runId: 'run-1' });
+        // No resume of run-1 is recorded (e.g. the session's resume failed to send).
+        yield chunk({ type: 'start', payload: {}, runId: 'run-1' });
+        yield chunk({ type: 'text-start', payload: { id: 't2' }, runId: 'run-1' });
+        yield chunk({ type: 'finish', payload: { stepResult: { reason: 'stop' } }, runId: 'run-1' });
+      })(),
+      activeRunId: () => null,
+      abort: () => true,
+      unsubscribe: vi.fn(),
+    };
+    session.stream.attach({ subscription, key: 'thread-1' });
+
+    await engine.processSubscribedThreadStream(subscription);
+
+    expect(events.filter(event => event.type === 'agent_start')).toHaveLength(1);
+    expect(events.filter(event => event.type === 'agent_end')).toEqual([{ type: 'agent_end', reason: 'aborted' }]);
+  });
+
   it('Given an aborted subscribed run that finishes within the grace period, Then the stale deadline does not kill a follow-up run', async () => {
     vi.useFakeTimers();
     const { engine, events, session } = createHarness();
