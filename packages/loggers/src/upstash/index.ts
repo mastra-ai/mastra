@@ -6,15 +6,21 @@ export class UpstashTransport extends LoggerTransport {
   upstashToken: string;
   listName: string;
   maxListLength: number;
+  maxBufferSize: number;
+  /** Number of buffered records discarded because the buffer exceeded `maxBufferSize`. */
+  droppedRecords = 0;
   batchSize: number;
   flushInterval: number;
   logBuffer: any[];
   lastFlush: number;
   flushIntervalId: NodeJS.Timeout;
+  private flushPromise: Promise<void> | null = null;
 
   constructor(opts: {
     listName?: string;
     maxListLength?: number;
+    /** Maximum number of records held in memory while Upstash is unreachable. Must be a positive integer. Defaults to `maxListLength`, or 10000 when `maxListLength` disables trimming. */
+    maxBufferSize?: number;
     batchSize?: number;
     upstashUrl: string;
     flushInterval?: number;
@@ -30,6 +36,11 @@ export class UpstashTransport extends LoggerTransport {
     this.upstashToken = opts.upstashToken;
     this.listName = opts.listName || 'application-logs';
     this.maxListLength = opts.maxListLength || 10000;
+    // A non-positive maxListLength disables LTRIM, so it cannot serve as the buffer limit.
+    this.maxBufferSize = opts.maxBufferSize ?? (this.maxListLength > 0 ? this.maxListLength : 10000);
+    if (!Number.isInteger(this.maxBufferSize) || this.maxBufferSize < 1) {
+      throw new Error('maxBufferSize must be a positive integer');
+    }
     this.batchSize = opts.batchSize || 100;
     this.flushInterval = opts.flushInterval || 10000;
 
@@ -61,11 +72,23 @@ export class UpstashTransport extends LoggerTransport {
     return response.json();
   }
 
-  async _flush() {
+  /** Sends the next batch to Upstash. Callers share the in-flight flush instead of starting a new request. */
+  _flush(): Promise<void> {
+    if (this.flushPromise) {
+      return this.flushPromise;
+    }
     if (this.logBuffer.length === 0) {
-      return;
+      return Promise.resolve();
     }
 
+    this.flushPromise = this.flushBatch().finally(() => {
+      this.flushPromise = null;
+    });
+    return this.flushPromise;
+  }
+
+  /** Pushes one batch to Upstash, returning the records to the front of the buffer if the request fails. */
+  private async flushBatch() {
     const now = Date.now();
     const logs = this.logBuffer.splice(0, this.batchSize);
 
@@ -82,7 +105,17 @@ export class UpstashTransport extends LoggerTransport {
     } catch (error) {
       // On error, put logs back in the buffer
       this.logBuffer.unshift(...logs);
+      this.enforceBufferLimit();
       throw error;
+    }
+  }
+
+  /** Drops the oldest buffered records once the buffer exceeds `maxBufferSize`. */
+  private enforceBufferLimit() {
+    const overflow = this.logBuffer.length - this.maxBufferSize;
+    if (overflow > 0) {
+      this.logBuffer.splice(0, overflow);
+      this.droppedRecords += overflow;
     }
   }
 
@@ -101,22 +134,22 @@ export class UpstashTransport extends LoggerTransport {
   _transform(chunk: string, _enc: string, cb: Function) {
     try {
       // Parse the log line if it's a string
-      const log = typeof chunk === 'string' ? JSON.parse(chunk) : chunk;
+      const parsed = typeof chunk === 'string' ? JSON.parse(chunk) : chunk;
 
-      // Add timestamp if not present
-      if (!log.time) {
-        log.time = Date.now();
-      }
+      // Add timestamp if not present, on a copy so caller-owned (possibly frozen) records stay untouched
+      const log = parsed.time === undefined || parsed.time === null ? { ...parsed, time: Date.now() } : parsed;
 
       // Add to buffer
       this.logBuffer.push(log);
 
-      // Flush if buffer reaches batch size
-      if (this.logBuffer.length >= this.batchSize) {
+      // Flush once a batch is ready, or earlier if the buffer limit is smaller than a batch
+      if (this.logBuffer.length >= Math.min(this.batchSize, this.maxBufferSize)) {
         this._flush().catch(err => {
           console.error('Error flushing logs to Upstash:', err);
         });
       }
+
+      this.enforceBufferLimit();
 
       // Pass through the log
       cb(null, chunk);
@@ -129,8 +162,8 @@ export class UpstashTransport extends LoggerTransport {
     clearInterval(this.flushIntervalId);
 
     // Final flush
-    if (this.logBuffer.length > 0) {
-      this._flush()
+    if (this.logBuffer.length > 0 || this.flushPromise) {
+      this.drainBuffer()
         .then(() => cb(err))
         .catch(flushErr => {
           console.error('Error in final flush:', flushErr);
@@ -139,6 +172,53 @@ export class UpstashTransport extends LoggerTransport {
     } else {
       cb(err);
     }
+  }
+
+  // Wait out any in-flight request, ignoring its failure since its records are back in the buffer,
+  // then keep sending until the buffer is empty. A failed request ends the drain instead of retrying forever.
+  private async drainBuffer(): Promise<void> {
+    await this.flushPromise?.catch(() => {});
+    while (this.logBuffer.length > 0 || this.flushPromise) {
+      await (this.flushPromise ?? this._flush());
+    }
+  }
+
+  private parseLogs(logs: unknown): BaseLogMessage[] {
+    if (!Array.isArray(logs)) return [];
+
+    return logs.flatMap((log: string) => {
+      try {
+        const parsedLog = JSON.parse(log);
+        return parsedLog !== null && typeof parsedLog === 'object' ? [parsedLog] : [];
+      } catch {
+        return [];
+      }
+    });
+  }
+
+  private matchesLog(
+    log: BaseLogMessage,
+    {
+      fromDate,
+      toDate,
+      logLevel,
+      filters,
+      runId,
+    }: {
+      fromDate?: Date;
+      toDate?: Date;
+      logLevel?: LogLevel;
+      filters?: Record<string, any>;
+      runId?: string;
+    },
+  ): boolean {
+    if (runId !== undefined && log.runId !== runId) return false;
+    if (logLevel && log.level !== logLevel) return false;
+    const logTime = new Date(log.time).getTime();
+    if (fromDate && !(logTime >= fromDate.getTime())) return false;
+    if (toDate && !(logTime <= toDate.getTime())) return false;
+
+    return !filters || Object.entries(filters).every(([key, value]) => log[key as keyof BaseLogMessage] === value);
   }
 
   async listLogs(params?: {
@@ -157,22 +237,6 @@ export class UpstashTransport extends LoggerTransport {
     hasMore: boolean;
   }> {
     try {
-      // Get all logs from the list
-      const command = ['LRANGE', this.listName, 0, -1];
-      const response = await this.executeUpstashCommands([command]);
-
-      const logs =
-        (response?.[0]?.result?.map((log: string) => {
-          try {
-            // Parse the logs from JSON strings back to objects
-            return JSON.parse(log);
-          } catch {
-            return {};
-          }
-        }) as BaseLogMessage[]) || [];
-
-      let filteredLogs = logs.filter(record => record !== null && typeof record === 'object');
-
       const {
         fromDate,
         toDate,
@@ -184,26 +248,33 @@ export class UpstashTransport extends LoggerTransport {
       } = params || {};
 
       const page = pageInput === 0 ? 1 : (pageInput ?? 1);
-      const perPage = perPageInput ?? 100;
+      const perPage = perPageInput || 100;
       const returnPaginationResults = returnPaginationResultsInput ?? true;
+      const hasFilters = Boolean(fromDate || toDate || logLevel || (filters && Object.keys(filters).length > 0));
 
-      if (filters) {
-        filteredLogs = filteredLogs.filter(log =>
-          Object.entries(filters || {}).every(([key, value]) => log[key as keyof BaseLogMessage] === value),
-        );
+      if (returnPaginationResults && !hasFilters) {
+        const start = (page - 1) * perPage;
+        const end = start + perPage;
+        const response = await this.executeUpstashCommands([
+          ['LLEN', this.listName],
+          ['LRANGE', this.listName, start, end - 1],
+        ]);
+        const total = Number(response?.[0]?.result) || 0;
+        const logs = this.parseLogs(response?.[1]?.result);
+
+        return {
+          logs,
+          total,
+          page,
+          perPage,
+          hasMore: end < total,
+        };
       }
 
-      if (logLevel) {
-        filteredLogs = filteredLogs.filter(log => log.level === logLevel);
-      }
-
-      if (fromDate) {
-        filteredLogs = filteredLogs.filter(log => new Date(log.time)?.getTime() >= fromDate!.getTime());
-      }
-
-      if (toDate) {
-        filteredLogs = filteredLogs.filter(log => new Date(log.time)?.getTime() <= toDate!.getTime());
-      }
+      const response = await this.executeUpstashCommands([['LRANGE', this.listName, 0, -1]]);
+      const filteredLogs = this.parseLogs(response?.[0]?.result).filter(log =>
+        this.matchesLog(log, { fromDate, toDate, logLevel, filters }),
+      );
 
       if (!returnPaginationResults) {
         return {
@@ -216,25 +287,22 @@ export class UpstashTransport extends LoggerTransport {
       }
 
       const total = filteredLogs.length;
-      const resolvedPerPage = perPage || 100;
-      const start = (page - 1) * resolvedPerPage;
-      const end = start + resolvedPerPage;
-      const paginatedLogs = filteredLogs.slice(start, end);
-      const hasMore = end < total;
+      const start = (page - 1) * perPage;
+      const end = start + perPage;
 
       return {
-        logs: paginatedLogs,
+        logs: filteredLogs.slice(start, end),
         total,
         page,
-        perPage: resolvedPerPage,
-        hasMore,
+        perPage,
+        hasMore: end < total,
       };
     } catch (error) {
       console.error('Error getting logs from Upstash:', error);
       return {
         logs: [],
         total: 0,
-        page: params?.page ?? 1,
+        page: params?.page === 0 ? 1 : (params?.page ?? 1),
         perPage: params?.perPage ?? 100,
         hasMore: false,
       };
@@ -266,29 +334,27 @@ export class UpstashTransport extends LoggerTransport {
   }> {
     try {
       const page = pageInput === 0 ? 1 : (pageInput ?? 1);
-      const perPage = perPageInput ?? 100;
+      const perPage = perPageInput || 100;
+
       const allLogs = await this.listLogs({ fromDate, toDate, logLevel, filters, returnPaginationResults: false });
-      const logs = (allLogs?.logs?.filter((log: any) => log.runId === runId) || []) as BaseLogMessage[];
+      const logs = allLogs.logs.filter(log => this.matchesLog(log, { runId }));
       const total = logs.length;
-      const resolvedPerPage = perPage || 100;
-      const start = (page - 1) * resolvedPerPage;
-      const end = start + resolvedPerPage;
-      const paginatedLogs = logs.slice(start, end);
-      const hasMore = end < total;
+      const start = (page - 1) * perPage;
+      const end = start + perPage;
 
       return {
-        logs: paginatedLogs,
+        logs: logs.slice(start, end),
         total,
         page,
-        perPage: resolvedPerPage,
-        hasMore,
+        perPage,
+        hasMore: end < total,
       };
     } catch (error) {
       console.error('Error getting logs by runId from Upstash:', error);
       return {
         logs: [],
         total: 0,
-        page: pageInput ?? 1,
+        page: pageInput === 0 ? 1 : (pageInput ?? 1),
         perPage: perPageInput ?? 100,
         hasMore: false,
       };

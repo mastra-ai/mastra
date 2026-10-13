@@ -32,7 +32,6 @@ export const apiKeyMultiProviderDeleteScenario = {
       completedAt: new Date(0).toISOString(),
       skippedAt: null,
       version: 1,
-      quietModePreferenceSelected: true,
     };
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
 

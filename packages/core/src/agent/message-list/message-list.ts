@@ -9,6 +9,7 @@ import type { AnySpan } from '../../observability/types';
 import { resolveCurrentSpan } from '../../observability/utils';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../tools/payload-transform';
 import type { IdGeneratorContext } from '../../types';
+import { safeStringify } from '../../utils/safe-stringify';
 import { createSignal, isCreatedAgentSignal, isTransientSignalMessage, mastraDBMessageToSignal } from '../signals';
 import type { CreatedAgentSignal } from '../signals';
 import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from './adapters';
@@ -29,6 +30,7 @@ import {
 } from './conversion';
 import type { ToolCallConversionMode } from './conversion';
 import { TypeDetector } from './detection/TypeDetector';
+import type { StoredMessageLoader } from './memory-message-refs';
 import { MessageMerger } from './merge';
 import { convertImageFilePart } from './prompt/convert-file';
 import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
@@ -279,6 +281,12 @@ export class MessageList {
   // Centralized state management for message tracking
   private stateManager = new MessageStateManager();
 
+  // Response messages this run produced that were later pruned from the live context (e.g. by
+  // observational memory after observing them). They no longer belong in the prompt, but they
+  // are still part of the run's response — see getRunResponseMessages(). Keyed by id in pruning
+  // order; the message is only held when pruned by this instance; a restored list has ids only.
+  #prunedResponseMessages = new Map<string, MastraDBMessage | undefined>();
+
   // Legacy getters for backward compatibility - delegate to stateManager
   private get memoryMessages() {
     return this.stateManager.getMemoryMessages();
@@ -444,6 +452,7 @@ export class MessageList {
       contents: signal.contents,
       attributes: signal.attributes,
       metadata: signal.metadata,
+      author: signal.author,
       providerOptions: signal.providerOptions,
       createdAt,
       acceptedAt,
@@ -566,7 +575,12 @@ export class MessageList {
       agentNetworkAppend: this._agentNetworkAppend,
     });
     const lastStepBoundary = this.#locateLastStepBoundary();
-    return lastStepBoundary ? { ...state, lastStepBoundary } : state;
+    const prunedResponseMessageIds = this.#getPrunedResponseMessageIds();
+    return {
+      ...state,
+      ...(lastStepBoundary ? { lastStepBoundary } : {}),
+      ...(prunedResponseMessageIds.length > 0 ? { prunedResponseMessageIds } : {}),
+    };
   }
 
   /**
@@ -609,6 +623,7 @@ export class MessageList {
     for (const message of this.messages) {
       this.updateLastCreatedAt(message);
     }
+    this.#prunedResponseMessages = new Map((state.prunedResponseMessageIds ?? []).map(id => [id, undefined]));
     this.#lastStepBoundary = undefined;
     if (state.lastStepBoundary) {
       const { messageId, partIndex } = state.lastStepBoundary;
@@ -684,6 +699,14 @@ export class MessageList {
     getSource: (message: MastraDBMessage) => MessageSource | null;
   } {
     return this.stateManager.createSourceChecker();
+  }
+
+  /**
+   * Ids of every message that entered this list from memory or as input, including messages
+   * later promoted to the response or replaced by a copy with the same id.
+   */
+  public getRememberedAndInputMessageIds(): Set<string> {
+    return new Set([...this.memoryMessagesPersisted, ...this.newUserMessagesPersisted].map(message => message.id));
   }
 
   public getLatestUserContent(): string | null {
@@ -762,14 +785,23 @@ export class MessageList {
   /**
    * Remove messages by ID
    * @param ids - Array of message IDs to remove
+   * @param options.pruned - The messages are only being dropped from the live context (e.g. after
+   *   observational memory has observed them). Response messages removed this way stay part of the
+   *   run's response reported by getRunResponseMessages().
    * @returns Array of removed messages
    */
-  public removeByIds(ids: string[]): MastraDBMessage[] {
+  public removeByIds(ids: string[], options?: { pruned?: boolean }): MastraDBMessage[] {
     const idsSet = new Set(ids);
     const removed: MastraDBMessage[] = [];
+    const persistedResponse = this.newResponseMessagesPersisted;
     this.messages = this.messages.filter(m => {
       if (idsSet.has(m.id)) {
         removed.push(m);
+        if (options?.pruned && persistedResponse.has(m)) {
+          this.#prunedResponseMessages.set(m.id, m);
+        } else if (!options?.pruned) {
+          this.#prunedResponseMessages.delete(m.id);
+        }
         this.stateManager.removeMessage(m);
         return false;
       }
@@ -1325,6 +1357,42 @@ export class MessageList {
         aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.response.db(), { transformToolPayloads: false })),
     },
   };
+  /** Ids of pruned response messages that are not (again) tracked as response messages in the live list. */
+  #getPrunedResponseMessageIds(): string[] {
+    if (this.#prunedResponseMessages.size === 0) return [];
+    const liveResponseIds = new Set(this.responsePersisted.db().map(message => message.id));
+    return Array.from(this.#prunedResponseMessages.keys()).filter(id => !liveResponseIds.has(id));
+  }
+
+  /**
+   * Every response message this run produced, in order, including messages that were later pruned
+   * from the live context (see removeByIds' `pruned` option). Use this to evaluate the whole run,
+   * e.g. for scoring; use getPersisted.response for what is still in the list.
+   *
+   * A list restored from serialized state only knows pruned messages by id; `loadStoredMessages`
+   * loads them from memory, where they were saved before being pruned. Pruned messages it cannot
+   * load are left out.
+   */
+  public async getRunResponseMessages(loadStoredMessages?: StoredMessageLoader): Promise<MastraDBMessage[]> {
+    const live = this.responsePersisted.db();
+    const prunedIds = this.#getPrunedResponseMessageIds();
+    if (prunedIds.length === 0) return live;
+
+    const pruned: MastraDBMessage[] = [];
+    const missingIds: string[] = [];
+    for (const id of prunedIds) {
+      const message = this.#prunedResponseMessages.get(id);
+      if (message) pruned.push(message);
+      else missingIds.push(id);
+    }
+    if (missingIds.length > 0 && loadStoredMessages) {
+      const missing = new Set(missingIds);
+      const stored = (await loadStoredMessages(missingIds)) ?? [];
+      pruned.push(...stored.filter(message => missing.has(message.id)));
+    }
+    return [...pruned, ...live].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }
+
   private responsePersisted = {
     db: (): MastraDBMessage[] => this.messages.filter(m => this.newResponseMessagesPersisted.has(m)),
 
@@ -1447,8 +1515,14 @@ export class MessageList {
     const parts = message.content.parts.map(part => {
       if (part.type === 'tool-invocation' && part.toolInvocation) {
         const inputTransform = getTransformedToolPayload(part.providerMetadata, 'transcript', 'input-available');
+        // A provider-flagged error (`output-error` with a structured `result`) comes from a tool-result
+        // chunk, so its transcript transform is stored under the output-available phase.
+        const isProviderErrorResult =
+          part.toolInvocation.state === 'output-error' &&
+          part.toolInvocation.result !== undefined &&
+          part.providerExecuted === true;
         const outputTransform =
-          part.toolInvocation.state === 'result'
+          part.toolInvocation.state === 'result' || isProviderErrorResult
             ? (getTransformedToolPayload(part.providerMetadata, 'transcript', 'output-available') ??
               getTransformedToolPayload(part.providerMetadata, 'transcript', 'error'))
             : part.toolInvocation.state === 'output-error'
@@ -1469,16 +1543,30 @@ export class MessageList {
               ? outputTransform.transformed
               : part.toolInvocation.result
             : undefined;
+        const transformedErrorResult = isProviderErrorResult
+          ? hasTransformedToolPayload(outputTransform)
+            ? outputTransform.transformed
+            : part.toolInvocation.result
+          : undefined;
         const transformedErrorText =
           part.toolInvocation.state === 'output-error'
-            ? hasTransformedToolPayload(outputTransform)
-              ? (outputTransform.transformed as string)
-              : part.toolInvocation.errorText
+            ? isProviderErrorResult && hasTransformedToolPayload(outputTransform)
+              ? typeof transformedErrorResult === 'string'
+                ? transformedErrorResult
+                : safeStringify(transformedErrorResult)
+              : hasTransformedToolPayload(outputTransform)
+                ? (outputTransform.transformed as string)
+                : part.toolInvocation.errorText
             : undefined;
         transformedByToolCallId.set(part.toolInvocation.toolCallId, {
           args: transformedArgs,
           ...(part.toolInvocation.state === 'result' ? { result: transformedResult } : {}),
-          ...(part.toolInvocation.state === 'output-error' ? { errorText: transformedErrorText } : {}),
+          ...(part.toolInvocation.state === 'output-error'
+            ? {
+                errorText: transformedErrorText,
+                ...(isProviderErrorResult ? { result: transformedErrorResult } : {}),
+              }
+            : {}),
         });
 
         return {
@@ -1487,7 +1575,12 @@ export class MessageList {
             ...part.toolInvocation,
             args: transformedArgs,
             ...(part.toolInvocation.state === 'result' ? { result: transformedResult } : {}),
-            ...(part.toolInvocation.state === 'output-error' ? { errorText: transformedErrorText } : {}),
+            ...(part.toolInvocation.state === 'output-error'
+              ? {
+                  errorText: transformedErrorText,
+                  ...(isProviderErrorResult ? { result: transformedErrorResult } : {}),
+                }
+              : {}),
           },
         };
       }
@@ -1517,7 +1610,9 @@ export class MessageList {
       return {
         ...invocation,
         ...(transformed.args !== undefined ? { args: transformed.args } : {}),
-        ...(invocation.state === 'result' && transformed.result !== undefined ? { result: transformed.result } : {}),
+        ...((invocation.state === 'result' || invocationState === 'output-error') && 'result' in transformed
+          ? { result: transformed.result }
+          : {}),
         ...(invocationState === 'output-error' && transformed.errorText !== undefined
           ? { errorText: transformed.errorText }
           : {}),
@@ -1865,7 +1960,14 @@ export class MessageList {
     // the result and the (possibly reconciled) toolCallId, matching the entry by
     // the id it held before reconciliation. Spread the legacy entry first to
     // preserve its type, then override only the fields that change here.
-    if (Array.isArray(msg.content.toolInvocations) && inputPart.toolInvocation.state === 'result') {
+    // A provider-executed error (`output-error`) is mirrored as a result: v4 has no error state.
+    // Client-tool errors stay out of the mirror so v4 never reads them as successes.
+    if (
+      Array.isArray(msg.content.toolInvocations) &&
+      (inputPart.toolInvocation.state === 'result' ||
+        (inputPart.toolInvocation.state === 'output-error' &&
+          (inputPartWithMeta.providerExecuted ?? originalPart.providerExecuted) === true))
+    ) {
       const resultInvocation = inputPart.toolInvocation;
       msg.content.toolInvocations = msg.content.toolInvocations.map(invocation =>
         invocation.toolCallId === priorToolCallId
@@ -2389,11 +2491,15 @@ export class MessageList {
     // Keep this replacement-target guard here instead of MessageMerger.shouldMerge().
     // shouldMerge() only decides whether to append to the latest assistant message,
     // but replace-by-id can target an older sealed message elsewhere in the list.
+    // An incoming message whose id belongs to an earlier message must update that message
+    // in place; merging it into the latest one would re-save earlier turns' parts.
+    const replacesEarlierMessage = !!replacementTarget && replacementTarget !== latestMessage;
     const isLatestFromMemory = latestMessage ? this.memoryMessages.has(latestMessage) : false;
     const shouldMerge =
       options.merge !== false &&
       latestMessageIsAfterSealedBoundary &&
       !hasSealedReplacementTarget &&
+      !replacesEarlierMessage &&
       MessageMerger.shouldMerge(latestMessage, messageV2, messageSource, isLatestFromMemory, this._agentNetworkAppend);
 
     if (shouldMerge && latestMessage) {

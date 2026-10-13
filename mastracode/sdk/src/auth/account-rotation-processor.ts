@@ -47,8 +47,7 @@ export interface AccountSwitchPartData {
     | 'auth-failed'
     | 'pool-exhausted'
     | 'persistent-outage'
-    | 'preferred-routing'
-    | 'starting-on-account';
+    | 'preferred-routing';
   at: string;
   /**
    * Set on a `to: null` part when a route pinned to a single account reported
@@ -331,7 +330,7 @@ export const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   xai: 'xAI',
 };
 
-const REASON_TEXT: Record<Exclude<AccountSwitchPartData['reason'], 'starting-on-account'>, string> = {
+const REASON_TEXT: Record<AccountSwitchPartData['reason'], string> = {
   'rate-limit': 'rate limit',
   'quota-exhausted': 'quota exhausted',
   'auth-failed': 'auth failed',
@@ -342,12 +341,9 @@ const REASON_TEXT: Record<Exclude<AccountSwitchPartData['reason'], 'starting-on-
 
 /** Validates untrusted `reason` values (e.g. persisted message parts). */
 export function isAccountSwitchReason(value: unknown): value is AccountSwitchPartData['reason'] {
-  return (
-    value === 'starting-on-account' ||
-    // Own-property check: `in` would accept prototype names like 'toString',
-    // which would then interpolate the inherited function into the notice text.
-    (typeof value === 'string' && Object.prototype.hasOwnProperty.call(REASON_TEXT, value))
-  );
+  // Own-property check: `in` would accept prototype names like 'toString',
+  // which would then interpolate the inherited function into the notice text.
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(REASON_TEXT, value);
 }
 
 /**
@@ -358,10 +354,7 @@ export function isAccountSwitchReason(value: unknown): value is AccountSwitchPar
  */
 export function accountSwitchNoticeText(data: AccountSwitchPartData): string {
   const provider = PROVIDER_DISPLAY_NAMES[data.provider] ?? data.provider;
-  if (data.reason === 'starting-on-account' && data.to) {
-    return `Starting on ${provider} account: ${data.to.label}`;
-  }
-  const reason = data.reason === 'starting-on-account' ? data.reason : REASON_TEXT[data.reason];
+  const reason = REASON_TEXT[data.reason];
   if (data.to === null) {
     // A12: a targeted route reports *its* account, not the pool — the other
     // subscriptions were never tried, so "all accounts unavailable" would be
@@ -922,8 +915,9 @@ export class AccountRotationProcessor implements Processor {
 }
 
 /**
- * Emits the "starting on a non-default account" notice (Q19) once per
- * request when the active registry account is not the first entry.
+ * Applies the pack's preferred account route once per request, before the
+ * first model call. Without a route it only reloads the credential store so
+ * the request sees accounts changed by other processes.
  *
  * TYPE CONSTRAINT: this class must NEVER implement `processAPIError`. It
  * lives in `inputProcessors`; the runner walks input processors first when
@@ -944,14 +938,9 @@ export class AccountStartNoticeProcessor implements Processor {
     const store = resolveCredentialStore(args.requestContext) ?? this.options.credentialStore;
 
     const route = resolveAccountRoute(args);
-    if (route) {
-      const switched = await applyPreferredAccountRoute(args, store, route);
-      if (switched || getRouteTargetAccountId(route) !== undefined) {
-        args.state.startNoticeEmitted = true;
-        return args.messageList;
-      }
-    } else {
+    if (!route) {
       store.reload();
+      return args.messageList;
     }
 
     // A14: a route whose accounts are all unavailable is not a pre-emptive
@@ -961,26 +950,10 @@ export class AccountStartNoticeProcessor implements Processor {
     // what lets the error lane classify it and hand the turn to the route's
     // configured fallback chain. The removed persisted set threw here instead,
     // before any socket opened, so the chain was never reached.
-    const providerId = route?.providerId ?? providerFromSession(args);
-    if (!providerId) return args.messageList;
-
-    const accounts = store.listAccounts?.(providerId) ?? [];
-    if (accounts.length < 2) return args.messageList;
-
-    const active = store.getActiveAccount?.(providerId);
-    const first = accounts[0];
-    if (!active || !first || active.id === first.id) return args.messageList;
-
-    args.state.startNoticeEmitted = true;
-
-    await emitAccountSwitchPart(args, {
-      provider: providerId,
-      from: null,
-      to: { id: active.id, label: active.label },
-      reason: 'starting-on-account',
-      at: new Date().toISOString(),
-    });
-
+    const switched = await applyPreferredAccountRoute(args, store, route);
+    if (switched || getRouteTargetAccountId(route) !== undefined) {
+      args.state.startNoticeEmitted = true;
+    }
     return args.messageList;
   }
 }

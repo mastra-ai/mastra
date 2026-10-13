@@ -47,8 +47,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const sessions = useGlobalSearchSessions(repositoryIds);
   const searchableFactoryId = repositoryIds.length > 0 ? factoryId : undefined;
   const workItems = useGlobalSearchWorkItems(searchableFactoryId);
-  const boardRepository = activeFactory?.repositories[0];
-  const intake = useGlobalSearchIntake(factoryId, boardRepository?.projectRepositoryId, boardRepository?.provider);
+  const intake = useGlobalSearchIntake(factoryId, activeFactory?.repositories ?? []);
   const toastFailureAfterPaletteCloses = (message: string) => toast.error(message);
   const workBoard = useBoardItems({
     factoryProjectId: searchableFactoryId,
@@ -97,7 +96,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
 
       {runs.repositorySelection && (
         <RepositoryPickerDialog
-          repositories={runs.repositories}
+          repositories={runs.repositoryChoices}
           onClose={runs.closeRepositorySelection}
           onSelect={async repository => {
             await runs.selectRepository(repository);

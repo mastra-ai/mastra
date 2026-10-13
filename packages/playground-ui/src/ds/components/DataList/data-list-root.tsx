@@ -1,8 +1,23 @@
 import type { CSSProperties, ReactNode, RefObject } from 'react';
+import { useId, useMemo } from 'react';
+import {
+  columnOrderSchema,
+  getColumnOrderStorageKey,
+  identityOrder,
+  keyedColumnOrderSchema,
+  moveIndex,
+  moveKeyedOrder,
+  normalizeOrder,
+  resolveKeyedOrder,
+  splitGridTracks,
+} from './data-list-column-order';
+import { DataListReorderContext } from './data-list-reorder-context';
+import type { DataListReorderContextValue } from './data-list-reorder-context';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea/scroll-area';
 import type { ScrollAreaMask, ScrollAreaProps } from '@/ds/components/ScrollArea/scroll-area';
 import { FluidMenuItems, useFluidMenu } from '@/ds/primitives/fluid-menu';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { useLocalStorageState } from '@/hooks/use-local-storage-state';
 import { cn } from '@/lib/utils';
 
 /**
@@ -43,6 +58,21 @@ export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation'
    * scrolls normally.
    */
   scrollRef?: RefObject<HTMLDivElement | null>;
+  /**
+   * Lets users drag header cells (or press Alt+Arrow on a focused header cell)
+   * to reorder columns. Requires `id`: the order is persisted in localStorage
+   * under that id. Sticky cells stay pinned. Supported for flat lists whose
+   * header and rows span the full grid; `repeat()` templates are not supported.
+   */
+  reorderable?: boolean;
+  /** Stable identifier of the list, used to persist the column order when `reorderable`. */
+  id?: string;
+  /**
+   * Stable key per column, in `columns` order. With `reorderable`, the order is
+   * persisted by key, so it survives columns being shown, hidden or added.
+   * Without it, the order is persisted by index and resets when the column count changes.
+   */
+  columnKeys?: string[];
 };
 
 type DataListRootStyle = CSSProperties & {
@@ -110,7 +140,88 @@ const dataListFitClasses: Record<DataListFit, string> = {
   container: 'w-full max-w-full',
 };
 
-export function DataListRoot({
+const disabledReorder: DataListReorderContextValue = { reorderable: false, order: [], move: () => {} };
+
+export function DataListRoot({ reorderable, id, columns, columnKeys, ...props }: DataListRootProps) {
+  const tracks = reorderable && id ? splitGridTracks(columns) : null;
+  if (id && tracks && columnKeys && columnKeys.length === tracks.length) {
+    return (
+      <DataListKeyedReorderableRoot
+        key={id}
+        storageId={id}
+        tracks={tracks}
+        columnKeys={columnKeys}
+        id={id}
+        columns={columns}
+        {...props}
+      />
+    );
+  }
+  if (id && tracks) {
+    return <DataListReorderableRoot key={id} storageId={id} tracks={tracks} id={id} columns={columns} {...props} />;
+  }
+  return <DataListBase id={id} columns={columns} reorder={disabledReorder} {...props} />;
+}
+
+function DataListKeyedReorderableRoot({
+  storageId,
+  tracks,
+  columnKeys,
+  ...props
+}: DataListReorderableRootProps & { columnKeys: string[] }) {
+  const [stored, setStored] = useLocalStorageState({
+    initialKey: getColumnOrderStorageKey(storageId),
+    defaultValue: columnKeys,
+    schema: keyedColumnOrderSchema,
+  });
+  const keysSignature = columnKeys.join('\u0000');
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by content, not array identity
+  const order = useMemo(() => resolveKeyedOrder(stored, columnKeys), [stored, keysSignature]);
+
+  const reorder = useMemo<DataListReorderContextValue>(
+    () => ({
+      reorderable: true,
+      order,
+      move: (from, to) => setStored(current => moveKeyedOrder(current, columnKeys, from, to)),
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by content, not array identity
+    [order, keysSignature, setStored],
+  );
+
+  return <DataListBase {...props} columns={order.map(i => tracks[i]).join(' ')} reorder={reorder} />;
+}
+
+type DataListReorderableRootProps = Omit<DataListRootProps, 'reorderable' | 'columnKeys'> & {
+  storageId: string;
+  tracks: string[];
+};
+
+function DataListReorderableRoot({ storageId, tracks, ...props }: DataListReorderableRootProps) {
+  const count = tracks.length;
+  const [stored, setStored] = useLocalStorageState({
+    initialKey: getColumnOrderStorageKey(storageId),
+    defaultValue: identityOrder(count),
+    schema: columnOrderSchema,
+  });
+  const order = normalizeOrder(stored, count);
+
+  const reorder = useMemo<DataListReorderContextValue>(
+    () => ({
+      reorderable: true,
+      order,
+      move: (from, to) => setStored(current => moveIndex(normalizeOrder(current, count), from, to)),
+    }),
+    [order, count, setStored],
+  );
+
+  return <DataListBase {...props} columns={order.map(i => tracks[i]).join(' ')} reorder={reorder} />;
+}
+
+type DataListBaseProps = Omit<DataListRootProps, 'reorderable' | 'columnKeys'> & {
+  reorder: DataListReorderContextValue;
+};
+
+function DataListBase({
   children,
   columns,
   className,
@@ -118,12 +229,23 @@ export function DataListRoot({
   variant = 'default',
   mask,
   scrollRef,
+  reorder,
   ...props
-}: DataListRootProps) {
+}: DataListBaseProps) {
+  const scopeId = useId();
   const gridStyle: DataListRootStyle = {
     '--data-list-background': dataListVariantBackground[variant],
     gridTemplateColumns: columns,
   };
+  // Cells keep their DOM order; CSS `order` places each one in its moved track.
+  const orderRules = reorder.reorderable
+    ? reorder.order
+        .map(
+          (original, visual) =>
+            `[data-data-list="${scopeId}"] .data-list-cells > :nth-child(${original + 1}) { order: ${visual}; }`,
+        )
+        .join('\n')
+    : null;
 
   // One hover surface travels between rows (same primitive as menus/selects).
   // Subheaders, pagination and whitespace stay inert, so no gap-click routing.
@@ -135,8 +257,10 @@ export function DataListRoot({
       // It is also the offsetParent rows are measured against and the highlight is positioned in.
       className={cn('grid content-start', ...dataListGridStyles, dataListFitClasses[fit], menu.containerClassName)}
       style={gridStyle}
+      data-data-list={reorder.reorderable ? scopeId : undefined}
       {...menu.getContainerProps({})}
     >
+      {orderRules && <style>{orderRules}</style>}
       {/* The highlight is the old row hover color. It sits between each row's
           `before` surface (-z-2) and the row content (see `dataListRowOuterStyles`). */}
       <FluidMenuItems menu={menu} className="rounded-none bg-fill-subtle">
@@ -165,7 +289,7 @@ export function DataListRoot({
       )}
     >
       <ScrollAreaViewport ref={scrollRef} className="min-h-0 flex-1 basis-auto">
-        {grid}
+        <DataListReorderContext.Provider value={reorder}>{grid}</DataListReorderContext.Provider>
       </ScrollAreaViewport>
     </ScrollArea>
   );

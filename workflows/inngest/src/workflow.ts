@@ -482,7 +482,7 @@ export class InngestWorkflow<
         // Hosts (e.g. `createInngestAgent`) can override via `__setPubsubFactory` to
         // wrap this default - typically with a `CachingPubSub` so `observe()` can replay
         // cached history - without disturbing per-workflow channel isolation.
-        const defaultPubsub = new InngestPubSub(this.inngest, this.id);
+        const defaultPubsub = new InngestPubSub(this.inngest, this.id, this.logger);
         const configuredPubsub: PubSub = this.#pubsubFactory?.(defaultPubsub) ?? defaultPubsub;
         const pubsub = new WorkflowEventPolicyPubSub(configuredPubsub, this.#emitWorkflowEvents);
 
@@ -666,32 +666,36 @@ export class InngestWorkflow<
                     })) ?? undefined;
                 }
 
+                const finalSnapshot: WorkflowRunState = {
+                  runId,
+                  status: result.status,
+                  value: result.state ?? initialState ?? {},
+                  context: toSnapshotContext(result.steps),
+                  activePaths: [],
+                  activeStepsPath: {},
+                  serializedStepGraph: this.serializedStepGraph,
+                  suspendedPaths: existingSnapshot?.suspendedPaths ?? {},
+                  waitingPaths: {},
+                  resumeLabels: existingSnapshot?.resumeLabels ?? result.resumeLabels ?? {},
+                  result: result.status === 'success' ? toSnapshotResult(result.result) : undefined,
+                  error: result.status === 'failed' ? result.error : undefined,
+                  requestContext: requestContext.toJSON(),
+                  tracingContext: workflowSpanData
+                    ? {
+                        traceId: workflowSpanData.traceId,
+                        spanId: workflowSpanData.id,
+                      }
+                    : undefined,
+                  timestamp: Date.now(),
+                };
+
                 await workflowsStore.persistWorkflowSnapshot({
                   workflowName: this.id,
                   runId,
                   resourceId,
-                  snapshot: {
-                    runId,
-                    status: result.status,
-                    value: result.state ?? initialState ?? {},
-                    context: toSnapshotContext(result.steps),
-                    activePaths: [],
-                    activeStepsPath: {},
-                    serializedStepGraph: this.serializedStepGraph,
-                    suspendedPaths: existingSnapshot?.suspendedPaths ?? {},
-                    waitingPaths: {},
-                    resumeLabels: existingSnapshot?.resumeLabels ?? result.resumeLabels ?? {},
-                    result: result.status === 'success' ? toSnapshotResult(result.result) : undefined,
-                    error: result.status === 'failed' ? result.error : undefined,
-                    requestContext: requestContext.toJSON(),
-                    tracingContext: workflowSpanData
-                      ? {
-                          traceId: workflowSpanData.traceId,
-                          spanId: workflowSpanData.id,
-                        }
-                      : undefined,
-                    timestamp: Date.now(),
-                  },
+                  snapshot: this.options.pruneSnapshot
+                    ? this.options.pruneSnapshot({ snapshot: finalSnapshot, workflowStatus: result.status })
+                    : finalSnapshot,
                 });
               }
             }

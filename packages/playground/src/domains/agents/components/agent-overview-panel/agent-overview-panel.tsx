@@ -43,10 +43,7 @@ export function AgentOverviewPanel({ agentId }: AgentOverviewPanelProps) {
   return (
     <div
       data-testid="agent-overview-panel"
-      className={cn(
-        'ml-2 grid h-full min-h-0 grid-rows-[auto_1fr] overflow-hidden rounded-studio-frame',
-        frameSurfaceStyle,
-      )}
+      className={cn('grid h-full min-h-0 grid-rows-[auto_1fr] overflow-hidden rounded-studio-frame', frameSurfaceStyle)}
     >
       {/* The header route action owns the close control (see AgentDetailHeaderActions). */}
       <div className="flex h-10 min-h-10 items-center border-b border-border px-4">
@@ -142,7 +139,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
           title: 'Using Tools and MCP documentation',
         }}
       >
-        <AgentMetadataToolList tools={tools} agentId={agentId} />
+        <AgentMetadataToolList agentId={agentId} tools={tools} />
       </AgentMetadataSection>
 
       <AgentMetadataSection

@@ -41,7 +41,7 @@ export function DataListSkeletonRows({ columnCount, numberOfRows = 3 }: DataList
   };
 
   return Array.from({ length: numberOfRows }).map((_, rowIdx) => (
-    <div key={rowIdx} className={cn('grid grid-cols-subgrid gap-4 px-3', ...dataListRowOuterStyles)}>
+    <div key={rowIdx} className={cn('data-list-cells grid grid-cols-subgrid gap-4 px-3', ...dataListRowOuterStyles)}>
       {Array.from({ length: columnCount }).map((_, colIdx) => (
         <DataListCell key={colIdx}>
           <SkeletonBar width={getPseudoRandomWidth(rowIdx, colIdx)} />
