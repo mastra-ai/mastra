@@ -16,26 +16,16 @@ import { GitLabIcon } from '../../../../ui/icons';
 import { CommittedInput, type SaveEnvironment } from './CommittedInput';
 
 /**
- * The route validates positions as a permutation of 1..n over every link of
- * the project, so each repository change ships the whole list, renumbered in
- * display order. Dead links (no repository row behind them) ride along with
- * their current values so the count matches; the factory skips them and the
- * page never shows them.
+ * A reorder must number every link of the project 1..n, so it lists them all
+ * in display order, dead links (no repository row behind them) last. It sends
+ * only ids and positions: commands and inclusion stay whatever the server
+ * holds, even when another editor changed them after this page loaded.
  */
-export function repositoriesPatch(
-  ordered: FactoryEnvironmentRepository[],
-  change?: Partial<FactoryEnvironmentRepositoryPatch> & { projectRepositoryId: string },
-): FactoryEnvironmentRepositoryPatch[] {
-  return ordered.map((repository, index) => {
-    const patch: FactoryEnvironmentRepositoryPatch = {
-      projectRepositoryId: repository.projectRepositoryId,
-      position: index + 1,
-      inEnvironment: repository.inEnvironment,
-      setupCommand: repository.setupCommand,
-      teardownCommand: repository.teardownCommand,
-    };
-    return change && change.projectRepositoryId === repository.projectRepositoryId ? { ...patch, ...change } : patch;
-  });
+export function reorderPatch(ordered: FactoryEnvironmentRepository[]): FactoryEnvironmentRepositoryPatch[] {
+  return ordered.map((repository, index) => ({
+    projectRepositoryId: repository.projectRepositoryId,
+    position: index + 1,
+  }));
 }
 
 export type RepositoryProviders = Record<string, 'github' | 'gitlab'>;
@@ -62,8 +52,8 @@ export function RepositoriesBlock({
   onSave: SaveEnvironment;
 }) {
   const { live, dead } = splitRows(repositories);
-  const save = (nextLive: FactoryEnvironmentRepository[], change?: Parameters<typeof repositoriesPatch>[1]) =>
-    onSave({ repositories: repositoriesPatch([...nextLive, ...dead], change) });
+  // A field change sends that one repository and field, so it never resends stale values for the rest.
+  const change = (patch: FactoryEnvironmentRepositoryPatch) => onSave({ repositories: [patch] });
 
   return (
     <ContentBlocks
@@ -72,7 +62,7 @@ export function RepositoriesBlock({
         // A drop in place changes nothing the route would see.
         const order = (list: FactoryEnvironmentRepository[]) => list.map(r => r.projectRepositoryId).join('\n');
         if (disabled || order(next) === order(live)) return;
-        void save(next);
+        void onSave({ repositories: reorderPatch([...next, ...dead]) });
       }}
       className="flex min-w-0 flex-col gap-4"
     >
@@ -86,9 +76,9 @@ export function RepositoriesBlock({
               disabled={disabled}
               dragHandleProps={dragHandleProps}
               onToggle={inEnvironment =>
-                void save(live, { projectRepositoryId: repository.projectRepositoryId, inEnvironment })
+                void change({ projectRepositoryId: repository.projectRepositoryId, inEnvironment })
               }
-              onCommands={commands => save(live, { projectRepositoryId: repository.projectRepositoryId, ...commands })}
+              onCommands={commands => change({ projectRepositoryId: repository.projectRepositoryId, ...commands })}
             />
           )}
         </ContentBlock>

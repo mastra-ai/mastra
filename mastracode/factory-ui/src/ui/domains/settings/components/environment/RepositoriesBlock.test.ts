@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import { environmentRepository } from '../__tests__/fixtures/environment';
-import { repositoriesPatch } from './RepositoriesBlock';
+import { reorderPatch } from './RepositoriesBlock';
 
-describe('repositoriesPatch', () => {
+describe('reorderPatch', () => {
   const web = environmentRepository({ projectRepositoryId: 'link-web', position: 1 });
   const api = environmentRepository({ projectRepositoryId: 'link-api', position: 2, setupCommand: 'pnpm build' });
   const gone = environmentRepository({
@@ -13,35 +13,13 @@ describe('repositoriesPatch', () => {
     inEnvironment: false,
   });
 
-  it('renumbers positions 1..n in display order and keeps every link, dead ones included', () => {
+  it('renumbers every link 1..n in display order, dead ones included, and sends nothing but positions', () => {
     // The page lists the live rows first (here dropped in a new order) and appends the dead links.
-    expect(repositoriesPatch([api, web, gone])).toEqual([
-      {
-        projectRepositoryId: 'link-api',
-        position: 1,
-        inEnvironment: true,
-        setupCommand: 'pnpm build',
-        teardownCommand: null,
-      },
-      { projectRepositoryId: 'link-web', position: 2, inEnvironment: true, setupCommand: null, teardownCommand: null },
-      {
-        projectRepositoryId: 'link-gone',
-        position: 3,
-        inEnvironment: false,
-        setupCommand: null,
-        teardownCommand: null,
-      },
+    // Commands and inclusion stay out, so a reorder never overwrites another editor's saved values.
+    expect(reorderPatch([api, web, gone])).toEqual([
+      { projectRepositoryId: 'link-api', position: 1 },
+      { projectRepositoryId: 'link-web', position: 2 },
+      { projectRepositoryId: 'link-gone', position: 3 },
     ]);
-  });
-
-  it('applies one change on top of the stored values', () => {
-    const patch = repositoriesPatch([web, api, gone], { projectRepositoryId: 'link-api', inEnvironment: false });
-    expect(patch[1]).toMatchObject({
-      projectRepositoryId: 'link-api',
-      position: 2,
-      inEnvironment: false,
-      setupCommand: 'pnpm build',
-    });
-    expect(patch[0]).toMatchObject({ projectRepositoryId: 'link-web', inEnvironment: true });
   });
 });

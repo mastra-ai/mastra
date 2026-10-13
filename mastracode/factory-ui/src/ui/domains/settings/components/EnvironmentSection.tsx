@@ -40,7 +40,14 @@ export function EnvironmentSection() {
   }
   if (!environmentQuery.data) return <Skeleton className="h-24 w-full" />;
 
-  return <EnvironmentBlocks factoryId={factoryId} environment={environmentQuery.data} providers={providers} />;
+  return (
+    <EnvironmentBlocks
+      key={factoryId}
+      factoryId={factoryId}
+      environment={environmentQuery.data}
+      providers={providers}
+    />
+  );
 }
 
 function EnvironmentBlocks({
