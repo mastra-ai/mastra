@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
-import type { AgentMemoryOption, MastraDBMessage } from '@mastra/core/agent';
+import type { AgentMemoryOption, MastraDBMessage, ModelWithRetries } from '@mastra/core/agent';
 import { modelSupportsAttachments } from '@mastra/core/llm';
-import type { WidenModelId } from '@mastra/core/llm';
+import type { WidenedMastraModelConfig, WidenModelId } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraMemory } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
@@ -181,7 +181,7 @@ export class ObserverRunner {
     } else if (typeof agentModel === 'function') {
       const resolveDynamicModel = agentModel;
       agentModel = (async args => {
-        const resolvedModel = await resolveDynamicModel(args);
+        const resolvedModel: WidenedMastraModelConfig | ModelWithRetries[] = await resolveDynamicModel(args);
         return Array.isArray(resolvedModel)
           ? resolvedModel.map(fallback => ({ ...fallback, maxRetries: 0 }))
           : resolvedModel;
