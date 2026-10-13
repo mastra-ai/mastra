@@ -156,14 +156,54 @@ describe('ACP Agent - Turn failures and cancellation', () => {
     await expect(agent.prompt({ sessionId, prompt: [] })).rejects.toMatchObject({ code: -32603 });
   });
 
-  it('does not fail a turn that recovers from a retryable error', async () => {
+  it.each([undefined, false])('reports an internal abort after an error with retryable=%s', async retryable => {
+    const { agent, emit, sendMessage } = setup();
+    const { sessionId } = await agent.newSession({ cwd: '/tmp', mcpServers: [] });
+    sendMessage.mockImplementationOnce(async () => {
+      emit({ type: 'error', error: new Error('Retrying provider request'), retryable: true });
+      emit({ type: 'error', error: new Error('Observational memory buffering failed'), retryable });
+      emit({ type: 'agent_end', reason: 'aborted' });
+    });
+    await expect(agent.prompt({ sessionId, prompt: [] })).rejects.toMatchObject({
+      code: -32603,
+      message: expect.stringContaining('Observational memory buffering failed'),
+    });
+    sendMessage.mockImplementationOnce(async () => emit({ type: 'agent_end', reason: 'complete' }));
+    await expect(agent.prompt({ sessionId, prompt: [] })).resolves.toMatchObject({ stopReason: 'end_turn' });
+  });
+
+  it.each([
+    ['complete', 'end_turn'],
+    ['aborted', 'cancelled'],
+  ] as const)('does not turn a retryable error followed by %s into a failure', async (reason, stopReason) => {
     const { agent, emit, sendMessage } = setup();
     const { sessionId } = await agent.newSession({ cwd: '/tmp', mcpServers: [] });
     sendMessage.mockImplementationOnce(async () => {
       emit({ type: 'error', error: new Error('Retrying'), retryable: true });
-      emit({ type: 'agent_end', reason: 'complete' });
+      emit({ type: 'agent_end', reason });
     });
-    await expect(agent.prompt({ sessionId, prompt: [] })).resolves.toMatchObject({ stopReason: 'end_turn' });
+    await expect(agent.prompt({ sessionId, prompt: [] })).resolves.toMatchObject({ stopReason });
+  });
+
+  it('preserves an abort without a recorded error', async () => {
+    const { agent, emit, sendMessage } = setup();
+    const { sessionId } = await agent.newSession({ cwd: '/tmp', mcpServers: [] });
+    sendMessage.mockImplementationOnce(async () => emit({ type: 'agent_end', reason: 'aborted' }));
+    await expect(agent.prompt({ sessionId, prompt: [] })).resolves.toMatchObject({ stopReason: 'cancelled' });
+  });
+
+  it.each(['before', 'after'])('preserves client cancellation when an error arrives %s it', async order => {
+    const { agent, emit, sendMessage, abort } = setup();
+    const { sessionId } = await agent.newSession({ cwd: '/tmp', mcpServers: [] });
+    const prompt = agent.prompt({ sessionId, prompt: [] });
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledOnce());
+    const error: AgentControllerEvent = { type: 'error', error: new Error('Observational memory failed') };
+    if (order === 'before') emit(error);
+    await agent.cancel({ sessionId });
+    if (order === 'after') emit(error);
+    emit({ type: 'agent_end', reason: 'aborted' });
+    await expect(prompt).resolves.toMatchObject({ stopReason: 'cancelled' });
+    expect(abort).toHaveBeenCalledOnce();
   });
 
   it('does not abort another session when an unknown session is cancelled', async () => {

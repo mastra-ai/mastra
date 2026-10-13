@@ -44,6 +44,7 @@ export interface PromptState {
   activeAssistantMessageId?: string;
   usage: TokenUsage;
   error?: Error;
+  errorRetryable?: boolean;
   stopReason?: 'max_tokens' | 'refusal';
   finished?: boolean;
   cancelled?: boolean;
@@ -133,6 +134,7 @@ export function handleAgentControllerEvent(
 
     case 'error':
       state.error = event.error;
+      state.errorRetryable = event.retryable;
       if (event.finishReason === 'length') state.stopReason = 'max_tokens';
       else if (event.finishReason === 'content-filter') state.stopReason = 'refusal';
       break;

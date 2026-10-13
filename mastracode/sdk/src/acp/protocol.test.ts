@@ -293,11 +293,11 @@ describe('ACP JSON-RPC conversation', () => {
     ]);
   });
 
-  it('returns a JSON-RPC error with the failed turn details', async () => {
+  it.each(['error', 'aborted'] as const)('returns a JSON-RPC error when a failed turn ends with %s', async reason => {
     const { client, sessionId, emit, sendMessage } = await connect();
     sendMessage.mockImplementationOnce(async () => {
       emit({ type: 'error', error: new Error('Provider rejected the request') });
-      emit({ type: 'agent_end', reason: 'error' });
+      emit({ type: 'agent_end', reason });
     });
     await expect(client.prompt({ sessionId, prompt: [] })).rejects.toMatchObject({
       code: -32603,
@@ -380,14 +380,16 @@ describe('ACP JSON-RPC conversation', () => {
 
 describe('ACP non-success model completion', () => {
   it.each([
-    ['length', 'max_tokens'],
-    ['content-filter', 'refusal'],
-  ] as const)('maps %s to %s while preserving partial output', async (finishReason, stopReason) => {
+    ['length', 'max_tokens', 'error'],
+    ['content-filter', 'refusal', 'error'],
+    ['length', 'max_tokens', 'aborted'],
+    ['content-filter', 'refusal', 'aborted'],
+  ] as const)('maps %s to %s when ending with %s', async (finishReason, stopReason, reason) => {
     const { client, sessionId, emit, sendMessage, updates } = await connect();
     sendMessage.mockImplementationOnce(async () => {
       assistant('Partial response').forEach(emit);
       emit({ type: 'error', error: new Error('Provider ended the response'), finishReason });
-      emit({ type: 'agent_end', reason: 'error' });
+      emit({ type: 'agent_end', reason });
     });
     await expect(client.prompt({ sessionId, prompt: [] })).resolves.toMatchObject({ stopReason });
     expect(updates[0]?.update).toMatchObject({ content: { text: 'Partial response' } });
