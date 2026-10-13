@@ -87,6 +87,8 @@ describe('Factory route contracts', () => {
       defaultModelId: null,
       autoRunEnabled: true,
     });
+    expect(updateProjectBodySchema.parse({ modelScope: 'factory' })).toEqual({ modelScope: 'factory' });
+    expect(updateProjectBodySchema.safeParse({ modelScope: 'org' }).success).toBe(false);
     expect(createWorkItemBodySchema.parse({ title: ' Card ', stages: ['intake'], ignored: true })).toEqual({
       title: 'Card',
       stages: ['intake'],
