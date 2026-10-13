@@ -146,6 +146,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/aimlapi',
+          label: 'AI/ML API',
+        },
+        {
+          type: 'doc',
           id: 'providers/aiand',
           label: 'ai&',
         },
@@ -838,6 +843,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/poolside',
           label: 'Poolside',
+        },
+        {
+          type: 'doc',
+          id: 'providers/prime',
+          label: 'Prime Inference',
         },
         {
           type: 'doc',

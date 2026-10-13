@@ -38,7 +38,7 @@ import { StepExecutor } from '../step-executor';
 import { processWorkflowForEach, processWorkflowLoop } from './loop';
 import { processWorkflowConditional, processWorkflowParallel } from './parallel';
 import { processWorkflowSleep, processWorkflowSleepUntil, processWorkflowWaitForEvent } from './sleep';
-import { getNestedWorkflow, getStepId, isExecutableStep } from './utils';
+import { getNestedWorkflow, getStepId, isExecutableStep, toStepExecutionParentWorkflow } from './utils';
 
 export type ProcessorArgs = {
   activeStepsPath: Record<string, number[]>;
@@ -2189,6 +2189,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         runId,
         stepId: leafId,
         executionPath,
+        parentWorkflow: toStepExecutionParentWorkflow(parentWorkflow),
         stepResults,
         state: currentState,
         requestContext: Object.fromEntries(rc.entries()),
