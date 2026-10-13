@@ -186,64 +186,91 @@ describe('PricingRegistry.getGlobal refresh', () => {
   });
 });
 
-describe('loadGatewayPricing', () => {
+describe('gateway pricing', () => {
   const PRIVATE_MODEL = { provider: 'my-provider', model: 'model-1' };
+  const PUBLIC_MODEL = { provider: 'openai', model: 'gpt-4o' };
+
+  function gateway(id: string, pricing: Record<string, unknown>, providerId = 'my-provider') {
+    return { id, fetchProviders: vi.fn(async () => ({ [providerId]: { pricing } })) };
+  }
 
   async function loadModule() {
     vi.resetModules();
-    vi.stubEnv('MASTRA_OFFLINE', 'true');
+    // Refresh off (not `mastra dev`), gateway loading on (not offline).
+    vi.stubEnv('MASTRA_DEV', '');
+    vi.stubEnv('MASTRA_AUTO_REFRESH_PRICING', '');
+    vi.stubEnv('MASTRA_OFFLINE', '');
+    vi.stubGlobal('fetch', vi.fn());
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     return import('./pricing-registry');
   }
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
-  it('prices models that custom gateways return and prefers them over models.dev', async () => {
-    const { PricingRegistry, loadGatewayPricing } = await loadModule();
-    expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)).toBeNull();
+  it('prices models that models.dev lacks, and never replaces a models.dev price', async () => {
+    const { PricingRegistry, setPricingGateways } = await loadModule();
+    const publicPrice = PricingRegistry.getGlobal()?.get(PUBLIC_MODEL)?.tiers[0]?.rates.input_tokens;
+    expect(publicPrice).toBeGreaterThan(0);
 
-    await loadGatewayPricing([
-      {
-        id: 'private',
-        fetchProviders: async () => ({
-          'my-provider': { pricing: { 'model-1': { input: 0.5, output: 1.5 } } },
-          openai: { pricing: { 'gpt-4o': { input: 99, output: 99 } } },
-        }),
-      },
-    ]);
-
-    expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)?.tiers[0]?.rates).toEqual({
-      input_tokens: 0.5e-6,
-      output_tokens: 1.5e-6,
+    const custom = gateway('private', {
+      'model-1': { input: 0.5, output: 1.5, tiers: [{ tier: { size: 200_000 }, input: 1, output: 3 }] },
     });
-    expect(
-      PricingRegistry.getGlobal()?.get({ provider: 'openai', model: 'gpt-4o' })?.tiers[0]?.rates.input_tokens,
-    ).toBe(99e-6);
-    // A model the gateway does not price still gets the models.dev price.
-    expect(PricingRegistry.getGlobal()?.get({ provider: 'openai', model: 'gpt-4o-mini' })).not.toBeNull();
+    const reseller = gateway('reseller', { 'gpt-4o': { input: 99, output: 99 } }, 'openai');
+    setPricingGateways(() => [custom, reseller]);
+
+    await vi.waitFor(() => expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)).not.toBeNull());
+    const priced = PricingRegistry.getGlobal()?.get(PRIVATE_MODEL);
+    expect(priced?.tiers[0]?.rates).toEqual({ input_tokens: 0.5e-6, output_tokens: 1.5e-6 });
+    expect(priced?.getPricingTierForUsage({ inputTokens: 250_000 })?.rates.input_tokens).toBe(1e-6);
+    expect(PricingRegistry.getGlobal()?.get(PUBLIC_MODEL)?.tiers[0]?.rates.input_tokens).toBe(publicPrice);
   });
 
-  it('skips built-in gateways and gateways whose fetchProviders fails', async () => {
-    const { PricingRegistry, loadGatewayPricing } = await loadModule();
-    const builtIn = vi.fn(async () => ({ openai: { pricing: { 'gpt-4o': { input: 99, output: 99 } } } }));
+  it('loads a gateway added later on the first miss, and skips the built-in gateways', async () => {
+    const { PricingRegistry, setPricingGateways } = await loadModule();
+    const builtIn = gateway('models.dev', { 'gpt-4o': { input: 99, output: 99 } }, 'openai');
+    const gateways = [builtIn];
+    setPricingGateways(() => gateways);
+    await vi.waitFor(() => expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)).toBeNull());
 
-    await loadGatewayPricing([
-      { id: 'models.dev', fetchProviders: builtIn },
-      { id: 'legacy', getId: () => 'netlify', fetchProviders: builtIn },
-      {
-        id: 'broken',
-        fetchProviders: async () => {
-          throw new Error('down');
-        },
-      },
-      {
-        id: 'private',
-        fetchProviders: async () => ({ 'my-provider': { pricing: { 'model-1': { input: 2, output: 4 } } } }),
-      },
-    ]);
+    gateways.push(gateway('private', { 'model-1': { input: 2, output: 4 } }));
+    expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)).toBeNull(); // the miss starts the load
+    await vi.waitFor(() =>
+      expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)?.tiers[0]?.rates.input_tokens).toBe(2e-6),
+    );
+    expect(builtIn.fetchProviders).not.toHaveBeenCalled();
+  });
 
-    expect(builtIn).not.toHaveBeenCalled();
+  it('warns when a gateway fails to load and retries it at most once an hour', async () => {
+    vi.useFakeTimers();
+    const { PricingRegistry, setPricingGateways } = await loadModule();
+    const broken = gateway('private', { 'model-1': { input: 2, output: 4 } });
+    broken.fetchProviders.mockRejectedValueOnce(new Error('down'));
+    setPricingGateways(() => [broken]);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('gateway private'), expect.any(Error));
+    expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)).toBeNull();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(broken.fetchProviders).toHaveBeenCalledTimes(1); // the miss does not retry within the hour
+
+    await vi.advanceTimersByTimeAsync(61 * 60 * 1000);
+    expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)).toBeNull();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(broken.fetchProviders).toHaveBeenCalledTimes(2);
     expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)?.tiers[0]?.rates.input_tokens).toBe(2e-6);
+  });
+
+  it('does not call gateways under MASTRA_OFFLINE', async () => {
+    const { PricingRegistry, setPricingGateways } = await loadModule();
+    vi.stubEnv('MASTRA_OFFLINE', 'true');
+    const custom = gateway('private', { 'model-1': { input: 2, output: 4 } });
+    setPricingGateways(() => [custom]);
+    await vi.waitFor(() => expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)).toBeNull());
+    expect(custom.fetchProviders).not.toHaveBeenCalled();
   });
 });

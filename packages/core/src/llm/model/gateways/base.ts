@@ -21,11 +21,8 @@ export interface ModelProviderOverride {
   npm?: string; // SDK package to use for this model
 }
 
-/**
- * What one model costs, in USD per 1 million tokens. Same keys as a models.dev model's
- * `cost`, so prices can be copied from models.dev or a provider's price page as they are.
- */
-export type ModelPricing = {
+/** Prices in USD per 1 million tokens, one per token kind. */
+export type ModelPricingRates = {
   input?: number;
   output?: number;
   cache_read?: number;
@@ -33,6 +30,15 @@ export type ModelPricing = {
   reasoning?: number;
   input_audio?: number;
   output_audio?: number;
+};
+
+/**
+ * What one model costs. Same shape as a models.dev model's `cost`, so prices can be copied
+ * from models.dev or a provider's price page as they are. `tiers` holds the rates that apply
+ * once the input reaches `tier.size` tokens (long-context pricing).
+ */
+export type ModelPricing = ModelPricingRates & {
+  tiers?: Array<ModelPricingRates & { tier: { type?: 'context'; size: number } }>;
 };
 
 export interface ProviderConfig {
