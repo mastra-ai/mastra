@@ -153,10 +153,8 @@ async function prune({ vacuum, keepMemory }: { vacuum: boolean; keepMemory: bool
  * native driver back on the cold-start path.
  */
 function isLibSQLVector(vector: MastraVector | undefined): vector is LibSQLVector {
-  for (let proto = vector && Object.getPrototypeOf(vector); proto; proto = Object.getPrototypeOf(proto)) {
-    if (proto.constructor?.name === 'LibSQLVector') return true;
-  }
-  return false;
+    return vector?.constructor.name === 'LibSQLVector';
+
 }
 
 /** Credential-free URL: drops userinfo and the query string (e.g. ?authToken=). */
