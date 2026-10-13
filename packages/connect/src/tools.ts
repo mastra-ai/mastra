@@ -231,7 +231,19 @@ interface SharedToolsState {
    */
   evictionHolds: { mcpKeys: Set<string>; expiresAt: number }[];
   closing?: Promise<void>;
+  /** LRU clock for registry eviction; bumped on every acquire. */
+  lastAcquiredAt: number;
 }
+
+/**
+ * Maximum shared states kept in the registry. Each distinct option set (for
+ * example an inline `fetch` closure or a rotated access token) mints one
+ * state holding snapshots and open MCP transports; without a bound those
+ * accumulate for the life of the process. Least recently acquired evicts
+ * first and is disconnected; a resolver still holding an evicted state keeps
+ * working — it just refetches and reopens transports on its next resolution.
+ */
+const MAX_SHARED_STATES = 32;
 
 const sharedStates = new Map<string, SharedToolsState>();
 const functionIds = new WeakMap<object, number>();
@@ -295,10 +307,33 @@ function acquireSharedState(
       mcpClients: new Map(),
       scopes: new Map(),
       evictionHolds: [],
+      lastAcquiredAt: Date.now(),
     };
     sharedStates.set(key, state);
+    evictSharedStates(key);
   }
+  state.lastAcquiredAt = Date.now();
   return state;
+}
+
+/** Evicts and disconnects the least recently acquired states beyond the registry bound. */
+function evictSharedStates(justAcquiredKey: string): void {
+  let excess = sharedStates.size - MAX_SHARED_STATES;
+  if (excess <= 0) return;
+  const candidates = Array.from(sharedStates.entries())
+    .filter(([key]) => key !== justAcquiredKey)
+    .sort((a, b) => a[1].lastAcquiredAt - b[1].lastAcquiredAt);
+  for (const [key, state] of candidates) {
+    if (excess <= 0) break;
+    sharedStates.delete(key);
+    excess -= 1;
+    void disconnectState(state).catch(() => {});
+  }
+}
+
+/** Test-only: current number of states in the shared registry. */
+export function __sharedToolsStateCountForTests(): number {
+  return sharedStates.size;
 }
 
 /** Test-only: disconnects and forgets every shared resolver state. */

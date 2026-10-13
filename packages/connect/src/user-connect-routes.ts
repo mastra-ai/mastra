@@ -118,6 +118,9 @@ const UNAUTHORIZED: RouteError = {
     'No end-user identity for this request. Configure server.auth with mapUserToResourceId, or pass a resourceId callback to userConnectRoutes().',
 };
 
+/** Fixed base used to prove a relative `returnTo` cannot escape the origin. */
+const RETURN_TO_BASE = 'https://relative.invalid';
+
 /**
  * Validates a `returnTo` redirect target. Relative paths (`/done`) are always
  * allowed; protocol-relative (`//host`), backslash tricks, and non-http(s)
@@ -132,7 +135,18 @@ export function validateReturnTo(
     // `//host` is protocol-relative and `/\host` is treated the same by
     // browsers — both escape the origin.
     if (raw.startsWith('//') || raw.startsWith('/\\')) return { ok: false };
-    return { ok: true, value: raw };
+    // Prefix checks alone are not enough: the WHATWG parser deletes ASCII
+    // tab/newline before parsing, so `/<TAB>/evil.test` still navigates to
+    // `//evil.test`. Resolve against a fixed base and require the origin to
+    // survive; return the normalized same-origin path.
+    let resolved: URL;
+    try {
+      resolved = new URL(raw, RETURN_TO_BASE);
+    } catch {
+      return { ok: false };
+    }
+    if (resolved.origin !== RETURN_TO_BASE) return { ok: false };
+    return { ok: true, value: `${resolved.pathname}${resolved.search}${resolved.hash}` };
   }
   let parsed: URL;
   try {

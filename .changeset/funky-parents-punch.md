@@ -25,12 +25,18 @@ Calling `tools()` per request is cheap: identical options share one internal sna
 A new `userConnectRoutes()` export returns mountable API routes (provider catalog, the caller's connections, connect sessions, status polling, disconnect, and a hosted connect page) gated on the authenticated end user's resource key from `server.auth.mapUserToResourceId`.
 
 ```ts
+import { Mastra } from '@mastra/core';
 import { userConnectRoutes } from '@mastra/connect';
 
-server: {
-  auth: myAuth,
-  apiRoutes: [...userConnectRoutes({ providers: ['linear', 'slack'] })],
-}
+export const mastra = new Mastra({
+  server: {
+    auth: {
+      authenticateToken: async token => verifyToken(token),
+      mapUserToResourceId: user => user.id,
+    },
+    apiRoutes: [...userConnectRoutes({ providers: ['linear', 'slack'] })],
+  },
+});
 ```
 
 `credential()` also gains an optional `resourceId` option for asserting a resource-scoped connection's key.
