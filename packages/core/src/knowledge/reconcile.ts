@@ -39,7 +39,16 @@ export interface MaterializeKnowledgeScopeInput {
   parentAddresses?: string[];
   contextualScopeAddress: string;
   parameters?: Record<string, string>;
+  /**
+   * Host callback consulted only for a scope parameter that neither the address nor `parameters`
+   * supplies. Returning `undefined` declines, and materialization throws as before. Vouching chooses
+   * which scope a run is anchored to; it never grants capability, so a scope materialized through the
+   * hook gets no implicit owner grant.
+   */
+  vouch?: KnowledgeScopeVouch;
 }
+
+export type KnowledgeScopeVouch = (request: { address: string; parameter: string }) => string | undefined;
 
 const BUILT_IN_SCOPE_TYPES: KnowledgeScopeTypesConfig = {
   'org:$orgId': { access: [{ principal: 'self', role: 'owner' }] },
@@ -163,6 +172,14 @@ export function materializeKnowledgeScopePlan(
   const match = matches[0];
   const config = match?.config ?? types.custom ?? BUILT_IN_SCOPE_TYPES.custom!;
   const parameters = { ...input.parameters, ...match?.parameters };
+  let vouched = false;
+  const vouch = input.vouch
+    ? (name: string) => {
+        const value = input.vouch!({ address: input.address, parameter: name })?.trim();
+        if (value) vouched = true;
+        return value || undefined;
+      }
+    : undefined;
   for (const [key, value] of Object.entries(match?.parameters ?? {})) {
     if (input.parameters?.[key] !== undefined && input.parameters[key] !== value) {
       throw new Error(`Host-vouched Knowledge scope parameter ${key} does not match address ${input.address}`);
@@ -170,14 +187,20 @@ export function materializeKnowledgeScopePlan(
   }
 
   const grants = (config.access ?? []).flatMap<KnowledgeStructureGrant>(access => {
-    const principal = resolvePrincipal(access.principal, input, parameters);
+    const principal = resolvePrincipal(access.principal, input, parameters, vouch);
     if (!principal) return [];
     return [{ scopeRefAddress: principal, role: access.role, canSuggest: access.canSuggest }];
   });
+  // Vouching anchors a run to a scope; it never makes the caller its owner (owner grants
+  // must come from explicit structure, not from a vouched or default-custom materialization).
+  const anchoredGrants =
+    vouched || (input.vouch && !match)
+      ? grants.filter(grant => grant.role !== 'owner' || grant.scopeRefAddress !== input.contextualScopeAddress)
+      : grants;
 
   const childParameters = { ...parameters, self: input.address };
   const children = (config.children ?? []).map<KnowledgeStructureScope>(child => ({
-    address: assertChildAddress(substituteParameters(child.address, childParameters), types),
+    address: assertChildAddress(substituteParameters(child.address, childParameters, vouch), types),
     name: child.name.trim(),
     metadata: child.description ? { description: child.description } : undefined,
     parentAddresses: [input.address],
@@ -185,7 +208,7 @@ export function materializeKnowledgeScopePlan(
       scopeRefAddress:
         access.principal === 'self' || access.principal === 'parent'
           ? input.address
-          : substituteParameters(access.principal, childParameters),
+          : substituteParameters(access.principal, childParameters, vouch),
       role: access.role,
       canSuggest: access.canSuggest,
     })),
@@ -199,7 +222,7 @@ export function materializeKnowledgeScopePlan(
         name: input.name?.trim() || input.address.split(':').at(-1)!,
         metadata: config.description ? { description: config.description } : undefined,
         parentAddresses: input.parentAddresses,
-        grants,
+        grants: anchoredGrants,
       },
       ...children,
     ],
@@ -234,9 +257,13 @@ function assertChildAddress(address: string, types: KnowledgeScopeTypesConfig): 
   return address;
 }
 
-function substituteParameters(template: string, parameters: Record<string, string>): string {
+function substituteParameters(
+  template: string,
+  parameters: Record<string, string>,
+  vouch?: (name: string) => string | undefined,
+): string {
   return template.replace(/\$([A-Za-z][A-Za-z0-9_]*)/g, (_match, name: string) => {
-    const value = parameters[name];
+    const value = parameters[name] || vouch?.(name);
     if (!value) throw new Error(`Missing host-vouched Knowledge scope parameter: ${name}`);
     return value;
   });
@@ -264,6 +291,7 @@ function resolvePrincipal(
   principal: KnowledgeScopeAccessConfig['principal'],
   input: MaterializeKnowledgeScopeInput,
   parameters: Record<string, string>,
+  vouch?: (name: string) => string | undefined,
 ): string | null {
   if (principal === 'self') return input.contextualScopeAddress;
   if (principal === 'parent') {
@@ -272,7 +300,7 @@ function resolvePrincipal(
     }
     return input.parentAddresses[0]!;
   }
-  return substituteParameters(principal, parameters);
+  return substituteParameters(principal, parameters, vouch);
 }
 
 function assertPattern(pattern: string): void {

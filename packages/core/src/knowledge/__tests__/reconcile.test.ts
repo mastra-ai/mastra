@@ -262,3 +262,45 @@ describe('Knowledge structure reconciliation', () => {
     });
   });
 });
+
+describe('Knowledge vouch hook', () => {
+  const types = { 'agent:$agentId:public': { access: [{ principal: 'team:$orgId', role: 'readonly' as const }] } };
+
+  it('fills a missing host-vouched parameter from the vouch hook', () => {
+    const plan = materializeKnowledgeScopePlan(types, {
+      address: 'agent:weather:public',
+      contextualScopeAddress: 'resource:weather',
+      vouch: ({ parameter }) => (parameter === 'orgId' ? 'acme' : undefined),
+    });
+    expect(plan.scopes[0]!.grants).toEqual([{ scopeRefAddress: 'team:acme', role: 'readonly', canSuggest: undefined }]);
+  });
+
+  it('still throws when the hook declines to vouch', () => {
+    expect(() =>
+      materializeKnowledgeScopePlan(types, {
+        address: 'agent:weather:public',
+        contextualScopeAddress: 'resource:weather',
+        vouch: () => undefined,
+      }),
+    ).toThrow('Missing host-vouched Knowledge scope parameter: orgId');
+  });
+
+  it('prefers explicit parameters over the hook', () => {
+    const plan = materializeKnowledgeScopePlan(types, {
+      address: 'agent:weather:public',
+      contextualScopeAddress: 'resource:weather',
+      parameters: { orgId: 'explicit' },
+      vouch: () => 'hooked',
+    });
+    expect(plan.scopes[0]!.grants[0]!.scopeRefAddress).toBe('team:explicit');
+  });
+
+  it('gives a vouched custom scope no owner grant', () => {
+    const plan = materializeKnowledgeScopePlan(undefined, {
+      address: 'project:alpha',
+      contextualScopeAddress: 'resource:caller',
+      vouch: () => 'unused',
+    });
+    expect(plan.scopes[0]!.grants.filter(grant => grant.role === 'owner')).toEqual([]);
+  });
+});
