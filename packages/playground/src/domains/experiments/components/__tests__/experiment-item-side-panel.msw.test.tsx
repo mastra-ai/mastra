@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { useLocation } from 'react-router';
@@ -21,6 +21,10 @@ import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 const mobileState = vi.hoisted(() => ({ value: false }));
 const handleSpy = vi.hoisted(() => ({ collapse: vi.fn(), expand: vi.fn(), toggle: vi.fn() }));
+// Latest `onResize` handed to the side panel, so tests can report sizes like the library does.
+const lastResize = vi.hoisted(() => ({ fn: null as null | ((size: { inPixels: number }) => void) }));
+// Mirrors react-resizable-panels' `data-separator` attribute, which is "active" mid-drag.
+const separatorState = vi.hoisted(() => ({ value: 'inactive' as 'inactive' | 'active' }));
 
 vi.mock('react-resizable-panels', () => ({
   Group: ({ children }: { children: ReactNode }) => <div data-testid="panel-group">{children}</div>,
@@ -35,18 +39,21 @@ vi.mock('@mastra/playground-ui/resize/collapsible-panel', () => ({
     id,
     children,
     ref,
+    onResize,
   }: {
     id: string;
     children: ReactNode;
     ref?: { current: typeof handleSpy | null };
+    onResize?: (size: { inPixels: number }) => void;
   }) => {
     if (ref) ref.current = handleSpy;
+    lastResize.fn = onResize ?? null;
     return <section data-testid={`collapsible-${id}`}>{children}</section>;
   },
 }));
 
 vi.mock('@mastra/playground-ui/resize/separator', () => ({
-  PanelSeparator: () => <div data-testid="panel-separator" />,
+  PanelSeparator: () => <div data-testid="panel-separator" data-separator={separatorState.value} />,
 }));
 
 vi.mock('@mastra/playground-ui/resize/panel-drawer', () => ({
@@ -113,8 +120,12 @@ beforeEach(() => {
   );
 });
 
+const reportSize = (inPixels: number) => act(() => lastResize.fn?.({ inPixels }));
+
 afterEach(() => {
   mobileState.value = false;
+  lastResize.fn = null;
+  separatorState.value = 'inactive';
   vi.clearAllMocks();
 });
 
@@ -165,6 +176,57 @@ describe('ExperimentItemSidePanel', () => {
 
       await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/experiments/exp-1'));
       expect(screen.queryByTestId('collapsible-route-side-panel')).toBeNull();
+    });
+  });
+
+  describe('when the panel mounts collapsed', () => {
+    it('keeps the item open', async () => {
+      renderExperimentPage(itemPath);
+      await findInlineResult();
+
+      reportSize(0);
+
+      expect(screen.getByTestId('location').textContent).toBe(itemPath);
+    });
+  });
+
+  describe('when the panel is collapsed by dragging', () => {
+    const dragShut = async () => {
+      renderExperimentPage(itemPath);
+      await findInlineResult();
+      await waitFor(() => expect(handleSpy.expand).toHaveBeenCalled());
+      reportSize(380);
+      // The separator is marked active for the whole drag, as the library does.
+      separatorState.value = 'active';
+      reportSize(320);
+      reportSize(0);
+    };
+
+    it('keeps the item open until the pointer is released', async () => {
+      await dragShut();
+
+      expect(screen.getByTestId('location').textContent).toBe(itemPath);
+    });
+
+    it('navigates back to the experiment once the pointer is released', async () => {
+      await dragShut();
+
+      fireEvent.pointerUp(window);
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/experiments/exp-1'));
+    });
+  });
+
+  describe('when the panel is collapsed without a drag', () => {
+    it('navigates back to the experiment', async () => {
+      renderExperimentPage(itemPath);
+      await findInlineResult();
+      await waitFor(() => expect(handleSpy.expand).toHaveBeenCalled());
+      reportSize(380);
+
+      reportSize(0);
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/experiments/exp-1'));
     });
   });
 
