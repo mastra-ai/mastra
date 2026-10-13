@@ -167,10 +167,11 @@ The following sizing rules apply to the inset variant.
 
 **Text is left-aligned. Numbers are right-aligned.** A header label lines up with the edge of its column, including sortable headers and icon-only columns such as row actions, which take `align="end"` like the button below them. Leave `align` at its default for text, badges, dates, and controls. Set `align="end"` on the `Table.Head` and every `Table.Cell` of a numeric column: amounts, balances, counts, durations, sizes, and numeric inputs. Right alignment lines digits up by place value, so people compare sizes at a glance. Do not center columns.
 
-**Text color is the same across columns.** Do not mute whole columns, such as dates or balances, while others stay full strength; mixed column colors read as a hierarchy that isn't there. Two exceptions:
+**Text color is the same across columns.** Leave data cells at the default `tone="ink"`. Do not mute some columns, such as dates or balances, while others stay full strength; mixed column colors read as a hierarchy that isn't there. The exceptions:
 
-- The first column, which names the row, stays full strength and every other column uses `tone="muted"`.
+- A table may keep its first column, which names the row, at full strength and set `tone="muted"` on every other column. Apply it to the whole table, never to a few columns.
 - Secondary text inside a cell, such as a caption under a title, uses `Txt tone="muted"`.
+- A negative amount uses `tone="muted"` on its cell, as described next.
 
 **Negative amounts are muted, not red.** Format money with `formatFullNumber(value, { currency: 'USD' })` from `@mastra/playground-ui/utils/cost`, which keeps the minus sign (`-$12.40`), and set `tone="muted"` on the cell when the value is below zero. Usage and charges are normal activity, not errors, so they must not look like a problem. The minus sign carries the meaning; the lighter gray only helps it scan.
 

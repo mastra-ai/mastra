@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   Pagination,
@@ -99,7 +100,8 @@ describe('Pagination', () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
-  it('prevents navigation from a disabled link', () => {
+  it('drops the href from a disabled anchor but keeps it focusable', async () => {
+    const user = userEvent.setup();
     render(
       <Pagination>
         <PaginationContent>
@@ -110,8 +112,31 @@ describe('Pagination', () => {
       </Pagination>,
     );
 
-    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
-    screen.getByRole('link', { name: 'Next' }).dispatchEvent(click);
-    expect(click.defaultPrevented).toBe(true);
+    const next = screen.getByRole('link', { name: 'Next' });
+    expect(next.hasAttribute('href')).toBe(false);
+    expect(next.getAttribute('aria-disabled')).toBe('true');
+    await user.tab();
+    expect(document.activeElement).toBe(next);
+  });
+
+  it('blocks middle-click on a disabled router link', () => {
+    const RouterLink = ({ to, ...props }: { to: string } & ComponentProps<'a'>) => <a href={to} {...props} />;
+    render(
+      <Pagination>
+        <PaginationContent>
+          <PaginationItem>
+            <PaginationNext disabled render={<RouterLink to="/credits?page=3" />} />
+          </PaginationItem>
+        </PaginationContent>
+      </Pagination>,
+    );
+
+    const next = screen.getByRole('link', { name: 'Next' });
+    const auxClick = new MouseEvent('auxclick', { bubbles: true, cancelable: true, button: 1 });
+    next.dispatchEvent(auxClick);
+    const metaClick = new MouseEvent('click', { bubbles: true, cancelable: true, metaKey: true });
+    next.dispatchEvent(metaClick);
+    expect(auxClick.defaultPrevented).toBe(true);
+    expect(metaClick.defaultPrevented).toBe(true);
   });
 });

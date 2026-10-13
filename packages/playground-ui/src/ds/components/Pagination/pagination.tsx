@@ -1,7 +1,7 @@
 import { useRender } from '@base-ui/react/use-render';
 import { ChevronLeft, ChevronRight, Ellipsis } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
-import type { ComponentProps, MouseEvent } from 'react';
+import { cloneElement, isValidElement, useMemo, useRef, useState } from 'react';
+import type { ComponentProps, MouseEvent, ReactElement } from 'react';
 import { PaginationContext, usePaginationItemRef } from './pagination-context';
 import type { PaginationContextValue } from './pagination-context';
 import { FluidHoverHighlight } from '@/components/fluid-hover-highlight';
@@ -80,27 +80,45 @@ export type PaginationLinkProps = useRender.ComponentProps<'button'> & {
   disabled?: boolean;
 };
 
+type LinkRender = PaginationLinkProps['render'];
+
+function preventActivation(event: MouseEvent<HTMLElement>) {
+  event.preventDefault();
+}
+
+function isAnchorElement(render: LinkRender): render is ReactElement<ComponentProps<'a'>> {
+  return isValidElement(render) && render.type === 'a';
+}
+
+function linkRender(render: LinkRender, disabled: boolean | undefined) {
+  if (disabled && isAnchorElement(render)) return cloneElement(render, { href: undefined });
+  return render;
+}
+
+function elementProps(render: LinkRender, disabled: boolean | undefined) {
+  if (render === undefined) return { type: 'button' as const };
+  if (disabled && isAnchorElement(render)) return { role: 'link', tabIndex: 0 };
+  return {};
+}
+
+function activationProps(disabled: boolean | undefined, onClick: PaginationLinkProps['onClick']) {
+  if (disabled) return { 'aria-disabled': true, onClick: preventActivation, onAuxClick: preventActivation };
+  return { onClick };
+}
+
 export function PaginationLink({ isActive, disabled, render, className, onClick, ...props }: PaginationLinkProps) {
   const ref = usePaginationItemRef();
-  const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
-    if (disabled) {
-      event.preventDefault();
-      return;
-    }
-    onClick?.(event);
-  };
   return useRender({
     defaultTagName: 'button',
-    render,
+    render: linkRender(render, disabled),
     ref,
     props: {
-      ...(render === undefined && { type: 'button' as const }),
+      ...elementProps(render, disabled),
       ...props,
+      ...activationProps(disabled, onClick),
       'data-slot': 'pagination-link',
       'aria-current': isActive && 'page',
-      'aria-disabled': disabled || undefined,
       className: cn(paginationLinkClass, className),
-      onClick: handleClick,
     },
   });
 }
