@@ -447,5 +447,35 @@ describe('Background Tasks handlers', () => {
         } as any),
       ).rejects.toMatchObject({ status: 404 });
     });
+
+    it('rejects an empty context resource id instead of granting privileged access', async () => {
+      const { task: other } = await enqueueFor('user-2', 'other', 'SECRET');
+      await tick();
+
+      await expect(
+        BACKGROUND_TASK_STREAM_ROUTE.handler({
+          mastra,
+          abortSignal: new AbortController().signal,
+          requestContext: scopedContext(''),
+        } as any),
+      ).rejects.toMatchObject({ status: 403 });
+
+      await expect(
+        LIST_BACKGROUND_TASKS_ROUTE.handler({
+          mastra,
+          requestContext: scopedContext(''),
+          abortSignal: new AbortController().signal,
+        } as any),
+      ).rejects.toMatchObject({ status: 403 });
+
+      await expect(
+        GET_BACKGROUND_TASK_ROUTE.handler({
+          mastra,
+          backgroundTaskId: other.id,
+          requestContext: scopedContext(''),
+          abortSignal: new AbortController().signal,
+        } as any),
+      ).rejects.toMatchObject({ status: 403 });
+    });
   });
 });

@@ -20,8 +20,13 @@ function resolveResourceScope(
   clientResourceId: string | undefined,
 ): { resourceId: string | undefined; scoped: boolean } {
   const contextResourceId = getContextResourceId(requestContext);
-  if (!contextResourceId) return { resourceId: clientResourceId, scoped: false };
-  if (clientResourceId && clientResourceId !== contextResourceId) {
+  if (contextResourceId === undefined) return { resourceId: clientResourceId, scoped: false };
+  // An empty resource id must not be mistaken for a privileged (unscoped) caller, and
+  // storage filters ignore empty strings, so it cannot be scoped safely either.
+  if (contextResourceId === '') {
+    throw new HTTPException(403, { message: 'Access denied: authenticated resourceId is empty' });
+  }
+  if (clientResourceId !== undefined && clientResourceId !== contextResourceId) {
     throw new HTTPException(403, { message: 'Access denied: resourceId does not match the authenticated resource' });
   }
   return { resourceId: contextResourceId, scoped: true };
@@ -105,6 +110,7 @@ export const GET_BACKGROUND_TASK_ROUTE = createRoute({
   tags: ['Background Tasks'],
   requiresAuth: true,
   handler: async ({ mastra, backgroundTaskId, requestContext }) => {
+    const { resourceId, scoped } = resolveResourceScope(requestContext, undefined);
     const bgManager = mastra.backgroundTaskManager;
     if (!bgManager) {
       // Background tasks not enabled — the task can't exist.
@@ -112,9 +118,8 @@ export const GET_BACKGROUND_TASK_ROUTE = createRoute({
     }
 
     const task = await bgManager.getTask(backgroundTaskId);
-    const contextResourceId = getContextResourceId(requestContext);
     // Report another resource's task as missing so its existence is not disclosed.
-    if (!task || (contextResourceId && task.resourceId !== contextResourceId)) {
+    if (!task || (scoped && task.resourceId !== resourceId)) {
       throw new HTTPException(404, { message: 'Background task not found' });
     }
     return task;

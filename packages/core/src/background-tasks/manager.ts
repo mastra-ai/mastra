@@ -775,9 +775,9 @@ export class BackgroundTaskManager {
       includeExisting = true,
       allResources = false,
     } = options ?? {};
-    const matchesResource = (taskResourceId: string | undefined) => {
-      if (resourceId) return taskResourceId === resourceId;
-      return allResources || !taskResourceId;
+    const matchesResource = (taskResourceId: string | null | undefined) => {
+      if (resourceId !== undefined) return taskResourceId === resourceId;
+      return allResources || taskResourceId == null;
     };
 
     const EVENT_STATUS_MAP: Record<string, BackgroundTaskStatus> = {

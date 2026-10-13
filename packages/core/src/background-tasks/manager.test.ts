@@ -2475,6 +2475,22 @@ describe('BackgroundTaskManager', () => {
         );
       });
 
+      it('treats an empty-string resource id as a resource, not as unscoped', async () => {
+        const unscopedAbort = new AbortController();
+        const unscoped = manager.stream({ agentId: 'a1', abortSignal: unscopedAbort.signal });
+        const emptyAbort = new AbortController();
+        const empty = manager.stream({ agentId: 'a1', resourceId: '', abortSignal: emptyAbort.signal });
+
+        await enqueueFor('', 'empty-call', 'EMPTY');
+        await enqueueFor('user-1', 'user-call', 'USER');
+
+        const unscopedEvents = await collect(unscoped, unscopedAbort);
+        expect(unscopedEvents.map(e => e.payload.toolCallId)).not.toContain('empty-call');
+
+        const emptyEvents = await collect(empty, emptyAbort);
+        expect(new Set(emptyEvents.map(e => e.payload.toolCallId))).toEqual(new Set(['empty-call']));
+      });
+
       it('delivers every resource when allResources is set', async () => {
         const abortController = new AbortController();
         const stream = manager.stream({ allResources: true, abortSignal: abortController.signal });
