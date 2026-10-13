@@ -137,6 +137,11 @@ export type KnowledgeImporterHandler<TPayload = unknown> = (
 
 export interface KnowledgeImporterDefinition<TPayload = unknown> {
   readonly id: string;
+  /**
+   * Organization this registration acts for. Agentic import runs carry it as the
+   * importer's FGA actor org; it never comes from the operator who triggered a run.
+   */
+  readonly organizationId?: string;
   readonly access?: KnowledgeImporterAccess;
   readonly canCreateRoots?: boolean;
   readonly triggers?: KnowledgeImporterTriggers;
@@ -147,6 +152,7 @@ export interface KnowledgeImporterDefinition<TPayload = unknown> {
 
 export interface KnowledgeImporterRegistrationContext<TPayload = unknown> {
   readonly importerId: string;
+  readonly organizationId?: string;
   readonly access?: KnowledgeImporterAccess;
   readonly canCreateRoots: boolean;
   readonly triggers: KnowledgeImporterTriggers;

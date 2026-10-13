@@ -137,6 +137,14 @@ function normalizeTriggers(triggers: KnowledgeImporterTriggers | undefined): Kno
   });
 }
 
+function normalizeOrganizationId(id: string, organizationId: string | undefined): string | undefined {
+  if (organizationId === undefined) return undefined;
+  if (typeof organizationId !== 'string' || !organizationId.trim() || organizationId.includes(':')) {
+    throw new Error(`Knowledge importer ${id} organizationId must be a non-empty id without ':'`);
+  }
+  return organizationId;
+}
+
 function normalizeAgentic(agentic: KnowledgeImporterAgentConfig | undefined): KnowledgeImporterAgentConfig | undefined {
   if (agentic === undefined) return undefined;
   if (!agentic || typeof agentic !== 'object' || Array.isArray(agentic)) {
@@ -198,12 +206,14 @@ export class KnowledgeImporterRegistry {
       throw new Error(`Knowledge importer ${id} canCreateRoots must be a boolean`);
     }
 
+    const organizationId = normalizeOrganizationId(id, definition.organizationId);
     const access = normalizeAccess(definition.access);
     const triggers = normalizeTriggers(definition.triggers);
     const agentic = normalizeAgentic(definition.agentic);
     const citations = normalizeCitations(definition.citations);
     const normalized: KnowledgeImporterDefinition<TPayload> = Object.freeze({
       id,
+      ...(organizationId === undefined ? {} : { organizationId }),
       ...(access === undefined ? {} : { access }),
       ...(definition.canCreateRoots ? { canCreateRoots: true } : {}),
       triggers,
@@ -214,6 +224,7 @@ export class KnowledgeImporterRegistry {
     const handle: KnowledgeImporterHandle<TPayload> = Object.freeze({
       definition: normalized,
       importerId: id,
+      ...(organizationId === undefined ? {} : { organizationId }),
       access,
       canCreateRoots: definition.canCreateRoots ?? false,
       triggers,

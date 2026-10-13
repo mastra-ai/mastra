@@ -274,6 +274,7 @@ export class KnowledgeImporterRunner {
                 const result = await runAgenticKnowledgeImport({
                   knowledge: this.#knowledge,
                   importerId: importer.importerId,
+                  ...(importer.organizationId ? { organizationId: importer.organizationId } : {}),
                   binding: run.binding,
                   runId: run.id,
                   signal: controller.signal,
