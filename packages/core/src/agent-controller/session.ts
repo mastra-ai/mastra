@@ -63,6 +63,8 @@ import type {
 
 export const SUSPENDED_RUN_AGENT_KEY = createRunScopeKey<Agent>('agent-controller.suspendedRunAgent');
 export const SOURCE_APPROVAL_CALLS_KEY = createRunScopeKey<Set<string>>('agent-controller.sourceApprovalCalls');
+/** Request-context key that tags a resumed segment with the resume attempt that sent it. */
+export const RESUME_ATTEMPT_CONTEXT_KEY = 'mastra.agentController.resumeAttempt';
 export const THREAD_OWNER_ID_RUN_SCOPE_KEY = createRunScopeKey<string>('agent-controller.threadOwnerId');
 export const THREAD_OWNER_ID_CONTEXT_KEY = 'mastra__agentControllerThreadOwnerId';
 
@@ -1496,12 +1498,11 @@ export class SessionThread {
   }
 }
 
-/** Consume one resume record for `runId`; false when none is left. */
-function consumeResumeRecord(resumedRuns: Map<string, number>, runId: string): boolean {
-  const count = resumedRuns.get(runId) ?? 0;
-  if (count === 0) return false;
-  if (count === 1) resumedRuns.delete(runId);
-  else resumedRuns.set(runId, count - 1);
+/** Consume the resume record of `attempt` for `runId`; false when it has none. */
+function consumeResumeRecord(resumedRuns: Map<string, Set<string>>, runId: string, attempt: string): boolean {
+  const attempts = resumedRuns.get(runId);
+  if (!attempts?.delete(attempt)) return false;
+  if (attempts.size === 0) resumedRuns.delete(runId);
   return true;
 }
 
@@ -1531,10 +1532,10 @@ export class SessionStream {
   /** Set once the live subscription's run loop has failed; cleared on attach. */
   #consumerFailure: { error: unknown } | null = null;
   /**
-   * Resumes this session sent through the live subscription whose resumed
-   * segment has not started, counted per run id. Replaced on attach.
+   * Resume attempts this session sent through the live subscription whose
+   * resumed segment has not started, by run id. Replaced on attach.
    */
-  #resumedRuns = new Map<string, number>();
+  #resumedRuns = new Map<string, Set<string>>();
 
   constructor(private readonly getSessionRun: () => { sessionId: string; runId: string | null }) {}
 
@@ -1627,20 +1628,22 @@ export class SessionStream {
   }
 
   /**
-   * Record that this session is sending a resume for `runId` through the live
-   * subscription. The resumed segment keeps the run id, so the consumer needs
-   * this to process it when the run was aborted earlier. Call the returned
-   * function when this resume fails to send, to drop its record.
+   * Record that this session is sending resume `attempt` for `runId` through
+   * the live subscription. The resumed segment keeps the run id, so the
+   * consumer needs this to process it when the run was aborted earlier; the
+   * segment's request context carries `attempt` under
+   * {@link RESUME_ATTEMPT_CONTEXT_KEY}. Call the returned function when this
+   * resume fails to send, to drop its record.
    */
-  markResumedRun({ runId }: { runId: string }): () => void {
+  markResumedRun({ runId, attempt }: { runId: string; attempt: string }): () => void {
     const resumedRuns = this.#resumedRuns;
-    resumedRuns.set(runId, (resumedRuns.get(runId) ?? 0) + 1);
-    return () => void consumeResumeRecord(resumedRuns, runId);
+    resumedRuns.set(runId, (resumedRuns.get(runId) ?? new Set<string>()).add(attempt));
+    return () => void consumeResumeRecord(resumedRuns, runId, attempt);
   }
 
-  /** Whether a resume of `runId` is waiting for its segment to start. Consumes one record. */
-  takeResumedRun({ runId }: { runId: string }): boolean {
-    return consumeResumeRecord(this.#resumedRuns, runId);
+  /** Whether `attempt` is a resume of `runId` waiting for its segment to start. Consumes its record. */
+  takeResumedRun({ runId, attempt }: { runId: string; attempt: unknown }): boolean {
+    return typeof attempt === 'string' && consumeResumeRecord(this.#resumedRuns, runId, attempt);
   }
 
   /** Agent that owns `subscription`, when it is the live subscription. */
@@ -5930,7 +5933,7 @@ export class Session<TState = unknown> {
   }
 
   private async observeSourceResume(agent: Agent, address: SuspensionAddress, requestContext: RequestContext) {
-    const markerKey = 'mastra.agentController.resumeAttempt';
+    const markerKey = RESUME_ATTEMPT_CONTEXT_KEY;
     const attempt = this.machinery.generateId();
     const observerContext = new RequestContext(requestContext.entries());
     let disposed = false;
@@ -6195,7 +6198,11 @@ export class Session<TState = unknown> {
         sharedOptions.requireToolApproval = false;
       }
       sharedOptions.onStepFinish = this.#resumeUsageRecorder(agent, suspension.runId, requestContext);
-      if (resumedSubscriptionBoundary) dropResumeRecord = this.stream.markResumedRun({ runId: suspension.runId });
+      if (resumedSubscriptionBoundary) {
+        const attempt = this.machinery.generateId();
+        requestContext.set(RESUME_ATTEMPT_CONTEXT_KEY, attempt);
+        dropResumeRecord = this.stream.markResumedRun({ runId: suspension.runId, attempt });
+      }
       await agent.sendStreamResume({
         threadId,
         resourceId,

@@ -17,6 +17,7 @@ import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/p
 import type { Session, SessionMachinery } from './session';
 import {
   ABORTED_BY_USER_REASON,
+  RESUME_ATTEMPT_CONTEXT_KEY,
   SOURCE_APPROVAL_CALLS_KEY,
   SUSPENDED_RUN_AGENT_KEY,
   SUSPENDED_RUN_MEMORY_KEY,
@@ -1798,7 +1799,13 @@ export class SessionRunEngine {
         // A resumed segment keeps its run id and opens with `start`. When this
         // session sent that resume, process the segment even if the run was
         // aborted; other chunks of the aborted run stay ignored.
-        const resumedSegment = chunk.type === 'start' && !!runId && this.#session.stream.takeResumedRun({ runId });
+        const resumedSegment =
+          chunk.type === 'start' &&
+          !!runId &&
+          this.#session.stream.takeResumedRun({
+            runId,
+            attempt: subscription.__getCurrentRunRequestContext?.()?.get(RESUME_ATTEMPT_CONTEXT_KEY),
+          });
         if (runId && runId === abortedRunId && !resumedSegment) continue;
         if (runId && abortedRunId) abortedRunId = undefined;
 

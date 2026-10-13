@@ -4,7 +4,7 @@ import { RequestContext } from '../../request-context';
 import { Workspace } from '../../workspace';
 import { LocalFilesystem } from '../../workspace/filesystem/local-filesystem';
 import type { SessionMachinery } from '../session';
-import { Session } from '../session';
+import { RESUME_ATTEMPT_CONTEXT_KEY, Session } from '../session';
 import { SessionRunEngine } from '../session-run-engine';
 import type { AgentControllerEvent } from '../types';
 
@@ -49,6 +49,13 @@ function createHarness() {
 
 function chunk(value: StreamChunk): StreamChunk {
   return value;
+}
+
+/** The request context a resumed segment carries for resume `attempt`. */
+function resumeAttemptContext(attempt: string): RequestContext {
+  const requestContext = new RequestContext();
+  requestContext.set(RESUME_ATTEMPT_CONTEXT_KEY, attempt);
+  return requestContext;
 }
 
 describe('SessionRunEngine — abort deadline', () => {
@@ -158,6 +165,7 @@ describe('SessionRunEngine — abort deadline', () => {
 
   it("Given an aborted subscribed run that this session resumes, Then it ignores the aborted run's tail and processes the resumed segment (#26871)", async () => {
     const { engine, events, session } = createHarness();
+    let currentRequestContext: RequestContext | undefined;
 
     const subscription = {
       stream: (async function* () {
@@ -165,16 +173,18 @@ describe('SessionRunEngine — abort deadline', () => {
         yield chunk({ type: 'text-start', payload: { id: 't1' }, runId: 'run-1' });
         session.run.requestAbort();
         yield chunk({ type: 'abort', payload: {}, runId: 'run-1' });
-        session.stream.markResumedRun({ runId: 'run-1' });
+        session.stream.markResumedRun({ runId: 'run-1', attempt: 'attempt-1' });
         // Still part of the aborted segment, even though the resume was sent.
         yield chunk({ type: 'finish', payload: { stepResult: { reason: 'stop' } }, runId: 'run-1' });
         // The resumed segment keeps the run id and opens with `start`.
+        currentRequestContext = resumeAttemptContext('attempt-1');
         yield chunk({ type: 'start', payload: {}, runId: 'run-1' });
         yield chunk({ type: 'text-start', payload: { id: 't2' }, runId: 'run-1' });
         yield chunk({ type: 'text-delta', payload: { id: 't2', text: 'resumed' }, runId: 'run-1' });
         yield chunk({ type: 'finish', payload: { stepResult: { reason: 'stop' } }, runId: 'run-1' });
       })(),
       activeRunId: () => null,
+      __getCurrentRunRequestContext: () => currentRequestContext,
       abort: () => true,
       unsubscribe: vi.fn(),
     };
@@ -188,6 +198,46 @@ describe('SessionRunEngine — abort deadline', () => {
       { type: 'agent_end', reason: 'complete' },
     ]);
     expect(session.run.isRunning()).toBe(false);
+  });
+
+  it("Given two resumes of an aborted run where the first fails to send but still broadcasts, Then only the second resume's segment is processed (#26871)", async () => {
+    const { engine, events, session } = createHarness();
+    let currentRequestContext: RequestContext | undefined;
+
+    const subscription = {
+      stream: (async function* () {
+        yield chunk({ type: 'start', payload: {}, runId: 'run-1' });
+        yield chunk({ type: 'text-start', payload: { id: 't1' }, runId: 'run-1' });
+        session.run.requestAbort();
+        yield chunk({ type: 'abort', payload: {}, runId: 'run-1' });
+        const dropFirst = session.stream.markResumedRun({ runId: 'run-1', attempt: 'attempt-1' });
+        session.stream.markResumedRun({ runId: 'run-1', attempt: 'attempt-2' });
+        // The first send rejects (e.g. its registration failed), but its segment still broadcasts.
+        dropFirst();
+        currentRequestContext = resumeAttemptContext('attempt-1');
+        yield chunk({ type: 'start', payload: {}, runId: 'run-1' });
+        yield chunk({ type: 'text-start', payload: { id: 't2' }, runId: 'run-1' });
+        yield chunk({ type: 'finish', payload: { stepResult: { reason: 'stop' } }, runId: 'run-1' });
+        currentRequestContext = resumeAttemptContext('attempt-2');
+        yield chunk({ type: 'start', payload: {}, runId: 'run-1' });
+        yield chunk({ type: 'text-start', payload: { id: 't3' }, runId: 'run-1' });
+        yield chunk({ type: 'text-delta', payload: { id: 't3', text: 'resumed' }, runId: 'run-1' });
+        yield chunk({ type: 'finish', payload: { stepResult: { reason: 'stop' } }, runId: 'run-1' });
+      })(),
+      activeRunId: () => null,
+      __getCurrentRunRequestContext: () => currentRequestContext,
+      abort: () => true,
+      unsubscribe: vi.fn(),
+    };
+    session.stream.attach({ subscription, key: 'thread-1' });
+
+    await engine.processSubscribedThreadStream(subscription);
+
+    expect(events.filter(event => event.type === 'agent_start')).toHaveLength(2);
+    expect(events.filter(event => event.type === 'agent_end')).toEqual([
+      { type: 'agent_end', reason: 'aborted' },
+      { type: 'agent_end', reason: 'complete' },
+    ]);
   });
 
   it('Given an aborted subscribed run and no resume recorded for it, Then a later `start` of that run is still ignored (#26871)', async () => {

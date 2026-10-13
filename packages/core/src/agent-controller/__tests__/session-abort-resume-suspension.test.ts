@@ -17,6 +17,7 @@ import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 import { askUserTool } from '../../tools/builtin/ask-user';
 import { AgentController } from '../agent-controller';
+import { RESUME_ATTEMPT_CONTEXT_KEY } from '../session';
 import { createMockWorkspace } from '../test-utils';
 import type { AgentControllerEvent } from '../types';
 
@@ -194,13 +195,16 @@ describe('resuming a tool call that parked after its run was aborted (#26871)', 
     const harness = await createHarness('abort-then-failed-resume');
     const { session, agent, events, getCallCount } = harness;
     const runId = await parkAfterAbort(harness);
-    vi.spyOn(agent, 'sendStreamResume').mockRejectedValueOnce(new Error('no suspended run'));
+    const sendStreamResume = vi.spyOn(agent, 'sendStreamResume').mockRejectedValueOnce(new Error('no suspended run'));
+    const attemptOf = (call: number) =>
+      sendStreamResume.mock.calls[call]?.[0].streamOptions?.requestContext?.get(RESUME_ATTEMPT_CONTEXT_KEY);
 
     await session.respondToToolSuspension({ toolCallId: 'call-ask', resumeData: 'Ada' });
 
     expect(events.some(event => event.type === 'error' && event.error.message === 'no suspended run')).toBe(true);
     // A later `start` of the aborted run must not pass as this failed resume.
-    expect(session.stream.takeResumedRun({ runId })).toBe(false);
+    expect(attemptOf(0)).toEqual(expect.any(String));
+    expect(session.stream.takeResumedRun({ runId, attempt: attemptOf(0) })).toBe(false);
 
     events.length = 0;
     const answered = await settleWithin(
@@ -211,7 +215,9 @@ describe('resuming a tool call that parked after its run was aborted (#26871)', 
     expect(answered).toBe('answered');
     expect(getCallCount()).toBe(2);
     expect(events.filter(event => event.type === 'agent_end')).toEqual([{ type: 'agent_end', reason: 'complete' }]);
-    expect(session.stream.takeResumedRun({ runId })).toBe(false);
+    expect(attemptOf(1)).toEqual(expect.any(String));
+    expect(attemptOf(1)).not.toBe(attemptOf(0));
+    expect(session.stream.takeResumedRun({ runId, attempt: attemptOf(1) })).toBe(false);
   });
 
   it('Given two overlapping resumes of the aborted run, When one fails to send before the other starts, Then the other still reaches the session', async () => {
