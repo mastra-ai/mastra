@@ -4,22 +4,27 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type * as authStudioModule from '@mastra/auth-studio';
 import { getDynamicInstructions } from '@mastra/code-sdk/agents/instructions';
+import { Mastra } from '@mastra/core';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
-import type { AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
+import { registerApiRoute } from '@mastra/core/server';
+import type { AuthInitContext, IMastraAuthProvider, Middleware } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
 
 import { FactorySandbox, FACTORY_SANDBOX_BRAND, isFactorySandbox, LocalSandbox } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
+import { MastraServer } from '@mastra/hono';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector } from '@mastra/pg';
+import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestBoard } from './boards/test-utils.js';
 import type { VersionControl } from './capabilities/version-control.js';
 import { MastraFactory } from './factory.js';
 import type { FactoryIntegration, IntegrationContext } from './integrations/base.js';
 import type * as platformGithubModule from './integrations/platform/github/integration.js';
+import type * as customProviderSourceModule from './routes/custom-provider-source.js';
 import type * as projectRoutesModule from './routes/projects.js';
 import type * as surfaceModule from './routes/surface.js';
 import type * as tenantCredentialsModule from './routes/tenant-credentials.js';
@@ -177,9 +182,35 @@ function lastStudioProvider():
 // in local/auth-disabled mode would force model calls through an empty tenant
 // store and break chat with "Not logged in", so the factory must gate it.
 const registerTenantCredentialResolverMock = vi.fn();
+// Records the tenant each primer sees, so tests can assert the primers run
+// after the user (and selected org) is resolved.
+const primedTenants: Array<[primer: string, tenant: unknown]> = [];
 vi.mock('./routes/tenant-credentials', async importOriginal => {
   const actual = await importOriginal<typeof tenantCredentialsModule>();
-  return { ...actual, registerTenantCredentialResolver: () => registerTenantCredentialResolverMock() };
+  return {
+    ...actual,
+    registerTenantCredentialResolver: () => registerTenantCredentialResolverMock(),
+    createTenantCredentialPrimer: (options: Parameters<typeof actual.createTenantCredentialPrimer>[0]) => {
+      const primer = actual.createTenantCredentialPrimer(options);
+      return async (c: Parameters<typeof primer>[0], next: Parameters<typeof primer>[1]) => {
+        primedTenants.push(['credentials', options.auth.tenant(c) ?? null]);
+        return primer(c, next);
+      };
+    },
+  };
+});
+vi.mock('./routes/custom-provider-source', async importOriginal => {
+  const actual = await importOriginal<typeof customProviderSourceModule>();
+  return {
+    ...actual,
+    createCustomProvidersPrimer: (options: Parameters<typeof actual.createCustomProvidersPrimer>[0]) => {
+      const primer = actual.createCustomProvidersPrimer(options);
+      return async (c: Parameters<typeof primer>[0], next: Parameters<typeof primer>[1]) => {
+        primedTenants.push(['customProviders', options.auth.tenant(c) ?? null]);
+        return primer(c, next);
+      };
+    },
+  };
 });
 
 // Wrap the route-surface assembly with a spy so tests can assert the DI deps
@@ -1244,6 +1275,49 @@ describe('MastraFactory.prepare', () => {
     const gatedMiddleware = (gatedConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
     expect(gatedMiddleware).toHaveLength(openMiddleware.length + 3);
     expect(gatedMiddleware.filter(entry => (entry as { phase?: string }).phase === 'afterAuth')).toHaveLength(3);
+  });
+
+  it.each([
+    ['a deployer with afterAuth support', false],
+    ['a deployer without afterAuth support', true],
+  ])('primes credentials and custom providers for the selected org on %s', async (_label, legacyDeployer) => {
+    const provider = fakeProvider({
+      authenticateToken: vi.fn(async () => ({
+        id: 'user_1',
+        email: 'user@example.com',
+        organizationId: 'org_1',
+        memberOrgIds: ['org_1', 'org_2'],
+      })),
+    });
+    const config = await prepareFactory({ storage: fakeStorage(), auth: provider });
+    const { middleware = [] } = (config.buildServerConfig as () => { middleware?: Middleware[] })();
+    // A deployer without afterAuth support ignores `phase` and mounts every
+    // entry as ordinary middleware, in array order, before core route auth.
+    const mounted = legacyDeployer
+      ? middleware.map(entry => (typeof entry === 'function' ? entry : { path: entry.path, handler: entry.handler }))
+      : middleware;
+
+    const mastra = new Mastra({
+      logger: false,
+      server: {
+        auth: provider,
+        middleware: mounted,
+        apiRoutes: [registerApiRoute('/web/probe', { method: 'GET', handler: async c => c.json({ ok: true }) })],
+      },
+    });
+    const app = new Hono();
+    await new MastraServer({ app, mastra }).init();
+    primedTenants.length = 0;
+
+    const res = await app.request('/web/probe', {
+      headers: { Accept: 'application/json', Authorization: 'Bearer t', 'X-Mastra-Organization-Id': 'org_2' },
+    });
+
+    expect(res.status).toBe(200);
+    expect(primedTenants).toEqual([
+      ['credentials', { orgId: 'org_2', userId: 'user_1' }],
+      ['customProviders', { orgId: 'org_2', userId: 'user_1' }],
+    ]);
   });
 
   it('passes the resolved auth provider to both server.auth and studio.auth', async () => {
