@@ -863,6 +863,53 @@ describe('SourceControlStorage', () => {
       expect(await backend.ops.findMany('source_control_session_repositories', {})).toHaveLength(1);
     });
 
+    it('deleting a connection removes its sessions and every repository row touching them or its links', async () => {
+      const project = await createProject();
+      const removedLink = await linkRepository({ factoryProjectId: project.id });
+      const otherInstallation = await createInstallation(github, { externalId: 'other-installation' });
+      const keptLink = await linkRepository({
+        factoryProjectId: project.id,
+        installationId: otherInstallation.id,
+        repositoryExternalId: 'repo-2',
+        repositorySlug: 'mastra-ai/second',
+      });
+      expect(keptLink.connectionId).not.toBe(removedLink.connectionId);
+      const removed = await github.sessions.create(
+        sessionInput('00000000-0000-4000-8000-000000000161', removedLink.id),
+      );
+      const kept = await github.sessions.create(
+        sessionInput('00000000-0000-4000-8000-000000000162', keptLink.id, 'user-1', 'other'),
+      );
+      // The removed session's row on the surviving connection's link.
+      await github.sessionRepositories.upsert({
+        sessionId: removed.sessionId,
+        projectRepositoryId: keptLink.id,
+        branch: 'feat/x',
+      });
+      // The surviving session's row on the removed link.
+      await github.sessionRepositories.upsert({
+        sessionId: kept.sessionId,
+        projectRepositoryId: removedLink.id,
+        branch: 'other',
+      });
+      // Unrelated to the removed connection.
+      await github.sessionRepositories.upsert({
+        sessionId: kept.sessionId,
+        projectRepositoryId: keptLink.id,
+        branch: 'other',
+      });
+
+      expect(await github.connections.delete({ orgId: 'org-1', id: removedLink.connectionId })).toBe(true);
+
+      expect(await github.sessions.getBySessionId(removed.sessionId)).toBeNull();
+      expect(await github.sessionRepositories.listBySession({ sessionId: removed.sessionId })).toEqual([]);
+      expect(await github.sessions.getBySessionId(kept.sessionId)).toMatchObject({ id: kept.id });
+      expect(
+        (await github.sessionRepositories.listBySession({ sessionId: kept.sessionId })).map(r => r.projectRepositoryId),
+      ).toEqual([keptLink.id]);
+      expect(await backend.ops.findMany('source_control_session_repositories', {})).toHaveLength(1);
+    });
+
     it('the in-memory handle mirrors factory derivation, listByProject and session repositories', async () => {
       const store = new SourceControlStorageInMemory('github');
       const installation = await store.installations.upsert({
@@ -944,6 +991,13 @@ describe('SourceControlStorage', () => {
       expect(await store.sessionRepositories.listBySession({ sessionId: 's-1' })).toHaveLength(2);
       await store.sessions.delete(session.id);
       expect(await store.sessionRepositories.listBySession({ sessionId: 's-1' })).toEqual([]);
+
+      const another = await store.sessions.create(sessionInput('s-2', first.id));
+      await store.sessionRepositories.upsert({ sessionId: 's-2', projectRepositoryId: second.id, branch: 'feat/y' });
+      expect(await store.connections.delete({ orgId: 'org-1', id: connection.id })).toBe(true);
+      expect(await store.sessions.getBySessionId(another.sessionId)).toBeNull();
+      expect(await store.sessionRepositories.listBySession({ sessionId: 's-2' })).toEqual([]);
+      expect(await store.projectRepositories.get({ orgId: 'org-1', id: second.id })).toBeNull();
     });
   });
 
