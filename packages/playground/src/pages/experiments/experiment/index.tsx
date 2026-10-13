@@ -205,6 +205,7 @@ function ExperimentPage() {
                 hasNextPage={hasNextPage}
                 selectedIds={selection.selectedIds}
                 onToggleSelect={selection.toggleSelect}
+                onToggleSelectAll={selection.toggleSelectAll}
                 sort={sort}
                 onSortChange={onSortChange}
               />

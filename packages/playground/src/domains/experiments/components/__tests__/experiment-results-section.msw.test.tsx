@@ -31,6 +31,7 @@ function renderSection(results: DatasetExperimentResult[], experimentStatus?: Ex
           isLoading={false}
           selectedIds={new Set()}
           onToggleSelect={() => {}}
+          onToggleSelectAll={() => {}}
         />
       </ExperimentItemPanelProvider>
     </TestLinkProvider>,

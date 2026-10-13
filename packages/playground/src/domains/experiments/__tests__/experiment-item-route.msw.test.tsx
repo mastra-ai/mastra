@@ -222,6 +222,39 @@ describe('experiment item sub-route', () => {
     });
   });
 
+  describe('when the user toggles the select-all checkbox', () => {
+    const resultCheckboxes = () =>
+      resultsResponse.results.map(r => screen.getByRole('checkbox', { name: `Select result ${r.itemId}` }));
+
+    it('selects every loaded result', async () => {
+      renderExperimentRoute();
+
+      fireEvent.click(await screen.findByRole('checkbox', { name: 'Select all' }));
+
+      expect(await screen.findByRole('button', { name: `${resultsResponse.results.length} selected` })).toBeDefined();
+      expect(resultCheckboxes().every(box => box.getAttribute('aria-checked') === 'true')).toBe(true);
+    });
+
+    it('shows a mixed state while only some results are selected', async () => {
+      renderExperimentRoute();
+
+      fireEvent.click(await screen.findByRole('checkbox', { name: 'Select result item-1' }));
+
+      expect(screen.getByRole('checkbox', { name: 'Select all' }).getAttribute('aria-checked')).toBe('mixed');
+    });
+
+    it('clears the selection once every result is selected', async () => {
+      renderExperimentRoute();
+
+      const selectAll = await screen.findByRole('checkbox', { name: 'Select all' });
+      fireEvent.click(selectAll);
+      fireEvent.click(selectAll);
+
+      expect(await screen.findByRole('button', { name: '0 selected' })).toBeDefined();
+      expect(resultCheckboxes().every(box => box.getAttribute('aria-checked') === 'false')).toBe(true);
+    });
+  });
+
   describe('when the user selects results to tag', () => {
     const patches: Array<{ resultId: string; body: unknown }> = [];
 

@@ -27,6 +27,7 @@ export type ExperimentResultsSectionProps = {
   hasNextPage?: boolean;
   selectedIds: Set<string>;
   onToggleSelect: (resultId: string) => void;
+  onToggleSelectAll: () => void;
   sort?: ListSort<ExperimentResultsSortKey>;
   onSortChange?: (direction: 'asc' | 'desc', key: ExperimentResultsSortKey) => void;
 };
@@ -47,6 +48,7 @@ export function ExperimentResultsSection({
   hasNextPage,
   selectedIds,
   onToggleSelect,
+  onToggleSelectAll,
   sort,
   onSortChange,
 }: ExperimentResultsSectionProps) {
@@ -116,6 +118,7 @@ export function ExperimentResultsSection({
         emptyMessage={emptyMessageByStatus[experimentStatus ?? ''] ?? 'No results yet'}
         selectedIds={selectedIds}
         onToggleSelect={onToggleSelect}
+        onToggleSelectAll={onToggleSelectAll}
         sort={sort}
         onSortChange={onSortChange}
       />
