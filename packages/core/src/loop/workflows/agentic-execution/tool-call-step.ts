@@ -606,7 +606,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 __streamState: await serializeStreamStateForSuspend(),
                 __agentId: agentId,
                 ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
-                ...(resolvedScopes?.length ? { __resolvedScopes: resolvedScopes } : {}),
+                // Persisted unconditionally — [] included — so absence marks a pre-upgrade snapshot,
+                // whose resume adopts the supplied scopes instead of rejecting them.
+                __resolvedScopes: resolvedScopes ?? [],
                 // Persist the inner suspended run id in the workflow snapshot, partitioned per
                 // tool call (resumeLabel = toolCallId). Persisted message metadata exposes the
                 // same id as delegatedRunId for cold reloads, while the snapshot remains the
@@ -653,7 +655,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 __streamState: await serializeStreamStateForSuspend(),
                 __agentId: agentId,
                 ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
-                ...(resolvedScopes?.length ? { __resolvedScopes: resolvedScopes } : {}),
+                // Persisted unconditionally — [] included — so absence marks a pre-upgrade snapshot,
+                // whose resume adopts the supplied scopes instead of rejecting them.
+                __resolvedScopes: resolvedScopes ?? [],
                 toolCallId: inputData.toolCallId,
                 toolName: inputData.toolName,
                 resumeLabel: options?.resumeLabel,
@@ -726,7 +730,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 __streamState: await serializeStreamStateForSuspend(),
                 __agentId: agentId,
                 ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
-                ...(resolvedScopes?.length ? { __resolvedScopes: resolvedScopes } : {}),
+                // Persisted unconditionally — [] included — so absence marks a pre-upgrade snapshot,
+                // whose resume adopts the supplied scopes instead of rejecting them.
+                __resolvedScopes: resolvedScopes ?? [],
               },
               {
                 resumeLabel: inputData.toolCallId,

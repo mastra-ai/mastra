@@ -9,7 +9,9 @@ const SCOPES_KEY = 'mastra__scopes';
  * A resumed run keeps the scopes it started with. Scopes re-supplied on resume (request
  * context or `scopes` option) may only repeat scopes the suspended run held, or name its own
  * resource and thread; anything else throws. The resumed run then acts with the saved set.
- * Runs that never had scopes are left unchanged.
+ * Post-upgrade runs persist their set unconditionally ([] included), so an ABSENT saved set
+ * marks a pre-upgrade snapshot: the resume adopts the supplied scopes instead of rejecting
+ * them, matching core's resume semantics.
  */
 export function keepSuspendedRunScopes(
   snapshot: any,
@@ -22,7 +24,7 @@ export function keepSuspendedRunScopes(
     ...(Array.isArray(fromContext) ? fromContext : []),
     ...(Array.isArray(resumeOptions?.scopes) ? resumeOptions.scopes : []),
   ];
-  if (!Array.isArray(saved) && supplied.length === 0) return;
+  if (!Array.isArray(saved)) return;
 
   const held = new Set(Array.isArray(saved) ? saved : []);
   const memoryInfo = snapshot?.context?.input?.messageListState?.memoryInfo;
@@ -47,9 +49,5 @@ export function keepSuspendedRunScopes(
     });
   }
 
-  if (Array.isArray(saved)) {
-    requestContext[SCOPES_KEY] = saved;
-  } else {
-    delete requestContext[SCOPES_KEY];
-  }
+  requestContext[SCOPES_KEY] = saved;
 }

@@ -20,9 +20,17 @@ describe('keepSuspendedRunScopes', () => {
     expect(() => keepSuspendedRunScopes(snapshot(['org:a']), {}, { scopes: ['org:b'] })).toThrow(
       expect.objectContaining({ id: 'AGENT_SCOPES_CONFLICT' }),
     );
-    expect(() =>
-      keepSuspendedRunScopes(snapshot(), {}, { requestContext: new RequestContext([['mastra__scopes', ['org:x']]]) }),
-    ).toThrow(expect.objectContaining({ id: 'AGENT_SCOPES_CONFLICT' }));
+    expect(() => keepSuspendedRunScopes(snapshot([]), {}, { scopes: ['org:b'] })).toThrow(
+      expect.objectContaining({ id: 'AGENT_SCOPES_CONFLICT' }),
+    );
+  });
+
+  it('adopts supplied scopes for a pre-upgrade snapshot that recorded none', () => {
+    const merged: Record<string, any> = { mastra__scopes: ['org:x'] };
+    keepSuspendedRunScopes(snapshot(), merged, {
+      requestContext: new RequestContext([['mastra__scopes', ['org:x']]]),
+    });
+    expect(merged.mastra__scopes).toEqual(['org:x']);
   });
 
   it('leaves runs without scopes unchanged', () => {

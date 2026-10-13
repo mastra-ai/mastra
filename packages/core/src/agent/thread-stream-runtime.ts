@@ -246,22 +246,34 @@ function unionScopes(...lists: Array<readonly string[] | undefined>): string[] {
 
 type ThreadTargetScopes = {
   scopes?: string[];
-  ifIdle?: { streamOptions?: { scopes?: string[] } };
+  ifIdle?: { streamOptions?: { scopes?: string[]; requestContext?: RequestContext } };
 };
 
 /**
  * Validates the scopes a thread target carries: top-level `scopes` unioned with
  * `ifIdle.streamOptions.scopes`. `resource:`/`thread:` scopes must equal the target's ids.
  * Returns the union, or undefined when the target carries no scopes.
+ *
+ * The agent's Mastra instance and the queued run's request context are passed through so
+ * the boundary checks fire at intake — an outdated registered server
+ * (`AGENT_SCOPES_SERVER_OUTDATED`) or a reserved-key identity conflict must reject the
+ * signal before `accepted` resolves, not when the queued run eventually starts.
  */
 function resolveThreadTargetScopes(
   target: ThreadTargetScopes,
   ids: { resourceId?: string; threadId?: string },
+  mastra?: { getMastraServer?(): unknown },
 ): string[] | undefined {
   const idleScopes = target.ifIdle?.streamOptions?.scopes;
   if (target.scopes === undefined && idleScopes === undefined) return undefined;
   const scopes = unionScopes(target.scopes, idleScopes);
-  resolveAgentScopes({ callScopes: scopes, resourceId: ids.resourceId, threadId: ids.threadId });
+  resolveAgentScopes({
+    callScopes: scopes,
+    resourceId: ids.resourceId,
+    threadId: ids.threadId,
+    requestContext: target.ifIdle?.streamOptions?.requestContext,
+    mastra,
+  });
   return scopes;
 }
 
@@ -270,8 +282,11 @@ function resolveThreadTargetScopes(
  * (`ifIdle.streamOptions.scopes`). A target that delivers to a known run only has its
  * scopes validated: an active run keeps the scopes it started with.
  */
-function withThreadTargetScopes<T extends SendAgentSignalOptions<any>>(target: T): T {
-  const scopes = resolveThreadTargetScopes(target, target);
+function withThreadTargetScopes<T extends SendAgentSignalOptions<any>>(
+  target: T,
+  mastra?: { getMastraServer?(): unknown },
+): T {
+  const scopes = resolveThreadTargetScopes(target, target, mastra);
   if (target.scopes === undefined) return target;
   const { scopes: _scopes, ...rest } = target;
   const startsRun = !!target.resourceId && !!target.threadId && (target.runId === undefined || !!target.ifIdle);
@@ -5497,7 +5512,7 @@ export class AgentThreadStreamRuntime {
       ...activeRecord?.streamOptions,
       abortSignal: undefined,
     };
-    const queuedScopes = resolveThreadTargetScopes(target, { resourceId, threadId });
+    const queuedScopes = resolveThreadTargetScopes(target, { resourceId, threadId }, agent.getMastraInstance?.());
     const queuedStreamOptions = queuedScopes
       ? { ...baseQueuedStreamOptions, scopes: unionScopes(baseQueuedStreamOptions.scopes, queuedScopes) }
       : baseQueuedStreamOptions;
@@ -5601,7 +5616,7 @@ export class AgentThreadStreamRuntime {
     inputTarget: SendAgentSignalOptions<OUTPUT>,
     pubsub?: PubSub,
   ): SendAgentSignalResult<OUTPUT> {
-    const target = withThreadTargetScopes(inputTarget);
+    const target = withThreadTargetScopes(inputTarget, agent.getMastraInstance?.());
     const state = this.#getState(pubsub);
     let key: string | undefined;
     let runId = target.runId;

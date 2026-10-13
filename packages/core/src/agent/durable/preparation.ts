@@ -662,6 +662,14 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // caller's own value (captured at step 3, before the merge) so persisted
   // input still reflects only caller intent.
   let requestContextEntriesSnapshot = snapshotRequestContextEntries(requestContext);
+  // Persist the run's scope set unconditionally — [] included — so a cold resume can tell
+  // "held no scopes" (recorded [], re-supplied scopes are rejected) from a pre-upgrade
+  // snapshot (key absent, supplied scopes are adopted). The live run context deliberately
+  // omits the key when the run has no non-identity scopes, so only the persisted entries
+  // carry the empty marker.
+  if (!Array.isArray(requestContextEntriesSnapshot?.[MASTRA_SCOPES_KEY])) {
+    requestContextEntriesSnapshot = { ...requestContextEntriesSnapshot, [MASTRA_SCOPES_KEY]: [] };
+  }
   if (requestVersions !== undefined) {
     const requestVersionsJson = boundedStringify(requestVersions);
     if (requestVersionsJson !== undefined) {

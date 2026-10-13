@@ -32,3 +32,5 @@ await agent.generate('Hi', { scopes: ['resource:user-123', 'thread:conversation-
 **Suspended runs.** Suspended runs keep their scopes when resumed: a resume may repeat some or all of them but cannot add new ones.
 
 **Upgrading.** Upgrade `@mastra/server` together with this release. While an older server is registered, agents refuse scopes from the call and the request context with an `AGENT_SCOPES_SERVER_OUTDATED` error (HTTP 400); the agent's own `scopes` option still applies. This detection relies on the server registering itself with Mastra, which `@mastra/server` has done since `1.0.0-beta.5`. Servers older than that — and custom server adapters that never call `mastra.setMastraServer()` — are indistinguishable from no server at all, so they are not detected: upgrade them rather than relying on the guard.
+
+Runs suspended before this release have no recorded scope set; resuming one adopts the scopes supplied at resume time (the same trust checks as a fresh run apply) instead of rejecting them. Runs suspended after the upgrade record their set — including the empty set — and a resume may not add to it.

@@ -8102,8 +8102,12 @@ export class Agent<
         ? {
             resourceId: snapshotMemoryInfo?.resourceId,
             threadId: snapshotMemoryInfo?.threadId,
-            // A run suspended without recorded scopes held none, so a resume may not add any.
-            scopes: this.#getSnapshotScopes(existingSnapshot) ?? [],
+            // Suspensions persist their scope set unconditionally ([] included), so a recorded
+            // empty set is authoritative: a resume may not add scopes. An ABSENT set marks a
+            // run suspended before the scopes upgrade — it adopts the supplied scopes, the
+            // same trust posture as a fresh run (identity is still pinned by the snapshot's
+            // resource/thread above).
+            scopes: this.#getSnapshotScopes(existingSnapshot),
           }
         : undefined);
     // A resumed run keeps its suspended scopes, so the Agent's configuration is not consulted.

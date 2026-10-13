@@ -3092,7 +3092,9 @@ export class DurableAgent<
           details: { agentName: this.name, runId },
         });
       }
-      rehydratedScopes = persistedScopes ?? [];
+      // Absent (vs recorded []) marks a run suspended before the scopes upgrade; the resume
+      // adopts the supplied scopes with the same trust posture as a fresh run.
+      rehydratedScopes = persistedScopes;
       const memory = threadId
         ? {
             ...options?.memory,
@@ -3134,12 +3136,18 @@ export class DurableAgent<
     // The suspended run's non-identity scopes live on its persisted request context;
     // its identity is the registered memory. A resume keeps that set (rule: re-supplied
     // scopes may only be a subset of it).
-    const snapshotScopes = rehydratedScopes ?? entry.requestContext?.get(MASTRA_SCOPES_KEY);
-    // A run without recorded scopes held none, so a resume may not add any.
+    // A recorded set — [] included — is authoritative: a resume may not add scopes.
+    // Cold resumes read the persisted entries, which preparation stamps unconditionally,
+    // so an absent value there marks a pre-upgrade snapshot whose resume adopts the
+    // supplied scopes. Warm registry entries only exist for runs this (post-upgrade)
+    // process started, so an absent live value simply means the run held no scopes.
+    const snapshotScopes = coldSnapshot
+      ? rehydratedScopes
+      : (entry.requestContext?.get(MASTRA_SCOPES_KEY) ?? []);
     const resumeScopesSnapshot: AgentScopesSnapshot = {
       resourceId: memoryInfo?.resourceId,
       threadId: memoryInfo?.threadId,
-      scopes: Array.isArray(snapshotScopes) ? snapshotScopes : [],
+      scopes: Array.isArray(snapshotScopes) ? snapshotScopes : undefined,
     };
 
     let resumeRequestContext = entry.requestContext;

@@ -6,6 +6,7 @@ import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import type { Processor } from '../../processors';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_SCOPES_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
+import { MastraServerBase } from '../../server/base';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
@@ -353,6 +354,49 @@ describe('agent scopes on runs', () => {
     ).resolves.toMatchObject({ id: 'AGENT_SCOPES_CONFLICT' });
   });
 
+  it('adopts supplied scopes when resuming a pre-upgrade snapshot that recorded none', async () => {
+    const approve = createTool({
+      id: 'approve',
+      description: 'needs approval',
+      inputSchema: z.object({}),
+      requireApproval: true,
+      execute: async () => ({ ok: true }),
+    });
+    const { agent } = setup({ model: toolCallingModel('approve'), tools: { approve } });
+    const storage = new InMemoryStore();
+    const mastra = new Mastra({ agents: { agent }, logger: false, storage });
+    const stream = await agent.stream('go');
+    let toolCallId: string | undefined;
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'tool-call-approval') toolCallId = chunk.payload.toolCallId;
+    }
+    expect(toolCallId).toBeDefined();
+
+    // Simulate a run suspended before the scopes upgrade: no __resolvedScopes key at all.
+    const workflowsStore = await mastra.getStorage()!.getStore('workflows');
+    const snapshot: any = await workflowsStore!.loadWorkflowSnapshot({
+      workflowName: 'agentic-loop',
+      runId: stream.runId,
+    });
+    for (const key in snapshot.context) {
+      const step = snapshot.context[key];
+      if (step?.status === 'suspended' && step.suspendPayload) {
+        delete step.suspendPayload.__resolvedScopes;
+      }
+    }
+    await workflowsStore!.persistWorkflowSnapshot({ workflowName: 'agentic-loop', runId: stream.runId, snapshot });
+
+    // Previously this threw AGENT_SCOPES_CONFLICT; a pre-upgrade run adopts the scopes.
+    const resumed = await agent.approveToolCall({
+      runId: stream.runId,
+      toolCallId: toolCallId!,
+      requestContext: new RequestContext([[MASTRA_SCOPES_KEY, ['org:acme']]]),
+    });
+    await resumed.consumeStream();
+    const finished = await resumed.finishReason;
+    expect(finished).toBeDefined();
+  });
+
   it('rejects a resume whose persisted scopes are malformed instead of treating them as no scopes', async () => {
     const approve = createTool({
       id: 'approve',
@@ -489,6 +533,38 @@ describe('agent scopes on runs', () => {
 });
 
 describe('agent scopes on thread entry points', () => {
+  it('rejects a queued signal with scopes at intake when the registered server is outdated', async () => {
+    const { agent } = setup({ pubsub: new EventEmitterPubSub() });
+    const mastra = new Mastra({ agents: { agent }, logger: false });
+    class OutdatedServer extends MastraServerBase {}
+    mastra.setMastraServer(new OutdatedServer({ app: {} }));
+    // The failure must surface at intake, before `accepted` resolves — not when the queued run starts.
+    const outcome = await conflictOf(() =>
+      agent.sendSignal(
+        { type: 'user-message', contents: 'wake up' },
+        { resourceId: 'u1', threadId: 't1', scopes: ['org:acme'], ifIdle: { streamOptions: {} } },
+      ),
+    );
+    expect(outcome).toMatchObject({ id: 'AGENT_SCOPES_SERVER_OUTDATED', status: 400 });
+  });
+
+  it('rejects a queued signal whose request-context thread conflicts with its thread scope at intake', async () => {
+    const { agent } = setup({ pubsub: new EventEmitterPubSub() });
+    const requestContext = new RequestContext([[MASTRA_THREAD_ID_KEY, 'other-thread']]);
+    const outcome = await conflictOf(() =>
+      agent.sendSignal(
+        { type: 'user-message', contents: 'wake up' },
+        {
+          resourceId: 'u1',
+          threadId: 't1',
+          scopes: ['thread:t1'],
+          ifIdle: { streamOptions: { requestContext } },
+        },
+      ),
+    );
+    expect(outcome).toMatchObject({ id: 'AGENT_SCOPES_CONFLICT' });
+  });
+
   it('sendSignal wakes an idle thread with the scopes and memory identity', async () => {
     const { agent, memory, seen } = setup({ pubsub: new EventEmitterPubSub() });
     const result = agent.sendSignal(

@@ -95,7 +95,9 @@ describe.each([
     const requestContext = new RequestContext([[MASTRA_THREAD_ID_KEY, 'middleware-thread']]);
     const result = await agent.prepare('hello', { requestContext });
     expect(result.threadId).toBeUndefined();
-    expect(result.workflowInput.requestContextEntries?.[MASTRA_SCOPES_KEY]).toBeUndefined();
+    // The persisted entries record the (empty) scope set unconditionally so a cold resume
+    // can distinguish a scopeless run from a pre-upgrade snapshot.
+    expect(result.workflowInput.requestContextEntries?.[MASTRA_SCOPES_KEY]).toEqual([]);
   });
 
   it('stream applies the Agent resolver and reserved key scopes', async () => {
@@ -444,6 +446,6 @@ describe('prepareForDurableExecution scopes', () => {
       requestContext,
     });
     expect(preparation.threadId).toBe('t2');
-    expect(preparation.workflowInput.requestContextEntries?.[MASTRA_SCOPES_KEY]).toBeUndefined();
+    expect(preparation.workflowInput.requestContextEntries?.[MASTRA_SCOPES_KEY]).toEqual([]);
   });
 });
