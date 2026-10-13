@@ -18,6 +18,7 @@ const threadTitleInstructions = `A short, noun-phrase title for this conversatio
 - "Auth bug fix" — not "Fixing the auth bug"
 - "Dark mode toggle" — not "User wants dark mode toggle added"
 - "Deployment pipeline setup" — not "Setting up deployment pipeline for project"
+Write the title in the same language the user's messages are written in.
 Only update when the topic meaningfully changes.`;
 
 export function createCurrentTaskExtractor(): Extractor<string> {
