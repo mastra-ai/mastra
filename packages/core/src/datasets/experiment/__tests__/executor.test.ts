@@ -332,8 +332,7 @@ describe('executeTarget', () => {
       };
 
       const versions = {
-        self: { versionId: 'root-v1' },
-        agents: { dependency: { versionId: 'dependency-v1' } },
+        agents: { root: { versionId: 'root-v1' }, dependency: { versionId: 'dependency-v1' } },
       } as const;
       const result = await executeTarget(
         mockAgent as unknown as Agent,

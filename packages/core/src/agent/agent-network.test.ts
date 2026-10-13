@@ -5,11 +5,12 @@ import { z } from 'zod/v4';
 import type { MastraError } from '../error';
 import { Mastra } from '../mastra';
 import { MockMemory } from '../memory/mock';
-import { MASTRA_SCOPES_KEY, RequestContext } from '../request-context';
+import { MASTRA_SCOPES_KEY, MASTRA_VERSIONS_KEY, RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage';
 import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
 import { Agent } from './index';
+import { getAgentVersionPins } from './version-pins';
 
 const createNetworkTestModel = (text = '{}') =>
   new MockLanguageModelV2({
@@ -4462,27 +4463,123 @@ describe('Agent - network - tool approval and suspension', () => {
   });
 
   describe('resumeNetwork', () => {
-    it('rejects root selector disagreement merged from Mastra defaults and a network call before lookup', async () => {
+    it.each(['label', 'code-fallback'] as const)(
+      'freezes %s dependency selection before routing changes the graph policy',
+      async selection => {
+        let target = 'v1';
+        const childContexts: RequestContext[] = [];
+        const childVersions: Array<string | undefined> = [];
+        const child = new Agent({
+          id: 'network-child',
+          name: 'child',
+          instructions: ({ requestContext }) => {
+            childContexts.push(requestContext);
+            childVersions.push(getAgentVersionPins(requestContext)?.root?.versionId);
+            return 'child';
+          },
+          model: createNetworkTestModel('done'),
+          defaultOptions: { versions: { defaultLabel: 'unrelated-default' } },
+        });
+        const model = createRoutingMockModel('child', 'agent', 'help');
+        const generate = model.doGenerate.bind(model);
+        vi.spyOn(model, 'doGenerate').mockImplementation(async options => {
+          target = 'v2';
+          return generate(options);
+        });
+        const root = new Agent({
+          id: 'network-root',
+          name: 'root',
+          instructions: 'route',
+          model,
+          memory,
+          agents: { child },
+        });
+        const mastra = new Mastra({ agents: { root }, storage, logger: false });
+        const resolve = vi.spyOn(mastra, 'resolveVersionedAgent');
+        const applyStoredOverrides = vi.fn(async (agent: Agent, selector: any) => {
+          if (selection === 'code-fallback' && agent.id === child.id && target === 'v1') return agent;
+          const fork = agent.__fork();
+          fork.__setRawConfig({ resolvedVersionId: selector.versionId ?? `${agent.id}-${target}` });
+          return fork;
+        });
+        vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as any);
+        const requestContext = new RequestContext();
+        const versions =
+          selection === 'label' ? { defaultLabel: 'candidate' } : { defaultStatus: 'published' as const };
+        requestContext.set(MASTRA_VERSIONS_KEY, versions);
+
+        const stream = await root.network('start', { requestContext, maxSteps: 1 });
+        expect(requestContext.get(MASTRA_VERSIONS_KEY)).toBe(versions);
+        for await (const _chunk of stream) {
+          // Drain execution after the label moves.
+        }
+
+        expect(childVersions).toEqual([selection === 'label' ? 'network-child-v1' : undefined]);
+        expect(childContexts[0]).not.toBe(requestContext);
+        expect(
+          resolve.mock.calls.filter(([agent, selector]) => agent.id === child.id && !selector.versionId),
+        ).toHaveLength(1);
+      },
+    );
+
+    it('rejects a dependency added after a labeled network was suspended', async () => {
+      let addLate = false;
+      const late = new Agent({ id: 'late', name: 'late', instructions: 'late', model: createNetworkTestModel() });
+      const root = new Agent({
+        id: 'dynamic-network',
+        name: 'root',
+        instructions: 'use the tool',
+        memory,
+        agents: () => (addLate ? { late } : {}),
+        tools: { suspendingTool },
+        model: createRoutingMockModel('suspendingTool', 'tool', JSON.stringify({ initialQuery: 'start' })),
+      });
+      const mastra = new Mastra({ agents: { root }, storage, logger: false });
+      const resolve = vi.spyOn(mastra, 'resolveVersionedAgent').mockImplementation(async (agent, selector) => {
+        const fork = agent.__fork();
+        fork.__setRawConfig({ resolvedVersionId: selector.versionId ?? `${agent.id}-v1` });
+        return fork;
+      });
+      const stream = await root.network('start', {
+        versions: { defaultLabel: 'candidate' },
+        memory: { thread: 'late-network', resource: 'network' },
+      });
+      for await (const _chunk of stream) {
+        /* Persist suspension. */
+      }
+      addLate = true;
+      resolve.mockClear();
+
+      await expect(root.resumeNetwork({ userResponse: 'continue' }, { runId: stream.runId })).rejects.toMatchObject({
+        id: 'PINNED_VERSION_REQUIRED',
+      });
+      expect(resolve.mock.calls.some(([agent]) => agent.id === late.id)).toBe(false);
+    });
+
+    it('lets an explicit agent selector override a network default label', async () => {
       const networkAgent = new Agent({
         id: 'disagreeing-network-agent',
         name: 'Disagreeing Network Agent',
         instructions: 'Route requests.',
         model: createNetworkTestModel(),
+        memory,
       });
       const mastra = new Mastra({
         agents: { networkAgent },
         storage,
         logger: false,
-        versions: { self: { status: 'published' } },
+        versions: { defaultLabel: 'candidate' },
       });
-      const resolve = vi.spyOn(mastra as any, 'resolveVersionedAgent');
+      const resolve = vi.spyOn(mastra as any, 'resolveVersionedAgent').mockResolvedValue(networkAgent);
 
-      await expect(
-        networkAgent.network('start', {
-          versions: { agents: { 'disagreeing-network-agent': { status: 'draft' } } },
-        }),
-      ).rejects.toMatchObject({ id: 'INVALID_VERSION_SELECTOR' });
-      expect(resolve).not.toHaveBeenCalled();
+      const stream = await networkAgent.network('start', {
+        versions: { agents: { 'disagreeing-network-agent': { status: 'draft' } } },
+      });
+      for await (const _chunk of stream) {
+        /* Drain the network execution. */
+      }
+      expect(resolve).toHaveBeenCalledWith(networkAgent, { status: 'draft' });
+      expect(resolve.mock.calls.some(([, selector]) => (selector as any).label)).toBe(false);
     });
 
     it('resumes a label-selected routing agent on the original exact version after the label moves', async () => {
@@ -4513,7 +4610,7 @@ describe('Agent - network - tool approval and suspension', () => {
       });
 
       const started = await networkAgent.network('Collect information', {
-        versions: { self: { label: 'production' } },
+        versions: { defaultLabel: 'production' },
         memory: { thread: 'network-version-pin', resource: 'network-version-pin-resource' },
       });
       for await (const _chunk of started) {
@@ -4528,7 +4625,7 @@ describe('Agent - network - tool approval and suspension', () => {
           { userResponse: 'approved' },
           {
             runId: started.runId,
-            versions: { self: { label: 'production' } },
+            versions: { defaultLabel: 'production' },
             memory: { thread: 'network-version-pin', resource: 'network-version-pin-resource' },
           },
         ),
@@ -4538,7 +4635,7 @@ describe('Agent - network - tool approval and suspension', () => {
           { userResponse: 'approved' },
           {
             runId: started.runId,
-            versions: { self: { versionId: 'v1' }, defaultStatus: 'draft' },
+            versions: { agents: { 'versioned-network-agent': { versionId: 'v1' } }, defaultStatus: 'draft' },
             memory: { thread: 'network-version-pin', resource: 'network-version-pin-resource' },
           },
         ),
@@ -4548,7 +4645,7 @@ describe('Agent - network - tool approval and suspension', () => {
           { userResponse: 'approved' },
           {
             runId: started.runId,
-            versions: { self: { versionId: 'v1' }, agents: { other: { versionId: 'other-v1' } } },
+            versions: { agents: { 'versioned-network-agent': { versionId: 'v1' }, other: { versionId: 'other-v1' } } },
             memory: { thread: 'network-version-pin', resource: 'network-version-pin-resource' },
           },
         ),
@@ -4559,19 +4656,19 @@ describe('Agent - network - tool approval and suspension', () => {
           {
             runId: started.runId,
             versions: {
-              self: { versionId: 'v1' },
+              defaultLabel: 'production',
               agents: { 'versioned-network-agent': { versionId: 'v2' } },
             },
             memory: { thread: 'network-version-pin', resource: 'network-version-pin-resource' },
           },
         ),
-      ).rejects.toMatchObject({ id: 'INVALID_VERSION_SELECTOR' });
+      ).rejects.toMatchObject({ id: 'PINNED_VERSION_CONFLICT' });
 
       const resumed = await networkAgent.resumeNetwork(
         { userResponse: 'approved' },
         {
           runId: started.runId,
-          versions: { self: { versionId: 'v1' } },
+          versions: { agents: { 'versioned-network-agent': { versionId: 'v1' } } },
           memory: { thread: 'network-version-pin', resource: 'network-version-pin-resource' },
         },
       );
@@ -4612,8 +4709,8 @@ describe('Agent - network - tool approval and suspension', () => {
       });
 
       for (const versions of [
-        { self: { label: 'production' } },
-        { self: { status: 'published' } },
+        { defaultLabel: 'production' },
+        { defaultStatus: 'published' },
         { agents: { dependency: { versionId: 'dep-v1' } } },
         { agents: { dependency: { label: 'production' } } },
         { defaultStatus: 'published' },
@@ -4641,7 +4738,7 @@ describe('Agent - network - tool approval and suspension', () => {
         { userResponse: 'approved' },
         {
           runId: started.runId,
-          versions: { self: { versionId: 'v1' } },
+          versions: { agents: { 'legacy-network-agent': { versionId: 'v1' } } },
           memory: { thread: 'legacy-network-pin', resource: 'legacy-network-pin-resource' },
         },
       );

@@ -885,23 +885,24 @@ const stream = await agent.stream('message for agent')
             type: 'VersionOverrides',
             isOptional: true,
             description:
-              'Per-invocation selectors for the root agent and delegated sub-agents. Dependency selectors merge on top of Mastra instance defaults and propagate through delegation. The root `self` selector is consumed by the current execution and does not propagate. Requires the editor package. See [Editor versioning](/reference/editor/versioning#sub-agent-versioning).',
+              'Per-invocation selectors for the root agent and delegated sub-agents. Selectors merge on top of request-context and Mastra instance defaults and propagate through delegation. Stored-version selection requires the editor package. See [Editor versioning](/reference/editor/versioning#sub-agent-versioning).',
             properties: [
               {
                 type: 'VersionOverrides',
                 parameters: [
                   {
-                    name: 'self',
-                    type: 'VersionSelector',
+                    name: 'defaultLabel',
+                    type: 'string',
                     isOptional: true,
                     description:
-                      'Select the root agent for this execution. Pass exactly one `versionId`, `label`, or `status`.',
+                      'Label to resolve for every agent without an explicit `agents[id]` selector, including the root. Takes precedence over `defaultStatus`. A missing label rejects the run.',
                   },
                   {
                     name: 'agents',
                     type: 'Record<string, VersionSelector>',
                     isOptional: true,
-                    description: 'A map of agent IDs to their version selectors.',
+                    description:
+                      'A map of agent IDs to their version selectors, including the root agent. Each entry selects exactly one `versionId`, `label`, or `status` and takes precedence over both defaults.',
                     properties: [
                       {
                         type: 'VersionSelector',
@@ -932,7 +933,8 @@ const stream = await agent.stream('message for agent')
                     name: 'defaultStatus',
                     type: "'draft' | 'published'",
                     isOptional: true,
-                    description: 'Fallback publication status for delegated agents without an explicit selector.',
+                    description:
+                      'Publication status for any agent without an explicit selector when `defaultLabel` is absent. If neither default is set, existing system defaults apply.',
                   },
                 ],
               },

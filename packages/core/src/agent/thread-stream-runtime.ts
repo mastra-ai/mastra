@@ -2358,11 +2358,13 @@ export class AgentThreadStreamRuntime {
       if (!versionIdentityChecked) {
         versionIdentityChecked = true;
         const runtimeState = runtime.#getState(pubsub);
-        const resolvedOverrides = exactVersionOverridesForPins(
-          runtime.#getRunVersionPins(runtimeState, output.runId, runtimeState.threadRunsById.get(output.runId)),
+        const versionPins = runtime.#getRunVersionPins(
+          runtimeState,
+          output.runId,
+          runtimeState.threadRunsById.get(output.runId),
         );
-        if (resolvedOverrides?.self) {
-          await emitPart({ type: 'resolved-version-overrides', payload: resolvedOverrides });
+        if (versionPins?.root) {
+          await emitPart({ type: 'resolved-version-overrides', payload: exactVersionOverridesForPins(versionPins) });
         }
       }
       let isSuspensionBoundary = false;
@@ -3785,6 +3787,11 @@ export class AgentThreadStreamRuntime {
         // Suspended runs save their messages too, so their parts are backed by
         // storage; only a successful run leaves nothing actionable to trim.
         const persisted = record.output.status === 'success' || record.output.status === 'suspended';
+        // Start the completed caller's memory lookup before observers can start
+        // another caller's run. Cleanup may finish later, but must not invoke a
+        // dynamic memory factory with the previous caller after completion.
+        const canTrimSavedRun =
+          record.output.status === 'success' ? this.#hasMemoryForTrim(record).catch(() => false) : undefined;
         // Keep a compact, expiring continuation identity separate from this
         // run's retained messages before the normal full-run trim removes them.
         const retainedIdentity =
@@ -3813,7 +3820,7 @@ export class AgentThreadStreamRuntime {
           )
           .then(() =>
             record.output.status === 'success'
-              ? this.#trimSavedRun(pubsub, key, record)
+              ? this.#trimSavedRun(pubsub, key, record, canTrimSavedRun)
               : record.output.status !== 'suspended'
                 ? this.#trimFailedRun(pubsub, key, record)
                 : undefined,
@@ -3905,6 +3912,10 @@ export class AgentThreadStreamRuntime {
     }
   }
 
+  async #hasMemoryForTrim(record: Pick<AgentThreadRunRecord<any>, 'agent' | 'streamOptions'>): Promise<boolean> {
+    return !!(await record.agent.getMemory?.({ requestContext: record.streamOptions.requestContext }));
+  }
+
   /**
    * Once a run saved successfully and the agent has storage, delete every topic
    * entry published with its runId. Matching by runId (not tracked entry IDs)
@@ -3915,10 +3926,10 @@ export class AgentThreadStreamRuntime {
     pubsub: PubSub | undefined,
     key: string,
     record: Pick<AgentThreadRunRecord<any>, 'agent' | 'streamOptions' | 'runId'>,
+    canTrimSavedRun = this.#hasMemoryForTrim(record),
   ) {
     // Without storage the topic is the only copy, so it stays.
-    const memory = await record.agent.getMemory?.({ requestContext: record.streamOptions.requestContext });
-    if (!memory) return;
+    if (!(await canTrimSavedRun)) return;
     await this.#getPubSub(pubsub).trimTopic(this.#threadTopic(key), { runId: record.runId });
   }
 

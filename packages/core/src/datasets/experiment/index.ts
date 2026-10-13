@@ -1,7 +1,9 @@
+import { MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY, MASTRA_AGENT_VERSION_PINS_KEY } from '../../agent/version-pins';
 import { MastraError } from '../../error/index.js';
 import type { MastraScorer } from '../../evals/base';
 import type { TrajectoryExpectation } from '../../evals/types';
 import type { Mastra } from '../../mastra';
+import { MASTRA_VERSIONS_KEY } from '../../request-context';
 import type { DatasetRecord } from '../../storage/types';
 import { ExperimentEventDispatcher, createItemCompletedEvent, toExperimentJsonValue } from './events';
 import { executeTarget } from './executor';
@@ -341,11 +343,25 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       if (!resolved) {
         throw new Error(`Target not found: ${targetType}/${targetId}`);
       }
-      const { target, versions: frozenVersions } = resolved;
+      const { target, versions: frozenVersions, versionPins: frozenPins } = resolved;
       execFn = (item, itemSignal) => {
         // Merge global request context with per-item request context (item takes precedence)
         const mergedRequestContext =
-          globalRequestContext || item.requestContext ? { ...globalRequestContext, ...item.requestContext } : undefined;
+          globalRequestContext || item.requestContext || frozenPins
+            ? {
+                ...globalRequestContext,
+                ...item.requestContext,
+                // Each item and retry consumes the experiment's original graph,
+                // including agents that resolved to code rather than a stored version.
+                ...(frozenPins
+                  ? {
+                      [MASTRA_AGENT_VERSION_PINS_KEY]: frozenPins,
+                      [MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY]: true,
+                      [MASTRA_VERSIONS_KEY]: frozenVersions ?? {},
+                    }
+                  : {}),
+              }
+            : undefined;
         return executeTarget(target, targetType, item, {
           signal: itemSignal,
           requestContext: mergedRequestContext,

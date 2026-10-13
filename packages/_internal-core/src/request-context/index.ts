@@ -117,10 +117,10 @@ export type VersionSelector =
   | { status: 'draft' | 'published'; versionId?: never; label?: never };
 
 export type VersionOverrides = {
-  /** Selects the version of the root agent receiving the execution request. */
-  self?: VersionSelector;
+  /** Label used for every agent without an explicit entry, including the directly invoked agent. */
+  defaultLabel?: string;
   agents?: Record<string, VersionSelector>;
-  /** Fallback status for sub-agents (and future primitives) without an explicit entry. */
+  /** Fallback status when neither an explicit agent entry nor a default label is provided. */
   defaultStatus?: 'draft' | 'published';
 };
 

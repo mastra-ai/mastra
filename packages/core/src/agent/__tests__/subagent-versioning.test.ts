@@ -164,15 +164,15 @@ describe('mergeVersionOverrides', () => {
     expect(result?.defaultStatus).toBe('published');
   });
 
-  it('overrides the root selector while preserving sub-agent selectors', () => {
+  it('overrides the default label while preserving explicit agent selectors', () => {
     const base: VersionOverrides = {
-      self: { label: 'staging' },
+      defaultLabel: 'staging',
       agents: { reviewer: { status: 'published' } },
     };
-    const overrides: VersionOverrides = { self: { versionId: 'version-2' } };
+    const overrides: VersionOverrides = { defaultLabel: 'candidate' };
 
     expect(mergeVersionOverrides(base, overrides)).toEqual({
-      self: { versionId: 'version-2' },
+      defaultLabel: 'candidate',
       agents: { reviewer: { status: 'published' } },
     });
   });
@@ -266,13 +266,15 @@ describe('Sub-agent version resolution', () => {
     });
 
     const mastra = new Mastra({ agents: { supervisor, sub } });
-    const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent').mockImplementation(async agent => agent);
+    const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent').mockImplementation(async agent => {
+      agent.__setRawConfig({ resolvedVersionId: `${agent.id}-v1` });
+      return agent;
+    });
 
     await supervisor.generate('Do something', {
       maxSteps: 3,
       versions: {
-        self: { label: 'root-staging' },
-        agents: { 'sub-agent': { label: 'sub-staging' } },
+        agents: { supervisor: { label: 'root-staging' }, 'sub-agent': { label: 'sub-staging' } },
       },
     });
 
@@ -646,7 +648,7 @@ describe('direct agent call version resolution', () => {
     expect(result.text).toBe('versioned response');
   });
 
-  it('resolves a labeled self selector supplied at the call site', async () => {
+  it('resolves a default label supplied at the call site', async () => {
     const agent = new Agent({
       id: 'my-agent',
       name: 'my-agent',
@@ -664,7 +666,7 @@ describe('direct agent call version resolution', () => {
     const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent').mockResolvedValue(versionedAgent);
 
     const result = await agent.generate('hello', {
-      versions: { self: { label: 'staging' } },
+      versions: { defaultLabel: 'staging' },
     });
 
     expect(resolveSpy).toHaveBeenCalledWith(agent, { label: 'staging' });
@@ -719,7 +721,7 @@ describe('direct agent call version resolution', () => {
       model: makeMockModel('code response'),
     });
 
-    const mastra = new Mastra({ agents: { agent }, versions: { self: { status: 'published' } } });
+    const mastra = new Mastra({ agents: { agent }, versions: { agents: { 'my-agent': { status: 'published' } } } });
     vi.spyOn(mastra, 'resolveVersionedAgent').mockRejectedValue(new Error('Editor not configured'));
 
     const result = await agent.generate('hello');
@@ -738,9 +740,7 @@ describe('direct agent call version resolution', () => {
     const mastra = new Mastra({ agents: { agent } });
     vi.spyOn(mastra, 'resolveVersionedAgent').mockRejectedValue(new Error('Label not found'));
 
-    await expect(agent.generate('hello', { versions: { self: { label: 'missing' } } })).rejects.toThrow(
-      'Label not found',
-    );
+    await expect(agent.generate('hello', { versions: { defaultLabel: 'missing' } })).rejects.toThrow('Label not found');
   });
 
   it('requires an editor for label selectors while allowing status defaults without one', async () => {
@@ -756,7 +756,7 @@ describe('direct agent call version resolution', () => {
       id: 'MASTRA_EDITOR_REQUIRED_FOR_VERSIONED_AGENT_LOOKUP',
     });
     await expect(mastra.resolveVersionedAgent(agent, { status: 'published' })).resolves.toBe(agent);
-    await expect(agent.generate('hello', { versions: { self: { label: 'production' } } })).rejects.toMatchObject({
+    await expect(agent.generate('hello', { versions: { defaultLabel: 'production' } })).rejects.toMatchObject({
       id: 'MASTRA_EDITOR_REQUIRED_FOR_VERSIONED_AGENT_LOOKUP',
     });
   });

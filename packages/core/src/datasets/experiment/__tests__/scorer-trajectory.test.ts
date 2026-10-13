@@ -95,6 +95,7 @@ function buildMastra(storage: MastraCompositeStore) {
   const mockAgent = createMockAgent();
   return {
     mastra: {
+      getVersionOverrides: vi.fn(),
       getStorage: vi.fn().mockReturnValue(storage),
       getAgent: vi.fn().mockReturnValue(mockAgent),
       getAgentById: vi.fn().mockReturnValue(mockAgent),

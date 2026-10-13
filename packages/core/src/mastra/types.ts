@@ -12,13 +12,25 @@ export type VersionSelector =
  * Keys are primitive IDs, values select which version to resolve.
  */
 export type VersionOverrides = {
-  /** Selects the version of the root agent receiving the execution request. */
-  self?: VersionSelector;
+  /** Label used for every agent without an explicit entry, including the directly invoked agent. */
+  defaultLabel?: string;
   agents?: Record<string, VersionSelector>;
-  /** Fallback status for sub-agents (and future primitives) without an explicit entry. */
+  /** Fallback status when neither an explicit agent entry nor a default label is provided. */
   defaultStatus?: 'draft' | 'published';
   // Future: tools, workflows, etc.
 };
+
+/** @internal Apply one selection policy to both the root agent and its dependencies. */
+export function getAgentVersionSelector(
+  versions: VersionOverrides | undefined,
+  agentId: string,
+): VersionSelector | undefined {
+  return (
+    versions?.agents?.[agentId] ??
+    (versions?.defaultLabel !== undefined ? { label: versions.defaultLabel } : undefined) ??
+    (versions?.defaultStatus !== undefined ? { status: versions.defaultStatus } : undefined)
+  );
+}
 
 /**
  * Shallow-merge two VersionOverrides objects.

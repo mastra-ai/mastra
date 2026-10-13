@@ -20,12 +20,13 @@ function makeMockModel(responseText: string) {
   });
 }
 
-function makeSupervisorModel() {
+function makeSupervisorModel(onDelegate?: () => Promise<void>) {
   let callCount = 0;
   return new MockLanguageModelV2({
     doGenerate: async () => {
       callCount++;
-      if (callCount === 1) {
+      if (callCount % 2 === 1) {
+        await onDelegate?.();
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'tool-calls' as const,
@@ -54,9 +55,10 @@ function makeSupervisorModel() {
   });
 }
 
-async function createStoredSupervisorRuntime() {
+async function createStoredSupervisorRuntime(onDelegate?: () => Promise<void>) {
   const storage = new InMemoryStore();
   const editor = new MastraEditor();
+  const supervisorModel = makeSupervisorModel(onDelegate);
   const subModel = makeMockModel('Code sub response');
   const sub = new Agent({
     id: 'sub-agent',
@@ -68,7 +70,7 @@ async function createStoredSupervisorRuntime() {
     id: 'supervisor',
     name: 'Supervisor',
     instructions: 'Code supervisor instructions.',
-    model: makeSupervisorModel(),
+    model: supervisorModel,
     agents: { 'sub-agent': sub },
   });
   const mastra = new Mastra({ storage, editor, agents: { supervisor, sub } });
@@ -111,7 +113,7 @@ async function createStoredSupervisorRuntime() {
     expectedRevisionToken: null,
   });
 
-  return { mastra, supervisor, sub, subModel };
+  return { mastra, supervisor, sub, subModel, supervisorModel, agentsStore, supervisorVersion, subVersion };
 }
 
 async function seedVersionedAgent(options: { codeAgent?: Agent } = {}) {
@@ -160,25 +162,22 @@ async function seedVersionedAgent(options: { codeAgent?: Agent } = {}) {
 }
 
 describe('EditorAgentNamespace version label resolution', () => {
-  it('keeps a real root label scoped to the supervisor while honoring an explicit stored sub-agent label', async () => {
+  it('keeps an explicit root label scoped to its agent and allows a sub-agent to override the graph default', async () => {
     const rootOnly = await createStoredSupervisorRuntime();
     const rootOnlyResolve = vi.spyOn(rootOnly.mastra, 'resolveVersionedAgent');
     const codeSubGenerate = vi.spyOn(rootOnly.sub, 'generate');
 
     await rootOnly.supervisor.generate('Delegate', {
       maxSteps: 3,
-      versions: { self: { label: 'root-staging' } },
+      versions: { agents: { supervisor: { label: 'root-staging' } } },
     });
 
     const delegatedOptions = codeSubGenerate.mock.calls[0]?.[1];
     expect(delegatedOptions?.versions).toBeUndefined();
     const delegatedVersionContext = delegatedOptions?.requestContext?.get(MASTRA_VERSIONS_KEY);
-    expect(delegatedVersionContext).toEqual({ defaultStatus: 'published' });
-    expect(delegatedVersionContext).not.toHaveProperty('self');
-    expect(delegatedVersionContext).not.toHaveProperty('agents.supervisor');
+    expect(delegatedVersionContext).toEqual({ agents: { supervisor: { versionId: rootOnly.supervisorVersion.id } } });
     expect(rootOnlyResolve.mock.calls.map(([agent, selector]) => [agent.id, selector])).toEqual([
       ['supervisor', { label: 'root-staging' }],
-      ['sub-agent', { status: 'published' }],
     ]);
     expect(codeSubGenerate).toHaveBeenCalled();
     expect(rootOnly.subModel.doGenerateCalls[0]?.prompt[0]).toMatchObject({
@@ -192,7 +191,7 @@ describe('EditorAgentNamespace version label resolution', () => {
     await explicitSub.supervisor.generate('Delegate', {
       maxSteps: 3,
       versions: {
-        self: { label: 'root-staging' },
+        defaultLabel: 'root-staging',
         agents: { 'sub-agent': { label: 'sub-staging' } },
       },
     });
@@ -204,6 +203,75 @@ describe('EditorAgentNamespace version label resolution', () => {
       role: 'system',
       content: 'Stored sub instructions.',
     });
+  });
+
+  it('pins a real stored graph default before delegation and resolves its moved target for the next run', async () => {
+    let moveLabel: (() => Promise<void>) | undefined;
+    const runtime = await createStoredSupervisorRuntime(async () => {
+      await moveLabel?.();
+      moveLabel = undefined;
+    });
+    const { agentsStore, supervisorVersion, subVersion } = runtime;
+    await agentsStore.versionLabels!.set({
+      entityType: 'agent',
+      entityId: 'supervisor',
+      label: 'candidate',
+      versionId: supervisorVersion.id,
+      expectedRevisionToken: null,
+    });
+    const subPointer = await agentsStore.versionLabels!.set({
+      entityType: 'agent',
+      entityId: 'sub-agent',
+      label: 'candidate',
+      versionId: subVersion.id,
+      expectedRevisionToken: null,
+    });
+    const nextSubVersion = await agentsStore.createVersion({
+      id: 'sub-agent-next',
+      agentId: 'sub-agent',
+      versionNumber: 2,
+      name: 'Stored Sub Agent',
+      instructions: 'Next sub instructions.',
+      model: { provider: 'openai', name: 'gpt-4o' },
+      changedFields: ['instructions'],
+      changeMessage: 'Update sub-agent instructions',
+    });
+    const resolve = vi.spyOn(runtime.mastra, 'resolveVersionedAgent');
+    moveLabel = async () => {
+      expect(resolve).toHaveBeenCalledWith(runtime.supervisor, { label: 'candidate' });
+      expect(resolve).toHaveBeenCalledWith(runtime.sub, { label: 'candidate' });
+      await agentsStore.versionLabels!.set({
+        entityType: 'agent',
+        entityId: 'sub-agent',
+        label: 'candidate',
+        versionId: nextSubVersion.id,
+        expectedRevisionToken: subPointer.revisionToken,
+      });
+    };
+
+    await runtime.supervisor.generate('Delegate', { maxSteps: 3, versions: { defaultLabel: 'candidate' } });
+
+    expect(runtime.supervisorModel.doGenerateCalls[0]?.prompt[0]).toMatchObject({
+      role: 'system',
+      content: 'Stored supervisor instructions.',
+    });
+    expect(runtime.subModel.doGenerateCalls[0]?.prompt[0]).toMatchObject({
+      role: 'system',
+      content: 'Stored sub instructions.',
+    });
+    expect(
+      resolve.mock.calls.filter(([agent, selector]) => agent.id === 'sub-agent' && 'label' in selector),
+    ).toHaveLength(1);
+
+    await runtime.supervisor.generate('Delegate again', { maxSteps: 3, versions: { defaultLabel: 'candidate' } });
+
+    expect(runtime.subModel.doGenerateCalls[1]?.prompt[0]).toMatchObject({
+      role: 'system',
+      content: 'Next sub instructions.',
+    });
+    expect(
+      resolve.mock.calls.filter(([agent, selector]) => agent.id === 'sub-agent' && 'label' in selector),
+    ).toHaveLength(2);
   });
 
   it('re-resolves labelled getById requests after the pointer moves and preserves resolution metadata', async () => {

@@ -46,7 +46,7 @@ A version label is a movable pointer to one immutable stored-agent version. Mast
 
 Selecting a label resolves its current target for that request. A later request can resolve a different version after the label moves. Use a `versionId` instead when a request must name one immutable version directly.
 
-For an agent execution, Mastra resolves the root selector and every explicit `versions.agents` selector before behavior begins. It records the resulting immutable version IDs with the run, so suspension, tool approval, retry, and recovery continue on the same versions even if a label moves. A later, separate execution resolves the label again and can therefore use its new target.
+For an agent execution, Mastra resolves selected versions throughout the configured agent graph before behavior begins. This includes the root, explicit `versions.agents` selectors, and agents selected by `versions.defaultLabel` or `versions.defaultStatus`. It records the resulting immutable version IDs with the run, so suspension, tool approval, retry, and recovery continue on the same versions even if a label moves. A later, separate execution resolves the label again and can therefore use its new target.
 
 Completed client-tool continuations sent through `sendToolApproval({ messages, approved: true })` use retained thread history to recover that identity. After the completed message stream is trimmed, a compact identity remains available for five minutes on PubSub implementations that support retained history. Missing or expired identities reject the continuation instead of selecting the current label target. This temporary window doesn't apply to suspended durable runs, which retain their pins in the saved run state.
 
@@ -103,6 +103,15 @@ Version overrides propagate through [supervisor-agent delegation](/docs/subagent
 
 Entries merge by agent ID. For the same ID, precedence is **direct invocation > request body or existing request context > Mastra instance default**.
 
+For each agent, including the root, Mastra chooses the first configured selector in this order:
+
+1. `versions.agents[agentId]`: An exact version, label, or publication status for this agent
+1. `versions.defaultLabel`: A label shared across the agent graph
+1. `versions.defaultStatus`: A shared publication status
+1. Existing system default
+
+The source precedence above merges configuration first; this selector precedence then applies to the merged result. For example, a per-agent selector on the Mastra instance still overrides a call-site `defaultLabel` for that agent.
+
 Set defaults on the Mastra instance:
 
 ```typescript title="src/mastra/index.ts"
@@ -113,6 +122,7 @@ export const mastra = new Mastra({
   agents: { supervisor, researchAgent, writerAgent },
   editor: new MastraEditor(),
   versions: {
+    defaultLabel: 'production',
     agents: {
       'research-agent': { status: 'published' },
       'writer-agent': { versionId: 'abc-123' },
@@ -148,11 +158,13 @@ curl -X POST http://localhost:4111/api/agents/supervisor/generate \
   }'
 ```
 
-`versions.self` selects only the root agent for the current execution. Mastra consumes it at the root execution boundary and doesn't propagate it to delegated sub-agents. Use `versions.agents` to select sub-agent versions.
+Use `versions.agents[rootAgentId]` to select only the root agent. The root follows the same rules as every sub-agent; its selector doesn't change the defaults for other agents.
 
-Explicit sub-agent selectors are resolved and pinned at run start. Unspecified dependencies use their existing status default. A label-selected root uses published dependencies. For backward compatibility, an exact-version root infers draft. An explicit `defaultStatus` takes precedence.
+Mastra resolves the configured agent graph and pins its selected versions at run start. Both explicit selectors and shared defaults propagate through delegation. Continuing an existing run uses its saved immutable version IDs, not a fresh label lookup. Omit mutable selectors when resuming; a continuation can repeat an already-pinned exact `versionId`, but it can't provide a label or `defaultLabel` to reselect the run.
 
-An explicit `versionId` or `label` fails closed when Mastra can't resolve the requested stored version. Status-based defaults can still fall back to the code-defined agent when no stored override exists.
+If your `agents` function returns dependencies dynamically, keep that graph stable for the run. A dependency added after the graph was pinned fails instead of resolving a label against a newer target.
+
+An explicit `versionId`, explicit `label`, or `defaultLabel` fails closed when Mastra can't resolve the requested stored version. A missing default label doesn't fall through to `defaultStatus`. Status-based selection can still fall back to the code-defined agent when no stored override exists.
 
 ## Stored-agent REST API
 

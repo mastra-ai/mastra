@@ -1,6 +1,7 @@
 import { MockLanguageModelV1, simulateReadableStream } from '@internal/ai-sdk-v4/test';
 import { describe, expect, it, vi } from 'vitest';
 import { Mastra } from '../../mastra';
+import { MASTRA_VERSIONS_KEY, RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 
 function textModel(text: string) {
@@ -35,6 +36,41 @@ function resolvedAgent(id: string, text: string, versionId: string) {
 }
 
 describe('legacy agent version boundary', () => {
+  it.each(['generateLegacy', 'streamLegacy'] as const)(
+    'preserves caller context and re-resolves moved defaults for independent %s runs',
+    async method => {
+      let target = 'v1';
+      const requestContext = new RequestContext();
+      const instructions = vi.fn(({ requestContext: context }: { requestContext: RequestContext }) => {
+        context.set('seen', true);
+        return 'root';
+      });
+      const root = new Agent({ id: 'root', name: 'root', instructions, model: textModel('done').model });
+      const applyStoredOverrides = vi.fn(async (agent: Agent, selector: any) => {
+        const fork = agent.__fork();
+        fork.__setRawConfig({ resolvedVersionId: selector.versionId ?? target });
+        return fork;
+      });
+      new Mastra({ agents: { root }, editor: { agent: { applyStoredOverrides } } as any });
+      const versions = { defaultLabel: 'candidate' };
+      requestContext.set(MASTRA_VERSIONS_KEY, versions);
+
+      for (const version of ['v1', 'v2']) {
+        target = version;
+        const result = await root[method]('start', { requestContext });
+        if ('consumeStream' in result) await result.consumeStream();
+        expect(requestContext.get(MASTRA_VERSIONS_KEY)).toBe(versions);
+      }
+
+      expect(instructions.mock.calls.every(([args]) => args.requestContext === requestContext)).toBe(true);
+      expect(requestContext.get('seen')).toBe(true);
+      expect(applyStoredOverrides.mock.calls.map(([, selector]) => selector)).toEqual([
+        { label: 'candidate' },
+        { label: 'candidate' },
+      ]);
+    },
+  );
+
   it('resolves a root label before direct generateLegacy behavior', async () => {
     const baseModel = textModel('base');
     const root = new Agent({ id: 'legacy-root', name: 'root', instructions: 'root', model: baseModel.model });
@@ -43,7 +79,7 @@ describe('legacy agent version boundary', () => {
     const resolve = vi.spyOn(mastra, 'resolveVersionedAgent').mockResolvedValue(selected.agent);
 
     const result = await root.generateLegacy('start', {
-      versions: { self: { label: 'production' } },
+      versions: { defaultLabel: 'production' },
     });
 
     expect(result.text).toBe('selected-v1');
@@ -60,7 +96,7 @@ describe('legacy agent version boundary', () => {
     const resolve = vi.spyOn(mastra, 'resolveVersionedAgent').mockResolvedValue(selected.agent);
 
     const result = await root.streamLegacy('start', {
-      versions: { self: { label: 'production' } },
+      versions: { defaultLabel: 'production' },
     });
 
     await result.consumeStream();

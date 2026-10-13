@@ -12,8 +12,8 @@ import { createTimeoutAbortSignal } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, Span } from '../../observability';
-import { MASTRA_SCOPES_KEY, MASTRA_VERSIONS_KEY, RequestContext } from '../../request-context';
-import type { VersionOverrides } from '../../request-context';
+import { MASTRA_SCOPES_KEY, MASTRA_VERSIONS_KEY, RequestContext, mergeVersionOverrides } from '../../request-context';
+import type { VersionOverrides, VersionSelector } from '../../request-context';
 import type { DeclaredAgentSchedule } from '../../schedules/define';
 import { toStandardSchema } from '../../schema';
 import type { MemoryStorage, WorkflowsStorage } from '../../storage';
@@ -50,7 +50,6 @@ import {
   getResolvedAgentVersionSelection,
   mergeLegacyContinuationRootPins,
   reconcileLegacyPersistedVersionPinDefaultStatus,
-  reconcileRootVersionOverrides,
   resolveLegacyContinuationRootPin,
   setAgentVersionPins,
 } from '../version-pins';
@@ -111,6 +110,16 @@ import { hydrateMessageListState, loadMessageListStateForResume } from './workfl
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
 /** Marks `prepare()` options whose scopes the caller applies itself (a resume rebuilt from storage). */
 const SCOPES_ALREADY_APPLIED = Symbol('mastra.durable.scopesAlreadyApplied');
+
+function getCallerVersionOverrides(options: {
+  versions?: VersionOverrides;
+  [RESOLVED_EXECUTION_OPTIONS]?: { callerVersions?: VersionOverrides; mergedVersions?: VersionOverrides };
+}): VersionOverrides | undefined {
+  const resolved = options[RESOLVED_EXECUTION_OPTIONS];
+  // Idle-loop continuations replace the merged selectors with frozen exact IDs.
+  // That replacement is new input, not the first segment's mutable selectors.
+  return resolved && options.versions === resolved.mergedVersions ? resolved.callerVersions : options.versions;
+}
 /** Recoveries in progress in this process, keyed by agent and run. */
 const localRecoveryClaims = new Map<string, string>();
 const RECOVER_ALREADY_IN_PROGRESS_ERROR_ID = 'DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS';
@@ -148,7 +157,33 @@ function shouldReportRecoveryFailure(error: unknown): boolean {
 }
 
 function getDurableSnapshotVersions(input: DurableAgenticWorkflowInput): VersionOverrides | undefined {
-  return input.requestContextEntries?.[MASTRA_VERSIONS_KEY] as VersionOverrides | undefined;
+  const versions = input.requestContextEntries?.[MASTRA_VERSIONS_KEY] as
+    | (VersionOverrides & { self?: VersionSelector })
+    | undefined;
+  if (!versions?.self) return versions;
+  // This spelling existed only in older snapshots. Translate it at the
+  // persistence boundary; public executions use the same agent map as every
+  // other agent. Authoritative persisted pins replace this selector below.
+  const { self, ...rest } = versions;
+  const mapped = rest.agents?.[input.agentId];
+  const authoritativeRoot = input.agentVersionPins?.root ?? getLegacyDurableRootPin(input, input.agentId);
+  if (
+    mapped &&
+    !authoritativeRoot &&
+    (self.versionId !== mapped.versionId || self.label !== mapped.label || self.status !== mapped.status)
+  ) {
+    throw new MastraError({
+      id: 'PINNED_VERSION_INVALID',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.USER,
+      text: `Legacy durable snapshot contains conflicting selectors for agent "${input.agentId}" without an authoritative version pin.`,
+      details: { agentId: input.agentId },
+    });
+  }
+  return {
+    ...rest,
+    agents: { ...rest.agents, [input.agentId]: rest.agents?.[input.agentId] ?? self },
+  };
 }
 
 function getLegacyDurableRootPin(
@@ -192,7 +227,6 @@ function replaceHistoricalRootWithExactPin(
   if (!versions) return undefined;
   return {
     ...versions,
-    ...(versions.self ? { self: { versionId: rootPin.versionId } } : {}),
     ...(versions.agents?.[rootPin.agentId]
       ? { agents: { ...versions.agents, [rootPin.agentId]: { versionId: rootPin.versionId } } }
       : {}),
@@ -1532,6 +1566,9 @@ export class DurableAgent<
       });
       workspace = await wrapped.getWorkspace({ requestContext });
     } catch (error) {
+      // A frozen graph cannot recover with missing or newly selected tools.
+      // Match cross-process runtime reconstruction's fail-closed behavior.
+      if (versionPins) throw error;
       this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] recover(${runId}) tool resolution failed: ${error}`);
     }
     executionFence.throwIfLost();
@@ -1843,7 +1880,7 @@ export class DurableAgent<
   }
 
   override __resolveExplicitAgentVersionPins(options: any) {
-    return this.#wrappedAgent.__resolveExplicitAgentVersionPins(options);
+    return this.#wrappedAgent.__resolveExplicitAgentVersionPins({ ...options, rootAgentId: this.id });
   }
 
   // --- Default options ---
@@ -1864,6 +1901,9 @@ export class DurableAgent<
       (defaultOptions ?? {}) as Record<string, unknown>,
       (options ?? {}) as Record<string, unknown>,
     ) as DurableAgentStreamOptions<TOutput>;
+    resolvedOptions.versions = mergeVersionOverrides(defaultOptions?.versions, options?.versions) as
+      | DurableAgentStreamOptions<TOutput>['versions']
+      | undefined;
     // Actor is a per-call trust signal, so an explicit value replaces the
     // default actor as a whole rather than inheriting any of its fields.
     if (options?.actor !== undefined) {
@@ -1875,7 +1915,10 @@ export class DurableAgent<
       snapshot,
     });
     // Preserve the marker when the until-idle wrapper spreads these options.
-    Object.defineProperty(scopedOptions, RESOLVED_EXECUTION_OPTIONS, { value: true, enumerable: true });
+    Object.defineProperty(scopedOptions, RESOLVED_EXECUTION_OPTIONS, {
+      value: { callerVersions: options?.versions, mergedVersions: scopedOptions.versions },
+      enumerable: true,
+    });
     return scopedOptions;
   }
 
@@ -2866,6 +2909,7 @@ export class DurableAgent<
         requestContext,
         optionsAreResolved: true,
         scopesResolved: true,
+        callerVersionOverrides: getCallerVersionOverrides(options),
         mastra: this.#mastra,
         durableAgentId: this.id,
         durableAgentName: this.name,
@@ -3139,8 +3183,6 @@ export class DurableAgent<
     const contextVersions = options?.requestContext?.get(MASTRA_VERSIONS_KEY) as
       | AgentExecutionOptions<TOutput>['versions']
       | undefined;
-    reconcileRootVersionOverrides(options?.versions as VersionOverrides | undefined, this.id);
-    reconcileRootVersionOverrides(contextVersions as VersionOverrides | undefined, this.id);
     if (entry && !warmPins) {
       const legacyRootPin = mergeLegacyContinuationRootPins(
         this.id,
@@ -3245,10 +3287,8 @@ export class DurableAgent<
       // Absent (vs recorded []) marks a run suspended before the scopes upgrade; the resume
       // adopts the supplied scopes with the same trust posture as a fresh run.
       rehydratedScopes = persistedScopes;
-      const snapshotVersions = snapshotRequestContext?.get(MASTRA_VERSIONS_KEY) as
-        | AgentExecutionOptions<TOutput>['versions']
-        | undefined;
-      reconcileRootVersionOverrides(snapshotVersions as VersionOverrides | undefined, this.id);
+      const snapshotVersions = getDurableSnapshotVersions(workflowInput);
+      if (snapshotVersions) snapshotRequestContext?.set(MASTRA_VERSIONS_KEY, snapshotVersions);
       const legacyRootPin = getLegacyDurableRootPin(workflowInput, this.id);
       let continuationVersionPins = getDurableWorkflowVersionPins(workflowInput, this.id);
       if (legacyRootPin && continuationVersionPins) {
@@ -3908,7 +3948,6 @@ export class DurableAgent<
     //    so obvious caller errors fail fast.
     let { workflowInput } = await this.#loadRecoverableSnapshot(workflowsStore, runId);
     const assertRecoveryVersions = (input: DurableAgenticWorkflowInput) => {
-      reconcileRootVersionOverrides(options?.versions as VersionOverrides | undefined, this.id);
       const pins = getDurableWorkflowVersionPins(input, this.id);
       if (pins) {
         assertContinuationVersionOverrides(options?.versions, pins, this.id);
@@ -4337,6 +4376,7 @@ export class DurableAgent<
         requestContext,
         optionsAreResolved: true,
         scopesResolved: true,
+        callerVersionOverrides: getCallerVersionOverrides(options),
         mastra: this.#mastra,
         methodType: 'generate',
         durableAgentId: this.id,
@@ -5358,6 +5398,8 @@ export class DurableAgent<
       versionResolutionAgent: this as unknown as Agent<string, any, TOutput>,
       messages,
       options,
+      durableAgentId: this.id,
+      durableAgentName: this.name,
       // Forward the caller-provided runId (mirrors stream()). Without this,
       // prepareForDurableExecution mints a fresh id, so prepare() registers a
       // different run than requested and a follow-up resume(runId) — e.g. when

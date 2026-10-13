@@ -538,6 +538,7 @@ When using the [editor](/docs/studio/editor), you can control which stored versi
 ```typescript
 const result = await parentAgent.generate('Research and write about AI safety', {
   versions: {
+    defaultLabel: 'production',
     agents: {
       'research-agent': { status: 'published' },
       'writing-agent': { label: 'candidate' },
@@ -546,9 +547,9 @@ const result = await parentAgent.generate('Research and write about AI safety', 
 })
 ```
 
-Entries under `versions.agents` propagate through delegation. A `versions.self` selector applies only to the root agent for the current execution and isn't inherited by subagents. See [Subagent versioning](/reference/editor/versioning#sub-agent-versioning) for selectors, resolution order, and server API usage.
+`versions.defaultLabel` selects a label across the agent graph, including the parent. An entry under `versions.agents` overrides that default for one agent ID. In this example, the parent uses `production`, the research agent uses its published version, and the writing agent uses `candidate`. Each selected label must exist; a missing label fails the run instead of falling back to a different version. See [Subagent versioning](/reference/editor/versioning#sub-agent-versioning) for the full resolution order.
 
-Mastra resolves explicit subagent labels to immutable version IDs before the run begins, then persists those pins through suspension and recovery. Moving a label affects a later run, but it can't change which subagent version an in-flight run invokes.
+Mastra resolves selected versions throughout the configured agent graph before the run begins, then persists those immutable version IDs through suspension and recovery. Moving a label affects a later run, but it can't change which subagent version an in-flight run invokes.
 
 ## Related
 

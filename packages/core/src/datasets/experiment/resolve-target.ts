@@ -3,13 +3,15 @@ import {
   exactVersionOverridesForPins,
   getAgentVersionPins,
   getResolvedAgentVersionSelection,
-  reconcileRootVersionOverrides,
   recordAgentVersionPin,
+  setAgentVersionPinDefaultStatus,
 } from '../../agent/version-pins';
+import type { AgentVersionPins } from '../../agent/version-pins';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { Mastra } from '../../mastra';
+import { getAgentVersionSelector, mergeVersionOverrides } from '../../mastra/types';
 import type { VersionOverrides, VersionSelector } from '../../mastra/types';
-import { RequestContext } from '../../request-context';
+import { MASTRA_VERSIONS_KEY, RequestContext } from '../../request-context';
 import type { Target } from './executor';
 
 /**
@@ -107,9 +109,9 @@ function missingImmutableSelection(agentId: string, selector: VersionSelector): 
  * per item and again for retries), so forwarding a movable label to each call
  * would make one experiment span multiple immutable agent versions.
  *
- * Root selectors use the canonical `versions.self` spelling internally. The
- * legacy `agentVersion` field remains an exact-version alias. Reachable explicit
- * dependency selectors are resolved by the Agent's normal recursive resolver;
+ * The same selection policy applies to the root and its graph. The legacy
+ * `agentVersion` field remains an exact-version alias. Reachable dependency
+ * selectors are resolved by the Agent's normal recursive resolver;
  * label selectors that are not known from the selected root fail closed rather
  * than leaking into the item loop for later re-resolution.
  *
@@ -124,16 +126,27 @@ export async function resolveExperimentTarget(
     versions?: VersionOverrides;
     requestContext?: Record<string, unknown>;
   },
-): Promise<{ target: Target; versions?: VersionOverrides } | null> {
+): Promise<{ target: Target; versions?: VersionOverrides; versionPins?: AgentVersionPins } | null> {
   const base = await resolveTarget(mastra, targetType, targetId);
   if (!base || targetType !== 'agent') return base;
 
   const baseAgent = base.target as Agent;
-  const canonicalVersions = reconcileRootVersionOverrides(options?.versions, baseAgent.id);
-  const canonicalRootSelector = canonicalVersions?.self;
+  const resolutionContext: RequestContext = new RequestContext<unknown>(Object.entries(options?.requestContext ?? {}));
+  const defaultOptions =
+    typeof baseAgent.getDefaultOptions === 'function'
+      ? await baseAgent.getDefaultOptions({ requestContext: resolutionContext })
+      : undefined;
+  const canonicalVersions = mergeVersionOverrides(
+    mergeVersionOverrides(
+      mastra.getVersionOverrides(),
+      resolutionContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined,
+    ),
+    mergeVersionOverrides(defaultOptions?.versions, options?.versions),
+  );
+  const explicitRootSelector = canonicalVersions?.agents?.[baseAgent.id];
   const legacyRootSelector = options?.agentVersion ? ({ versionId: options.agentVersion } as const) : undefined;
 
-  if (canonicalRootSelector && legacyRootSelector && !sameSelector(canonicalRootSelector, legacyRootSelector)) {
+  if (explicitRootSelector && legacyRootSelector && !sameSelector(explicitRootSelector, legacyRootSelector)) {
     throw new MastraError({
       id: 'INVALID_VERSION_SELECTOR',
       domain: ErrorDomain.AGENT,
@@ -142,15 +155,15 @@ export async function resolveExperimentTarget(
       details: {
         agentId: baseAgent.id,
         agentVersion: legacyRootSelector.versionId,
-        versionsSelf: JSON.stringify(canonicalRootSelector),
+        versionsAgent: JSON.stringify(explicitRootSelector),
       },
     });
   }
 
-  const rootSelector = canonicalRootSelector ?? legacyRootSelector;
+  const rootSelector = legacyRootSelector ?? getAgentVersionSelector(canonicalVersions, baseAgent.id);
   let resolvedAgent = baseAgent;
   if (rootSelector) {
-    if (canonicalRootSelector) {
+    if (!legacyRootSelector) {
       resolvedAgent = await mastra.resolveVersionedAgent(baseAgent, rootSelector);
     } else {
       // Keep the pre-existing agentVersion lookup behavior (including ID/name
@@ -161,7 +174,6 @@ export async function resolveExperimentTarget(
     }
   }
 
-  const resolutionContext: RequestContext = new RequestContext<unknown>(Object.entries(options?.requestContext ?? {}));
   if (rootSelector) {
     const resolvedRootSelection =
       (typeof (resolvedAgent as Agent).toRawConfig === 'function'
@@ -169,8 +181,10 @@ export async function resolveExperimentTarget(
         : undefined) ??
       (typeof rootSelector.versionId === 'string'
         ? { agentId: baseAgent.id, versionId: rootSelector.versionId }
-        : missingImmutableSelection(baseAgent.id, rootSelector));
-    recordAgentVersionPin(resolutionContext, resolvedRootSelection, 'root');
+        : 'label' in rootSelector
+          ? missingImmutableSelection(baseAgent.id, rootSelector)
+          : undefined);
+    if (resolvedRootSelection) recordAgentVersionPin(resolutionContext, resolvedRootSelection, 'root');
   }
 
   if (typeof resolvedAgent.__resolveExplicitAgentVersionPins === 'function') {
@@ -180,30 +194,29 @@ export async function resolveExperimentTarget(
     });
   }
 
+  setAgentVersionPinDefaultStatus(resolutionContext, canonicalVersions?.defaultStatus);
   const pins = getAgentVersionPins(resolutionContext);
   const pinnedOverrides = exactVersionOverridesForPins(pins, canonicalVersions?.defaultStatus);
   const frozenAgents: NonNullable<VersionOverrides['agents']> = {
     ...(pinnedOverrides?.agents ?? {}),
   };
 
-  // Exact IDs are already immutable and remain valid even when the dependency
-  // is supplied dynamically at item execution time. Status preserves its
-  // established fallback behavior. A label, however, must have produced a pin
-  // during the recursive run-start audit or the experiment cannot start safely.
+  // A label must have produced a pin during the recursive run-start audit.
+  // Do not forward unpinned status selectors: their code fallback is already
+  // frozen by graph membership. Unreachable exact selectors are unused.
   for (const [agentId, selector] of Object.entries(canonicalVersions?.agents ?? {})) {
     if (frozenAgents[agentId]) continue;
     if ('label' in selector) missingImmutableSelection(agentId, selector);
-    frozenAgents[agentId] = selector;
   }
 
   const frozenVersions: VersionOverrides = {
-    ...(pinnedOverrides?.self ? { self: pinnedOverrides.self } : {}),
     ...(Object.keys(frozenAgents).length > 0 ? { agents: frozenAgents } : {}),
     ...(canonicalVersions?.defaultStatus ? { defaultStatus: canonicalVersions.defaultStatus } : {}),
   };
 
   return {
     target: resolvedAgent,
+    ...(pins ? { versionPins: pins } : {}),
     ...(Object.keys(frozenVersions).length > 0 ? { versions: frozenVersions } : {}),
   };
 }

@@ -89,7 +89,7 @@ describe('thread stream version pins', () => {
         root: { agentId: 'stored-agent', versionId: 'v1', selectedLabel: 'production' },
         agents: { dependency: { agentId: 'dependency', versionId: 'dep-v1', selectedLabel: 'stable' } },
       },
-      versions: { self: { versionId: 'v1' }, agents: { dependency: { versionId: 'dep-v1' } } },
+      versions: { agents: { 'stored-agent': { versionId: 'v1' }, dependency: { versionId: 'dep-v1' } } },
     },
     {
       name: 'a rootless dependency selection',
@@ -248,7 +248,7 @@ describe('thread stream version pins', () => {
     // per-caller continuation token.
     expect(parts[0]).toEqual({
       type: 'resolved-version-overrides',
-      payload: { defaultStatus: 'published', self: { versionId: 'v1' } },
+      payload: { defaultStatus: 'published', agents: { 'stored-agent': { versionId: 'v1' } } },
     });
     expect(parts[1]).toMatchObject({ type: 'text-delta' });
     expect(JSON.stringify(parts[0])).not.toContain('pr-101');
@@ -290,14 +290,14 @@ describe('thread stream version pins', () => {
       defaultStatus: 'published',
     });
     requestContext.set(MASTRA_VERSIONS_KEY, {
-      self: { label: 'production' },
+      defaultLabel: 'production',
       agents: { dependency: { label: 'stable' } },
     });
 
     let labelTarget = 'v1';
     const selectedVersions: string[] = [];
     const stream = vi.fn(async (_messages: unknown, options: any) => {
-      const selector = options.versions.self;
+      const selector = options.versions.agents['stored-agent'];
       selectedVersions.push('versionId' in selector ? selector.versionId : labelTarget);
       return completedOutput(options.runId);
     });
@@ -333,8 +333,7 @@ describe('thread stream version pins', () => {
       runId: continuation.runId,
       versions: {
         defaultStatus: 'published',
-        self: { versionId: 'v1' },
-        agents: { dependency: { versionId: 'dep-v1' } },
+        agents: { 'stored-agent': { versionId: 'v1' }, dependency: { versionId: 'dep-v1' } },
       },
     });
     expect(getAgentVersionPins(continuationOptions.requestContext)).toEqual({
@@ -392,7 +391,7 @@ describe('thread stream version pins', () => {
 
     const selectedVersions: string[] = [];
     const stream = vi.fn(async (_messages: unknown, options: any) => {
-      const selector = options.versions.self;
+      const selector = options.versions.agents['stored-agent'];
       selectedVersions.push('versionId' in selector ? selector.versionId : labelTarget);
       return completedOutput(options.runId);
     });
@@ -415,8 +414,7 @@ describe('thread stream version pins', () => {
       runId: 'remote-continuation',
       versions: {
         defaultStatus: 'published',
-        self: { versionId: 'v1' },
-        agents: { dependency: { versionId: 'dep-v1' } },
+        agents: { 'stored-agent': { versionId: 'v1' }, dependency: { versionId: 'dep-v1' } },
       },
     });
     expect(selectedVersions).toEqual(['v1']);
@@ -533,7 +531,7 @@ describe('thread stream version pins', () => {
     expect(hydrated).toEqual({ runId: 'code-run', versionPins: undefined });
 
     // A production version may appear after this base-root run completes. Core
-    // must preserve the retained rootless identity and never synthesize self.
+    // must preserve the retained rootless identity and never synthesize a root selection.
     const stream = vi.spyOn(agent, 'stream').mockResolvedValue(completedOutput('code-continuation') as any);
     await agent.sendToolApproval({
       approved: true,
@@ -543,7 +541,7 @@ describe('thread stream version pins', () => {
       resourceId: 'resource',
     });
     await vi.waitFor(() => expect(stream).toHaveBeenCalledOnce());
-    expect(stream.mock.calls[0]?.[1]?.versions?.self).toBeUndefined();
+    expect(stream.mock.calls[0]?.[1]?.versions?.agents?.['stored-agent']).toBeUndefined();
     expect(getAgentVersionPins(stream.mock.calls[0]?.[1]?.requestContext)).toBeUndefined();
   });
 
@@ -603,7 +601,7 @@ describe('thread stream version pins', () => {
     await vi.waitFor(() => expect(stream).toHaveBeenCalledOnce());
     expect(stream.mock.calls[0]?.[1]).toMatchObject({
       runId: 'new-run',
-      versions: { defaultStatus: 'published', self: { versionId: 'v1' } },
+      versions: { defaultStatus: 'published', agents: { 'stored-agent': { versionId: 'v1' } } },
     });
   });
 
@@ -634,7 +632,7 @@ describe('thread stream version pins', () => {
     await vi.waitFor(() => expect(stream).toHaveBeenCalledOnce());
     expect(stream.mock.calls[0]?.[1]?.versions).toEqual({
       defaultStatus: 'published',
-      self: { versionId: 'v1' },
+      agents: { 'stored-agent': { versionId: 'v1' } },
     });
   });
 });

@@ -79,13 +79,15 @@ describe('streamUntilIdle version pins', () => {
       {
         requestContext: new RequestContext(),
         memory: { thread: 'thread', resource: 'resource' },
-        versions: { self: { label: 'production' } },
+        versions: { defaultLabel: 'production' },
       },
       { activeStreams: new Map(), bgManager: completionManager() },
     );
     await drain(result.fullStream);
 
-    expect(continuationVersions).toEqual([{ defaultStatus: 'published', self: { versionId: 'v1' } }]);
+    expect(continuationVersions).toEqual([
+      { defaultStatus: 'published', agents: { 'stored-agent': { versionId: 'v1' } } },
+    ]);
   });
 
   it('keeps a durable label-selected run on its original exact ID for background continuations', async () => {
@@ -96,12 +98,14 @@ describe('streamUntilIdle version pins', () => {
       {
         requestContext: new RequestContext(),
         memory: { thread: 'thread', resource: 'resource' },
-        versions: { self: { label: 'production' } },
+        versions: { defaultLabel: 'production' },
       },
       { activeStreams: new Map(), bgManager: completionManager() },
     );
     await drain(result.fullStream);
 
-    expect(continuationVersions).toEqual([{ defaultStatus: 'published', self: { versionId: 'v1' } }]);
+    expect(continuationVersions).toEqual([
+      { defaultStatus: 'published', agents: { 'stored-agent': { versionId: 'v1' } } },
+    ]);
   });
 });

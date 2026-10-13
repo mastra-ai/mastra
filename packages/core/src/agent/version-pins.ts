@@ -9,11 +9,13 @@ export interface ResolvedAgentVersionSelection {
   selectedLabel?: string;
 }
 
-/** @internal Root and explicit dependency pins owned by one agent run. */
+/** @internal Immutable root and dependency selections owned by one agent run. */
 export interface AgentVersionPins {
   root?: ResolvedAgentVersionSelection;
   agents?: Record<string, ResolvedAgentVersionSelection>;
   defaultStatus?: VersionOverrides['defaultStatus'];
+  /** Run-start graph membership. A listed agent without a version pin uses its code configuration. */
+  resolvedAgentIds?: string[];
 }
 
 /** @internal Request-context slot used to carry run pins through tool creation and delegation. */
@@ -85,13 +87,36 @@ export function normalizeAgentVersionPins(value: unknown): AgentVersionPins | un
     }
   }
 
-  if (!root && Object.keys(agents).length === 0 && !defaultStatus) {
+  if (root && agents[root.agentId]) {
+    reconcilePersistedSelections(root, agents[root.agentId]!, `root agent "${root.agentId}"`);
+  }
+
+  let resolvedAgentIds: string[] | undefined;
+  if (input.resolvedAgentIds !== undefined) {
+    if (
+      !Array.isArray(input.resolvedAgentIds) ||
+      input.resolvedAgentIds.length === 0 ||
+      !input.resolvedAgentIds.every(isNonEmptyString)
+    ) {
+      return invalidPins('the resolved agent graph is invalid');
+    }
+    resolvedAgentIds = [...new Set(input.resolvedAgentIds)].sort();
+    if (
+      (root && !resolvedAgentIds.includes(root.agentId)) ||
+      Object.keys(agents).some(agentId => !resolvedAgentIds!.includes(agentId))
+    ) {
+      return invalidPins('a pinned agent is missing from the resolved graph');
+    }
+  }
+
+  if (!root && Object.keys(agents).length === 0 && !defaultStatus && !resolvedAgentIds) {
     return invalidPins('the pin payload contains no selections');
   }
   return {
     ...(root ? { root } : {}),
     ...(Object.keys(agents).length > 0 ? { agents } : {}),
     ...(defaultStatus ? { defaultStatus } : {}),
+    ...(resolvedAgentIds ? { resolvedAgentIds } : {}),
   };
 }
 
@@ -143,6 +168,14 @@ export function reconcileAgentVersionPinPayloads(...values: unknown[]): AgentVer
       return invalidPins('defaultStatus values disagree');
     }
     const defaultStatus = reconciled?.defaultStatus ?? pins.defaultStatus;
+    if (
+      reconciled?.resolvedAgentIds &&
+      pins.resolvedAgentIds &&
+      JSON.stringify(reconciled.resolvedAgentIds) !== JSON.stringify(pins.resolvedAgentIds)
+    ) {
+      return invalidPins('resolved agent graphs disagree');
+    }
+    const resolvedAgentIds = reconciled?.resolvedAgentIds ?? pins.resolvedAgentIds;
 
     // Scoped delegation can retain the selected child in both positions. That
     // historical shape is compatible only when both entries identify the same
@@ -154,17 +187,19 @@ export function reconcileAgentVersionPinPayloads(...values: unknown[]): AgentVer
         root: shared,
         ...(Object.keys(agents).length > 0 ? { agents } : {}),
         ...(defaultStatus ? { defaultStatus } : {}),
+        ...(resolvedAgentIds ? { resolvedAgentIds } : {}),
       };
     } else {
       reconciled = {
         ...(root ? { root } : {}),
         ...(Object.keys(agents).length > 0 ? { agents } : {}),
         ...(defaultStatus ? { defaultStatus } : {}),
+        ...(resolvedAgentIds ? { resolvedAgentIds } : {}),
       };
     }
   }
 
-  return reconciled;
+  return normalizeAgentVersionPins(reconciled);
 }
 
 /**
@@ -199,9 +234,9 @@ export function setAgentVersionPins(requestContext: RequestContext, pins: AgentV
 
 /**
  * @internal Rebase an inherited run pin map onto the agent at a delegation boundary.
- * The parent's root remains private to the parent run; an explicit dependency pin
- * for the delegated agent becomes the child's root while deeper dependency pins
- * remain available to nested tools.
+ * The delegated agent's dependency pin becomes its root. Keep the parent's
+ * identity in the agent map so a cycle back to that agent still uses the same
+ * immutable version, without mistaking it for the child's root.
  */
 export function scopeAgentVersionPins(
   pins: AgentVersionPins | undefined,
@@ -209,16 +244,15 @@ export function scopeAgentVersionPins(
 ): AgentVersionPins | undefined {
   if (!pins) return undefined;
   const root = pins.root?.agentId === agentId ? pins.root : pins.agents?.[agentId];
+  const agents = Object.fromEntries(Object.entries(pins.agents ?? {}).map(([id, pin]) => [id, { ...pin }]));
+  if (pins.root && pins.root.agentId !== agentId) agents[pins.root.agentId] = { ...pins.root };
   const scoped: AgentVersionPins = {
     ...(root ? { root: { ...root } } : {}),
-    ...(pins.agents
-      ? {
-          agents: Object.fromEntries(Object.entries(pins.agents).map(([id, pin]) => [id, { ...pin }])),
-        }
-      : {}),
+    ...(Object.keys(agents).length > 0 ? { agents } : {}),
     ...(pins.defaultStatus ? { defaultStatus: pins.defaultStatus } : {}),
+    ...(pins.resolvedAgentIds ? { resolvedAgentIds: [...pins.resolvedAgentIds] } : {}),
   };
-  if (!scoped.root && !scoped.agents && !scoped.defaultStatus) return undefined;
+  if (!scoped.root && !scoped.agents && !scoped.defaultStatus && !scoped.resolvedAgentIds) return undefined;
   return normalizeAgentVersionPins(scoped);
 }
 
@@ -230,13 +264,11 @@ export function exactVersionOverridesForPins(
   const selectedDefaultStatus = defaultStatus ?? pins?.defaultStatus;
   if (!pins && !selectedDefaultStatus) return undefined;
   const exactAgents = Object.fromEntries(
-    Object.entries(pins?.agents ?? {})
-      .filter(([agentId]) => agentId !== pins?.root?.agentId)
-      .map(([agentId, pin]) => [agentId, { versionId: pin.versionId }]),
+    Object.entries(pins?.agents ?? {}).map(([agentId, pin]) => [agentId, { versionId: pin.versionId }]),
   );
+  if (pins?.root) exactAgents[pins.root.agentId] = { versionId: pins.root.versionId };
   return {
     ...(selectedDefaultStatus ? { defaultStatus: selectedDefaultStatus } : {}),
-    ...(pins?.root ? { self: { versionId: pins.root.versionId } } : {}),
     ...(Object.keys(exactAgents).length > 0 ? { agents: exactAgents } : {}),
   };
 }
@@ -323,50 +355,6 @@ function selectorDetails(selector: VersionSelector): Record<string, string> {
   return { requestedStatus: selector.status };
 }
 
-function selectorsEqual(left: VersionSelector, right: VersionSelector): boolean {
-  if ('versionId' in left) return 'versionId' in right && left.versionId === right.versionId;
-  if ('label' in left) return 'label' in right && left.label === right.label;
-  return 'status' in right && left.status === right.status;
-}
-
-/**
- * @internal Canonicalize the two supported root-selector spellings. Supplying
- * both is permitted only when they are identical; the per-agent root entry is
- * then removed so dependency traversal cannot resolve the root a second time.
- */
-export function reconcileRootVersionOverrides(
-  overrides: VersionOverrides | undefined,
-  rootAgentId: string,
-): VersionOverrides | undefined {
-  if (!overrides) return undefined;
-  const selfSelector = overrides.self;
-  const mappedSelector = overrides.agents?.[rootAgentId];
-  if (selfSelector && mappedSelector && !selectorsEqual(selfSelector, mappedSelector)) {
-    throw new MastraError({
-      id: 'INVALID_VERSION_SELECTOR',
-      domain: ErrorDomain.AGENT,
-      category: ErrorCategory.USER,
-      text: `Agent "${rootAgentId}" received conflicting root version selectors.`,
-      details: {
-        agentId: rootAgentId,
-        selfSelector: JSON.stringify(selectorDetails(selfSelector)),
-        mappedSelector: JSON.stringify(selectorDetails(mappedSelector)),
-      },
-    });
-  }
-
-  const rootSelector = selfSelector ?? mappedSelector;
-  const dependencyAgents = Object.fromEntries(
-    Object.entries(overrides.agents ?? {}).filter(([agentId]) => agentId !== rootAgentId),
-  );
-  const canonical: VersionOverrides = {
-    ...(rootSelector ? { self: rootSelector } : {}),
-    ...(Object.keys(dependencyAgents).length > 0 ? { agents: dependencyAgents } : {}),
-    ...(overrides.defaultStatus ? { defaultStatus: overrides.defaultStatus } : {}),
-  };
-  return Object.keys(canonical).length > 0 ? canonical : undefined;
-}
-
 /**
  * @internal A continuation consumes its persisted pin. Only an explicit repeat of the
  * exact immutable ID is accepted; mutable selectors and different IDs fail closed.
@@ -422,6 +410,9 @@ export function resolveLegacyContinuationRootPin(
   rootAgentId: string,
 ): ResolvedAgentVersionSelection | undefined {
   if (!overrides) return undefined;
+  if (overrides.defaultLabel !== undefined) {
+    return legacyPinRequired(rootAgentId, 'a graph defaultLabel');
+  }
   if (overrides.defaultStatus !== undefined) {
     return legacyPinRequired(rootAgentId, 'a dependency defaultStatus');
   }
@@ -434,25 +425,8 @@ export function resolveLegacyContinuationRootPin(
     }
   }
 
-  const selectors = [overrides.self, overrides.agents?.[rootAgentId]].filter(
-    (selector): selector is VersionSelector => selector !== undefined,
-  );
-  for (const selector of selectors) {
-    if (!('versionId' in selector)) {
-      return legacyPinRequired(rootAgentId, `a mutable selector for root agent "${rootAgentId}"`);
-    }
-  }
-  const versionIds = [...new Set(selectors.map(selector => selector.versionId))];
-  if (versionIds.length > 1) {
-    throw new MastraError({
-      id: 'PINNED_VERSION_CONFLICT',
-      domain: ErrorDomain.AGENT,
-      category: ErrorCategory.USER,
-      text: `Agent "${rootAgentId}" continuation supplied conflicting exact root versions.`,
-      details: { agentId: rootAgentId, requestedVersionIds: versionIds.join(', ') },
-    });
-  }
-  return versionIds[0] ? { agentId: rootAgentId, versionId: versionIds[0] } : undefined;
+  const versionId = overrides.agents?.[rootAgentId]?.versionId;
+  return versionId ? { agentId: rootAgentId, versionId } : undefined;
 }
 
 /** @internal Merge exact legacy bridges from separate option/context sources. */
@@ -488,7 +462,15 @@ export function assertContinuationVersionOverrides(
     assertContinuationSelectorMatchesPin(selector, pin);
   };
 
-  assertAgentSelector(rootAgentId, overrides.self, pins.root);
+  if (overrides.defaultLabel !== undefined) {
+    throw new MastraError({
+      id: 'PINNED_VERSION_CONFLICT',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.USER,
+      text: 'Agent run versions are frozen and cannot apply a mutable default label during continuation.',
+      details: { agentId: rootAgentId, requestedDefaultLabel: overrides.defaultLabel },
+    });
+  }
   for (const [agentId, selector] of Object.entries(overrides.agents ?? {})) {
     assertAgentSelector(agentId, selector, agentId === rootAgentId ? pins.root : pins.agents?.[agentId]);
   }

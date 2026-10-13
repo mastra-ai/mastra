@@ -79,6 +79,7 @@ async function setupDataset(itemCount: number) {
 
 function setupMastra(agent: Agent) {
   mastra = {
+    getVersionOverrides: vi.fn(),
     getStorage: vi.fn().mockReturnValue(mockStorage),
     getAgent: vi.fn().mockReturnValue(agent),
     getAgentById: vi.fn().mockReturnValue(agent),

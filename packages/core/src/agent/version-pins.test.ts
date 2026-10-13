@@ -7,11 +7,11 @@ import {
   assertAgentVersionPinsOwnerIntegrity,
   assertContinuationVersionOverrides,
   assertContinuationSelectorMatchesPin,
+  exactVersionOverridesForPins,
   MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY,
   getAgentVersionPins,
   normalizeAgentVersionPins,
   reconcileAgentVersionPinPayloads,
-  reconcileRootVersionOverrides,
   resolveLegacyContinuationRootPin,
   scopeAgentVersionPins,
   setAgentVersionPins,
@@ -29,6 +29,50 @@ function model() {
 }
 
 describe('agent version pins', () => {
+  it('preserves frozen code-agent membership through serialization and delegation', () => {
+    const pins = normalizeAgentVersionPins({ resolvedAgentIds: ['root', 'child'] });
+    expect(scopeAgentVersionPins(pins, 'child')).toEqual({ resolvedAgentIds: ['child', 'root'] });
+    expect(exactVersionOverridesForPins(pins)).toEqual({});
+    expect(reconcileAgentVersionPinPayloads(pins, JSON.parse(JSON.stringify(pins)))).toEqual(pins);
+    expect(() => reconcileAgentVersionPinPayloads(pins, { resolvedAgentIds: ['root', 'late-child'] })).toThrowError(
+      expect.objectContaining({ id: 'PINNED_VERSION_INVALID' }),
+    );
+    expect(() =>
+      normalizeAgentVersionPins({
+        root: { agentId: 'root', versionId: 'v1' },
+        resolvedAgentIds: ['child'],
+      }),
+    ).toThrowError(expect.objectContaining({ id: 'PINNED_VERSION_INVALID' }));
+    expect(() =>
+      reconcileAgentVersionPinPayloads(
+        { agents: { outside: { agentId: 'outside', versionId: 'v1' } } },
+        { resolvedAgentIds: ['root'] },
+      ),
+    ).toThrowError(expect.objectContaining({ id: 'PINNED_VERSION_INVALID' }));
+  });
+
+  it('represents every frozen identity through the explicit per-agent map', () => {
+    expect(
+      exactVersionOverridesForPins({
+        root: { agentId: 'root', versionId: 'root-v1', selectedLabel: 'candidate' },
+        agents: { child: { agentId: 'child', versionId: 'child-v1', selectedLabel: 'candidate' } },
+      }),
+    ).toEqual({ agents: { root: { versionId: 'root-v1' }, child: { versionId: 'child-v1' } } });
+  });
+
+  it('rejects a mutable graph default on a continuation even if its label name is unchanged', () => {
+    expect(() =>
+      assertContinuationVersionOverrides(
+        { defaultLabel: 'candidate' },
+        { root: { agentId: 'root', versionId: 'root-v1', selectedLabel: 'candidate' } },
+        'root',
+      ),
+    ).toThrowError(expect.objectContaining({ id: 'PINNED_VERSION_CONFLICT' }));
+    expect(() => resolveLegacyContinuationRootPin({ defaultLabel: 'candidate' }, 'root')).toThrowError(
+      expect.objectContaining({ id: 'PINNED_VERSION_REQUIRED' }),
+    );
+  });
+
   it('keeps an explicit sub-agent label immutable within a run and resolves it again for a new run', async () => {
     let labelTarget = 'sub-v1';
     const sub = new Agent({ id: 'sub-agent', name: 'sub', instructions: 'sub', model: model() });
@@ -61,12 +105,12 @@ describe('agent version pins', () => {
       versionId: 'sub-v1',
       selectedLabel: 'production',
     });
-    expect(selectors).toEqual([{ label: 'production' }]);
+    expect(selectors).toEqual([{ label: 'production' }, { versionId: 'sub-v1' }]);
 
     setAgentVersionPins(requestContext, undefined);
     await supervisor.__resolveExplicitAgentVersionPins({ requestContext, versions });
     expect(getAgentVersionPins(requestContext)?.agents?.['sub-agent']?.versionId).toBe('sub-v2');
-    expect(selectors).toEqual([{ label: 'production' }, { label: 'production' }]);
+    expect(selectors).toEqual([{ label: 'production' }, { versionId: 'sub-v1' }, { label: 'production' }]);
   });
 
   it('fails closed for corrupt pins and mutable or different continuation selectors', () => {
@@ -74,6 +118,14 @@ describe('agent version pins', () => {
       expect.objectContaining({ id: 'PINNED_VERSION_INVALID' }),
     );
     const pin = { agentId: 'agent', versionId: 'v1', selectedLabel: 'production' };
+    for (const duplicate of [
+      { ...pin, versionId: 'v2' },
+      { ...pin, selectedLabel: 'candidate' },
+    ]) {
+      expect(() => normalizeAgentVersionPins({ root: pin, agents: { agent: duplicate } })).toThrowError(
+        expect.objectContaining({ id: 'PINNED_VERSION_INVALID' }),
+      );
+    }
     expect(() => assertContinuationSelectorMatchesPin({ label: 'production' }, pin)).toThrowError(
       expect.objectContaining({ id: 'PINNED_VERSION_CONFLICT' }),
     );
@@ -135,38 +187,24 @@ describe('agent version pins', () => {
     expect(scoped?.root).toEqual({ agentId: 'child', versionId: 'child-v1' });
   });
 
-  it('reconciles duplicate root selector spellings and rejects disagreement', () => {
-    expect(
-      reconcileRootVersionOverrides(
-        {
-          self: { label: 'production' },
-          agents: { root: { label: 'production' }, dep: { versionId: 'dep-v1' } },
-          defaultStatus: 'published',
-        },
-        'root',
-      ),
-    ).toEqual({
-      self: { label: 'production' },
-      agents: { dep: { versionId: 'dep-v1' } },
-      defaultStatus: 'published',
-    });
-    expect(() =>
-      reconcileRootVersionOverrides({ self: { versionId: 'v1' }, agents: { root: { versionId: 'v2' } } }, 'root'),
-    ).toThrowError(expect.objectContaining({ id: 'INVALID_VERSION_SELECTOR' }));
-  });
-
-  it('rejects root selector disagreement merged from Mastra defaults and a direct call before lookup', async () => {
+  it('lets an explicit root selector override a graph label inherited from Mastra', async () => {
     const root = new Agent({ id: 'root', name: 'root', instructions: 'root', model: model() });
     const mastra = new Mastra({
       agents: { root },
-      versions: { self: { versionId: 'v1' } },
+      versions: { defaultLabel: 'production' },
     });
-    const resolve = vi.spyOn(mastra as any, 'resolveVersionedAgent');
+    const resolve = vi.spyOn(mastra, 'resolveVersionedAgent').mockImplementation(async (agent, selector) => {
+      const fork = agent.__fork();
+      fork.__setRawConfig({ resolvedVersionId: selector.versionId });
+      fork.__markStoredVersionApplied();
+      return fork;
+    });
 
-    await expect(root.generate('start', { versions: { agents: { root: { versionId: 'v2' } } } })).rejects.toMatchObject(
-      { id: 'INVALID_VERSION_SELECTOR' },
-    );
-    expect(resolve).not.toHaveBeenCalled();
+    await expect(
+      root.generate('start', { versions: { agents: { root: { versionId: 'v2' } } } }),
+    ).resolves.toMatchObject({ text: 'ok' });
+    expect(resolve).toHaveBeenCalledWith(root, { versionId: 'v2' });
+    expect(resolve.mock.calls.every(([, selector]) => selector.versionId === 'v2')).toBe(true);
   });
 
   it.each([
@@ -175,7 +213,7 @@ describe('agent version pins', () => {
       { agents: { dep: { versionId: 'dep-v1' } }, defaultStatus: 'published' },
       false,
     ],
-    ['a new root selector', { self: { versionId: 'root-v1' } }, true],
+    ['a new root selector', { agents: { root: { versionId: 'root-v1' } } }, true],
     ['a new dependency selector', { agents: { other: { versionId: 'other-v1' } } }, true],
     ['a mutable dependency selector', { agents: { dep: { label: 'production' } } }, true],
     ['a different exact dependency', { agents: { dep: { versionId: 'dep-v2' } } }, true],
@@ -194,9 +232,9 @@ describe('agent version pins', () => {
   });
 
   it.each([
-    ['exact root bridge', { self: { versionId: 'root-v1' } }, false],
-    ['root label', { self: { label: 'production' } }, true],
-    ['root status', { self: { status: 'published' } }, true],
+    ['exact root bridge', { agents: { root: { versionId: 'root-v1' } } }, false],
+    ['root label', { agents: { root: { label: 'production' } } }, true],
+    ['root status', { agents: { root: { status: 'published' } } }, true],
     ['dependency exact selector', { agents: { dep: { versionId: 'dep-v1' } } }, true],
     ['dependency label', { agents: { dep: { label: 'production' } } }, true],
     ['dependency default', { defaultStatus: 'published' }, true],
@@ -244,6 +282,7 @@ describe('agent version pins', () => {
       agents: {
         leaf: { agentId: 'leaf', versionId: 'leaf-v1', selectedLabel: 'production' },
       },
+      resolvedAgentIds: ['leaf', 'middle', 'root'],
     });
     expect(scopeAgentVersionPins(getAgentVersionPins(requestContext), 'leaf')?.root).toEqual({
       agentId: 'leaf',
@@ -255,7 +294,7 @@ describe('agent version pins', () => {
   it('does not copy a selected parent root onto an unversioned child', () => {
     expect(
       scopeAgentVersionPins({ root: { agentId: 'root', versionId: 'root-v1', selectedLabel: 'production' } }, 'middle'),
-    ).toBeUndefined();
+    ).toEqual({ agents: { root: { agentId: 'root', versionId: 'root-v1', selectedLabel: 'production' } } });
   });
 
   it('lets a selected parent delegate to an unversioned child without treating the parent pin as the child root', async () => {
@@ -275,7 +314,9 @@ describe('agent version pins', () => {
     requestContext.set(MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY, true);
 
     await expect((child as any).generate('continue', { requestContext })).resolves.toMatchObject({ text: 'ok' });
-    expect(getAgentVersionPins(requestContext)).toBeUndefined();
+    expect(getAgentVersionPins(requestContext)).toEqual({
+      agents: { parent: { agentId: 'parent', versionId: 'parent-v1', selectedLabel: 'production' } },
+    });
   });
 
   it('hydrates a recursively pinned grandchild by exact ID after its label moves', async () => {

@@ -95,6 +95,7 @@ describe('runExperiment', () => {
     const mockAgent = createMockAgent('Response');
     mastra = {
       getStorage: vi.fn().mockReturnValue(mockStorage),
+      getVersionOverrides: vi.fn(),
       getAgent: vi.fn().mockReturnValue(mockAgent),
       getAgentById: vi.fn().mockReturnValue(mockAgent),
       getScorerById: vi.fn(),

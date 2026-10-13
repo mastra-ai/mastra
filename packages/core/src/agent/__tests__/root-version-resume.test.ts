@@ -13,6 +13,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
+import type { VersionOverrides } from '../../mastra/types';
 import { RequestContext, MASTRA_VERSIONS_KEY } from '../../request-context';
 import { createVersionLabelError, InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
@@ -104,10 +105,11 @@ function createFindUserTool() {
  * flipping that value. `applyStoredOverrides` is the spy under test: it receives the exact
  * selector `Agent#execute` decided on.
  */
-function setup() {
+function setup(defaultVersions?: VersionOverrides, codeFallback = false) {
   let published = 'v1';
   let deleted: string | undefined;
   const applyStoredOverrides = vi.fn(async (agent: Agent, selector: any) => {
+    if (codeFallback && published === 'v1') return agent;
     const versionId = 'versionId' in selector && selector.versionId ? selector.versionId : published;
     if (deleted && versionId === deleted) {
       throw createVersionLabelError('VERSION_NOT_FOUND', { entityId: agent.id, versionId });
@@ -126,6 +128,7 @@ function setup() {
     name: 'Versioned Agent',
     instructions: 'You find users.',
     model: createModel(),
+    defaultOptions: defaultVersions ? { versions: defaultVersions } : undefined,
     tools: { findUserTool: createFindUserTool() },
   });
 
@@ -217,6 +220,41 @@ function getSuspendedStep(snapshot: Record<string, any>): Record<string, any> {
 }
 
 describe('root agent version pinning across suspend/resume', () => {
+  it.each(['stream', 'generate'] as const)(
+    'ignores mutable defaultOptions labels on %s continuations',
+    async method => {
+      const { agent, applyStoredOverrides, publish, selectorsFor } = setup({ defaultLabel: 'candidate' });
+      const context = new RequestContext();
+      const { runId, toolCallId } =
+        method === 'stream'
+          ? await suspendOnApproval(agent, context, `default-${method}`)
+          : await suspendGenerateOnApproval(agent, context, `default-${method}`);
+      publish('v2');
+      applyStoredOverrides.mockClear();
+
+      if (method === 'stream') await drain(await agent.approveToolCall({ runId, toolCallId }));
+      else await agent.approveToolCallGenerate({ runId, toolCallId });
+
+      expect(selectorsFor('versioned-agent')).toEqual([{ versionId: 'v1' }]);
+    },
+  );
+
+  it.each(['stream', 'generate'] as const)('keeps a code fallback frozen across a %s continuation', async method => {
+    const { agent, applyStoredOverrides, publish } = setup({ defaultStatus: 'published' }, true);
+    const context = new RequestContext();
+    const { runId, toolCallId } =
+      method === 'stream'
+        ? await suspendOnApproval(agent, context, `fallback-${method}`)
+        : await suspendGenerateOnApproval(agent, context, `fallback-${method}`);
+    publish('v2');
+    applyStoredOverrides.mockClear();
+
+    if (method === 'stream') await drain(await agent.approveToolCall({ runId, toolCallId }));
+    else await agent.approveToolCallGenerate({ runId, toolCallId });
+
+    expect(applyStoredOverrides).not.toHaveBeenCalled();
+  });
+
   it('resumes on the version the run suspended on, even after a newer version is published', async () => {
     const { agent, applyStoredOverrides, publish, selectorsFor } = setup();
     const requestContext = new RequestContext();
@@ -238,7 +276,7 @@ describe('root agent version pinning across suspend/resume', () => {
   it('pins a root label across approval and rejects mutable or different continuation selectors', async () => {
     const { agent, applyStoredOverrides, publish, selectorsFor } = setup();
     const requestContext = new RequestContext();
-    requestContext.set(MASTRA_VERSIONS_KEY, { self: { label: 'production' } });
+    requestContext.set(MASTRA_VERSIONS_KEY, { defaultLabel: 'production' });
 
     const { runId, toolCallId } = await suspendOnApproval(agent, requestContext, 'thread-label');
     expect(selectorsFor('versioned-agent')).toEqual([{ label: 'production' }]);
@@ -247,26 +285,30 @@ describe('root agent version pinning across suspend/resume', () => {
     applyStoredOverrides.mockClear();
 
     await expect(
-      agent.approveToolCall({ runId, toolCallId, versions: { self: { label: 'production' } } }),
-    ).rejects.toMatchObject({ id: 'PINNED_VERSION_CONFLICT' });
-    await expect(
-      agent.approveToolCall({ runId, toolCallId, versions: { self: { status: 'published' } } }),
-    ).rejects.toMatchObject({ id: 'PINNED_VERSION_CONFLICT' });
-    await expect(
-      agent.approveToolCall({ runId, toolCallId, versions: { self: { versionId: 'v2' } } }),
+      agent.approveToolCall({ runId, toolCallId, versions: { defaultLabel: 'production' } }),
     ).rejects.toMatchObject({ id: 'PINNED_VERSION_CONFLICT' });
     await expect(
       agent.approveToolCall({
         runId,
         toolCallId,
-        versions: { self: { versionId: 'v1' }, defaultStatus: 'draft' },
+        versions: { agents: { 'versioned-agent': { status: 'published' } } },
+      }),
+    ).rejects.toMatchObject({ id: 'PINNED_VERSION_CONFLICT' });
+    await expect(
+      agent.approveToolCall({ runId, toolCallId, versions: { agents: { 'versioned-agent': { versionId: 'v2' } } } }),
+    ).rejects.toMatchObject({ id: 'PINNED_VERSION_CONFLICT' });
+    await expect(
+      agent.approveToolCall({
+        runId,
+        toolCallId,
+        versions: { agents: { 'versioned-agent': { versionId: 'v1' } }, defaultStatus: 'draft' },
       }),
     ).rejects.toMatchObject({ id: 'PINNED_VERSION_CONFLICT' });
     await expect(
       agent.approveToolCall({
         runId,
         toolCallId,
-        versions: { self: { versionId: 'v1' }, agents: { other: { versionId: 'other-v1' } } },
+        versions: { agents: { 'versioned-agent': { versionId: 'v1' }, other: { versionId: 'other-v1' } } },
       }),
     ).rejects.toMatchObject({ id: 'PINNED_VERSION_CONFLICT' });
     await expect(
@@ -274,13 +316,19 @@ describe('root agent version pinning across suspend/resume', () => {
         runId,
         toolCallId,
         versions: {
-          self: { versionId: 'v1' },
+          defaultLabel: 'production',
           agents: { 'versioned-agent': { versionId: 'v2' } },
         },
       }),
-    ).rejects.toMatchObject({ id: 'INVALID_VERSION_SELECTOR' });
+    ).rejects.toMatchObject({ id: 'PINNED_VERSION_CONFLICT' });
 
-    await drain(await agent.approveToolCall({ runId, toolCallId, versions: { self: { versionId: 'v1' } } }));
+    await drain(
+      await agent.approveToolCall({
+        runId,
+        toolCallId,
+        versions: { agents: { 'versioned-agent': { versionId: 'v1' } } },
+      }),
+    );
     expect(selectorsFor('versioned-agent')).toEqual([{ versionId: 'v1' }]);
   });
 
@@ -346,7 +394,7 @@ describe('root agent version pinning across suspend/resume', () => {
 
     await resolvedV1.stream('Find the user', {
       memory: { thread: 'thread-explicit-override', resource: 'resource-1' },
-      versions: { self: { versionId: 'v2' } },
+      versions: { agents: { 'versioned-agent': { versionId: 'v2' } } },
     });
     expect(selectorsFor('versioned-agent')).toEqual([{ versionId: 'v2' }]);
   });
@@ -360,7 +408,7 @@ describe('root agent version pinning across suspend/resume', () => {
       { agents: { dependency: { versionId: 'dep-v1' } } },
       { agents: { dependency: { label: 'production' } } },
       { defaultStatus: 'published' },
-      { self: { label: 'production' } },
+      { defaultLabel: 'production' },
     ] as const) {
       await expect(agent.approveToolCall({ runId, toolCallId, versions })).rejects.toMatchObject({
         id: 'PINNED_VERSION_REQUIRED',
@@ -406,7 +454,7 @@ describe('root agent version pinning across suspend/resume', () => {
   it('direct resumeGenerate rejects a conflicting foreach pin before stored-agent lookup', async () => {
     const { agent, mastra, applyStoredOverrides } = setup();
     const requestContext = new RequestContext();
-    requestContext.set(MASTRA_VERSIONS_KEY, { self: { label: 'production' } });
+    requestContext.set(MASTRA_VERSIONS_KEY, { defaultLabel: 'production' });
     const { runId } = await suspendGenerateOnApproval(agent, requestContext, 'foreach-pin-conflict');
 
     await mutateSnapshot(mastra, runId, snapshot => {
@@ -436,7 +484,7 @@ describe('root agent version pinning across suspend/resume', () => {
   it('direct resumeStream rejects a conflicting durable-input pin before stored-agent lookup', async () => {
     const { agent, mastra, applyStoredOverrides } = setup();
     const requestContext = new RequestContext();
-    requestContext.set(MASTRA_VERSIONS_KEY, { self: { label: 'production' } });
+    requestContext.set(MASTRA_VERSIONS_KEY, { defaultLabel: 'production' });
     const { runId } = await suspendOnApproval(agent, requestContext, 'input-pin-conflict');
 
     await mutateSnapshot(mastra, runId, snapshot => {
@@ -455,7 +503,7 @@ describe('root agent version pinning across suspend/resume', () => {
   it('accepts identical pin copies across suspended and durable-input payloads', async () => {
     const { agent, mastra, applyStoredOverrides, selectorsFor } = setup();
     const requestContext = new RequestContext();
-    requestContext.set(MASTRA_VERSIONS_KEY, { self: { label: 'production' } });
+    requestContext.set(MASTRA_VERSIONS_KEY, { defaultLabel: 'production' });
     const { runId, toolCallId } = await suspendGenerateOnApproval(agent, requestContext, 'identical-pin-copies');
 
     await mutateSnapshot(mastra, runId, snapshot => {
@@ -474,7 +522,7 @@ describe('root agent version pinning across suspend/resume', () => {
   it('direct resumeStream accepts identical suspended and durable-input pin copies', async () => {
     const { agent, mastra, applyStoredOverrides, selectorsFor } = setup();
     const requestContext = new RequestContext();
-    requestContext.set(MASTRA_VERSIONS_KEY, { self: { label: 'production' } });
+    requestContext.set(MASTRA_VERSIONS_KEY, { defaultLabel: 'production' });
     const { runId, toolCallId } = await suspendOnApproval(agent, requestContext, 'identical-stream-pin-copies');
 
     await mutateSnapshot(mastra, runId, snapshot => {
