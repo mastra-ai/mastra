@@ -23,6 +23,7 @@ export const RESOURCES = [
   'embedders',
   'experiments',
   'infrastructure',
+  'knowledge',
   'logs',
   'mcp',
   'memory',
@@ -111,6 +112,8 @@ export const PERMISSION_PATTERNS = {
   'experiments:*': 'experiments:*',
   /** Full access to infrastructure */
   'infrastructure:*': 'infrastructure:*',
+  /** Full access to knowledge */
+  'knowledge:*': 'knowledge:*',
   /** Full access to logs */
   'logs:*': 'logs:*',
   /** Full access to MCP servers */
@@ -203,6 +206,8 @@ export const PERMISSION_PATTERNS = {
   'experiments:read': 'experiments:read',
   /** View infrastructure */
   'infrastructure:read': 'infrastructure:read',
+  /** Create and modify knowledge */
+  'knowledge:write': 'knowledge:write',
   /** View logs */
   'logs:read': 'logs:read',
   /** Execute MCP servers */
@@ -381,6 +386,7 @@ export const PERMISSIONS = [
   'experiments:delete',
   'experiments:read',
   'infrastructure:read',
+  'knowledge:write',
   'logs:read',
   'mcp:execute',
   'mcp:read',
@@ -506,6 +512,8 @@ export const MastraFGAPermissions = {
   EXPERIMENTS_READ: 'experiments:read',
   /** View infrastructure */
   INFRASTRUCTURE_READ: 'infrastructure:read',
+  /** Create and modify knowledge */
+  KNOWLEDGE_WRITE: 'knowledge:write',
   /** View logs */
   LOGS_READ: 'logs:read',
   /** Execute MCP servers */
