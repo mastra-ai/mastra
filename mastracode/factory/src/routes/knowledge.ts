@@ -264,6 +264,8 @@ function metadataString(metadata: Record<string, unknown> | undefined, key: stri
 
 const SESSION_ADDRESS_RE = /^resource:[^:]+:thread:([^:]+)$/;
 const SESSION_NAME_CONCURRENCY = 8;
+/** Sessions probed for a visible captured record at once. */
+const SESSION_PROBE_CONCURRENCY = 8;
 
 /** The thread id of a session (`resource:<project>:thread:<id>`) scope address. */
 function sessionThreadId(address: string | undefined): string | undefined {
@@ -609,19 +611,35 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         if (!UUID_RE.test(preflight.scopeId)) return { response: c.json({ error: 'scope_not_found' }, 404) };
         // Identity scopes are vouched by address; any other scope must sit inside the viewer's org.
         if (!visibleScopeIds.includes(preflight.scopeId)) {
-          let inOrg = false;
+          let summary: KnowledgeScopeNodeSummary | undefined;
           try {
             const { scopes } = await store.listScopeNodes({
               withinAddress: orgAddress,
               ids: [preflight.scopeId],
               limit: 1,
             });
-            inOrg = scopes.length > 0;
+            summary = scopes[0];
           } catch (error) {
             // Without the structural read there is no way to prove org membership: fail closed.
             if (!(error instanceof KnowledgeUnsupportedError)) throw error;
           }
-          if (!inOrg) return { response: c.json({ error: 'scope_not_found' }, 404) };
+          if (!summary) return { response: c.json({ error: 'scope_not_found' }, 404) };
+          // Session scopes resolve only under the viewed project, and only when a
+          // visible record was captured in that session — other projects' sessions
+          // stay as unreachable through drill-downs as they are absent from listings.
+          const sessionThread = sessionThreadId(summary.address);
+          if (sessionThread) {
+            const ownSession =
+              summary.address.startsWith(`resource:${projectId}:thread:`) &&
+              summary.parentIds.includes(existingResource.scopeNodeId);
+            if (!ownSession) return { response: c.json({ error: 'scope_not_found' }, 404) };
+            const probe = await store.listRecordsBySource({
+              source: sessionThread,
+              scopeIds: [existingOrg.scopeNodeId, existingResource.scopeNodeId, preflight.scopeId],
+              limit: 1,
+            });
+            if (probe.records.length === 0) return { response: c.json({ error: 'scope_not_found' }, 404) };
+          }
         }
         const scope = await store.getNode(preflight.scopeId);
         if (!scope?.isScope || scope.deletedAt) return { response: c.json({ error: 'scope_not_found' }, 404) };
@@ -720,6 +738,45 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       );
     }
     return names;
+  }
+
+  /**
+   * Session scopes are listed only under the viewed project, and only when the thread
+   * drill-down would accept them (a visible record captured in that session), so no
+   * listing exposes a session id the drill-down would reject. Returns the ids of hidden
+   * session nodes. With `probe: false` only the cheap project check runs; callers probe
+   * the bounded set they return.
+   */
+  async #hiddenSessionIds(
+    view: ResolvedView,
+    nodes: Array<{ id: string; address?: string; parentIds?: string[] }>,
+    { probe }: { probe: boolean },
+  ): Promise<Set<string>> {
+    const hidden = new Set<string>();
+    const sessions: Array<{ id: string; threadId: string }> = [];
+    const ownSessionPrefix = `resource:${view.projectId}:thread:`;
+    for (const node of nodes) {
+      const threadId = sessionThreadId(node.address);
+      if (!threadId) continue;
+      if (!node.address!.startsWith(ownSessionPrefix) || !node.parentIds?.includes(view.resourceScopeId)) {
+        hidden.add(node.id);
+      } else if (probe && threadId !== view.threadId) {
+        sessions.push({ id: node.id, threadId });
+      }
+    }
+    for (let index = 0; index < sessions.length; index += SESSION_PROBE_CONCURRENCY) {
+      await Promise.all(
+        sessions.slice(index, index + SESSION_PROBE_CONCURRENCY).map(async ({ id, threadId }) => {
+          const { records } = await view.store.listRecordsBySource({
+            source: threadId,
+            scopeIds: [view.orgScopeId, view.resourceScopeId, id],
+            limit: 1,
+          });
+          if (records.length === 0) hidden.add(id);
+        }),
+      );
+    }
+    return hidden;
   }
 
   async #pinnedNodeIds(
@@ -948,6 +1005,8 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           try {
             const orgScopes = await listOrgScopeNodes(view.store, view.orgId, this.#limits.maxOrgScopePages);
             scopesTruncated = orgScopes.truncated;
+            const hiddenSessions = await this.#hiddenSessionIds(view, orgScopes.scopes, { probe: true });
+            orgScopes.scopes = orgScopes.scopes.filter(scope => !hiddenSessions.has(scope.id));
             scopeNodes = orgScopes.scopes.map(scope => ({
               id: scope.id,
               address: scope.address,
@@ -1446,7 +1505,35 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           ) {
             return c.json({ error: 'invalid_activity_filters' }, 400);
           }
-          const events = await view.store.listActivity({ scopeIds: [selected.id], limit: 100 });
+          const fetched = await view.store.listActivity({ scopeIds: [selected.id], limit: 100 });
+          // Visibility is re-checked here before any window shaping: a row whose target
+          // is not visible in the selected scope is skipped entirely, so no action/type/
+          // id/time metadata leaks even when an adapter's activity read is lax about it.
+          const nodeVisibility = new Map<string, Promise<boolean>>();
+          const isNodeVisible = (nodeId: string): Promise<boolean> => {
+            let cached = nodeVisibility.get(nodeId);
+            if (!cached) {
+              cached = (async () => {
+                const node = await view.store.getNode(nodeId);
+                if (!node) return false;
+                return isKnowledgeScopeVisible(await view.store.getNodeScopeIds(nodeId), [selected.id]);
+              })();
+              nodeVisibility.set(nodeId, cached);
+            }
+            return cached;
+          };
+          const visibility = await Promise.all(
+            fetched.map(async event => {
+              if (event.targetType === 'node') return isNodeVisible(event.targetId);
+              const record = await view.store.getRecord({ id: event.targetId, includeDeleted: true });
+              if (!record) return false;
+              const recordScopeIds = await view.store.getRecordScopeIds(event.targetId);
+              return (
+                isKnowledgeScopeVisible(recordScopeIds, [selected.id]) && (await isNodeVisible(record.nodeId))
+              );
+            }),
+          );
+          const events = fetched.filter((_, index) => visibility[index]);
           const addresses = await scopeAddressIndex(view.store, [
             selected.id,
             ...events.flatMap(event => (event.contextScopeId ? [event.contextScopeId] : [])),
