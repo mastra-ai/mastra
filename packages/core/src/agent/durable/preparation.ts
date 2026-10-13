@@ -4,7 +4,7 @@ import type { MastraFGAPermissionInput } from '../../auth/ee';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
-import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import type { MastraLanguageModel, MastraModelConfig } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory/memory';
@@ -30,6 +30,7 @@ import { toStandardSchema } from '../../schema';
 import { asJsonSchema } from '../../stream/base/schema';
 import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
 import type { CoreTool, ToolHooks, ToolPayloadTransformPolicy } from '../../tools/types';
+import type { DynamicArgument } from '../../types';
 import { boundedStringify, deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
@@ -363,7 +364,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // can persist a thread or run user-defined processors, tools, or hooks.
   const { model, modelList, fallbackTimeouts } = await typedAgent.__getModelAndModelList({
     requestContext,
-    model: execOptions.model,
+    model: (execOptions as { model?: DynamicArgument<MastraModelConfig> }).model,
   });
   if (!model) {
     throw new Error('Agent model not available');
