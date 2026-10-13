@@ -327,7 +327,11 @@ function evictSharedStates(justAcquiredKey: string): void {
     if (excess <= 0) break;
     sharedStates.delete(key);
     excess -= 1;
-    void disconnectState(state).catch(() => {});
+    // The registry shrinks immediately, but a tool record resolved just
+    // before eviction may still execute against this state's MCP clients:
+    // disconnect after the same grace period MCP-key eviction uses.
+    const timer = setTimeout(() => void disconnectState(state).catch(() => {}), EVICTION_LINGER_MS);
+    timer.unref?.();
   }
 }
 
