@@ -1,16 +1,26 @@
 import type { ComponentPropsWithRef, ReactNode } from 'react';
 
+import { MobileHeaderSlotProvider } from './app-shell-mobile-header';
 import { cn } from '@/lib/utils';
 
 import './app-shell.css';
 
 export interface AppShellProps extends Omit<ComponentPropsWithRef<'div'>, 'children'> {
   children: ReactNode;
+  /** Top bar below `lg`. Use `AppShellMobileHeader` so pages can render their breadcrumbs into it. */
   mobileHeader?: ReactNode;
   sidebar?: ReactNode;
 }
 
-export function AppShell({ children, className, mobileHeader, ref, sidebar, ...props }: AppShellProps) {
+export function AppShell(props: AppShellProps) {
+  return (
+    <MobileHeaderSlotProvider>
+      <AppShellLayout {...props} />
+    </MobileHeaderSlotProvider>
+  );
+}
+
+function AppShellLayout({ children, className, mobileHeader, ref, sidebar, ...props }: AppShellProps) {
   return (
     <div
       ref={ref}

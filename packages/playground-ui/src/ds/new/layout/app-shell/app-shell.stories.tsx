@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 
 import { PageHeader } from '../page-header';
 import { AppShell } from './app-shell';
+import { AppShellMobileHeader } from './app-shell-mobile-header';
 import { MainCard } from './main-card';
 import { Breadcrumb, Crumb } from '@/ds/components/Breadcrumb';
 import { LogoWithoutText } from '@/ds/components/Logo';
@@ -37,15 +38,15 @@ function DemoSidebar() {
 
 function MobileHeader() {
   return (
-    <div className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-sidebar px-3 lg:hidden">
-      <span className="flex items-center gap-3">
-        <Sidebar.MobileTrigger />
-        <span className="text-subheading text-foreground">Workspace</span>
-      </span>
-      <button type="button" aria-label="Search">
-        <Search className="size-5" />
-      </button>
-    </div>
+    <AppShellMobileHeader
+      start={<Sidebar.MobileTrigger />}
+      fallback={<span className="text-subheading text-foreground">Workspace</span>}
+      end={
+        <button type="button" aria-label="Search" className="flex size-10 items-center justify-center">
+          <Search className="size-5" />
+        </button>
+      }
+    />
   );
 }
 

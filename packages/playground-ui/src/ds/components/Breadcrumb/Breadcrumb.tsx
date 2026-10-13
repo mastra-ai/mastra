@@ -2,6 +2,7 @@ import React from 'react';
 
 import { Icon } from '../../icons/Icon';
 import { SlashIcon } from '../../icons/SlashIcon';
+import { useBreadcrumbDisplay } from './breadcrumb-display';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { controlSizeClasses } from '@/ds/primitives/control-size';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
@@ -16,9 +17,12 @@ export interface BreadcrumbProps {
 }
 
 export const Breadcrumb = ({ children, label, className, listClassName }: BreadcrumbProps) => {
+  const display = useBreadcrumbDisplay();
   return (
     <nav aria-label={label} className={className}>
-      <ol className={cn('flex items-center gap-0.5', listClassName)}>{children}</ol>
+      <ol className={cn('flex items-center gap-0.5', listClassName, display === 'stacked' && 'flex-col items-stretch')}>
+        {children}
+      </ol>
     </nav>
   );
 };
@@ -61,6 +65,7 @@ export const Crumb = ({
   ...props
 }: CrumbProps) => {
   const Root = as || 'span';
+  const display = useBreadcrumbDisplay();
   const switcherCoversCrumb = Boolean(isCurrent && switcher);
 
   return (
@@ -69,6 +74,7 @@ export const Crumb = ({
         className={cn(
           'group flex h-control-sm min-w-0 items-center',
           isCurrent ? 'shrink' : 'shrink-0',
+          display === 'current' && !isCurrent && 'hidden',
           switcherCoversCrumb &&
             'relative rounded-full has-[[data-slot=crumb-switcher]_[data-popup-open]]:bg-fill-subtle has-[[data-slot=crumb-switcher]_button:enabled]:hover:bg-fill-subtle has-[[data-slot=crumb-switcher]_button:enabled]:active:bg-fill',
         )}
@@ -85,6 +91,8 @@ export const Crumb = ({
             isCurrent
               ? 'max-w-xs cursor-default text-foreground'
               : cn(quietTextHover, 'max-w-48 cursor-pointer hover:bg-fill-subtle active:bg-fill'),
+            // A menu row spans the menu; its width is the limit.
+            display === 'stacked' && 'max-w-none flex-1',
             className,
           )}
           {...props}
@@ -122,8 +130,8 @@ export const Crumb = ({
         )}
         {action && <span className="-ml-1 flex h-control-sm shrink-0 items-center">{action}</span>}
       </li>
-      {!isCurrent && (
-        <li role="separator" className="flex h-full items-center">
+      {!isCurrent && display !== 'stacked' && (
+        <li role="separator" className={cn('flex h-full items-center', display === 'current' && 'hidden')}>
           <Icon className="text-placeholder">
             <SlashIcon />
           </Icon>

@@ -1,10 +1,17 @@
 import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Header } from '../Header';
+import { PageLayoutMobileHeader } from './page-layout-mobile-header';
+import { useMobileHeaderSlot } from '@/ds/new/layout/app-shell/mobile-header-slot';
+import { useIsMobile } from '@/hooks/use-is-mobile';
 import { cn } from '@/lib/utils';
 
 export interface PageLayoutProps {
   children: ReactNode;
-  /** Left side of the page header row. */
+  /**
+   * Left side of the page header row. Below `lg` inside an `AppShell` with an `AppShellMobileHeader`,
+   * the row moves into that header: the current crumb inline, earlier ones behind a menu.
+   */
   breadcrumbs?: ReactNode;
   /** Right side of the page header row. */
   headerActions?: ReactNode;
@@ -27,6 +34,12 @@ export function PageLayout({
   header,
   variant = 'container',
 }: PageLayoutProps) {
+  const mobileHeaderSlot = useMobileHeaderSlot();
+  const isMobile = useIsMobile();
+  const hasHeaderRow = Boolean(breadcrumbs || headerActions);
+  // One header on phones: the app's top bar carries the page's breadcrumbs and actions.
+  const mobileHeaderTarget = hasHeaderRow && isMobile ? mobileHeaderSlot : null;
+
   const headerSlot = header ? (
     <div data-slot="page-layout-header" className={cn(variant === 'fit' && 'p-4')}>
       {header}
@@ -35,7 +48,12 @@ export function PageLayout({
 
   return (
     <div data-slot="page-layout" className="flex h-full min-h-0 flex-col">
-      {(breadcrumbs || headerActions) && (
+      {mobileHeaderTarget &&
+        createPortal(
+          <PageLayoutMobileHeader breadcrumbs={breadcrumbs} headerActions={headerActions} />,
+          mobileHeaderTarget,
+        )}
+      {hasHeaderRow && !mobileHeaderTarget && (
         <Header className="min-h-header-default shrink-0 gap-2 overflow-hidden px-2">
           {breadcrumbs}
           {headerActions && (
