@@ -4295,6 +4295,46 @@ describe('Agent - network - tool approval and suspension', () => {
       expect(mockToolExecute).not.toHaveBeenCalled();
     });
 
+    it('rejects a direct network tool call from beforeApproval without suspending (#26772)', async () => {
+      const execute = vi.fn().mockResolvedValue({ result: 'should not run' });
+      const beforeApproval = vi.fn().mockResolvedValue({ proceed: false, output: { error: 'Order not found' } });
+      const guardedTool = createTool({
+        id: 'guardedTool',
+        description: 'A tool that requires approval.',
+        inputSchema: z.object({ query: z.string() }),
+        requireApproval: true,
+        beforeApproval,
+        execute,
+      });
+
+      const mockModel = createRoutingMockModel('guardedTool', 'tool', JSON.stringify({ query: 'guarded' }));
+      const networkAgent = new Agent({
+        id: 'before-approval-network-agent',
+        name: 'Before Approval Network Agent',
+        instructions: 'Use guardedTool.',
+        model: mockModel,
+        tools: { guardedTool },
+        memory,
+      });
+      const mastra = new Mastra({ agents: { networkAgent }, storage, logger: false });
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Process the query "guarded"', {
+        memory: { thread: 'test-thread-before-approval', resource: 'test-resource-before-approval' },
+      });
+
+      const chunks: any[] = [];
+      for await (const chunk of anStream) {
+        chunks.push(chunk);
+      }
+
+      expect(beforeApproval).toHaveBeenCalledTimes(1);
+      expect(chunks.map(chunk => chunk.type)).not.toContain('tool-execution-approval');
+      const executionEnd = chunks.find(chunk => chunk.type === 'tool-execution-end');
+      expect(executionEnd?.payload?.result).toBe(JSON.stringify({ error: 'Order not found' }));
+      expect(execute).not.toHaveBeenCalled();
+    });
+
     it('should decline a nested agent tool call', async () => {
       mockToolExecute.mockClear();
 

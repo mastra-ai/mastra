@@ -1714,7 +1714,11 @@ export async function createNetworkLoop({
           });
         } else {
           if (rejection || !resumeData?.approved) {
-            const rejectionResult = rejection ? rejection.output : resolveDeclineReason(resumeData);
+            const rejectionResult = rejection
+              ? typeof rejection.output === 'string'
+                ? rejection.output
+                : JSON.stringify(rejection.output)
+              : resolveDeclineReason(resumeData);
             await saveMessagesWithProcessors(
               memory,
               [
