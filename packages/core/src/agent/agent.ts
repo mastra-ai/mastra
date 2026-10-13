@@ -710,6 +710,26 @@ function hasOnDemandSkillDiscoveryProcessor(processors: InputProcessorOrWorkflow
   return hasConfiguredProcessor(processors, processor => processor.providesSkillDiscovery === 'on-demand');
 }
 
+function alreadyClaimedResumeError({
+  agentName,
+  method,
+  runId,
+  toolCallId,
+}: {
+  agentName: string;
+  method: string;
+  runId: string;
+  toolCallId?: string;
+}): MastraError {
+  return new MastraError({
+    id: 'AGENT_RESUME_ALREADY_CLAIMED',
+    domain: ErrorDomain.AGENT,
+    category: ErrorCategory.USER,
+    text: `Agent "${agentName}" ${method}() cannot resume run "${runId}" because another resume of it already claimed it.`,
+    details: { agentName, method, runId, ...(toolCallId !== undefined ? { toolCallId } : {}) },
+  });
+}
+
 /**
  * Creates an AI agent that generates and streams responses, with optional tools,
  * memory, and voice capabilities.
@@ -738,27 +758,6 @@ function hasOnDemandSkillDiscoveryProcessor(processors: InputProcessorOrWorkflow
  * @see [Agent documentation](https://mastra.ai/docs/agents/overview)
  * if packaged docs are unavailable.
  */
-
-function alreadyClaimedResumeError({
-  agentName,
-  method,
-  runId,
-  toolCallId,
-}: {
-  agentName: string;
-  method: string;
-  runId: string;
-  toolCallId?: string;
-}): MastraError {
-  return new MastraError({
-    id: 'AGENT_RESUME_ALREADY_CLAIMED',
-    domain: ErrorDomain.AGENT,
-    category: ErrorCategory.USER,
-    text: `Agent "${agentName}" ${method}() cannot resume run "${runId}" because another resume of it already claimed it.`,
-    details: { agentName, method, runId, ...(toolCallId !== undefined ? { toolCallId } : {}) },
-  });
-}
-
 export class Agent<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
