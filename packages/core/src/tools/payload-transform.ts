@@ -101,7 +101,15 @@ async function transformOneTarget(
   ].filter(Boolean) as ToolPayloadTransformFunction[];
 
   if (transformers.length === 0) {
-    return context.phase === 'input-delta' ? { suppress: true } : { transformed: safePlaceholder(context) };
+    // Only a tool-level transform reaches here (a policy configured for the
+    // target always contributes a transformer): the target has transformers
+    // for OTHER phases but none for this one. Pass the original payload
+    // through — rewriting it to a placeholder silently corrupts what the
+    // model emitted (stored `args` must round-trip exactly; providers that
+    // bind reasoning to the request prefix reject altered replays, #26597).
+    // Input deltas stay suppressed: a target that transforms its payloads
+    // should not stream raw fragments it never had a chance to shape.
+    return context.phase === 'input-delta' ? { suppress: true } : undefined;
   }
 
   for (const transformer of transformers) {

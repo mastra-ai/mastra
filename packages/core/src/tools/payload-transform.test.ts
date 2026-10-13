@@ -111,6 +111,74 @@ describe('tool payload transform', () => {
     expect(transform?.transcript).toBeUndefined();
   });
 
+  it('keeps the original payload for a phase with no transformer on a tool-level target (#26597)', async () => {
+    // A tool that only transforms `transcript.output` (e.g. to keep a large
+    // payload out of storage) must not have its OTHER phases rewritten to a
+    // placeholder: stored `args` must round-trip byte-exact, or providers
+    // that bind reasoning to the request prefix (Anthropic preserved
+    // thinking) reject the replayed conversation.
+    const transform = await transformToolPayloadForTargets(
+      {
+        phase: 'input-available',
+        toolName: 'lookup',
+        toolCallId: 'call-1',
+        input: { query: 'first' },
+      },
+      {
+        toolTransform: {
+          transcript: {
+            output: ({ output }) => ({ query: (output as { query: string }).query }),
+          },
+        },
+      },
+    );
+
+    // No transform state at all: the caller persists the original payload.
+    expect(transform).toBeUndefined();
+  });
+
+  it('still transforms the configured phase when another phase passes through (#26597)', async () => {
+    const transform = await transformToolPayloadForTargets(
+      {
+        phase: 'output-available',
+        toolName: 'lookup',
+        toolCallId: 'call-1',
+        input: { query: 'first' },
+        output: { query: 'first', payload: 'x'.repeat(50) },
+      },
+      {
+        toolTransform: {
+          transcript: {
+            output: ({ output }) => ({ query: (output as { query: string }).query }),
+          },
+        },
+      },
+    );
+
+    expect(transform?.transcript?.['output-available']).toEqual({ transformed: { query: 'first' } });
+    expect(transform?.display).toBeUndefined();
+  });
+
+  it('keeps the original error payload when only output is transformed (#26597)', async () => {
+    const transform = await transformToolPayloadForTargets(
+      {
+        phase: 'error',
+        toolName: 'lookup',
+        toolCallId: 'call-1',
+        error: 'boom',
+      },
+      {
+        toolTransform: {
+          transcript: {
+            output: () => ({ redacted: true }),
+          },
+        },
+      },
+    );
+
+    expect(transform).toBeUndefined();
+  });
+
   it('suppresses input deltas when transform is configured without a delta projector', async () => {
     const transform = await transformToolPayloadForTargets(
       {
