@@ -53,7 +53,9 @@
     if (!file) return;
     await action(async () => {
       const body = new FormData(); body.set('file', file);
-      const result = await (await request('/vrq/questionnaires', { method: 'POST', body })).json();
+      const response = await request('/vrq/questionnaires', { method: 'POST', body });
+      const result = await response.json().catch(() => { throw new Error('Unexpected upload response.'); });
+      if (typeof result?.runId !== 'string' || !result.runId.trim()) throw new Error('Unexpected upload response.');
       selected = result.runId; detail = null; tab = 'questionnaires'; files = undefined;
     });
   }
