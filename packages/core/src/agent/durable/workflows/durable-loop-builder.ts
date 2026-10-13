@@ -615,7 +615,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           );
           deferredChunk.payload._durableResponseMessages = list.get.response.aiV5.model();
         } catch (error) {
-          rt.logger?.debug?.(`[DurableAgent] Could not rebuild step-finish messages: ${error}`);
+          rt.logger?.warn?.(`[DurableAgent] Could not rebuild step-finish messages: ${error}`);
         }
 
         try {

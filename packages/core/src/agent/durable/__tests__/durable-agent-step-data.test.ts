@@ -103,7 +103,7 @@ describe('DurableAgent step data (#26780)', () => {
       model: perCallModel.model as LanguageModelV2,
       onStepFinish: (e: any) => void stepEvents.push(e),
       onFinish: (e: any) => void (finish = e),
-    } as any);
+    });
     await output.consumeStream();
     const steps = await output.steps;
     cleanup();
@@ -144,7 +144,7 @@ describe('DurableAgent step data (#26780)', () => {
     const result: any = await durableAgent.generate('go', {
       maxSteps: 5,
       model: perCallModel.model as LanguageModelV2,
-    } as any);
+    });
 
     expect(perCallModel.calls()).toBe(2);
     expect(agentModel.calls()).toBe(0);
@@ -206,6 +206,75 @@ describe('DurableAgent step data (#26780)', () => {
       expect(step.response?.modelId).toBe('resume-model');
       expect(step.response?.messages?.length).toBeGreaterThan(0);
     }
+  }, 30000);
+
+  it('keeps steps completed before an approval in the resumed onFinish', async () => {
+    let calls = 0;
+    const model = new MockLanguageModelV2({
+      modelId: 'resume-model',
+      doStream: async () => {
+        calls++;
+        const toolCall = (id: string, toolName: string) => [
+          { type: 'tool-call', toolCallId: id, toolName, input: '{"q":1}', providerExecuted: false },
+          { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+        ];
+        const parts =
+          calls === 1
+            ? toolCall('call-free', 'free')
+            : calls === 2
+              ? toolCall('call-gated', 'gated')
+              : [
+                  { type: 'text-start', id: 't' },
+                  { type: 'text-delta', id: 't', delta: 'done' },
+                  { type: 'text-end', id: 't' },
+                  { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+                ];
+        return {
+          stream: convertArrayToReadableStream([{ type: 'stream-start', warnings: [] }, ...parts] as any),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      },
+    });
+    const tool = (id: string, requireApproval: boolean) =>
+      createTool({
+        id,
+        description: id,
+        inputSchema: z.object({ q: z.number() }),
+        requireApproval,
+        execute: async () => ({ ok: true }),
+      });
+    const memory = { thread: 'step-data-resume-prior', resource: 'r' };
+    const durableAgent = createDurableAgent({
+      agent: new Agent({
+        id: 'step-data-resume-prior',
+        name: 'Step Data Resume Prior',
+        instructions: 'Test',
+        model: model as LanguageModelV2,
+        memory: new MockMemory(),
+        tools: { free: tool('free', false), gated: tool('gated', true) },
+      }),
+      pubsub,
+    });
+    new Mastra({ agents: { durableAgent }, storage: new InMemoryStore(), logger: false });
+
+    const stream = await durableAgent.stream('go', { memory, maxSteps: 5 });
+    for await (const chunk of stream.fullStream) if (chunk.type === 'tool-call-approval') break;
+
+    let finish: any;
+    const resumed: any = await durableAgent.approveToolCall({
+      runId: stream.runId,
+      toolCallId: 'call-gated',
+      memory,
+      onFinish: (e: any) => void (finish = e),
+    });
+    for await (const _ of resumed.fullStream);
+    await vi.waitFor(() => expect(finish).toBeDefined());
+
+    expect(finish.steps).toHaveLength(3);
+    expect(finish.toolCalls.map((c: any) => c.payload?.toolName ?? c.toolName)).toEqual(['free', 'gated']);
+    expect(finish.toolResults).toHaveLength(2);
+    expect(finish.steps.at(-1).response?.modelId).toBe('resume-model');
+    expect(finish.steps.at(-1).response?.messages?.length).toBeGreaterThan(0);
   }, 30000);
 
   it('gives onAbort the completed steps and output.response the run messages (toolsets)', async () => {

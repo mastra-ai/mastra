@@ -363,7 +363,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // can persist a thread or run user-defined processors, tools, or hooks.
   const { model, modelList, fallbackTimeouts } = await typedAgent.__getModelAndModelList({
     requestContext,
-    model: (execOptions as { model?: unknown }).model,
+    model: execOptions.model,
   });
   if (!model) {
     throw new Error('Agent model not available');

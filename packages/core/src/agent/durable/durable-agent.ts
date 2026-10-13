@@ -231,6 +231,13 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   /** Maximum number of steps to run */
   maxSteps?: number;
   /**
+   * Model to run for this call instead of the agent's model.
+   *
+   * A model instance can't be persisted, so `recover()` in another process falls back to the
+   * agent's own model and logs a warning.
+   */
+  model?: AgentExecutionOptions<OUTPUT>['model'];
+  /**
    * Conditions for stopping execution (e.g., step count, token limit).
    *
    * The predicate is non-serializable, so it's parked on the in-process run
