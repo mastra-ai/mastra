@@ -694,6 +694,37 @@ export function createKnowledgeStorageTests(
       );
     });
 
+    it('never coalesces an address-bound node onto a same-named sibling', async () => {
+      const first = await store.createNodeWithAddress({
+        source: 'linear',
+        address: 'project:dynamic-workflows',
+        node: { name: 'Dynamic Workflows', scopeIds: [PROJECT_SCOPE_ID] },
+      });
+
+      await expect(
+        store.createNodeWithAddress({
+          source: 'linear',
+          address: 'document:dynamic-workflows',
+          node: { name: 'Dynamic Workflows', scopeIds: [PROJECT_SCOPE_ID] },
+        }),
+      ).rejects.toMatchObject({ name: 'KnowledgeConflictError' });
+      expect(await store.getNodeAddress({ source: 'linear', address: 'document:dynamic-workflows' })).toBeNull();
+
+      const second = await store.createNodeWithAddress({
+        source: 'linear',
+        address: 'document:dynamic-workflows',
+        node: { name: 'Dynamic Workflows (rkflows)', scopeIds: [PROJECT_SCOPE_ID] },
+      });
+      expect(second.id).not.toBe(first.id);
+
+      const replayed = await store.createNodeWithAddress({
+        source: 'linear',
+        address: 'project:dynamic-workflows',
+        node: { name: 'Dynamic Workflows', scopeIds: [PROJECT_SCOPE_ID] },
+      });
+      expect(replayed.id).toBe(first.id);
+    });
+
     it('preserves source-owned records that were broadened outside the importer binding', async () => {
       const node = await store.createNodeWithAddress({
         source: 'github',

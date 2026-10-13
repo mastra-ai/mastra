@@ -1469,7 +1469,7 @@ export class KnowledgePG extends KnowledgeStorage {
         if (!existing) throw new KnowledgeNotFoundError('node', String(binding.rows[0].nodeId));
         return existing;
       }
-      const node = await this.#createNode(tx, input.node);
+      const node = await this.#createNode(tx, input.node, { coalesceByName: false });
       await tx.execute({
         sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" (source,address,nodeId) VALUES (?,?,?)`,
         args: [input.source, input.address, node.id],
@@ -1906,12 +1906,19 @@ export class KnowledgePG extends KnowledgeStorage {
   async #transaction<T>(operation: (tx: Executor) => Promise<T>): Promise<T> {
     return this.#client.tx(tx => operation(createExecutor(tx, this.#schemaName)));
   }
-  async #createNode(executor: Executor, input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {
+  async #createNode(
+    executor: Executor,
+    input: CreateKnowledgeNodeInput,
+    { coalesceByName = true } = {},
+  ): Promise<KnowledgeNode> {
     if (!input.name.trim()) throw new Error('Knowledge node names must not be blank.');
     const scopeIds = await this.#assertScopeNodes(executor, input.scopeIds);
     await this.#lockSiblingName(executor, input.name, scopeIds);
     const existing = await this.#getNodeByName(executor, input.name, scopeIds);
-    if (existing) return existing;
+    if (existing) {
+      if (!coalesceByName) throw new KnowledgeConflictError(existing.id);
+      return existing;
+    }
     await this.#assertNoSiblingNameCollision(executor, input.name, scopeIds);
     const now = new Date();
     const node: KnowledgeNode = {

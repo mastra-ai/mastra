@@ -1,4 +1,4 @@
-import { knowledgeImporterBindingKey } from '../../storage/domains/knowledge';
+import { KnowledgeConflictError, knowledgeImporterBindingKey } from '../../storage/domains/knowledge';
 import type { KnowledgeNode, KnowledgeRecord } from '../../storage/domains/knowledge';
 import { deepEqual } from '../../utils/deep-equal';
 import type { Knowledge } from '../index';
@@ -304,23 +304,31 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
     const normalized = normalizeAddress(address);
     const storage = await this.#knowledge.getStorage();
     const binding = await storage.getNodeAddress({ source: this.#importer.source, address: normalized });
+    // Names are unique per scope, but distinct source entities can share a title, so a
+    // collision falls back to a deterministic address-derived name rather than coalescing.
+    const fallbackName = disambiguatedNodeName(input.name, normalized);
+    const createNode = (name: string) =>
+      storage.createNodeWithAddress({
+        source: this.#importer.source,
+        address: normalized,
+        node: {
+          name,
+          metadata: input.metadata,
+          scopeIds: [this.#importer.scopeId],
+          contextScopeId: this.#importer.scopeId,
+          importRunId: this.#importRunId,
+        },
+      });
     const existing = binding
       ? await this.#knowledge.getNode(binding.nodeId)
-      : await storage.createNodeWithAddress({
-          source: this.#importer.source,
-          address: normalized,
-          node: {
-            name: input.name,
-            metadata: input.metadata,
-            scopeIds: [this.#importer.scopeId],
-            contextScopeId: this.#importer.scopeId,
-            importRunId: this.#importRunId,
-          },
+      : await createNode(input.name).catch(error => {
+          if (!(error instanceof KnowledgeConflictError)) throw error;
+          return createNode(fallbackName);
         });
     if (!existing) throw new Error(`Knowledge node address points to a missing node: ${normalized}`);
     const existingScopeIds = await storage.getNodeScopeIds(existing.id);
     const matchesImporterState =
-      existing.name === input.name.trim() &&
+      (existing.name === input.name.trim() || existing.name === fallbackName) &&
       JSON.stringify(existing.metadata) === JSON.stringify(input.metadata) &&
       existingScopeIds.length === 1 &&
       existingScopeIds[0] === this.#importer.scopeId;
@@ -337,14 +345,20 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
     if (tracked?.nodeId !== existing.id || tracked.version !== existing.version) {
       throw new Error(`Knowledge node ${normalized} changed outside importer ${this.#importer.importerId}`);
     }
-    const updated = await this.#knowledge.updateNode({
-      id: existing.id,
-      version: existing.version,
-      name: input.name,
-      metadata: input.metadata,
-      scopeIds: [this.#importer.scopeId],
-      contextScopeId: this.#importer.scopeId,
-      importRunId: this.#importRunId,
+    const updateNode = (name: string) =>
+      this.#knowledge.updateNode({
+        id: existing.id,
+        version: existing.version,
+        name,
+        metadata: input.metadata,
+        scopeIds: [this.#importer.scopeId],
+        contextScopeId: this.#importer.scopeId,
+        importRunId: this.#importRunId,
+      });
+    // Prefer the plain name so a disambiguated node self-heals once the collision is gone.
+    const updated = await updateNode(input.name).catch(error => {
+      if (!(error instanceof KnowledgeConflictError)) throw error;
+      return updateNode(fallbackName);
     });
     await this.#setTrackedNode(normalized, updated);
     return this.#handle(normalized, updated);
@@ -445,6 +459,14 @@ function trackedVersionKey(address: string): string {
 
 function trackedRecordVersionKey(id: string): string {
   return `mastra:static-importer:record-version:${id}`;
+}
+
+function disambiguatedNodeName(name: string, address: string): string {
+  const tail = address
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .slice(-6)
+    .toLowerCase();
+  return `${name.trim()} (${tail || 'alt'})`;
 }
 
 function normalizeAddress(address: string): string {
