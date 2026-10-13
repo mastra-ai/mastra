@@ -20,7 +20,6 @@ export interface ComparisonSide {
   startedAt: string | null;
   completedAt: string | null;
   scores: ComparisonScore[];
-  traceId?: string;
   /** Tokens and estimated cost of this side's run. Undefined when unknown (no metrics, or a target without model calls). */
   usage?: ExperimentItemUsage;
 }
@@ -97,8 +96,6 @@ const buildSide = (
 ): ComparisonSide => {
   if (!comparisonResult) return absentSide;
 
-  const traceId = detail?.traceId ?? undefined;
-
   // Reasons are not part of the result row: they live in the scores store.
   const reasonByScorerId = new Map<string, string | null>();
   for (const score of itemScores ?? []) {
@@ -117,8 +114,7 @@ const buildSide = (
     scores: Object.entries(comparisonResult.scores)
       .map(([scorerId, value]) => ({ scorerId, value, reason: reasonByScorerId.get(scorerId) ?? null }))
       .sort((a, b) => a.scorerId.localeCompare(b.scorerId)),
-    traceId,
-    usage: traceId ? usageByTraceId?.[traceId] : undefined,
+    usage: detail?.traceId ? usageByTraceId?.[detail.traceId] : undefined,
   };
 };
 

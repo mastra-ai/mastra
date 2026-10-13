@@ -49,10 +49,11 @@ export interface ComparisonSideMetrics {
   averageScore: number | null;
   /** Mean item run duration, in milliseconds. */
   averageDurationMs: number | null;
-  /** Total estimated cost of the experiment. Undefined when the observability storage cannot serve metrics. */
-  cost?: { value?: number; unit?: string };
-  /** Total input plus output tokens of the experiment. Undefined when the observability storage cannot serve metrics. */
-  tokens?: { value?: number };
+  /** Total estimated cost of the experiment. */
+  cost?: number;
+  costUnit?: string;
+  /** Total input plus output tokens of the experiment. */
+  tokens?: number;
 }
 
 export interface ComparisonSideHeaderProps {
@@ -69,6 +70,8 @@ export interface ComparisonSideHeaderProps {
   versionMismatch?: boolean;
   /** Makes this contender the baseline. Omitted on the baseline itself. */
   onSetBaseline?: () => void;
+  /** Shows the total cost and tokens lines. False when the observability storage cannot serve metrics. */
+  showUsage?: boolean;
 }
 
 const sideVariant = { baseline: 'purple', contender: 'blue' } as const;
@@ -83,6 +86,7 @@ export function ComparisonSideHeader({
   baselineMetrics,
   versionMismatch,
   onSetBaseline,
+  showUsage = false,
 }: ComparisonSideHeaderProps) {
   const { Link, paths } = useLinkComponent();
 
@@ -138,21 +142,18 @@ export function ComparisonSideHeader({
       ]
     : [];
 
-  const cost = metrics?.cost;
-  const baselineCost = baselineMetrics?.cost;
-  const costTrend =
-    cost && baselineCost && cost.unit === baselineCost.unit ? trend(cost.value, baselineCost.value) : null;
+  const usage = showUsage ? metrics : undefined;
 
   const summaryMetrics: ComparisonMetric[] = [
-    ...(cost
+    ...(usage
       ? [
           {
             id: 'total-cost',
             icon: <CoinsIcon />,
             label: 'Total cost',
-            value: formatCostValue(cost.value, cost.unit),
-            delta: costTrend,
-            formatDelta: costDeltaFormatter(cost.unit),
+            value: formatCostValue(usage.cost, usage.costUnit),
+            delta: usage.costUnit === baselineMetrics?.costUnit ? trend(usage.cost, baselineMetrics?.cost) : null,
+            formatDelta: costDeltaFormatter(usage.costUnit),
             higherIsBetter: false,
             emphasis: true,
           },
@@ -172,14 +173,14 @@ export function ComparisonSideHeader({
           },
         ]
       : []),
-    ...(metrics?.tokens
+    ...(usage
       ? [
           {
             id: 'total-tokens',
             icon: <HashIcon />,
             label: 'Total tokens',
-            value: formatTokenCount(metrics.tokens.value),
-            delta: trend(metrics.tokens.value, baselineMetrics?.tokens?.value),
+            value: formatTokenCount(usage.tokens),
+            delta: trend(usage.tokens, baselineMetrics?.tokens),
             formatDelta: formatTokenCount,
             higherIsBetter: false,
           },
@@ -197,6 +198,11 @@ export function ComparisonSideHeader({
             formatDelta: String,
             higherIsBetter: false,
           },
+        ]
+      : []),
+    // Every column lists the same scorers, so hiding it when there are none keeps the columns aligned.
+    ...(metrics && summary && summary.length > 0
+      ? [
           {
             id: 'avg-score',
             icon: <GaugeIcon />,

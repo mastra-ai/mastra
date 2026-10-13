@@ -171,12 +171,10 @@ describe('buildComparisonRows', () => {
         usageById: { [BASELINE_ID]: baselineUsage, [CONTENDER_ID]: contenderUsage },
       });
 
-    it("attaches each side's own trace and usage", () => {
+    it("attaches the usage of each side's own trace", () => {
       const [baseline, contender] = usageRows()[0].sides;
 
-      expect(baseline.traceId).toBe('trace-res-baseline-a');
       expect(baseline.usage).toEqual({ inputTokens: 120, outputTokens: 30, estimatedCost: 0.0015, costUnit: 'usd' });
-      expect(contender.traceId).toBe('trace-res-contender-a');
       expect(contender.usage).toEqual({ inputTokens: 200, outputTokens: 60, estimatedCost: 0.004, costUnit: 'usd' });
     });
 
@@ -205,10 +203,7 @@ describe('buildComparisonRows', () => {
       })[1].sides[1];
 
     it('leaves that side without usage', () => {
-      const contender = missingUsageContender();
-
-      expect(contender.traceId).toBe('trace-res-contender-b');
-      expect(contender.usage).toBeUndefined();
+      expect(missingUsageContender().usage).toBeUndefined();
     });
 
     it('leaves the cost delta undefined', () => {

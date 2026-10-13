@@ -133,8 +133,9 @@ export function ExperimentsComparison({
         const summary = usageById[experimentId]?.summary;
         return {
           ...columnMetrics(rows, index),
-          cost: summary ? { value: summary.estimatedCost, unit: summary.costUnit } : undefined,
-          tokens: summary ? { value: totalTokens(summary) } : undefined,
+          cost: summary?.estimatedCost,
+          costUnit: summary?.costUnit,
+          tokens: totalTokens(summary),
         };
       }),
     [rows, experimentIds, usageById],
@@ -198,6 +199,7 @@ export function ExperimentsComparison({
                       : undefined
                   }
                   onSetBaseline={index > 0 && onSetBaseline ? () => onSetBaseline(experimentId) : undefined}
+                  showUsage={supportsMetrics}
                 />
               </div>
             );

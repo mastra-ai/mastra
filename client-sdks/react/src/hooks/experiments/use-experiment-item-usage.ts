@@ -29,14 +29,12 @@ type UsageAccumulator = {
   inputTokens?: number;
   outputTokens?: number;
   estimatedCost: number;
-  hasEstimatedCost: boolean;
   costUnits: Set<string>;
   hasUnknownCostUnit: boolean;
 };
 
 const createAccumulator = (): UsageAccumulator => ({
   estimatedCost: 0,
-  hasEstimatedCost: false,
   costUnits: new Set(),
   hasUnknownCostUnit: false,
 });
@@ -48,7 +46,6 @@ function accumulate(accumulator: UsageAccumulator, tokenField: 'inputTokens' | '
 
   if (group.estimatedCost == null) return;
   accumulator.estimatedCost += group.estimatedCost;
-  accumulator.hasEstimatedCost = true;
   if (group.costUnit) {
     accumulator.costUnits.add(group.costUnit.toLowerCase());
   } else {
@@ -57,7 +54,8 @@ function accumulate(accumulator: UsageAccumulator, tokenField: 'inputTokens' | '
 }
 
 function toUsage(accumulator: UsageAccumulator): ExperimentItemUsage {
-  const isPriced = accumulator.hasEstimatedCost && !accumulator.hasUnknownCostUnit && accumulator.costUnits.size === 1;
+  // A single known unit implies at least one priced group.
+  const isPriced = !accumulator.hasUnknownCostUnit && accumulator.costUnits.size === 1;
   return {
     inputTokens: accumulator.inputTokens,
     outputTokens: accumulator.outputTokens,
