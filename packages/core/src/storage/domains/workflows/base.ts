@@ -90,6 +90,10 @@ export abstract class WorkflowsStorage extends StorageDomain {
     throw runFencingNotSupportedError('workflows', this.constructor.name);
   }
 
+  /**
+   * Returns an empty object without writing when the workflow run does not exist.
+   * A stale step-result write must not recreate an intentionally deleted run snapshot.
+   */
   abstract updateWorkflowResults({
     workflowName,
     runId,

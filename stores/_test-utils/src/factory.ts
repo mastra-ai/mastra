@@ -47,6 +47,8 @@ export type TestCapabilities = {
   datasetItemIdentity?: boolean;
   /** Whether permanent dataset item purge is supported by the test topology (defaults to true). */
   datasetItemPurge?: boolean;
+  /** Whether late workflow-result writes preserve a deleted run (defaults to false during adapter rollout). */
+  workflowResultsNoopWhenRunMissing?: boolean;
   /**
    * Whether batchDeleteTraces supports tenant-scoped deletion via
    * organizationId/resourceId (defaults to false). Adapters without tenant
@@ -136,7 +138,10 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
 
     // Tests are registered unconditionally - each test internally handles
     // checking if the storage domain is available
-    createWorkflowsTests({ storage });
+    createWorkflowsTests({
+      storage,
+      workflowResultsNoopWhenRunMissing: capabilities.workflowResultsNoopWhenRunMissing,
+    });
     createMemoryTest({ storage });
     createScoresTest({ storage, capabilities });
     createObservabilityTests({ storage, capabilities });
