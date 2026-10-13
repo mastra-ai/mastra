@@ -1,4 +1,4 @@
-import type { JsonSchemaType } from '@modelcontextprotocol/client';
+import type { JsonSchemaType, JsonSchemaValidator } from '@modelcontextprotocol/client';
 
 /**
  * Structural JSON Schema meta-schema, used to check that a server-supplied tool input schema is
@@ -175,3 +175,43 @@ export const INPUT_SCHEMA_META_SCHEMA: JsonSchemaType = {
   },
   default: true,
 };
+
+let inputSchemaMetaValidator: JsonSchemaValidator<unknown> | undefined;
+let inputSchemaMetaValidatorLoad: Promise<void> | undefined;
+
+/**
+ * Loads the SDK's cf-worker validator, which interprets schemas instead of compiling them with
+ * `new Function`, so it also runs on Cloudflare Workers. It is imported lazily because
+ * `@cfworker/json-schema` builds a URL from `self.location` at import time, which throws in some
+ * browser worker locations; importing `@mastra/mcp` must not fail there. If loading fails, the
+ * check is skipped and schemas are still validated when a tool is called.
+ */
+export function loadInputSchemaMetaValidator(): Promise<void> {
+  inputSchemaMetaValidatorLoad ??= import('@modelcontextprotocol/client/validators/cf-worker').then(
+    ({ CfWorkerJsonSchemaValidator }) => {
+      inputSchemaMetaValidator = new CfWorkerJsonSchemaValidator({ draft: '7' }).getValidator(INPUT_SCHEMA_META_SCHEMA);
+    },
+    () => {},
+  );
+  return inputSchemaMetaValidatorLoad;
+}
+
+/**
+ * Checks a server-supplied input schema against {@link INPUT_SCHEMA_META_SCHEMA} once
+ * {@link loadInputSchemaMetaValidator} has finished. Callers must rule out oversized schemas
+ * with getJsonSchemaComplexityError first.
+ */
+export function getInputSchemaError(schema: unknown): string | undefined {
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return '#: input schema must be a JSON object';
+  if (!inputSchemaMetaValidator) return undefined;
+  let result: ReturnType<typeof inputSchemaMetaValidator>;
+  try {
+    result = inputSchemaMetaValidator(schema);
+  } catch {
+    // Only in-process schema objects can be cyclic (wire JSON never is) and the validator recurses
+    // until the stack overflows on them. Leave those to the usual call-time validation.
+    return undefined;
+  }
+  // Errors run from the outermost schema to the offending keyword; the last one is the most specific.
+  return result.valid ? undefined : result.errorMessage.split('; ').at(-1);
+}

@@ -12,6 +12,7 @@ import { InternalMastraMCPClient } from './client';
 import type { MastraMCPServerDefinition, MCPServerAuthState } from './client';
 import { getMCPDiscoveryErrorDetails, isReconnectableMCPError } from './error-utils';
 import type { MCPDiscoveryErrorDetails } from './error-utils';
+import { loadInputSchemaMetaValidator } from './input-schema-meta-schema';
 import { createOAuthCallbackServer } from './oauth-callback-server';
 import type { OAuthCallbackServer } from './oauth-callback-server';
 import { MCPOAuthClientProvider } from './oauth-provider';
@@ -1196,6 +1197,7 @@ To fix this you have three different options:
     // getOrCreateClient constructs the client without connecting; connection is deferred to
     // the tool's first execution.
     const client = await this.getOrCreateClient(serverName, this.getServerConfig(serverName));
+    await loadInputSchemaMetaValidator();
     return client.toolFromDefinition({ definition });
   }
 

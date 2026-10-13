@@ -586,7 +586,7 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     expect(callTool).not.toHaveBeenCalled();
   });
 
-  it('bounds nested input subschemas before compiling them', async () => {
+  it('skips tools whose input schema is nested too deeply to validate', async () => {
     const sdkClient = (client as any).client as Client;
     let nestedSchema: Record<string, unknown> = { type: 'string' };
     for (let depth = 0; depth < 150; depth++) {
@@ -595,13 +595,13 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
       tools: [{ name: 'deep_input', inputSchema: nestedSchema as any }],
     });
-    const callTool = vi.spyOn(sdkClient, 'callTool');
+    const warn = vi.spyOn((client as any).logger, 'warn');
 
-    const tool = (await client.tools()).deep_input;
-    const result = await tool.execute?.({} as any);
-
-    expect(result).toMatchObject({ error: true, message: expect.stringMatching(/maximum depth/i) });
-    expect(callTool).not.toHaveBeenCalled();
+    expect(await client.tools()).toEqual({});
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping MCP tool "deep_input"'),
+      expect.objectContaining({ reason: expect.stringMatching(/maximum depth/i) }),
+    );
   });
 
   it('preserves JSON Schema 2020-12 identity, composition, and boolean subschemas', async () => {
@@ -3710,8 +3710,24 @@ describe('InternalMastraMCPClient - malformed input schemas (issue #23731)', () 
     expect(warn).not.toHaveBeenCalled();
   });
 
-  it('rejects explicit hydration of an invalid definition with a dedicated error', () => {
+  it('skips an oversized input schema even when its leaf is malformed', async () => {
+    let inputSchema: Record<string, unknown> = { type: 'object', properties: { required: ['coin'] } };
+    for (let depth = 0; depth < 130; depth++) {
+      inputSchema = { type: 'object', properties: { nested: inputSchema } };
+    }
+    const { client, warn } = createClientWithTools([validTool, { name: 'malformed', inputSchema }]);
+
+    expect(Object.keys(await client.tools())).toEqual(['get_candles']);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping MCP tool "malformed"'),
+      expect.objectContaining({ reason: expect.stringMatching(/maximum depth/i) }),
+    );
+  });
+
+  it('rejects explicit hydration of an invalid definition with a dedicated error', async () => {
     const { client } = createClientWithTools([]);
+    // The async discovery path waits for the lazily loaded schema validator.
+    await client.tools();
 
     expect(() =>
       client.toolFromDefinition({

@@ -28,10 +28,8 @@ import type {
   SubscriptionFilter,
   VersionNegotiationMode,
   jsonSchemaValidator,
-  JsonSchemaValidator,
 } from '@modelcontextprotocol/client';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio';
-import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/client/validators/cf-worker';
 import { asyncExitHook, gracefulExit } from 'exit-hook';
 import { JSON_SCHEMA_2020_12, MAX_JSON_SCHEMA_DEPTH, MAX_JSON_SCHEMA_NODES, toJsonSchema2020 } from '../shared/json-schema-dialect';
 import { getMastraToolStrictMeta } from '../shared/mastra-tool-meta';
@@ -41,7 +39,7 @@ import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
 import { ResourceClientActions } from './actions/resource';
 import { isReconnectableMCPError } from './error-utils';
-import { INPUT_SCHEMA_META_SCHEMA } from './input-schema-meta-schema';
+import { getInputSchemaError, loadInputSchemaMetaValidator } from './input-schema-meta-schema';
 import { MCP_CLIENT_PROTOCOL_VERSION } from './types';
 import type {
   FetchLike,
@@ -145,29 +143,6 @@ function getJsonSchemaComplexityError(schema: unknown): string | undefined {
   }
 
   return undefined;
-}
-
-let inputSchemaMetaValidator: JsonSchemaValidator<unknown> | undefined;
-
-/**
- * Checks a server-supplied input schema against the JSON Schema meta-schema. Uses the SDK's
- * cf-worker validator because it interprets schemas instead of compiling them with
- * `new Function`, so it also runs on Cloudflare Workers. Callers must rule out oversized
- * schemas with getJsonSchemaComplexityError first.
- */
-function getInputSchemaError(schema: unknown): string | undefined {
-  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return '#: input schema must be a JSON object';
-  inputSchemaMetaValidator ??= new CfWorkerJsonSchemaValidator({ draft: '7' }).getValidator(INPUT_SCHEMA_META_SCHEMA);
-  let result: ReturnType<typeof inputSchemaMetaValidator>;
-  try {
-    result = inputSchemaMetaValidator(schema);
-  } catch {
-    // Only in-process schema objects can be cyclic (wire JSON never is) and the validator recurses
-    // until the stack overflows on them. Leave those to the usual call-time validation.
-    return undefined;
-  }
-  // Errors run from the outermost schema to the offending keyword; the last one is the most specific.
-  return result.valid ? undefined : result.errorMessage.split('; ').at(-1);
 }
 
 const SUPPORTED_DIALECTS = new Set([
@@ -470,6 +445,8 @@ export class InternalMastraMCPClient extends MastraBase {
    */
   constructor({ name, version = '1.0.0', server, timeout = DEFAULT_REQUEST_TIMEOUT_MSEC }: InternalMastraMCPClientOptions) {
     super({ name: 'MastraMCPClient' });
+    // Started early so the sync toolFromDefinition() normally has the input schema check ready.
+    void loadInputSchemaMetaValidator();
     this.name = name;
     this.timeout = timeout;
     this.logHandler = server.logger;
@@ -1295,16 +1272,7 @@ export class InternalMastraMCPClient extends MastraBase {
 
   private convertInputSchema(inputSchema: MCPToolListEntry['inputSchema']): StandardSchemaWithJSON {
     const schema = withDefaultDialect(('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7);
-    const standardSchema = toStandardSchema(schema);
-    const complexityError = getJsonSchemaComplexityError(schema);
-    if (!complexityError) return standardSchema;
-
-    return {
-      '~standard': {
-        ...standardSchema['~standard'],
-        validate: () => ({ issues: [{ message: complexityError }] }),
-      },
-    };
+    return toStandardSchema(schema);
   }
 
   /**
@@ -1399,6 +1367,7 @@ export class InternalMastraMCPClient extends MastraBase {
   async tools(): Promise<Record<string, Tool<any, any, any, any>>> {
     this.log('debug', `Requesting tools from MCP server`);
     const { tools } = await this.client.listTools({ _meta: this.requestMeta() }, { timeout: this.timeout });
+    await loadInputSchemaMetaValidator();
     const toolsRes: Record<string, Tool<any, any, any, any>> = {};
     for (const tool of tools) {
       const mastraTool = this.buildToolFromListEntry(tool, {
@@ -1429,7 +1398,9 @@ export class InternalMastraMCPClient extends MastraBase {
       rawInputSchema && typeof rawInputSchema === 'object' && 'jsonSchema' in rawInputSchema
         ? rawInputSchema.jsonSchema
         : rawInputSchema;
-    const inputSchemaError = getJsonSchemaComplexityError(inputSchema) ? undefined : getInputSchemaError(inputSchema);
+    // Oversized schemas are dropped too: every call to them fails anyway, and the meta-schema
+    // validator cannot walk them safely.
+    const inputSchemaError = getJsonSchemaComplexityError(inputSchema) ?? getInputSchemaError(inputSchema);
     if (inputSchemaError) {
       const details = { serverName: this.name, toolName: tool.name, reason: inputSchemaError };
       this.log(
