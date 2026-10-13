@@ -138,7 +138,8 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
     columns: {
       id: { type: 'uuid-pk' },
       session_id: { type: 'text' },
-      // Still written by every entry point (the position-1 link) until FACT-342.
+      // The link the session is filed under (the position-1 link by default).
+      // The PR tools, subscriptions, audit and work-item check still read it.
       project_repository_id: { type: 'text' },
       // Nullable so the column can be added to populated tables; filled by the
       // init() backfill and written by every `create` since.
@@ -327,9 +328,12 @@ export interface SourceControlSession {
   id: string;
   sessionId: string;
   /**
-   * The position-1 repository link at creation. Still populated for every
-   * session until FACT-342 moves the per-repository readers to
-   * `sessionRepositories`; nullable now so that deletion is a column change only.
+   * The repository link the session is filed under (the position-1 link by
+   * default). The PR tools default to it, and subscriptions, audit and the
+   * work-item check still read it; `sessionRepositories` records each
+   * repository the session pushed to or opened a change request in, but
+   * nothing reads those rows back yet. Moving the readers to them is a
+   * follow-up; nullable now so that deletion is a column change only.
    */
   projectRepositoryId: string | null;
   /** The factory the session belongs to. Null only on rows the backfill could not resolve. */
