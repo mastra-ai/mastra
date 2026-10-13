@@ -52,7 +52,6 @@
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
-    "google/gemini-4-argon",
     "google/gemini-nano-banana-2.1",
     "google/gemma-3-12b-it",
     "google/gemma-3-27b-it",
@@ -198,8 +197,6 @@
     "sakana/fugu-ultra",
     "sakana/fugu-ultra-v2",
     "sakana/sakana-namazu",
-    "scaledown/extract",
-    "scaledown/summarize",
     "stepfun/step-3.7-flash",
     "stepfun/step-5-preview",
     "thinkingmachines/inkling",
@@ -312,7 +309,6 @@
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
-    "google/gemini-4-argon",
     "google/gemini-nano-banana-2.1",
     "google/gemma-2-27b-it",
     "google/gemma-3-12b-it",
@@ -617,7 +613,6 @@
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
-    "google/gemini-4-argon",
     "google/gemini-nano-banana-2.1",
     "google/gemma-2-27b-it",
     "google/gemma-3-12b-it",
@@ -1665,12 +1660,6 @@
       {
         "type": "effort",
         "values": ["minimal", "high"]
-      }
-    ],
-    "google/gemini-4-argon": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ],
     "google/gemini-3.1-flash-lite": [

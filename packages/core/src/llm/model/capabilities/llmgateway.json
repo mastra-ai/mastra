@@ -36,7 +36,6 @@
     "gemini-3.6-flash",
     "gemini-3.7-flash",
     "gemini-3.8-flash",
-    "gemini-4-argon",
     "gemini-pro-latest",
     "gemma-4-26b-a4b-it",
     "gemma-4-31b-it",
@@ -351,7 +350,6 @@
     "gemini-3.6-flash",
     "gemini-3.7-flash",
     "gemini-3.8-flash",
-    "gemini-4-argon",
     "gemini-pro-latest",
     "gemma-4-26b-a4b-it",
     "gemma-4-31b-it",
@@ -1339,12 +1337,6 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "gemini-4-argon": [
-      {
-        "type": "effort",
-        "values": ["high"]
       }
     ],
     "minimax-m2": [

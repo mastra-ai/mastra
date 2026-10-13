@@ -23,7 +23,6 @@
     "gemini-3.6-flash",
     "gemini-3.7-flash",
     "gemini-3.8-flash",
-    "gemini-4-argon",
     "gemini-embedding-2",
     "gemini-flash-latest",
     "gemini-flash-lite-latest",
@@ -64,7 +63,6 @@
     "gemini-3.6-flash",
     "gemini-3.7-flash",
     "gemini-3.8-flash",
-    "gemini-4-argon",
     "gemini-flash-latest",
     "gemini-flash-lite-latest",
     "gemini-omni-flash-preview",
@@ -87,7 +85,6 @@
     "gemini-3.6-flash",
     "gemini-3.7-flash",
     "gemini-3.8-flash",
-    "gemini-4-argon",
     "gemini-flash-latest",
     "gemini-flash-lite-latest",
     "gemma-4-26b-a4b-it",
@@ -225,12 +222,6 @@
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "gemini-4-argon": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ],
     "gemini-3.1-flash-lite": [

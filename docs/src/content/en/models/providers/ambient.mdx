@@ -7,7 +7,7 @@ description: "Browse Ambient model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/ambient.svg" alt="Ambient logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Ambient
 
-Access 16 Ambient models through Mastra's model router. Authentication is handled automatically using the `AMBIENT_API_KEY` environment variable.
+Access 14 Ambient models through Mastra's model router. Authentication is handled automatically using the `AMBIENT_API_KEY` environment variable.
 
 Learn more in the [Ambient documentation](https://ambient.xyz).
 
@@ -56,18 +56,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 202752,
     "inputCost": 0.6,
     "outputCost": 2
-  },
-  {
-    "model": "ambient/ambient/small",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 101072,
-    "maxOutput": 101072,
-    "inputCost": 0.001,
-    "outputCost": 0.001
   },
   {
     "model": "ambient/deepseek/deepseek-v4-flash",
@@ -176,18 +164,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 262144,
     "inputCost": 0.19,
     "outputCost": 1.14
-  },
-  {
-    "model": "ambient/unsloth/qwen3.8-27b-gguf",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 101072,
-    "maxOutput": 101072,
-    "inputCost": 0.001,
-    "outputCost": 0.001
   },
   {
     "model": "ambient/xiaomi/mimo-v2.5",
