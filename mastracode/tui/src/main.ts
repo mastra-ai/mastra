@@ -37,7 +37,7 @@ import {
   shouldRunHeadless,
 } from './resume-command.js';
 import { resolveTuiSubagents } from './subagent-settings.js';
-import { applyThemePreference } from './tui/commands/theme.js';
+import { applyThemePreference, normalizeThemePreference } from './tui/commands/theme.js';
 import { MastraTUI } from './tui/index.js';
 import { getUpdateCommandArgs, runUpdateCommand } from './update-command.js';
 import { getCurrentVersion } from './version.js';
@@ -137,7 +137,7 @@ async function tuiMain(
 
   // Detect and apply terminal theme
   // MASTRA_THEME env var is the highest-priority override (mode name or custom theme name)
-  const envTheme = process.env.MASTRA_THEME?.toLowerCase();
+  const envTheme = normalizeThemePreference(process.env.MASTRA_THEME ?? '');
   const themePref = envTheme || loadSettings().preferences.theme || 'auto';
   await applyThemePreference(themePref);
 

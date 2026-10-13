@@ -43,7 +43,7 @@ vi.mock('../../overlay.js', () => ({
   showModalOverlay: vi.fn(),
 }));
 
-import { handleThemeCommand } from '../theme.js';
+import { handleThemeCommand, normalizeThemePreference } from '../theme.js';
 
 function createCtx() {
   return {
@@ -230,5 +230,29 @@ describe('handleThemeCommand', () => {
     expect(mocks.loadCustomTheme).toHaveBeenCalledWith('catppuccin-latte');
     expect(mocks.applyThemeMode).toHaveBeenCalledWith('light', '#eff1f5', colors);
     expect(ctx.showInfo).toHaveBeenCalledWith('Theme set to Catppuccin Latte (light)');
+  });
+
+  it('normalizes built-in modes typed in any case', async () => {
+    const settings = { preferences: { theme: 'auto' } };
+    mocks.loadSettings.mockReturnValue(settings);
+    const ctx = createCtx();
+
+    await handleThemeCommand(ctx, ['Dark']);
+
+    expect(mocks.applyThemeMode).toHaveBeenCalledWith('dark');
+    expect(settings.preferences.theme).toBe('dark');
+  });
+});
+
+describe('normalizeThemePreference', () => {
+  it('lowercases reserved modes and bundled pairs', () => {
+    expect(normalizeThemePreference('AUTO')).toBe('auto');
+    expect(normalizeThemePreference('Light')).toBe('light');
+    expect(normalizeThemePreference('Catppuccin-Latte/Catppuccin-Mocha')).toBe('catppuccin-latte/catppuccin-mocha');
+  });
+
+  it('keeps custom theme names as typed', () => {
+    expect(normalizeThemePreference('MyTheme')).toBe('MyTheme');
+    expect(normalizeThemePreference('MyLight/MyDark')).toBe('MyLight/MyDark');
   });
 });

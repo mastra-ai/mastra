@@ -24,6 +24,13 @@ function parseThemePair(pref: string): { light: string; dark: string } | undefin
   return { light, dark };
 }
 
+export function normalizeThemePreference(pref: string): string {
+  const lower = pref.toLowerCase();
+  if (lower === 'auto' || lower === 'dark' || lower === 'light') return lower;
+  const pair = BUNDLED_THEME_PAIRS.find(({ light, dark }) => `${light}/${dark}` === lower);
+  return pair ? lower : pref;
+}
+
 /**
  * Apply a stored theme preference: 'auto', 'dark', 'light', the name of a
  * custom theme file, or a light/dark pair like 'catppuccin-latte/catppuccin-mocha'
@@ -121,7 +128,7 @@ async function showThemePicker(ctx: SlashCommandContext): Promise<void> {
   const settings = loadSettings();
   // The effective theme may differ from the saved preference (MASTRA_THEME
   // overrides it at startup) — restore what's actually active on cancel.
-  const currentPref = process.env.MASTRA_THEME?.toLowerCase() || settings.preferences.theme || 'auto';
+  const currentPref = normalizeThemePreference(process.env.MASTRA_THEME ?? '') || settings.preferences.theme || 'auto';
   const customNames = listCustomThemes();
   const bundledNames = listBundledThemes().filter(name => !customNames.includes(name));
 
@@ -254,5 +261,5 @@ export async function handleThemeCommand(ctx: SlashCommandContext, args: string[
     return;
   }
 
-  await setThemePreference(ctx, arg);
+  await setThemePreference(ctx, normalizeThemePreference(arg));
 }
