@@ -276,7 +276,7 @@ export const testWorkflow = createWorkflow({})
 
 ## Check previous step results
 
-Use `getStepResult()` to inspect a previous step’s results.
+Use `getStepResultAsync()` to inspect a previous step’s results. It resolves to `null` if the step hasn't completed successfully.
 
 ```typescript oxfmt:false {8} title="src/mastra/workflows/test-workflow.ts"
 import { createStep } from "@mastra/core/workflows";
@@ -285,8 +285,8 @@ import { z } from "zod";
 const step1 = createStep({...});
 
 const step2 = createStep({
-  execute: async ({ getStepResult }) => {
-    const step1Result = getStepResult(step1);
+  execute: async ({ getStepResultAsync }) => {
+    const step1Result = await getStepResultAsync(step1);
 
     return {
       value: ""
