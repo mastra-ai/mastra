@@ -89,7 +89,23 @@ describe('TemporalRun', () => {
     const steps = {
       increment: { status: 'success', payload: { value: 1 }, output: { ok: true }, startedAt: 1, endedAt: 2 },
     };
-    const executionResult = (result: unknown) => ({ status: 'success', input: { value: 1 }, result, state: {}, steps });
+    const workerSteps = {
+      increment: {
+        __temporalStepResult: true,
+        status: 'success',
+        payload: { value: 1 },
+        output: { ok: true },
+        startedAt: 1,
+        endedAt: 2,
+      },
+    };
+    const executionResult = (result: unknown) => ({
+      status: 'success',
+      input: { value: 1 },
+      result,
+      state: {},
+      steps: workerSteps,
+    });
 
     function createHookedWorkflow(
       options: Record<string, unknown>,
@@ -220,6 +236,49 @@ describe('TemporalRun', () => {
       expect(result.status).toBe('failed');
       expect(onFinish).toHaveBeenCalledOnce();
       expect(onError).toHaveBeenCalledOnce();
+    });
+
+    it('preserves serialized step results even when payload and output are omitted', async () => {
+      const serializedSteps = {
+        voidStep: { __temporalStepResult: true, status: 'success', startedAt: 1, endedAt: 2 },
+      };
+      const normalizedSteps = {
+        voidStep: { status: 'success', payload: undefined, output: undefined, startedAt: 1, endedAt: 2 },
+      };
+      const onFinish = vi.fn();
+      const { workflow } = createHookedWorkflow({ onFinish }, async () => ({
+        status: 'success',
+        input: { value: 1 },
+        result: undefined,
+        state: {},
+        steps: serializedSteps,
+      }));
+      const run = await workflow.createRun({ runId: 'run-1' });
+
+      const result = await run.start({ inputData: { value: 1 } });
+
+      expect(result.steps).toEqual(normalizedSteps);
+      expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ steps: normalizedSteps }));
+    });
+
+    it('preserves serialized step results from startAsync background hooks when payload and output are omitted', async () => {
+      let resolveResult!: (value: unknown) => void;
+      const serializedSteps = {
+        voidStep: { __temporalStepResult: true, status: 'success', startedAt: 1, endedAt: 2 },
+      };
+      const normalizedSteps = {
+        voidStep: { status: 'success', payload: undefined, output: undefined, startedAt: 1, endedAt: 2 },
+      };
+      const onFinish = vi.fn();
+      const { workflow } = createHookedWorkflow({ onFinish }, () => new Promise(resolve => (resolveResult = resolve)));
+      const run = await workflow.createRun({ runId: 'run-1' });
+
+      await expect(run.startAsync({ inputData: { value: 1 } })).resolves.toEqual({ runId: 'run-1' });
+      resolveResult({ status: 'success', input: { value: 1 }, result: undefined, state: {}, steps: serializedSteps });
+
+      await vi.waitFor(() =>
+        expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ steps: normalizedSteps })),
+      );
     });
 
     it('runs onFinish in the background after startAsync returns', async () => {

@@ -16,6 +16,7 @@ vi.mock('@temporalio/workflow', () => ({
 
 const succeeded = (output: unknown) =>
   expect.objectContaining({
+    __temporalStepResult: true,
     status: 'success',
     output,
     startedAt: expect.any(Number),
@@ -62,6 +63,7 @@ describe('temporal workflow runtime helper module', () => {
       state: { started: true },
       steps: {
         'fetch-weather': {
+          __temporalStepResult: true,
           status: 'success',
           payload: { city: 'SF' },
           output: { city: 'SF', weather: 'sunny' },

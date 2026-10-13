@@ -37,7 +37,14 @@ export class TemporalExecutionEngine {
   async recordStep(stepResults, id, payload, run) {
     const startedAt = Date.now();
     const output = await run();
-    stepResults[id] = { status: 'success', payload, output, startedAt, endedAt: Date.now() };
+    stepResults[id] = {
+      __temporalStepResult: true,
+      status: 'success',
+      payload,
+      output,
+      startedAt,
+      endedAt: Date.now(),
+    };
     return output;
   }
 
@@ -176,6 +183,7 @@ export class TemporalExecutionEngine {
 
         await Promise.all(workers);
         stepResults[entry.step.id] = {
+          __temporalStepResult: true,
           status: 'success',
           payload: inputData,
           output: results,

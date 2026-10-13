@@ -223,18 +223,28 @@ export class TemporalRun<
 }
 
 // The worker only records successful steps; a failed run rejects handle.result() instead.
-function isStepResult(value: unknown): boolean {
+function normalizeStepResult(value: unknown): unknown {
   if (typeof value !== 'object' || value === null) {
-    return false;
+    return { status: 'success', output: value, startedAt: 0, endedAt: 0 };
   }
+
   const record = value as Record<string, unknown>;
-  return (
+  if (
+    record.__temporalStepResult === true &&
     record.status === 'success' &&
-    'payload' in record &&
-    'output' in record &&
     typeof record.startedAt === 'number' &&
     typeof record.endedAt === 'number'
-  );
+  ) {
+    return {
+      status: 'success',
+      payload: record.payload,
+      output: record.output,
+      startedAt: record.startedAt,
+      endedAt: record.endedAt,
+    };
+  }
+
+  return { status: 'success', output: value, startedAt: 0, endedAt: 0 };
 }
 
 // Workers built before step results used the core StepResult shape return raw step outputs.
@@ -242,10 +252,5 @@ function normalizeStepResults<T>(steps: T): T {
   if (!steps || typeof steps !== 'object') {
     return {} as T;
   }
-  return Object.fromEntries(
-    Object.entries(steps).map(([id, value]) => [
-      id,
-      isStepResult(value) ? value : { status: 'success', output: value, startedAt: 0, endedAt: 0 },
-    ]),
-  ) as T;
+  return Object.fromEntries(Object.entries(steps).map(([id, value]) => [id, normalizeStepResult(value)])) as T;
 }

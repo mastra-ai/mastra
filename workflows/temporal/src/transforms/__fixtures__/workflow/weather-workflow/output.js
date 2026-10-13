@@ -42,6 +42,7 @@ class TemporalExecutionEngine {
     const startedAt = Date.now();
     const output = await run();
     stepResults[id] = {
+      __temporalStepResult: true,
       status: 'success',
       payload,
       output,
@@ -193,6 +194,7 @@ class TemporalExecutionEngine {
           });
           await Promise.all(workers);
           stepResults[entry.step.id] = {
+            __temporalStepResult: true,
             status: 'success',
             payload: inputData,
             output: results,
