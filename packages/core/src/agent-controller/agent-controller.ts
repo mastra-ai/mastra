@@ -1503,11 +1503,14 @@ export class AgentController<TState = {}> {
     const configured = (await agent.getMemory({ requestContext }))?.getMergedThreadConfig().generateTitle;
     const titleConfig = typeof configured === 'object' ? configured : undefined;
 
+    // Not `model ?? titleConfig?.model`: merging the two model types hits TS2590 (#26922).
+    let titleModel = titleConfig?.model;
+    if (model !== undefined) titleModel = model;
     const title = (
       await agent.generateTitleFromUserMessage({
         messages,
         requestContext,
-        model: model ?? titleConfig?.model,
+        model: titleModel,
         instructions: titleConfig?.instructions,
       })
     )?.trim();

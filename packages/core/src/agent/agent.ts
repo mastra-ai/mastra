@@ -3489,9 +3489,10 @@ export class Agent<
       : this.resolveModelSelection(this.model, requestContext);
 
     return modelSelectionPromise.then(modelSelection => {
-      const firstEnabledModel = Array.isArray(modelSelection)
-        ? modelSelection.find(m => m.enabled)?.model
-        : modelSelection;
+      // Branches instead of a ternary: merging these two model types hits TS2590 (#26922).
+      let firstEnabledModel: DynamicArgument<MastraModelConfig> | undefined;
+      if (Array.isArray(modelSelection)) firstEnabledModel = modelSelection.find(m => m.enabled)?.model;
+      else firstEnabledModel = modelSelection;
 
       if (!firstEnabledModel) {
         const mastraError = new MastraError({
@@ -3513,9 +3514,8 @@ export class Agent<
           // Filter disabled entries before prepareModels so their model factories and
           // dynamic resolvers are never invoked on the streaming path. A disabled
           // entry's throwing/side-effecting factory must not break the request.
-          const enabledSelection = Array.isArray(modelSelection)
-            ? (modelSelection.filter(m => m.enabled) as typeof modelSelection)
-            : modelSelection;
+          let enabledSelection: ResolvedModelSelection = modelSelection;
+          if (Array.isArray(modelSelection)) enabledSelection = modelSelection.filter(m => m.enabled) as ModelFallbacks;
 
           llm = this.prepareModels(requestContext, enabledSelection).then(models => {
             return new MastraLLMVNext({
@@ -3924,9 +3924,12 @@ export class Agent<
 
     this.model = modelArray.map(mdl => {
       if (mdl.id === id) {
+        // Not `model ?? mdl.model`: merging the two model types hits TS2590 (#26922).
+        let nextModel: DynamicArgument<MastraModelConfig> = mdl.model;
+        if (model !== undefined) nextModel = model;
         return {
           ...mdl,
-          model: model ?? mdl.model,
+          model: nextModel,
           enabled: enabled ?? mdl.enabled,
           maxRetries: maxRetries ?? mdl.maxRetries,
           maxRetriesConfigured: maxRetries !== undefined || mdl.maxRetriesConfigured,
@@ -7450,12 +7453,14 @@ export class Agent<
       model: MastraLanguageModel | MastraLegacyLanguageModel;
     },
   ): Promise<Array<AgentModelManagerConfig>> {
-    const selection =
-      resolvedSelection ??
-      (await this.resolveModelSelection(
+    // Not `resolvedSelection ?? await ...`: merging the two model types hits TS2590 (#26922).
+    let selection: ResolvedModelSelection;
+    if (resolvedSelection !== undefined) selection = resolvedSelection;
+    else
+      selection = await this.resolveModelSelection(
         this.model as DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks,
         requestContext,
-      ));
+      );
 
     if (!Array.isArray(selection)) {
       const resolvedModel = await this.resolveModelConfig(selection, requestContext);
