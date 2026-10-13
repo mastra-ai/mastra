@@ -12,6 +12,18 @@ const PROJECT_REPOSITORIES = 'factory_project_repositories';
 const SESSIONS = 'source_control_sessions';
 const SESSION_REPOSITORIES = 'source_control_session_repositories';
 
+/**
+ * The user already holds the branch on this link in a session without this
+ * factory's ownership, left by the factory migration. It is never reused and
+ * cannot be replaced while it holds the branch.
+ */
+export class SessionOwnershipMismatchError extends Error {
+  constructor(readonly sessionId: string) {
+    super(`Session ${sessionId} already holds this branch but does not belong to this factory.`);
+    this.name = 'SessionOwnershipMismatchError';
+  }
+}
+
 export class SourceControlConnectionNotFoundError extends Error {
   constructor() {
     super('Project source-control connection not found for this organization and integration.');
@@ -1393,12 +1405,16 @@ export class SourceControlStorage extends FactoryStorageDomain {
         },
         create: async input => {
           const link = await requireProjectRepositoryById(input.projectRepositoryId);
-          const connection = await db().findOne<ConnectionDbRow>(CONNECTIONS, { id: link.connectionId });
+          const connection = await getConnection({ orgId: input.orgId, id: link.connectionId });
           if (!connection) throw new Error('Project repository not found for this integration.');
-          if (input.factoryProjectId !== undefined && input.factoryProjectId !== connection.factory_project_id) {
+          if (input.factoryProjectId !== undefined && input.factoryProjectId !== connection.factoryProjectId) {
             throw new Error('Session factory does not match the repository link.');
           }
-          const factoryProjectId = connection.factory_project_id;
+          const factoryProjectId = connection.factoryProjectId;
+          const reuse = (row: SessionDbRow) => {
+            if (row.factory_project_id !== factoryProjectId) throw new SessionOwnershipMismatchError(row.session_id);
+            return toSession(row);
+          };
           // Reuse is still keyed by the link, as before this column existed. A
           // branch the same user already holds on another link of the factory
           // surfaces as the unique violation of the insert below.
@@ -1409,7 +1425,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
               branch: input.branch,
             });
           const existing = await findExisting();
-          if (existing) return toSession(existing);
+          if (existing) return reuse(existing);
           const now = new Date();
           try {
             const row = await db().insertOne<SessionDbRow>(SESSIONS, {
@@ -1434,7 +1450,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
             if (!(error instanceof UniqueViolationError)) throw error;
             const row = await findExisting();
             if (!row) throw error;
-            return toSession(row);
+            return reuse(row);
           }
         },
         setSandbox: async ({ id, sandboxId, sandboxWorkdir }) => {
