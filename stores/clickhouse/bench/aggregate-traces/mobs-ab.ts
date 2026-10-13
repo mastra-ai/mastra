@@ -6,11 +6,14 @@
  *   A (today)  server defaults (read-ahead pool 200), 60 s safety cap
  *   B (PR)     filesystem_prefetches_limit=8, max_execution_time=9, timeout_overflow_mode=throw
  *
+ * With --pair guardrails (OBS-591), A is the platform#3407 settings above and B adds the per-query
+ * caps: max_memory_usage=1 GiB, max_result_bytes=256 MiB, max_bytes_to_read=16 GiB (all throw).
+ *
  * Results are streamed and counted, never printed. Trace/span ids, scorer ids and feedback types are
  * picked from the project's own first page in memory only. Output: bucket + hash + metrics.
  *
- *   npx tsx mobs-ab.ts run [--platform <mobs-query dir>] [--reps 3] [--only op,op]
- *   npx tsx mobs-ab.ts report
+ *   npx tsx mobs-ab.ts run [--platform <mobs-query dir>] [--reps 3] [--only op,op] [--pair guardrails]
+ *   npx tsx mobs-ab.ts report [--pair guardrails]
  */
 import { randomUUID } from 'node:crypto';
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
@@ -28,15 +31,31 @@ import { loadSelection } from './profile';
 import type { SelectedProject } from './profile';
 import { PREFLIGHT_FILE, RESULTS_DIR } from './run';
 
-const OUT = join(RESULTS_DIR, 'mobs-ab.jsonl');
+let OUT = join(RESULTS_DIR, 'mobs-ab.jsonl');
 const ALL_LOG = `clusterAllReplicas('all_groups.default', system.query_log)`;
 const OBS_TABLES = `['mastra_trace_roots', 'mastra_trace_branches', 'mastra_span_events', 'mastra_metric_events', 'mastra_score_events', 'mastra_feedback_events', 'mastra_log_events']`;
 const GAP_MS = 150;
 
 type Variant = 'A' | 'B';
+const PR3407: ClickHouseSettings = {
+  filesystem_prefetches_limit: '8',
+  max_execution_time: 9,
+  timeout_overflow_mode: 'throw',
+};
 const VARIANTS: Record<Variant, ClickHouseSettings> = {
   A: { max_execution_time: 60, timeout_overflow_mode: 'throw' },
-  B: { filesystem_prefetches_limit: '8', max_execution_time: 9, timeout_overflow_mode: 'throw' },
+  B: PR3407,
+};
+const GUARDRAILS: Record<Variant, ClickHouseSettings> = {
+  A: PR3407,
+  B: {
+    ...PR3407,
+    max_memory_usage: String(1024 ** 3),
+    max_result_bytes: String(256 * 1024 ** 2),
+    result_overflow_mode: 'throw',
+    max_bytes_to_read: String(16 * 1024 ** 3),
+    read_overflow_mode: 'throw',
+  },
 };
 
 interface CallRecord {
@@ -80,19 +99,23 @@ function guardedClient(raw: ClickHouseClient, state: { current?: Tagged }): Clic
     if (!tag) throw new Error('query outside a measured call');
     const queryId = randomUUID();
     tag.queryIds.push(queryId);
-    return raw.query({
+    const pending = raw.query({
       ...params,
       query_id: queryId,
       clickhouse_settings: {
         ...params.clickhouse_settings,
-        ...VARIANTS[tag.variant],
         use_query_cache: 0,
         max_bytes_to_read: String(50e9),
         read_overflow_mode: 'throw',
+        ...VARIANTS[tag.variant],
         log_comment: `aqa-bench:mobs-ab:${tag.variant}`,
         ...(tag.cold ? { enable_filesystem_cache: 0 } : {}),
       },
     });
+    // Some service functions start several reads and stop awaiting the rest once one fails; their
+    // later rejections must not crash the run. The caller still receives this promise's rejection.
+    pending.catch(() => {});
+    return pending;
   };
   return new Proxy(raw, {
     get(target, prop) {
@@ -752,8 +775,13 @@ const { positionals, values } = parseArgs({
     reps: { type: 'string', default: '3' },
     only: { type: 'string' },
     traffic: { type: 'boolean', default: false },
+    pair: { type: 'string' },
   },
 });
+if (values.pair === 'guardrails') {
+  Object.assign(VARIANTS, GUARDRAILS);
+  OUT = join(RESULTS_DIR, 'mobs-ab-guardrails.jsonl');
+}
 if (positionals[0] === 'run') {
   await run({
     platform: values.platform!,

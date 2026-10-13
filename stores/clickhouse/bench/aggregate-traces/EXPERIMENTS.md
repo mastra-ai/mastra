@@ -43,47 +43,48 @@ Numbers are warm medians on the representative project per bucket, 30-day window
 
 ## Experiment register
 
-| ID  | Env        | Question                                                                                                                   | Result (short)                                                                                                                               | Status |
-| --- | ---------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| X01 | prod       | Baseline: latency/bytes/memory by project size                                                                             | Peak 592 MiB (non-token), 991 MiB (token/cost); ~160 MiB even for 25-trace projects                                                          | done   |
-| X02 | prod       | W1: tenant-scope the outer re-read                                                                                         | Bytes ×0.13–0.5 (small–p99), ×0.84 largest; memory ×0.9–1.4                                                                                  | done   |
-| X03 | prod       | `quantileExact` vs `quantileDeterministic`; `uniq` vs `uniqExact`                                                          | No material difference                                                                                                                       | done   |
-| X04 | prod       | `max_threads = 2` (t2)                                                                                                     | Memory ×0.91–1.02, often slower                                                                                                              | done   |
-| X05 | prod       | External GROUP BY/sort at 256 MiB (spill)                                                                                  | E4 largest ×0.65 memory but ×3.8 latency; elsewhere no gain                                                                                  | done   |
-| X06 | prod       | Dedupe token rows on `metricId` only (mkey)                                                                                | Memory ×0.98–1.03                                                                                                                            | done   |
-| X07 | prod       | Diagnostic: no retry dedupe (nodedupe) / no `costMetadata` parse (nocm)                                                    | nodedupe ×0.47 largest, ×0.86 p99; nocm ×0.96–0.98                                                                                           | done   |
-| X08 | prod       | `FINAL` instead of manual dedupe                                                                                           | Worse: 986–1209 MiB largest                                                                                                                  | done   |
-| X09 | prod       | Is the floor tied to parts/granules selected?                                                                              | 30d scoped count selects 268/268 parts before PK; `endedAt` bound cuts to 19 parts, 156 → 55 MiB                                             | done   |
-| X10 | prod       | What sets the ~160 MiB floor? (meter, columns, settings)                                                                   | `SELECT 1` 7.5 MiB; floor independent of columns/threads/blocks/buffers; prefetch off → 8.5 MiB                                              | done   |
-| X11 | prod       | Which prefetch setting? Effect on full queries                                                                             | Prefetched read pool is the floor; both off is best (small F0 10, E4 28, F3 16 MiB)                                                          | done   |
-| X12 | prod       | Cold (object-storage) latency with prefetch off                                                                            | Small: no cost. p99 +30–40%, largest F0 times out (>30 s vs 22 s). Prefetch limit 8 sits between                                             | done   |
-| X13 | local      | Stage-by-stage CTE breakdown                                                                                               | Memory jumps at the span dedupe (F3) and the token usage dedupe (E4); root stages are cheap                                                  | done   |
-| X17 | local      | Query-shape rewrites (`rs`, `r1`, `sp`, `shape`): equivalence and memory                                                   | 0 mismatches in 3,096 comparisons; `r1` does nothing; `sp`/`shape` cut p99 F3 128 → 48 MiB                                                   | done   |
-| X18 | prod       | Shape rewrites ± prefetch limit vs the 32–64 / 256 MiB budget                                                              | Small and p99 F0/F3 within budget; E4 p99 139 MiB; largest 242–432 MiB, still over 256 for F3/E4                                             | done   |
-| X14 | local      | Lab calibration: does local reproduce shape memory?                                                                        | Yes, within ~10–20% of prod with prefetch off (small/p99 F0, E4, F3; largest E4 820 vs ~930 MiB)                                             | done   |
-| X15 | prod       | Duplicate rate of token metric rows (does the retry dedupe ever fire?)                                                     | 0 duplicate `metricId`s in 30 days for all 15 projects (up to 2.06M token rows)                                                              | done   |
-| X16 | prod       | Keep prefetch but bound it (`filesystem_prefetch_max_memory_usage`, `filesystem_prefetches_limit`, `prefetch_buffer_size`) | Only `filesystem_prefetches_limit = 8` works: small count 12 MiB, F0 23–27, E4 42; p99 F0 52                                                 | done   |
-| X19 | local      | Root dedupe in sort-key order (`rio`); join algorithms                                                                     | `rio` cuts largest E3 ~42%, F0 ~17%, 0 mismatches; only `partial_merge` join helps E4 (×0.87)                                                | done   |
-| X20 | local      | Usage rollup + span-name index (`urollup`, `snidx`, `arch`) on pulled data                                                 | 0 mismatches in 1,320 comparisons; `arch` largest E4 294, F3 115, E1 134 MiB                                                                 | done   |
-| X21 | local      | Rollup keyed by `cityHash64(traceId)`; FINAL read; dropping the `IN candidates` filter                                     | UInt64 key ×0.75–0.85 memory; FINAL no gain; dropping the filter changes results                                                             | done   |
-| X22 | local      | `traceId` bloom filters                                                                                                    | No memory change; bytes drop only for small tenants on the unscoped base re-read                                                             | done   |
-| X23 | local      | Retries vs write-time rollups; per-metric ReplacingMergeTree + FINAL; insert dedup tokens                                  | Rollup double-counts retries; per-metric FINAL exact at ~355 MiB; dedup keeps the MV exact                                                   | done   |
-| X24 | local      | Concurrency: 10/25/50 parallel non-largest queries, base vs `arch`                                                         | Server peak at 50: +722 MiB → +392 MiB; no failures                                                                                          | done   |
-| X25 | prod       | Cold reads for `shape` and `shape + limit 8`                                                                               | `shape` lets small/p99 F3/E4 finish cold; limit 8 pushes p99 F3/E4 over 30 s; largest F3/E4 time out cold                                    | done   |
-| X26 | local      | Hourly token/cost rollup for dashboard queries (`hourly`)                                                                  | 8–14 MiB at every size; largest E4 882 → 12 MiB; 0 mismatches in 264 comparisons                                                             | done   |
-| X27 | local      | Integer trace keys, no root dedupe, usage on the root row (`hk`, `nord`, `arch2`, `arch3`)                                 | `arch3` largest 23–35 MiB for every measured case; 0 mismatches (2,880 + 960)                                                                | done   |
-| X28 | local      | One day of a 30-day query (per-day split)                                                                                  | Largest `shape` 1-day 17–25 MiB vs 228–315 MiB for 30 days                                                                                   | done   |
-| X29 | prod       | mid and p90 with `shape` and `shape + limit 8`, warm and cold                                                              | Warm F0/F3 20–28 MiB, E4 36–42 MiB; cold all finish, 8–30 s                                                                                  | done   |
-| X30 | prod       | Prefetch limit 4/8/16/32, warm and cold, small–p99                                                                         | Memory rises with the limit (8 ≈ 4 < 16 < 32); cold latency about the same for every limit; p99 F3/E4 cold time out at all four              | done   |
-| X31 | prod       | Compiler rewrites that keep every dedupe (`sk`, `safe` = sk + sort-order dedupe + integer keys), ± limit 8, warm and cold  | Non-token small–p90 18–43 MiB; token/cost stays 34–49 / 293–302 / 866 MiB (p90 / p99 / largest); 0 mismatches in 2,880                       | done   |
-| X32 | local      | Trace-ordered projection / copy of token rows so the `(traceId, metricId)` dedupe streams                                  | Projection never chosen; sorted copy alone 806–875 MiB, in-order aggregation worse; the dedupe alone is ~470 MiB                             | done   |
-| X33 | prod       | Write-side facts for schema proposals (`prechecks.ts`, all tenants, 7 days)                                                | Roots rewritten (0.08% of traces, up to 263 copies); 0 duplicate token rows; span names never change; 4.3% of token rows after the root ends | done   |
-| X34 | prod+local | Integer keys for the token retry dedupe; what the dedupe costs                                                             | Dedupe memory follows the number of token rows, not key type or aggregate: −11% at largest                                                   | done   |
-| X35 | local      | One usage row per model call: separate table, span columns, `FINAL` read                                                   | Per-call table ×0.41 at largest; `FINAL` read adds a ~160 MiB floor (rejected)                                                               | done   |
-| X36 | prod       | Real Platform read traffic from `query_log` across compute groups (`traffic.ts`, 2.3 days)                                 | Cold reads are rare (≤5% of reads touch object storage, p99 1.6 s); the read-ahead floor makes 8% of 256 MiB-capped span reads fail          | done   |
-| X37 | prod       | mobs-query's own read paths, today's settings vs platform#3407 (`mobs-ab.ts`, 33 operations, 15 projects)                  | Warm: same latency, 3–4× less memory, no failures. Forced-cold: 2–4× slower; 43 of 230 cold reads hit the 9 s limit, 39 already took > 9 s   | done   |
-| X38 | prod       | Where cold `spans.some` time goes; span and root time bounds under one root per trace                                      | Span scan was never the bottleneck; the unscoped root re-read is. `w1` gives most of the cold win, `rs` more at 7d, `spb` nothing            | done   |
-| X39 | prod       | Largest-project `spans.some` memory across #26327, OBS-589 and OBS-613, stage by stage (`floor.ts` `mr-*` probes)          | No rise from #26327 on the same project; the reported 204→362 MiB compared two projects. OBS-613 is ~10% lower; memory is spans + semi-join  | done   |
+| ID  | Env        | Question                                                                                                                               | Result (short)                                                                                                                               | Status |
+| --- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| X01 | prod       | Baseline: latency/bytes/memory by project size                                                                                         | Peak 592 MiB (non-token), 991 MiB (token/cost); ~160 MiB even for 25-trace projects                                                          | done   |
+| X02 | prod       | W1: tenant-scope the outer re-read                                                                                                     | Bytes ×0.13–0.5 (small–p99), ×0.84 largest; memory ×0.9–1.4                                                                                  | done   |
+| X03 | prod       | `quantileExact` vs `quantileDeterministic`; `uniq` vs `uniqExact`                                                                      | No material difference                                                                                                                       | done   |
+| X04 | prod       | `max_threads = 2` (t2)                                                                                                                 | Memory ×0.91–1.02, often slower                                                                                                              | done   |
+| X05 | prod       | External GROUP BY/sort at 256 MiB (spill)                                                                                              | E4 largest ×0.65 memory but ×3.8 latency; elsewhere no gain                                                                                  | done   |
+| X06 | prod       | Dedupe token rows on `metricId` only (mkey)                                                                                            | Memory ×0.98–1.03                                                                                                                            | done   |
+| X07 | prod       | Diagnostic: no retry dedupe (nodedupe) / no `costMetadata` parse (nocm)                                                                | nodedupe ×0.47 largest, ×0.86 p99; nocm ×0.96–0.98                                                                                           | done   |
+| X08 | prod       | `FINAL` instead of manual dedupe                                                                                                       | Worse: 986–1209 MiB largest                                                                                                                  | done   |
+| X09 | prod       | Is the floor tied to parts/granules selected?                                                                                          | 30d scoped count selects 268/268 parts before PK; `endedAt` bound cuts to 19 parts, 156 → 55 MiB                                             | done   |
+| X10 | prod       | What sets the ~160 MiB floor? (meter, columns, settings)                                                                               | `SELECT 1` 7.5 MiB; floor independent of columns/threads/blocks/buffers; prefetch off → 8.5 MiB                                              | done   |
+| X11 | prod       | Which prefetch setting? Effect on full queries                                                                                         | Prefetched read pool is the floor; both off is best (small F0 10, E4 28, F3 16 MiB)                                                          | done   |
+| X12 | prod       | Cold (object-storage) latency with prefetch off                                                                                        | Small: no cost. p99 +30–40%, largest F0 times out (>30 s vs 22 s). Prefetch limit 8 sits between                                             | done   |
+| X13 | local      | Stage-by-stage CTE breakdown                                                                                                           | Memory jumps at the span dedupe (F3) and the token usage dedupe (E4); root stages are cheap                                                  | done   |
+| X17 | local      | Query-shape rewrites (`rs`, `r1`, `sp`, `shape`): equivalence and memory                                                               | 0 mismatches in 3,096 comparisons; `r1` does nothing; `sp`/`shape` cut p99 F3 128 → 48 MiB                                                   | done   |
+| X18 | prod       | Shape rewrites ± prefetch limit vs the 32–64 / 256 MiB budget                                                                          | Small and p99 F0/F3 within budget; E4 p99 139 MiB; largest 242–432 MiB, still over 256 for F3/E4                                             | done   |
+| X14 | local      | Lab calibration: does local reproduce shape memory?                                                                                    | Yes, within ~10–20% of prod with prefetch off (small/p99 F0, E4, F3; largest E4 820 vs ~930 MiB)                                             | done   |
+| X15 | prod       | Duplicate rate of token metric rows (does the retry dedupe ever fire?)                                                                 | 0 duplicate `metricId`s in 30 days for all 15 projects (up to 2.06M token rows)                                                              | done   |
+| X16 | prod       | Keep prefetch but bound it (`filesystem_prefetch_max_memory_usage`, `filesystem_prefetches_limit`, `prefetch_buffer_size`)             | Only `filesystem_prefetches_limit = 8` works: small count 12 MiB, F0 23–27, E4 42; p99 F0 52                                                 | done   |
+| X19 | local      | Root dedupe in sort-key order (`rio`); join algorithms                                                                                 | `rio` cuts largest E3 ~42%, F0 ~17%, 0 mismatches; only `partial_merge` join helps E4 (×0.87)                                                | done   |
+| X20 | local      | Usage rollup + span-name index (`urollup`, `snidx`, `arch`) on pulled data                                                             | 0 mismatches in 1,320 comparisons; `arch` largest E4 294, F3 115, E1 134 MiB                                                                 | done   |
+| X21 | local      | Rollup keyed by `cityHash64(traceId)`; FINAL read; dropping the `IN candidates` filter                                                 | UInt64 key ×0.75–0.85 memory; FINAL no gain; dropping the filter changes results                                                             | done   |
+| X22 | local      | `traceId` bloom filters                                                                                                                | No memory change; bytes drop only for small tenants on the unscoped base re-read                                                             | done   |
+| X23 | local      | Retries vs write-time rollups; per-metric ReplacingMergeTree + FINAL; insert dedup tokens                                              | Rollup double-counts retries; per-metric FINAL exact at ~355 MiB; dedup keeps the MV exact                                                   | done   |
+| X24 | local      | Concurrency: 10/25/50 parallel non-largest queries, base vs `arch`                                                                     | Server peak at 50: +722 MiB → +392 MiB; no failures                                                                                          | done   |
+| X25 | prod       | Cold reads for `shape` and `shape + limit 8`                                                                                           | `shape` lets small/p99 F3/E4 finish cold; limit 8 pushes p99 F3/E4 over 30 s; largest F3/E4 time out cold                                    | done   |
+| X26 | local      | Hourly token/cost rollup for dashboard queries (`hourly`)                                                                              | 8–14 MiB at every size; largest E4 882 → 12 MiB; 0 mismatches in 264 comparisons                                                             | done   |
+| X27 | local      | Integer trace keys, no root dedupe, usage on the root row (`hk`, `nord`, `arch2`, `arch3`)                                             | `arch3` largest 23–35 MiB for every measured case; 0 mismatches (2,880 + 960)                                                                | done   |
+| X28 | local      | One day of a 30-day query (per-day split)                                                                                              | Largest `shape` 1-day 17–25 MiB vs 228–315 MiB for 30 days                                                                                   | done   |
+| X29 | prod       | mid and p90 with `shape` and `shape + limit 8`, warm and cold                                                                          | Warm F0/F3 20–28 MiB, E4 36–42 MiB; cold all finish, 8–30 s                                                                                  | done   |
+| X30 | prod       | Prefetch limit 4/8/16/32, warm and cold, small–p99                                                                                     | Memory rises with the limit (8 ≈ 4 < 16 < 32); cold latency about the same for every limit; p99 F3/E4 cold time out at all four              | done   |
+| X31 | prod       | Compiler rewrites that keep every dedupe (`sk`, `safe` = sk + sort-order dedupe + integer keys), ± limit 8, warm and cold              | Non-token small–p90 18–43 MiB; token/cost stays 34–49 / 293–302 / 866 MiB (p90 / p99 / largest); 0 mismatches in 2,880                       | done   |
+| X32 | local      | Trace-ordered projection / copy of token rows so the `(traceId, metricId)` dedupe streams                                              | Projection never chosen; sorted copy alone 806–875 MiB, in-order aggregation worse; the dedupe alone is ~470 MiB                             | done   |
+| X33 | prod       | Write-side facts for schema proposals (`prechecks.ts`, all tenants, 7 days)                                                            | Roots rewritten (0.08% of traces, up to 263 copies); 0 duplicate token rows; span names never change; 4.3% of token rows after the root ends | done   |
+| X34 | prod+local | Integer keys for the token retry dedupe; what the dedupe costs                                                                         | Dedupe memory follows the number of token rows, not key type or aggregate: −11% at largest                                                   | done   |
+| X35 | local      | One usage row per model call: separate table, span columns, `FINAL` read                                                               | Per-call table ×0.41 at largest; `FINAL` read adds a ~160 MiB floor (rejected)                                                               | done   |
+| X36 | prod       | Real Platform read traffic from `query_log` across compute groups (`traffic.ts`, 2.3 days)                                             | Cold reads are rare (≤5% of reads touch object storage, p99 1.6 s); the read-ahead floor makes 8% of 256 MiB-capped span reads fail          | done   |
+| X37 | prod       | mobs-query's own read paths, today's settings vs platform#3407 (`mobs-ab.ts`, 33 operations, 15 projects)                              | Warm: same latency, 3–4× less memory, no failures. Forced-cold: 2–4× slower; 43 of 230 cold reads hit the 9 s limit, 39 already took > 9 s   | done   |
+| X38 | prod       | Where cold `spans.some` time goes; span and root time bounds under one root per trace                                                  | Span scan was never the bottleneck; the unscoped root re-read is. `w1` gives most of the cold win, `rs` more at 7d, `spb` nothing            | done   |
+| X39 | prod       | Largest-project `spans.some` memory across #26327, OBS-589 and OBS-613, stage by stage (`floor.ts` `mr-*` probes)                      | No rise from #26327 on the same project; the reported 204→362 MiB compared two projects. OBS-613 is ~10% lower; memory is spans + semi-join  | done   |
+| X40 | prod       | OBS-591 read caps (1 GiB memory, 256 MiB result, 16 GiB read) replayed: `query_log` what-if, mobs-query A/B, source reads, heavy reads | 58 of 82,819 reads stopped, all giant-payload trace reads; mobs-query unchanged; a 3.8 GiB read stops at 1 GiB in 0.4 s; raw E4 at the cap   | done   |
 
 ## Entries
 
@@ -569,6 +570,80 @@ Isolating that step on prod (largest project, ~2.3M token rows): grouping alone 
 | E4   | 293–298    | 297–304   | 872–875        | 752–771       |
 | T1   | 303–305    | 289–292   | 845–854        | 766–768       |
 | T3   | 299–300    | 291       | 860–867        | 758–766       |
+
+### X40: OBS-591 read guardrails replayed against production (prod replica, read-only, 2026-10-13)
+
+**Question.** Platform's observability reads get per-query caps: `max_memory_usage` 1 GiB, `max_result_bytes`
+256 MiB and `max_bytes_to_read` 16 GiB (all throw), plus a server-side `max_execution_time` on source reads. Which
+real reads would these stop, do mobs-query's own reads change, and does a runaway read actually get cut short?
+
+**Method.** `guardrails.ts` what-if over every `query_log` read of the observability tables (12.7 h, 82,819
+reads, clients told apart by their settings). `mobs-ab.ts run --pair guardrails`: platform#3407 settings (A)
+vs those plus the caps (B) through mobs-query's real service functions, 33 operations, 15 projects, 1 cold + 3
+warm reps per arm (1,840 calls). `read-ab.ts --source`: platform#3446 source settings vs those plus the caps and a
+9 s timeout, on the entity-signals per-trace shapes and the cleanup tenant listing. `read-ab.ts --big-trace`:
+the per-trace reads of the heaviest-payload trace in the window where production went over 1 GiB, across
+`max_threads`/`max_block_size` and today-vs-caps. `heavy-proof.ts`: Q0, Q3, E4 on the largest project, 30 d.
+
+**What-if (reads the caps would have stopped).**
+
+| client                             | reads  | > 1 GiB memory | > 16 GiB read | > 256 MiB result | max memory |
+| ---------------------------------- | ------ | -------------- | ------------- | ---------------- | ---------- |
+| agent-learning `traceReadSettings` | 48,066 | 0              | 0             | 0                | 247 MiB    |
+| source reads, no settings yet      | 19,742 | 56             | 0             | 0                | 1,655 MiB  |
+| mobs-query interactive             | 14,887 | 2              | 0             | 0                | 1,633 MiB  |
+| cleanup `/tenants` (exempt)        | 124    | 124            | 0             | 0                | 2,153 MiB  |
+
+All 58 non-cleanup reads over 1 GiB are per-trace span reads that started at 20:06 UTC, while one project ingested
+a trace with 1,972 spans and 502 MiB of payload. They return little (≤491 rows, ≤68 MiB; the two mobs-query
+reads 64 rows, 2.6 MiB) but read 641–912 MiB of neighbouring rows' payloads. The 56 source reads ran at
+read-ahead 200 (platform#3446 not deployed); the same span-stats shape on that data measures 214–340 MiB at
+read-ahead 8. Entity-signals is in beta and these reads are allowed to fail.
+
+**The heavy trace itself.**
+
+| read (502 MiB-payload trace)                  | memory                                | time   | result    |
+| --------------------------------------------- | ------------------------------------- | ------ | --------- |
+| span stats, threads 16 → 1                    | 340 → 214 MiB                         | < 1 s  | 1 row     |
+| spans, threads 16 → 1                         | 3.8 → 2.7 GiB                         | ~50 s  | 1,069 MiB |
+| trace detail, threads 16 → 1                  | 3.4 → 2.7 GiB                         | ~50 s  | 803 MiB   |
+| trace detail, `max_block_size` 128, 4 threads | 1.9 GiB                               | ~50 s  | 803 MiB   |
+| trace detail, today                           | 3.8 GiB, 241 at the 4 GiB profile cap | 4.3 s  | —         |
+| trace detail, OBS-591 caps                    | 985 MiB, 241                          | 0.37 s | —         |
+
+No thread or block setting brings it under 1 GiB, and its response alone is over the 256 MiB result cap; it
+cannot be shown today either (9 s mobs-query timeout). The cap turns a 3.8 GiB, multi-second read into one
+stopped at 1 GiB in under 0.4 s.
+
+**mobs-query, A vs B (caps).** 0 limit errors in either arm. Warm latency B/A median 0.996 (p10 0.91, p90 1.05),
+memory identical, max peak 610 MiB. The only failures are 9 s timeouts (159) in both arms: cold A 59, B 67 of
+230, split both ways per operation; warm A 1, B 2 of 690 (all `branches_page`, small project).
+
+**Source reads.** p99 and largest per-trace shapes (span stats, spans, version) are unchanged within noise
+(15–81 MiB). The cleanup tenant listing is stopped at 1,023 MiB after 1.2 s (1,942 MiB, 8.7 GiB read uncapped),
+which is why the cleanup client stays exempt.
+
+**Largest project, 30 d.**
+
+| case                        | today               | with caps           |
+| --------------------------- | ------------------- | ------------------- |
+| Q0 `queryTraces()`          | 528–536 MiB, ok     | 523–524 MiB, ok     |
+| Q3 `spans.some`             | 635–640 MiB, ok     | 630–631 MiB, ok     |
+| E4 token/cost on raw tables | 1,022–1,040 MiB, ok | 1,019–1,023 MiB, ok |
+
+The plan's "old `queryTraces()` shapes use 2.6–4 GiB" came from the lab's synthetic data; on production they stay
+under 650 MiB. E4 on the raw tables now sits at the 1 GiB cap (991 MiB in FINDINGS, data has grown): a raw-table
+token aggregate over 30 d on the largest project will start failing with 422. Token/cost aggregates for large
+projects need the per-call usage table (`mastra_model_usage`, 338 MiB in X35) before they ship.
+
+**Conclusions.**
+
+1. 1 GiB stops nothing legitimate in mobs-query's measured paths, and stops the reads that take a third of a
+   node: giant-payload trace reads and the reads they drag along while their parts are unmerged.
+2. The result and read caps stop nothing in 82,819 production reads; they are backstops.
+3. E4-style raw-table token aggregates are at the cap on the largest project; route them through
+   `mastra_model_usage` (OBS-593 u4).
+4. After deploy: re-run `guardrails.ts` and count 241/422/503 by client.
 
 ### X39: largest-project `spans.some` memory, stage by stage (prod replica, 2026-10-13)
 
