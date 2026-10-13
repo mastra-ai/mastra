@@ -1251,9 +1251,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // command's result, so the boot that finds one records it on the link.
       const failures = new Map<string, string>();
       let primaryError: unknown;
-      // Recorded whatever happens: once a repository is materialized and set
-      // up, retirement must tear it down even when this boot fails later.
-      const record = () =>
+      // Failed setup still publishes usable state, but a retired boot must
+      // never restore cleared state or overwrite its replacement.
+      const record = () => {
+        if (workspaceRegistry.generation(session.sessionId) !== workspaceGeneration) return;
         recordSessionEnvironment(
           session.sessionId,
           { workingDirectory: gate.root, repositories: states },
@@ -1262,6 +1263,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             return command ? [{ slug: state.slug, dir: state.dir, command }] : [];
           }),
         );
+      };
       // The repository whose setup is running when the boot throws something
       // other than a setup failure: its outcome is unknown, never `configured`.
       let inFlight: string | undefined;
