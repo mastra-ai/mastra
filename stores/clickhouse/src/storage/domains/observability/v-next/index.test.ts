@@ -570,6 +570,47 @@ LIMIT 1`,
     }
   });
 
+  it('lists a trace with several roots once across keyset pages', async () => {
+    const timeRange = { from: '2026-08-10T00:00:00Z', to: '2026-08-11T00:00:00Z' };
+    const root = (traceId: string, spanId: string, at: string) => ({
+      traceId,
+      spanId,
+      parentSpanId: null,
+      name: 'agent run',
+      spanType: SpanType.AGENT_RUN,
+      isEvent: false,
+      startedAt: new Date(at),
+      endedAt: new Date(at),
+    });
+    // Trace T has roots on either side of trace U's only root, which only a writer bug produces.
+    await storage.createSpan({ span: root('keyset-t', 'root-t1', '2026-08-10T10:00:01.000Z') });
+    await storage.createSpan({ span: root('keyset-t', 'root-t0', '2026-08-10T10:00:00.000Z') });
+    await storage.createSpan({ span: root('keyset-u', 'root-u', '2026-08-10T10:00:00.500Z') });
+
+    for (const field of ['startedAt', 'endedAt'] as const) {
+      for (const direction of ['desc', 'asc'] as const) {
+        const listed: string[] = [];
+        let after: string | undefined;
+        do {
+          const response = await storage.queryTraces(
+            planTraceQuery(
+              parseTraceQueryRequest({
+                timeRange,
+                orderBy: [{ field, direction }],
+                page: { limit: 1, ...(after ? { after } : {}) },
+              }),
+            ),
+          );
+          if (!('traces' in response) || !('page' in response)) throw new Error('Expected keyset trace results');
+          listed.push(...response.traces.map(trace => trace.traceId));
+          after = response.page.next ?? undefined;
+        } while (after && listed.length < 5);
+        // T sorts by its first root in either direction, so it comes first, once.
+        expect(listed, `${field} ${direction}`).toEqual(['keyset-t', 'keyset-u']);
+      }
+    }
+  });
+
   it('keeps ordinary current-score reads proportional to logical rows after merges', async () => {
     const client = createClient({
       url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
