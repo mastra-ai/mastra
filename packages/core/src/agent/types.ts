@@ -964,7 +964,7 @@ interface AgentConfigBase<
    * When provided, the request context will be validated against this schema at the start of generate() and stream() calls.
    * If validation fails, an error is thrown.
    */
-  requestContextSchema?: PublicSchema<TRequestContext>;
+  requestContextSchema?: PublicSchema<TRequestContext, any>;
   /**
    * Background task configuration for this agent.
    * Controls which tools can run in the background and their behavior.
