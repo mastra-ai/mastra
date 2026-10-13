@@ -55,7 +55,7 @@ describeIntegration('OracleStore shared storage suite', () => {
     await poolManager.close();
   });
 
-  createWorkflowsTests({ storage: store });
+  createWorkflowsTests({ storage: store, workflowResultsNoopWhenRunMissing: false });
   createMemoryTest({ storage: store });
   createScoresTest({ storage: store, capabilities: { listScoresBySpan: true, toolMocks: false } });
   createObservabilityTests({ storage: store });
