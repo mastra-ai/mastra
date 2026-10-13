@@ -1212,9 +1212,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       const primaryDir = `${gate.root}/${repositoryDirectoryName(repoFullName)}`;
       const states: SessionEnvironmentRepositoryState[] = [];
       let primaryError: unknown;
-      // Recorded whatever happens: once a repository is materialized and set
-      // up, retirement must tear it down even when this boot fails later.
-      const record = () =>
+      // Failed setup still publishes usable state, but a retired boot must
+      // never restore cleared state or overwrite its replacement.
+      const record = () => {
+        if (workspaceRegistry.generation(session.sessionId) !== workspaceGeneration) return;
         recordSessionEnvironment(
           session.sessionId,
           { workingDirectory: gate.root, repositories: states },
@@ -1223,6 +1224,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             return command ? [{ slug: state.slug, dir: state.dir, command }] : [];
           }),
         );
+      };
       try {
         for (const repo of repos) {
           const entry = gate.repos.find(candidate => candidate.slug === repo.slug);
