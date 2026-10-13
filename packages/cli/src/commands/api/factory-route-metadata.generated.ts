@@ -256,6 +256,7 @@ export const FACTORY_API_ROUTE_METADATA = {
       "autoRunEnabled",
       "defaultModelId",
       "description",
+      "modelScope",
       "name",
       "slackWorkItemsEnabled"
     ],
@@ -1614,14 +1615,17 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "defaultModelId": {
           "$ref": "#/$defs/__schema2"
         },
-        "slackWorkItemsEnabled": {
+        "modelScope": {
           "$ref": "#/$defs/__schema3"
         },
-        "autoRunEnabled": {
+        "slackWorkItemsEnabled": {
           "$ref": "#/$defs/__schema4"
         },
-        "autoApprovePlans": {
+        "autoRunEnabled": {
           "$ref": "#/$defs/__schema5"
+        },
+        "autoApprovePlans": {
+          "$ref": "#/$defs/__schema6"
         }
       },
       "$defs": {
@@ -1653,12 +1657,19 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ]
         },
         "__schema3": {
-          "type": "boolean"
+          "type": "string",
+          "enum": [
+            "factory",
+            "user"
+          ]
         },
         "__schema4": {
           "type": "boolean"
         },
         "__schema5": {
+          "type": "boolean"
+        },
+        "__schema6": {
           "type": "boolean"
         }
       }

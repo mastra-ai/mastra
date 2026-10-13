@@ -1,5 +1,78 @@
 # @mastra/core
 
+## 1.77.0-alpha.3
+
+### Minor Changes
+
+- Added authenticated message authors to AgentController sessions. Pass `author` to `sendMessage`, `queueMessage`, or `steer`, and read it back with `getMessageAuthor`. ([#26549](https://github.com/mastra-ai/mastra/pull/26549))
+
+  ```ts
+  await session.sendMessage({ content: 'Hi', author: { id: 'user-123' } });
+  const messages = await session.thread.listMessages({ threadId: session.thread.requireId() });
+  const message = messages.findLast(message => message.role === 'signal')!;
+  const author = getMessageAuthor(message);
+  ```
+
+- Added transferable AgentController thread ownership and a per-run owner snapshot in request context. New threads record their owner and creator, while ownership changes to the active thread become visible on the next run. ([#26549](https://github.com/mastra-ai/mastra/pull/26549))
+
+  ```ts
+  await session.thread.transferOwnership({ toOwnerId: 'owner-b' });
+  ```
+
+### Patch Changes
+
+- Fixed aborted agent streams reporting empty token usage. When a stream is aborted, `onFinish` now receives the usage of steps that completed before the abort: `totalUsage` is the sum across those steps and `usage` is the last completed step. Observability and cost tracking for cancelled runs now include that completed-step usage. Usage from the step that was still running when the abort happened is not reported. If no step completed before the abort, `usage` and `totalUsage` still have undefined token counts. ([#26629](https://github.com/mastra-ai/mastra/pull/26629))
+
+- Fixed a tool running twice when the same suspended tool call is approved, declined, or resumed concurrently (for example a double click, a client retry, or two open tabs). `approveToolCall`, `declineToolCall`, `resumeStream`, and their generate variants now claim the suspended run before resuming it. Only one caller resumes; the others fail with `AGENT_RESUME_ALREADY_CLAIMED`. ([#26688](https://github.com/mastra-ai/mastra/pull/26688))
+
+  ```ts
+  const results = await Promise.allSettled([
+    agent.approveToolCall({ runId, toolCallId }),
+    agent.approveToolCall({ runId, toolCallId }),
+  ]);
+  // One fulfilled, one rejected with AGENT_RESUME_ALREADY_CLAIMED. The tool runs once.
+  ```
+
+  Durable agents report the losing resume the same way, as an error chunk in its stream with the `AGENT_RESUME_ALREADY_CLAIMED` id.
+
+  What each resume error means:
+
+  - `AGENT_RESUME_ALREADY_CLAIMED`: another approval or resume of this run is running or just finished. Stop retrying.
+  - `AGENT_RESUME_RUN_NOT_SUSPENDED` (durable agents): the run exists but isn't waiting for approval, for example because it already finished or failed. `details.status` gives its state.
+  - `AGENT_RESUME_NO_SNAPSHOT_FOUND`: there is no record of a suspended run. Check the `runId`. Agents delete a run's record when it finishes, so an approval sent after that also gets this error.
+
+  Resuming a workflow run that isn't suspended now throws an error with the id `WORKFLOW_RUN_NOT_SUSPENDED`. The message is unchanged.
+
+  Storage adapters that support atomic updates (for example PostgreSQL, LibSQL, MongoDB, and the in-memory store) protect against duplicates across processes. Other adapters protect against duplicates within a single process.
+
+- Fixed tools returned by an input processor's `processInputStep` (such as `ToolSearchProcessor`'s loaded tools) running with an empty `context.agent.agentId`. They now receive the agent's id, the same as tools assigned to the agent directly, in both regular and durable agents. ([#26816](https://github.com/mastra-ai/mastra/pull/26816))
+
+- Fixed untilIdle streams dropping background tasks started by the run they replaced: a new stream({ untilIdle: true }) on the same thread aborts the earlier idle wrapper, and the new wrapper only tracked tasks whose events it saw itself — so an in-flight task's completion woke nobody and the agent never reported its result. The idle loop now adopts still-running and pending background tasks for its agent, thread, and resource when it starts, so their completions trigger a continuation turn as usual. Fixes #26841 ([#26848](https://github.com/mastra-ai/mastra/pull/26848))
+
+## 1.77.0-alpha.2
+
+### Patch Changes
+
+- Fixed durable, evented, and Inngest agents leaking one run's messages into another run's model prompt when two Mastra instances in the same process reuse a `runId`. ([#26787](https://github.com/mastra-ai/mastra/pull/26787))
+
+- Fixed output guardrails leaving blocked replies in memory. When an output processor aborts in `processOutputResult`, the agent (including durable agents) now deletes the reply messages that the run had already saved. The blocked text no longer stays in memory and is not sent back to the model on the next turn. This affected turns that paused for tool approval (approved or declined) and turns run with `savePerStep: true`. The user's message, earlier turns, and messages sent in as input are kept. Fixes #26215. ([#26252](https://github.com/mastra-ai/mastra/pull/26252))
+
+- Fixed evented agents and nested evented workflows failing with `Workflow with id ... not found` when an orchestration worker runs steps on the API server through `MASTRA_STEP_EXECUTION_URL`. The worker now sends the parent workflow with each step request, so the server can find steps that are only reachable through their parent workflow, such as the steps of an evented agent. Fixes [#26676](https://github.com/mastra-ai/mastra/issues/26676). ([#26695](https://github.com/mastra-ai/mastra/pull/26695))
+
+  Also fixed nested evented workflows hanging when their parent workflow is registered under a key that differs from its `id`.
+
+- Fixed provider tool errors being sent back to the model as successful results. When a provider-run tool returns an error, Mastra now saves it as an error and sends it back as an error in later steps and recalled conversations. ([#26652](https://github.com/mastra-ai/mastra/pull/26652))
+
+- Fixed live scorers missing tool calls when observational memory is enabled. Observational memory removes messages from the agent's context once it has observed them, and live scorers only saw the messages that were left. On runs that suspend and resume, scorer `output` could miss every tool call made before `suspend()`, or end up empty. Scorers now receive every response message the run produced, across all suspend/resume segments, under the original `runId`. The prompt sent to the model is unchanged. ([#26687](https://github.com/mastra-ai/mastra/pull/26687))
+
+- Improved AgentController sessions so each thread restores its saved mode, model, state, token usage, and pending tool prompts when selected. Switching away and `detachFromCurrent()` cancel actively running local executions only for the initiating session. Listeners detach without cancelling the run. Parked runs and pending prompts remain available when switching back. ([#26058](https://github.com/mastra-ai/mastra/pull/26058))
+
+  Fixed first-thread creation to retain explicit startup mode, model, and thinking selections. Later new conversations use controller defaults. Asynchronous state writes and resumed tools keep their source thread's preferences without changing another active conversation. Addressed resumes recover the originating agent after restart and support repeated suspensions while another thread stays active. The executing run saves token usage to its own thread and retains unsaved measurements for retry on the next step. Subscribers display saved totals without counting replayed steps again or saving usage. Storage-free sessions can still receive inactive wake signals. Custom state and permissions remain host-scoped.
+
+  Changed `session.thread.set()` and `session.thread.clear()` to throw during thread lifecycle transitions. Added address-based suspension APIs and event fields so callers can safely claim and resume a prompt after switching threads: `const claim = session.claimToolSuspension(toolCallId, runId)` returns an `address` that can be passed to `session.respondToToolSuspension({ address, resumeData })`. Exported `SuspensionAddress` and `getSuspensionAddressKey` for hosts that persist or key those addresses.
+
+  Deprecated the `SessionRecord.modeId`, `modelId`, `state`, and `pending` fields, the `HarnessStorage.appendPendingItem()`, `updatePendingItem()`, and `removePendingItem()` helpers, and `SessionSuspensions.resolveToolCallId()`.
+
 ## 1.77.0-alpha.1
 
 ### Minor Changes

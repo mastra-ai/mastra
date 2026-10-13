@@ -2,6 +2,8 @@ import { FactoryStorageDomain } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
 export const DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES = 10;
+export const FACTORY_MODEL_SCOPES = ['factory', 'user'] as const;
+export type FactoryModelScope = (typeof FACTORY_MODEL_SCOPES)[number];
 
 export interface FactoryProject {
   id: string;
@@ -11,6 +13,8 @@ export interface FactoryProject {
   description: string | null;
   /** Default model for sessions/runs started under this Factory (null = harness default). */
   defaultModelId: string | null;
+  /** Whether sessions use the Factory's model and credentials or the current user's. */
+  modelScope: FactoryModelScope;
   /** Whether new Slack sessions create Work-board items for this Factory. */
   slackWorkItemsEnabled: boolean;
   /** Whether rules may start agent runs on their own; off, a run waits for approval on its card. */
@@ -51,6 +55,7 @@ export interface UpdateFactoryProjectInput {
   name?: string;
   description?: string | null;
   defaultModelId?: string | null;
+  modelScope?: FactoryModelScope;
   slackWorkItemsEnabled?: boolean;
   autoRunEnabled?: boolean;
   autoApprovePlans?: boolean;
@@ -75,6 +80,7 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     name: { type: 'text' },
     description: { type: 'text', nullable: true },
     default_model_id: { type: 'text', nullable: true },
+    model_scope: { type: 'text', default: 'factory' },
     slack_work_items_enabled: { type: 'boolean', default: false },
     auto_run_enabled: { type: 'boolean', default: false },
     auto_approve_plans: { type: 'boolean', default: false },
@@ -103,6 +109,7 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   name: string;
   description: string | null;
   default_model_id: string | null;
+  model_scope: string;
   slack_work_items_enabled: boolean;
   auto_run_enabled: boolean;
   auto_approve_plans: boolean;
@@ -129,6 +136,7 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     name: row.name,
     description: row.description,
     defaultModelId: row.default_model_id,
+    modelScope: row.model_scope === 'user' ? 'user' : 'factory',
     slackWorkItemsEnabled: row.slack_work_items_enabled,
     autoRunEnabled: row.auto_run_enabled,
     autoApprovePlans: row.auto_approve_plans ?? false,
@@ -180,6 +188,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       name: input.name,
       description: input.description ?? null,
       default_model_id: input.defaultModelId ?? null,
+      model_scope: 'factory',
       slack_work_items_enabled: false,
       auto_run_enabled: false,
       auto_approve_plans: false,
@@ -234,6 +243,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
           ...(changes.name !== undefined ? { name: changes.name } : {}),
           ...(changes.description !== undefined ? { description: changes.description } : {}),
           ...(changes.defaultModelId !== undefined ? { default_model_id: changes.defaultModelId } : {}),
+          ...(changes.modelScope !== undefined ? { model_scope: changes.modelScope } : {}),
           ...(changes.slackWorkItemsEnabled !== undefined
             ? { slack_work_items_enabled: changes.slackWorkItemsEnabled }
             : {}),
