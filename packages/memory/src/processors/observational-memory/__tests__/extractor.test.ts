@@ -1035,7 +1035,9 @@ describe('required inline extractor sections', () => {
     ]);
 
     expect(parsed.values).toEqual({});
-    expect(parsed.failures).toEqual([{ slug: 'profile', error: expect.stringContaining('required <profile> section') }]);
+    expect(parsed.failures).toEqual([
+      { slug: 'profile', error: expect.stringContaining('required <profile> section') },
+    ]);
   });
 
   it('treats UNCHANGED in a required section as an explicit no-change answer', () => {
@@ -1045,10 +1047,9 @@ describe('required inline extractor sections', () => {
       requireInlineSection: true,
     });
 
-    const parsed = parseExtractedValues(
-      '<observations>Nothing durable.</observations>\n<profile>UNCHANGED</profile>',
-      [required],
-    );
+    const parsed = parseExtractedValues('<observations>Nothing durable.</observations>\n<profile>UNCHANGED</profile>', [
+      required,
+    ]);
 
     expect(parsed.values).toEqual({});
     expect(parsed.failures).toEqual([]);
