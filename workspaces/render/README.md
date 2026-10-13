@@ -2,19 +2,7 @@
 
 Give an agent a separate environment to execute generated code, inspect files, and run tests. `RenderSandbox` plugs into Mastra's `Workspace` and supplies its built-in shell tool. Your TypeScript application runs on the host and calls the model provider. Commands and project files run in a Render sandbox; tool output returns to the agent and can be sent to the model.
 
-This package is a **local, unpublished integration candidate**. Render maintains the integration. It is prepared as `@mastra/render` in Mastra's workspace, subject to Mastra's review and acceptance. It needs no workflow service. The prepared Mastra catalog and documentation changes have not been submitted or accepted.
-
-Tested with Render SDK 1.2.0 and Mastra core 1.75.0: 71 tests, build, typechecking, live SDK checks, and real Claude Haiku 4.5 and Sonnet 4.6 agent runs pass. The 71-test suite also passes on source-built [official main `918704fd4608`](https://github.com/mastra-ai/mastra/commit/918704fd4608aa4d9d90d4d92c0a3429de2b880a), version 1.76.0-alpha.5. After the networking fix, fresh Haiku runs on released core and Sonnet runs on pinned main pass. Earlier runs cover both models on both cores. Core 1.67.0 has packed-package import and type compatibility checks, including coexistence with Render Workflows. The peer range follows Mastra's provider convention, `>=1.67.0-0 <2.0.0-0`; the tested versions are listed here rather than implying every version was exercised. See [verification evidence](validation/RESULTS.md) for the exact scope and the remaining core cancellation-reporting issue.
-
-## Installation
-
-After Mastra publishes the package, install it with:
-
-```bash
-npm install @mastra/render
-```
-
-Until then, use the local build and archive instructions below.
+This package is an **unpublished preview** available from this checkout. Build it locally using the instructions below.
 
 ## Usage
 
@@ -52,11 +40,10 @@ From the Mastra repository root, install and build the package with its workspac
 ```bash
 pnpm install --frozen-lockfile
 pnpm turbo build --filter @mastra/render
-pnpm --filter @mastra/render test:unit
 pnpm --filter @mastra/render example
 ```
 
-Successful output (abbreviated from the live test; the ID varies):
+Example output (abbreviated; the ID varies):
 
 ```text
 Sandbox sbx-...: running
@@ -172,7 +159,7 @@ const sandbox = new RenderSandbox({
 });
 ```
 
-SDK 1.2.0 sends `allowedDomains`, but the live API requires `rules`. The adapter accepts the current typed format above and translates legacy `{ default: 'allow-list', allowedDomains: [...] }` into HTTPS rules through the same public SDK client. HTTP is blocked, including for an allowed domain. Exact domains do not include subdomains. The adapter never falls back to allow-all. Direct `sdk.create()` bypasses this compatibility mapping. Live checks verify deny-all, explicit allow-all, allowed HTTPS, a denied domain and denied HTTP. See the [operation coverage record](validation/RESULTS.md#operation-coverage-audit) for evidence and test limits.
+SDK 1.2.0 sends `allowedDomains`, but the live API requires `rules`. The adapter accepts the current typed format above and translates legacy `{ default: 'allow-list', allowedDomains: [...] }` into HTTPS rules through the same public SDK client. HTTP is blocked, including for an allowed domain. Exact domains do not include subdomains. The adapter never falls back to allow-all. Direct `sdk.create()` bypasses this compatibility mapping.
 
 Creation fields pass through to the SDK, with the networking compatibility mapping below. During Render's current early access, the service uses Oregon and a fixed compute size, so supplying `region` or `plan` does not select different infrastructure. See the [SDK creation reference](https://render.com/docs/sandboxes-sdk-typescript#sandbox-lifecycle) for service constraints.
 
@@ -232,7 +219,7 @@ Process groups cover ordinary descendants, not a deliberately detached process t
 
 `cancellationMode: 'observe'` keeps the SDK's observation-only behavior and leaves the provider reusable. The native `exec()` event iterator always has observation-only cancellation, regardless of mode. Closing its iterator or aborting its signal does not claim remote termination.
 
-If command termination cannot be confirmed, the adapter throws with `details.remoteMayBeRunning: true`; it never fabricates `killed: true`. The separate [Mastra issue #26580](https://github.com/mastra-ai/mastra/issues/26580) remains relevant: core 1.75.0 and tested main can prepend a false “killed” statement to an aborted tool error. Successful confirmed cancellation works with those versions. The proposed generic core correction is documented in [UPSTREAM.md](docs/UPSTREAM.md).
+If command termination cannot be confirmed, the adapter throws with `details.remoteMayBeRunning: true`; it never fabricates `killed: true`. The separate [Mastra issue #26580](https://github.com/mastra-ai/mastra/issues/26580) remains relevant: core 1.75.0 and tested main can prepend a false “killed” statement to an aborted tool error. Successful confirmed cancellation works with those versions.
 
 ### Bounds and configuration
 
@@ -255,23 +242,13 @@ Creation and other SDK control-plane methods do not accept AbortSignal. The adap
 
 This package provides the Workspace sandbox and checkpoint interfaces, not `WorkspaceFilesystem`, mounts, an interactive background process manager, stdin, public preview URLs or code-mode transport. The current Render SDK has no native methods for those facilities. Agent file work uses shell commands; SDK file transfers and snapshots are exposed directly as described above.
 
-### Verification
-
-From the package directory, run `pnpm test:unit`, `pnpm typecheck`, `pnpm lint` and `pnpm build` for local checks. `pnpm test:package` verifies the packed ESM and CommonJS exports and TypeScript consumer compatibility. The shared workspace CI automatically discovers this package. `pnpm test:cloud` runs the live SDK smoke test when both Render credentials are set; otherwise Vitest reports it as skipped. With host Render credentials configured, `npm run test:production-live` checks real cancellation, concurrent work, large transfers, archive extraction, metadata and filesystem/runtime restoration, then deletes its test snapshots and sandboxes. `npm run example` runs the real agent repair task. Evidence and compatibility results are in [validation/RESULTS.md](validation/RESULTS.md).
-
 ### Render Workflows
 
 Sandboxes supply the environment in which an agent executes commands. Render Workflows orchestrates durable tasks. They can be composed by creating and cleaning up a sandbox inside an existing task, after accounting for workflow retries potentially repeating agent work. This package imports no Workflows integration or worker transport. Both integrations pin `@renderinc/sdk` 1.2.0 and accept compatible host Render client configuration; the SDK already owns authentication fallback, so no shared helper is needed.
 
-The existing `@renderinc/mastra` Workflows package is private and its upstream PR remains under review. It is never a prerequisite for this example. See [research and API decisions](docs/RESEARCH.md) and [verification evidence](validation/RESULTS.md).
-
 ## Documentation
 
-Read the [Render integration guide](https://mastra.ai/integrations/sandboxes/render) for agent setup and lifecycle details. This route is prepared locally and becomes public only after the documentation change is accepted. The [upstream handoff](docs/UPSTREAM.md) records submission and verification status.
-
-## Changelog
-
-Release history will appear in the [package changelog](https://github.com/mastra-ai/mastra/blob/main/workspaces/render/CHANGELOG.md).
+Read the [Render integration guide](../../docs/src/content/en/integrations/sandboxes/render.mdx) for agent setup and lifecycle details.
 
 ## Support
 
