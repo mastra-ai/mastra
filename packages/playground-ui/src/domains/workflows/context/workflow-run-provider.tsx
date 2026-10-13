@@ -12,6 +12,7 @@ import type { ReactNode } from 'react';
 import {
   convertWorkflowRunStateToStreamResult,
   isIdleRunStatus,
+  isObservedResultStale,
   isWorkflowRunFinished,
   readStoredPayload,
   resolveWorkflowRunResult,
@@ -94,7 +95,12 @@ export function WorkflowRunProvider({
     () => (storedSnapshot ? convertWorkflowRunStateToStreamResult(storedSnapshot) : null),
     [storedSnapshot],
   );
-  const result = useMemo(() => resolveWorkflowRunResult(liveResult, storedResult), [liveResult, storedResult]);
+  const observedResultIsStale = isObserving && !override && isObservedResultStale(streamedResult, storedResult);
+  const visibleLiveResult = observedResultIsStale ? null : liveResult;
+  const result = useMemo(
+    () => resolveWorkflowRunResult(visibleLiveResult, storedResult),
+    [visibleLiveResult, storedResult],
+  );
   const runSnapshot = initialRunId ? storedSnapshot : undefined;
   const observedRunIsIdle = isObserving && isIdleRunStatus(result?.status);
   const isStreamingWorkflow = isStreamOpen && !observedRunIsIdle;

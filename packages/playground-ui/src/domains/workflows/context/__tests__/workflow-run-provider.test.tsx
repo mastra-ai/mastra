@@ -19,9 +19,12 @@ import {
   partialCompletedLoop,
   pausedLoop,
   rawCompletedRun,
+  resumedApprovalRun,
+  runningApprovalRun,
+  secondApprovalRun,
   suspendedLoop,
 } from './fixtures/completed-loop';
-import { completedChunks, replayedChunks, runningChunk } from './fixtures/workflow-stream';
+import { approvalSuspendedChunks, completedChunks, replayedChunks, runningChunk } from './fixtures/workflow-stream';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -39,6 +42,7 @@ function CompletedRunProbe() {
     timeTravelWorkflowStream,
     observeWorkflowStream,
     isStreamingWorkflow,
+    streamResult,
   } = useContext(WorkflowRunContext);
   return (
     <>
@@ -127,6 +131,9 @@ function CompletedRunProbe() {
       <output aria-label="Stream completion">{streamFinished ? 'Finished' : 'Pending'}</output>
       <output aria-label="Streaming state">{String(isStreamingWorkflow)}</output>
       <output aria-label="Run state">{result?.status}</output>
+      <output aria-label="Streamed state">{streamResult?.status}</output>
+      <output aria-label="Approval state">{result?.steps.approval?.status}</output>
+      <output aria-label="Second approval state">{result?.steps['second-approval']?.status}</output>
       <output aria-label="Step IDs">{JSON.stringify(Object.keys(result?.steps ?? {}))}</output>
       <output aria-label="Child state">
         {result?.steps['analyze-document[0].count-words']?.status ?? 'No child state'}
@@ -159,7 +166,7 @@ function renderProvider(initialRunId?: string, children?: ReactNode) {
     </MastraReactProvider>
   );
   const view = render(tree(initialRunId));
-  return { ...view, selectRun: (runId?: string) => view.rerender(tree(runId)) };
+  return { ...view, queryClient, selectRun: (runId?: string) => view.rerender(tree(runId)) };
 }
 
 describe('WorkflowRunProvider', () => {
@@ -405,6 +412,74 @@ describe('WorkflowRunProvider', () => {
       });
       await waitFor(() => expect(screen.getByLabelText('Run state').textContent).toBe('success'));
       expect(screen.getByLabelText('Child output').textContent).toBe('{"words":2}');
+    });
+  });
+
+  describe('when observing a run that was resumed outside Studio', () => {
+    it('keeps the stored progress instead of the replayed suspension', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/workflows/two-step-workflow/runs/completed-loop`, () =>
+          HttpResponse.json(resumedApprovalRun),
+        ),
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/create-run`, () =>
+          HttpResponse.json({ runId: completedLoop.runId }),
+        ),
+        http.post(
+          `${BASE_URL}/api/workflows/two-step-workflow/observe`,
+          () => new HttpResponse(approvalSuspendedChunks.map(chunk => JSON.stringify(chunk) + '\x1e').join('')),
+        ),
+      );
+      renderProvider(completedLoop.runId);
+      await waitFor(() => expect(screen.getByLabelText('Run state').textContent).toBe('running'));
+      fireEvent.click(screen.getByRole('button', { name: 'Observe run' }));
+      await waitFor(() => expect(screen.getByLabelText('Streamed state').textContent).toBe('suspended'));
+      expect(screen.getByLabelText('Run state').textContent).toBe('running');
+      expect(screen.getByLabelText('Approval state').textContent).toBe('success');
+    });
+
+    it('keeps only the current suspension after the run suspends again', async () => {
+      let storedRun = resumedApprovalRun;
+      server.use(
+        http.get(`${BASE_URL}/api/workflows/two-step-workflow/runs/completed-loop`, () => HttpResponse.json(storedRun)),
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/create-run`, () =>
+          HttpResponse.json({ runId: completedLoop.runId }),
+        ),
+        http.post(
+          `${BASE_URL}/api/workflows/two-step-workflow/observe`,
+          () => new HttpResponse(approvalSuspendedChunks.map(chunk => JSON.stringify(chunk) + '\x1e').join('')),
+        ),
+      );
+      const { queryClient } = renderProvider(completedLoop.runId);
+      await waitFor(() => expect(screen.getByLabelText('Run state').textContent).toBe('running'));
+      fireEvent.click(screen.getByRole('button', { name: 'Observe run' }));
+      await waitFor(() => expect(screen.getByLabelText('Streamed state').textContent).toBe('suspended'));
+      storedRun = secondApprovalRun;
+      await act(() => queryClient.invalidateQueries());
+      await waitFor(() => expect(screen.getByLabelText('Second approval state').textContent).toBe('suspended'));
+      expect(screen.getByLabelText('Run state').textContent).toBe('suspended');
+      expect(screen.getByLabelText('Approval state').textContent).toBe('success');
+    });
+  });
+
+  describe('when a run suspends while being observed', () => {
+    it('shows the suspension before the stored run records it', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/workflows/two-step-workflow/runs/completed-loop`, () =>
+          HttpResponse.json(runningApprovalRun),
+        ),
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/create-run`, () =>
+          HttpResponse.json({ runId: completedLoop.runId }),
+        ),
+        http.post(
+          `${BASE_URL}/api/workflows/two-step-workflow/observe`,
+          () => new HttpResponse(approvalSuspendedChunks.map(chunk => JSON.stringify(chunk) + '\x1e').join('')),
+        ),
+      );
+      renderProvider(completedLoop.runId);
+      await waitFor(() => expect(screen.getByLabelText('Approval state').textContent).toBe('running'));
+      fireEvent.click(screen.getByRole('button', { name: 'Observe run' }));
+      await waitFor(() => expect(screen.getByLabelText('Run state').textContent).toBe('suspended'));
+      expect(screen.getByLabelText('Approval state').textContent).toBe('suspended');
     });
   });
 

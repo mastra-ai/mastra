@@ -94,6 +94,17 @@ function mergeStepResults(liveSteps: WorkflowRunStreamResult['steps'], storedSte
   return { ...storedSteps, ...Object.fromEntries(mergedLiveSteps) };
 }
 
+// /observe replays buffered history, which can end at a suspension the stored run has already finished.
+export function isObservedResultStale(
+  observedResult: WorkflowRunStreamResult | null,
+  storedResult: WorkflowRunStreamResult | null,
+) {
+  if (!observedResult || !storedResult) return false;
+  return Object.entries(observedResult.steps).some(
+    ([stepId, step]) => step.status === 'suspended' && isWorkflowRunFinished(storedResult.steps[stepId]?.status),
+  );
+}
+
 export function resolveWorkflowRunResult(
   liveResult: WorkflowRunStreamResult | null,
   storedResult: WorkflowRunStreamResult | null,

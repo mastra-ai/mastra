@@ -32,6 +32,27 @@ export const completedChunks: StreamVNextChunkType[] = [
   },
 ];
 
+// An /observe stream that ends with the run suspended at `approval`.
+export const approvalSuspendedChunks: StreamVNextChunkType[] = [
+  { ...runningChunk, runId: completedLoop.runId },
+  {
+    type: 'workflow-step-suspended',
+    runId: completedLoop.runId,
+    from: 'WORKFLOW',
+    payload: { id: 'approval', status: 'suspended', payload: {}, suspendPayload: {} },
+  },
+  {
+    type: 'workflow-finish',
+    runId: completedLoop.runId,
+    from: 'WORKFLOW',
+    payload: {
+      workflowStatus: 'suspended',
+      output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+      metadata: {},
+    },
+  },
+];
+
 export const replayedChunks: StreamVNextChunkType[] = completedChunks.map(chunk => ({
   ...chunk,
   runId: completedLoop.runId,

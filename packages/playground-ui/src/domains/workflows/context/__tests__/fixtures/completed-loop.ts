@@ -36,6 +36,30 @@ export const partialCompletedLoop: GetWorkflowRunByIdResponse = {
 
 export const pausedLoop: GetWorkflowRunByIdResponse = { ...suspendedLoop, status: 'paused' };
 
+export const resumedApprovalRun: GetWorkflowRunByIdResponse = {
+  ...completedLoop,
+  status: 'running',
+  steps: {
+    approval: { status: 'success', payload: {}, output: {}, startedAt: 100, endedAt: 110 },
+    slow: { status: 'running', payload: {}, startedAt: 120 },
+  },
+};
+
+export const runningApprovalRun: GetWorkflowRunByIdResponse = {
+  ...completedLoop,
+  status: 'running',
+  steps: { approval: { status: 'running', payload: {}, startedAt: 100 } },
+};
+
+export const secondApprovalRun: GetWorkflowRunByIdResponse = {
+  ...completedLoop,
+  status: 'suspended',
+  steps: {
+    approval: { status: 'success', payload: {}, output: {}, startedAt: 100, endedAt: 110 },
+    'second-approval': { status: 'suspended', payload: {}, suspendPayload: {}, startedAt: 120, suspendedAt: 130 },
+  },
+};
+
 export const completedIterationArray: GetWorkflowRunByIdResponse = {
   ...completedLoop,
   steps: {
