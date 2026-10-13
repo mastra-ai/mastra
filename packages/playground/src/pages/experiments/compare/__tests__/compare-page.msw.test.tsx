@@ -13,6 +13,7 @@ import {
   emptyScores,
   comparisonOf,
 } from './fixtures/page';
+import { storageWithoutMetrics } from '@/domains/configuration/hooks/__tests__/fixtures/observability-storage-capabilities';
 import { buildListExperimentsResponse } from '@/domains/experiments/components/__tests__/fixtures/experiments';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
@@ -35,6 +36,8 @@ beforeEach(() => {
       HttpResponse.json(emptyResults),
     ),
     http.get(`${TEST_BASE_URL}/api/scores/run/:experimentId`, () => HttpResponse.json(emptyScores)),
+    // Metrics off: per-item usage is covered by the comparison layout test.
+    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(storageWithoutMetrics)),
   );
 });
 
