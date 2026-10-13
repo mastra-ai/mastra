@@ -418,6 +418,60 @@ describe('UpstashTransport', () => {
   });
 
   describe('listLogs and listLogsByRunId', () => {
+    it('skips malformed entries without inventing empty logs in an unpaginated snapshot', async () => {
+      const logs = [
+        { msg: 'first', time: 1 },
+        { msg: 'second', time: 2 },
+      ];
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{ result: [JSON.stringify(logs[0]), 'invalid json', JSON.stringify(logs[1])] }],
+      });
+
+      expect(await transport.listLogs({ returnPaginationResults: false })).toEqual({
+        logs,
+        total: 2,
+        page: 1,
+        perPage: 2,
+        hasMore: false,
+      });
+    });
+
+    it('returns no log records when every snapshot entry is malformed', async () => {
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{ result: ['invalid json', '{'] }],
+      });
+
+      expect(await transport.listLogs({ returnPaginationResults: false })).toEqual({
+        logs: [],
+        total: 0,
+        page: 1,
+        perPage: 0,
+        hasMore: false,
+      });
+    });
+
+    it('skips malformed page entries while preserving Redis list pagination metadata', async () => {
+      const log = { msg: 'valid', time: 1 };
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{ result: 3 }, { result: ['invalid json', JSON.stringify(log)] }],
+      });
+
+      expect(await transport.listLogs({ page: 1, perPage: 2 })).toEqual({
+        logs: [log],
+        total: 3,
+        page: 1,
+        perPage: 2,
+        hasMore: true,
+      });
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual([
+        ['LLEN', 'test-logs'],
+        ['LRANGE', 'test-logs', 0, 1],
+      ]);
+    });
+
     it('should normalize page 0 to page 1 when listLogs fails', async () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       fetchMock.mockImplementation(() => Promise.reject(new Error('Upstash down')));
