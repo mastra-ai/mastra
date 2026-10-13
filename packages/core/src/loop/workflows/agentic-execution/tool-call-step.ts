@@ -87,6 +87,14 @@ type AddToolMetadataOptions = {
     }
 );
 
+/**
+ * Creates the agentic-execution step for a tool call using the run's live message list.
+ *
+ * Handles approval gates and suspension/resume metadata, executes the tool, and
+ * emits its lifecycle chunks through the run's output writer.
+ *
+ * @returns A workflow step that produces the tool result or serialized error.
+ */
 export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   tools,
   messageList,
