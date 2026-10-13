@@ -132,8 +132,10 @@ export async function readDomainMetrics(url: string, runId: string) {
       exports: events.filter(e => e.kind === 'exported').length,
     };
   } finally {
-    db?.close();
-    processing?.close();
-    review?.close();
+    await Promise.allSettled([
+      Promise.resolve().then(() => db?.close()),
+      Promise.resolve().then(() => processing?.close()),
+      Promise.resolve().then(() => review?.close()),
+    ]);
   }
 }

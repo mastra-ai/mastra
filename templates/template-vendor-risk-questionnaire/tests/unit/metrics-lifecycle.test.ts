@@ -29,3 +29,36 @@ it.each([0, 1, 2, 3])('closes only opened metrics stores when stage %i fails', a
     expect(close[i]).toHaveBeenCalledTimes(i < failureAt ? 1 : 0);
   }
 });
+
+it('waits for asynchronous cleanup and preserves the read error when cleanup fails', async () => {
+  const failure = new Error('READ_FAILED');
+  let finishClose!: () => void;
+  const dbClose = vi.fn(() => {
+    throw new Error('DB_CLOSE_FAILED');
+  });
+  const processingClose = vi.fn(
+    () =>
+      new Promise<void>((_, reject) => {
+        finishClose = () => reject(new Error('DRAIN_FAILED'));
+      }),
+  );
+  const reviewClose = vi.fn();
+  vi.mocked(openDatabase).mockResolvedValue({ close: dbClose } as unknown as Awaited<ReturnType<typeof openDatabase>>);
+  vi.mocked(openProcessingStore).mockResolvedValue({
+    close: processingClose,
+    status: vi.fn().mockRejectedValue(failure),
+  } as unknown as Awaited<ReturnType<typeof openProcessingStore>>);
+  vi.mocked(openReviewStore).mockResolvedValue({ close: reviewClose } as unknown as Awaited<
+    ReturnType<typeof openReviewStore>
+  >);
+  let settled = false;
+  const result = readDomainMetrics('file:test.db', 'run').catch(error => {
+    settled = true;
+    return error;
+  });
+  await vi.waitFor(() => expect(processingClose).toHaveBeenCalledOnce());
+  expect(settled).toBe(false);
+  expect(reviewClose).toHaveBeenCalledOnce();
+  finishClose();
+  expect(await result).toBe(failure);
+});
