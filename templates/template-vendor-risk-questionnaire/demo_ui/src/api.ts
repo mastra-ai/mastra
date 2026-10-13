@@ -1,3 +1,4 @@
+import { downloadFilename } from './download-filename.ts';
 import type { ReviewState, ReviewDecision } from '../../src/mastra/contracts/review.ts';
 export type { ReviewState, ReviewDecision };
 export type Questionnaire = {
@@ -69,7 +70,7 @@ export async function download(path: string) {
     url = URL.createObjectURL(await response.blob());
   const link = document.createElement('a');
   link.href = url;
-  link.download = response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1] ?? 'answered';
+  link.download = downloadFilename(response.headers);
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
