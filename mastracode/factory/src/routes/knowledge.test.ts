@@ -664,6 +664,56 @@ describe('KnowledgeRoutes', () => {
     });
   });
 
+  it('keeps hidden sessions out of cursors and child-scope counts', async () => {
+    const h = await createHarness();
+    const anchor = await node(h.knowledge, 'Session Anchor', h.threadScope('thread-live'));
+    await record(h.knowledge, anchor, 'Live session evidence', h.threadScope('thread-live'), 'thread-live');
+    // A recordless session: hidden from every projection, including counts.
+    await scopePathIds(h.knowledge, h.threadScope('thread-empty'));
+
+    const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    expect(response.status).toBe(200);
+    const tree = (await response.json()) as KnowledgeScopeTreePayload;
+    const project = (tree.scopeNodes ?? []).find(scopeNode => scopeNode.address === `resource:${h.projectId}`);
+    // Only the live session counts as a child scope of the project.
+    expect(project?.childScopeCount).toBe(1);
+    const emptyAddress = `resource:${h.projectId}:thread:thread-empty`;
+    const emptyId = (await h.knowledge.getScopeAddress(emptyAddress))?.scopeNodeId;
+    expect(emptyId).toBeDefined();
+    expect(JSON.stringify(tree)).not.toContain(emptyId);
+    // A hidden session id is not accepted as a paging cursor either.
+    const probe = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/scopes?parentId=${project!.id}&cursor=${emptyId}`,
+    );
+    expect(probe.status).toBe(400);
+  });
+
+  it('keeps the identity chain in the initial tree even when earlier-sorting scopes fill the window', async () => {
+    const h = await createHarness({ limits: { maxNodes: 4 } });
+    await h.knowledge.reconcileStructure({
+      scopes: [
+        { address: `org:${ORG}`, name: ORG },
+        // Names sorting ahead of the project would otherwise consume the window.
+        ...Array.from({ length: 6 }, (_, index) => ({
+          address: `aaa:${index}`,
+          name: `aaa ${index}`,
+          parentAddresses: [`org:${ORG}`],
+        })),
+      ],
+    });
+    const anchor = await node(h.knowledge, 'Identity Anchor', h.threadScope('thread-id'));
+    await record(h.knowledge, anchor, 'Identity evidence', h.threadScope('thread-id'), 'thread-id');
+
+    const response = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/scopes?threadId=thread-id&scopeLevel=thread`,
+    );
+    expect(response.status).toBe(200);
+    const tree = (await response.json()) as KnowledgeScopeTreePayload;
+    const addressesReturned = (tree.scopeNodes ?? []).map(scopeNode => scopeNode.address);
+    expect(addressesReturned).toContain(`resource:${h.projectId}`);
+    expect(addressesReturned).toContain(`resource:${h.projectId}:thread:thread-id`);
+  });
+
   it('labels scope nodes by what they are: org, project, session, or the structural kind/topic', async () => {
     const h = await createHarness();
     await h.knowledge.reconcileStructure({
@@ -1565,6 +1615,29 @@ describe('KnowledgeRoutes', () => {
       rung: 'thread',
       threadId: 't-enrich',
     });
+  });
+
+  it("never derives an event's threadId from another project's session scope", async () => {
+    const h = await createHarness();
+    // A node attached to the viewed project AND a foreign project's private session.
+    const projectIds = await scopePathIds(h.knowledge, h.projectScope);
+    const foreignIds = await scopePathIds(h.knowledge, [
+      `org:${ORG}`,
+      'resource:foreign-project',
+      'resource:foreign-project:thread:private-thread-x',
+    ]);
+    const shared = await h.knowledge.createNode({
+      name: 'Shared Node',
+      kind: 'concept',
+      scopeIds: [projectIds.at(-1)!, foreignIds.at(-1)!],
+      contextScopeId: projectIds.at(-1),
+    });
+    await record(h.knowledge, shared, 'Shared evidence', h.projectScope);
+
+    const response = await activity(h);
+    expect(response.status).toBe(200);
+    expect(response.body.events.length).toBeGreaterThan(0);
+    expect(JSON.stringify(response.body)).not.toContain('private-thread-x');
   });
 
   it('authorizes activity targets before window shaping so a hidden backlog cannot displace visible events', async () => {
