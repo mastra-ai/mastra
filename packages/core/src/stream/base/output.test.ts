@@ -1322,6 +1322,179 @@ describe('MastraModelOutput', () => {
       expect(finishPayload.content).toEqual([]);
     });
 
+    it('should report usage from steps completed before the abort in the aborted onFinish payload', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      let finishPayload: any;
+
+      const stream = createChunkStream([
+        createStepFinishChunk(runId),
+        {
+          type: 'text-delta',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { text: 'partial answer' },
+        },
+        {
+          type: 'abort',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {},
+        },
+        createStepFinishChunk(runId, undefined, { inputTokens: 99, outputTokens: 99, totalTokens: 198 }),
+      ] as ChunkType[]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: '__GATEWAY_OPENAI_MODEL__', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: {
+          runId,
+          onFinish: async payload => {
+            finishPayload = payload;
+          },
+        },
+      });
+
+      await output.consumeStream();
+
+      expect(finishPayload.finishReason).toBe('aborted');
+      expect(finishPayload.usage).toMatchObject({ inputTokens: 10, outputTokens: 20, totalTokens: 30 });
+      expect(finishPayload.totalUsage).toMatchObject({ inputTokens: 10, outputTokens: 20, totalTokens: 30 });
+    });
+
+    it('should sum usage across all steps completed before the abort and report the last step as usage', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      let finishPayload: any;
+
+      const stream = createChunkStream([
+        createStepFinishChunk(runId, undefined, {
+          inputTokens: 10,
+          outputTokens: 20,
+          totalTokens: 30,
+          reasoningTokens: 3,
+          cachedInputTokens: 4,
+        }),
+        createStepFinishChunk(runId, undefined, {
+          inputTokens: 5,
+          outputTokens: 5,
+          totalTokens: 10,
+          reasoningTokens: 2,
+        }),
+        {
+          type: 'abort',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {},
+        },
+      ] as ChunkType[]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: '__GATEWAY_OPENAI_MODEL__', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: {
+          runId,
+          onFinish: async payload => {
+            finishPayload = payload;
+          },
+        },
+      });
+
+      await output.consumeStream();
+
+      expect(finishPayload.finishReason).toBe('aborted');
+      expect(finishPayload.totalUsage).toMatchObject({
+        inputTokens: 15,
+        outputTokens: 25,
+        totalTokens: 40,
+        reasoningTokens: 5,
+        cachedInputTokens: 4,
+      });
+      expect(finishPayload.usage).toMatchObject({
+        inputTokens: 5,
+        outputTokens: 5,
+        totalTokens: 10,
+        reasoningTokens: 2,
+      });
+    });
+
+    it('should keep completed-step usage in the aborted payload after a continuing goal truncates the step buffer', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      let finishPayload: any;
+
+      const stream = createChunkStream([
+        createStepFinishChunk(runId, undefined, { inputTokens: 10, outputTokens: 20, totalTokens: 30 }),
+        createGoalChunk(runId, { shouldContinue: true }),
+        { type: 'text-delta', runId, from: ChunkFrom.AGENT, payload: { id: 'text-1', text: 'next turn' } },
+        {
+          type: 'abort',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {},
+        },
+      ] as ChunkType[]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: '__GATEWAY_OPENAI_MODEL__', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: {
+          runId,
+          onFinish: async payload => {
+            finishPayload = payload;
+          },
+        },
+      });
+
+      await output.consumeStream();
+
+      expect(finishPayload.finishReason).toBe('aborted');
+      expect(finishPayload.totalUsage).toMatchObject({ inputTokens: 10, outputTokens: 20, totalTokens: 30 });
+      expect(finishPayload.usage).toMatchObject({ inputTokens: 10, outputTokens: 20, totalTokens: 30 });
+    });
+
+    it('should keep completed-step usage in the aborted payload after restoring serialized state', async () => {
+      const runId = 'test-run';
+      let finishPayload: any;
+
+      const first = new MastraModelOutput({
+        model: { modelId: '__GATEWAY_OPENAI_MODEL__', provider: 'test', version: 'v3' },
+        stream: createChunkStream([
+          createStepFinishChunk(runId, undefined, { inputTokens: 10, outputTokens: 20, totalTokens: 30 }),
+          createGoalChunk(runId, { shouldContinue: true }),
+        ] as ChunkType[]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+      await first.consumeStream();
+
+      const restored = new MastraModelOutput({
+        model: { modelId: '__GATEWAY_OPENAI_MODEL__', provider: 'test', version: 'v3' },
+        stream: createChunkStream([{ type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} }] as ChunkType[]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: {
+          runId,
+          onFinish: async payload => {
+            finishPayload = payload;
+          },
+        },
+        initialState: JSON.parse(JSON.stringify(first.serializeState())),
+      });
+      await restored.consumeStream();
+
+      expect(finishPayload.finishReason).toBe('aborted');
+      expect(finishPayload.totalUsage).toMatchObject({ inputTokens: 10, outputTokens: 20, totalTokens: 30 });
+      expect(finishPayload.usage).toMatchObject({ inputTokens: 10, outputTokens: 20, totalTokens: 30 });
+    });
+
     it('reports finishReason "aborted" and no tripwire when a caller abort bails through the tripwire path', async () => {
       const runId = 'test-run';
       const messageList = new MessageList({ threadId: 'test-thread' });

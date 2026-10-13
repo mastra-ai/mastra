@@ -5,6 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
+  '@modelcontextprotocol/sdk@>=1.0.0 <1.32.0': 1.32.1
   postcss@<8.5.23: 8.5.23
   nanoid@<5.1.16: 5.1.16
   source-map-js@>=1.0.0 <1.2.2: 1.2.2

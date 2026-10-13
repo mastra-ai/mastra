@@ -115,3 +115,23 @@ test('warmup downloads models without initializing ONNX sessions', async () => {
   expect(mocks.retrieveModel).toHaveBeenCalledTimes(2);
   expect(mocks.init).not.toHaveBeenCalled();
 });
+
+test('resolves the cache directory from the current home on each load', async () => {
+  vi.stubEnv('HOME', '/tmp/fastembed-home-a');
+  mocks.init.mockRejectedValueOnce(new Error('Config file not found'));
+  const { getCachedModel } = await import('./model-cache.js');
+
+  try {
+    await expect(getCachedModel('BGESmallENV15')).rejects.toThrow('Config file not found');
+
+    vi.stubEnv('HOME', '/tmp/fastembed-home-b');
+    await getCachedModel('BGESmallENV15');
+
+    expect(mocks.init).toHaveBeenLastCalledWith({
+      model: 'fast-bge-small-en-v1.5',
+      cacheDir: expect.stringContaining('/tmp/fastembed-home-b/'),
+    });
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});

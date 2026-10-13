@@ -203,4 +203,23 @@ describe('MemoryMessageRefs', () => {
 
     expect(load).toHaveBeenCalledTimes(1);
   });
+
+  it('replaces messages the run saved with refs without reading storage, and keeps them inline once they change', async () => {
+    const list = new MessageList({ threadId: 't', resourceId: 'r' });
+    list.add('new input', 'input');
+    const saved = list.get.all.db();
+    const refs = new MemoryMessageRefs();
+    refs.recordSaved(structuredClone(saved), { threadId: 't', resourceId: 'r' });
+
+    const state = list.serialize();
+    const dehydrated = refs.dehydrate(state);
+    expect(dehydrated.messages.every(isMemoryMessageRef)).toBe(true);
+
+    const load = vi.fn<StoredMessageLoader>();
+    expect(await refs.hydrate(dehydrated, load)).toEqual(state);
+    expect(load).not.toHaveBeenCalled();
+
+    list.add({ role: 'user', content: 'edited', id: saved[0]!.id } as any, 'input');
+    expect(refs.dehydrate(list.serialize()).messages.some(isMemoryMessageRef)).toBe(false);
+  });
 });

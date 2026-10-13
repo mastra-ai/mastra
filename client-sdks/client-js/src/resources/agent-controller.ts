@@ -36,7 +36,7 @@ import type {
   SendNotificationResult,
   ToolCategory,
 } from '../types';
-import { parseClientRequestContext } from '../utils';
+import { isTerminalReconnectError, parseClientRequestContext } from '../utils';
 import { BaseResource } from './base';
 
 /**
@@ -174,6 +174,7 @@ const KNOWN_AGENT_CONTROLLER_EVENT_TYPES = new Set<string>(
     thread_changed: true,
     thread_created: true,
     thread_deleted: true,
+    thread_owner_changed: true,
     thread_title_updated: true,
     subagent_start: true,
     subagent_text_delta: true,
@@ -562,6 +563,13 @@ export class AgentControllerSession extends BaseResource {
           try {
             reconnectedResponse = await requestStream();
           } catch (error) {
+            if (cancelled) return;
+            // Auth denials and other client errors won't resolve by resubscribing;
+            // 408/429 stay retryable.
+            if (isTerminalReconnectError(error)) {
+              safeOnError(error);
+              return;
+            }
             result = { kind: 'transport_error', error };
           }
         }

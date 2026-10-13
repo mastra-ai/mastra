@@ -160,6 +160,75 @@ describe('UpstashTransport', () => {
     expect(fetchMock).toHaveBeenCalled();
   });
 
+  describe('timestamp handling', () => {
+    const now = 1_700_000_000_000;
+
+    const getPushedLog = () => {
+      const commands = JSON.parse(fetchMock.mock.calls[0][1].body);
+      return JSON.parse(commands[0][2]);
+    };
+
+    beforeEach(() => {
+      vi.setSystemTime(now);
+    });
+
+    it('should preserve a zero timestamp from object input', async () => {
+      transport.write({ msg: 'epoch record', time: 0 } as any);
+      await transport._flush();
+
+      expect(getPushedLog().time).toBe(0);
+    });
+
+    it('should preserve a zero timestamp from JSON string input', async () => {
+      transport.write(JSON.stringify({ msg: 'epoch record', time: 0 }));
+      await transport._flush();
+
+      expect(getPushedLog().time).toBe(0);
+    });
+
+    it('should add the current time when time is null', async () => {
+      transport.write(JSON.stringify({ msg: 'null time', time: null }));
+      await transport._flush();
+
+      expect(getPushedLog().time).toBe(now);
+    });
+
+    it('should add the current time when time is missing', async () => {
+      transport.write(JSON.stringify({ msg: 'no time' }));
+      await transport._flush();
+
+      expect(getPushedLog().time).toBe(now);
+    });
+
+    it('should not mutate object input when adding a timestamp', async () => {
+      const record = { msg: 'caller-owned' };
+      transport.write(record as any);
+      await transport._flush();
+
+      expect(record).toEqual({ msg: 'caller-owned' });
+      expect(getPushedLog()).toEqual({ msg: 'caller-owned', time: now });
+    });
+
+    it('should not mutate object input with a null timestamp', async () => {
+      const record = { msg: 'null time', time: null };
+      transport.write(record as any);
+      await transport._flush();
+
+      expect(record.time).toBeNull();
+      expect(getPushedLog().time).toBe(now);
+    });
+
+    it('should send frozen records and pass the original chunk through', async () => {
+      const record = Object.freeze({ msg: 'frozen' });
+      const callback = vi.fn();
+      transport._transform(record as any, 'utf8', callback);
+      await transport._flush();
+
+      expect(callback).toHaveBeenCalledWith(null, record);
+      expect(getPushedLog()).toEqual({ msg: 'frozen', time: now });
+    });
+  });
+
   describe('error handling', () => {
     it('should handle Upstash API errors', async () => {
       fetchMock.mockImplementationOnce(() =>
@@ -377,6 +446,36 @@ describe('UpstashTransport', () => {
   });
 
   describe('listLogs and listLogsByRunId', () => {
+    it('should normalize page 0 to page 1 when listLogs fails', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      fetchMock.mockImplementation(() => Promise.reject(new Error('Upstash down')));
+
+      expect(await transport.listLogs({ page: 0 })).toEqual({
+        logs: [],
+        total: 0,
+        page: 1,
+        perPage: 100,
+        hasMore: false,
+      });
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should normalize page 0 to page 1 when listLogsByRunId fails', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(transport, 'listLogs').mockRejectedValueOnce(new Error('Upstash down'));
+
+      expect(await transport.listLogsByRunId({ runId: 'run-1', page: 0 })).toEqual({
+        logs: [],
+        total: 0,
+        page: 1,
+        perPage: 100,
+        hasMore: false,
+      });
+
+      consoleSpy.mockRestore();
+    });
+
     it('should fetch only the requested page for unfiltered queries', async () => {
       const logs = Array.from({ length: 2 }, (_, index) =>
         JSON.stringify({ msg: `message${index + 3}`, time: index + 3 }),
@@ -396,6 +495,52 @@ describe('UpstashTransport', () => {
       ]);
       expect(result).toMatchObject({ total: 5, page: 2, perPage: 2, hasMore: true });
       expect(result.logs.map(log => log.msg)).toEqual(['message3', 'message4']);
+    });
+
+    it('should skip malformed entries in snapshot queries', async () => {
+      fetchMock.mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([{ result: [JSON.stringify({ msg: 'valid', time: 1 }), 'invalid json'] }]),
+        }),
+      );
+
+      const result = await transport.listLogs({ returnPaginationResults: false });
+
+      expect(result.logs).toEqual([{ msg: 'valid', time: 1 }]);
+      expect(result).toMatchObject({ total: 1, perPage: 1, hasMore: false });
+    });
+
+    it('should return no logs when every snapshot entry is malformed', async () => {
+      fetchMock.mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([{ result: ['nope', '{bad'] }]),
+        }),
+      );
+
+      const result = await transport.listLogs({ returnPaginationResults: false });
+
+      expect(result.logs).toEqual([]);
+      expect(result.total).toBe(0);
+    });
+
+    it('should skip malformed entries in unfiltered pages without changing the request', async () => {
+      fetchMock.mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([{ result: 5 }, { result: [JSON.stringify({ msg: 'm3', time: 3 }), 'bad'] }]),
+        }),
+      );
+
+      const result = await transport.listLogs({ page: 2, perPage: 2 });
+
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual([
+        ['LLEN', 'test-logs'],
+        ['LRANGE', 'test-logs', 2, 3],
+      ]);
+      expect(result).toMatchObject({ total: 5, page: 2, perPage: 2, hasMore: true });
+      expect(result.logs.map(log => log.msg)).toEqual(['m3']);
     });
 
     it('should read run ID queries from a single snapshot', async () => {

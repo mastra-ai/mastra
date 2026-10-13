@@ -182,6 +182,46 @@ describe('createFactorySupervisorWriteTools', () => {
     });
   });
 
+  it('refuses to retry a failure a rerun cannot fix and leaves the decision failed', async () => {
+    const context = await setup();
+    const { decision } = await queueDecision(context.workItems, 1);
+    await context.workItems.failDeferredDecision({
+      id: decision.id,
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      ownerId: 'test',
+      now: NOW,
+      availableAt: NOW,
+      lastError: 'overdue',
+      failureCode: 'run_overdue',
+      terminal: true,
+    });
+    const before = await context.workItems.getDeferredDecision('org-1', PROJECT_ID, decision.id);
+
+    await expect(execute(context.tools.factory_retry_decision, { decisionId: decision.id })).rejects.toThrow(
+      /cannot be fixed by a retry/,
+    );
+    expect(await context.workItems.getDeferredDecision('org-1', PROJECT_ID, decision.id)).toMatchObject({
+      status: 'failed',
+      failureCode: 'run_overdue',
+      deliveryGeneration: before!.deliveryGeneration,
+    });
+    expect(await auditByAction(context.audit, 'factory.run.retry')).toBeUndefined();
+  });
+
+  it('refuses to retry a decision that has not failed', async () => {
+    const context = await setup();
+    const { decision } = await queueDecision(context.workItems, 1);
+
+    await expect(execute(context.tools.factory_retry_decision, { decisionId: decision.id })).rejects.toThrow(
+      /not failed/,
+    );
+    expect(await context.workItems.getDeferredDecision('org-1', PROJECT_ID, decision.id)).toMatchObject({
+      status: decision.status,
+    });
+    expect(await auditByAction(context.audit, 'factory.run.retry')).toBeUndefined();
+  });
+
   it('approves and dismisses proposals through the existing decision lifecycle', async () => {
     const approvedContext = await setup();
     const approved = await queueDecision(approvedContext.workItems, 2);

@@ -1,3 +1,4 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Code } from '@mastra/playground-ui/components/Code';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
@@ -69,15 +70,24 @@ function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo })
       <Collapsible>
         <CollapsibleTrigger className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left">
           <div className="flex min-w-0 flex-col gap-0.5">
-            <Txt tone="ink" as="span" variant="body">
-              {title}
-              <Txt font="mono" tone="muted" as="span" variant="caption" className="ml-2">
-                {skill.name}
+            <span className="flex items-center gap-2">
+              <Txt tone="ink" as="span" variant="body">
+                {title}
+                <Txt font="mono" tone="muted" as="span" variant="caption" className="ml-2">
+                  {skill.name}
+                </Txt>
               </Txt>
-            </Txt>
-            <Txt tone="muted" as="span" variant="caption">
-              {skill.description}
-            </Txt>
+              {skill.error && <Badge variant="destructive">Failed to load</Badge>}
+            </span>
+            {skill.error ? (
+              <Txt as="span" variant="caption" className="text-destructive-foreground whitespace-pre-wrap">
+                Agents cannot load this skill: {skill.error}
+              </Txt>
+            ) : (
+              <Txt tone="muted" as="span" variant="caption">
+                {skill.description}
+              </Txt>
+            )}
           </div>
           <DisclosureChevron direction="right" className="text-muted-foreground size-4" />
         </CollapsibleTrigger>

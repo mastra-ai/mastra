@@ -40,11 +40,12 @@ describe('ProjectRoutes', () => {
     });
     expect(createdResponse.status).toBe(201);
     const created = (await createdResponse.json()) as {
-      project: { id: string; name: string; description: string; slackWorkItemsEnabled: boolean };
+      project: { id: string; name: string; description: string; modelScope: string; slackWorkItemsEnabled: boolean };
     };
     expect(created.project).toMatchObject({
       name: 'Platform',
       description: 'Core services',
+      modelScope: 'factory',
       slackWorkItemsEnabled: false,
     });
 
@@ -55,11 +56,16 @@ describe('ProjectRoutes', () => {
     const updatedResponse = await app.request(`/web/factory/projects/${created.project.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: 'Platform engineering', description: null, slackWorkItemsEnabled: true }),
+      body: JSON.stringify({
+        name: 'Platform engineering',
+        description: null,
+        modelScope: 'user',
+        slackWorkItemsEnabled: true,
+      }),
     });
     expect(updatedResponse.status).toBe(200);
     expect((await updatedResponse.json()) as unknown).toMatchObject({
-      project: { name: 'Platform engineering', description: null, slackWorkItemsEnabled: true },
+      project: { name: 'Platform engineering', description: null, modelScope: 'user', slackWorkItemsEnabled: true },
     });
 
     expect((await app.request(`/web/factory/projects/${created.project.id}`, { method: 'DELETE' })).status).toBe(204);
@@ -81,9 +87,16 @@ describe('ProjectRoutes', () => {
 
     expect((await buildApp().request('/web/factory/projects')).status).toBe(401);
     expect((await buildApp({ workosId: 'user-1' }).request('/web/factory/projects')).status).toBe(403);
+    const otherOrg = buildApp({ workosId: 'user-2', organizationId: 'org-2' });
+    expect((await otherOrg.request(`/web/factory/projects/${project.id}`)).status).toBe(404);
     expect(
-      (await buildApp({ workosId: 'user-2', organizationId: 'org-2' }).request(`/web/factory/projects/${project.id}`))
-        .status,
+      (
+        await otherOrg.request(`/web/factory/projects/${project.id}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ modelScope: 'factory' }),
+        })
+      ).status,
     ).toBe(404);
   });
 
@@ -579,6 +592,66 @@ describe('ProjectRoutes', () => {
   // because projects.ts iterates connections.list (which does not filter by
   // installation existence) and then calls projectRepositories.list, which
   // calls requireConnection, which throws when the installation is gone.
+  it.each([
+    ['notifies the repository-linked hook', () => undefined],
+    [
+      'still links when the repository-linked hook throws',
+      () => {
+        throw new Error('backlog import unavailable');
+      },
+    ],
+  ])('%s', async (_name, behavior) => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
+    const github = seed.sourceControl.forIntegration('github');
+    const installation = await github.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: 'gh-1',
+      accountName: 'acme',
+    });
+    const repository = await github.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: 'repo-1', slug: 'acme/api', defaultBranch: 'main' },
+    });
+    const onProjectRepositoryLinked = vi.fn(behavior);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, projectRoutes(seed, ['github'], undefined, undefined, { onProjectRepositoryLinked }));
+    const connectResponse = await app.request(`/web/factory/projects/${project.id}/source-control-connections`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ integrationId: 'github', installationId: installation.id }),
+    });
+    const { connection } = (await connectResponse.json()) as { connection: { id: string } };
+
+    const linkResponse = await app.request(
+      `/web/factory/projects/${project.id}/source-control-connections/${connection.id}/repositories`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          repositoryId: repository.id,
+          branch: 'main',
+          sandboxProvider: 'local',
+          sandboxWorkdir: '/workspace/acme/api',
+        }),
+      },
+    );
+
+    expect(linkResponse.status).toBe(201);
+    expect(onProjectRepositoryLinked).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      projectRepository: expect.objectContaining({ repositoryId: repository.id, connectionId: connection.id }),
+    });
+    warn.mockRestore();
+  });
+
   it('does not 500 when a linked GitHub installation was pruned (uninstalled)', async () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
@@ -685,5 +758,13 @@ describe('ProjectRoutes', () => {
         })
       ).status,
     ).toBe(400);
+
+    const invalidScope = await app.request(`/web/factory/projects/${project.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ modelScope: 'org' }),
+    });
+    expect(invalidScope.status).toBe(400);
+    expect(await invalidScope.json()).toEqual({ error: 'invalid_project' });
   });
 });

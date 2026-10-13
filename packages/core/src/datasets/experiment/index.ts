@@ -48,8 +48,11 @@ type ExperimentItem = {
 
 // Re-export types and helpers
 export type {
+  AgentExperimentOutput,
   DataItem,
   ExperimentConfig,
+  ExperimentResultOutput,
+  ScorerExperimentOutput,
   ExperimentHookArgs,
   ExperimentHookItem,
   ExperimentItemHookArgs,
