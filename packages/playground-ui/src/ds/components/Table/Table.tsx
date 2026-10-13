@@ -1,7 +1,7 @@
 import type { ComponentProps, ComponentPropsWithoutRef, CSSProperties, ReactNode } from 'react';
 import { forwardRef, useEffect, useRef } from 'react';
 import { Cell } from './Cells';
-import { tableAlignClasses } from './table-align';
+import { resolveTableAlign, tableAlignClasses } from './table-align';
 import type { TableAlign } from './table-align';
 import { TableVariantContext, useTableVariant } from './table-context';
 import type { TableVariant } from './table-context';
@@ -109,7 +109,7 @@ export interface ThProps extends Omit<ComponentProps<'th'>, 'align'> {
 export const Th = ({ className, children, ...props }: ThProps) => {
   const variant = useTableVariant();
   const { align = 'start', ...insetProps } = props;
-  const insetAlign = align === 'center' ? 'center' : align === 'end' || align === 'right' ? 'end' : 'start';
+  const insetAlign = resolveTableAlign(align);
   return (
     <th
       className={cn(

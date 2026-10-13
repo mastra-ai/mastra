@@ -2,7 +2,7 @@ import React from 'react';
 
 import { Icon } from '../../icons/Icon';
 import { Txt } from '../Txt';
-import { tableAlignClasses } from './table-align';
+import { resolveTableAlign, tableAlignClasses } from './table-align';
 import type { TableAlign } from './table-align';
 import { useTableVariant } from './table-context';
 import { cn } from '@/lib/utils';
@@ -32,7 +32,7 @@ export const Cell = ({ className, children, tone = 'ink', ...props }: CellProps)
         className={cn(
           'h-9 border-transparent bg-background bg-clip-padding px-2 py-1 align-middle whitespace-nowrap first:pl-3 last:pr-3',
           'group-data-column-dividers/table:border-l group-data-column-dividers/table:px-3',
-          tableAlignClasses[align === 'center' ? 'center' : align === 'end' || align === 'right' ? 'end' : 'start'],
+          tableAlignClasses[resolveTableAlign(align)],
           tableCellToneClasses[tone],
           className,
         )}

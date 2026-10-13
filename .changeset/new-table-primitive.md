@@ -2,7 +2,14 @@
 '@mastra/playground-ui': minor
 ---
 
-Added an opt-in `variant="inset"` to the existing `Table` at `@mastra/playground-ui/components/Table`, a simple data table built on native `table`, `tr`, `th`, and `td` elements with the same look as `DataList`. Existing default and small tables keep their rendering and behavior. Use the inset variant for data such as billing history or usage. Rows grow with their content, cells can hold any component, and `columnDividers` draws lines between columns. Rows can link anywhere with `Table.RowLink`, which makes the whole row a real link you can tab to. Compose `Table.Pagination` below the table for numbered, caller-controlled pages.
+Added `variant="inset"` to `Table` from `@mastra/playground-ui/components/Table`. It gives a native table the same raised look as `DataList`, with rows that grow with their content and cells that can hold any component. Existing default and small tables render exactly as before.
+
+The inset variant comes with composable parts:
+
+- `Table.RowLink` and `Table.RowButton` make a whole row a link or a button, and other controls in the row keep their own clicks.
+- `Table.SortButton` turns a header into a sort control with a direction arrow.
+- `Table.Pagination` adds numbered pages below the table; the page and rows stay in your code.
+- `columnDividers` draws lines between columns.
 
 ```tsx
 import { Table } from '@mastra/playground-ui/components/Table';
