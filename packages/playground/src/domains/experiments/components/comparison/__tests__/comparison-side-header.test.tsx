@@ -188,7 +188,7 @@ describe('ComparisonSideHeader', () => {
       averageScore: 0.5,
       averageDurationMs: 1500,
       cost: { value: 0.0015, unit: 'usd' },
-      tokens: 12400,
+      tokens: { value: 12400 },
     };
 
     it('lists the total cost, the average duration and the total tokens first', () => {
@@ -224,13 +224,13 @@ describe('ComparisonSideHeader', () => {
 
   describe('when a contender uses fewer tokens than the baseline', () => {
     it('shows the saving as an improvement', () => {
-      const baselineMetrics = { errorCount: 0, averageScore: 0.5, averageDurationMs: 1500, tokens: 12400 };
+      const baselineMetrics = { errorCount: 0, averageScore: 0.5, averageDurationMs: 1500, tokens: { value: 12400 } };
       renderColumn(
         <ComparisonSideHeader
           role="contender"
           label="Contender 1"
           experiment={namedExperiment}
-          metrics={{ ...baselineMetrics, tokens: 10000 }}
+          metrics={{ ...baselineMetrics, tokens: { value: 10000 } }}
           baselineMetrics={baselineMetrics}
         />,
       );

@@ -13,8 +13,8 @@ const currencyCodes = new Set(Intl.supportedValuesOf('currency'));
  * Per-item costs are usually fractions of a cent, so amounts below 1 keep three significant
  * digits instead of collapsing to `<$0.01`. Larger amounts round to two decimals.
  */
-export const formatCostValue = (value: number | null, unit: string | null): string => {
-  if (value == null) return '-';
+export const formatCostValue = (value?: number, unit?: string): string => {
+  if (value === undefined) return '-';
   const digits: Intl.NumberFormatOptions =
     value !== 0 && Math.abs(value) < 1
       ? { maximumSignificantDigits: 3 }
@@ -26,16 +26,14 @@ export const formatCostValue = (value: number | null, unit: string | null): stri
   return `${new Intl.NumberFormat('en-US', digits).format(value)} ${unit}`;
 };
 
-export const costDeltaFormatter = (unit: string | null) => (absDelta: number) => formatCostValue(absDelta, unit);
+export const costDeltaFormatter = (unit?: string) => (absDelta: number) => formatCostValue(absDelta, unit);
 
 const tokenFormat = new Intl.NumberFormat('en-US');
 
-export const formatTokenCount = (value: number | null) => (value != null ? tokenFormat.format(value) : '-');
+export const formatTokenCount = (value?: number) => (value !== undefined ? tokenFormat.format(value) : '-');
 
-/** Input plus output tokens. Null when neither is known. */
-export const totalTokens = (
-  usage: { inputTokens: number | null; outputTokens: number | null } | null | undefined,
-): number | null => {
-  if (usage?.inputTokens == null && usage?.outputTokens == null) return null;
+/** Input plus output tokens. Undefined when neither is known. */
+export const totalTokens = (usage?: { inputTokens?: number; outputTokens?: number }): number | undefined => {
+  if (usage?.inputTokens === undefined && usage?.outputTokens === undefined) return undefined;
   return (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0);
 };

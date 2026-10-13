@@ -37,15 +37,15 @@ function formatValue(value: unknown): string {
 }
 
 function sideMetrics(side: ComparisonColumn, showUsage: boolean): ComparisonMetric[] {
-  const costUnit = side.usage?.costUnit ?? null;
+  const costUnit = side.usage?.costUnit;
   const cost: ComparisonMetric[] = showUsage
     ? [
         {
           id: 'cost',
           icon: <CoinsIcon />,
           label: 'Cost',
-          value: formatCostValue(side.usage?.estimatedCost ?? null, costUnit),
-          delta: side.costDelta,
+          value: formatCostValue(side.usage?.estimatedCost, costUnit),
+          delta: side.costDelta ?? null,
           formatDelta: costDeltaFormatter(costUnit),
           higherIsBetter: false,
         },
@@ -59,7 +59,7 @@ function sideMetrics(side: ComparisonColumn, showUsage: boolean): ComparisonMetr
           icon: <HashIcon />,
           label: 'Tokens',
           value: formatTokenCount(totalTokens(side.usage)),
-          delta: side.tokenDelta,
+          delta: side.tokenDelta ?? null,
           formatDelta: formatTokenCount,
           higherIsBetter: false,
         },

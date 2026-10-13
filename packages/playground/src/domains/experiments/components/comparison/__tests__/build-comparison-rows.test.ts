@@ -183,14 +183,14 @@ describe('buildComparisonRows', () => {
     it('computes the cost delta against the baseline on the contender side', () => {
       const [baseline, contender] = usageRows()[0].sides;
 
-      expect(baseline.costDelta).toBeNull();
+      expect(baseline.costDelta).toBeUndefined();
       expect(contender.costDelta).toBeCloseTo(0.0025);
     });
 
     it('computes the token delta against the baseline on the contender side', () => {
       const [baseline, contender] = usageRows()[0].sides;
 
-      expect(baseline.tokenDelta).toBeNull();
+      expect(baseline.tokenDelta).toBeUndefined();
       expect(contender.tokenDelta).toBe(260 - 150);
     });
   });
@@ -208,20 +208,20 @@ describe('buildComparisonRows', () => {
       const contender = missingUsageContender();
 
       expect(contender.traceId).toBe('trace-res-contender-b');
-      expect(contender.usage).toBeNull();
+      expect(contender.usage).toBeUndefined();
     });
 
-    it('leaves the cost delta null', () => {
-      expect(missingUsageContender().costDelta).toBeNull();
+    it('leaves the cost delta undefined', () => {
+      expect(missingUsageContender().costDelta).toBeUndefined();
     });
 
-    it('leaves the token delta null', () => {
-      expect(missingUsageContender().tokenDelta).toBeNull();
+    it('leaves the token delta undefined', () => {
+      expect(missingUsageContender().tokenDelta).toBeUndefined();
     });
   });
 
   describe('when the two sides are priced in different units', () => {
-    it('leaves the cost delta null', () => {
+    it('leaves the cost delta undefined', () => {
       const [, contender] = buildComparisonRows({
         comparison: comparisonResponse,
         experimentIds: [BASELINE_ID, CONTENDER_ID],
@@ -237,7 +237,7 @@ describe('buildComparisonRows', () => {
         },
       })[0].sides;
 
-      expect(contender.costDelta).toBeNull();
+      expect(contender.costDelta).toBeUndefined();
     });
   });
 

@@ -134,7 +134,7 @@ export function ExperimentsComparison({
         return {
           ...columnMetrics(rows, index),
           cost: summary ? { value: summary.estimatedCost, unit: summary.costUnit } : undefined,
-          tokens: summary ? totalTokens(summary) : undefined,
+          tokens: summary ? { value: totalTokens(summary) } : undefined,
         };
       }),
     [rows, experimentIds, usageById],

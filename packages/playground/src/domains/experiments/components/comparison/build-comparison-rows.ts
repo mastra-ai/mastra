@@ -20,9 +20,9 @@ export interface ComparisonSide {
   startedAt: string | null;
   completedAt: string | null;
   scores: ComparisonScore[];
-  traceId: string | null;
-  /** Tokens and estimated cost of this side's run. Null when unknown (no metrics, or a target without model calls). */
-  usage: ExperimentItemUsage | null;
+  traceId?: string;
+  /** Tokens and estimated cost of this side's run. Undefined when unknown (no metrics, or a target without model calls). */
+  usage?: ExperimentItemUsage;
 }
 
 export type ComparisonRole = 'baseline' | 'contender';
@@ -35,10 +35,10 @@ export interface ComparisonColumn extends ComparisonSide {
   deltas: Record<string, number | null> | null;
   /** This side's run duration minus the baseline's, in ms. Null on the baseline or when either is unknown. */
   durationDeltaMs: number | null;
-  /** This side's estimated cost minus the baseline's. Null on the baseline, when either is unknown, or when units differ. */
-  costDelta: number | null;
-  /** This side's input plus output tokens minus the baseline's. Null on the baseline or when either is unknown. */
-  tokenDelta: number | null;
+  /** This side's estimated cost minus the baseline's. Undefined on the baseline, when either is unknown, or when units differ. */
+  costDelta?: number;
+  /** This side's input plus output tokens minus the baseline's. Undefined on the baseline or when either is unknown. */
+  tokenDelta?: number;
 }
 
 export interface ComparisonRow {
@@ -74,8 +74,6 @@ const absentSide: ComparisonSide = {
   startedAt: null,
   completedAt: null,
   scores: [],
-  traceId: null,
-  usage: null,
 };
 
 const toIsoString = (value: string | Date | null | undefined): string | null => {
@@ -99,7 +97,7 @@ const buildSide = (
 ): ComparisonSide => {
   if (!comparisonResult) return absentSide;
 
-  const traceId = detail?.traceId ?? null;
+  const traceId = detail?.traceId ?? undefined;
 
   // Reasons are not part of the result row: they live in the scores store.
   const reasonByScorerId = new Map<string, string | null>();
@@ -120,7 +118,7 @@ const buildSide = (
       .map(([scorerId, value]) => ({ scorerId, value, reason: reasonByScorerId.get(scorerId) ?? null }))
       .sort((a, b) => a.scorerId.localeCompare(b.scorerId)),
     traceId,
-    usage: (traceId && usageByTraceId?.[traceId]) || null,
+    usage: traceId ? usageByTraceId?.[traceId] : undefined,
   };
 };
 
@@ -146,17 +144,17 @@ const durationDeltaAgainst = (baseline: ComparisonSide, side: ComparisonSide): n
   return baselineMs != null && sideMs != null ? sideMs - baselineMs : null;
 };
 
-const costDeltaAgainst = (baseline: ComparisonSide, side: ComparisonSide): number | null => {
+const costDeltaAgainst = (baseline: ComparisonSide, side: ComparisonSide): number | undefined => {
   const baselineCost = baseline.usage?.estimatedCost;
   const sideCost = side.usage?.estimatedCost;
-  if (baselineCost == null || sideCost == null) return null;
-  return baseline.usage?.costUnit === side.usage?.costUnit ? sideCost - baselineCost : null;
+  if (baselineCost === undefined || sideCost === undefined) return undefined;
+  return baseline.usage?.costUnit === side.usage?.costUnit ? sideCost - baselineCost : undefined;
 };
 
-const tokenDeltaAgainst = (baseline: ComparisonSide, side: ComparisonSide): number | null => {
+const tokenDeltaAgainst = (baseline: ComparisonSide, side: ComparisonSide): number | undefined => {
   const baselineTokens = totalTokens(baseline.usage);
   const sideTokens = totalTokens(side.usage);
-  return baselineTokens != null && sideTokens != null ? sideTokens - baselineTokens : null;
+  return baselineTokens !== undefined && sideTokens !== undefined ? sideTokens - baselineTokens : undefined;
 };
 
 /**
@@ -197,8 +195,8 @@ export const buildComparisonRows = ({
         role: index === 0 ? 'baseline' : 'contender',
         deltas: index === 0 ? null : deltasAgainst(baseline, side),
         durationDeltaMs: index === 0 ? null : durationDeltaAgainst(baseline, side),
-        costDelta: index === 0 ? null : costDeltaAgainst(baseline, side),
-        tokenDelta: index === 0 ? null : tokenDeltaAgainst(baseline, side),
+        costDelta: index === 0 ? undefined : costDeltaAgainst(baseline, side),
+        tokenDelta: index === 0 ? undefined : tokenDeltaAgainst(baseline, side),
       })),
     };
   });

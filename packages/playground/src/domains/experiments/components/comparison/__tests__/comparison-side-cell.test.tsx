@@ -18,10 +18,6 @@ const makeColumn = (overrides: Partial<ComparisonColumn>): ComparisonColumn => (
   startedAt: null,
   completedAt: null,
   scores: [],
-  traceId: null,
-  usage: null,
-  costDelta: null,
-  tokenDelta: null,
   ...overrides,
 });
 
@@ -107,7 +103,7 @@ describe('ComparisonSideCell', () => {
 
   describe('when usage is shown but the item has no usage', () => {
     it('shows a dash for the cost and the tokens', () => {
-      renderCell(makeColumn({ ...pricedTiming, usage: null }), { showUsage: true });
+      renderCell(makeColumn({ ...pricedTiming, usage: undefined }), { showUsage: true });
 
       expect(metricTerms().slice(0, 3)).toEqual(['Cost', 'Duration', 'Tokens']);
       expect(within(metricsRegion()).getAllByText('-')).toHaveLength(2);

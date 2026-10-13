@@ -28,13 +28,13 @@ describe('formatCostValue', () => {
 
   describe('when the unit is missing', () => {
     it('defaults to dollars', () => {
-      expect(formatCostValue(0.25, null)).toBe('$0.25');
+      expect(formatCostValue(0.25)).toBe('$0.25');
     });
   });
 
   describe('when the cost is unknown', () => {
     it('shows a dash', () => {
-      expect(formatCostValue(null, 'usd')).toBe('-');
+      expect(formatCostValue(undefined, 'usd')).toBe('-');
     });
   });
 });
@@ -48,7 +48,7 @@ describe('formatTokenCount', () => {
 
   describe('when the count is unknown', () => {
     it('shows a dash', () => {
-      expect(formatTokenCount(null)).toBe('-');
+      expect(formatTokenCount()).toBe('-');
     });
   });
 });
@@ -56,19 +56,19 @@ describe('formatTokenCount', () => {
 describe('totalTokens', () => {
   describe('when only one direction is known', () => {
     it('counts the known side', () => {
-      expect(totalTokens({ inputTokens: 120, outputTokens: null })).toBe(120);
+      expect(totalTokens({ inputTokens: 120 })).toBe(120);
     });
   });
 
   describe('when neither direction is known', () => {
-    it('returns null', () => {
-      expect(totalTokens({ inputTokens: null, outputTokens: null })).toBeNull();
+    it('returns undefined', () => {
+      expect(totalTokens({})).toBeUndefined();
     });
   });
 
   describe('when there is no usage', () => {
-    it('returns null', () => {
-      expect(totalTokens(null)).toBeNull();
+    it('returns undefined', () => {
+      expect(totalTokens()).toBeUndefined();
     });
   });
 });

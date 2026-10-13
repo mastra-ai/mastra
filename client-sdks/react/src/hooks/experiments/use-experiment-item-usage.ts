@@ -11,11 +11,11 @@ const OUTPUT_TOKEN_METRIC = 'mastra_model_total_output_tokens';
 const POLL_INTERVAL_MS = 2000;
 
 export interface ExperimentItemUsage {
-  inputTokens: number | null;
-  outputTokens: number | null;
-  /** Null when no group is priced or when groups use different cost units. */
-  estimatedCost: number | null;
-  costUnit: string | null;
+  inputTokens?: number;
+  outputTokens?: number;
+  /** Undefined when no group is priced or when groups use different cost units. */
+  estimatedCost?: number;
+  costUnit?: string;
 }
 
 /** Usage of one experiment: its totals, and each item's usage keyed by the trace id of its run. */
@@ -26,8 +26,8 @@ export interface ExperimentUsage {
 }
 
 type UsageAccumulator = {
-  inputTokens: number | null;
-  outputTokens: number | null;
+  inputTokens?: number;
+  outputTokens?: number;
   estimatedCost: number;
   hasEstimatedCost: boolean;
   costUnits: Set<string>;
@@ -35,8 +35,6 @@ type UsageAccumulator = {
 };
 
 const createAccumulator = (): UsageAccumulator => ({
-  inputTokens: null,
-  outputTokens: null,
   estimatedCost: 0,
   hasEstimatedCost: false,
   costUnits: new Set(),
@@ -63,8 +61,8 @@ function toUsage(accumulator: UsageAccumulator): ExperimentItemUsage {
   return {
     inputTokens: accumulator.inputTokens,
     outputTokens: accumulator.outputTokens,
-    estimatedCost: isPriced ? accumulator.estimatedCost : null,
-    costUnit: isPriced ? ([...accumulator.costUnits][0] ?? null) : null,
+    estimatedCost: isPriced ? accumulator.estimatedCost : undefined,
+    costUnit: isPriced ? [...accumulator.costUnits][0] : undefined,
   };
 }
 

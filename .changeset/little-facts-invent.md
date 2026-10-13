@@ -18,4 +18,4 @@ const item = data['exp-1']?.traces[result.traceId];
 // both: { inputTokens, outputTokens, estimatedCost, costUnit }
 ```
 
-`estimatedCost` and `costUnit` are `null` when no price is known or when cost units are mixed.
+`estimatedCost` and `costUnit` are `undefined` when no price is known or when cost units are mixed.

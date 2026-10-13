@@ -128,7 +128,7 @@ describe('useExperimentsItemUsage', () => {
   });
 
   describe('when an experiment mixes cost units', () => {
-    it('keeps the token totals and nulls the experiment cost', async () => {
+    it('keeps the token totals and leaves the experiment cost undefined', async () => {
       useBreakdownHandler();
 
       const { result } = renderHook(
@@ -141,14 +141,12 @@ describe('useExperimentsItemUsage', () => {
       expect(result.current.data[CONTENDER_EXPERIMENT_ID]?.summary).toEqual({
         inputTokens: 200,
         outputTokens: 80,
-        estimatedCost: null,
-        costUnit: null,
       });
     });
   });
 
   describe('when a trace mixes cost units', () => {
-    it('keeps tokens and nulls the cost', async () => {
+    it('keeps tokens and leaves the cost undefined', async () => {
       useBreakdownHandler();
 
       const { result } = renderHook(
@@ -161,14 +159,12 @@ describe('useExperimentsItemUsage', () => {
       expect(result.current.data[CONTENDER_EXPERIMENT_ID]?.traces['trace-c1']).toEqual({
         inputTokens: 200,
         outputTokens: 80,
-        estimatedCost: null,
-        costUnit: null,
       });
     });
   });
 
   describe('when a trace has no priced group', () => {
-    it('returns a null cost', async () => {
+    it('leaves the cost undefined', async () => {
       useBreakdownHandler();
 
       const { result } = renderHook(
@@ -180,9 +176,6 @@ describe('useExperimentsItemUsage', () => {
 
       expect(result.current.data[BASELINE_EXPERIMENT_ID]?.traces['trace-b2']).toEqual({
         inputTokens: 70,
-        outputTokens: null,
-        estimatedCost: null,
-        costUnit: null,
       });
     });
   });

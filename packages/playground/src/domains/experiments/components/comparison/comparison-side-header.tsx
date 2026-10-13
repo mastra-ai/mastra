@@ -50,9 +50,9 @@ export interface ComparisonSideMetrics {
   /** Mean item run duration, in milliseconds. */
   averageDurationMs: number | null;
   /** Total estimated cost of the experiment. Undefined when the observability storage cannot serve metrics. */
-  cost?: { value: number | null; unit: string | null };
+  cost?: { value?: number; unit?: string };
   /** Total input plus output tokens of the experiment. Undefined when the observability storage cannot serve metrics. */
-  tokens?: number | null;
+  tokens?: { value?: number };
 }
 
 export interface ComparisonSideHeaderProps {
@@ -172,14 +172,14 @@ export function ComparisonSideHeader({
           },
         ]
       : []),
-    ...(metrics?.tokens !== undefined
+    ...(metrics?.tokens
       ? [
           {
             id: 'total-tokens',
             icon: <HashIcon />,
             label: 'Total tokens',
-            value: formatTokenCount(metrics.tokens),
-            delta: trend(metrics.tokens, baselineMetrics?.tokens),
+            value: formatTokenCount(metrics.tokens.value),
+            delta: trend(metrics.tokens.value, baselineMetrics?.tokens?.value),
             formatDelta: formatTokenCount,
             higherIsBetter: false,
           },
