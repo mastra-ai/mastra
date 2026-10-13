@@ -354,10 +354,11 @@ export interface MastraCodeConfig {
   /**
    * Custom instructions for thread-title generation, passed to Memory's
    * `generateTitle.instructions`. Hosts use this to control title style or
-   * language. When set, this REPLACES core's default title instructions
-   * entirely — including the default's rule to write the title in the same
-   * language the user writes in — so include any such rules you still want.
-   * When omitted, core's default title instructions apply.
+   * language. When set to a non-empty string, this REPLACES core's default
+   * title instructions entirely — including the default's rule to write the
+   * title in the same language the user writes in — so include any such rules
+   * you still want. When omitted or empty, core's default title instructions
+   * apply (core treats an empty string as absent).
    */
   titleInstructions?: string;
   /** Override the plugin manager. Primarily useful for tests or embedding. */
