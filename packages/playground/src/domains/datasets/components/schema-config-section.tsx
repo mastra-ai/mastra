@@ -205,7 +205,7 @@ export function SchemaConfigSection({
 
       {/* keepMounted preserves an unfinished (invalid) draft when switching tabs. */}
       <Tabs<SchemaTab> defaultTab="input" value={tab} onValueChange={setTab}>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col items-start gap-2 md:flex-row md:flex-wrap md:items-center">
           <Field orientation="horizontal" className="shrink-0">
             <FieldLabel>From</FieldLabel>
             <Select value={sourceType} onValueChange={v => handleSourceChange(v as SourceType)} disabled={disabled}>
@@ -262,9 +262,9 @@ export function SchemaConfigSection({
             </Select>
           )}
 
-          {/* TabList renders inside a w-full scroller; sizing this wrapper to its content keeps it on the select's row when it fits. */}
-          <div className="min-w-0 grow basis-auto">
-            <TabList variant="pill" size="sm" className="ml-auto">
+          {/* TabList renders inside a w-full scroller; sizing this wrapper to its content keeps it on the select's row (md+) when it fits. */}
+          <div className="min-w-0 self-stretch md:grow md:basis-auto md:self-auto">
+            <TabList variant="pill" size="sm" className="md:ml-auto">
               <Tab value="input">Input</Tab>
               <Tab value="groundTruth">Ground truth</Tab>
               <Tab value="requestContext">Request context</Tab>
