@@ -7,4 +7,5 @@ Sessions now belong to a Factory rather than to one repository link, so a sessio
 - `source_control_sessions` gains `factory_project_id`, filled by an idempotent backfill on init. Nothing is dropped or deleted.
 - New `source_control_session_repositories` table records the branch and change request a session has per repository (`sessionRepositories.upsert` / `listBySession`).
 - `sessions.create` requires `factoryProjectId`; `sessions.listByProject` lists a Factory's sessions across its links; `sessions.getForBranch` accepts `{ factoryProjectId, userId, branch }`.
+- New `GET /web/factory/projects/:id/sessions` lists every session of a Factory the caller can see, across all source-control providers. The sidebar, search, and board use it instead of querying each repository link.
 - `SourceControlSession.factoryProjectId` replaces `resolveFactoryProjectForSession`.
