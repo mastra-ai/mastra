@@ -444,7 +444,15 @@ export class MessageList {
 
   public addSignal(signal: CreatedAgentSignal, options?: { source?: MessageSource }): CreatedAgentSignal {
     const source = options?.source ?? 'input';
-    const createdAt = this.generateCreatedAt(source, new Date());
+    // A signal can name the message it should sort directly before (e.g. memory's
+    // temporal-gap reminder describes the user message that follows it). Stamping it
+    // with "now" would place it after that message, where models read it as the
+    // latest turn.
+    const precedesMessageId = signal.metadata?.precedesMessageId;
+    const precededMessage = typeof precedesMessageId === 'string' ? this.getMessageById(precedesMessageId) : undefined;
+    const createdAt = precededMessage
+      ? new Date(precededMessage.createdAt.getTime() - 1)
+      : this.generateCreatedAt(source, new Date());
     const acceptedAt = signal.acceptedAt ?? signal.createdAt;
     const signalInput = {
       id: signal.id,

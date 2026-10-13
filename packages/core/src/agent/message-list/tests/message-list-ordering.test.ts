@@ -474,6 +474,64 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
       });
     });
 
+    // Regression test for GitHub issue #26751: memory's temporal-gap reminder names the
+    // message it precedes via metadata.precedesMessageId, but addSignal stamped it with
+    // "now" so it sorted after the user message and models read it as the latest turn.
+    it('should sort a signal before the message named by metadata.precedesMessageId', () => {
+      const userTime = new Date('2024-01-01T10:00:00.000Z');
+      const list = new MessageList();
+
+      list.add(
+        {
+          id: 'user-1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Book the meeting' }] },
+          createdAt: userTime,
+        },
+        'input',
+      );
+
+      const signalForTranscript = list.addSignal(
+        createSignal({
+          id: 'gap',
+          type: 'reactive',
+          tagName: 'system-reminder',
+          contents: '2 hours passed',
+          metadata: { precedesMessageId: 'user-1' },
+        }),
+      );
+
+      expect(list.get.all.db().map(message => message.id)).toEqual(['gap', 'user-1']);
+      expect(signalForTranscript.createdAt.getTime()).toBeLessThan(userTime.getTime());
+    });
+
+    it('should stamp a signal normally when precedesMessageId names an unknown message', () => {
+      const userTime = new Date('2024-01-01T10:00:00.000Z');
+      const list = new MessageList();
+
+      list.add(
+        {
+          id: 'user-1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Book the meeting' }] },
+          createdAt: userTime,
+        },
+        'input',
+      );
+
+      list.addSignal(
+        createSignal({
+          id: 'gap',
+          type: 'reactive',
+          tagName: 'system-reminder',
+          contents: '2 hours passed',
+          metadata: { precedesMessageId: 'missing-message' },
+        }),
+      );
+
+      expect(list.get.all.db().map(message => message.id)).toEqual(['user-1', 'gap']);
+    });
+
     it('should normalize regular input signals using transcript timestamps', () => {
       const baseTime = Date.now() + 60_000;
       const responseTime = new Date(baseTime);
