@@ -10,7 +10,7 @@ packages:
 
 A `FactorySandbox` is the one object a host gives `MastraFactory` to describe where sessions run. It owns the session sandbox constructor, the repository template built for a session, the schema of settings a user can tune per project, and optionally the ability to build that template ahead of time.
 
-Factory doesn't store settings yet, so every session boots with an empty settings document and the provider's defaults. `factory.sandboxDescription` reports the provider, the settings schema as JSON Schema and the available capabilities. Everything provider-specific stays inside the object: Factory only calls the contract and reads `provider` for display.
+Factory doesn't store settings yet. Every session boots with an empty settings document and the provider's defaults. `factory.sandboxDescription` reports the provider, the settings schema as JSON Schema and the available capabilities. Everything provider-specific stays inside the object: Factory only calls the contract and reads `provider` for display.
 
 ## Usage
 
@@ -53,9 +53,9 @@ new LocalFactorySandbox({ root: '/var/sandboxes', env: { PATH: process.env.PATH!
 
 `LocalFactorySandbox` runs every session on the host machine under `join(root, sessionId)`.
 
-For a setting that is unset, the provider applies its own default: 2 CPUs, 1024 MB and a 5 minute idle timeout on Platform and E2B, overridable through `defaults`. On Platform, a top-level `idleTimeoutMinutes` option also applies when `defaults` doesn't set one. The schema's `default` values show the effective defaults.
+For an unset setting, the provider applies its own default: 2 CPUs, 1024 MB and a 5 minute idle timeout on Platform and E2B, overridable through `defaults`. On Platform, a top-level `idleTimeoutMinutes` option also applies when `defaults` doesn't set one. The schema's `default` values show the effective defaults.
 
-Platform builds are polled through the builder that started them, so after a host restart an earlier build reads as `unknown`.
+Platform polls a build through the builder that started it. After a host restart, an earlier build reads as `unknown`.
 
 ### Callback form
 
@@ -90,7 +90,7 @@ abstract class FactorySandbox<TSettings extends Record<string, unknown> = Record
     name: 'create',
     type: '(ctx, settings) => MastraSandbox',
     description:
-      'Constructs the sandbox for one session. Synchronous and side-effect free: the VM is provisioned on start(), not here. Factory currently passes an empty settings document, so the provider defaults apply.',
+      'Constructs the sandbox for one session. Synchronous and side-effect free: the VM is provisioned on start(), not here. Factory currently passes an empty settings document and the provider defaults apply.',
   },
   {
     name: 'template',
