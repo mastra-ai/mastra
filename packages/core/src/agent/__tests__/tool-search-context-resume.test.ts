@@ -5,6 +5,41 @@ import { ToolSearchProcessor } from '../../processors/processors/tool-search';
 import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
+import { getSingleDummyResponseModel } from './mock-model';
+
+class StrictMemory extends MockMemory {
+  override async recall(...args: Parameters<MockMemory['recall']>) {
+    const [{ threadId }] = args;
+    const thread = await this.getThreadById({ threadId });
+    if (!thread) {
+      throw new Error(`No thread found with id ${threadId}`);
+    }
+    return super.recall(...args);
+  }
+}
+
+class DelayedThreadCreationMemory extends StrictMemory {
+  private recallStarted!: () => void;
+  private readonly recallStartedPromise = new Promise<void>(resolve => {
+    this.recallStarted = resolve;
+  });
+
+  override async recall(...args: Parameters<MockMemory['recall']>) {
+    this.recallStarted();
+    return super.recall(...args);
+  }
+
+  override async createThread(...args: Parameters<MockMemory['createThread']>) {
+    await this.recallStartedPromise;
+    return super.createThread(...args);
+  }
+}
+
+class FailingRecallMemory extends MockMemory {
+  override async recall(..._args: Parameters<MockMemory['recall']>): Promise<never> {
+    throw new Error('storage unavailable');
+  }
+}
 
 // Issue #24787: a resumed run (after a restart, run-registry expiry, or on another
 // instance) rebuilds tools without a live processInputStep. With storage: 'context'
@@ -97,5 +132,50 @@ describe('ToolSearchProcessor storage: context — resume tool rebuild', () => {
     });
 
     expect(tools.weather).toBeUndefined();
+  });
+
+  it('treats a nonexistent thread as an empty transcript during tool reconstruction', async () => {
+    const memory = new StrictMemory();
+    const agent = createAgent(memory);
+
+    const tools = await agent.getToolsForExecution({
+      threadId: 'new-thread',
+      resourceId: 'user-1',
+      requestContext: new RequestContext(),
+    });
+
+    expect(tools.weather).toBeUndefined();
+  });
+
+  it('completes the first turn when tool reconstruction reaches memory before thread creation', async () => {
+    const memory = new DelayedThreadCreationMemory();
+    const agent = new Agent({
+      id: 'tool-search-agent',
+      name: 'tool-search-agent',
+      instructions: 'test',
+      model: getSingleDummyResponseModel('v2'),
+      memory,
+      inputProcessors: [new ToolSearchProcessor({ tools: { weather }, storage: 'context' })],
+    });
+
+    const response = await agent.stream('hello', {
+      memory: { thread: 'new-thread', resource: 'user-1' },
+    });
+
+    await expect(response.text).resolves.toBe('Dummy response');
+    await expect(memory.getThreadById({ threadId: 'new-thread' })).resolves.toBeDefined();
+  });
+
+  it('propagates recall failures unrelated to a missing thread', async () => {
+    const memory = new FailingRecallMemory();
+    const agent = createAgent(memory);
+
+    await expect(
+      agent.getToolsForExecution({
+        threadId: 'thread-3',
+        resourceId: 'user-1',
+        requestContext: new RequestContext(),
+      }),
+    ).rejects.toThrow('storage unavailable');
   });
 });

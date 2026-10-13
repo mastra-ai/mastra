@@ -4696,11 +4696,23 @@ export class Agent<
         vectorMessageSearch: '',
         memoryConfig,
         requestContext,
-      }).then(result => {
-        if (!runMessages?.length) return result.messages;
-        const seen = new Set(result.messages.map(m => m.id));
-        return [...result.messages, ...runMessages.filter(m => !seen.has(m.id))];
-      });
+      })
+        .then(result => {
+          if (!runMessages?.length) return result.messages;
+          const seen = new Set(result.messages.map(m => m.id));
+          return [...result.messages, ...runMessages.filter(m => !seen.has(m.id))];
+        })
+        .catch(error => {
+          if (!(error instanceof Error) || error.message !== `No thread found with id ${threadId}`) {
+            throw error;
+          }
+          this.logger.debug('Skipping processor-loaded tool history (thread does not exist yet)', {
+            agent: this.name,
+            runId,
+            threadId,
+          });
+          return runMessages ?? [];
+        });
       return messagesPromise;
     };
 
