@@ -626,6 +626,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       : buildSourceControlSessionRoutes({
           auth: deps.auth,
           sourceControls,
+          projects: deps.domains.projects,
           ...(deps.users ? { users: deps.users } : {}),
           controller: deps.controller,
           memorySettings: deps.domains.memorySettings,
