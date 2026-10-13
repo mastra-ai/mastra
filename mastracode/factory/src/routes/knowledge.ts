@@ -1220,6 +1220,11 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               })),
               { probe: true },
             );
+            // Without a proven address (adapters lacking structural reads, or a
+            // partial read) a scope member cannot be shown to be harmless: fail closed.
+            for (const node of memberScopes) {
+              if (!memberAddresses.get(node.id)?.address) hiddenSessions.add(node.id);
+            }
             if (hiddenSessions.size > 0) {
               directMembers.splice(
                 0,
