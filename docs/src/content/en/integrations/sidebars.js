@@ -634,6 +634,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'tools/keenable',
+          label: 'Keenable',
+          customProps: { icon: '/img/integrations/keenable.svg' },
+        },
+        {
+          type: 'doc',
           id: 'tools/parallel',
           label: 'Parallel',
           customProps: { icon: '/img/integrations/parallel.svg' },

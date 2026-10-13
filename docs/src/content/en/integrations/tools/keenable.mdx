@@ -1,0 +1,240 @@
+---
+title: "Keenable | Tools"
+description: "Add Keenable web search and page fetch tools to Mastra agents with typed schemas, site and date filters, and Markdown page content. Works without an API key."
+packages:
+  - "@mastra/keenable"
+---
+
+# Keenable
+
+The `@mastra/keenable` package wraps the [Keenable API](https://docs.keenable.ai/api-reference) as Mastra-compatible tools for web search and page fetching. It exposes factory functions that return tools created with [`createTool()`](/reference/tools/create-tool) and full Zod input/output schemas.
+
+The tools work without an API key. Keyless requests use Keenable's public endpoints, which are rate limited. An API key from the [Keenable console](https://keenable.ai/console) raises the limit.
+
+## Installation
+
+Install the package alongside Zod:
+
+```sh npm2yarn
+npm install @mastra/keenable zod
+```
+
+## Usage example
+
+The following example creates both tools with the default configuration. When `KEENABLE_API_KEY` is set in the environment, the tools use it. Without it, they use the keyless endpoints.
+
+```typescript title="src/mastra/tools/index.ts"
+import { createKeenableTools } from '@mastra/keenable'
+
+const { keenableSearch, keenableFetch } = createKeenableTools()
+```
+
+To pass an API key explicitly:
+
+```typescript title="src/mastra/tools/index.ts"
+import { createKeenableTools } from '@mastra/keenable'
+
+const tools = createKeenableTools({ apiKey: 'keen_...' })
+```
+
+## Configuration
+
+All factory functions accept a `KeenableClientOptions` object:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'apiKey',
+    type: 'string',
+    description:
+      'Keenable API key. Falls back to the `KEENABLE_API_KEY` environment variable. Without a key, the tools use the rate-limited keyless endpoints.',
+    isOptional: true,
+  },
+  {
+    name: 'baseUrl',
+    type: 'string',
+    description: 'Override the API base URL.',
+    isOptional: true,
+    defaultValue: "'https://api.keenable.ai'",
+  },
+  {
+    name: 'fetch',
+    type: 'typeof fetch',
+    description: 'Custom `fetch` implementation. Useful for tests, retries, or instrumentation.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Methods
+
+### Factory functions
+
+#### `createKeenableTools(config?)`
+
+Returns an object containing all Keenable tools that share the supplied configuration.
+
+```typescript
+import { createKeenableTools } from '@mastra/keenable'
+
+const tools = createKeenableTools()
+// tools.keenableSearch, tools.keenableFetch
+```
+
+Returns: `{ keenableSearch, keenableFetch }`
+
+#### `createKeenableSearchTool(config?)`
+
+Creates a tool that searches the web using the Keenable Search API. Returns ranked results with titles, URLs, page text snippets of about 500 characters, and publication dates when known.
+
+The tool is registered with the ID `keenable-search`.
+
+```typescript
+import { createKeenableSearchTool } from '@mastra/keenable'
+
+const searchTool = createKeenableSearchTool()
+```
+
+##### Input
+
+<PropertiesTable
+  content={[
+  {
+    name: 'query',
+    type: 'string',
+    description: 'The search query.',
+  },
+  {
+    name: 'maxResults',
+    type: 'number',
+    description: 'Maximum number of results to return (1-50). Defaults to 10.',
+    isOptional: true,
+  },
+  {
+    name: 'site',
+    type: 'string',
+    description: 'Restrict results to a single domain, for example `github.com`.',
+    isOptional: true,
+  },
+  {
+    name: 'publishedAfter',
+    type: 'string',
+    description: 'Exclude pages published before this date. Format: YYYY-MM-DD. Pages without a known date are kept.',
+    isOptional: true,
+  },
+  {
+    name: 'publishedBefore',
+    type: 'string',
+    description: 'Exclude pages published after this date. Format: YYYY-MM-DD. Pages without a known date are kept.',
+    isOptional: true,
+  },
+]}
+/>
+
+##### Output
+
+<PropertiesTable
+  content={[
+  {
+    name: 'query',
+    type: 'string',
+    description: 'The original search query.',
+  },
+  {
+    name: 'results',
+    type: 'SearchResult[]',
+    description: 'Array of search results.',
+    properties: [
+      {
+        type: 'SearchResult',
+        parameters: [
+          { name: 'title', type: 'string', description: 'Result title.' },
+          { name: 'url', type: 'string', description: 'Result URL.' },
+          { name: 'snippet', type: 'string', description: 'Page text from the result, whitespace collapsed.' },
+          {
+            name: 'publishedAt',
+            type: 'string',
+            description: 'Publication date as an ISO 8601 string, when known.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+#### `createKeenableFetchTool(config?)`
+
+Creates a tool that reads a web page using the Keenable Fetch API and returns its main content as Markdown.
+
+The tool is registered with the ID `keenable-fetch`.
+
+```typescript
+import { createKeenableFetchTool } from '@mastra/keenable'
+
+const fetchTool = createKeenableFetchTool()
+```
+
+##### Input
+
+<PropertiesTable
+  content={[
+  {
+    name: 'url',
+    type: 'string',
+    description: 'The URL of the page to read.',
+  },
+  {
+    name: 'maxChars',
+    type: 'number',
+    description: 'Maximum number of characters of page content to return.',
+    isOptional: true,
+  },
+]}
+/>
+
+##### Output
+
+<PropertiesTable
+  content={[
+  { name: 'url', type: 'string', description: 'The page URL.' },
+  { name: 'title', type: 'string', description: 'Page title.', isOptional: true },
+  { name: 'content', type: 'string', description: 'Main page content as Markdown.' },
+  {
+    name: 'publishedAt',
+    type: 'string',
+    description: 'Publication date as an ISO 8601 string, when known.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Agent example
+
+The following example registers both tools on an agent so it can search the web and then read the pages it finds.
+
+```typescript title="src/mastra/agents/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { createKeenableTools } from '@mastra/keenable'
+
+const agent = new Agent({
+  id: 'research-agent',
+  name: 'Research Agent',
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+  instructions:
+    'You are a research assistant. Use keenable-search to find current sources, then keenable-fetch to read a page before quoting it.',
+  tools: createKeenableTools(),
+})
+```
+
+## Environment variables
+
+| Variable | Description |
+| - | - |
+| `KEENABLE_API_KEY` | Optional Keenable API key. Used as the default when `apiKey` isn't passed to a factory function. Without it, the tools use the rate-limited keyless endpoints. |
+
+## Related
+
+- [`createTool()`](/reference/tools/create-tool)
+- [Keenable API reference](https://docs.keenable.ai/api-reference)
