@@ -6,6 +6,7 @@ import { CachingPubSub } from '../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
 import { isRunLocalTopic } from '../../events/topics';
+import type { MastraModelConfig } from '../../llm/model/shared.types';
 import { getRunStreamSlot, getScopeStreamSlot } from '../../loop/shared/stream-until-idle-helpers';
 import { createTimeoutAbortSignal } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
@@ -25,6 +26,7 @@ import type {
 } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import type { CoreTool } from '../../tools/types';
+import type { DynamicArgument } from '../../types';
 import { deepMerge } from '../../utils';
 import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { Agent } from '../agent';
@@ -236,7 +238,7 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
    * A model instance can't be persisted, so `recover()` in another process falls back to the
    * agent's own model and logs a warning.
    */
-  model?: AgentExecutionOptions<OUTPUT>['model'];
+  model?: DynamicArgument<MastraModelConfig>;
   /**
    * Conditions for stopping execution (e.g., step count, token limit).
    *
