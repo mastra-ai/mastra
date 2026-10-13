@@ -20,6 +20,29 @@ function appendResponseProviderItemKeys(cacheKey: string, ...providerSources: un
 }
 
 /**
+ * Anthropic thinking blocks with `display: "omitted"` (the default on recent
+ * models) carry EMPTY text; the block's identity lives in
+ * `providerMetadata.anthropic.signature` (or `redactedData` for redacted
+ * thinking). Without it in the key, every such reasoning part collapses onto
+ * the same cache key and the merge logic drops each later step's thinking
+ * block as a duplicate (#25516) — the Anthropic counterpart of the OpenAI
+ * `rs_` item-id fix above.
+ */
+function appendAnthropicReasoningKeys(cacheKey: string, ...providerSources: unknown[]): string {
+  for (const source of providerSources) {
+    const anthropic = (source as Record<string, unknown> | undefined)?.anthropic as
+      | Record<string, unknown>
+      | undefined;
+    if (!anthropic) continue;
+    const identity = anthropic.signature ?? anthropic.redactedData;
+    if (typeof identity === 'string' && identity.length > 0) {
+      cacheKey += `|anthropic:${identity}`;
+    }
+  }
+  return cacheKey;
+}
+
+/**
  * CacheKeyGenerator - Centralized cache key generation for message equality checks
  *
  * This class provides consistent cache key generation across all message formats,
@@ -90,6 +113,7 @@ export class CacheKeyGenerator {
 
       if (partAny && Object.hasOwn(partAny, 'providerMetadata')) {
         cacheKey = appendResponseProviderItemKeys(cacheKey, partAny.providerMetadata);
+        cacheKey = appendAnthropicReasoningKeys(cacheKey, partAny.providerMetadata);
       }
     }
     if (part.type === 'file') {
@@ -140,6 +164,7 @@ export class CacheKeyGenerator {
         key += part.text.length;
         const partAny = part as any;
         key = appendResponseProviderItemKeys(key, partAny.providerMetadata, partAny.providerOptions);
+        key = appendAnthropicReasoningKeys(key, partAny.providerMetadata, partAny.providerOptions);
       }
       if (part.type === 'tool-call') {
         key += part.toolCallId;
@@ -182,6 +207,7 @@ export class CacheKeyGenerator {
       if (part.type === 'reasoning') {
         key += part.text;
         key = appendResponseProviderItemKeys(key, (part as any).providerMetadata);
+        key = appendAnthropicReasoningKeys(key, (part as any).providerMetadata);
       }
       if (part.type === 'file') {
         key += part.url.length;
@@ -207,6 +233,7 @@ export class CacheKeyGenerator {
       if (part.type === 'reasoning') {
         key += part.text.length;
         key = appendResponseProviderItemKeys(key, (part as any).providerOptions);
+        key = appendAnthropicReasoningKeys(key, (part as any).providerOptions);
       }
       if (part.type === 'tool-call') {
         key += part.toolCallId;
