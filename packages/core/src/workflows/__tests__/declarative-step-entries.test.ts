@@ -10,6 +10,7 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../agent';
+import { createDurableAgent } from '../../agent/durable/create-durable-agent';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
@@ -330,6 +331,28 @@ describe.each(ENGINES)('declarative step runtime ($name engine)', ({ evented }) 
     expect(result.status).toBe('success');
     if (result.status === 'success') {
       expect((result.steps['rt-agent'] as any).output.text).toBe('hello world');
+    }
+  });
+
+  it('createStep() executes a durable agent and returns { text }', async () => {
+    const durableAgent = createDurableAgent({
+      agent: textAgent('rt-durable-agent', 'durable response'),
+      cleanupTimeoutMs: 0,
+    });
+    const wf = createWorkflow({
+      id: 'rt-durable-agent-wf',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.any(),
+    })
+      .then(createStep(durableAgent))
+      .commit();
+    bind(wf, { agents: { 'rt-durable-agent': durableAgent } });
+
+    const run = await wf.createRun();
+    const result = await run.start({ inputData: { prompt: 'say hi' } });
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect((result.steps['rt-durable-agent'] as any).output).toEqual({ text: 'durable response' });
     }
   });
 
