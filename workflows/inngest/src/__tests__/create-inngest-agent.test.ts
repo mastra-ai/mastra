@@ -2919,6 +2919,21 @@ describe('thread and run abort (#25156)', () => {
     }
   });
 
+  it("abortRunStream never aborts another Mastra instance's run with the same runId", async () => {
+    const durableAgent = makeDurable('abort-run-other-app');
+    new Mastra({ agents: { mine: durableAgent as any }, storage: new InMemoryStore(), logger: false });
+    const runId = 'abort-run-other-app-run';
+    const otherController = new AbortController();
+    globalRunRegistry.set(runId, { mastra: new Mastra({ logger: false }), abortController: otherController } as any);
+
+    try {
+      expect(durableAgent.abortRunStream(runId)).toBe(false);
+      expect(otherController.signal.aborted).toBe(false);
+    } finally {
+      globalRunRegistry.delete(runId);
+    }
+  });
+
   it('does not throw when publishing the abort request fails', async () => {
     const durableAgent = makeDurable('abort-run-publish-fails');
     vi.spyOn(durableAgent.pubsub, 'publish').mockRejectedValue(new Error('transport down'));

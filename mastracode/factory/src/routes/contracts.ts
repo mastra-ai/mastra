@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { FACTORY_ROLE_STAGES } from '../rules/types.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
+import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
 
 const FACTORY_ROLE_VALUES = Object.keys(FACTORY_ROLE_STAGES) as [string, ...string[]];
 
@@ -55,6 +56,7 @@ export const updateProjectBodySchema = z
     name: nonEmptyTrimmed(200).optional(),
     description: nullableTrimmed(2_000).optional(),
     defaultModelId: nullableTrimmed(200).optional(),
+    modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
     slackWorkItemsEnabled: z.boolean().optional(),
     autoRunEnabled: z.boolean().optional(),
     autoApprovePlans: z.boolean().optional(),

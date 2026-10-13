@@ -5,6 +5,7 @@ allowBuilds:
   esbuild: true
 
 overrides:
+  '@modelcontextprotocol/sdk@>=1.0.0 <1.32.0': 1.32.1
   # Vanta 2026-09-28: nested-lock security floors
   'postcss@<8.5.23': 8.5.23
   # Vanta 2026-10-02: force fixed majors for findings whose parents have no release on them yet.

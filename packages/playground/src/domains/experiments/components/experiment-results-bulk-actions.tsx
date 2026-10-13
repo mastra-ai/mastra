@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ClipboardCheck, X } from 'lucide-react';
+import { ClipboardPlus, X } from 'lucide-react';
 
 import type { ExperimentResultsSelection } from '../hooks/use-experiment-results-selection';
 import { ExperimentResultsTagPicker } from './experiment-results-tag-picker';
@@ -15,7 +15,7 @@ export function ExperimentResultsBulkActions({ selection }: ExperimentResultsBul
   const isEmpty = selectedIds.size === 0;
 
   return (
-    <div className="flex min-h-8 items-center gap-1 whitespace-nowrap">
+    <div className="flex min-h-8 items-center gap-2 whitespace-nowrap">
       <Button
         variant="ghost"
         size="sm"
@@ -23,20 +23,14 @@ export function ExperimentResultsBulkActions({ selection }: ExperimentResultsBul
         iconEnd={isEmpty ? undefined : <X />}
         onClick={selection.clearSelection}
         tooltip={isEmpty ? undefined : 'Clear selection'}
-        className="mr-2 tabular-nums"
+        className="tabular-nums"
       >
         {selectedIds.size} selected
       </Button>
       {!isEmpty && (
         <>
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={busy}
-            onClick={selection.flagSelectedForReview}
-            icon={<ClipboardCheck />}
-          >
-            Flag for review
+          <Button size="sm" disabled={busy} onClick={selection.flagSelectedForReview} icon={<ClipboardPlus />}>
+            Request review
           </Button>
           <ExperimentResultsTagPicker
             selectedResults={selectedResults}

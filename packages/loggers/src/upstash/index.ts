@@ -134,12 +134,10 @@ export class UpstashTransport extends LoggerTransport {
   _transform(chunk: string, _enc: string, cb: Function) {
     try {
       // Parse the log line if it's a string
-      const log = typeof chunk === 'string' ? JSON.parse(chunk) : chunk;
+      const parsed = typeof chunk === 'string' ? JSON.parse(chunk) : chunk;
 
-      // Add timestamp if not present
-      if (log.time === undefined || log.time === null) {
-        log.time = Date.now();
-      }
+      // Add timestamp if not present, on a copy so caller-owned (possibly frozen) records stay untouched
+      const log = parsed.time === undefined || parsed.time === null ? { ...parsed, time: Date.now() } : parsed;
 
       // Add to buffer
       this.logBuffer.push(log);
@@ -193,7 +191,7 @@ export class UpstashTransport extends LoggerTransport {
         const parsedLog = JSON.parse(log);
         return parsedLog !== null && typeof parsedLog === 'object' ? [parsedLog] : [];
       } catch {
-        return [{} as BaseLogMessage];
+        return [];
       }
     });
   }
