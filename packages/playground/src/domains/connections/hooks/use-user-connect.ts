@@ -65,6 +65,19 @@ function useConnectFetch(): ConnectFetch {
   );
 }
 
+/**
+ * Resolves a server-relative launch-gate path (returned by the session route
+ * as `launchUrl`) against the SDK's base URL for top-level popup navigation.
+ * The launch route is authenticated by the browser's session cookie — the
+ * server re-verifies that this browser owns the pending session before
+ * redirecting into the vendor OAuth flow.
+ */
+export function useConnectLaunchHref(): (launchUrl: string) => string {
+  const client = useMastraClient();
+  const { baseUrl } = client.options;
+  return useCallback((launchUrl: string) => (baseUrl ? `${baseUrl}${launchUrl}` : launchUrl), [baseUrl]);
+}
+
 export type ConnectSurface =
   | { status: 'ready'; providers: UserConnectProvidersResponse['providers'] }
   | { status: 'not-mounted' }

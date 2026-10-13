@@ -45,7 +45,14 @@ export interface UserConnectionsResponse {
 export interface UserConnectSessionResponse {
   connectionId: string;
   integrationId: string;
-  connectUrl: string | null;
+  /**
+   * Server-relative launch-gate path (`{basePath}/connections/:id/launch`).
+   * The popup navigates here — same-origin with the Mastra server and
+   * authenticated — and the server verifies this browser owns the pending
+   * session before 302ing into the vendor OAuth flow. The raw vendor connect
+   * URL is never exposed to the browser.
+   */
+  launchUrl: string;
   sessionToken: string | null;
   expiresAt: string | null;
 }

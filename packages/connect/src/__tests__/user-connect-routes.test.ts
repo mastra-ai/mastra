@@ -71,11 +71,29 @@ function fakePlatform(options?: {
       return Response.json({ connections: rows });
     }
     if (url.pathname.includes('/connect-sessions') && method === 'POST') {
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {};
       return Response.json({
         connectionId: 'c_new1',
         integrationId: url.pathname.split('/integrations/')[1]!.split('/')[0]!,
-        connectUrl: 'https://connect.test/session',
+        // The platform nulls the vendor link for resource-scoped sessions:
+        // the launch gate is the only reader.
+        connectUrl: body.resourceId ? null : 'https://connect.test/session',
         sessionToken: 'sess_tok',
+        expiresAt: '2026-10-13T15:00:00Z',
+      });
+    }
+    if (url.pathname.endsWith('/connect-url') && method === 'GET') {
+      // Launch gate: the platform serves the stored vendor link only when the
+      // caller's resource assertion matches the pending row; everything else
+      // is an indistinguishable 404.
+      const connectionId = url.pathname.split('/connections/')[1]!.split('/')[0]!;
+      const asserted = new Headers(init?.headers).get('x-mastra-resource-id');
+      const row = connections.find(connection => connection.id === connectionId);
+      if (!row || row.resourceId === null || asserted !== row.resourceId) {
+        return Response.json({ error: 'not found' }, { status: 404 });
+      }
+      return Response.json({
+        connectUrl: 'https://connect.test/session-launch',
         expiresAt: '2026-10-13T15:00:00Z',
       });
     }
@@ -123,6 +141,7 @@ function makeCtx(options?: {
     html: (content: string, status = 200) =>
       new Response(content, { status, headers: { 'content-type': 'text/html; charset=UTF-8', ...headers } }),
     body: (data: string | null, status = 200) => new Response(data, { status, headers }),
+    redirect: (location: string, status = 302) => new Response(null, { status, headers: { location, ...headers } }),
   };
 }
 
@@ -191,6 +210,7 @@ describe('userConnectRoutes construction', () => {
       'GET /end-user/connections',
       'GET /end-user/connections/:id/status',
       'DELETE /end-user/connections/:id',
+      'GET /end-user/connections/:id/launch',
       'POST /end-user/:provider/sessions',
       'GET /end-user/:provider',
     ]);
@@ -315,7 +335,8 @@ describe('POST /:provider/sessions', () => {
     expect(await json(response)).toEqual({
       connectionId: 'c_new1',
       integrationId: 'linear',
-      connectUrl: 'https://connect.test/session',
+      // The browser gets the launch-gate path, never the vendor connect URL.
+      launchUrl: '/connect/connections/c_new1/launch',
       sessionToken: 'sess_tok',
       expiresAt: '2026-10-13T15:00:00Z',
     });
@@ -331,6 +352,46 @@ describe('POST /:provider/sessions', () => {
       makeCtx({ resourceId: 'end-user-42', params: { provider: 'github' } }),
     );
     expect(response.status).toBe(404);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /connections/:id/launch', () => {
+  it('redirects the owner into the vendor OAuth flow with the resource assertion', async () => {
+    const { fetchMock, requests } = fakePlatform({
+      connections: [makeConnection({ id: 'c_own', resourceId: 'end-user-42', status: 'pending' })],
+    });
+    const routes = userConnectRoutes(routeOptions(fetchMock as unknown as typeof fetch));
+    const response = await (findRoute(routes, 'GET', '/connect/connections/:id/launch') as any).handler(
+      makeCtx({ resourceId: 'end-user-42', params: { id: 'c_own' } }),
+    );
+    expect(response.status).toBe(302);
+    expect(response.headers.get('location')).toBe('https://connect.test/session-launch');
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    const gateRequest = requests.find(request => request.url.pathname.endsWith('/connect-url'))!;
+    expect(gateRequest.url.pathname).toBe('/v2/connections/c_own/connect-url');
+    expect(gateRequest.headers.get(RESOURCE_ID_HEADER)).toBe('end-user-42');
+  });
+
+  it('404s for a session owned by another resource — a leaked launch URL is useless', async () => {
+    const { fetchMock } = fakePlatform({
+      connections: [makeConnection({ id: 'c_other', resourceId: 'end-user-other', status: 'pending' })],
+    });
+    const routes = userConnectRoutes(routeOptions(fetchMock as unknown as typeof fetch));
+    const response = await (findRoute(routes, 'GET', '/connect/connections/:id/launch') as any).handler(
+      makeCtx({ resourceId: 'end-user-42', params: { id: 'c_other' } }),
+    );
+    expect(response.status).toBe(404);
+    expect((await json(response)).error.code).toBe('connection_not_found');
+  });
+
+  it('401s without an authenticated identity', async () => {
+    const { fetchMock } = fakePlatform();
+    const routes = userConnectRoutes(routeOptions(fetchMock as unknown as typeof fetch));
+    const response = await (findRoute(routes, 'GET', '/connect/connections/:id/launch') as any).handler(
+      makeCtx({ params: { id: 'c_own' } }),
+    );
+    expect(response.status).toBe(401);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

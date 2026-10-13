@@ -2,7 +2,11 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEffect, useState } from 'react';
 
-import { useConnectionStatus, useCreateConnectSession } from '@/domains/connections/hooks/use-user-connect';
+import {
+  useConnectLaunchHref,
+  useConnectionStatus,
+  useCreateConnectSession,
+} from '@/domains/connections/hooks/use-user-connect';
 import type { UserConnectProvider } from '@/domains/connections/types';
 
 interface PendingConnect {
@@ -24,6 +28,7 @@ export interface AddConnectionSectionProps {
  */
 export function AddConnectionSection({ providers }: AddConnectionSectionProps) {
   const session = useCreateConnectSession();
+  const resolveLaunchHref = useConnectLaunchHref();
   const [pending, setPending] = useState<PendingConnect | null>(null);
   const status = useConnectionStatus({ connectionId: pending?.connectionId ?? null });
 
@@ -39,15 +44,17 @@ export function AddConnectionSection({ providers }: AddConnectionSectionProps) {
       { provider: providerId },
       {
         onSuccess: created => {
-          if (created.connectUrl && popup) {
-            popup.location.href = created.connectUrl;
-          } else {
-            popup?.close();
+          // The popup enters OAuth through the server's launch gate, which
+          // verifies this browser owns the pending session before redirecting
+          // to the vendor flow — the raw vendor URL never reaches the page.
+          const launchHref = resolveLaunchHref(created.launchUrl);
+          if (popup) {
+            popup.location.href = launchHref;
           }
           setPending({
             provider: providerId,
             connectionId: created.connectionId,
-            fallbackUrl: created.connectUrl && !popup ? created.connectUrl : null,
+            fallbackUrl: popup ? null : launchHref,
           });
         },
         onError: () => popup?.close(),

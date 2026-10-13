@@ -591,7 +591,13 @@ export async function proxyRequestWithResponse(
 export const connectSessionSchema = z.object({
   connectionId: z.string(),
   integrationId: z.string(),
-  connectUrl: z.string(),
+  /**
+   * Vendor connect link. The platform nulls this for resource-scoped
+   * sessions: their link is a bearer capability served only by the launch
+   * gate (`getConnectUrl`) under a matching resource assertion, so it never
+   * appears in a creation response that could reach a browser.
+   */
+  connectUrl: z.string().nullish(),
   sessionToken: z.string(),
   expiresAt: z.string(),
 });
@@ -627,6 +633,44 @@ export async function createProjectConnectSession(
     throw new MastraConnectError(
       'platform_error',
       `Platform returned an unexpected connect-session shape for ${integrationId}.`,
+    );
+  }
+  return parsed.data;
+}
+
+export const connectUrlSchema = z.object({
+  connectUrl: z.string(),
+  expiresAt: z.string(),
+});
+
+export type ConnectUrl = z.infer<typeof connectUrlSchema>;
+
+/**
+ * Fetches the vendor connect link for a pending resource-scoped connection
+ * from the platform's launch gate. The platform serves it only while the
+ * session is pending and unexpired, and only when the client's
+ * `x-mastra-resource-id` assertion matches the row — any mismatch is a 404,
+ * which surfaces here as `connection_not_found`. This is how the browser's
+ * popup enters OAuth: the link itself never reaches browser-visible state.
+ */
+export async function getConnectUrl(client: ResolvedClient, connectionId: string): Promise<ConnectUrl> {
+  const response = await platformFetch(client, `/v2/connections/${encodeURIComponent(connectionId)}/connect-url`);
+  if (response.status === 404) {
+    throw new MastraConnectError(
+      'connection_not_found',
+      `No launchable connect session found for connection ${connectionId}.`,
+    );
+  }
+  if (!response.ok) {
+    await throwPlatformError(response, `fetching the connect URL for ${connectionId}`);
+  }
+  const parsed = connectUrlSchema.safeParse(
+    await parsePlatformJson(response, `fetching the connect URL for ${connectionId}`),
+  );
+  if (!parsed.success) {
+    throw new MastraConnectError(
+      'platform_error',
+      `Platform returned an unexpected connect-url shape for ${connectionId}.`,
     );
   }
   return parsed.data;

@@ -166,7 +166,9 @@ describe('ConnectionsPage', () => {
 
       await waitFor(() => expect(onSession).toHaveBeenCalled());
       expect(openSpy).toHaveBeenCalled();
-      await waitFor(() => expect(popup.location.href).toBe(sessionResponse.connectUrl));
+      // The popup is sent to the launch gate (resolved against the server base
+      // URL), never to a raw vendor connect URL.
+      await waitFor(() => expect(popup.location.href).toBe(`${BASE_URL}${sessionResponse.launchUrl}`));
 
       expect(await within(slackRow).findByRole('status')).not.toBeNull();
 
@@ -195,7 +197,7 @@ describe('ConnectionsPage', () => {
       fireEvent.click(within(slackRow).getByRole('button', { name: 'Connect' }));
 
       const fallback = await within(slackRow).findByRole('link', { name: 'Open the connect window' });
-      expect(fallback.getAttribute('href')).toBe(sessionResponse.connectUrl);
+      expect(fallback.getAttribute('href')).toBe(`${BASE_URL}${sessionResponse.launchUrl}`);
     });
   });
 });

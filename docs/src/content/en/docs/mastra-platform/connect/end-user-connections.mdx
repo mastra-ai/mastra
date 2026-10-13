@@ -98,6 +98,10 @@ The page shows a Connect button, opens the provider's authorization flow in a po
 
 Prefer your own UI? Call the JSON routes directly — see the [route reference](/reference/connect/user-connect-routes#routes).
 
+### The authorization link never leaves the server
+
+The provider's authorization link is a bearer capability: anyone who opens it can bind their third-party account to the pending connection. For end-user sessions, that link stays on the platform. Session creation returns a `launchUrl` instead — an authenticated route that re-verifies the caller owns the session before redirecting into the provider's flow. A forwarded or leaked launch URL returns 404 for anyone else, so another user can't attach their account to a session they don't own.
+
 ## Inspect connections in Studio
 
 With `userConnectRoutes()` mounted, Studio's **Connections** page shows the project's global connections alongside the connections belonging to the resource ID your studio session resolves to, and lets you run the connect flow against your allowlisted providers. Because the routes are gated on an end-user identity, the page needs `server.auth` with `mapUserToResourceId` configured — without it, Studio shows a setup prompt instead.

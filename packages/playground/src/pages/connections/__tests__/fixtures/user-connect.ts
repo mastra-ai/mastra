@@ -51,7 +51,8 @@ export const globalOnlyConnectionsResponse: UserConnectionsResponse = {
 export const sessionResponse: UserConnectSessionResponse = {
   connectionId: 'conn-user-2',
   integrationId: 'slack',
-  connectUrl: 'https://connect.example.com/session/abc',
+  // Server-relative launch-gate path; the vendor OAuth URL is never exposed.
+  launchUrl: '/connect/connections/conn-user-2/launch',
   sessionToken: 'session-token',
   expiresAt: '2026-10-13T23:59:59.000Z',
 };

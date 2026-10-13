@@ -4,6 +4,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import {
   createProjectConnectSession,
   disconnectConnection,
+  getConnectUrl,
   listIntegrations,
   listProjectConnections,
   resolveClient,
@@ -354,6 +355,26 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
       }),
     },
     {
+      path: `${basePath}/connections/:id/launch`,
+      method: 'GET',
+      requiresAuth: true,
+      handler: gated(async (c, client) => {
+        // Launch gate: the only way a browser enters the OAuth flow. The
+        // vendor connect link is a bearer capability, so it is never returned
+        // by the session route; instead the popup navigates here, this route
+        // re-fetches the link from the platform under the caller's own
+        // resource assertion, and redirects. A caller who is not the
+        // session's owner gets a 404 from the platform before any OAuth page
+        // ever loads — which is what makes a leaked or fixated launch URL
+        // useless.
+        const id = String(c.req.param('id') ?? '');
+        if (!id) return notFound(c, 'connection_not_found', 'Connection not found.');
+        const { connectUrl } = await getConnectUrl(client, id);
+        c.header('Cache-Control', 'no-store');
+        return c.redirect(connectUrl, 302);
+      }),
+    },
+    {
       path: `${basePath}/:provider/sessions`,
       method: 'POST',
       requiresAuth: true,
@@ -365,7 +386,10 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
           {
             connectionId: session.connectionId,
             integrationId: session.integrationId,
-            connectUrl: session.connectUrl,
+            // The browser never receives the vendor connect link. It opens
+            // the launch gate instead, which verifies the caller's identity
+            // against the pending row immediately before OAuth entry.
+            launchUrl: `${basePath}/connections/${encodeURIComponent(session.connectionId)}/launch`,
             sessionToken: session.sessionToken,
             expiresAt: session.expiresAt,
           },
