@@ -784,6 +784,8 @@ describe('OpenAISchemaCompatLayer', () => {
       ['azure.chat', 'graphic-gpt'],
       ['azure.chat', 'sophia-gpt-4o'],
       ['azure.responses', 'gpt-4o-telemetry'],
+      ['azure.chat', 'metadata-gpt'],
+      ['azure.chat', 'grokking-gpt-4o'],
     ])('should apply for @ai-sdk/azure models (%s, %s)', (provider, modelId) => {
       const layer = new OpenAISchemaCompatLayer({ provider, modelId, supportsStructuredOutputs: false });
       expect(layer.shouldApply()).toBe(true);
@@ -802,6 +804,8 @@ describe('OpenAISchemaCompatLayer', () => {
       ['azure.chat', 'grok-3'],
       ['azure.chat', 'Cohere-command-r-plus'],
       ['azure.responses', 'prod-claude-sonnet'],
+      ['azure.chat', 'llama3-70b'],
+      ['azure.chat', 'phi4-prod'],
     ])('should not apply for @ai-sdk/azure models owned by another layer (%s, %s)', (provider, modelId) => {
       const layer = new OpenAISchemaCompatLayer({ provider, modelId, supportsStructuredOutputs: false });
       expect(layer.shouldApply()).toBe(false);

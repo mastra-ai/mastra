@@ -109,8 +109,10 @@ export function isOpenAICompatibleModel(model: { provider?: string; modelId?: st
   // @ai-sdk/azure reports `azure.responses` / `azure.chat`, and deployment names rarely contain "openai".
   // Model families with their own layer must still reach it, since the first applicable layer wins.
   // Azure catalog IDs are mixed case (e.g. `DeepSeek-V3`, `Phi-4`), so match case-insensitively.
+  // Family names must be whole tokens (a version digit may follow, e.g. `llama3`), so `metadata-gpt` is not excluded.
   return (
-    provider.startsWith('azure.') && !/(^|[-_./:])(claude|deepseek|meta|llama|mistral|phi|grok|cohere)/i.test(modelId)
+    provider.startsWith('azure.') &&
+    !/(^|[-_./:])(claude|deepseek|meta|llama|mistral|phi|grok|cohere)(?=$|[-_./:]|\d)/i.test(modelId)
   );
 }
 
