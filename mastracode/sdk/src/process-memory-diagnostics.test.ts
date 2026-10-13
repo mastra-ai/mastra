@@ -79,6 +79,7 @@ function createInspector(
 async function createHarness(options: Parameters<typeof createInspector>[0] = {}) {
   const parentDirectory = await mkdtemp(join(tmpdir(), 'mastracode-profile-test-'));
   const inspector = createInspector(options);
+  let artifactId = 0;
   let observerCallback: ((entries: PerformanceEntry[]) => void) | null = null;
   const observer = { observe: vi.fn(), disconnect: vi.fn() };
   const diagnostics = new ProcessMemoryDiagnostics(
@@ -94,7 +95,7 @@ async function createHarness(options: Parameters<typeof createInspector>[0] = {}
         observerCallback = callback;
         return observer;
       },
-      randomId: () => 'test-id',
+      randomId: () => `test-id-${++artifactId}`,
     },
   );
   return {
@@ -460,6 +461,8 @@ describe('ProcessMemoryDiagnostics', () => {
   });
 
   it('waits for an in-progress stop before starting a new diagnostics run', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-13T00:00:00.000Z'));
     const finalCapture = deferred<Record<string, unknown>>();
     const harness = await createHarness({ stopResponses: [finalCapture.promise] });
     roots.push(harness.parentDirectory);
