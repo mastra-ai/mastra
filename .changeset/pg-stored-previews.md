@@ -4,7 +4,7 @@
 
 Trace and span lists now read short stored previews instead of each span's full input. Every span stores previews of its input, output and error when it is written, and `queryTraces()` and `querySpans()` read them. Lists also return `outputPreview` and `errorPreview`, and `querySpans()` adds `errorPreview` and `errorTruncated`.
 
-Generated previews use the shared format from `@mastra/core`: at most 100 characters plus `…` when cut. For message lists they show the last user message. `querySpans()` previews used to be the first 256 characters of raw JSON. Nonblank supplied previews are trimmed without a length limit; missing or blank write-time previews are generated from their payloads.
+Generated previews use the shared format from `@mastra/core`: at most 100 characters plus `…` when cut. For message lists they show the last user message. `querySpans()` previews used to be the first 256 characters of raw JSON. Nonblank supplied previews are trimmed and capped the same way; missing or blank write-time previews are generated from their payloads.
 
 `listTracesLight()` also reads stored previews. NULL previews trigger batched payload reads and application-side generation; stored empty strings do not. With older core versions that lack the optional preview helper, preview fields pass through unchanged without generation.
 

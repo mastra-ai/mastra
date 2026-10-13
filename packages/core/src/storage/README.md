@@ -6,7 +6,7 @@ The storage package provides a flexible and extensible storage system for Mastra
 
 ### Observability previews
 
-The ClickHouse, PostgreSQL and DuckDB observability adapters store nullable `inputPreview`, `outputPreview` and `errorPreview` columns. At insertion, a nonblank supplied preview is trimmed without a length limit. Missing or blank values are generated from their payload through `buildStoredPreview` in `@mastra/core/storage`; generated text is limited to 100 characters plus an ellipsis when truncated.
+The ClickHouse, PostgreSQL and DuckDB observability adapters store nullable `inputPreview`, `outputPreview` and `errorPreview` columns. At insertion, `buildStoredPreview` in `@mastra/core/storage` keeps a nonblank supplied preview, otherwise generates one from the payload. Both are trimmed and limited to 100 characters plus an ellipsis when truncated.
 
 List reads use stored previews and generate a fallback in adapter TypeScript only for NULL previews. A stored empty string means there is nothing to preview and does not trigger a payload lookup. Fallback never writes to the database, and raw payloads are omitted from preview list responses. Full/detail responses keep their existing behavior.
 

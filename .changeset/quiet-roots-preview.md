@@ -6,4 +6,4 @@ Trace and span lists use less memory. Every span now stores short previews of it
 
 The store adds `inputPreview`, `outputPreview` and `errorPreview` columns to `mastra_span_events`, `mastra_trace_roots` and `mastra_trace_branches` when it starts. No manual migration is needed.
 
-Nonblank supplied previews are trimmed without a length limit. Missing or blank write-time previews are generated through the optional core helper. Stored empty strings do not trigger read fallback. With older core versions that lack the helper, preview fields pass through unchanged without generation.
+Nonblank supplied previews are trimmed and capped like generated ones (100 characters plus `…`). Missing or blank write-time previews are generated through the optional core helper. Stored empty strings do not trigger read fallback. With older core versions that lack the helper, preview fields pass through unchanged without generation.

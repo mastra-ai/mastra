@@ -392,11 +392,18 @@ describe('buildPreviewFromJson', () => {
 });
 
 describe('buildStoredPreview', () => {
-  it('trims supplied previews without limiting them and regenerates blanks', () => {
+  it('trims supplied previews, caps them like generated ones and regenerates blanks', () => {
     expect(buildStoredPreview(' upstream ', { text: 'built' })).toBe('upstream');
-    expect(buildStoredPreview('u'.repeat(300), 'built')).toBe('u'.repeat(300));
+    expect(buildStoredPreview('u'.repeat(300), 'built')).toBe(`${'u'.repeat(PREVIEW_MAX_LENGTH)}…`);
     expect(buildStoredPreview('', 'built')).toBe('built');
     expect(buildStoredPreview(' \n\t ', 'built')).toBe('built');
+  });
+
+  it('caps an oversized supplied preview without splitting a surrogate pair', () => {
+    const huge = 'p'.repeat(PREVIEW_MAX_LENGTH - 1) + '\u{1F600}'.repeat(1_000_000);
+    const preview = buildStoredPreview(huge, 'built');
+    expect(preview).toBe(`${'p'.repeat(PREVIEW_MAX_LENGTH - 1)}…`);
+    expect(isPreviewTruncated(preview)).toBe(true);
   });
 
   it('builds from the stored value otherwise, with an empty string for nothing to preview', () => {

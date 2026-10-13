@@ -583,15 +583,16 @@ export function buildPreviewFromJson(json: string | null | undefined): string | 
 
 /**
  * The preview a store writes for one payload: an upstream preview when the span record carries
- * a nonblank one (trimmed without a length cap), otherwise one built from the payload.
- * Generated previews are bounded; `''` means there is nothing to preview.
+ * a nonblank one, otherwise one built from the payload. Both are capped the same way, at
+ * {@link PREVIEW_MAX_LENGTH} characters plus `…`, so an exporter can't store an unbounded preview.
+ * `''` means there is nothing to preview.
  */
 export function buildStoredPreview(
   upstream: string | null | undefined,
   value: unknown,
   serialized?: string | null,
 ): string {
-  return upstream?.trim() || buildPreview(value, serialized) || '';
+  return (upstream ? truncatePreview(upstream) : null) ?? buildPreview(value, serialized) ?? '';
 }
 
 /**

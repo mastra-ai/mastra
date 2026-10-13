@@ -242,7 +242,7 @@ function commonContextToRow(record: CommonContextWritable): Record<string, unkno
 
 /**
  * Serialize a span payload for its jsonb column and build its stored preview from the same value.
- * Nonblank upstream previews win (trimmed without a length cap). The preview goes into a `text` column, which
+ * Nonblank upstream previews win (trimmed and capped like generated ones). The preview goes into a `text` column, which
  * rejects NUL, so it gets the same repair `toPgJson` applies to the payload.
  */
 function spanPayload(value: unknown, upstream: string | null | undefined) {

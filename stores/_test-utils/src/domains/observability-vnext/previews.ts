@@ -131,17 +131,19 @@ export function createPreviewTests(getStorage: () => ObservabilityStorage, optio
       }
     });
 
-    it('trims upstream previews without limiting them and regenerates blank previews', async () => {
+    it('trims upstream previews, caps them like generated ones and regenerates blank previews', async () => {
+      // Oversized, and cut right before a surrogate pair: the cap must not split it.
+      const oversized = `  ${'u'.repeat(99)}${'\u{1F600}'.repeat(100_000)}`;
       await getStorage().batchCreateSpans({
         records: [
-          root('trace-upstream', { inputPreview: `  ${'u'.repeat(250)}`, outputPreview: 'upstream output' }),
+          root('trace-upstream', { inputPreview: oversized, outputPreview: 'upstream output' }),
           child('trace-upstream', { errorPreview: '' }),
         ],
       });
       await options.afterWrite?.();
 
       const rootPreviews = {
-        inputPreview: 'u'.repeat(250),
+        inputPreview: `${'u'.repeat(99)}…`,
         outputPreview: 'upstream output',
         errorPreview: null,
       };
@@ -149,7 +151,7 @@ export function createPreviewTests(getStorage: () => ObservabilityStorage, optio
       expect(await listLight()).toEqual({ 'trace-upstream': rootPreviews });
       if (options.spanQuery !== false) {
         expect(await listSpans()).toEqual({
-          'trace-upstream-root': { ...rootPreviews, truncated: [false, false, false] },
+          'trace-upstream-root': { ...rootPreviews, truncated: [true, false, false] },
           'trace-upstream-child': { ...expected.child, truncated: [true, false, false] },
         });
       }

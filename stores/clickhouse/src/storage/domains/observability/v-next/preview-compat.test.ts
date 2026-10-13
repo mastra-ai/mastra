@@ -17,7 +17,7 @@ describe('optional core preview generator', () => {
     }
   });
 
-  it('generates blank previews, trims supplied text, and preserves long custom previews', async () => {
+  it('generates blank previews, trims supplied text, and caps long custom previews', async () => {
     const compat = await import('./preview-compat');
     expect(compat.canGeneratePreviews).toBe(true);
     for (const preview of [undefined, null, '', ' \t\n\u00a0\ufeff ']) {
@@ -27,7 +27,8 @@ describe('optional core preview generator', () => {
       expect(compat.readPreview(preview, '"   "', true)).toBeNull();
     }
     expect(compat.readPreview('  custom  ', 'other')).toBe('custom');
-    expect(compat.storedPreview('x'.repeat(500), 'other')).toBe('x'.repeat(500));
+    expect(compat.storedPreview('x'.repeat(500), 'other')).toBe(`${'x'.repeat(100)}…`);
+    expect(compat.storedPreview('x'.repeat(5_000_000), 'other')).toBe(`${'x'.repeat(100)}…`);
     expect(compat.readPreview(null, 'false', true)).toBe('false');
     expect(compat.readPreview(null, '0', true)).toBe('0');
   });

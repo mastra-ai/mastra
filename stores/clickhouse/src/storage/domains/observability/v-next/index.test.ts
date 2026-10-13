@@ -6766,6 +6766,67 @@ describe('listTracesLight projection', () => {
     expect(row.status).toBe('success');
     expect(row.metadata).toEqual({ customer: 'acme' });
   });
+
+  it('caps oversized supplied previews like generated ones', async () => {
+    const huge = 'p'.repeat(99) + '\u{1F600}'.repeat(1_000_000);
+    const capped = `${'p'.repeat(99)}…`;
+    await storage.batchCreateSpans({
+      records: [
+        {
+          traceId: 'light-trace-supplied',
+          spanId: 'light-span-supplied',
+          parentSpanId: null,
+          name: 'agent run',
+          spanType: SpanType.AGENT_RUN,
+          isEvent: false,
+          startedAt: new Date('2026-01-01T00:03:00Z'),
+          endedAt: new Date('2026-01-01T00:03:05Z'),
+          entityType: null,
+          entityId: null,
+          entityName: null,
+          userId: null,
+          organizationId: null,
+          resourceId: null,
+          runId: null,
+          sessionId: null,
+          threadId: null,
+          requestId: null,
+          environment: null,
+          source: null,
+          serviceName: null,
+          scope: null,
+          links: null,
+          metadata: null,
+          tags: [],
+          error: { message: 'boom' },
+          attributes: null,
+          input: 'input',
+          output: 'output',
+          inputPreview: huge,
+          outputPreview: huge,
+          errorPreview: huge,
+        },
+      ],
+    });
+
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    const stored = await (
+      await client.query({
+        query: `SELECT inputPreview, outputPreview, errorPreview FROM ${TABLE_TRACE_ROOTS} WHERE traceId = 'light-trace-supplied'`,
+        format: 'JSONEachRow',
+      })
+    ).json();
+    await client.close();
+    expect(stored).toEqual([{ inputPreview: capped, outputPreview: capped, errorPreview: capped }]);
+
+    const { spans } = await storage.listTracesLight({ pagination: { page: 0, perPage: 10 } });
+    const row = spans.find(s => s.traceId === 'light-trace-supplied')! as Record<string, unknown>;
+    expect([row.inputPreview, row.outputPreview, row.errorPreview]).toEqual([capped, capped, capped]);
+  });
 });
 
 // ---------------------------------------------------------------------------
