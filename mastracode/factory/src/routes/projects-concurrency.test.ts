@@ -146,3 +146,185 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
     });
   },
 );
+
+type UpdateManyArgs = [table: string, filter: { id?: string }, values: { position?: number }];
+
+describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
+  'environment repository order across independent %s clients',
+  backend => {
+    async function withEnvironment(
+      run: (env: {
+        apps: Hono[];
+        projects: FactoryProjectsStorage;
+        projectId: string;
+        docs: string;
+        api: string;
+        /** Wraps every database `updateMany`, inside and outside transactions. */
+        intercept: (handler: (args: UpdateManyArgs, write: () => Promise<unknown>) => Promise<unknown>) => void;
+        positions: () => Promise<Record<string, number>>;
+      }) => Promise<void>,
+    ) {
+      const directory = await mkdtemp(join(tmpdir(), 'factory-order-'));
+      const url = `file:${join(directory, 'order.db')}`;
+      const backends = ['left', 'right'].map(id =>
+        backend === 'postgres'
+          ? new PgFactoryStorage({ id, connectionString: postgresUrl! })
+          : new LibSQLFactoryStorage({ id, url }),
+      );
+      let projectId: string | undefined;
+      try {
+        const apps: Hono[] = [];
+        let projects: FactoryProjectsStorage | undefined;
+        let sourceControl: SourceControlStorage | undefined;
+        for (const storage of backends) {
+          projects = storage.registerDomain(new FactoryProjectsStorage());
+          sourceControl = storage.registerDomain(new SourceControlStorage());
+          await storage.init();
+          const app = new Hono();
+          app.use('*', async (context, next) => {
+            context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+            await next();
+          });
+          mountApiRoutes(
+            app as never,
+            new ProjectRoutes({
+              auth: fakeRouteAuth(),
+              projects,
+              sourceControl,
+              versionControlIntegrationIds: ['github'],
+            }).routes(),
+          );
+          apps.push(app);
+        }
+        const project = await projects!.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Ordered' } });
+        projectId = project.id;
+        const github = sourceControl!.forIntegration('github');
+        const installation = await github.installations.upsert({
+          orgId: 'org-1',
+          connectedByUserId: 'user-1',
+          externalId: `gh-${project.id}`,
+          accountName: 'acme',
+        });
+        const connection = await github.connections.create({
+          orgId: 'org-1',
+          factoryProjectId: project.id,
+          installationId: installation.id,
+          createdByUserId: 'user-1',
+        });
+        const ids: string[] = [];
+        for (const slug of ['acme/docs', 'acme/api']) {
+          const repository = await github.repositories.upsert({
+            orgId: 'org-1',
+            input: {
+              installationId: installation.id,
+              externalId: `${project.id}/${slug}`,
+              slug,
+              defaultBranch: 'main',
+            },
+          });
+          const link = await github.projectRepositories.link({
+            orgId: 'org-1',
+            connectionId: connection.id,
+            repositoryId: repository.id,
+            createdByUserId: 'user-1',
+            branch: 'main',
+            sandboxProvider: 'local',
+            sandboxWorkdir: '/workspace',
+          });
+          await github.projectRepositories.update({ orgId: 'org-1', id: link.id, input: { position: ids.length + 1 } });
+          ids.push(link.id);
+        }
+        const [docs, api] = ids as [string, string];
+        // Ops created inside and outside transactions share one prototype per backend.
+        const prototype = Object.getPrototypeOf(backends[0]!.ops) as { updateMany: (...args: unknown[]) => unknown };
+        const original = prototype.updateMany;
+        const intercept: Parameters<typeof run>[0]['intercept'] = handler => {
+          vi.spyOn(prototype, 'updateMany').mockImplementation(function (this: unknown, ...args: unknown[]) {
+            return handler(args as UpdateManyArgs, async () => original.apply(this, args));
+          });
+        };
+        const positions = async () =>
+          Object.fromEntries(
+            (await github.projectRepositories.listByProject({ orgId: 'org-1', factoryProjectId: project.id })).map(
+              link => [link.id === docs ? 'docs' : 'api', link.position],
+            ),
+          );
+        await run({ apps, projects: projects!, projectId: project.id, docs, api, intercept, positions });
+      } finally {
+        vi.restoreAllMocks();
+        try {
+          if (projectId) await backends[0]!.ops.deleteMany('factory_projects', { id: projectId });
+        } finally {
+          await Promise.all(backends.map(storage => storage.close()));
+          await rm(directory, { recursive: true, force: true });
+        }
+      }
+    }
+
+    const patch = (app: Hono, projectId: string, body: unknown) =>
+      app.request(`/web/factory/projects/${projectId}/environment`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    it('leaves the project and every link unchanged when a link write fails partway', async () => {
+      await withEnvironment(async ({ apps, projects, projectId, docs, api, intercept, positions }) => {
+        let linkWrites = 0;
+        intercept(async ([table], write) => {
+          if (table === 'factory_project_repositories' && ++linkWrites === 2) throw new Error('disk full');
+          return write();
+        });
+        const response = await patch(apps[0]!, projectId, {
+          workspaceSetupCommand: 'pnpm -r build',
+          repositories: [
+            { projectRepositoryId: api, position: 1 },
+            { projectRepositoryId: docs, position: 2 },
+          ],
+        });
+        vi.restoreAllMocks();
+        expect(response.status).toBe(500);
+        expect(await positions()).toEqual({ docs: 1, api: 2 });
+        expect(await projects.getById({ id: projectId })).toMatchObject({ workspaceSetupCommand: null });
+      });
+    });
+
+    it('applies two concurrent reorders one after the other instead of mixing them', async () => {
+      await withEnvironment(async ({ apps, projectId, docs, api, intercept, positions }) => {
+        const swapStarted = Promise.withResolvers<void>();
+        const keepDone = Promise.withResolvers<void>();
+        let paused = false;
+        intercept(async ([table, filter, values], write) => {
+          const result = await write();
+          // Hold the swap after its first link write until the other reorder finishes (or a
+          // transaction keeps it from starting).
+          if (table === 'factory_project_repositories' && filter.id === docs && values.position === 2 && !paused) {
+            paused = true;
+            swapStarted.resolve();
+            await Promise.race([keepDone.promise, new Promise(resolve => setTimeout(resolve, 300))]);
+          }
+          return result;
+        });
+        const swap = patch(apps[0]!, projectId, {
+          repositories: [
+            { projectRepositoryId: docs, position: 2 },
+            { projectRepositoryId: api, position: 1 },
+          ],
+        });
+        await swapStarted.promise;
+        const keep = patch(apps[1]!, projectId, {
+          repositories: [
+            { projectRepositoryId: docs, position: 1 },
+            { projectRepositoryId: api, position: 2 },
+          ],
+        }).finally(() => keepDone.resolve());
+        expect((await Promise.all([swap, keep])).map(response => response.status)).toEqual([200, 200]);
+        vi.restoreAllMocks();
+        expect([
+          { docs: 2, api: 1 },
+          { docs: 1, api: 2 },
+        ]).toContainEqual(await positions());
+      });
+    });
+  },
+);
