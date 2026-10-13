@@ -1011,3 +1011,121 @@ describe('WorkingMemoryExtractor schema enforcement', () => {
     expect(result.failures).toEqual([{ slug: 'working-memory', error: expect.stringContaining('preferredColor') }]);
   });
 });
+
+describe('required inline extractor sections', () => {
+  const markdownMemory = () =>
+    ({
+      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true } })),
+      getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'markdown', content: '# User\n' })),
+      getWorkingMemory: vi.fn(async () => '- Existing fact'),
+      updateWorkingMemory: vi.fn(async () => undefined),
+    }) as any;
+
+  it('records a failure when a required inline section is missing from the output', () => {
+    const required = new Extractor({
+      name: 'Profile',
+      instructions: 'Extract the profile.',
+      requireInlineSection: true,
+    });
+    const optional = new Extractor({ name: 'Mood', instructions: 'Extract mood.' });
+
+    const parsed = parseExtractedValues('<observations>User switched reports to USD.</observations>', [
+      required,
+      optional,
+    ]);
+
+    expect(parsed.values).toEqual({});
+    expect(parsed.failures).toEqual([{ slug: 'profile', error: expect.stringContaining('required <profile> section') }]);
+  });
+
+  it('treats UNCHANGED in a required section as an explicit no-change answer', () => {
+    const required = new Extractor({
+      name: 'Profile',
+      instructions: 'Extract the profile.',
+      requireInlineSection: true,
+    });
+
+    const parsed = parseExtractedValues(
+      '<observations>Nothing durable.</observations>\n<profile>UNCHANGED</profile>',
+      [required],
+    );
+
+    expect(parsed.values).toEqual({});
+    expect(parsed.failures).toEqual([]);
+  });
+
+  it('marks required sections as REQUIRED with the UNCHANGED instruction in the prompt', () => {
+    const required = new Extractor({
+      name: 'Profile',
+      instructions: 'Extract the profile.',
+      requireInlineSection: true,
+    });
+    const optional = new Extractor({ name: 'Mood', instructions: 'Extract mood.' });
+
+    const section = buildExtractorOutputSections([required, optional]);
+
+    expect(section).toContain('This section is REQUIRED: always output <profile>.');
+    expect(section).toContain('write exactly UNCHANGED inside the tag');
+    expect(section).toContain('Include this section when the observations contain relevant information for <mood>.');
+  });
+
+  it('requires the working-memory section for markdown working memory and explains UNCHANGED', async () => {
+    const memory = markdownMemory();
+    const [resolved] = await resolveExtractors([new WorkingMemoryExtractor()], {
+      source: 'observer',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+
+    expect(resolved?.mode).toBe('inline');
+    expect(resolved?.requireInlineSection).toBe(true);
+    expect(resolved?.instructions).toContain('If no working memory update is needed, return exactly UNCHANGED.');
+
+    const parsed = parseExtractedValues('<observations>User switched reports to USD.</observations>', [resolved!]);
+    expect(parsed.failures).toEqual([
+      { slug: 'working-memory', error: expect.stringContaining('required <working-memory> section') },
+    ]);
+  });
+
+  it('does not write markdown working memory when the extractor answers UNCHANGED', async () => {
+    const memory = markdownMemory();
+    const [resolved] = await resolveExtractors([new WorkingMemoryExtractor()], {
+      source: 'observer',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+
+    const result = await applyExtractorHooks({
+      source: 'observer',
+      extractors: [resolved!],
+      values: { 'working-memory': 'UNCHANGED' },
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+
+    expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
+    expect(result.failures ?? []).toEqual([]);
+  });
+
+  it('does not require the section for schema working memory (structured extraction path)', async () => {
+    const memory = {
+      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema: {} } })),
+      getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{"type":"object"}' })),
+      getWorkingMemory: vi.fn(async () => '{"name":"Tyler"}'),
+      updateWorkingMemory: vi.fn(async () => undefined),
+    } as any;
+    const [resolved] = await resolveExtractors([new WorkingMemoryExtractor()], {
+      source: 'observer',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+
+    expect(resolved?.mode).toBe('structured');
+    const parsed = parseExtractedValues('<observations>No section here.</observations>', [resolved!]);
+    expect(parsed.failures).toEqual([]);
+  });
+});

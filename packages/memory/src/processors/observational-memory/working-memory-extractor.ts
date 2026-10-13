@@ -5,7 +5,7 @@ import { standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import { z } from 'zod';
 
 import { stripNullsFromOptional } from '../../tools/working-memory';
-import { Extractor } from './extractor';
+import { Extractor, INLINE_SECTION_UNCHANGED } from './extractor';
 import type { ExtractorRuntimeContext } from './extractor';
 
 /**
@@ -82,6 +82,7 @@ function buildWorkingMemoryInstructions(details: Awaited<ReturnType<typeof getWo
   return [
     'Update working memory with durable facts from the observations you made.',
     'Return the full updated Markdown working memory. Preserve useful existing content and add or revise only what changed.',
+    `If no working memory update is needed, return exactly ${INLINE_SECTION_UNCHANGED}.`,
     details.template ? `Working memory template:\n${details.template}` : undefined,
     details.current ? `Current working memory:\n${details.current}` : undefined,
   ]
@@ -96,6 +97,10 @@ export class WorkingMemoryExtractor extends Extractor<string | Record<string, un
       includePreviousExtraction: false,
       metadataKeyPath: false,
       retryStructuredExtractionOnEmptyObject: true,
+      // Markdown working memory is extracted inline from the observer output. An optional section
+      // gets omitted often enough to silently drop updates (#25350), so require it and give the
+      // model an explicit no-change answer instead.
+      requireInlineSection: true,
       instructions: async context => buildWorkingMemoryInstructions(await getWorkingMemoryDetails(context)),
       schema: async context => {
         const details = await getWorkingMemoryDetails(context);
@@ -121,7 +126,7 @@ export class WorkingMemoryExtractor extends Extractor<string | Record<string, un
         }
 
         const workingMemory = typeof document === 'string' ? document : (JSON.stringify(document) ?? '');
-        if (!workingMemory.trim()) {
+        if (!workingMemory.trim() || workingMemory.trim() === INLINE_SECTION_UNCHANGED) {
           return undefined;
         }
 

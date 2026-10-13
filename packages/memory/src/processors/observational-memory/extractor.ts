@@ -60,7 +60,16 @@ export interface ExtractorConfig<T = unknown> {
   onExtracted?: (context: ExtractorOnExtractedContext<T>) => Promise<T | void | undefined> | T | void | undefined;
   /** Retry with JSON prompt injection when native structured output returns an empty object. */
   retryStructuredExtractionOnEmptyObject?: boolean;
+  /**
+   * Require the inline XML section in every observer/reflector output. The prompt tells the model to
+   * answer `UNCHANGED` when there is nothing to update, and a missing section is recorded as an
+   * extraction failure instead of being skipped silently. Only applies to inline extractors.
+   */
+  requireInlineSection?: boolean;
 }
+
+/** Explicit no-change answer for required inline sections. */
+export const INLINE_SECTION_UNCHANGED = 'UNCHANGED';
 
 const BUILT_IN_SLUGS = new Set(['current-task', 'suggested-response', 'thread-title']);
 
@@ -141,6 +150,7 @@ export class Extractor<T = unknown> {
   readonly metadataKeyPath: string | false;
   readonly onExtracted?: ExtractorConfig<T>['onExtracted'];
   readonly retryStructuredExtractionOnEmptyObject: boolean;
+  readonly requireInlineSection: boolean;
   /** @internal */
   readonly internal: boolean;
   private readonly instructionsConfig: ExtractorConfigValue<string>;
@@ -185,6 +195,7 @@ export class Extractor<T = unknown> {
     this.metadataKeyPath = isHook ? false : (config.metadataKeyPath ?? `extracted.${slug}`);
     this.onExtracted = config.onExtracted;
     this.retryStructuredExtractionOnEmptyObject = config.retryStructuredExtractionOnEmptyObject ?? false;
+    this.requireInlineSection = isHook ? false : (config.requireInlineSection ?? false);
     this.internal = internal;
   }
 
@@ -211,6 +222,7 @@ export class Extractor<T = unknown> {
         metadataKeyPath: this.metadataKeyPath,
         onExtracted: this.onExtracted,
         retryStructuredExtractionOnEmptyObject: this.retryStructuredExtractionOnEmptyObject,
+        requireInlineSection: this.requireInlineSection,
       },
       this.internal,
     );
@@ -346,6 +358,17 @@ export function parseExtractedValues(output: string, extractors: readonly Extrac
     const tagMatch = [...output.matchAll(tagRegex)].at(-1);
     const rawValue = tagMatch?.[1]?.trim();
     if (!rawValue) {
+      // A required section that is absent is a dropped update, not a no-op: the explicit
+      // UNCHANGED answer is the only valid way to say "nothing changed" (#25350).
+      if (extractor.requireInlineSection && !failures.some(failure => failure.slug === extractor.slug)) {
+        failures.push({
+          slug: extractor.slug,
+          error: `Output did not include the required <${extractor.slug}> section.`,
+        });
+      }
+      continue;
+    }
+    if (extractor.requireInlineSection && rawValue === INLINE_SECTION_UNCHANGED) {
       continue;
     }
     try {
@@ -380,12 +403,20 @@ export function buildExtractorOutputSections(extractors: readonly Extractor<any>
     .map(
       extractor => `<${extractor.slug}>
 ${extractor.instructions}
-Include this section when the observations contain relevant information for <${extractor.slug}>. Write only that information inside the tag.
+${
+  extractor.requireInlineSection
+    ? `This section is REQUIRED: always output <${extractor.slug}>. If nothing needs to change, write exactly ${INLINE_SECTION_UNCHANGED} inside the tag.`
+    : `Include this section when the observations contain relevant information for <${extractor.slug}>. Write only that information inside the tag.`
+}
 </${extractor.slug}>`,
     )
     .join('\n\n');
 
-  return `Additional optional XML sections:\nIf the observations include information relevant to any of these tags, output that tag after <observations> and include the relevant information.\n${sections}`;
+  const hasRequired = inlineExtractors.some(extractor => extractor.requireInlineSection);
+  const header = hasRequired
+    ? `Additional XML sections:\nOutput every REQUIRED tag after <observations> each time. Output the other tags when the observations include information relevant to them.`
+    : `Additional optional XML sections:\nIf the observations include information relevant to any of these tags, output that tag after <observations> and include the relevant information.`;
+  return `${header}\n${sections}`;
 }
 
 function renderPriorValue(value: unknown): string {
