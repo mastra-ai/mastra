@@ -1123,11 +1123,19 @@ describe('expectEngineParity', () => {
   });
 
   it('drops failure chunk stacks but keeps a stack an application owns', () => {
-    const failure = { error: { name: 'Error', message: 'boom', stack: 'at /checkout/src/x.ts:1' } };
-    const normalizedFailure = { error: { name: 'Error', message: 'boom' } };
+    const failure = {
+      args: { stack: ['a', 'b'] },
+      error: { name: 'Error', message: 'boom', stack: 'at /checkout/src/x.ts:1' },
+    };
 
-    expect(normalizeChunkPayload('error', failure)).toEqual(normalizedFailure);
-    expect(normalizeChunkPayload('tool-error', failure)).toEqual(normalizedFailure);
+    expect(normalizeChunkPayload('error', failure)).toEqual({
+      args: {},
+      error: { name: 'Error', message: 'boom' },
+    });
+    expect(normalizeChunkPayload('tool-error', failure)).toEqual({
+      args: { stack: ['a', 'b'] },
+      error: { name: 'Error', message: 'boom' },
+    });
 
     // Everywhere else a `stack` is the application's data. Dropping it by key
     // name would have made the two cases below compare equal.

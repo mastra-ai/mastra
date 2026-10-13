@@ -285,7 +285,14 @@ export function normalizePayload(value: unknown, ancestors: readonly object[] = 
 }
 
 export function normalizeChunkPayload(type: string, payload: unknown): unknown {
-  return normalizePayload(payload, [], type === 'error' || type === 'tool-error');
+  if (type === 'error') return normalizePayload(payload, [], true);
+
+  const normalized = normalizePayload(payload);
+  if (type !== 'tool-error' || normalized === null || typeof normalized !== 'object') return normalized;
+
+  const error = (normalized as Record<string, unknown>).error;
+  if (error !== null && typeof error === 'object') delete (error as Record<string, unknown>).stack;
+  return normalized;
 }
 
 function sortByCallId<T extends { toolCallId: string; toolName: string }>(arr: T[]): T[] {
