@@ -46,5 +46,16 @@ export function entityIndexMetadata(entity: ThemeLearningEntity): EntityIndexMet
 
 export function entityStatusLabel(status: EntityLearningProgressStatus | undefined): string {
   if (!status) return 'Unavailable';
+  if (status === 'collecting') return 'Waiting for Traces';
   return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+/**
+ * The API reports traces collected so far, not how many are still needed: readiness
+ * has no fixed trace threshold, so the waiting state can only describe what exists.
+ */
+export function waitingForTracesDescription(traceCount: number | undefined): string {
+  const pending = 'Signals appear once enough traces are processed.';
+  if (traceCount === undefined) return pending;
+  return `${numberFormatter.format(traceCount)} ${traceCount === 1 ? 'trace' : 'traces'} collected so far. ${pending}`;
 }
