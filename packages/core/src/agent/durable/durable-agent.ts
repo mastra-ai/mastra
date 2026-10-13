@@ -3028,7 +3028,22 @@ export class DurableAgent<
         ? new RequestContext<unknown>(Object.entries(workflowInput.requestContextEntries))
         : undefined;
       if (snapshotRequestContext) restoreRunAgentScopes(snapshotRequestContext);
-      rehydratedScopes = workflowInput.requestContextEntries?.[MASTRA_SCOPES_KEY] ?? [];
+      const persistedScopes = workflowInput.requestContextEntries?.[MASTRA_SCOPES_KEY];
+      if (
+        persistedScopes !== undefined &&
+        (!Array.isArray(persistedScopes) || persistedScopes.some(scope => typeof scope !== 'string'))
+      ) {
+        // A malformed persisted set must not be coerced to "no scopes": that would both
+        // drop the run's scopes and falsely reject re-supplied ones as additions.
+        throw new MastraError({
+          id: 'AGENT_SCOPES_INVALID',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.SYSTEM,
+          text: `DurableAgent "${this.name}" resume(${runId}): persisted run scopes are malformed; expected an array of strings.`,
+          details: { agentName: this.name, runId, status: 400 },
+        });
+      }
+      rehydratedScopes = persistedScopes ?? [];
       const memory = threadId
         ? {
             ...options?.memory,

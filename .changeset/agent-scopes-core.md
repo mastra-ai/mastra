@@ -2,9 +2,11 @@
 '@mastra/core': minor
 ---
 
-Added `scopes` to agents: the addresses a run acts as, written as `<type>:<value>` (for example `org:acme`, `resource:user-123`, `thread:conversation-123`). Pass them per call on `stream`, `generate`, `network`, `sendMessage`, `queueMessage` and `sendSignal`, set them on the agent, or set them from trusted middleware with the new `MASTRA_SCOPES_KEY` request context key. Mastra combines all three.
+Added `scopes` to agents: the addresses a run acts as, written as `<type>:<value>` (for example `org:acme`, `resource:user-123`, `thread:conversation-123`).
 
-Memory now reads its resource and thread from `resource:` and `thread:` scopes, in addition to `memory.resource`, `memory.thread` and the existing request context keys. If they name different values, the call throws a 400 error instead of silently picking one. Runs with no scopes from any source (call, agent or request context) behave as before.
+**Setting scopes.** Pass them per call on `stream`, `generate`, `network`, `sendMessage`, `queueMessage` and `sendSignal`, set them on the agent, or set them from trusted middleware with the new `MASTRA_SCOPES_KEY` request context key. Mastra combines all three. Read an agent's configured scopes with `agent.getScopes()`.
+
+**Memory.** Memory reads its resource and thread from `resource:` and `thread:` scopes, in addition to `memory.resource`, `memory.thread` and the existing request context keys. If they name different values, the call throws a 400 error instead of silently picking one. Runs with no scopes from any source behave as before.
 
 ```ts
 const agent = new Agent({
@@ -25,6 +27,8 @@ await agent.generate('Hi', { memory: { resource: 'user-123', thread: 'conversati
 await agent.generate('Hi', { scopes: ['resource:user-123', 'thread:conversation-123'] });
 ```
 
-Tools, processors and subagents see the run's other scopes (for example `org:acme`) under `MASTRA_SCOPES_KEY`, but not its `resource:` and `thread:` scopes, so nested agent calls can choose their own thread. Suspended runs keep their scopes when resumed: a resume may repeat some or all of them but cannot add new ones, so a run suspended before you start setting scopes in middleware must be resumed without them. Changing the agent's own `scopes` does not affect runs that are already suspended. When a run has scopes, it works on a copy of the request context, so values the run sets (such as `MastraMemory`) are not written back to the caller's context. Use `agent.getScopes()` to read an agent's configured scopes.
+**Nested calls.** Tools, processors and subagents see the run's other scopes (for example `org:acme`) under `MASTRA_SCOPES_KEY`, but not its `resource:` and `thread:` scopes, so nested agent calls can choose their own thread.
 
-Upgrade `@mastra/server` together with this release. Older servers pass a request body's `scopes` option and `MASTRA_SCOPES_KEY` through to the agent, so while an older server is registered, agents refuse scopes from the call and the request context with an `AGENT_SCOPES_SERVER_OUTDATED` error (HTTP 400). The agent's own `scopes` option still applies.
+**Suspended runs.** Suspended runs keep their scopes when resumed: a resume may repeat some or all of them but cannot add new ones.
+
+**Upgrading.** Upgrade `@mastra/server` together with this release. While an older server is registered, agents refuse scopes from the call and the request context with an `AGENT_SCOPES_SERVER_OUTDATED` error (HTTP 400); the agent's own `scopes` option still applies.
