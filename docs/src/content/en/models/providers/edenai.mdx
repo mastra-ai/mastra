@@ -7,7 +7,7 @@ description: "Browse Eden AI model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/edenai.svg" alt="Eden AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Eden AI
 
-Access 304 Eden AI models through Mastra's model router. Authentication is handled automatically using the `EDENAI_API_KEY` environment variable.
+Access 309 Eden AI models through Mastra's model router. Authentication is handled automatically using the `EDENAI_API_KEY` environment variable.
 
 Learn more in the [Eden AI documentation](https://docs.edenai.co).
 
@@ -1760,6 +1760,66 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 0.009,
     "outputCost": 0.045
+  },
+  {
+    "model": "edenai/greenpt/deepseek-v4-flash-0731",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": 0.156534,
+    "outputCost": 0.391335
+  },
+  {
+    "model": "edenai/greenpt/deepseek-v4.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": 0.245982,
+    "outputCost": 1.229911
+  },
+  {
+    "model": "edenai/greenpt/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": 0.22362,
+    "outputCost": 0.78267
+  },
+  {
+    "model": "edenai/greenpt/llama-3.3-70b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 1.229911,
+    "outputCost": 1.229911
+  },
+  {
+    "model": "edenai/greenpt/qwen3-235b-a22b-instruct-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 250000,
+    "maxOutput": 16384,
+    "inputCost": 1.00629,
+    "outputCost": 3.018871
   },
   {
     "model": "edenai/groq/openai/gpt-oss-120b",

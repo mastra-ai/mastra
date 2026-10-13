@@ -841,6 +841,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/prime',
+          label: 'Prime Inference',
+        },
+        {
+          type: 'doc',
           id: 'providers/privatemode-ai',
           label: 'Privatemode AI',
         },
