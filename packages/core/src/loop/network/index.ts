@@ -22,6 +22,7 @@ import { escapeUnescapedControlCharsInJsonStrings } from '../../stream/base/outp
 import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream';
 import { getNeedsApprovalFn } from '../../tools/toolchecks';
 import type { IdGeneratorContext } from '../../types';
+import { safeStringify } from '../../utils/safe-stringify';
 import { createWorkflow } from '../../workflows/create';
 import type { Step, SuspendOptions } from '../../workflows/step';
 import { createStep } from '../../workflows/workflow';
@@ -1717,7 +1718,7 @@ export async function createNetworkLoop({
             const rejectionResult = rejection
               ? typeof rejection.output === 'string'
                 ? rejection.output
-                : JSON.stringify(rejection.output)
+                : safeStringify(rejection.output)
               : resolveDeclineReason(resumeData);
             await saveMessagesWithProcessors(
               memory,

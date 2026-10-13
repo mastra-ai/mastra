@@ -4335,6 +4335,49 @@ describe('Agent - network - tool approval and suspension', () => {
       expect(execute).not.toHaveBeenCalled();
     });
 
+    it('stringifies circular or undefined beforeApproval output on the network path (#26772)', async () => {
+      const circular: Record<string, unknown> = { error: 'loop' };
+      circular.self = circular;
+      const outputs: unknown[] = [circular, undefined];
+
+      for (const [index, output] of outputs.entries()) {
+        const execute = vi.fn().mockResolvedValue({ result: 'should not run' });
+        const guardedTool = createTool({
+          id: 'guardedTool',
+          description: 'A tool that requires approval.',
+          inputSchema: z.object({ query: z.string() }),
+          requireApproval: true,
+          beforeApproval: async () => ({ proceed: false as const, output }),
+          execute,
+        });
+        const networkAgent = new Agent({
+          id: `before-approval-edge-network-agent-${index}`,
+          name: 'Before Approval Edge Network Agent',
+          instructions: 'Use guardedTool.',
+          model: createRoutingMockModel('guardedTool', 'tool', JSON.stringify({ query: 'guarded' })),
+          tools: { guardedTool },
+          memory,
+        });
+        const mastra = new Mastra({ agents: { networkAgent }, storage, logger: false });
+        const anStream = await mastra.getAgent('networkAgent').network('Process the query "guarded"', {
+          memory: {
+            thread: `test-thread-before-approval-edge-${index}`,
+            resource: 'test-resource-before-approval-edge',
+          },
+        });
+
+        const chunks: any[] = [];
+        for await (const chunk of anStream) {
+          chunks.push(chunk);
+        }
+
+        const executionEnd = chunks.find(chunk => chunk.type === 'tool-execution-end');
+        expect(typeof executionEnd?.payload?.result).toBe('string');
+        expect(chunks.map(chunk => chunk.type)).not.toContain('tool-execution-approval');
+        expect(execute).not.toHaveBeenCalled();
+      }
+    });
+
     it('should decline a nested agent tool call', async () => {
       mockToolExecute.mockClear();
 
