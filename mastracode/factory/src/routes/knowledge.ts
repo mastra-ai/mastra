@@ -1086,10 +1086,14 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           try {
             const orgScopes = await listOrgScopeNodes(view.store, view.orgId, this.#limits.maxOrgScopePages);
             scopesTruncated = orgScopes.truncated;
-            // Search lists only the open session; others are reached from the tree.
+            // Search lists only the viewer's own open session; others are reached from
+            // the tree. Matching by scope node id (not thread id) keeps a foreign
+            // project's session out even when it reuses the open thread's id.
             structuralScopes = orgScopes.scopes.filter(scope => {
               const threadId = sessionThreadId(scope.address);
-              return (!threadId || threadId === view.threadId) && scope.name.toLocaleLowerCase().includes(query);
+              return (
+                (!threadId || scope.id === view.threadScopeId) && scope.name.toLocaleLowerCase().includes(query)
+              );
             });
           } catch (error) {
             if (!(error instanceof KnowledgeUnsupportedError)) throw error;
@@ -1198,6 +1202,31 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             if (scopeNodeId && !nodeScopeIds.includes(selected.id)) continue;
             if (!node.isScope && !isKnowledgeScopeVisible(nodeScopeIds, view.scopeIds)) continue;
             directMembers.push(node);
+          }
+          // Hidden sessions never surface as scope members either: a lens on a sibling
+          // project (or this one) must not expose session ids the drill-down rejects.
+          const memberScopes = directMembers.filter(node => node.isScope);
+          if (memberScopes.length > 0) {
+            const memberAddresses = await scopeAddressIndex(
+              store,
+              memberScopes.map(node => node.id),
+            );
+            const hiddenSessions = await this.#hiddenSessionIds(
+              view,
+              memberScopes.map(node => ({
+                id: node.id,
+                address: memberAddresses.get(node.id)?.address,
+                parentIds: memberAddresses.get(node.id)?.parentIds,
+              })),
+              { probe: true },
+            );
+            if (hiddenSessions.size > 0) {
+              directMembers.splice(
+                0,
+                directMembers.length,
+                ...directMembers.filter(node => !hiddenSessions.has(node.id)),
+              );
+            }
           }
           const contentNodes = directMembers.filter(node => !node.isScope);
           const recordWindow: KnowledgeRecord[] = [];
@@ -1524,6 +1553,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           };
           const visibility = await Promise.all(
             fetched.map(async event => {
+              if (event.contextScopeId && event.contextScopeId !== selected.id) return false;
               if (event.targetType === 'node') return isNodeVisible(event.targetId);
               const record = await view.store.getRecord({ id: event.targetId, includeDeleted: true });
               if (!record) return false;

@@ -390,6 +390,87 @@ describe('KnowledgeRoutes', () => {
     expect(ids).not.toContain('zzzz-leak');
   });
 
+  it("search lists only the viewer's own open session, never a foreign session reusing its thread id", async () => {
+    const h = await createHarness();
+    const anchor = await node(h.knowledge, 'Session anchor', h.threadScope('thread-1'));
+    await record(h.knowledge, anchor, 'Session evidence', h.threadScope('thread-1'), 'thread-1');
+    // A foreign project's session reuses the same thread id and a matching name.
+    const foreignScope = [`org:${ORG}`, 'resource:foreign-project', 'resource:foreign-project:thread:thread-1'];
+    const foreignAnchor = await node(h.knowledge, 'Foreign anchor', foreignScope);
+    await record(h.knowledge, foreignAnchor, 'Foreign evidence', foreignScope, 'thread-1');
+    const foreignSessionId = (await h.knowledge.getScopeAddress('resource:foreign-project:thread:thread-1'))!
+      .scopeNodeId;
+    const ownSessionId = (await h.knowledge.getScopeAddress(`resource:${h.projectId}:thread:thread-1`))!.scopeNodeId;
+
+    const response = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/search?q=thread-1&threadId=thread-1`,
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as KnowledgeSearchPayload;
+    const scopeIds = body.results.filter(result => result.type === 'scope').map(result => result.id);
+    expect(scopeIds).toContain(ownSessionId);
+    expect(scopeIds).not.toContain(foreignSessionId);
+  });
+
+  it('omits hidden sessions from subgraph scope members', async () => {
+    const h = await createHarness();
+    const anchor = await node(h.knowledge, 'Session anchor', h.threadScope('thread-1'));
+    await record(h.knowledge, anchor, 'Session evidence', h.threadScope('thread-1'), 'thread-1');
+    // An empty session under the viewed project, and a sibling project with its own session.
+    await scopePathIds(h.knowledge, h.threadScope('thread-empty'));
+    const foreignScope = [`org:${ORG}`, 'resource:foreign-project', 'resource:foreign-project:thread:thread-x'];
+    const foreignAnchor = await node(h.knowledge, 'Foreign anchor', foreignScope);
+    await record(h.knowledge, foreignAnchor, 'Foreign evidence', foreignScope, 'thread-x');
+    const emptySessionId = (await h.knowledge.getScopeAddress(`resource:${h.projectId}:thread:thread-empty`))!
+      .scopeNodeId;
+    const foreignSessionId = (await h.knowledge.getScopeAddress('resource:foreign-project:thread:thread-x'))!
+      .scopeNodeId;
+    const foreignProjectId = (await h.knowledge.getScopeAddress('resource:foreign-project'))!.scopeNodeId;
+    const resourceScopeId = (await h.knowledge.getScopeAddress(`resource:${h.projectId}`))!.scopeNodeId;
+
+    // Drilling into the viewed project omits its record-less session.
+    const own = await graph(h, `?scopeNodeId=${resourceScopeId}`);
+    expect(own.status).toBe(200);
+    expect(own.body.nodes.map(graphNode => graphNode.id)).not.toContain(emptySessionId);
+    // Drilling into a sibling project omits that project's sessions entirely.
+    const sibling = await graph(h, `?scopeNodeId=${foreignProjectId}`);
+    expect(sibling.status).toBe(200);
+    expect(sibling.body.nodes.map(graphNode => graphNode.id)).not.toContain(foreignSessionId);
+  });
+
+  it('drops activity rows whose context scope is not the selected scope, even from a lax adapter', async () => {
+    class LeakyStore extends InMemoryKnowledgeStorage {
+      leaked: KnowledgeActivityEvent[] = [];
+      override async listActivity(input: Parameters<KnowledgeStorage['listActivity']>[0]) {
+        return [...this.leaked, ...(await super.listActivity(input))];
+      }
+    }
+    const store = new LeakyStore({ db: new InMemoryDB() });
+    const h = await createHarness({ knowledge: store });
+    const anchor = await node(store, 'Project anchor', h.projectScope);
+    await record(store, anchor, 'Project evidence', h.projectScope);
+    const foreignScope = [`org:${ORG}`, 'resource:foreign-project', 'resource:foreign-project:thread:thread-x'];
+    await node(store, 'Foreign anchor', foreignScope);
+    const foreignSessionId = (await store.getScopeAddress('resource:foreign-project:thread:thread-x'))!.scopeNodeId;
+    // The target is visible, but the row's context scope belongs to a foreign session.
+    store.leaked = [
+      {
+        id: 'zzzz-context-leak',
+        action: 'create',
+        targetType: 'node',
+        targetId: anchor.id,
+        contextScopeId: foreignSessionId,
+        createdAt: new Date(),
+      },
+    ];
+
+    const response = await activity(h, '?scopeLevel=resource');
+    expect(response.status).toBe(200);
+    const events = response.body.events as Array<{ id: string; scope: string[] }>;
+    expect(events.map(event => event.id)).not.toContain('zzzz-context-leak');
+    expect(JSON.stringify(events)).not.toContain('foreign-project');
+  });
+
   it('labels scope nodes by what they are: org, project, session, or the structural kind/topic', async () => {
     const h = await createHarness();
     await h.knowledge.reconcileStructure({
