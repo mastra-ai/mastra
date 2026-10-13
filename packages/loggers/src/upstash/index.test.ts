@@ -469,6 +469,52 @@ describe('UpstashTransport', () => {
       expect(result.logs.map(log => log.msg)).toEqual(['message3', 'message4']);
     });
 
+    it('should skip malformed entries in snapshot queries', async () => {
+      fetchMock.mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([{ result: [JSON.stringify({ msg: 'valid', time: 1 }), 'invalid json'] }]),
+        }),
+      );
+
+      const result = await transport.listLogs({ returnPaginationResults: false });
+
+      expect(result.logs).toEqual([{ msg: 'valid', time: 1 }]);
+      expect(result).toMatchObject({ total: 1, perPage: 1, hasMore: false });
+    });
+
+    it('should return no logs when every snapshot entry is malformed', async () => {
+      fetchMock.mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([{ result: ['nope', '{bad'] }]),
+        }),
+      );
+
+      const result = await transport.listLogs({ returnPaginationResults: false });
+
+      expect(result.logs).toEqual([]);
+      expect(result.total).toBe(0);
+    });
+
+    it('should skip malformed entries in unfiltered pages without changing the request', async () => {
+      fetchMock.mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([{ result: 5 }, { result: [JSON.stringify({ msg: 'm3', time: 3 }), 'bad'] }]),
+        }),
+      );
+
+      const result = await transport.listLogs({ page: 2, perPage: 2 });
+
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual([
+        ['LLEN', 'test-logs'],
+        ['LRANGE', 'test-logs', 2, 3],
+      ]);
+      expect(result).toMatchObject({ total: 5, page: 2, perPage: 2, hasMore: true });
+      expect(result.logs.map(log => log.msg)).toEqual(['m3']);
+    });
+
     it('should read run ID queries from a single snapshot', async () => {
       const logs = [
         JSON.stringify({ msg: 'other', runId: 'other-run-id', time: 1 }),

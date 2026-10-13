@@ -193,7 +193,7 @@ export class UpstashTransport extends LoggerTransport {
         const parsedLog = JSON.parse(log);
         return parsedLog !== null && typeof parsedLog === 'object' ? [parsedLog] : [];
       } catch {
-        return [{} as BaseLogMessage];
+        return [];
       }
     });
   }
