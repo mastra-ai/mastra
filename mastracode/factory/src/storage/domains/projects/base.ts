@@ -96,6 +96,8 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     last_build_heads: { type: 'json', nullable: true },
     last_build_inputs: { type: 'text', nullable: true },
     last_build_attempted_at: { type: 'timestamp', nullable: true },
+    build_start_claim: { type: 'text', nullable: true },
+    build_start_claim_expires_at: { type: 'timestamp', nullable: true },
     build_on_push_enabled: { type: 'boolean', default: false },
     build_push_debounce_minutes: { type: 'integer', default: DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES },
     /** Set once the source-control domain has backfilled repository positions and environment membership. */
@@ -126,6 +128,8 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   last_build_heads: Record<string, string> | null;
   last_build_inputs: string | null;
   last_build_attempted_at: Date | null;
+  build_start_claim: string | null;
+  build_start_claim_expires_at: Date | null;
   build_on_push_enabled: boolean | null;
   build_push_debounce_minutes: number | null;
   environment_backfilled_at: Date | null;
@@ -312,6 +316,82 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       }),
     );
     return claimed;
+  }
+
+  /**
+   * Takes the project's build-start lease for `token`. Every trigger (manual,
+   * schedule, push) takes it before reading build state and holds it through
+   * `builds.start` and recording the result, so two runs never both start a
+   * build. Resolves false while another run holds an unexpired lease. A lease
+   * expires after `leaseMs`, so a crashed run never blocks builds for good.
+   * Only the claim is transactional; provider calls run outside it.
+   */
+  async claimBuildStart({
+    id,
+    token,
+    leaseMs,
+    now = new Date(),
+  }: {
+    id: string;
+    token: string;
+    leaseMs: number;
+    now?: Date;
+  }): Promise<boolean> {
+    let claimed = false;
+    await this.storage.withTransaction(ops =>
+      ops.updateAtomic<FactoryProjectDbRow>('factory_projects', { id }, current => {
+        const expiresAt = current.build_start_claim_expires_at;
+        if (current.build_start_claim && expiresAt && expiresAt.getTime() > now.getTime()) return null;
+        claimed = true;
+        return {
+          build_start_claim: token,
+          build_start_claim_expires_at: new Date(now.getTime() + leaseMs),
+          updated_at: now,
+        };
+      }),
+    );
+    return claimed;
+  }
+
+  /**
+   * Releases the build-start lease taken with `token` and writes `changes` in
+   * the same transaction, but only while `token` still holds the lease. A run
+   * whose lease expired and was taken by a newer run writes nothing, so it
+   * never clears or overwrites that run's build. Resolves false when skipped.
+   */
+  async releaseBuildStart({
+    id,
+    token,
+    changes = {},
+    now = new Date(),
+  }: {
+    id: string;
+    token: string;
+    changes?: Pick<
+      UpdateFactoryProjectInput,
+      'lastBuildId' | 'lastBuildHeads' | 'lastBuildInputs' | 'lastBuildAttemptedAt'
+    >;
+    now?: Date;
+  }): Promise<boolean> {
+    let released = false;
+    await this.storage.withTransaction(ops =>
+      ops.updateAtomic<FactoryProjectDbRow>('factory_projects', { id }, current => {
+        if (current.build_start_claim !== token) return null;
+        released = true;
+        return {
+          ...(changes.lastBuildId !== undefined ? { last_build_id: changes.lastBuildId } : {}),
+          ...(changes.lastBuildHeads !== undefined ? { last_build_heads: changes.lastBuildHeads } : {}),
+          ...(changes.lastBuildInputs !== undefined ? { last_build_inputs: changes.lastBuildInputs } : {}),
+          ...(changes.lastBuildAttemptedAt !== undefined
+            ? { last_build_attempted_at: changes.lastBuildAttemptedAt }
+            : {}),
+          build_start_claim: null,
+          build_start_claim_expires_at: null,
+          updated_at: now,
+        };
+      }),
+    );
+    return released;
   }
 
   /**
