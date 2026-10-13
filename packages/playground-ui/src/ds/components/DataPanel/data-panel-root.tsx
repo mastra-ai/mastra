@@ -57,7 +57,7 @@ export interface DataPanelInlineProps extends DataPanelBaseProps {
 
 export type DataPanelProps = DataPanelDrawerProps | DataPanelInlineProps;
 
-const CARD_CLASSES = 'flex max-h-full w-full flex-col overflow-hidden rounded-xl border border-border bg-background';
+const CARD_CLASSES = 'flex max-h-full w-full flex-col overflow-hidden border border-border bg-background';
 
 const DEPTH_WIDTH = { 1: 'w-xl', 2: 'w-lg', 3: 'w-md' } as const;
 const SIZE_WIDTH = { half: 'w-1/2', wide: 'w-4/5', full: 'w-full' } as const;
@@ -82,7 +82,8 @@ function DataPanelInline({ title, description, children, className }: DataPanelI
         data-variant="inline"
         aria-label={title}
         aria-describedby={description ? descriptionId : undefined}
-        className={cn(CARD_CLASSES, 'h-full min-h-0', className)}
+        // Inline, the card docks beside the app frame, so it shares the frame's rounding.
+        className={cn(CARD_CLASSES, 'h-full min-h-0 rounded-studio-frame', className)}
       >
         {description && (
           <span id={descriptionId} className="sr-only">
@@ -149,7 +150,7 @@ function DataPanelDrawer({
 
               <PortalContainerProvider container={portalHost}>
                 {/* Whole card is swipe-exempt: pointerdown on tabs/buttons/text must not start a dismiss gesture. */}
-                <DrawerPrimitive.Content render={<section />} className={cn(CARD_CLASSES, className)}>
+                <DrawerPrimitive.Content render={<section />} className={cn(CARD_CLASSES, 'rounded-xl', className)}>
                   {children}
                 </DrawerPrimitive.Content>
               </PortalContainerProvider>
