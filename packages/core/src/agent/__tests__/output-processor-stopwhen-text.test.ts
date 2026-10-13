@@ -432,9 +432,15 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
               ...message,
               content: {
                 ...message.content,
-                parts: message.content.parts?.map(part =>
-                  part.type === 'text' ? { ...part, text: `${part.text.toUpperCase()}!` } : part,
-                ),
+                parts: message.content.parts?.flatMap(part => {
+                  if (part.type !== 'text') return part;
+                  const rewrittenText = `${part.text.toUpperCase()}!`;
+                  const splitAt = Math.ceil(rewrittenText.length / 2);
+                  return [
+                    { ...part, text: rewrittenText.slice(0, splitAt) },
+                    { ...part, text: rewrittenText.slice(splitAt) },
+                  ];
+                }),
               },
             })),
         },
