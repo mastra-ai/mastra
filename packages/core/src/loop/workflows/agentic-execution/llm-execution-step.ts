@@ -3180,8 +3180,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         finishReason !== 'error' &&
         finishReason !== 'length' &&
         finishReason !== 'content-filter';
-      const shouldContinue =
-        shouldRetry || (!tripwireTriggered && (hasPendingToolCalls || !TERMINAL_FINISH_REASONS.includes(finishReason)));
+      // A non-terminal finish reason only re-enters the loop when the step produced tool calls
+      // (matching the durable engine). Without tool calls (e.g. openai-compatible reports 'other'
+      // when the stream omits finish_reason) re-sending the same request would duplicate the
+      // answer until maxSteps. See: https://github.com/mastra-ai/mastra/issues/26811
+      const hasToolCallContinuation = toolCalls.length > 0 && !TERMINAL_FINISH_REASONS.includes(finishReason);
+      const shouldContinue = shouldRetry || (!tripwireTriggered && (hasPendingToolCalls || hasToolCallContinuation));
 
       // Fail abandoned provider calls before creating snapshots so persisted history
       // cannot retain pending calls after a terminal error. Only target this step's IDs.
