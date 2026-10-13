@@ -88,7 +88,12 @@ async function seedProject(seed: FactoryStorageTestSeed, slugs: string[]) {
 }
 
 /** Records `buildId` as the last build, ready on `heads` with the project's current template inputs. */
-async function recordBuild(seed: FactoryStorageTestSeed, projectId: string, buildId: string, heads: Record<string, string>) {
+async function recordBuild(
+  seed: FactoryStorageTestSeed,
+  projectId: string,
+  buildId: string,
+  heads: Record<string, string>,
+) {
   const project = await seed.projects.getById({ id: projectId });
   const environment = await resolveProjectEnvironment(seed.sourceControl.forIntegration('github'), project!);
   await seed.projects.update({
