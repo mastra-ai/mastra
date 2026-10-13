@@ -213,4 +213,38 @@ describe('resuming a tool call that parked after its run was aborted (#26871)', 
     expect(events.filter(event => event.type === 'agent_end')).toEqual([{ type: 'agent_end', reason: 'complete' }]);
     expect(session.stream.takeResumedRun({ runId })).toBe(false);
   });
+
+  it('Given two overlapping resumes of the aborted run, When one fails to send before the other starts, Then the other still reaches the session', async () => {
+    const harness = await createHarness('abort-then-overlapping-resumes');
+    const { session, agent, events, getCallCount } = harness;
+    await parkAfterAbort(harness);
+
+    const sendStreamResume = agent.sendStreamResume.bind(agent);
+    let failFirstAttempt!: () => void;
+    const firstAttemptMayFail = new Promise<void>(resolve => {
+      failFirstAttempt = resolve;
+    });
+    vi.spyOn(agent, 'sendStreamResume')
+      .mockImplementationOnce(async () => {
+        await firstAttemptMayFail;
+        throw new Error('no suspended run');
+      })
+      .mockImplementationOnce(async options => {
+        // The first attempt fails while this one is in flight, before its segment starts.
+        failFirstAttempt();
+        return sendStreamResume(options);
+      });
+
+    await Promise.all([
+      session.respondToToolSuspension({ toolCallId: 'call-ask', resumeData: 'Ada' }),
+      session.respondToToolSuspension({ toolCallId: 'call-ask', resumeData: 'Ada' }),
+    ]);
+
+    await vi.waitFor(() =>
+      expect(events.filter(event => event.type === 'agent_end')).toEqual([{ type: 'agent_end', reason: 'complete' }]),
+    );
+    expect(getCallCount()).toBe(2);
+    expect(events.filter(event => event.type === 'agent_start')).toHaveLength(1);
+    await vi.waitFor(() => expect(session.run.isRunning()).toBe(false));
+  });
 });

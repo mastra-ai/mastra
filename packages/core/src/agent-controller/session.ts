@@ -1496,6 +1496,15 @@ export class SessionThread {
   }
 }
 
+/** Consume one resume record for `runId`; false when none is left. */
+function consumeResumeRecord(resumedRuns: Map<string, number>, runId: string): boolean {
+  const count = resumedRuns.get(runId) ?? 0;
+  if (count === 0) return false;
+  if (count === 1) resumedRuns.delete(runId);
+  else resumedRuns.set(runId, count - 1);
+  return true;
+}
+
 /**
  * Owns the session's live subscription to the active thread's agent event
  * stream. A subscription is created per `(agent, resource, thread)` and reused
@@ -1521,8 +1530,11 @@ export class SessionStream {
   readonly #consumerFailureWaiters = new Set<(error: unknown) => void>();
   /** Set once the live subscription's run loop has failed; cleared on attach. */
   #consumerFailure: { error: unknown } | null = null;
-  /** Runs this session resumed through the live subscription whose resumed segment has not started; cleared on attach. */
-  readonly #resumedRunIds = new Set<string>();
+  /**
+   * Resumes this session sent through the live subscription whose resumed
+   * segment has not started, counted per run id. Replaced on attach.
+   */
+  #resumedRuns = new Map<string, number>();
 
   constructor(private readonly getSessionRun: () => { sessionId: string; runId: string | null }) {}
 
@@ -1611,21 +1623,24 @@ export class SessionStream {
     this.#key = key;
     this.#binding = { resourceId, threadId };
     this.#consumerFailure = null;
-    this.#resumedRunIds.clear();
+    this.#resumedRuns = new Map();
   }
 
   /**
-   * Record that this session sent a resume for `runId` through the live
+   * Record that this session is sending a resume for `runId` through the live
    * subscription. The resumed segment keeps the run id, so the consumer needs
-   * this to process it when the run was aborted earlier.
+   * this to process it when the run was aborted earlier. Call the returned
+   * function when this resume fails to send, to drop its record.
    */
-  markResumedRun({ runId }: { runId: string }): void {
-    this.#resumedRunIds.add(runId);
+  markResumedRun({ runId }: { runId: string }): () => void {
+    const resumedRuns = this.#resumedRuns;
+    resumedRuns.set(runId, (resumedRuns.get(runId) ?? 0) + 1);
+    return () => void consumeResumeRecord(resumedRuns, runId);
   }
 
-  /** Whether this session resumed `runId`. Clears the record, so it applies to one segment. */
+  /** Whether a resume of `runId` is waiting for its segment to start. Consumes one record. */
   takeResumedRun({ runId }: { runId: string }): boolean {
-    return this.#resumedRunIds.delete(runId);
+    return consumeResumeRecord(this.#resumedRuns, runId);
   }
 
   /** Agent that owns `subscription`, when it is the live subscription. */
@@ -6157,6 +6172,8 @@ export class Session<TState = unknown> {
         resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter({ toolCallId, resolveOnToolEnd });
     }
     let observer: Awaited<ReturnType<Session<TState>['observeSourceResume']>> | undefined;
+    // Drops this resume's record when the send fails. A sent resume's `start` consumes it.
+    let dropResumeRecord: (() => void) | undefined;
     const prompt = [...this.displayState.get().pendingSuspensions.values()].find(
       entry =>
         entry.toolCallId === toolCallId &&
@@ -6178,7 +6195,7 @@ export class Session<TState = unknown> {
         sharedOptions.requireToolApproval = false;
       }
       sharedOptions.onStepFinish = this.#resumeUsageRecorder(agent, suspension.runId, requestContext);
-      if (resumedSubscriptionBoundary) this.stream.markResumedRun({ runId: suspension.runId });
+      if (resumedSubscriptionBoundary) dropResumeRecord = this.stream.markResumedRun({ runId: suspension.runId });
       await agent.sendStreamResume({
         threadId,
         resourceId,
@@ -6193,12 +6210,14 @@ export class Session<TState = unknown> {
           toolsets,
         },
       });
+      dropResumeRecord = undefined;
       if (resumedSubscriptionBoundary) {
         await resumedSubscriptionBoundary.promise;
       } else {
         await observer?.promise;
       }
     } catch (error) {
+      dropResumeRecord?.();
       if (!observer?.dispatched()) {
         this.suspensions.register({ ...address, toolName: suspension.toolName });
         this.#suspensionAgents.set(this.suspensions.get(address)!, agent);
@@ -6208,9 +6227,6 @@ export class Session<TState = unknown> {
     } finally {
       observer?.cancel();
       resumedSubscriptionBoundary?.cancel();
-      // The resumed segment's `start` consumes the record. Drop it when the
-      // resume ends without one, so no later `start` passes as this resume.
-      if (resumedSubscriptionBoundary) this.stream.takeResumedRun({ runId: suspension.runId });
     }
   }
 
