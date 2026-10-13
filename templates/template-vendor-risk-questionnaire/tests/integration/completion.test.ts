@@ -14,6 +14,7 @@ import {
 } from '../fixtures/support.ts';
 import { docxFixture, xlsxFixture } from '../fixtures/office.ts';
 import { questionnaireRows } from '../fixtures/corpus.ts';
+import { withExcelFormatting } from '../fixtures/excel-formatting.ts';
 import { reviewFixture, decision, attachParent } from '../support/review.ts';
 import { draftingFixture, controlledProvider, executeDraft, jsonStream, userText } from '../support/drafting.ts';
 import * as completionPersistence from '../../src/mastra/persistence/completion.ts';
@@ -519,6 +520,60 @@ it.each(['unknown', 'restricted', 'review_required', 'invalid correction'] as co
     await f.mastra.shutdown();
   },
 );
+it('retries_failed_publication_of_excel_formatted_withheld_answers_without_model_calls', async () => {
+  const f = await respondFixture('xlsx', 'excel-save', {
+    questions: [{ text: 'Does workforce MFA apply?' }, { text: 'Is workforce MFA required?' }],
+  });
+  await writeFile(f.sourcePath, withExcelFormatting(await readFile(f.sourcePath)));
+  const lines: string[] = [],
+    responses = ['withheld', 'withheld', 'APPROVE'];
+  const publish = vi
+    .spyOn(publication, 'publishExport')
+    .mockRejectedValueOnce(new Error('UNINSPECTABLE_PACKAGE_CONTENT'));
+  try {
+    await expect(
+      respond({
+        ...f,
+        databaseUrl: f.url,
+        models: f.provider.factory,
+        io: { show: s => lines.push(s), ask: async () => responses.shift() ?? null },
+      }),
+    ).rejects.toThrow('UNINSPECTABLE_PACKAGE_CONTENT');
+    const runId = /Run ID: ([^. ]+)/.exec(lines.find(s => s.startsWith('Run ID:'))!)![1]!;
+    const calls = f.provider.calls.length;
+    const saved = await openReviewStore(f.url);
+    try {
+      const approved = (await saved.read(runId))!;
+      expect(approved.state).toBe('approved');
+      expect((await f.workflow.getWorkflowRunById(approved.workflowRunId))!.status).toBe('failed');
+      const output = await respond({
+        ...f,
+        databaseUrl: f.url,
+        sourcePath: undefined,
+        resume: runId,
+        models: f.provider.factory,
+        io: {
+          show: () => {},
+          ask: async () => {
+            throw new Error('APPROVAL_ALREADY_SAVED');
+          },
+        },
+      });
+      expect(output.manifest.quality).toBe('delivered_with_gaps');
+      expect((await saved.read(runId))!.state).toBe('exported');
+      expect(f.provider.calls).toHaveLength(calls);
+      expect(publish).toHaveBeenCalledTimes(2);
+      const sheet = strFromU8(unzipSync(await readFile(output.path))['xl/worksheets/sheet1.xml']!);
+      expect(sheet).toContain('width="32" customWidth="1"');
+      expect(sheet).toContain('withheld');
+    } finally {
+      saved.close();
+    }
+  } finally {
+    await f.mastra.shutdown();
+  }
+});
+
 it('respond_reviews_and_completes_xlsx_and_docx_without_json', async () => {
   const publish = vi.spyOn(publication, 'publishExport');
   for (const format of ['xlsx', 'docx'] as const) {

@@ -1,5 +1,6 @@
 import { columnIndex } from '../parsers/coordinates.ts';
 import { zipSync } from 'fflate';
+import { z } from 'zod';
 import { defaultLimits } from '../contracts/limits.ts';
 import { writePlanSchema } from '../contracts/completion.ts';
 import type { DocumentWritePlan, WriteTarget } from '../contracts/completion.ts';
@@ -7,10 +8,11 @@ import type { Projection } from '../contracts/review.ts';
 import type { EvidenceSnapshotRecord } from '../evidence/snapshot.ts';
 import { sha256, canonicalJson } from '../intake/source.ts';
 import { openOfficePackage } from '../parsers/office-package.ts';
-import { xml, content } from '../parsers/xml.ts';
+import { xml, content, all, children } from '../parsers/xml.ts';
 import { checkLocalContent } from '../processing/local-filter.ts';
 import { containsRestricted } from '../review/validation.ts';
 import { elements, descendants, spanText, xmlText } from './xml-spans.ts';
+import { isFormattingMetadata } from './formatting-metadata.ts';
 
 export function renderedValues(plan: DocumentWritePlan, projection: Projection) {
   if (projection.answers.length !== plan.questions.length) throw new Error('APPROVED_PROJECTION_MISMATCH');
@@ -192,6 +194,19 @@ export async function screenRetainedPackage(
   evidence: EvidenceSnapshotRecord,
 ) {
   const entries = openOfficePackage(bytes, format, defaultLimits);
+  const sharedStrings = entries['xl/sharedStrings.xml']
+    ? all(xml(entries['xl/sharedStrings.xml'], defaultLimits), 'si').map(node => content(children(node, 'si')))
+    : [];
+  const sharedStringIndex = z
+    .string()
+    .regex(/^(?:0|[1-9]\d*)$/)
+    .transform(Number)
+    .pipe(
+      z
+        .int()
+        .nonnegative()
+        .max(sharedStrings.length - 1),
+    );
   const allowed =
     /^(?:\[Content_Types\]\.xml|_rels\/\.rels|docProps\/(?:core|app|custom)\.xml|xl\/(?:workbook\.xml|_rels\/workbook\.xml\.rels|styles\.xml|sharedStrings\.xml|theme\/theme\d+\.xml|worksheets\/sheet\d+\.xml|worksheets\/_rels\/sheet\d+\.xml\.rels|comments\d+\.xml|tables\/table\d+\.xml)|word\/(?:document\.xml|styles\.xml|settings\.xml|webSettings\.xml|fontTable\.xml|numbering\.xml|theme\/theme\d+\.xml|header\d*\.xml|footer\d*\.xml|comments\.xml|footnotes\.xml|endnotes\.xml|_rels\/[A-Za-z0-9_.-]+\.rels))$/;
   for (const [part, data] of Object.entries(entries)) {
@@ -216,6 +231,7 @@ export async function screenRetainedPackage(
             ]!,
       );
     const payloads: string[] = [];
+    const formattingPayloads: string[] = [];
     const known = new Set(
       'Types Default Override comments authors author commentList comment text Relationships Relationship workbook workbookPr bookViews workbookView sheets sheet calcPr worksheet sheetPr tabColor outlinePr pageSetUpPr dimension sheetViews sheetView pane selection sheetFormatPr cols col sheetData row c v is t r rPr mergeCells mergeCell sheetProtection autoFilter filterColumn filters filter customFilters customFilter sortState sortCondition dataValidations dataValidation formula1 formula2 conditionalFormatting cfRule formula printOptions pageMargins pageSetup headerFooter oddHeader oddFooter evenHeader evenFooter firstHeader firstFooter rowBreaks colBreaks brk table tableColumns tableColumn tableStyleInfo styleSheet numFmts numFmt fonts font name sz family charset b i u strike outline shadow vertAlign color scheme fills fill patternFill fgColor bgColor gradientFill stop borders border left right top bottom diagonal start end cellStyleXfs cellXfs xf alignment protection cellStyles cellStyle dxfs dxf tableStyles colors indexedColors rgbColor mruColors extLst extension sst si Properties property value'.split(
         ' ',
@@ -238,6 +254,53 @@ export async function screenRetainedPackage(
       types: 'http://schemas.openxmlformats.org/package/2006/content-types',
       relationships: 'http://schemas.openxmlformats.org/package/2006/relationships',
     };
+    // Excel adds these passive formatting/version records when saving an ordinary
+    // workbook. Inspect every branch and value, including ignorable extensions.
+    const extensions: Record<string, { elements: string[]; attributes: string[] }> =
+      format === 'xlsx'
+        ? {
+            'http://schemas.openxmlformats.org/markup-compatibility/2006': {
+              elements: ['AlternateContent', 'Choice', 'Fallback'],
+              attributes: ['Ignorable'],
+            },
+            'http://schemas.microsoft.com/office/spreadsheetml/2010/11/ac': {
+              elements: ['absPath'],
+              attributes: [],
+            },
+            'http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac': {
+              elements: [],
+              attributes: ['dyDescent', 'knownFonts'],
+            },
+            'http://schemas.microsoft.com/office/spreadsheetml/2014/revision': {
+              elements: ['revisionPtr'],
+              attributes: ['uid'],
+            },
+            'http://schemas.microsoft.com/office/spreadsheetml/2015/revision2': {
+              elements: [],
+              attributes: ['uid'],
+            },
+            'http://schemas.microsoft.com/office/spreadsheetml/2016/revision6': {
+              elements: [],
+              attributes: ['coauthVersionLast', 'coauthVersionMax'],
+            },
+            'http://schemas.microsoft.com/office/spreadsheetml/2016/revision10': {
+              elements: [],
+              attributes: ['uidLastSave'],
+            },
+            'http://schemas.microsoft.com/office/spreadsheetml/2009/9/main': {
+              elements: ['slicerStyles'],
+              attributes: [],
+            },
+            'http://schemas.microsoft.com/office/spreadsheetml/2010/11/main': {
+              elements: ['timelineStyles'],
+              attributes: [],
+            },
+            'http://schemas.microsoft.com/office/thememl/2012/main': {
+              elements: ['themeFamily'],
+              attributes: [],
+            },
+          }
+        : {};
     const metadataNamespaces = new Set([
       'http://schemas.openxmlformats.org/package/2006/metadata/core-properties',
       'http://schemas.openxmlformats.org/officeDocument/2006/extended-properties',
@@ -270,6 +333,7 @@ export async function screenRetainedPackage(
                   !uri ||
                   (!Object.values(namespaces).includes(uri) &&
                     !metadataNamespaces.has(uri) &&
+                    !extensions[uri]?.attributes.includes(name.slice(2).split(':')[1]!) &&
                     ![
                       'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
                       'http://www.w3.org/XML/1998/namespace',
@@ -279,7 +343,19 @@ export async function screenRetainedPackage(
                   throw new Error('UNINSPECTABLE_PACKAGE_CONTENT');
                 if (/base64Binary|hexBinary/i.test(String(v))) throw new Error('UNINSPECTABLE_PACKAGE_CONTENT');
               }
-              payloads.push(String(v));
+              const element = Object.keys(object).find(key => key !== ':@')!,
+                [elementPrefix, elementName] = element.includes(':') ? element.split(':') : ['', element],
+                attribute = name.slice(2),
+                [attributePrefix, attributeName] = attribute.includes(':') ? attribute.split(':') : ['', attribute];
+              const formatting = isFormattingMetadata(
+                part,
+                bound[elementPrefix!],
+                elementName!,
+                attributePrefix ? bound[attributePrefix] : undefined,
+                attributeName!,
+                String(v),
+              );
+              (formatting ? formattingPayloads : payloads).push(String(v));
             }
           else if (key === '#text') payloads.push(String(value));
           else {
@@ -290,7 +366,7 @@ export async function screenRetainedPackage(
               (uri === namespaces.word
                 ? word.has(local!)
                 : uri === namespaces.sheet
-                  ? known.has(local!)
+                  ? known.has(local!) || ['fileVersion', 'ext'].includes(local!)
                   : uri === namespaces.types
                     ? ['Types', 'Default', 'Override'].includes(local!)
                     : uri === namespaces.relationships
@@ -298,11 +374,24 @@ export async function screenRetainedPackage(
                       : metadataNamespaces.has(uri!)
                         ? metadata.has(local!)
                         : uri === namespaces.drawing
-                          ? /^(?:theme|themeElements|clrScheme|dk1|lt1|dk2|lt2|accent[1-6]|hlink|folHlink|sysClr|srgbClr|fontScheme|majorFont|minorFont|latin|ea|cs|font|fmtScheme|fillStyleLst|solidFill|gradFill|gsLst|gs|schemeClr|tint|shade|satMod|lin|path|fillToRect|lnStyleLst|ln|prstDash|miter|headEnd|tailEnd|effectStyleLst|effectStyle|effectLst|outerShdw|bgFillStyleLst|objectDefaults|extraClrSchemeLst|extLst|ext)$/.test(
+                          ? /^(?:theme|themeElements|clrScheme|dk1|lt1|dk2|lt2|accent[1-6]|hlink|folHlink|sysClr|srgbClr|fontScheme|majorFont|minorFont|latin|ea|cs|font|fmtScheme|fillStyleLst|solidFill|gradFill|gsLst|gs|schemeClr|tint|shade|satMod|lumMod|alpha|lin|path|fillToRect|lnStyleLst|ln|prstDash|miter|headEnd|tailEnd|effectStyleLst|effectStyle|effectLst|outerShdw|bgFillStyleLst|objectDefaults|lnDef|spPr|bodyPr|lstStyle|style|lnRef|fillRef|effectRef|fontRef|extraClrSchemeLst|extLst|ext)$/.test(
                               local!,
                             )
-                          : false);
+                          : (extensions[uri!]?.elements.includes(local!) ?? false));
             if (!supported) throw new Error('UNINSPECTABLE_PACKAGE_CONTENT');
+            // Screen the text Excel displays, not concatenated shared-string
+            // indices (which can resemble phone/card numbers). Only the parsed
+            // inspection tree changes; output retains the original package XML.
+            if (uri === namespaces.sheet && local === 'c' && attrs['@_t'] === 's' && Array.isArray(value)) {
+              for (const child of value as Record<string, unknown>[]) {
+                const values = child['v'];
+                if (!Array.isArray(values)) continue;
+                const index = sharedStringIndex.safeParse(content(values));
+                if (!index.success || values.some(node => Object.keys(node).some(key => key !== '#text')))
+                  throw new Error('UNINSPECTABLE_PACKAGE_CONTENT');
+                child['v'] = [{ '#text': sharedStrings[index.data]! }];
+              }
+            }
             inspect(value, bound);
           }
         }
@@ -317,7 +406,9 @@ export async function screenRetainedPackage(
     )
       throw new Error('UNINSPECTABLE_PACKAGE_CONTENT');
     const visible = content(nodes);
-    for (const value of [visible, decode(text.replace(/<[^>]+>/g, '')), ...payloads]) {
+    for (const value of formattingPayloads)
+      if (containsRestricted(value, evidence)) throw new Error('RESTRICTED_ORIGINAL_CONTENT');
+    for (const value of [visible, ...payloads]) {
       try {
         await checkLocalContent(value, 'retained-package');
       } catch {

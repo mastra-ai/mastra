@@ -375,16 +375,38 @@ export async function respond(options: RespondOptions) {
       ))!;
     }
     const recovered = await recoverQuestionnaire(workflow, state.workflowRunId);
-    const result = await recovered.run.resume({
-      step: 'review-answer-set',
-      resumeData: {
-        approvalId: state.projection!.approvalId,
-        revision: state.revision,
-        digest: state.digest,
-      },
-    });
-    if (result.status !== 'success') throw new Error('PUBLICATION_INCOMPLETE');
-    const output = result.result;
+    let output;
+    if (recovered.reader.getStatus() === 'failed' && state.state === 'approved') {
+      // A failed native run cannot resume. Retry only publication of the exact
+      // saved approval, as the standalone export command does, without redrafting.
+      const approval = recovered.reader.getStepOutput<{
+        runId: string;
+        revision: number;
+        approvalId: string;
+      }>('review-answer-set');
+      if (
+        !approval ||
+        Array.isArray(approval) ||
+        approval.runId !== runId ||
+        approval.revision !== state.revision ||
+        approval.approvalId !== state.projection!.approvalId
+      )
+        throw new Error('STALE_REVIEW');
+      const { path, manifest } = await publishExport(runId, reviewOptions);
+      output = { path, manifest };
+    } else {
+      const result = await recovered.run.resume({
+        step: 'review-answer-set',
+        resumeData: {
+          approvalId: state.projection!.approvalId,
+          revision: state.revision,
+          digest: state.digest,
+        },
+      });
+      if (result.status === 'failed') throw result.error;
+      if (result.status !== 'success') throw new Error('PUBLICATION_INCOMPLETE');
+      output = result.result;
+    }
     io.show(
       `${output.path}\n${output.manifest.quality}: ${state.projection!.supported}/${state.projection!.total} supported.`,
     );

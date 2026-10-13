@@ -9,6 +9,34 @@ import { controlledClient } from '../support/persistence.ts';
 import { openProcessingStore } from '../../src/mastra/persistence/processing.ts';
 import { temporaryDirectory, cleanupDirectory } from '../fixtures/support.ts';
 
+it('reports_writer_conflicts_without_opening_storage_or_failing_cleanup', async () => {
+  const root = await temporaryDirectory(),
+    url = `file:${resolve(root, 'owned.db')}`,
+    guard = writerLease(url),
+    blocked = createNativeStorage('blocked-writer', url);
+  try {
+    guard.acquire();
+    const ownerPath = `${url.slice(5)}.writer/owner.json`,
+      owner = await readFile(ownerPath, 'utf8');
+    await expect(blocked.storage.init()).rejects.toThrow('DATABASE_WRITER_OWNED');
+    await expect(blocked.close()).resolves.toBeUndefined();
+    expect(await readFile(ownerPath, 'utf8')).toBe(owner);
+    await expect(stat(url.slice(5))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(stat(`${url.slice(5)}.telemetry.duckdb`)).rejects.toMatchObject({ code: 'ENOENT' });
+    guard.release();
+    const retry = createNativeStorage('retry-writer', url);
+    try {
+      await retry.storage.init();
+    } finally {
+      await retry.close();
+    }
+  } finally {
+    await blocked.close().catch(() => {});
+    guard.release();
+    await cleanupDirectory(root);
+  }
+});
+
 it('excludes_a_second_writer_process_allows_query_only_status_and_requires_explicit_crash_recovery', async () => {
   const root = await temporaryDirectory(),
     url = `file:${resolve(root, 'process.db')}`;

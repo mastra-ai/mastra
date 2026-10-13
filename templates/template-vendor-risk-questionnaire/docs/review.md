@@ -238,6 +238,8 @@ A process killed during review or export can leave a saved **claim**, indicating
 
 Claim recovery does not restore stale approval or replenish usage. If the database writer lock blocks commands, follow [local process ownership](#local-process-ownership) first.
 
+If export fails after terminal approval, `npm run respond -- --resume RUN_ID` can retry publication once the underlying problem is fixed. It checks that the saved workflow approval matches the current approved revision and exports that exact set without new model calls or another approval prompt. The original failed workflow history remains available; the review state records the successful export. A stale approval cannot use this recovery path.
+
 ## Answered document
 
 Each successful run publishes exactly one `answered.xlsx` or `answered.docx`, preserving the original format. The original source is kept unchanged.

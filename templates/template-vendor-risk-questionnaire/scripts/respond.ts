@@ -86,8 +86,14 @@ try {
     'STALE_SOURCE_MAPPING',
     'STALE_REVIEW',
     'RUN_NOT_FOUND',
+    'DATABASE_WRITER_OWNED',
   ]);
   console.error(error instanceof Error && safeCodes.has(error.message) ? error.message : 'RESPOND_OPERATION_FAILED');
+  if (error instanceof Error && error.message === 'DATABASE_WRITER_OWNED') {
+    console.error('The local database is locked by another process. Stop npm run dev or any other writer, then retry.');
+    console.error('respond runs Mastra directly and does not need the dev server.');
+    console.error('If the previous process crashed, follow the writer recovery instructions in docs/review.md.');
+  }
   process.exitCode = 1;
 } finally {
   terminal?.close();

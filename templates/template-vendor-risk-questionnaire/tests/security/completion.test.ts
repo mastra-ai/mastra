@@ -4,6 +4,7 @@ import { temporaryDirectory, cleanupDirectory, alterZip, addZipMember } from '..
 import { documentFixture } from '../support/completion.ts';
 import { draftingFixture } from '../support/drafting.ts';
 import { screenRetainedPackage, writeDocument } from '../../src/mastra/completion/document.ts';
+import { withExcelFormatting } from '../fixtures/excel-formatting.ts';
 
 let root: string;
 beforeEach(async () => {
@@ -12,6 +13,47 @@ beforeEach(async () => {
 afterEach(async () => {
   await cleanupDirectory(root);
 });
+it('preserves_excel_save_metadata_and_column_widths_while_screening_displayed_text', async () => {
+  const evidence = (await draftingFixture(root)).snapshot.record;
+  const f = await documentFixture('xlsx', withExcelFormatting);
+  const plan = await f.plan();
+  const output = writeDocument(f.bytes, plan, f.projection);
+  await screenRetainedPackage(f.bytes, 'xlsx', evidence);
+  await screenRetainedPackage(output, 'xlsx', evidence);
+  const before = unzipSync(f.bytes),
+    after = unzipSync(output);
+  for (const part of Object.keys(before).filter(part => part !== 'xl/worksheets/sheet1.xml'))
+    expect(after[part]).toEqual(before[part]);
+  expect(strFromU8(after['xl/worksheets/sheet1.xml']!)).toContain('width="32" customWidth="1"');
+  for (const [part, transform] of [
+    ['xl/workbook.xml', (s: string) => s.replace('/workbooks/', 'sk-proj-ATTRIBUTECANARY01234567890123456789')],
+    [
+      'xl/theme/theme1.xml',
+      (s: string) => s.replace('02050302040000000000', 'sk-proj-PANOSECANARY01234567890123456789'),
+    ],
+    ['xl/styles.xml', (s: string) => s.replace('0.79998168889431442', 'sk-proj-TINTCANARY01234567890123456789')],
+    [
+      'xl/sharedStrings.xml',
+      (s: string) => s.replace('Describe workforce access controls.', 'sk-proj-SHAREDCANARY01234567890123456789'),
+    ],
+    ['xl/sharedStrings.xml', (s: string) => s.replace('Describe workforce access controls.', '123456789012')],
+    ['xl/worksheets/sheet1.xml', (s: string) => s.replace('</worksheet>', '<!--123456789012--></worksheet>')],
+    ['xl/styles.xml', (s: string) => s.replace('<font>', '<font custom="123456789012">')],
+  ] as const)
+    await expect(screenRetainedPackage(alterZip(f.bytes, part, transform), 'xlsx', evidence)).rejects.toThrow(
+      'SECURITY_BLOCKED',
+    );
+  for (const [part, transform] of [
+    ['xl/workbook.xml', (s: string) => s.replace('</mc:Choice>', '<xr:opaque>hidden</xr:opaque></mc:Choice>')],
+    ['xl/styles.xml', (s: string) => s.replace('<font>', '<font xmlns:evil="urn:unknown" evil:uid="123456789012">')],
+    ['xl/worksheets/sheet1.xml', (s: string) => s.replace('<v>0</v>', '<v>99999999</v>')],
+    ['xl/worksheets/sheet1.xml', (s: string) => s.replace('<v>0</v>', '<v><hidden>0</hidden></v>')],
+  ] as const)
+    await expect(screenRetainedPackage(alterZip(f.bytes, part, transform), 'xlsx', evidence)).rejects.toThrow(
+      'UNINSPECTABLE_PACKAGE_CONTENT',
+    );
+});
+
 it('blocks_unsafe_original_content_and_preserves_explicit_gaps', async () => {
   const evidence = (await draftingFixture(root)).snapshot.record;
   for (const format of ['xlsx', 'docx'] as const) {

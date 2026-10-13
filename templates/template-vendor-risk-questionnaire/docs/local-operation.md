@@ -24,9 +24,9 @@ Run the commands on this page from the template directory. For the browser walkt
    npm run demo
    ```
 
-   This command makes no model calls. It preserves existing configuration and data. If it reports incomplete or unsafe demo data, resolve that diagnostic before continuing.
+   This command makes no model calls and preserves existing configuration and data. If it reports incomplete or unsafe demo data, resolve that diagnostic before continuing.
 
-4. Start the questionnaire:
+4. Stop `npm run dev` with `Ctrl+C` if it is running, then start the questionnaire:
 
    ```bash
    npm run respond -- "$PWD/.runtime/demo/questionnaire.xlsx"
@@ -34,10 +34,31 @@ Run the commands on this page from the template directory. For the browser walkt
 
    To try Word, replace `questionnaire.xlsx` with `questionnaire.docx`. Processing uses your API key and the limits in `.runtime/profile.json`.
 
-5. Follow any field-mapping prompts. For each answer, read the draft and citations, then choose `release`, `correct`, `unknown` or `withheld`. See [review choices](review.md#choose-what-to-share) for examples.
+   `respond` runs Mastra directly; it does not need the web server. Only one process can write to the local database at a time. If it reports `DATABASE_WRITER_OWNED`, stop the other server or terminal writer before retrying. For a lock left after a crash, follow [local process ownership](review.md#local-process-ownership).
+
+5. The sample has automatically recognized headers and empty answer destinations. For other layouts, follow any field-mapping prompts. If an answer destination already contains text, inspect it and type `REPLACE` to authorize replacement; this confirmation is case-insensitive. For each answer, read the draft and citations, then choose `release`, `correct`, `unknown` or `withheld`. See [review choices](review.md#choose-what-to-share) for examples.
 6. Read the complete revised answer set and type `APPROVE` when ready to share it.
 
 The command returns the path to one `answered.xlsx` or `answered.docx` under `.runtime/exports`. Open it and check the answers, qualifications and explicit gaps.
+
+### Sample fields
+
+The XLSX and DOCX samples contain 24 questions and these six columns:
+
+| Header           | Purpose                                                |
+| ---------------- | ------------------------------------------------------ |
+| `Reference`      | Original question ID                                   |
+| `Inquiry`        | Question text                                          |
+| `Guidance`       | Instructions and scope for the answer                  |
+| `Buyer response` | Empty destination for the approved answer              |
+| `Explanation`    | Empty destination for qualifications, reasons and gaps |
+| `Evidence`       | Empty destination for approved citation references     |
+
+The sample questions use `free_text`, and the interpretation agent selects a domain within the configured evidence scope. Custom questionnaires can include `Response kind`, `Allowed values` and `Domain` to specify answer types, choices and source section labels. Configure the organization's scope separately in the evidence profile.
+
+Custom questionnaires can use fewer columns. For example, `Reference | Inquiry | Buyer response` supports free-text answers. Explicit choice answers require an explanation destination for qualifications and gaps. See [automatic header recognition](intake.md#automatic-header-recognition) and the [field-mapping walkthrough](intake.md#upload-and-map-in-the-frontend) for supported fields and constraints.
+
+After editing a questionnaire, start a new run or upload the edited file. Resuming a browser upload uses the original saved bytes; changing the file on disk does not update that run.
 
 ## Resume terminal work
 
@@ -136,13 +157,15 @@ Local files live under ignored `.runtime`. They include the LibSQL database, ori
 
 Changing evidence or its policy invalidates an existing approval and requires a new run. `VRQ_MODEL` overrides the profile model for new runs; resumed runs retain their saved model. [Execution limits](drafting.md#execution-policy) may leave unanswered questions and are not a provider billing cap.
 
+The default profile allows 1,000 provider calls (`policy.maxPhysicalCalls`), USD 5 in estimated cost (`policy.budgetUsd`) and 30 minutes (`policy.maxRunElapsedMs`). Detector, interpretation, drafting, verification, retry and review calls share these limits. To configure different limits, edit the policy in `.runtime/profile.json` and start a new run. See [finishing an exhausted run](review.md#finish-when-the-budget-is-exhausted) for the `unknown` and `withheld` review path.
+
 ## Open Mastra Studio
 
 1. Run `npm run dev:mastra`.
 2. Open [Mastra Studio](http://127.0.0.1:4111).
 3. Select a workflow, or open **Observability → Traces** to inspect execution.
 
-Studio workflow inputs use absolute local document paths. Use the [web interface](ui.md) for file uploads. `npm run dev` starts both interfaces together.
+For document intake in Studio, select **vendor-risk-intake** and supply a local document path in `sourcePath`, preferably an absolute path. The **vendor-risk-questionnaire** workflow consumes saved intake and evidence for a run; it does not accept a file upload or questionnaire columns as input. Follow the [Studio intake and review steps](review.md#studio-intake-and-review). Use the [web interface](ui.md) for file uploads. `npm run dev` starts both interfaces together.
 
 For production, follow the [production setup](ui.md#production). It requires `NODE_ENV=production` and `MASTRA_STUDIO_TOKEN`; `mastra dev` remains unauthenticated.
 

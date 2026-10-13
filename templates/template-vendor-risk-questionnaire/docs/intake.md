@@ -273,6 +273,8 @@ The response is written after `Response:`. Each selected paragraph region uses r
 
 Intake preserves question text, IDs, order and source locations. Before calling a model, it checks that the exact mapped destinations can receive answers. The mapping is tied to the inspected source hash and adapter/profile versions.
 
+Changing column widths in Excel is supported. Export preserves those widths and recognized Excel theme, style and revision metadata. Shared-string cells are screened using their displayed text. Numeric formatting fields and revision identifiers are validated in their specific XML locations; text, comments and other attributes still receive content screening. Unknown extensions and embedded content remain unsupported.
+
 Prefilled answers are untrusted input, not evidence. The frontend and terminal ask for `REPLACE` for each nonempty destination. A formula-backed answer cell cannot be completed even with that consent. A custom integration must record consent tied to the exact source and destination.
 
 If intake or export reports an unsupported layout, prepare a corrected copy and upload it as a new run:

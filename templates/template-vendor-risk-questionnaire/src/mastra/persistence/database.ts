@@ -207,6 +207,7 @@ export function createNativeStorage(
       await telemetry.init();
     })());
   let initialized: Promise<void> | undefined, closing: Promise<void> | undefined;
+  let activated = false;
   let accepting = true;
   const admitted = new Set<Promise<unknown>>();
   class LocalStorage extends MastraCompositeStore {
@@ -238,6 +239,17 @@ export function createNativeStorage(
     }
     private initialize() {
       initialized ??= (async () => {
+        // Report process ownership conflicts before adapter startup sanitizes them.
+        // Keep constructor-time operations blocked until this composition owns the writer.
+        try {
+          await group.ready;
+          for (const authority of group.owners) authority.assertHealthy();
+          group.lease.acquire();
+        } catch (error) {
+          cancel(error instanceof Error ? error : new StorageFault());
+          throw error;
+        }
+        activated = true;
         activate();
         await native.init();
         try {
@@ -254,7 +266,7 @@ export function createNativeStorage(
         // Await whole admitted calls, including callbacks queued before lazy telemetry
         // startup, before closing either physical adapter. Rejections still drain below.
         await Promise.allSettled([...admitted]);
-        if (!initialized) cancel(new StorageFault('CLOSED'));
+        if (!activated) cancel(new StorageFault('CLOSED'));
         owner.stop();
         client.close();
         let failed = false,
@@ -280,7 +292,7 @@ export function createNativeStorage(
           failed = true;
         }
         if (unpersisted) throw new UnpersistedStorageFault();
-        if (failed && initialized) throw new StorageFault();
+        if (failed && activated) throw new StorageFault();
       })();
       return closing;
     }
