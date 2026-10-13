@@ -25,16 +25,17 @@ git -C "$workdir" ls-files --others --exclude-standard -z
 const ARTIFACTS_LIST_COMMAND = 'cd "$1" && test -d .artifacts && find .artifacts -type f -print0 || true';
 /**
  * Regular files directly under the workspace root written since the session
- * was created ($2 is a UTC `touch -t` stamp, `YYYYMMDDhhmm.SS`): the agent's
- * notes, setup markers. Files the template shipped with (shell dotfiles, a
- * build's setup markers) predate the session and stay out; the checkouts are
- * covered by git. Credential stores are never listed, a listed path becomes
- * readable through the thread's file route. `touch -t` plus `-newer` works on
- * GNU and BSD find alike; `-newermt "@epoch"` is GNU only.
+ * was created ($2 is a UTC `touch -t` stamp, `YYYYMMDDhhmm.SS`), such as the
+ * agent's notes. Files the template shipped with predate the session and stay
+ * out; the checkouts are covered by git. Dotfiles are never listed: a listed
+ * path becomes readable through the thread's file route, and the root is where
+ * setup leaves `.env`, `.pgpass`, `.netrc` and other credential files.
+ * `touch -t` plus `-newer` works on GNU and BSD find alike; `-newermt
+ * "@epoch"` is GNU only.
  */
-const ROOT_FILES_LIST_COMMAND = [
+export const ROOT_FILES_LIST_COMMAND = [
   'cd "$1" && ref=$(mktemp) && TZ=UTC touch -t "$2" "$ref"',
-  '&& find . -mindepth 1 -maxdepth 1 -type f ! -name .netrc ! -name .git-credentials ! -name .npmrc ! -name .pypirc -newer "$ref" -print0',
+  "&& find . -mindepth 1 -maxdepth 1 -type f ! -name '.*' -newer \"$ref\" -print0",
   '; status=$?; rm -f "$ref"; exit $status',
 ].join(' ');
 
@@ -176,7 +177,7 @@ export async function captureSessionFilesystem(
       } else {
         for (const path of rootFiles.stdout.split('\0')) {
           const normalizedPath = path.replace(/^\.\//, '');
-          if (normalizedPath) {
+          if (normalizedPath && !normalizedPath.startsWith('.')) {
             files.set(normalizedPath, { path: normalizedPath });
           }
         }

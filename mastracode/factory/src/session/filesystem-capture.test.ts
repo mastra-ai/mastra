@@ -1,3 +1,8 @@
+import { execFileSync } from 'node:child_process';
+import { mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import type { SessionBeforeAgentEndListener } from '@mastra/core/agent-controller';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -11,6 +16,7 @@ import {
   waitForPendingFilesystemCapture,
   type FilesystemCaptureDependencies,
   type FilesystemCaptureSession,
+  ROOT_FILES_LIST_COMMAND,
 } from './filesystem-capture.js';
 
 function commandResult(overrides: Partial<{ exitCode: number; stdout: string; stderr: string }> = {}) {
@@ -311,13 +317,49 @@ describe('captureSessionFilesystem across environment repositories', () => {
       threadId: 'thread-1',
       files: [
         { path: '.artifacts/report.md' },
-        { path: '.setup-ran-workdir' },
         { path: 'api/src/app.ts' },
         { path: 'docs/README.md' },
         { path: 'poem.txt' },
         { path: 'site/index.html' },
       ],
     });
+  });
+
+  it('never persists a root dotfile, so credential files stay unreadable through the file route', async () => {
+    seedEnvironment();
+    const { session } = createEnvironmentSession(
+      {},
+      commandResult(),
+      commandResult({ stdout: './.env\0./.env.local\0./.pgpass\0./.yarnrc.yml\0./notes.md\0' }),
+    );
+    const dependencies = createDependencies();
+
+    await captureSessionFilesystem(session, dependencies);
+
+    expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledWith({
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      files: [{ path: 'notes.md' }],
+    });
+  });
+
+  it('lists only new non-dotfiles when the root command runs in a real directory', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'factory-root-'));
+    try {
+      await writeFile(join(root, 'shipped.txt'), '');
+      const old = new Date('2026-10-09T16:00:00Z');
+      await utimes(join(root, 'shipped.txt'), old, old);
+      for (const name of ['.env', '.env.local', '.pgpass', '.yarnrc.yml', '.netrc', 'notes.md']) {
+        await writeFile(join(root, name), 'secret');
+      }
+      await mkdir(join(root, 'api'));
+      const output = execFileSync('sh', ['-c', ROOT_FILES_LIST_COMMAND, 'sh', root, '202610091700.00'], {
+        encoding: 'utf8',
+      });
+      expect(parseFilesystemCaptureFiles(output)).toEqual([{ path: 'notes.md' }]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it('keeps the git and artifact results when the root listing fails', async () => {
