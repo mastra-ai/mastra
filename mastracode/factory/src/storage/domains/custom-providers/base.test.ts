@@ -256,3 +256,34 @@ describe('CustomProvidersStorage', () => {
     expect(row!.api_key).not.toContain('raw-legacy-key');
   });
 });
+
+describe('CustomProvidersStorage enabling secretEncryption', () => {
+  it('encrypts api keys written without encryption and reads back the original key', async () => {
+    const url = `file:${join(mkdtempSync(join(tmpdir(), 'factory-cp-')), 'enable-encryption.db')}`;
+    {
+      const { backend, domain } = await makeFileStore(url);
+      await domain.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        input: {
+          providerId: 'my-llm',
+          name: 'My LLM',
+          url: 'https://llm.example.com/v1',
+          apiKey: 'sk-fake-custom-key',
+          models: ['m'],
+        },
+      });
+      await backend.close();
+    }
+
+    for (let boot = 0; boot < 2; boot++) {
+      const { backend, domain } = await makeFileStore(url, createFactorySecretEncryption({ primary: testKey }));
+      const [provider] = await domain.list({ orgId: 'org-1' });
+      expect(provider!.apiKey).toBe('sk-fake-custom-key');
+
+      const row = await backend.ops.findOne<{ api_key: string }>('custom_providers', { provider_id: 'my-llm' });
+      expect(row!.api_key).toMatch(/^mastra:factory-secret:v1:/);
+      await backend.close();
+    }
+  });
+});
