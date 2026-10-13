@@ -151,6 +151,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const [datasetDialogTarget, setDatasetDialogTarget] = useState<{
     traceId: string;
     rootSpanId: string | undefined;
+    spanId?: string;
   } | null>(null);
   const [addMocksTarget, setAddMocksTarget] = useState<{ traceId: string } | null>(null);
   // Trace whose side panel currently shows the full thread. Keyed by trace id so selecting
@@ -589,6 +590,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
       <TraceAsItemDialog
         rootSpanId={datasetDialogTarget?.rootSpanId}
+        spanId={datasetDialogTarget?.spanId}
         traceId={datasetDialogTarget?.traceId}
         isOpen={!!datasetDialogTarget}
         onClose={() => setDatasetDialogTarget(null)}

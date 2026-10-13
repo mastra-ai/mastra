@@ -31,6 +31,7 @@ const baseProps: TraceDataPanelViewProps = {
 };
 
 const openTraceActions = () => fireEvent.click(screen.getByRole('button', { name: 'Open trace actions' }));
+const openAddToDataset = () => fireEvent.click(screen.getByRole('button', { name: 'Add to dataset' }));
 
 // jsdom has no layout, so it ships no scrollIntoView.
 const scrollIntoView = vi.fn();
@@ -214,7 +215,7 @@ describe('TraceDataPanelView — header actions', () => {
     expect(screen.getByRole('button', { name: /score trace/i })).toBeTruthy();
   });
 
-  it('exposes the dataset and mock actions from the header menu', () => {
+  it('keeps the mock action in the overflow menu, and the dataset actions out of it', () => {
     render(
       <TraceDataPanelView
         {...baseProps}
@@ -226,18 +227,58 @@ describe('TraceDataPanelView — header actions', () => {
 
     openTraceActions();
     expect(screen.getByRole('button', { name: /score trace/i })).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: /add full trace to dataset/i })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /add tool mocks to item/i })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: /full trace/i })).toBeNull();
   });
+});
 
-  it('still saves the dataset item against the root span from the header', () => {
+describe('TraceDataPanelView — Add to dataset', () => {
+  it('saves the full trace against the root span', () => {
     const onSaveAsDatasetItem = vi.fn();
     render(<TraceDataPanelView {...baseProps} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
 
-    openTraceActions();
-    fireEvent.click(screen.getByRole('menuitem', { name: /add full trace to dataset/i }));
+    openAddToDataset();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Full trace' }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
+  });
+
+  it('saves the selected span', () => {
+    const onSaveAsDatasetItem = vi.fn();
+    render(
+      <TraceDataPanelView
+        {...baseProps}
+        spans={nestedSpanFixture}
+        initialSpanId="child"
+        onSaveAsDatasetItem={onSaveAsDatasetItem}
+      />,
+    );
+
+    openAddToDataset();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'This span' }));
+
+    expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root', spanId: 'child' });
+  });
+
+  it('offers no span to save until one is selected', () => {
+    const onSaveAsDatasetItem = vi.fn();
+    render(<TraceDataPanelView {...baseProps} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
+
+    openAddToDataset();
+    const thisSpan = screen.getByRole('menuitem', { name: 'This span' });
+    expect(thisSpan.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(thisSpan);
+
+    expect(onSaveAsDatasetItem).not.toHaveBeenCalled();
+  });
+
+  it('does not render without a save handler, or on the trace page', () => {
+    const { unmount } = render(<TraceDataPanelView {...baseProps} />);
+    expect(screen.queryByRole('button', { name: 'Add to dataset' })).toBeNull();
+    unmount();
+
+    render(<TraceDataPanelView {...baseProps} placement="trace-page" onSaveAsDatasetItem={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: 'Add to dataset' })).toBeNull();
   });
 });
 
@@ -501,16 +542,6 @@ describe('TraceDataPanelView — the actions row', () => {
     expect(screen.queryByText(/available in Mastra Studio/)).toBeNull();
   });
 
-  it('saves the dataset item against the root span it found', () => {
-    const onSaveAsDatasetItem = vi.fn();
-    render(<TraceDataPanelView {...baseProps} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
-
-    openTraceActions();
-    fireEvent.click(screen.getByRole('menuitem', { name: /add full trace to dataset/i }));
-
-    expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
-  });
-
   it('reports the evaluation request with no arguments of its own', () => {
     const onEvaluateTrace = vi.fn();
     render(<TraceDataPanelView {...baseProps} onEvaluateTrace={onEvaluateTrace} />);
@@ -576,8 +607,8 @@ describe('TraceDataPanelView — an anchored subtrace', () => {
       />,
     );
 
-    openTraceActions();
-    fireEvent.click(screen.getByRole('menuitem', { name: /add full trace to dataset/i }));
+    openAddToDataset();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Full trace' }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'child' });
   });
@@ -586,8 +617,8 @@ describe('TraceDataPanelView — an anchored subtrace', () => {
     const onSaveAsDatasetItem = vi.fn();
     render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
 
-    openTraceActions();
-    fireEvent.click(screen.getByRole('menuitem', { name: /add full trace to dataset/i }));
+    openAddToDataset();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Full trace' }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
   });
@@ -603,8 +634,8 @@ describe('TraceDataPanelView — an anchored subtrace', () => {
       />,
     );
 
-    openTraceActions();
-    fireEvent.click(screen.getByRole('menuitem', { name: /add full trace to dataset/i }));
+    openAddToDataset();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Full trace' }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
   });
@@ -703,8 +734,8 @@ describe('TraceDataPanelView — an anchor the trace does not have', () => {
       />,
     );
 
-    openTraceActions();
-    fireEvent.click(screen.getByRole('menuitem', { name: /add full trace to dataset/i }));
+    openAddToDataset();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Full trace' }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: undefined });
   });
@@ -725,8 +756,8 @@ describe('TraceDataPanelView — following the spans it is given', () => {
     const otherRoot = [{ ...(rootSpanFixture[0] as (typeof rootSpanFixture)[number]), spanId: 'other-root' }];
     rerender(<TraceDataPanelView {...baseProps} spans={otherRoot} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
 
-    openTraceActions();
-    fireEvent.click(screen.getByRole('menuitem', { name: /add full trace to dataset/i }));
+    openAddToDataset();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Full trace' }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'other-root' });
   });
@@ -751,8 +782,8 @@ describe('TraceDataPanelView — following the spans it is given', () => {
       />,
     );
 
-    openTraceActions();
-    fireEvent.click(screen.getByRole('menuitem', { name: /add full trace to dataset/i }));
+    openAddToDataset();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Full trace' }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'child' });
   });
@@ -767,8 +798,8 @@ describe('TraceDataPanelView — following the spans it is given', () => {
       />,
     );
 
-    openTraceActions();
-    fireEvent.click(screen.getByRole('menuitem', { name: /add full trace to dataset/i }));
+    openAddToDataset();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Full trace' }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
   });
