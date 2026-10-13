@@ -513,7 +513,9 @@ export async function processWorkflowForEach(
   const suspendedIndices =
     currentResult?.output?.flatMap((result: any, index: number) => (result?.status === 'suspended' ? [index] : [])) ??
     [];
-  const activeIterations = runningIterations + suspendedIndices.length;
+  // With continueAfterSuspend, a suspended iteration doesn't hold a slot: the
+  // rest keep running and the foreach suspends once nothing is left to run.
+  const activeIterations = runningIterations + (step.opts?.continueAfterSuspend ? 0 : suspendedIndices.length);
 
   if (
     suspendedIndices.length > 0 &&

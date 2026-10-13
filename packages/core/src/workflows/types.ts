@@ -833,6 +833,13 @@ export type ForeachConcurrencyResolver = (context: ForeachConcurrencyContext) =>
 
 export interface ForeachOptions {
   concurrency: number | ForeachConcurrencyResolver;
+  /**
+   * @internal When an iteration suspends, keep running the remaining iterations
+   * instead of stopping the queue. The foreach still suspends once every
+   * iteration has either finished or suspended. Used by the agentic tool-call
+   * loop so tool calls next to a suspending one still run.
+   */
+  continueAfterSuspend?: boolean;
 }
 
 export type SerializedStep<TEngineType = DefaultEngineType> = Pick<

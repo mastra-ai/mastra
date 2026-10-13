@@ -1134,6 +1134,9 @@ export async function executeForeach(
         };
       }
       await emitIterationProgress(k, 'suspended');
+      if (opts?.continueAfterSuspend) {
+        return;
+      }
     } else if (result.status === 'failed') {
       completedCount++;
       await emitIterationProgress(k, 'failed');

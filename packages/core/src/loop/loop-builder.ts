@@ -386,6 +386,9 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         { id: 'map-tool-calls' },
       )
       .foreach(toolCallStep, {
+        // A suspending tool call must not stop its siblings: they run, and the
+        // step suspends once every call has finished or suspended (#26514).
+        continueAfterSuspend: true,
         // On a resume that re-enters the suspended foreach, map-tool-calls already
         // completed in the snapshot and is skipped, so the limit above was never
         // recomputed for this instance. Derive it from the persisted tool-call batch

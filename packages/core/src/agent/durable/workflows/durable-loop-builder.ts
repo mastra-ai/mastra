@@ -512,6 +512,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         // is shared across runs, so this must be a resolver — never a mutated
         // shared options object.
         .foreach(toolCallStep, {
+          // Siblings of a suspending tool call still run (#26514).
+          continueAfterSuspend: true,
           concurrency: ({ inputData, getInitData }) => {
             const state = getInitData() as IterationState | undefined;
             return resolveDurableToolCallConcurrency({
