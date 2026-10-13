@@ -193,7 +193,6 @@ describe('listProviders', () => {
       });
       expect(personalOnly[0]).toMatchObject({ source: 'stored-user', orgKey: false });
 
-      // Local (non-tenant) mode has no scope concept — the field is omitted.
       const local = await listProviders({ controller, authStorage: makeAuthStorage({ loggedIn: [] }) });
       expect(local[0]?.orgKey).toBeUndefined();
     });
@@ -205,7 +204,6 @@ describe('listProviders', () => {
         authStorage: auth,
         tenantCredentials: [],
       });
-      // Tenant records take over entirely; auth.json state must not leak.
       expect(list[0]?.source).toBe('none');
     });
   });
@@ -347,8 +345,6 @@ describe('resolveDeploymentModelProviders', () => {
     warn.mockRestore();
   });
 });
-
-// ── Scoped API key routes (tenant mode) ─────────────────────────────────
 
 describe('provider key routes with a tenant', () => {
   let seed: FactoryStorageTestSeed;
@@ -523,8 +519,6 @@ describe('provider key routes with a tenant', () => {
   });
 });
 
-// ── Available models + DB-backed custom providers (tenant mode) ─────────
-
 describe('GET /web/config/models', () => {
   const fableReasoning: ModelReasoningOption[] = [{ type: 'effort', values: ['low', 'high'] }];
 
@@ -650,7 +644,6 @@ describe('GET /web/config/models', () => {
       userId: 'user-a',
       input: { providerId: 'acme', name: 'Acme', url: 'https://llm.acme.dev/v1', apiKey: 'sk', models: ['fast-1'] },
     });
-    // Another org's providers must never leak into the caller's catalog.
     await seed.customProviders.upsert({
       orgId: 'org2',
       userId: 'user-b',
@@ -790,13 +783,12 @@ describe('default model routes with a tenant', () => {
 describe('OM routes with a tenant', () => {
   let seed: FactoryStorageTestSeed;
 
-  // A host Gemini key would make every auto role prefer Google, hiding the
-  // provider-following behavior these cases assert.
-  beforeEach(() => {
+  function isolateFromHostProviderKeys() {
     vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
-    // The host's stored Mastra gateway key would otherwise make every `mastra/` route available.
     vi.spyOn(MastraCodeGateway, 'getMastraGatewayApiKey').mockReturnValue(undefined);
-  });
+  }
+
+  beforeEach(isolateFromHostProviderKeys);
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
@@ -915,8 +907,6 @@ describe('OM routes with a tenant', () => {
       key: 'sk-deepseek',
     });
     const session = makeOmSession({ currentModelId: 'deepseek/deepseek-v4-pro' });
-    // The Factory default resolves to the anthropic pack, so the assertion only
-    // holds when the live session's model wins over `factoryOmFallback`.
     const res = await buildApp(session, { defaultModelId: 'anthropic/claude-opus-5' }).request(
       '/web/config/om?resourceId=r1',
     );
@@ -938,8 +928,6 @@ describe('OM routes with a tenant', () => {
   });
 
   it('keeps the gateway route and reports the routed provider status', async () => {
-    // A gateway-addressable session model keeps its `mastra/` route for OM; provider
-    // status reads the segment after the prefix, not the prefix itself.
     await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'deepseek', {
       type: 'api_key',
       key: 'sk-deepseek',
@@ -1153,10 +1141,6 @@ describe('OM routes with a tenant', () => {
   });
 
   it('falls back to the stored row when the resourceId has no live session', async () => {
-    // The settings page addresses the factory-level resource, which has no
-    // live agent-controller session after a restart or before any chat. The
-    // stored row is authoritative and new sessions hydrate from it, so reads
-    // and writes must succeed session-less instead of 404ing.
     const app = buildApp(null);
 
     const initial = await app.request('/web/config/om?resourceId=r1');
@@ -1204,16 +1188,11 @@ describe('OM routes with a tenant', () => {
     expect(config.observerModelId).toBe('openai/gpt-5.6');
     expect(config.observationThreshold).toBe(12000);
     expect(config.observeAttachments).toBe(false);
-    // The row is authoritative and read per invocation, so the route must not
-    // copy it into session state. The row reaching the running Memory is covered
-    // by `mastracode/sdk/src/agents/memory.test.ts`.
     expect(session.state.get().observationThreshold).toBeUndefined();
     expect(config.reflectorModelId).toBe(DEFAULT_OM_MODEL_ID);
   });
 
   it('GET ignores stale session OM values when no row is stored', async () => {
-    // Simulates a session whose state still carries a pre-DB settings.json
-    // seed (e.g. a custom-provider model from the host machine's TUI config).
     const session = makeOmSession();
     await session.om.observer.switchModel({ modelId: 'alibaba-token-plan/deepseek-v4-flash' });
     session.state.set({ observationThreshold: 99000 });

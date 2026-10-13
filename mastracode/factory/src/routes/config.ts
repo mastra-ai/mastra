@@ -1085,15 +1085,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         },
       }),
 
-      // ── Thinking (reasoning-effort) defaults ─────────────────────────────────
-      // Deployment-scoped default stored in the server's settings.json
-      // (`preferences.thinkingLevel`). This is what request-time resolution
-      // falls back to when a session carries no explicit override — including
-      // automated (rule-driven) Factory runs nobody opens interactively. When
-      // auth is enabled, only signed-in admins of the configured deployment
-      // organization may write them, because the settings file is shared by
-      // the whole deployment.
-
+      // One settings.json for the whole deployment: with auth on, only deployment-org admins may write it.
       registerApiRoute('/web/config/thinking', {
         method: 'GET',
         requiresAuth: false,
@@ -1122,25 +1114,23 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               access.status,
             );
           }
-          let globalDefault: unknown;
+          let body: unknown;
           try {
-            const parsed: unknown = await c.req.json();
-            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-              return c.json({ error: 'Request body must be a JSON object' }, 400);
-            }
-            if ('modeDefaults' in parsed) {
-              return c.json({ error: 'modeDefaults is no longer supported; send only globalDefault' }, 400);
-            }
-            globalDefault = 'globalDefault' in parsed ? parsed.globalDefault : undefined;
+            body = await c.req.json();
           } catch {
             return c.json({ error: 'Invalid JSON body' }, 400);
           }
-          if (!isThinkingLevelSetting(globalDefault)) {
+          const parsed = z
+            .object({ globalDefault: z.custom<ThinkingLevelSetting>(isThinkingLevelSetting) })
+            .strict()
+            .safeParse(body);
+          if (!parsed.success) {
             return c.json(
-              { error: `Invalid globalDefault — expected one of: ${THINKING_LEVEL_VALUES.join(', ')}` },
+              { error: `Expected only globalDefault, one of: ${THINKING_LEVEL_VALUES.join(', ')}` },
               400,
             );
           }
+          const { globalDefault } = parsed.data;
           try {
             const settings = loadSettings(options.settingsPath);
             settings.preferences.thinkingLevel = globalDefault;
