@@ -1,5 +1,29 @@
 # @mastra/server
 
+## 1.77.0-alpha.3
+
+### Patch Changes
+
+- Forward authenticated users as AgentController message authors. ([#26549](https://github.com/mastra-ai/mastra/pull/26549))
+
+- Fixed losing concurrent tool approvals and agent resumes returning HTTP 500. The approve, decline, and resume routes now return 409 Conflict when another request is already resuming the same run, or when the run isn't waiting to be resumed. ([#26688](https://github.com/mastra-ai/mastra/pull/26688))
+
+- Updated dependencies [[`54e9dc3`](https://github.com/mastra-ai/mastra/commit/54e9dc3ed0615ee84a6526395a9fefe17320fe7e), [`59164cb`](https://github.com/mastra-ai/mastra/commit/59164cb7f8b298e28e13305b0273ed2ef7f1d9e1), [`aa00f41`](https://github.com/mastra-ai/mastra/commit/aa00f41855e8d6802546f613ffec1669e03409fc), [`8dc4d65`](https://github.com/mastra-ai/mastra/commit/8dc4d65b34aad280c4f6ab265162c4846face7e3), [`aa00f41`](https://github.com/mastra-ai/mastra/commit/aa00f41855e8d6802546f613ffec1669e03409fc), [`226823f`](https://github.com/mastra-ai/mastra/commit/226823ffde55e2dcce01f2111a6a35be3f2c9b85)]:
+  - @mastra/core@1.77.0-alpha.3
+
+## 1.77.0-alpha.2
+
+### Patch Changes
+
+- Added an optional run id to tool-suspension responses so callers can target the exact suspended run when tool-call ids are reused. ([#26058](https://github.com/mastra-ai/mastra/pull/26058))
+
+- Fixed evented agents and nested evented workflows failing with `Workflow with id ... not found` when an orchestration worker runs steps on the API server through `MASTRA_STEP_EXECUTION_URL`. The worker now sends the parent workflow with each step request, so the server can find steps that are only reachable through their parent workflow, such as the steps of an evented agent. Fixes [#26676](https://github.com/mastra-ai/mastra/issues/26676). ([#26695](https://github.com/mastra-ai/mastra/pull/26695))
+
+  Also fixed nested evented workflows hanging when their parent workflow is registered under a key that differs from its `id`.
+
+- Updated dependencies [[`2a1bb80`](https://github.com/mastra-ai/mastra/commit/2a1bb80305bca1859504287e1a09f43c8a014330), [`519e97f`](https://github.com/mastra-ai/mastra/commit/519e97f624a15362fec7b143dea4eabcff556712), [`aea91e7`](https://github.com/mastra-ai/mastra/commit/aea91e7f3a4fb066bfda96dca670d7d2a766d770), [`da87b0a`](https://github.com/mastra-ai/mastra/commit/da87b0a1629d5ffc980b434f70fe60f9445ddb1c), [`182f097`](https://github.com/mastra-ai/mastra/commit/182f09745783aa83e42131307085ecf913cfbc38), [`7236b47`](https://github.com/mastra-ai/mastra/commit/7236b472bca9bbc9dddba53f683b15c271350183)]:
+  - @mastra/core@1.77.0-alpha.2
+
 ## 1.77.0-alpha.1
 
 ### Minor Changes

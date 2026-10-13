@@ -256,3 +256,78 @@ describe('Processor-returned tools receive requestContext', () => {
     expect(existingToolContext!.get('tenantId')).toBe('tenant-abc');
   });
 });
+
+describe('Processor-returned tools receive the agent id', () => {
+  it('should set context.agent.agentId for tools added by processInputStep', async () => {
+    let capturedAgentId: string | undefined;
+
+    const dynamicTool = createTool({
+      id: 'dynamic-tool',
+      description: 'A dynamically loaded tool that reads the agent id',
+      inputSchema: z.object({ query: z.string() }),
+      execute: async (_input, context) => {
+        capturedAgentId = context.agent?.agentId;
+        return 'ok';
+      },
+    });
+
+    const toolInjectorProcessor = {
+      id: 'tool-injector-processor',
+      processInputStep: async (args: ProcessInputStepArgs) => ({
+        tools: { ...(args.tools ?? {}), 'dynamic-tool': dynamicTool },
+      }),
+    } as InputProcessor;
+
+    let callCount = 0;
+    const mockModel = new MockLanguageModelV2({
+      doStream: async () => {
+        callCount++;
+        const chunks =
+          callCount === 1
+            ? [
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call-1',
+                  toolName: 'dynamic-tool',
+                  input: JSON.stringify({ query: 'test' }),
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                },
+              ]
+            : [
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Done.' },
+                { type: 'text-end', id: 'text-1' },
+                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 } },
+              ];
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: `id-${callCount}`, modelId: 'mock-model-id', timestamp: new Date(0) },
+            ...chunks,
+          ] as any),
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent-id',
+      name: 'Test Agent Id',
+      instructions: 'Use tools when asked',
+      model: mockModel as any,
+      inputProcessors: [toolInjectorProcessor],
+    });
+
+    const stream = await agent.stream('Call the dynamic tool', { maxSteps: 5 });
+    for await (const _chunk of stream.fullStream) {
+      // drain
+    }
+
+    expect(capturedAgentId).toBe('test-agent-id');
+  });
+});
