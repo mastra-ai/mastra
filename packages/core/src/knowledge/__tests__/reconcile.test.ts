@@ -220,4 +220,29 @@ describe('Knowledge structure reconciliation', () => {
       ],
     });
   });
+
+  describe('custom scope ownership', () => {
+    const ownerGrants = (plan: ReturnType<typeof materializeKnowledgeScopePlan>, address: string) =>
+      plan.scopes.find(scope => scope.address === address)!.grants?.filter(grant => grant.role === 'owner') ?? [];
+
+    it('grants no owner on a custom scope materialized from its own address', () => {
+      const plan = materializeKnowledgeScopePlan(undefined, { address: 'team:core', contextualScopeAddress: 'team:core' });
+      expect(ownerGrants(plan, 'team:core')).toEqual([]);
+    });
+
+    it('grants no owner to the context that vouched a custom scope', () => {
+      const plan = materializeKnowledgeScopePlan(undefined, {
+        address: 'team:core',
+        contextualScopeAddress: 'resource:alice',
+      });
+      expect(ownerGrants(plan, 'team:core')).toEqual([]);
+    });
+
+    it('keeps the built-in owner grant on identity scope types', () => {
+      for (const address of ['org:acme', 'resource:alice', 'resource:alice:thread:t-1']) {
+        const plan = materializeKnowledgeScopePlan(undefined, { address, contextualScopeAddress: address });
+        expect(ownerGrants(plan, address)).toEqual([expect.objectContaining({ scopeRefAddress: address })]);
+      }
+    });
+  });
 });
