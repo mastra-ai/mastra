@@ -6,13 +6,17 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { ExperimentsComparison } from '../experiments-comparison';
 import {
   BASELINE_ID,
+  CHALLENGER_ID,
   CONTENDER_ID,
   DATASET_ID,
   baselineResults,
   baselineScoreRows,
+  challengerResults,
+  challengerScoreRows,
   comparisonResponse,
   contenderResults,
   contenderScoreRows,
+  threeWayComparisonResponse,
 } from './fixtures/comparison';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
@@ -64,27 +68,42 @@ beforeEach(() => {
   );
 });
 
-const renderComparison = () =>
+const renderComparison = (contenderIds: string[] = [CONTENDER_ID]) =>
   renderWithProviders(
     <TestLinkProvider>
-      <ExperimentsComparison datasetId={DATASET_ID} experimentIdA={BASELINE_ID} experimentIdB={CONTENDER_ID} />
+      <ExperimentsComparison datasetId={DATASET_ID} baselineId={BASELINE_ID} contenderIds={contenderIds} />
     </TestLinkProvider>,
     { router: true },
   );
 
+const useThreeWayComparison = () =>
+  server.use(
+    http.post(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/compare`, () =>
+      HttpResponse.json(threeWayComparisonResponse),
+    ),
+    http.get(`${experimentsBase}/${CHALLENGER_ID}`, () => HttpResponse.json(makeExperiment(CHALLENGER_ID, 1))),
+    http.get(`${experimentsBase}/${CHALLENGER_ID}/results`, () =>
+      HttpResponse.json(resultsResponse(challengerResults)),
+    ),
+    http.get(`${TEST_BASE_URL}/api/scores/run/${CHALLENGER_ID}`, () =>
+      HttpResponse.json(scoresResponse(challengerScoreRows)),
+    ),
+  );
+
+type SideName = 'Baseline' | 'Contender 1' | 'Contender 2';
+
 const itemRow = (itemId: string) => screen.getByRole('row', { name: itemId });
 const findItemRow = (itemId: string) => screen.findByRole('row', { name: itemId });
-const sideOf = (itemId: string, side: 'Baseline' | 'Contender') =>
-  within(itemRow(itemId)).getByRole('cell', { name: side });
+const sideOf = (itemId: string, side: SideName) => within(itemRow(itemId)).getByRole('cell', { name: side });
 
 describe('experiments comparison table', () => {
   describe('when the comparison loads', () => {
-    it('renders the Items, Baseline and Contender column headers', async () => {
+    it('renders the Items, Baseline and Contender 1 column headers', async () => {
       renderComparison();
 
       expect(await screen.findByRole('columnheader', { name: 'Items' })).toBeTruthy();
       expect(screen.getByRole('columnheader', { name: 'Baseline' })).toBeTruthy();
-      expect(screen.getByRole('columnheader', { name: 'Contender' })).toBeTruthy();
+      expect(screen.getByRole('columnheader', { name: 'Contender 1' })).toBeTruthy();
     });
 
     it('renders every item as its own row, without any selection', async () => {
@@ -125,7 +144,7 @@ describe('experiments comparison table', () => {
       await waitFor(() => {
         expect(within(sideOf('item-a', 'Baseline')).getByText(/"Paris"/)).toBeTruthy();
       });
-      expect(within(sideOf('item-a', 'Contender')).getByText(/"Paris, France"/)).toBeTruthy();
+      expect(within(sideOf('item-a', 'Contender 1')).getByText(/"Paris, France"/)).toBeTruthy();
       expect(within(sideOf('item-b', 'Baseline')).getByText(/"Frank Herbert"/)).toBeTruthy();
     });
   });
@@ -135,7 +154,7 @@ describe('experiments comparison table', () => {
       renderComparison();
 
       await waitFor(() => {
-        expect(within(sideOf('item-c', 'Contender')).getByText('Not present in this experiment')).toBeTruthy();
+        expect(within(sideOf('item-c', 'Contender 1')).getByText('Not present in this experiment')).toBeTruthy();
       });
       expect(within(sideOf('item-c', 'Baseline')).getByText(/"42"/)).toBeTruthy();
     });
@@ -148,7 +167,7 @@ describe('experiments comparison table', () => {
       await waitFor(() => {
         expect(within(sideOf('item-a', 'Baseline')).getByText('Metadata')).toBeTruthy();
       });
-      expect(within(sideOf('item-a', 'Contender')).queryByText('Metadata')).toBeNull();
+      expect(within(sideOf('item-a', 'Contender 1')).queryByText('Metadata')).toBeNull();
     });
   });
 
@@ -159,8 +178,8 @@ describe('experiments comparison table', () => {
       await waitFor(() => {
         expect(within(sideOf('item-a', 'Baseline')).getByText('Missing the country')).toBeTruthy();
       });
-      expect(within(sideOf('item-a', 'Contender')).getByText('Complete answer')).toBeTruthy();
-      expect(within(sideOf('item-a', 'Contender')).getByText('0.40', { exact: false })).toBeTruthy();
+      expect(within(sideOf('item-a', 'Contender 1')).getByText('Complete answer')).toBeTruthy();
+      expect(within(sideOf('item-a', 'Contender 1')).getByText('0.40', { exact: false })).toBeTruthy();
       expect(within(sideOf('item-a', 'Baseline')).queryByText('0.40', { exact: false })).toBeNull();
     });
   });
@@ -170,7 +189,7 @@ describe('experiments comparison table', () => {
       renderComparison();
 
       await waitFor(() => {
-        expect(within(sideOf('item-b', 'Contender')).getByText('Agent run failed: rate limited')).toBeTruthy();
+        expect(within(sideOf('item-b', 'Contender 1')).getByText('Agent run failed: rate limited')).toBeTruthy();
       });
     });
   });
@@ -186,6 +205,59 @@ describe('experiments comparison table', () => {
 
       expect(await findItemRow('item-a')).toBeTruthy();
       expect(within(sideOf('item-a', 'Baseline')).getByRole('status')).toBeTruthy();
+    });
+  });
+
+  describe('when comparing three experiments', () => {
+    it('renders one column header per experiment', async () => {
+      useThreeWayComparison();
+      renderComparison([CONTENDER_ID, CHALLENGER_ID]);
+
+      expect(await screen.findByRole('columnheader', { name: 'Baseline' })).toBeTruthy();
+      expect(screen.getByRole('columnheader', { name: 'Contender 1' })).toBeTruthy();
+      expect(screen.getByRole('columnheader', { name: 'Contender 2' })).toBeTruthy();
+    });
+
+    it('renders a cell per experiment on every row', async () => {
+      useThreeWayComparison();
+      renderComparison([CONTENDER_ID, CHALLENGER_ID]);
+
+      const row = await findItemRow('item-a');
+
+      // Items cell plus one cell per experiment.
+      expect(within(row).getAllByRole('cell')).toHaveLength(4);
+    });
+
+    it('shows each contender its own delta against the baseline', async () => {
+      useThreeWayComparison();
+      renderComparison([CONTENDER_ID, CHALLENGER_ID]);
+
+      await waitFor(() => {
+        expect(within(sideOf('item-a', 'Contender 2')).getByText('Close enough')).toBeTruthy();
+      });
+      expect(within(sideOf('item-a', 'Contender 1')).getByText('0.40', { exact: false })).toBeTruthy();
+      // +0.10 on accuracy and -0.10 on relevancy.
+      expect(within(sideOf('item-a', 'Contender 2')).getAllByText('0.10')).toHaveLength(2);
+      expect(within(sideOf('item-a', 'Baseline')).queryByText('0.40')).toBeNull();
+      expect(within(sideOf('item-a', 'Baseline')).queryByText('0.10')).toBeNull();
+    });
+  });
+
+  describe('when a contender has a different dataset version than the baseline', () => {
+    it('flags the version on that contender header only', async () => {
+      useThreeWayComparison();
+      renderComparison([CONTENDER_ID, CHALLENGER_ID]);
+
+      const contender = await screen.findByRole('columnheader', { name: 'Contender 1' });
+      await waitFor(() => {
+        expect(within(contender).getByText(/different dataset version/)).toBeTruthy();
+      });
+      expect(
+        within(screen.getByRole('columnheader', { name: 'Baseline' })).queryByText(/different dataset version/),
+      ).toBeNull();
+      expect(
+        within(screen.getByRole('columnheader', { name: 'Contender 2' })).queryByText(/different dataset version/),
+      ).toBeNull();
     });
   });
 });

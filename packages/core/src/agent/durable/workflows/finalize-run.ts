@@ -15,6 +15,7 @@ import type { ChunkType } from '../../../stream/types';
 import type { Agent } from '../../agent';
 import { convertMessages, coreContentToString, MessageList } from '../../message-list';
 import type { SerializedMessageListState } from '../../message-list/state';
+import { undoSavedResponseMessages } from '../../save-queue/undo-saved-response-messages';
 import { TripWire } from '../../trip-wire';
 import type { StructuredOutputOptions } from '../../types';
 import { assertExecutionOwned, isExecutionFenceError } from '../execution-fence';
@@ -267,7 +268,17 @@ export async function runDurableFinishSideEffects({
       );
     } catch (error) {
       if (error instanceof TripWire) {
-        // Match Agent: a tripwire rejects the answer, so skip persistence and title generation.
+        // Match Agent: a tripwire rejects the answer, so skip persistence and title generation,
+        // and remove any response messages this run already saved.
+        await undoSavedResponseMessages({
+          memory: registryEntry?.memory ?? rebuiltMemory,
+          threadId: durableState?.threadId,
+          memoryConfig: durableState?.memoryConfig,
+          messageList,
+          saveQueueManager: registryEntry?.saveQueueManager ?? rebuiltSaveQueueManager,
+          logger: effectiveLogger,
+          runId,
+        });
         return {
           messageListState: messageList.serialize(),
           outputText: resolveOutputText(messageList),

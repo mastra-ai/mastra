@@ -1,58 +1,43 @@
-import { AlertDialog as AlertDialogPrimitive } from '@base-ui/react/alert-dialog';
+import type * as React from 'react';
 
 import { Button } from '@/ds/components/Button';
 import {
+  Dialog,
   DialogBody,
   DialogCancel,
+  DialogClose,
+  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogOverlay,
-  DialogPortal,
   DialogTitle,
+  DialogTrigger,
 } from '@/ds/components/Dialog';
-import {
-  DialogContext,
-  dialogActionLayoutClasses,
-  dialogActionSizeClasses,
-} from '@/ds/components/Dialog/dialog-context';
-import type { DialogContextValue } from '@/ds/components/Dialog/dialog-context';
-import { dialogContentSizeClasses, dialogPopupClassName } from '@/ds/components/Dialog/dialog-shell';
-import type { DialogSize } from '@/ds/components/Dialog/dialog-shell';
+import type { DialogProps } from '@/ds/components/Dialog';
+import { dialogActionLayoutClasses, dialogActionSizeClasses } from '@/ds/components/Dialog/dialog-context';
 import { cn } from '@/lib/utils';
 
-const alertDialogContext: DialogContextValue = { intent: 'default', pending: false };
+type AlertDialogProps = Omit<DialogProps, 'intent' | 'pending' | 'modal' | 'disablePointerDismissal'>;
 
-function AlertDialog(props: AlertDialogPrimitive.Root.Props) {
+// base-ui's AlertDialog is its Dialog with these three settings, so it shares Dialog's phone drawer.
+function AlertDialog(props: AlertDialogProps) {
+  return <Dialog {...props} modal disablePointerDismissal />;
+}
+
+type AlertDialogContentProps = Omit<
+  React.ComponentProps<typeof DialogContent>,
+  'showCloseButton' | 'showOverlay' | 'overlayClassName' | 'role'
+>;
+
+function AlertDialogContent({ size = 'sm', ...props }: AlertDialogContentProps) {
   return (
-    <DialogContext.Provider value={alertDialogContext}>
-      <AlertDialogPrimitive.Root {...props} />
-    </DialogContext.Provider>
+    <DialogContent data-slot="alert-dialog-content" size={size} showCloseButton={false} {...props} role="alertdialog" />
   );
 }
 
-type AlertDialogContentProps = Omit<AlertDialogPrimitive.Popup.Props, 'className'> & {
-  className?: string;
-  size?: DialogSize;
-};
-
-function AlertDialogContent({ className, size = 'sm', ...props }: AlertDialogContentProps) {
+function AlertDialogAction({ children, ...props }: React.ComponentProps<typeof DialogClose>) {
   return (
-    <DialogPortal>
-      <DialogOverlay />
-      <AlertDialogPrimitive.Popup
-        data-slot="alert-dialog-content"
-        data-size={size}
-        className={cn(dialogPopupClassName, dialogContentSizeClasses[size], className)}
-        {...props}
-      />
-    </DialogPortal>
-  );
-}
-
-function AlertDialogAction({ children, ...props }: AlertDialogPrimitive.Close.Props) {
-  return (
-    <AlertDialogPrimitive.Close
+    <DialogClose
       render={
         <Button
           variant="primary"
@@ -66,7 +51,7 @@ function AlertDialogAction({ children, ...props }: AlertDialogPrimitive.Close.Pr
   );
 }
 
-AlertDialog.Trigger = AlertDialogPrimitive.Trigger;
+AlertDialog.Trigger = DialogTrigger;
 AlertDialog.Content = AlertDialogContent;
 AlertDialog.Header = DialogHeader;
 AlertDialog.Footer = DialogFooter;

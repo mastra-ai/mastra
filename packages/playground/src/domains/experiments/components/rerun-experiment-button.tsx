@@ -35,6 +35,7 @@ export function RerunExperimentButton({ experiment }: RerunExperimentButtonProps
     <>
       <Button
         variant="primary"
+        size="sm"
         onClick={() => setOpen(true)}
         tooltip="Run this experiment again with the same configuration"
         icon={<Play />}

@@ -92,6 +92,7 @@ const result = await memory.listThreads({
     type: 'number | false',
     description: 'Maximum number of threads to return per page, or false to fetch all',
     isOptional: true,
+    defaultValue: '100',
   },
   {
     name: 'orderBy',

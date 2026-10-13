@@ -26,6 +26,7 @@ import { getAbortReason, isMastraTimeoutError } from '../../../../loop/timeout';
 import type { MastraTimeoutError } from '../../../../loop/timeout';
 import { buildMessagesFromChunks } from '../../../../loop/workflows/agentic-execution/build-messages-from-chunks';
 import type { CollectedChunk } from '../../../../loop/workflows/agentic-execution/build-messages-from-chunks';
+import { getToolResultInvocationState } from '../../../../loop/workflows/agentic-execution/provider-tool-result-state';
 import { endPendingProviderToolSpan } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
 import type { PendingProviderToolCall } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
 import type { Mastra } from '../../../../mastra';
@@ -1708,11 +1709,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   messageList.updateToolInvocation({
                     type: 'tool-invocation',
                     toolInvocation: {
-                      state: 'result',
                       toolCallId: resultPayload.toolCallId,
                       toolName: resultPayload.toolName,
                       args: resultPayload.args,
-                      result: resultPayload.result,
+                      ...getToolResultInvocationState(resultPayload),
                     },
                     providerMetadata: withToolPayloadTransformProviderMetadata(
                       resultPayload.providerMetadata,

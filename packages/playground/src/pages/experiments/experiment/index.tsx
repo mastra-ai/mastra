@@ -15,11 +15,11 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 import { DeleteExperimentDialog } from '@/domains/experiments/components/delete-experiment-dialog';
+import { ExperimentHeaderActions } from '@/domains/experiments/components/experiment-header-actions';
 import { ExperimentItemPanel } from '@/domains/experiments/components/experiment-item-panel';
+import { ExperimentKpis } from '@/domains/experiments/components/experiment-kpis';
 import { ExperimentResultsBulkActions } from '@/domains/experiments/components/experiment-results-bulk-actions';
 import { ExperimentResultsSection } from '@/domains/experiments/components/experiment-results-section';
-import { ExperimentSideRail } from '@/domains/experiments/components/experiment-side-rail';
-import { ExperimentTopArea } from '@/domains/experiments/components/experiment-top-area';
 import { ExperimentItemPanelProvider } from '@/domains/experiments/context/experiment-item-panel-context';
 import { ExperimentCrumb, ExperimentCrumbStatusIcon } from '@/domains/experiments/experiment-crumb';
 import { useExperimentResultsSelection } from '@/domains/experiments/hooks/use-experiment-results-selection';
@@ -186,29 +186,29 @@ function ExperimentPage() {
       <div className="h-full">
         <PageLayout
           breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-          actionRow={
-            <ExperimentTopArea experiment={experiment} onDeleteClick={() => setDeleteDialogOpen(true)}>
-              <ExperimentResultsBulkActions selection={selection} />
-            </ExperimentTopArea>
+          headerActions={
+            <ExperimentHeaderActions experiment={experiment} onDeleteClick={() => setDeleteDialogOpen(true)} />
           }
         >
           <h1 className="sr-only">{experimentId}</h1>
-          {/* Results take the remaining width; the rail keeps the pipeline and run metadata beside them. */}
-          <div className="grid grid-cols-[1fr_auto] gap-4 overflow-visible">
-            <ExperimentResultsSection
-              experimentId={experimentId}
-              experimentStatus={experiment.status}
-              results={results ?? []}
-              isLoading={resultsLoading}
-              setEndOfListElement={setEndOfListElement}
-              isFetchingNextPage={isFetchingNextPage}
-              hasNextPage={hasNextPage}
-              selectedIds={selection.selectedIds}
-              onToggleSelect={selection.toggleSelect}
-              sort={sort}
-              onSortChange={onSortChange}
-            />
-            <ExperimentSideRail experiment={experiment} metrics={experimentMetrics} className="w-80 overflow-y-auto" />
+          <div className="grid content-start gap-4">
+            <ExperimentKpis experiment={experiment} metrics={experimentMetrics} />
+            <div className="grid content-start gap-1">
+              <ExperimentResultsBulkActions selection={selection} />
+              <ExperimentResultsSection
+                experimentId={experimentId}
+                experimentStatus={experiment.status}
+                results={results ?? []}
+                isLoading={resultsLoading}
+                setEndOfListElement={setEndOfListElement}
+                isFetchingNextPage={isFetchingNextPage}
+                hasNextPage={hasNextPage}
+                selectedIds={selection.selectedIds}
+                onToggleSelect={selection.toggleSelect}
+                sort={sort}
+                onSortChange={onSortChange}
+              />
+            </div>
           </div>
         </PageLayout>
 

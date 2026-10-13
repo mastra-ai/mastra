@@ -7,7 +7,7 @@ description: "Browse LowRouter model IDs, capabilities, context windows, and pri
 
 # <img src="https://models.dev/logos/lowrouter.svg" alt="LowRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />LowRouter
 
-Access 8 LowRouter models through Mastra's model router. Authentication is handled automatically using the `LOWROUTER_API_KEY` environment variable.
+Access 12 LowRouter models through Mastra's model router. Authentication is handled automatically using the `LOWROUTER_API_KEY` environment variable.
 
 Learn more in the [LowRouter documentation](https://lowrouter.ai/docs/models/available).
 
@@ -140,6 +140,54 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 256000,
     "inputCost": 0.1569,
     "outputCost": 0.6275
+  },
+  {
+    "model": "lowrouter/auto/openai/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.1695,
+    "outputCost": 0.6779
+  },
+  {
+    "model": "lowrouter/auto/openai/gpt-oss-20b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.113,
+    "outputCost": 0.4745
+  },
+  {
+    "model": "lowrouter/auto/openai/gpt-oss-safeguard-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.18,
+    "outputCost": 0.73
+  },
+  {
+    "model": "lowrouter/auto/openai/gpt-oss-safeguard-20b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.08,
+    "outputCost": 0.24
   }
 ]}
 />
@@ -174,7 +222,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "lowrouter/auto/mistralai/mistral-small-2603"
+      ? "lowrouter/auto/openai/gpt-oss-safeguard-20b"
       : "lowrouter/auto/mistralai/codestral-2508";
   }
 });

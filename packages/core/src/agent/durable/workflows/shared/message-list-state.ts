@@ -228,6 +228,11 @@ export function dehydrateSnapshotTranscripts(snapshot: WorkflowRunState): Workfl
   return { ...snapshot, value, context: (changed ? nextContext : context) as WorkflowRunState['context'] };
 }
 
+/** Loads stored messages of the run by id from the run's memory. */
+export function loadRunStoredMessages(params: TranscriptParams): StoredMessageLoader {
+  return runTranscriptRefs(params).load;
+}
+
 /** Frees this process's verified rows once the run has read its transcript for the last time. */
 export function releaseMessageListState(params: TranscriptParams): void {
   const { runId } = (params.getInitData() ?? {}) as RunIdentity;

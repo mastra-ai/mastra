@@ -7,6 +7,7 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
 import {
+  experimentResultResponseSchema,
   listDatasetsQuerySchema,
   listExperimentResultsQuerySchema,
   listExperimentsQuerySchema,
@@ -17,6 +18,7 @@ import { DATASETS_ROUTES } from '../server-adapter/routes/datasets';
 import {
   ADD_ITEM_ROUTE,
   BATCH_INSERT_ITEMS_ROUTE,
+  COMPARE_EXPERIMENTS_ROUTE,
   DELETE_ANY_EXPERIMENT_ROUTE,
   DELETE_DATASET_ROUTE,
   DELETE_EXPERIMENT_ROUTE,
@@ -236,6 +238,86 @@ describe('Datasets Handlers', () => {
       expect(startExperimentAsync).toHaveBeenCalledWith(
         expect.objectContaining({ requestContext: { tenantId: 'tenant-1' } }),
       );
+    });
+  });
+
+  describe('COMPARE_EXPERIMENTS_ROUTE', () => {
+    async function createExperimentWithOutput(datasetId: string, itemId: string, output: string) {
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId,
+        start: false,
+      } as any)) as any;
+      await SUBMIT_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId,
+        experimentId: created.experimentId,
+        itemId,
+        output,
+      } as any);
+      await FINALIZE_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId,
+        experimentId: created.experimentId,
+      } as any);
+      return created.experimentId as string;
+    }
+
+    describe('when three experiments are compared', () => {
+      it('returns a result for every experiment on each item', async () => {
+        const dataset = await mastra.datasets.create({ name: 'Compare DS' });
+        const item = await dataset.addItem({ input: { q: 'q1' } });
+        const ids = [
+          await createExperimentWithOutput(dataset.id, item.id, 'one'),
+          await createExperimentWithOutput(dataset.id, item.id, 'two'),
+          await createExperimentWithOutput(dataset.id, item.id, 'three'),
+        ];
+
+        const body = COMPARE_EXPERIMENTS_ROUTE.bodySchema.parse({ experimentIds: ids, baselineId: ids[1] });
+        const result = (await COMPARE_EXPERIMENTS_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          ...body,
+        } as any)) as any;
+
+        expect(result.baselineId).toBe(ids[1]);
+        expect(result.items).toHaveLength(1);
+        expect(Object.keys(result.items[0].results).sort()).toEqual([...ids].sort());
+        expect(ids.map(id => result.items[0].results[id].output)).toEqual(['one', 'two', 'three']);
+      });
+    });
+
+    describe('when ten experiments are compared', () => {
+      it('accepts them', () => {
+        const experimentIds = Array.from({ length: 10 }, (_, i) => `exp-${i}`);
+        expect(COMPARE_EXPERIMENTS_ROUTE.bodySchema.safeParse({ experimentIds }).success).toBe(true);
+      });
+    });
+
+    describe('when the body is invalid', () => {
+      it('rejects fewer than two experiment ids', () => {
+        expect(COMPARE_EXPERIMENTS_ROUTE.bodySchema.safeParse({ experimentIds: ['a'] }).success).toBe(false);
+      });
+
+      it('rejects more than ten experiment ids', () => {
+        const experimentIds = Array.from({ length: 11 }, (_, i) => `exp-${i}`);
+        expect(COMPARE_EXPERIMENTS_ROUTE.bodySchema.safeParse({ experimentIds }).success).toBe(false);
+      });
+
+      it('rejects a baselineId that is not one of experimentIds', () => {
+        expect(
+          COMPARE_EXPERIMENTS_ROUTE.bodySchema.safeParse({ experimentIds: ['a', 'b'], baselineId: 'c' }).success,
+        ).toBe(false);
+      });
+    });
+
+    describe('when an older client sends experimentIdA/experimentIdB', () => {
+      it('compares them with experimentIdA as the baseline', () => {
+        expect(COMPARE_EXPERIMENTS_ROUTE.bodySchema.parse({ experimentIdA: 'a', experimentIdB: 'b' })).toEqual({
+          experimentIds: ['a', 'b'],
+          baselineId: 'a',
+        });
+      });
     });
   });
 
@@ -500,6 +582,71 @@ describe('Datasets Handlers', () => {
       expect(listed.results).toHaveLength(2);
     });
 
+    it('attaches the experiment targetType to returned results', async () => {
+      const { dataset, item1 } = await setupDatasetWithItems();
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+      } as any)) as any;
+
+      const submitted = (await SUBMIT_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        itemId: item1.id,
+        output: { a: 'ok' },
+      } as any)) as any;
+      expect(submitted.targetType).toBeNull();
+
+      const patched = (await UPDATE_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        resultId: submitted.id,
+        tags: ['a'],
+      } as any)) as any;
+      expect(patched.targetType).toBeNull();
+
+      const listed = (await LIST_EXPERIMENT_RESULTS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        page: 0,
+        perPage: 10,
+      } as any)) as any;
+      expect(listed.results[0].targetType).toBeNull();
+      expect(listed.results[0].output).toEqual({ a: 'ok' });
+      expect(experimentResultResponseSchema.safeParse(listed.results[0]).success).toBe(true);
+    });
+
+    it('accepts agent output, including legacy empty errors, in the response schema', () => {
+      const base = {
+        id: 'r1',
+        experimentId: 'e1',
+        itemId: 'i1',
+        itemDatasetVersion: 1,
+        input: 'hi',
+        groundTruth: null,
+        error: null,
+        startedAt: new Date(),
+        completedAt: new Date(),
+        retryCount: 0,
+        traceId: null,
+        toolMockReport: null,
+        createdAt: new Date(),
+      };
+      const parsed = experimentResultResponseSchema.parse({
+        ...base,
+        targetType: 'agent',
+        output: { text: 'hello', toolCalls: [{ type: 'tool-call' }], usage: { inputTokens: 1 }, error: {} },
+      });
+      expect(parsed.targetType === 'agent' && parsed.output?.text).toBe('hello');
+      expect(
+        experimentResultResponseSchema.safeParse({ ...base, targetType: 'agent', output: { text: 42 } }).success,
+      ).toBe(false);
+    });
+
     it('filters listed results by tags (all must match)', async () => {
       const { dataset, item1, item2 } = await setupDatasetWithItems();
       const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
@@ -693,6 +840,17 @@ describe('Datasets Handlers', () => {
       } as any)) as any;
       expect(first.result.output?.text).toBe('agent answer');
       expect(first.result.error).toBeNull();
+      expect(first.result.targetType).toBe('agent');
+
+      const listed = (await LIST_EXPERIMENT_RESULTS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        page: 0,
+        perPage: 10,
+      } as any)) as any;
+      expect(listed.results[0].targetType).toBe('agent');
+      expect(experimentResultResponseSchema.safeParse(listed.results[0]).success).toBe(true);
 
       // A retried call converges on the same row.
       const second = (await RUN_EXPERIMENT_ITEM_ROUTE.handler({

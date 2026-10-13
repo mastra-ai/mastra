@@ -4,6 +4,7 @@ import type { ScoresByItemId } from '../../build-comparison-rows';
 export const DATASET_ID = 'dataset-1';
 export const BASELINE_ID = 'exp-baseline';
 export const CONTENDER_ID = 'exp-contender';
+export const CHALLENGER_ID = 'exp-challenger';
 
 /**
  * Comparison payload covering the three interesting shapes:
@@ -142,4 +143,54 @@ export const contenderScores: ScoresByItemId = {
     { scorerId: 'accuracy', reason: 'Complete answer' },
     { scorerId: 'relevancy', reason: null },
   ],
+};
+
+/**
+ * Three-way payload: the two-way one plus a second contender (`CHALLENGER_ID`) that ran
+ * `item-a` and `item-b` but not `item-c`.
+ */
+export const threeWayComparisonResponse: CompareExperimentsResponse = {
+  baselineId: BASELINE_ID,
+  items: comparisonResponse.items.map(item => ({
+    ...item,
+    results: {
+      ...item.results,
+      [CHALLENGER_ID]:
+        item.itemId === 'item-a'
+          ? { output: { answer: 'Paris' }, scores: { accuracy: 0.6, relevancy: 0.8 } }
+          : item.itemId === 'item-b'
+            ? { output: { answer: 'Frank Herbert' }, scores: { accuracy: 1 } }
+            : null,
+    },
+  })),
+};
+
+export const challengerResults: DatasetExperimentResult[] = [
+  makeResult({
+    id: 'res-challenger-a',
+    experimentId: CHALLENGER_ID,
+    itemId: 'item-a',
+    output: { answer: 'Paris' },
+    comment: 'Challenger matches the baseline',
+  }),
+  makeResult({
+    id: 'res-challenger-b',
+    experimentId: CHALLENGER_ID,
+    itemId: 'item-b',
+    output: { answer: 'Frank Herbert' },
+  }),
+];
+
+export const challengerScoreRows = [
+  makeScoreRow(CHALLENGER_ID, 'item-a', 'accuracy', 0.6, 'Close enough'),
+  makeScoreRow(CHALLENGER_ID, 'item-a', 'relevancy', 0.8, null),
+  makeScoreRow(CHALLENGER_ID, 'item-b', 'accuracy', 1, 'Exact match'),
+];
+
+export const challengerScores: ScoresByItemId = {
+  'item-a': [
+    { scorerId: 'accuracy', reason: 'Close enough' },
+    { scorerId: 'relevancy', reason: null },
+  ],
+  'item-b': [{ scorerId: 'accuracy', reason: 'Exact match' }],
 };

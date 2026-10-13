@@ -3084,6 +3084,47 @@ export class DurableAgent<
     await priorExecution?.catch(() => {
       /* errors already handled by the prior segment */
     });
+    // A warm resume reuses the tools built for the first request, which close
+    // over its request context and delegation hooks (#25960). Rebuild them for
+    // this call and swap in only entries still holding a request-built tool, so
+    // tools a processor added or replaced are kept. Cold resumes already
+    // rebuilt everything in prepare() above.
+    if (!coldSnapshot && (options?.requestContext || options?.delegation)) {
+      try {
+        const requestTools = await this.#wrappedAgent.getToolsForExecution({
+          toolsets: resolvedOptions.toolsets,
+          clientTools: resolvedOptions.clientTools,
+          threadId: memoryInfo?.threadId,
+          resourceId: memoryInfo?.resourceId,
+          runId,
+          requestContext: resumeRequestContext,
+          memoryConfig: resolvedOptions.memory?.options,
+          autoResumeSuspendedTools: resolvedOptions.autoResumeSuspendedTools,
+          delegation: resolvedOptions.delegation,
+          methodType: resolvedOptions.closeOnSuspend ? 'generate' : 'stream',
+          backgroundTaskEnabled: Boolean(entry.backgroundTaskManager),
+          backgroundTaskPolicy: resolvedOptions.backgroundTaskPolicy,
+          model: entry.model,
+        });
+        const refresh = (current: Record<string, CoreTool>, previous: Record<string, CoreTool> | undefined) => {
+          const next = { ...current };
+          for (const [name, tool] of Object.entries(requestTools)) {
+            // A name missing from current but present in previous was withheld by a processor.
+            const configured = name in current ? current[name] === previous?.[name] : !previous || !(name in previous);
+            if (configured) next[name] = tool;
+          }
+          return next;
+        };
+        for (const reg of new Set([entry, getRunRegistryEntry(runId, this.#mastra)])) {
+          if (!reg) continue;
+          reg.tools = refresh(reg.tools ?? {}, reg.requestTools);
+          if (reg.baseTools) reg.baseTools = refresh(reg.baseTools, reg.requestTools);
+          reg.requestTools = requestTools;
+        }
+      } catch (error) {
+        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] resume(${runId}) tool resolution failed: ${error}`);
+      }
+    }
     // Claimed before the abort controller and timeout are replaced, so a
     // conflicting resume leaves the executing segment's state untouched.
     const executionFence = await this.#claimExecution(runId, 'acquire', resumeRequestContext);
