@@ -88,7 +88,7 @@ function compiled(caseId: string, days: number, variant: Variant = 'base') {
   };
 }
 
-const ROOT_CTES = new Set(['current_roots', 'root_scope', 'current_spans', 'candidates']);
+const ROOT_CTES = new Set(['current_roots', 'root_scope', 'current_spans', 'candidates', 'trace_roots']);
 
 /**
  * Runs the compiled WITH chain but ends at one CTE, so each stage's own cost shows. Root stages hash only traceId,
@@ -140,6 +140,29 @@ const SETTINGS: Array<[string, Settings, string]> = [
 ];
 
 export const PROBES: Probe[] = [
+  // OBS-613 memory rise: F3 (spans.some) as compiled by this checkout, in full, with the prefetch limit, and up to
+  // each stage. Stage names differ by code version, so pick the probes that exist (`--probes`).
+  ...(['base', 'w1'] as const).flatMap(v =>
+    [7, 30].flatMap((days): Probe[] => [
+      { id: `mr-F3-${v}-${days}`, note: `F3 ${days}d, ${v}`, sql: compiled('F3', days, v) },
+      {
+        id: `mr-F3-${v}-${days}-pf8`,
+        note: `F3 ${days}d, ${v} + prefetch limit 8`,
+        sql: compiled('F3', days, v),
+        settings: { filesystem_prefetches_limit: 8 },
+      },
+      ...['current_roots', 'root_scope', 'current_spans', 'candidates', 'trace_roots', 'facts'].map(
+        (cte): Probe => ({
+          id: `mr-F3-${v}-${days}-${cte}`,
+          note: `F3 ${days}d, ${v}, up to ${cte}`,
+          sql: (p, to) => {
+            const c = compiled('F3', days, v)(p, to);
+            return { query: stageQuery(c.query, cte), params: c.params };
+          },
+        }),
+      ),
+    ]),
+  ),
   { id: 'select1', note: 'no table read', sql: () => ({ query: 'SELECT 1', params: {} }) },
   {
     id: 'count',

@@ -82,6 +82,8 @@ Numbers are warm medians on the representative project per bucket, 30-day window
 | X35 | local      | One usage row per model call: separate table, span columns, `FINAL` read                                                   | Per-call table ×0.41 at largest; `FINAL` read adds a ~160 MiB floor (rejected)                                                               | done   |
 | X36 | prod       | Real Platform read traffic from `query_log` across compute groups (`traffic.ts`, 2.3 days)                                 | Cold reads are rare (≤5% of reads touch object storage, p99 1.6 s); the read-ahead floor makes 8% of 256 MiB-capped span reads fail          | done   |
 | X37 | prod       | mobs-query's own read paths, today's settings vs platform#3407 (`mobs-ab.ts`, 33 operations, 15 projects)                  | Warm: same latency, 3–4× less memory, no failures. Forced-cold: 2–4× slower; 43 of 230 cold reads hit the 9 s limit, 39 already took > 9 s   | done   |
+| X38 | prod       | Where cold `spans.some` time goes; span and root time bounds under one root per trace                                      | Span scan was never the bottleneck; the unscoped root re-read is. `w1` gives most of the cold win, `rs` more at 7d, `spb` nothing            | done   |
+| X39 | prod       | Largest-project `spans.some` memory across #26327, OBS-589 and OBS-613, stage by stage (`floor.ts` `mr-*` probes)          | No rise from #26327 on the same project; the reported 204→362 MiB compared two projects. OBS-613 is ~10% lower; memory is spans + semi-join  | done   |
 
 ## Entries
 
@@ -567,6 +569,64 @@ Isolating that step on prod (largest project, ~2.3M token rows): grouping alone 
 | E4   | 293–298    | 297–304   | 872–875        | 752–771       |
 | T1   | 303–305    | 289–292   | 845–854        | 766–768       |
 | T3   | 299–300    | 291       | 860–867        | 758–766       |
+
+### X39: largest-project `spans.some` memory, stage by stage (prod replica, 2026-10-13)
+
+**Question.** X38 reported F3 (`spans.some`) warm memory on the largest bucket rising from 204 to ~362 MiB under the
+root fixes (#26327 `w1`, `rs`, `rsb`), and a later run reported OBS-613 (`oneRootPerTrace` for aggregates) bringing it
+back to 187/289 MiB. Is the rise real, and where does the memory go?
+
+**Correction first.** Both comparisons mixed projects. `run.ts` runs base on all three largest-bucket projects and
+variants only on the representative one (`a62771ca`, 434k traces/30d); the 204 MiB was the median of a different,
+smaller project (`40b45a96`, 292k). Per project, from the Oct 9 records:
+
+| a62771ca, warm median | 7d      | 30d     |
+| --------------------- | ------- | ------- |
+| before #26327 (base)  | 364 MiB | 551 MiB |
+| #26327 (`w1`)         | 368 MiB | 548 MiB |
+| `rsb`                 | 362 MiB | 549 MiB |
+| OBS-613               | 320 MiB | 501 MiB |
+
+So there was no rise on the largest project, and OBS-613's "187/289" was also a cross-project median.
+
+**Method.** `floor.ts` `mr-F3-*` probes on the two checkouts (pre-#26327 code with `base`/`w1`, and OBS-613 stacked on
+OBS-589): F3 in full, with `filesystem_prefetches_limit = 8`, and cut at each CTE (`stageQuery`). Representative
+project of the p99 and largest buckets, 7d and 30d, 4 reps, rep 0 dropped. Memory is the summary header's
+`memory_usage`; a `query_log` cross-check (`is_initial_query`, no secondary queries) agrees.
+
+**Results (warm median MiB / MB read).**
+
+| largest                       | pre-#26327 | #26327    | OBS-613   |
+| ----------------------------- | ---------- | --------- | --------- |
+| 7d full                       | 373 / 678  | 371 / 494 | 334 / 399 |
+| 7d, roots stage               | 187 / 175  | 238 / 81  | 184 / 29  |
+| 7d, + span dedupe             | 257 / 466  | 258 / 374 | 256 / 320 |
+| 7d, + candidates (semi-join)  | 368 / 676  | 371 / 493 | 328 / 387 |
+| 30d full                      | 558 / 1015 | 554 / 825 | 504 / 660 |
+| 30d, roots stage              | 277 / 246  | 256 / 151 | 183 / 62  |
+| 30d, + span dedupe            | 389 / 700  | 390 / 606 | 393 / 516 |
+| 30d, + candidates (semi-join) | 550 / 1011 | 556 / 821 | 505 / 638 |
+| 30d full, prefetch limit 8    | 553        | 551       | 503       |
+
+| p99                        | pre-#26327 | #26327 | OBS-613 |
+| -------------------------- | ---------- | ------ | ------- |
+| 7d full                    | 180        | 232    | 192     |
+| 30d full                   | 189        | 277    | 192     |
+| 30d full, prefetch limit 8 | 155        | 146    | 132     |
+
+**Conclusions.**
+
+1. On the largest project #26327 did not raise memory, and OBS-613 lowers it ~10% (334/504 vs 373/558 MiB).
+2. #26327 did raise memory on the p99 project (180→232 at 7d, 189→277 at 30d), at the root and candidate stages.
+   OBS-613 takes it back to ~192 MiB.
+3. At the largest project the memory is in the span stages, not the roots: the span dedupe (`LIMIT 1 BY dedupeKey`
+   over every span of the candidate traces) adds ~70–210 MiB, and the semi-join into candidates adds another
+   ~70–110 MiB. No root-selection change touches either.
+4. The prefetch limit removes the read-ahead floor at p99 (−60 MiB) but does nothing at the largest project: that
+   memory is query data, not buffers.
+5. `spans.some` on the largest project needs ~500 MiB at 30d with any of these root strategies. That matters for
+   OBS-591 guardrails and is a span-side problem; X38's `spcolsnd` (no span
+   dedupe, exact for name-only predicates) cut it 20–30%.
 
 ### X38: where cold `spans.some` time goes, and time bounds under one root per trace (prod replica, 2026-10-09)
 
