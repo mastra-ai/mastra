@@ -100,6 +100,7 @@ async function setupDataset(agent: Agent, inputs: string[] = ITEM_INPUTS) {
 
   const mastra = {
     getStorage: vi.fn().mockReturnValue(mockStorage),
+    getVersionOverrides: vi.fn().mockReturnValue(undefined),
     getAgent: vi.fn().mockReturnValue(agent),
     getAgentById: vi.fn().mockReturnValue(agent),
     getScorerById: vi.fn(),

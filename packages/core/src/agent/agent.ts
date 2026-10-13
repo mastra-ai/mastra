@@ -3298,8 +3298,6 @@ export class Agent<
         name: this.name,
         id: this.id,
         mastra: this.#mastra,
-        getDefaultGenerateOptionsLegacy: this.getDefaultGenerateOptionsLegacy.bind(this),
-        getDefaultStreamOptionsLegacy: this.getDefaultStreamOptionsLegacy.bind(this),
         hasOwnMemory: this.hasOwnMemory.bind(this),
         getScopes: this.getScopes.bind(this),
         getInstructions: async (options: { requestContext: RequestContext }) => {
@@ -11942,9 +11940,22 @@ export class Agent<
       model?: DynamicArgument<MastraModelConfig>;
     } = {},
   ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
-    const prepared = await this.#prepareLegacyVersionedRun(generateOptions);
+    const defaultEvaluationContext = generateOptions.requestContext ?? new RequestContext();
+    // Resolve defaults on the original agent before choosing an immutable
+    // version. Pass the result through so the selected fork cannot evaluate a
+    // dynamic factory again or replace its request context.
+    const defaults = await this.getDefaultGenerateOptionsLegacy({ requestContext: defaultEvaluationContext });
+    const requestContext = generateOptions.requestContext ?? defaults.requestContext ?? defaultEvaluationContext;
+    const prepared = await this.#prepareLegacyVersionedRun({
+      ...generateOptions,
+      requestContext,
+      versions:
+        requestContext.get(MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY) === true
+          ? generateOptions.versions
+          : mergeVersionOverrides(defaults.versions, generateOptions.versions),
+    });
     try {
-      return await prepared.agent.getLegacyHandler().generateLegacy(messages, prepared.options);
+      return await prepared.agent.getLegacyHandler().generateLegacy(messages, prepared.options, defaults);
     } finally {
       prepared.restoreVersions?.();
     }
@@ -12011,9 +12022,19 @@ export class Agent<
     | StreamTextResult<any, OUTPUT>
     | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties)
   > {
-    const prepared = await this.#prepareLegacyVersionedRun(streamOptions);
+    const defaultEvaluationContext = streamOptions.requestContext ?? new RequestContext();
+    const defaults = await this.getDefaultStreamOptionsLegacy({ requestContext: defaultEvaluationContext });
+    const requestContext = streamOptions.requestContext ?? defaults.requestContext ?? defaultEvaluationContext;
+    const prepared = await this.#prepareLegacyVersionedRun({
+      ...streamOptions,
+      requestContext,
+      versions:
+        requestContext.get(MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY) === true
+          ? streamOptions.versions
+          : mergeVersionOverrides(defaults.versions, streamOptions.versions),
+    });
     try {
-      return await (prepared.agent.getLegacyHandler().streamLegacy(messages, prepared.options) as Promise<
+      return await (prepared.agent.getLegacyHandler().streamLegacy(messages, prepared.options, defaults) as Promise<
         | StreamTextResult<any, OUTPUT>
         | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties)
       >);

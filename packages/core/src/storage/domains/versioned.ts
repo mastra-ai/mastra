@@ -292,7 +292,10 @@ export abstract class VersionedStorageDomain<
     const result = await this.list(args);
 
     const status = (args as Record<string, unknown> | undefined)?.status as
-      'draft' | 'published' | 'archived' | undefined;
+      | 'draft'
+      | 'published'
+      | 'archived'
+      | undefined;
     const entities = (result as Record<string, unknown>)[this.listKey] as TEntity[];
 
     let resolved: TResolved[];

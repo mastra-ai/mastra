@@ -4,8 +4,8 @@ import { InMemoryServerCache } from '../cache/inmemory';
 import { CachingPubSub } from '../events/caching-pubsub';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { MASTRA_VERSIONS_KEY, RequestContext } from '../request-context';
-import { Agent } from './agent';
 import { LeasePubSub } from './__tests__/thread-stream-test-utils';
+import { Agent } from './agent';
 import { AgentThreadStreamRuntime, agentThreadStreamRuntime } from './thread-stream-runtime';
 import { getAgentVersionPins, setAgentVersionPins } from './version-pins';
 import type { AgentVersionPins } from './version-pins';
@@ -82,6 +82,172 @@ function outputWithParts(runId: string, parts: unknown[]) {
 }
 
 describe('thread stream version pins', () => {
+  describe('when the transport does not retain completed history', () => {
+    async function completedLocalRun(versionPins?: AgentVersionPins, runId = 'local-source') {
+      const runtime = new AgentThreadStreamRuntime();
+      const pubsub = new EventEmitterPubSub();
+      const requestContext = new RequestContext();
+      if (versionPins) setAgentVersionPins(requestContext, versionPins);
+      const agent = { id: 'stored-agent' } as unknown as Agent<any, any, any, any>;
+      await runtime.registerRun(
+        agent,
+        completedOutput(runId),
+        { requestContext, memory: { thread: 'local-thread', resource: 'resource' } },
+        pubsub,
+      );
+      await vi.waitFor(() => expect(runtime.hasThreadRun(runId, pubsub)).toBe(false));
+      return { runtime, pubsub, runId };
+    }
+
+    it.each([
+      {
+        name: 'a stored root and its complete frozen graph',
+        pins: {
+          root: { agentId: 'stored-agent', versionId: 'v1', selectedLabel: 'production' },
+          agents: { dependency: { agentId: 'dependency', versionId: 'dep-v1' } },
+          resolvedAgentIds: ['code-only', 'dependency', 'stored-agent'],
+        },
+      },
+      {
+        name: 'a rootless frozen dependency graph',
+        pins: {
+          agents: { dependency: { agentId: 'dependency', versionId: 'dep-v1' } },
+          resolvedAgentIds: ['dependency', 'stored-agent'],
+        },
+      },
+      { name: 'an unversioned run', pins: undefined },
+    ])('recovers $name after the warm run is removed', async ({ pins }) => {
+      const { runtime, pubsub, runId } = await completedLocalRun(pins);
+      const options = { agentId: 'stored-agent', threadId: 'local-thread', resourceId: 'resource' };
+      await expect(runtime.hydrateThreadRunVersionPins({ ...options, runId }, pubsub)).resolves.toEqual({
+        runId,
+        versionPins: pins,
+      });
+      await expect(runtime.hydrateThreadRunVersionPins(options, pubsub)).resolves.toEqual({
+        runId,
+        versionPins: pins,
+      });
+    });
+
+    it('rejects identities belonging to another agent, thread, resource, or runtime', async () => {
+      const { runtime, pubsub, runId } = await completedLocalRun();
+      const options = { agentId: 'stored-agent', runId, threadId: 'local-thread', resourceId: 'resource' };
+      await expect(
+        runtime.hydrateThreadRunVersionPins({ ...options, agentId: 'other-agent' }, pubsub),
+      ).rejects.toMatchObject({ id: 'PINNED_VERSION_INVALID' });
+      for (const scope of [{ threadId: 'other-thread' }, { resourceId: 'other-resource' }]) {
+        await expect(runtime.hydrateThreadRunVersionPins({ ...options, ...scope }, pubsub)).rejects.toMatchObject({
+          id: 'PINNED_VERSION_REQUIRED',
+        });
+      }
+      await expect(new AgentThreadStreamRuntime().hydrateThreadRunVersionPins(options, pubsub)).rejects.toMatchObject({
+        id: 'PINNED_VERSION_REQUIRED',
+      });
+    });
+
+    it('rejects a local identity when the five-minute continuation window expires', async () => {
+      const { runtime, pubsub, runId } = await completedLocalRun({
+        root: { agentId: 'stored-agent', versionId: 'v1' },
+      });
+      const now = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 5 * 60 * 1000);
+      try {
+        await expect(
+          runtime.hydrateThreadRunVersionPins(
+            { agentId: 'stored-agent', runId, threadId: 'local-thread', resourceId: 'resource' },
+            pubsub,
+          ),
+        ).rejects.toMatchObject({ id: 'PINNED_VERSION_REQUIRED' });
+      } finally {
+        now.mockRestore();
+      }
+    });
+
+    it('bounds local completed identities and fails closed for an evicted run', async () => {
+      const runtime = new AgentThreadStreamRuntime();
+      const pubsub = new EventEmitterPubSub();
+      const agent = { id: 'stored-agent' } as unknown as Agent<any, any, any, any>;
+      for (let index = 0; index <= 1_000; index++) {
+        await runtime.registerRun(
+          agent,
+          completedOutput(`bounded-${index}`),
+          { memory: { thread: `thread-${index}`, resource: 'resource' } },
+          pubsub,
+        );
+      }
+      await vi.waitFor(() => expect(runtime.hasThreadRun('bounded-1000', pubsub)).toBe(false));
+      await expect(
+        runtime.hydrateThreadRunVersionPins(
+          { agentId: 'stored-agent', runId: 'bounded-0', threadId: 'thread-0', resourceId: 'resource' },
+          pubsub,
+        ),
+      ).rejects.toMatchObject({ id: 'PINNED_VERSION_REQUIRED' });
+      await expect(
+        runtime.hydrateThreadRunVersionPins(
+          { agentId: 'stored-agent', runId: 'bounded-1000', threadId: 'thread-1000', resourceId: 'resource' },
+          pubsub,
+        ),
+      ).resolves.toEqual({ runId: 'bounded-1000', versionPins: undefined });
+    });
+
+    it.each([false, true])(
+      'does not resurrect an earlier success after a later failed run (retained: %s)',
+      async retain => {
+        const runtime = new AgentThreadStreamRuntime();
+        const pubsub = retain ? new RetainedVersionPubSub() : new EventEmitterPubSub();
+        if (pubsub instanceof RetainedVersionPubSub) pubsub.retain = true;
+        const agent = { id: 'stored-agent' } as unknown as Agent<any, any, any, any>;
+        const options = { agentId: 'stored-agent', threadId: 'failure-thread', resourceId: 'resource' };
+        const memory = { thread: options.threadId, resource: options.resourceId };
+        await runtime.registerRun(agent, completedOutput('old-success'), { memory }, pubsub);
+        await vi.waitFor(() => expect(runtime.hasThreadRun('old-success', pubsub)).toBe(false));
+        await runtime.registerRun(agent, { ...completedOutput('new-failure'), status: 'error' }, { memory }, pubsub);
+        await vi.waitFor(() => expect(runtime.hasThreadRun('new-failure', pubsub)).toBe(false));
+        await expect(runtime.hydrateThreadRunVersionPins(options, pubsub)).rejects.toMatchObject({
+          id: 'PINNED_VERSION_REQUIRED',
+        });
+        const topic = `agent.thread-stream.${encodeURIComponent('resource\u0000failure-thread')}`;
+        await pubsub.trimTopic(topic, { runId: 'new-failure' });
+        await expect(runtime.hydrateThreadRunVersionPins(options, pubsub)).rejects.toMatchObject({
+          id: 'PINNED_VERSION_REQUIRED',
+        });
+        await expect(
+          runtime.hydrateThreadRunVersionPins({ ...options, runId: 'old-success' }, pubsub),
+        ).resolves.toEqual({ runId: 'old-success', versionPins: undefined });
+      },
+    );
+
+    it('validates the owner and scope of an active unversioned run', async () => {
+      const runtime = new AgentThreadStreamRuntime();
+      const pubsub = new EventEmitterPubSub();
+      let finish!: () => void;
+      const finished = new Promise<void>(resolve => (finish = resolve));
+      const agent = { id: 'stored-agent' } as unknown as Agent<any, any, any, any>;
+      await runtime.registerRun(
+        agent,
+        { ...completedOutput('warm-run'), status: 'running', _waitUntilFinished: () => finished },
+        { memory: { thread: 'warm-thread', resource: 'resource' } },
+        pubsub,
+      );
+      const options = { agentId: 'stored-agent', runId: 'warm-run', threadId: 'warm-thread', resourceId: 'resource' };
+      try {
+        await expect(runtime.hydrateThreadRunVersionPins(options, pubsub)).resolves.toEqual({
+          runId: 'warm-run',
+          versionPins: undefined,
+        });
+        await expect(
+          runtime.hydrateThreadRunVersionPins({ ...options, agentId: 'other-agent' }, pubsub),
+        ).rejects.toMatchObject({ id: 'PINNED_VERSION_INVALID' });
+        for (const scope of [{ threadId: 'other-thread' }, { resourceId: 'other-resource' }]) {
+          await expect(runtime.hydrateThreadRunVersionPins({ ...options, ...scope }, pubsub)).rejects.toMatchObject({
+            id: 'PINNED_VERSION_REQUIRED',
+          });
+        }
+      } finally {
+        finish();
+      }
+    });
+  });
+
   it.each([
     {
       name: 'a stored root and dependency',

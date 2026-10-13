@@ -776,7 +776,10 @@ describe('AgentController signal messages', () => {
     const thread = await session.thread.create();
     session.run.ensureAbortController();
 
-    await session.followUp({ content: 'queued follow-up' });
+    const versions = { agents: { 'follow-up-queue-agent': { versionId: 'queued-version' } } };
+    const pendingFollowUp = session.followUp({ content: 'queued follow-up', versions });
+    versions.agents['follow-up-queue-agent'].versionId = 'mutated-version';
+    await pendingFollowUp;
 
     expect(queueMessage).toHaveBeenCalledWith(
       { contents: 'queued follow-up' },
@@ -785,6 +788,7 @@ describe('AgentController signal messages', () => {
         threadId: thread.id,
         ifIdle: expect.objectContaining({
           streamOptions: expect.objectContaining({
+            versions: { agents: { 'follow-up-queue-agent': { versionId: 'queued-version' } } },
             memory: expect.objectContaining({ thread: thread.id, resource: thread.resourceId }),
             maxSteps: 1000,
             savePerStep: false,

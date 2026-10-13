@@ -184,6 +184,7 @@ const AGENT_SUSPENDED_RUN_TTL_MS = readPositiveIntEnv('MASTRA_SUSPENDED_RUN_TTL_
 // A completed client-tool run only needs its immutable identity, not its saved
 // message stream, for a short continuation window.
 const AGENT_THREAD_VERSION_IDENTITY_TTL_MS = 5 * 60 * 1000;
+const MAX_COMPLETED_RUN_VERSION_IDENTITIES = 1_000;
 
 export const AGENT_THREAD_LEASE_CONFLICT_CODE = 'AGENT_THREAD_LEASE_CONFLICT';
 
@@ -522,6 +523,11 @@ type AgentThreadRuntimeState = {
   activeThreadStreamIds: Map<string, string>;
   streamSeqByRunId: Map<string, number>;
   versionPinsByRunId: Map<string, AgentVersionPins>;
+  completedVersionIdentities: Map<
+    string,
+    { threadKey: string; identity: Extract<AgentThreadStreamRuntimeEvent, { type: 'run-version-identity' }> }
+  >;
+  latestLocalRunIdsByThread: ReturnType<typeof createRecentRequests<string>>;
   approvalSuspendedRunIds: Set<string>;
   suspendedRunIds: Set<string>;
   suspensionMetadataByRunId: Map<string, Map<string | undefined, AgentThreadRunSuspension>>;
@@ -752,6 +758,8 @@ function createRuntimeState(): AgentThreadRuntimeState {
     activeThreadStreamIds: new Map(),
     streamSeqByRunId: new Map(),
     versionPinsByRunId: new Map(),
+    completedVersionIdentities: new Map(),
+    latestLocalRunIdsByThread: createRecentRequests<string>(MAX_COMPLETED_RUN_VERSION_IDENTITIES),
     approvalSuspendedRunIds: new Set(),
     suspendedRunIds: new Set(),
     suspensionMetadataByRunId: new Map(),
@@ -2781,25 +2789,51 @@ export class AgentThreadStreamRuntime {
     const state = this.#getState(resolvedPubSub);
     const key = this.#threadKey(options.resourceId, options.threadId);
     const knownRunId = options.runId ?? state.activeThreadRunIds.get(key);
-    const knownPins = knownRunId ? state.versionPinsByRunId.get(knownRunId) : undefined;
+    const knownRecord = knownRunId ? state.threadRunsById.get(knownRunId) : undefined;
+    const knownThreadKey = knownRunId
+      ? (state.threadKeysByRunId.get(knownRunId) ?? state.remoteThreadKeysByRunId.get(knownRunId))
+      : undefined;
+    const knownPins = knownRunId && knownThreadKey === key ? state.versionPinsByRunId.get(knownRunId) : undefined;
     const knownRunExists =
-      !!knownRunId && (state.threadRunsById.has(knownRunId) || state.activeThreadRunIds.get(key) === knownRunId);
+      !!knownRunId && knownThreadKey === key && (!!knownRecord || state.activeThreadRunIds.get(key) === knownRunId);
+    const knownAgentId =
+      knownRecord?.agent.id ?? (knownRunId ? state.remoteAgentIdsByRunId.get(knownRunId) : undefined);
+    if (knownRunExists && options.agentId && knownAgentId && knownAgentId !== options.agentId) {
+      throw new MastraError({
+        id: 'PINNED_VERSION_INVALID',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'The running continuation identity belongs to a different agent.',
+        details: { runId: knownRunId, agentId: options.agentId },
+      });
+    }
 
     const history = await resolvedPubSub.getHistory(this.#threadTopic(key)).catch(() => []);
     let candidateRunId = options.runId ?? knownRunId;
+    const latestLocalRunId = state.latestLocalRunIdsByThread.get(key);
     for (let index = history.length - 1; index >= 0; index--) {
       const data = history[index]?.data as AgentThreadStreamRuntimeEvent | undefined;
       if (!data) continue;
-      if (data.type === 'run-version-identity') {
-        candidateRunId ??= data.sourceRunId;
-        break;
-      }
-      if ('runId' in data) {
-        candidateRunId ??= data.runId;
+      const historyRunId =
+        data.type === 'run-version-identity' ? data.sourceRunId : 'runId' in data ? data.runId : undefined;
+      if (historyRunId) {
+        candidateRunId ??= historyRunId;
         break;
       }
     }
-    if (candidateRunId) {
+    // Remember the latest registration, including a run that later failed or
+    // was evicted. If retained history disagrees, require an explicit source
+    // instead of inferring chronology across processes and resurrecting a run.
+    const ambiguousImplicitSource =
+      !knownRunId && !!candidateRunId && !!latestLocalRunId && candidateRunId !== latestLocalRunId;
+    candidateRunId ??= latestLocalRunId;
+    if (candidateRunId && !ambiguousImplicitSource) {
+      const identityKey = JSON.stringify([key, candidateRunId]);
+      let localIdentity = state.completedVersionIdentities.get(identityKey)?.identity;
+      if (localIdentity && localIdentity.expiresAt <= Date.now()) {
+        state.completedVersionIdentities.delete(identityKey);
+        localIdentity = undefined;
+      }
       const matchingEvents = history
         .map(entry => entry?.data as AgentThreadStreamRuntimeEvent | undefined)
         .filter(
@@ -2809,6 +2843,7 @@ export class AgentThreadStreamRuntime {
               ? data.sourceRunId === candidateRunId
               : 'runId' in data && data.runId === candidateRunId),
         );
+      if (localIdentity?.sourceRunId === candidateRunId) matchingEvents.push(localIdentity);
       let latestLifecycleEvent: AgentThreadStreamRuntimeEvent | undefined;
       for (let index = matchingEvents.length - 1; index >= 0; index--) {
         const data = matchingEvents[index]!;
@@ -2826,7 +2861,11 @@ export class AgentThreadStreamRuntime {
       const unavailableLifecycle =
         latestLifecycleEvent?.type === 'run-aborted' ||
         latestLifecycleEvent?.type === 'run-failed' ||
-        latestLifecycleEvent?.type === 'run-discarded';
+        latestLifecycleEvent?.type === 'run-discarded' ||
+        (latestLifecycleEvent?.type === 'run-completed' &&
+          latestLifecycleEvent.status !== undefined &&
+          latestLifecycleEvent.status !== 'success' &&
+          latestLifecycleEvent.status !== 'suspended');
       const retainedIdentities = matchingEvents.filter(
         (data): data is Extract<AgentThreadStreamRuntimeEvent, { type: 'run-version-identity' }> =>
           data.type === 'run-version-identity',
@@ -2836,7 +2875,15 @@ export class AgentThreadStreamRuntime {
         !knownPins &&
         latestLifecycleEvent?.type !== 'run-registered' &&
         retainedIdentities.some(identity => !Number.isFinite(identity.expiresAt) || identity.expiresAt <= Date.now());
-      if (retainedIdentities.some(identity => options.agentId && identity.agentId !== options.agentId)) {
+      if (
+        matchingEvents.some(
+          event =>
+            (event.type === 'run-version-identity' || event.type === 'run-registered') &&
+            event.agentId &&
+            options.agentId &&
+            event.agentId !== options.agentId,
+        )
+      ) {
         throw new MastraError({
           id: 'PINNED_VERSION_INVALID',
           domain: ErrorDomain.AGENT,
@@ -2882,7 +2929,9 @@ export class AgentThreadStreamRuntime {
       id: 'PINNED_VERSION_REQUIRED',
       domain: ErrorDomain.AGENT,
       category: ErrorCategory.USER,
-      text: 'Cannot continue the thread run because its version-selection state is unavailable or expired.',
+      text: ambiguousImplicitSource
+        ? 'Cannot infer the source run from conflicting local and retained history. Provide its runId.'
+        : 'Cannot continue the thread run because its version-selection state is unavailable or expired.',
       details: { ...(candidateRunId ? { runId: candidateRunId } : {}), threadId: options.threadId },
     });
   }
@@ -3107,6 +3156,8 @@ export class AgentThreadStreamRuntime {
     state.activeThreadStreamIds.clear();
     state.streamSeqByRunId.clear();
     state.versionPinsByRunId.clear();
+    state.completedVersionIdentities.clear();
+    state.latestLocalRunIdsByThread.clear();
     state.watchedThreadStreamIds.clear();
     for (const preparedRun of state.preparedRunsById.values()) {
       if (preparedRun.finalizerToken) this.#threadlessRunFinalizer?.unregister(preparedRun.finalizerToken);
@@ -3466,6 +3517,8 @@ export class AgentThreadStreamRuntime {
     };
     const versionPins = getAgentVersionPins(streamOptions.requestContext);
 
+    state.latestLocalRunIdsByThread.set(key, output.runId);
+    state.completedVersionIdentities.delete(JSON.stringify([key, output.runId]));
     state.threadRunsById.set(output.runId, record);
     state.threadRunsByStreamId.set(streamId, record);
     state.threadKeysByRunId.set(output.runId, key);
@@ -3752,6 +3805,14 @@ export class AgentThreadStreamRuntime {
         return;
       }
 
+      // The default in-process transport has no retained history. Keep only
+      // this compact identity before dropping the warm run, so a client-tool
+      // reply can continue immediately without a second version lookup.
+      const completedVersionIdentity =
+        record.output.status === 'success'
+          ? this.#rememberCompletedRunVersionIdentity(state, key, record.runId, record.agent.id, terminalVersionPins)
+          : undefined;
+
       record.lifecycle = 'completed';
       this.#clearSuspendedRun(state, record.runId);
       state.threadRunsByStreamId.delete(record.streamId);
@@ -3794,16 +3855,9 @@ export class AgentThreadStreamRuntime {
           record.output.status === 'success' ? this.#hasMemoryForTrim(record).catch(() => false) : undefined;
         // Keep a compact, expiring continuation identity separate from this
         // run's retained messages before the normal full-run trim removes them.
-        const retainedIdentity =
-          record.output.status === 'success'
-            ? this.#retainCompletedRunVersionIdentity(
-                pubsub,
-                key,
-                record.runId,
-                record.agent.id,
-                terminalVersionPins,
-              ).catch(() => {})
-            : Promise.resolve();
+        const retainedIdentity = completedVersionIdentity
+          ? this.#retainCompletedRunVersionIdentity(pubsub, key, completedVersionIdentity).catch(() => {})
+          : Promise.resolve();
         void retainedIdentity
           .then(() =>
             this.#publishAndWait(pubsub, key, {
@@ -3850,12 +3904,32 @@ export class AgentThreadStreamRuntime {
     });
   }
 
-  async #retainCompletedRunVersionIdentity(
-    pubsub: PubSub | undefined,
+  #rememberCompletedRunVersionIdentity(
+    state: AgentThreadRuntimeState,
     key: string,
     sourceRunId: string,
     agentId: string,
     versionPins: AgentVersionPins | undefined,
+  ): Extract<AgentThreadStreamRuntimeEvent, { type: 'run-version-identity' }> {
+    const identity = {
+      type: 'run-version-identity' as const,
+      sourceRunId,
+      agentId,
+      expiresAt: Date.now() + AGENT_THREAD_VERSION_IDENTITY_TTL_MS,
+      versionPins,
+    };
+    state.completedVersionIdentities.set(JSON.stringify([key, sourceRunId]), { threadKey: key, identity });
+    if (state.completedVersionIdentities.size > MAX_COMPLETED_RUN_VERSION_IDENTITIES) {
+      const oldest = state.completedVersionIdentities.keys().next().value;
+      if (oldest !== undefined) state.completedVersionIdentities.delete(oldest);
+    }
+    return identity;
+  }
+
+  async #retainCompletedRunVersionIdentity(
+    pubsub: PubSub | undefined,
+    key: string,
+    identity: Extract<AgentThreadStreamRuntimeEvent, { type: 'run-version-identity' }>,
   ) {
     const resolvedPubSub = this.#getPubSub(pubsub);
     const topic = this.#threadTopic(key);
@@ -3864,19 +3938,22 @@ export class AgentThreadStreamRuntime {
       type: 'run-version-identity',
       // This control record is not part of the completed message stream.
       runId: retentionId,
-      data: {
-        type: 'run-version-identity',
-        sourceRunId,
-        agentId,
-        expiresAt: Date.now() + AGENT_THREAD_VERSION_IDENTITY_TTL_MS,
-        versionPins,
-      } satisfies AgentThreadStreamRuntimeEvent,
+      data: { ...identity, versionPins: normalizeAgentVersionPins(identity.versionPins) },
     });
     // The timestamp is checked on every read even if the origin exits before
     // this best-effort cleanup. Do not retain the agent, output, or run record.
-    const timer = setTimeout(() => {
-      void resolvedPubSub.trimTopic(topic, { runId: retentionId }).catch(() => {});
-    }, AGENT_THREAD_VERSION_IDENTITY_TTL_MS);
+    const identityKey = JSON.stringify([key, identity.sourceRunId]);
+    const expiresAt = identity.expiresAt;
+    const timer = setTimeout(
+      () => {
+        const state = this.#getState(resolvedPubSub);
+        if (state.completedVersionIdentities.get(identityKey)?.identity.expiresAt === expiresAt) {
+          state.completedVersionIdentities.delete(identityKey);
+        }
+        void resolvedPubSub.trimTopic(topic, { runId: retentionId }).catch(() => {});
+      },
+      Math.max(0, expiresAt - Date.now()),
+    );
     timer.unref?.();
   }
 

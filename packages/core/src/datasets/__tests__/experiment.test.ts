@@ -62,6 +62,7 @@ describe('Experiment (via Dataset)', () => {
     const mockAgent = createMockAgent('Response');
     mastra = {
       getStorage: vi.fn().mockReturnValue(mockStorage),
+      getVersionOverrides: vi.fn().mockReturnValue(undefined),
       getAgent: vi.fn().mockReturnValue(mockAgent),
       getAgentById: vi.fn().mockReturnValue(mockAgent),
       getScorerById: vi.fn(),
