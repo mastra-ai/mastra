@@ -738,6 +738,27 @@ function hasOnDemandSkillDiscoveryProcessor(processors: InputProcessorOrWorkflow
  * @see [Agent documentation](https://mastra.ai/docs/agents/overview)
  * if packaged docs are unavailable.
  */
+
+function alreadyClaimedResumeError({
+  agentName,
+  method,
+  runId,
+  toolCallId,
+}: {
+  agentName: string;
+  method: string;
+  runId: string;
+  toolCallId?: string;
+}): MastraError {
+  return new MastraError({
+    id: 'AGENT_RESUME_ALREADY_CLAIMED',
+    domain: ErrorDomain.AGENT,
+    category: ErrorCategory.USER,
+    text: `Agent "${agentName}" ${method}() cannot resume run "${runId}" because another resume of it already claimed it.`,
+    details: { agentName, method, runId, ...(toolCallId !== undefined ? { toolCallId } : {}) },
+  });
+}
+
 export class Agent<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
@@ -7529,9 +7550,16 @@ export class Agent<
   async #loadAgenticLoopSnapshotOrThrow({ runId, method }: { runId: string; method: string }) {
     const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
     const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
+    let claimedThenFinished = false;
     const existingSnapshot = await waitForSuspendedSnapshot(workflowsStore, 'agentic-loop', runId, {
       missingSnapshotGraceReads: 3,
+      onClaimedRunFinished: () => {
+        claimedThenFinished = true;
+      },
     });
+
+    // The run was claimed by another resume while we waited, then finished and was cleaned up.
+    if (claimedThenFinished) throw alreadyClaimedResumeError({ agentName: this.name, method, runId });
 
     if (!existingSnapshot) {
       const hasStorage = !!workflowsStore;
@@ -7542,7 +7570,7 @@ export class Agent<
         text:
           `Agent "${this.name}" ${method}() could not find a suspended run for runId "${runId}". ` +
           (hasStorage
-            ? `The run may have already completed, never suspended, or the runId is invalid. `
+            ? `The run has already finished (for example, an earlier approval or resume already handled it), never suspended, or the runId is invalid. `
             : `No storage is configured on this Mastra instance, so workflow snapshots can't be persisted. Register the agent on a Mastra instance with persistent storage (e.g. PostgreSQL, LibSQL). See https://mastra.ai/docs/storage. `) +
           `Ensure you are calling ${method}() only with a runId from a currently-suspended run.`,
         details: {
@@ -7808,18 +7836,7 @@ export class Agent<
     method: string;
   }): Promise<AgentLoopResumeClaim> {
     const throwAlreadyClaimed = (): never => {
-      throw new MastraError({
-        id: 'AGENT_RESUME_ALREADY_CLAIMED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: `Agent "${this.name}" ${method}() cannot resume run "${runId}" because another resume of it is already in progress.`,
-        details: {
-          agentName: this.name,
-          method,
-          runId,
-          ...(toolCallId !== undefined ? { toolCallId } : {}),
-        },
-      });
+      throw alreadyClaimedResumeError({ agentName: this.name, method, runId, toolCallId });
     };
 
     const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());

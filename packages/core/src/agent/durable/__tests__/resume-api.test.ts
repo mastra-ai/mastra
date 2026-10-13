@@ -367,9 +367,9 @@ describe('Resume API', () => {
       );
       const prepareSpy = vi.spyOn(durableAgent, 'prepare');
 
-      await expect(durableAgent.resume(runId, { approved: true })).rejects.toThrow(
-        'This workflow run was not suspended',
-      );
+      await expect(durableAgent.resume(runId, { approved: true })).rejects.toMatchObject({
+        id: 'AGENT_RESUME_ALREADY_CLAIMED',
+      });
       expect(prepareSpy).not.toHaveBeenCalled();
       expect(durableAgent.runRegistry.has(runId)).toBe(false);
     });

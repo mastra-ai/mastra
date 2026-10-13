@@ -12,4 +12,6 @@ const results = await Promise.allSettled([
 // One fulfilled, one rejected with AGENT_RESUME_ALREADY_CLAIMED. The tool runs once.
 ```
 
+Durable agents report the losing resume the same way, as an error chunk in its stream with the `AGENT_RESUME_ALREADY_CLAIMED` id.
+
 Storage adapters that support atomic updates (for example PostgreSQL, LibSQL, MongoDB, and the in-memory store) protect against duplicates across processes. Other adapters protect against duplicates within a single process.
