@@ -168,7 +168,7 @@ Queue a message for the next run, or send it immediately while the session is id
 
 #### `steer({ content, files?, requestContext?, author? })`
 
-Abort the active run, then send `content` as a new message. Pass `files` to attach files in the same shape as `sendMessage()`: `{ data, mediaType, filename? }`, where `data` is raw text or a data URL for text files, and base64 for binary files.
+Abort the active run, then send `content` as a new message. Pass `files` to attach files in the same shape as `sendMessage()`: `{ data, mediaType, filename? }`, where `data` is raw text or a base64 data URL for text files, and base64 for binary files.
 
 ```typescript
 await session.steer({ content: 'Focus on the failing tests.' })
