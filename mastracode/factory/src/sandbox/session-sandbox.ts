@@ -231,18 +231,20 @@ export function __clearSessionSandboxesForTests(): void {
  * that triggered it. Recording it lets the next start skip the known-bad
  * command instead of wedging the session behind a permanently failing
  * onStart: clone and checkout still run, and the agent can fix or re-run
- * the setup itself. Keyed by the exact command so an edited setup command
- * runs fresh. In-memory only — a server restart re-runs the (idempotent)
+ * the setup itself. Keyed by the exact command, one entry per failed command, so an
+ * edited setup command runs fresh. In-memory only — a server restart re-runs the (idempotent)
  * setup.
  */
-const failedSetupCommands = new Map<string, string>();
+const failedSetupCommands = new Map<string, Set<string>>();
 
 export function recordFailedSetupCommand(sessionId: string, command: string): void {
-  failedSetupCommands.set(sessionId, command);
+  const failed = failedSetupCommands.get(sessionId) ?? new Set<string>();
+  failed.add(command);
+  failedSetupCommands.set(sessionId, failed);
 }
 
 export function hasFailedSetupCommand(sessionId: string, command: string): boolean {
-  return failedSetupCommands.get(sessionId) === command;
+  return failedSetupCommands.get(sessionId)?.has(command) ?? false;
 }
 
 /**
