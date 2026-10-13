@@ -573,6 +573,83 @@ describe('KnowledgeRoutes', () => {
     expect(cursor).toBeUndefined();
   });
 
+  it('pages sibling scopes per parent and hands out initial child cursors', async () => {
+    const h = await createHarness();
+    const { scopes: ids } = await h.knowledge.reconcileStructure({
+      scopes: [
+        { address: `org:${ORG}`, name: ORG },
+        ...Array.from({ length: 30 }, (_, index) => ({
+          address: `topic:${String(index).padStart(2, '0')}`,
+          name: `topic ${String(index).padStart(2, '0')}`,
+          parentAddresses: [`org:${ORG}`],
+        })),
+      ],
+    });
+
+    // Initial load: the org root plus only its first page of children, with a
+    // child cursor for lazy expansion.
+    const first = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    expect(first.status).toBe(200);
+    const tree = (await first.json()) as KnowledgeScopeTreePayload;
+    const orgNodeId = ids[`org:${ORG}`]!;
+    const children = (tree.scopeNodes ?? []).filter(node => node.parentIds.includes(orgNodeId));
+    expect(children.length).toBeLessThanOrEqual(25);
+    expect(tree.childCursors?.[orgNodeId]).toBeDefined();
+    // The viewed project stays present even when it sorts past the first page.
+    expect((tree.scopeNodes ?? []).some(node => node.address === `resource:${h.projectId}`)).toBe(true);
+
+    // Expanding the org pages through its children without overlap.
+    const page2 = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/scopes?parentId=${orgNodeId}&cursor=${tree.childCursors![orgNodeId]}`,
+    );
+    expect(page2.status).toBe(200);
+    const body2 = (await page2.json()) as KnowledgeScopeTreePayload;
+    const page2Ids = (body2.scopeNodes ?? []).map(node => node.id);
+    const firstChildIds = children.map(node => node.id);
+    expect(page2Ids.length).toBeGreaterThan(0);
+    expect(page2Ids.some(id => firstChildIds.includes(id))).toBe(false);
+
+    // Unknown parents and malformed cursors are rejected.
+    expect(
+      (await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes?parentId=nope`)).status,
+    ).toBe(404);
+    expect(
+      (await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes?cursor=nope`)).status,
+    ).toBe(400);
+    expect(
+      (
+        await h.app.request(
+          `/web/factory/projects/${h.projectId}/knowledge/scopes?parentId=00000000-0000-4000-8000-000000000000`,
+        )
+      ).status,
+    ).toBe(404);
+  });
+
+  it('reports member counts on scope tree nodes', async () => {
+    const h = await createHarness();
+    await h.knowledge.reconcileStructure({
+      scopes: [
+        { address: `org:${ORG}`, name: ORG },
+        { address: 'features', name: 'features', parentAddresses: [`org:${ORG}`] },
+        { address: 'features:memory', name: 'memory', parentAddresses: ['features'] },
+      ],
+    });
+    const anchorA = await node(h.knowledge, 'Anchor A', [`org:${ORG}`, 'features']);
+    await node(h.knowledge, 'Anchor B', [`org:${ORG}`, 'features']);
+    await record(h.knowledge, anchorA, 'Feature evidence', [`org:${ORG}`, 'features']);
+
+    const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    expect(response.status).toBe(200);
+    const tree = (await response.json()) as KnowledgeScopeTreePayload;
+    const features = (tree.scopeNodes ?? []).find(node => node.address === 'features');
+    expect(features).toMatchObject({
+      contentNodeCount: 2,
+      childScopeCount: 1,
+      memberCount: 3,
+      memberCountTruncated: false,
+    });
+  });
+
   it('labels scope nodes by what they are: org, project, session, or the structural kind/topic', async () => {
     const h = await createHarness();
     await h.knowledge.reconcileStructure({
@@ -760,9 +837,9 @@ describe('KnowledgeRoutes', () => {
     // declared org node, keeping the declared name ('mastra') untouched.
     const resourceNode = byName.get('Graph project');
     expect(resourceNode).toMatchObject({ address: `resource:${h.projectId}`, parentIds: [ids[`org:${ORG}`]] });
-    expect([...byName.keys()].sort()).toEqual(
-      ['features', 'Graph project', 'issues', 'mastra', 'memory', 'repo:mastra'].sort(),
-    );
+    // Initial load serves roots plus their first page of children; deeper
+    // levels (memory, issues) are fetched lazily per parent.
+    expect([...byName.keys()].sort()).toEqual(['features', 'Graph project', 'mastra', 'repo:mastra'].sort());
     // Identity rungs whose addresses are owned by scope nodes carry the
     // structural match, so the client renders one merged entry per rung.
     expect(body.roots).toEqual([
@@ -775,8 +852,21 @@ describe('KnowledgeRoutes', () => {
       parentIds: [ids[`org:${ORG}`]],
     });
     expect(byName.get('mastra')).toMatchObject({ address: `org:${ORG}`, parentIds: [] });
-    expect(byName.get('memory')).toMatchObject({ description: 'Memory scope', parentIds: [ids['features']] });
-    expect(byName.get('issues')?.parentIds).toEqual([ids['repo:mastra']]);
+
+    const featuresPage = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/scopes?parentId=${ids['features']}`,
+    );
+    expect(featuresPage.status).toBe(200);
+    const featuresChildren = ((await featuresPage.json()) as KnowledgeScopeTreePayload).scopeNodes ?? [];
+    expect(featuresChildren.find(scopeNode => scopeNode.name === 'memory')).toMatchObject({
+      description: 'Memory scope',
+      parentIds: [ids['features']],
+    });
+    const repoPage = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/scopes?parentId=${ids['repo:mastra']}`,
+    );
+    const repoChildren = ((await repoPage.json()) as KnowledgeScopeTreePayload).scopeNodes ?? [];
+    expect(repoChildren.find(scopeNode => scopeNode.name === 'issues')?.parentIds).toEqual([ids['repo:mastra']]);
 
     const projectLens = await h.app.request(
       `/web/factory/projects/${h.projectId}/knowledge/subgraph?scopeNodeId=${ids[`resource:${h.projectId}`]}`,
