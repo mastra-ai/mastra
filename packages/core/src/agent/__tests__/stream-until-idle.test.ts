@@ -2,13 +2,13 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { buildContinuationOpts, resolveScope } from '../../loop/shared/stream-until-idle-helpers';
-import { RequestContext } from '../../request-context';
-import { resolveAgentScopes } from '../scopes';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory';
+import { RequestContext } from '../../request-context';
 import { MockStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
+import { resolveAgentScopes } from '../scopes';
 
 /**
  * Helper: build a mock model whose streaming response is controlled by the
