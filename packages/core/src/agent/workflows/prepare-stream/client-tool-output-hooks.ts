@@ -143,8 +143,19 @@ export async function fireClientToolOutputHooks({
  *
  * Mutates the MessageList's stored messages in place on purpose: prompt
  * building reads these same part objects, and messages saved to memory carry
- * the enrichment so reloads are cheap and idempotent.
+ * the enrichment so memory reloads restore it without recomputing.
+ *
+ * Mapping markers found on wire-delivered input are NOT trusted: a client
+ * could forge `mastra.modelOutput` to inject arbitrary prompt content, so
+ * they are stripped and the mapping is recomputed from the raw result.
  */
+/**
+ * Parts whose `mastra.modelOutput` markers were written by THIS process.
+ * Identity-based so metadata arriving over the wire (new objects) is never
+ * trusted, while in-process re-runs stay idempotent.
+ */
+const serverComputedParts = new WeakSet<object>();
+
 export async function applyClientToolModelOutput({
   messageList,
   tools,
@@ -159,7 +170,7 @@ export async function applyClientToolModelOutput({
     tool: CoreTool,
   ): tool is CoreTool & { toModelOutput: NonNullable<CoreTool['toModelOutput']> } =>
     !tool.execute && tool.type !== 'provider-defined' && typeof tool.toModelOutput === 'function';
-  if (!Object.values(tools).some(isClientMappedTool)) return;
+  const hasClientMappedTool = Object.values(tools).some(isClientMappedTool);
 
   for (const message of messageList.get.input.db()) {
     if (message.role !== 'assistant' || message.content?.format !== 2 || !message.content.parts) continue;
@@ -167,9 +178,36 @@ export async function applyClientToolModelOutput({
     for (const part of message.content.parts) {
       if (part.type !== 'tool-invocation' || part.toolInvocation?.state !== 'result') continue;
 
+      // Trust boundary: `mastra.modelOutput` / `modelOutputComputed` are
+      // server-computed markers. A client could forge them on its input to
+      // smuggle arbitrary content into the prompt past the idempotency skip
+      // below, so markers on wire-delivered parts are stripped and the
+      // mapping is recomputed from the raw result. Only parts this process
+      // enriched itself (tracked by identity) keep their markers.
+      if (!serverComputedParts.has(part)) {
+        const wireMastra = part.providerMetadata?.mastra;
+        if (
+          wireMastra &&
+          typeof wireMastra === 'object' &&
+          ('modelOutput' in wireMastra || 'modelOutputComputed' in wireMastra)
+        ) {
+          const {
+            modelOutput: _untrustedOutput,
+            modelOutputComputed: _untrustedMarker,
+            ...restMastra
+          } = wireMastra as Record<string, unknown>;
+          part.providerMetadata = {
+            ...part.providerMetadata,
+            mastra: restMastra,
+          } as unknown as typeof part.providerMetadata;
+        }
+      }
+
+      if (!hasClientMappedTool) continue;
+
       const mastraMetadata = part.providerMetadata?.mastra;
-      // Idempotency: skip parts already mapped (retries, durable replays, and
-      // messages reloaded from DB that were enriched on a previous request).
+      // Idempotency: skip parts this process already mapped (retries and
+      // in-request re-runs). Markers from any other origin were stripped above.
       if (
         mastraMetadata &&
         typeof mastraMetadata === 'object' &&
@@ -205,6 +243,7 @@ export async function applyClientToolModelOutput({
           ...part.providerMetadata,
           mastra: nextMastra,
         } as unknown as typeof part.providerMetadata;
+        serverComputedParts.add(part);
       } catch (error) {
         // Client-tool mapping runs during preparation on an already-finished
         // result, outside the execution path, so log and preserve the raw result.
