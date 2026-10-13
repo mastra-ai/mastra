@@ -1,10 +1,22 @@
+import type { ActorSignal } from '../../../auth/ee';
 import type { IMastraLogger } from '../../../logger';
 import type { RequestContext } from '../../../request-context';
 import type { StandardSchemaWithJSON } from '../../../schema';
 import type { RequireToolApproval } from '../../../tools';
-import { getBeforeApprovalFn, getNeedsApprovalFn } from '../../../tools/toolchecks';
-import type { ToolApprovalContext, ToolBeforeHookResult } from '../../../tools/types';
+import { getBeforeApprovalFn, getNeedsApprovalFn, isBuiltBeforeApproval } from '../../../tools/toolchecks';
+import type {
+  BeforeApprovalContext,
+  BeforeApprovalRuntime,
+  ToolApprovalContext,
+  ToolBeforeHookResult,
+} from '../../../tools/types';
 import { validateToolInput } from '../../../tools/validation';
+
+type BeforeApprovalWithRuntime = (
+  input: unknown,
+  ctx: BeforeApprovalContext,
+  runtime: BeforeApprovalRuntime,
+) => void | ToolBeforeHookResult | Promise<void | ToolBeforeHookResult>;
 
 export function buildToolApprovalContext({
   toolName,
@@ -94,6 +106,7 @@ export async function runBeforeApprovalHook({
     toolName: string;
     requestContext?: RequestContext;
     workspace?: ToolApprovalContext['workspace'];
+    actor?: ActorSignal;
   };
   logger?: IMastraLogger;
 }): Promise<ToolBeforeHookResult | undefined> {
@@ -114,15 +127,28 @@ export async function runBeforeApprovalHook({
     args: input as ToolApprovalContext['args'],
     requestContext: context.requestContext,
   });
+  // Built tools run the TOOLS_EXECUTE authorization check inside their beforeApproval wrapper,
+  // so they need the live request context and actor that execute would receive.
+  // User hooks on raw Tool instances never receive these trusted values.
+  const hookContext: BeforeApprovalContext = {
+    toolCallId: context.toolCallId,
+    toolName: context.toolName,
+    requestContext,
+    workspace: context.workspace,
+  };
   try {
-    const result = await beforeApproval(input, {
-      toolCallId: context.toolCallId,
-      toolName: context.toolName,
-      requestContext,
-      workspace: context.workspace,
-    });
+    const result = isBuiltBeforeApproval(beforeApproval)
+      ? await (beforeApproval as BeforeApprovalWithRuntime)(input, hookContext, {
+          requestContext: context.requestContext,
+          actor: context.actor,
+        })
+      : await beforeApproval(input, hookContext);
     return result && typeof result === 'object' && result.proceed === false ? result : undefined;
   } catch (error) {
+    // Authorization denials must fail the call the same way they do from execute.
+    if (error instanceof Error && error.name === 'FGADeniedError') {
+      throw error;
+    }
     logger?.error(`Error calling beforeApproval for tool ${context.toolName}:`, error);
     return undefined;
   }

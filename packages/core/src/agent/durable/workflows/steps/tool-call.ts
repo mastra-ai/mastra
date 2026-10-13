@@ -945,7 +945,7 @@ export function createDurableToolCallStep() {
         const rejection = await runBeforeApprovalHook({
           tool,
           input: args,
-          context: { toolCallId, toolName, requestContext: approvalRequestContext, workspace },
+          context: { toolCallId, toolName, requestContext: approvalRequestContext, workspace, actor },
           logger: logger as any,
         });
         if (rejection) {

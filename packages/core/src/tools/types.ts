@@ -102,6 +102,16 @@ export type BeforeApprovalFn<TInput = any, TOutput = unknown> = (
   ctx: BeforeApprovalContext,
 ) => void | ToolBeforeHookResult<TOutput> | Promise<void | ToolBeforeHookResult<TOutput>>;
 
+/**
+ * Trusted runtime values the agent runtime passes to a built tool's `beforeApproval`
+ * wrapper so it can run the same authorization check as `execute`. Not exposed to user hooks.
+ * @internal
+ */
+export type BeforeApprovalRuntime = {
+  requestContext?: RequestContext;
+  actor?: ActorSignal;
+};
+
 export interface ToolHookContext<
   TInput = unknown,
   TContext = unknown,

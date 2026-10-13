@@ -686,6 +686,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 toolName: inputData.toolName,
                 requestContext,
                 workspace: approvalWorkspace,
+                actor,
               },
               logger,
             });

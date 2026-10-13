@@ -88,3 +88,17 @@ export function getBeforeApprovalFn(tool: unknown): BeforeApprovalFn | undefined
   const fn = (tool as { beforeApproval?: unknown }).beforeApproval;
   return typeof fn === 'function' ? (fn as BeforeApprovalFn) : undefined;
 }
+
+const BUILT_BEFORE_APPROVAL = Symbol.for('mastra.builtBeforeApproval');
+
+/**
+ * Marks a {@link CoreToolBuilder} `beforeApproval` wrapper that expects trusted runtime values
+ * (request context and actor) as a third argument for its authorization check.
+ */
+export function markBuiltBeforeApproval<T extends BeforeApprovalFn>(fn: T): T {
+  return Object.assign(fn, { [BUILT_BEFORE_APPROVAL]: true });
+}
+
+export function isBuiltBeforeApproval(fn: BeforeApprovalFn): boolean {
+  return (fn as { [BUILT_BEFORE_APPROVAL]?: boolean })[BUILT_BEFORE_APPROVAL] === true;
+}
