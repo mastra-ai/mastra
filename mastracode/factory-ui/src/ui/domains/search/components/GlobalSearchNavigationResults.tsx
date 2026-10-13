@@ -2,6 +2,7 @@ import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 import { Brain, Gauge, GitPullRequest, ListChecks, ScrollText, Settings, SquareKanban } from 'lucide-react';
 
+import { rememberedBoardPath } from '../../factory/services/boardViews';
 import type { GlobalSearchSelectHandler } from '../services/searchNavigation';
 import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../../settings/settingsSections';
 
@@ -26,14 +27,14 @@ export function GlobalSearchNavigationResults({
         title="Work"
         subtitle="Factory navigation"
         value={`Work Factory navigation /factories/${factoryId}/work`}
-        onSelect={() => onSelect(`/factories/${factoryId}/work`, false)}
+        onSelect={() => onSelect(rememberedBoardPath(factoryId, 'work'), false)}
       />
       <CommandPaletteItem
         icon={<GitPullRequest />}
         title="Review"
         subtitle="Factory navigation"
         value={`Review Factory navigation /factories/${factoryId}/review`}
-        onSelect={() => onSelect(`/factories/${factoryId}/review`, false)}
+        onSelect={() => onSelect(rememberedBoardPath(factoryId, 'review'), false)}
       />
       <CommandPaletteItem
         icon={<ListChecks />}

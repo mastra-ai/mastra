@@ -545,6 +545,37 @@ describe('accumulateChunk - lifecycle', () => {
     expect(out).toEqual(initial);
   });
 
+  it('step-start uses the persisted assistant id after a user signal removes the pending message', () => {
+    const out = reduce([
+      startChunk('asst-1'),
+      dataUserMessageChunk('sig-1', 'hello'),
+      stepStartChunk('persisted-1'),
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'hello back'),
+      textEndChunk('t1'),
+    ]);
+
+    expect(out).toHaveLength(2);
+    expect(out[0]).toMatchObject({ id: 'sig-1', role: 'user' });
+    expect(out[1]).toMatchObject({
+      id: 'persisted-1',
+      role: 'assistant',
+      content: { parts: [{ type: 'text', text: 'hello back' }] },
+    });
+  });
+
+  it('step-start does not duplicate an existing assistant message after a user signal', () => {
+    const initial = reduce([
+      startChunk('persisted-1'),
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'hello'),
+      textEndChunk('t1'),
+      dataUserMessageChunk('sig-1', 'hello back'),
+    ]);
+
+    expect(reduce([stepStartChunk('persisted-1')], streamMeta(), initial)).toEqual(initial);
+  });
+
   it('step-start with a rotated message id re-keys the empty pending assistant message', () => {
     const out = reduce([startChunk('asst-1'), stepStartChunk('rotated-1')]);
     expect(out).toHaveLength(1);

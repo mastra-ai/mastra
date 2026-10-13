@@ -17,7 +17,6 @@ import {
   emptyScorers,
   emptyServiceNames,
   emptyTags,
-  metricsCapableSystemPackages,
   traceList,
   traceUsageBreakdown,
 } from '@/pages/traces/__tests__/fixtures/traces';
@@ -35,7 +34,6 @@ const LocationProbe = () => {
 
 const setHandlers = (onQuery: (body: unknown) => void) => {
   server.use(
-    http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(metricsCapableSystemPackages)),
     http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(traceQueryCapabilities)),
     http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(emptyScorers)),
     http.get(`${TEST_BASE_URL}/api/datasets`, () => HttpResponse.json(buildListDatasetsResponse([]))),

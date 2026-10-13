@@ -1,16 +1,27 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 8b75595da34c — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ 23df553a789b — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
-export const updateOrganizationRoleInputSchema = z.object({
-  organization_role_id: z.string(),
-  name: z.string().optional(),
-  key: z.string().optional(),
-  description: z.string().optional(),
-  permissions: z.array(z.string()).optional(),
-});
+export const updateOrganizationRoleInputSchema = z
+  .object({
+    organization_role_id: z.string().min(1),
+    name: z.string().optional(),
+    key: z.string().optional(),
+    description: z.string().optional(),
+    permissions: z.array(z.string()).optional(),
+  })
+  .refine(
+    value =>
+      value.name !== undefined ||
+      value.key !== undefined ||
+      value.description !== undefined ||
+      value.permissions !== undefined,
+    {
+      message: 'Provide at least one of name, key, description, or permissions.',
+    },
+  );
 
 const ResourceSchema = z
   .object({

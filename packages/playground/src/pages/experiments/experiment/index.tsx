@@ -6,24 +6,28 @@ import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/se
 import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
+import { useDatasetExperiment, useDatasetExperimentResults, useExperiment } from '@mastra/react/hooks/datasets';
+import { useExperimentMetrics } from '@mastra/react/hooks/experiments';
 import { ArrowLeft } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
-import { useDatasetExperiment, useDatasetExperimentResults } from '@/domains/datasets/hooks/use-dataset-experiments';
-import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
+import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 import { DeleteExperimentDialog } from '@/domains/experiments/components/delete-experiment-dialog';
-import { ExperimentItemPanel } from '@/domains/experiments/components/experiment-item-panel';
+import { ExperimentHeaderActions } from '@/domains/experiments/components/experiment-header-actions';
+import { ExperimentItemSidePanel } from '@/domains/experiments/components/experiment-item-side-panel';
+import { ExperimentKpis } from '@/domains/experiments/components/experiment-kpis';
 import { ExperimentResultsBulkActions } from '@/domains/experiments/components/experiment-results-bulk-actions';
 import { ExperimentResultsSection } from '@/domains/experiments/components/experiment-results-section';
-import { ExperimentSideRail } from '@/domains/experiments/components/experiment-side-rail';
-import { ExperimentTopArea } from '@/domains/experiments/components/experiment-top-area';
 import { ExperimentItemPanelProvider } from '@/domains/experiments/context/experiment-item-panel-context';
-import { ExperimentCrumb, ExperimentCrumbStatusIcon } from '@/domains/experiments/experiment-crumb';
-import { useExperimentMetrics } from '@/domains/experiments/hooks/use-experiment-metrics';
+import {
+  ExperimentCrumb,
+  ExperimentCrumbItemCount,
+  ExperimentCrumbStatusIcon,
+} from '@/domains/experiments/experiment-crumb';
 import { useExperimentResultsSelection } from '@/domains/experiments/hooks/use-experiment-results-selection';
-import { navCrumb, truncateItemIdCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
+import { navCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
 
 // Stable fallback so the selection hook's memoised filters don't churn while results load.
 const EMPTY_RESULTS: never[] = [];
@@ -41,22 +45,11 @@ function ExperimentPageShell({ crumbs, children }: { crumbs: CrumbDef[]; childre
 }
 
 function ExperimentPage() {
-  const { experimentId, itemId } = useParams<{ experimentId: string; itemId: string }>();
-  // The `to` link only renders on the nested items/:itemId route.
+  const { experimentId } = useParams<{ experimentId: string }>();
+  // The selected item shows in the side panel, so it gets no crumb of its own.
   const crumbs: CrumbDef[] = [
     navCrumb('/experiments'),
-    {
-      id: 'experiment',
-      Component: ExperimentCrumb,
-      icon: ExperimentCrumbStatusIcon,
-      to: experimentId ? `/experiments/${encodeURIComponent(experimentId)}` : undefined,
-    },
-    ...(itemId
-      ? [
-          { id: 'experiment-items', label: 'Items' },
-          { id: 'experiment-item', label: truncateItemIdCrumb(itemId) },
-        ]
-      : []),
+    { id: 'experiment', Component: ExperimentCrumb, icon: ExperimentCrumbStatusIcon, Action: ExperimentCrumbItemCount },
   ];
   const navigate = useNavigate();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -73,15 +66,22 @@ function ExperimentPage() {
   );
 
   // Resolve datasetId from experimentId (the URL has only the experiment id).
-  const { data: experimentsData, isLoading: experimentsListLoading } = useExperiments();
-  const matchedExperiment = experimentsData?.experiments?.find(e => e.id === experimentId);
-  const datasetId = matchedExperiment?.datasetId ?? '';
+  const {
+    data: resolvedExperiment,
+    isLoading: resolvedExperimentLoading,
+    error: resolveError,
+  } = useExperiment({ experimentId: experimentId ?? '', queryOptions: { enabled: Boolean(experimentId) } });
+  const datasetId = resolvedExperiment?.datasetId ?? '';
 
   const {
     data: experiment,
     isLoading: experimentLoading,
-    error: experimentError,
-  } = useDatasetExperiment(datasetId, experimentId ?? '');
+    error: datasetExperimentError,
+  } = useDatasetExperiment({
+    datasetId: datasetId,
+    experimentId: experimentId ?? '',
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentId) },
+  });
 
   const {
     data: results,
@@ -94,9 +94,16 @@ function ExperimentPage() {
     experimentId: experimentId ?? '',
     experimentStatus: experiment?.status,
     orderBy,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentId) },
   });
 
-  const experimentMetrics = useExperimentMetrics({ experimentId, experimentStatus: experiment?.status });
+  const { supportsMetrics } = useObservabilityStorageCapabilities();
+  const experimentMetrics = useExperimentMetrics({
+    experimentId,
+    experimentStatus: experiment?.status,
+    supportsMetrics,
+    queryOptions: { enabled: Boolean(experimentId) && supportsMetrics },
+  });
 
   const selection = useExperimentResultsSelection({
     datasetId,
@@ -104,8 +111,10 @@ function ExperimentPage() {
     results: results ?? EMPTY_RESULTS,
   });
 
+  const experimentError = resolveError ?? datasetExperimentError;
+
   if (!experimentId) return null;
-  if (experimentsListLoading || experimentLoading) return null; // Avoid layout shift on initial load
+  if (resolvedExperimentLoading || experimentLoading) return null; // Avoid layout shift on initial load
 
   if (experimentError && is401UnauthorizedError(experimentError)) {
     return (
@@ -155,8 +164,7 @@ function ExperimentPage() {
     );
   }
 
-  // Not found: the experimentId isn't present in the full experiments listing
-  // (so we can't resolve a datasetId for it), or the fetch resolved empty.
+  // Not found: the experiment has no dataset (orphaned by dataset deletion), or the fetch resolved empty.
   if (!datasetId || !experiment) return notFound;
 
   return (
@@ -171,34 +179,36 @@ function ExperimentPage() {
       <div className="h-full">
         <PageLayout
           breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-          actionRow={
-            <ExperimentTopArea experiment={experiment} onDeleteClick={() => setDeleteDialogOpen(true)}>
-              <ExperimentResultsBulkActions selection={selection} />
-            </ExperimentTopArea>
+          headerActions={
+            <ExperimentHeaderActions experiment={experiment} onDeleteClick={() => setDeleteDialogOpen(true)} />
           }
         >
           <h1 className="sr-only">{experimentId}</h1>
-          {/* Results take the remaining width; the rail keeps the pipeline and run metadata beside them. */}
-          <div className="grid grid-cols-[1fr_auto] gap-4 overflow-visible">
-            <ExperimentResultsSection
-              experimentId={experimentId}
-              experimentStatus={experiment.status}
-              results={results ?? []}
-              isLoading={resultsLoading}
-              setEndOfListElement={setEndOfListElement}
-              isFetchingNextPage={isFetchingNextPage}
-              hasNextPage={hasNextPage}
-              selectedIds={selection.selectedIds}
-              onToggleSelect={selection.toggleSelect}
-              sort={sort}
-              onSortChange={onSortChange}
-            />
-            <ExperimentSideRail experiment={experiment} metrics={experimentMetrics} className="w-80 overflow-y-auto" />
+          <div className="grid content-start gap-4">
+            <ExperimentKpis experiment={experiment} metrics={experimentMetrics} />
+            <div className="grid content-start gap-1">
+              <ExperimentResultsBulkActions selection={selection} />
+              <ExperimentResultsSection
+                experimentId={experimentId}
+                experimentStatus={experiment.status}
+                results={results ?? []}
+                isLoading={resultsLoading}
+                setEndOfListElement={setEndOfListElement}
+                isFetchingNextPage={isFetchingNextPage}
+                hasNextPage={hasNextPage}
+                selectedIds={selection.selectedIds}
+                onToggleSelect={selection.toggleSelect}
+                onToggleSelectAll={selection.toggleSelectAll}
+                sort={sort}
+                onSortChange={onSortChange}
+                supportsMetrics={supportsMetrics}
+              />
+            </div>
           </div>
         </PageLayout>
 
-        {/* Item detail drawer; the `items/:itemId` child route only carries the breadcrumb. */}
-        <ExperimentItemPanel withQueryTrace={traceQuery.enabled} withFeedback={traceQuery.enabled} />
+        {/* Item detail in the route side panel (drawer on mobile); the `items/:itemId` child route only carries the selected item. */}
+        <ExperimentItemSidePanel withQueryTrace={traceQuery.enabled} withFeedback={traceQuery.enabled} />
 
         <DeleteExperimentDialog
           open={deleteDialogOpen}

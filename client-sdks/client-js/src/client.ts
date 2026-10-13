@@ -31,6 +31,8 @@ import type {
   LegacyGetTracesResponse,
   LegacyTracesPaginatedArg,
   ListScoresBySpanParams,
+  QuerySpansInput,
+  QuerySpansResult,
   QueryTraceThreadsInput,
   QueryTraceThreadsResult,
   QueryTracesGroupedInput,
@@ -960,18 +962,22 @@ export class MastraClient extends BaseResource {
    * @param threadId - ID of the thread.
    * @param workingMemory - The new working memory content.
    * @param resourceId - Optional ID of the resource.
+   * @param mode - `replace` (default) or `merge` to atomically deep-merge a partial JSON object
+   * into resource-scoped schema working memory (requires storage support, e.g. PostgreSQL).
    */
   public updateWorkingMemory({
     agentId,
     threadId,
     workingMemory,
     resourceId,
+    mode,
     requestContext,
   }: {
     agentId: string;
     threadId: string;
     workingMemory: string;
     resourceId?: string;
+    mode?: 'replace' | 'merge';
     requestContext?: RequestContext | Record<string, any>;
   }) {
     return this.request(
@@ -981,6 +987,7 @@ export class MastraClient extends BaseResource {
         body: {
           workingMemory,
           resourceId,
+          ...(mode ? { mode } : {}),
         },
       },
     );
@@ -1154,6 +1161,11 @@ export class MastraClient extends BaseResource {
   /** Queries thread identities using eligible-trace and cross-trace predicates. */
   queryTraceThreads(params: QueryTraceThreadsInput): Promise<QueryTraceThreadsResult> {
     return this.observability.queryTraceThreads(params);
+  }
+
+  /** Queries completed spans using a span predicate, returning one row per matching span. */
+  querySpans(params: QuerySpansInput): Promise<QuerySpansResult> {
+    return this.observability.querySpans(params);
   }
 
   /**
@@ -2291,6 +2303,19 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Gets an experiment by ID regardless of dataset association, including its
+   * `datasetId` (null for experiments orphaned by dataset deletion). When tenancy
+   * fields are supplied, experiments outside the tenant are reported as not found.
+   */
+  public getExperiment(
+    experimentId: PathParams<'GET /experiments/:experimentId'>['experimentId'],
+    options?: QueryParams<'GET /experiments/:experimentId'>,
+  ): Promise<SerializedRouteResponse<'GET /experiments/:experimentId'>> {
+    const qs = buildTenancyQuery(options);
+    return this.request(`/experiments/${encodeURIComponent(experimentId)}${qs}`);
+  }
+
+  /**
    * Deletes a dataset experiment and its results. Tenancy fields, when provided,
    * scope the dataset lookup on the server side.
    *
@@ -2475,7 +2500,8 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Compares two dataset experiments for regression detection
+   * Compares two to ten dataset experiments item by item against a baseline.
+   * Every experiment in `experimentIds` gets a result entry per item (`null` when it did not run that item).
    */
   public compareExperiments(params: CompareExperimentsParams): Promise<CompareExperimentsResponse> {
     const { datasetId, ...body } = params;

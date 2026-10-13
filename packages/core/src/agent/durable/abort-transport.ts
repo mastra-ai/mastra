@@ -13,8 +13,9 @@
  * event is ever published, leaving stream consumers hanging forever.
  */
 import type { PubSub } from '../../events';
+import type { Mastra } from '../../mastra';
 import { AGENT_CONTROL_TOPIC, AgentControlEventTypes } from './constants';
-import { globalRunRegistry } from './run-registry';
+import { getRunRegistryEntry, setRunRegistryEntry } from './run-registry';
 import type { RunRegistryEntry } from './types';
 
 /**
@@ -74,8 +75,8 @@ export async function subscribeToAbortRequests(
  * calls this. The subscription is torn down with the registry entry, whether
  * that happens on explicit cleanup or TTL eviction.
  */
-export async function ensureRemoteAbortListener(pubsub: PubSub, runId: string): Promise<void> {
-  let entry = globalRunRegistry.get(runId);
+export async function ensureRemoteAbortListener(pubsub: PubSub, runId: string, mastra?: Mastra): Promise<void> {
+  let entry = getRunRegistryEntry(runId, mastra);
 
   if (!entry) {
     // A worker can reach its first step before anything has populated the
@@ -84,7 +85,8 @@ export async function ensureRemoteAbortListener(pubsub: PubSub, runId: string): 
     // marked as a placeholder (and carries no model) so `resolveRuntimeDependencies`
     // still rebuilds the real runtime state into it rather than trusting it.
     entry = { isPlaceholder: true } as RunRegistryEntry;
-    globalRunRegistry.set(runId, entry);
+    // Another instance's live run holds this runId; don't wire our abort to it.
+    if (!setRunRegistryEntry(runId, entry, mastra)) return;
   }
 
   if (entry.remoteAbortListenerInstalled) return;
@@ -105,7 +107,7 @@ export async function ensureRemoteAbortListener(pubsub: PubSub, runId: string): 
   let unsubscribe: () => Promise<void>;
   try {
     unsubscribe = await subscribeToAbortRequests(pubsub, runId, () => {
-      const controller = globalRunRegistry.get(runId)?.abortController ?? entry.abortController;
+      const controller = getRunRegistryEntry(runId, mastra)?.abortController ?? entry.abortController;
       if (controller && !controller.signal.aborted) {
         controller.abort(new Error('Aborted'));
       }

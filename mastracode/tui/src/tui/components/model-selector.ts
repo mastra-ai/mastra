@@ -25,6 +25,8 @@ export interface ModelItem {
   apiKeyEnvVar?: string;
   /** Number of times this model has been selected (for ranking) */
   useCount?: number;
+  /** Optional label shown instead of the model ID */
+  displayName?: string;
 }
 
 export interface ModelSelectorOptions {
@@ -188,7 +190,7 @@ export class ModelSelectorComponent extends Box implements Focusable {
     // Apply fuzzy filter if there's a query, otherwise show all
     // Sorting already puts models with API keys first
     this.filteredModels = query
-      ? fuzzyFilter(this.allModels, query, m => `${m.id} ${m.provider} ${m.modelName}`)
+      ? fuzzyFilter(this.allModels, query, m => `${m.displayName ?? ''} ${m.id} ${m.provider} ${m.modelName}`)
       : this.allModels;
 
     // Show "Use: query" only for a complete provider/model-shaped ID.
@@ -235,6 +237,7 @@ export class ModelSelectorComponent extends Box implements Focusable {
 
       const isSelected = i === this.selectedIndex;
       const isCurrent = item.id === this.currentModelId;
+      const label = item.displayName ?? item.id;
       const checkmark = isCurrent ? theme.fg('success', ' ✓') : '';
       const noKeyIndicator = !item.hasApiKey
         ? theme.fg('error', ' ✗') + theme.fg('muted', item.apiKeyEnvVar ? ` (${item.apiKeyEnvVar})` : ' (no key)')
@@ -242,9 +245,9 @@ export class ModelSelectorComponent extends Box implements Focusable {
 
       let line = '';
       if (isSelected) {
-        line = theme.fg('accent', '→ ' + item.id) + checkmark + noKeyIndicator;
+        line = theme.fg('accent', '→ ' + label) + checkmark + noKeyIndicator;
       } else {
-        const modelText = item.hasApiKey ? item.id : theme.fg('muted', item.id);
+        const modelText = item.hasApiKey ? label : theme.fg('muted', label);
         line = '  ' + modelText + checkmark + noKeyIndicator;
       }
 

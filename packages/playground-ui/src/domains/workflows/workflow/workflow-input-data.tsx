@@ -1,4 +1,4 @@
-import { ChevronRight, Play } from 'lucide-react';
+import { Play } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useRef, useState } from 'react';
 import type { ZodSchema } from 'zod';
@@ -11,12 +11,12 @@ import { WorkflowInputTypeToggle } from './workflow-input-type-toggle';
 import type { WorkflowInputType } from './workflow-input-type-toggle';
 import { Button } from '@/ds/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { DynamicForm } from '@/lib/form';
-import { isPlainObject } from '@/lib/form/utils';
-import { getBaseSchema } from '@/lib/form/zod-provider/compat';
-import { inferFieldType } from '@/lib/form/zod-provider/field-type-inference';
+import { getFormShapeError, parseJsonDraft, validateJsonDraft } from '@/lib/form/json-draft';
+import type { JsonDraftValue } from '@/lib/form/json-draft';
 import { cn } from '@/utils/cn';
 
 export interface WorkflowInputDataProps {
@@ -44,8 +44,6 @@ type InputDraft =
   | { type: 'form'; value: unknown }
   | { type: 'simple'; value: ProcessorDraft };
 
-type DraftValue = { ok: true; value: unknown } | { ok: false; error: string };
-
 const defaultSubmitIcon = (
   <Icon>
     <Play />
@@ -57,23 +55,6 @@ function createInitialDraft(defaultValues: unknown, isProcessorWorkflow: boolean
   const input = defaultValues ?? createProcessorInput();
   const draft = parseProcessorDraft(input);
   return draft ? { type: 'simple', value: draft } : { type: 'json', value: JSON.stringify(input, null, 2) };
-}
-
-function parseJsonDraft(text: string): DraftValue {
-  try {
-    return { ok: true, value: JSON.parse(text) };
-  } catch (error) {
-    return { ok: false, error: error instanceof Error ? `Invalid JSON: ${error.message}` : 'Invalid JSON' };
-  }
-}
-
-function getFormShapeError(schema: ZodSchema, value: unknown) {
-  const fieldType = inferFieldType(getBaseSchema(schema));
-  if (fieldType === 'object' && !isPlainObject(value))
-    return 'Form input requires a JSON object. Correct the JSON first.';
-  if (fieldType === 'array' && !Array.isArray(value))
-    return 'Form input requires a JSON array. Correct the JSON first.';
-  return undefined;
 }
 
 export const WorkflowInputData = ({
@@ -100,17 +81,15 @@ export const WorkflowInputData = ({
   const formValues = useRef<unknown>(defaultValues);
   const [errors, setErrors] = useState<string[]>([]);
 
-  function readDraftValue(): DraftValue {
+  function readDraftValue(): JsonDraftValue {
     if (draft.type === 'json') return parseJsonDraft(draft.value);
     return { ok: true, value: draft.type === 'form' ? formValues.current : draft.value };
   }
 
   function submitJsonDraft(text: string) {
-    const json = parseJsonDraft(text);
-    if (!json.ok) return setErrors([json.error]);
-    const result = schema.safeParse(json.value);
-    if (result.success) onSubmit(result.data);
-    else setErrors(result.error.issues.map(issue => `${issue.path.join('.') || 'Input'}: ${issue.message}`));
+    const result = validateJsonDraft(schema, text);
+    if (result.ok) onSubmit(result.value);
+    else setErrors(result.errors);
   }
 
   function changeInputType(type: WorkflowInputType) {
@@ -230,7 +209,7 @@ export const WorkflowInputData = ({
   if (!collapsible) {
     return (
       <>
-        {!hideHeading && <div className="border-b border-border/50 pb-3">{headingSlot ?? defaultHeading}</div>}
+        {!hideHeading && <div className="border-b border-border pb-3">{headingSlot ?? defaultHeading}</div>}
         <div>{body}</div>
       </>
     );
@@ -239,7 +218,7 @@ export const WorkflowInputData = ({
   return (
     <Collapsible defaultOpen>
       <CollapsibleTrigger className="flex w-full items-center gap-2 pb-3 text-left">
-        <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+        <DisclosureChevron direction="right" className="size-4 text-muted-foreground" />
         {headingSlot ?? defaultHeading}
       </CollapsibleTrigger>
 

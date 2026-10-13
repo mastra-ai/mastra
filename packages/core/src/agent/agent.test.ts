@@ -5539,6 +5539,65 @@ describe('Agent Tests', () => {
   });
 
   describe('prepareStep', () => {
+    it("keeps tools and tool history when prepareStep forces toolChoice 'none' (#25908)", async () => {
+      const calls: LanguageModelV2CallOptions[] = [];
+      const mockModel = new MockLanguageModelV2({
+        doGenerate: async options => {
+          calls.push(options);
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            warnings: [],
+            ...(calls.length === 1
+              ? {
+                  finishReason: 'tool-calls' as const,
+                  content: [
+                    {
+                      type: 'tool-call' as const,
+                      toolCallId: 'call-1',
+                      toolName: 'lookup',
+                      input: JSON.stringify({ q: 'x' }),
+                    },
+                  ],
+                }
+              : { finishReason: 'stop' as const, content: [{ type: 'text' as const, text: 'Done' }] }),
+          };
+        },
+        doStream: async () => {
+          throw new Error('Not implemented');
+        },
+      });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: mockModel,
+        tools: {
+          lookup: createTool({
+            id: 'lookup',
+            description: 'lookup',
+            inputSchema: z.object({ q: z.string() }),
+            execute: async () => 'looked up',
+          }),
+        },
+      });
+      agent.__setLogger(noopLogger);
+
+      await agent.generate('Hello', {
+        maxSteps: 3,
+        prepareStep: ({ stepNumber }) => (stepNumber >= 1 ? { toolChoice: 'none' } : undefined),
+      });
+
+      expect(calls).toHaveLength(2);
+      const finalCall = calls[1]!;
+      expect(finalCall.toolChoice).toEqual({ type: 'none' });
+      expect(finalCall.tools?.map(t => t.name)).toEqual(['lookup']);
+      const partTypes = finalCall.prompt.flatMap(m => (Array.isArray(m.content) ? m.content.map(p => p.type) : []));
+      expect(partTypes).toContain('tool-call');
+      expect(partTypes).toContain('tool-result');
+    });
+
     it('should allow adding new tools via prepareStep', async () => {
       let capturedTools: any;
       const mockModel = new MockLanguageModelV2({

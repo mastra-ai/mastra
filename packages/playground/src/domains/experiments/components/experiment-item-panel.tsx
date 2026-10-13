@@ -1,9 +1,8 @@
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
-import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDatasetMutations, useScoresByExperimentId } from '@mastra/react/hooks/datasets';
 import { useCallback, useMemo } from 'react';
 
-import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { ExperimentResultDetail } from '@/domains/experiments/components/experiment-result-detail';
 import { useExperimentItemPanel } from '@/domains/experiments/context/experiment-item-panel-context';
 import { useExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
@@ -12,13 +11,15 @@ import { useExperimentTagVocabulary } from '@/domains/experiments/hooks/use-expe
 export interface ExperimentItemPanelProps {
   withQueryTrace: boolean;
   withFeedback: boolean;
+  /** `drawer` (default) for a standalone overlay; `inline` when hosted in the route side panel. */
+  variant?: 'drawer' | 'inline';
 }
 
 /**
- * Result drawer for the `items/:itemId` child route. Always mounted by the
- * experiment page so the drawer animates in and out; `currentItemId` drives `open`.
+ * Result panel for the `items/:itemId` child route. As a drawer, keep it mounted so it
+ * animates in and out; `currentItemId` drives `open`. Inline, it renders only while an item is open.
  */
-export function ExperimentItemPanel({ withQueryTrace, withFeedback }: ExperimentItemPanelProps) {
+export function ExperimentItemPanel({ withQueryTrace, withFeedback, variant }: ExperimentItemPanelProps) {
   const {
     currentItemId: itemId,
     experimentId,
@@ -34,7 +35,11 @@ export function ExperimentItemPanel({ withQueryTrace, withFeedback }: Experiment
 
   const result = useMemo(() => (itemId ? results.find(r => r.itemId === itemId) : undefined), [results, itemId]);
 
-  const { data: scoresByItemId } = useScoresByExperimentId(experimentId, experimentStatus);
+  const { data: scoresByItemId } = useScoresByExperimentId({
+    experimentId: experimentId,
+    experimentStatus: experimentStatus,
+    queryOptions: { enabled: Boolean(experimentId) },
+  });
   const { updateExperimentResult } = useDatasetMutations();
 
   const flagForReview = useCallback(
@@ -77,6 +82,7 @@ export function ExperimentItemPanel({ withQueryTrace, withFeedback }: Experiment
 
   return (
     <ExperimentResultDetail
+      variant={variant}
       result={result}
       itemId={itemId}
       fallback={

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   SettingsContainer,
   SettingsDescription,
@@ -15,11 +15,6 @@ import { Form } from '@/ds/components/Form';
 import { Input } from '@/ds/components/Input';
 import { Switch } from '@/ds/components/Switch';
 
-beforeAll(() => {
-  if (typeof window.PointerEvent === 'undefined') {
-    Object.defineProperty(window, 'PointerEvent', { configurable: true, value: window.MouseEvent });
-  }
-});
 afterEach(cleanup);
 
 describe('Settings', () => {

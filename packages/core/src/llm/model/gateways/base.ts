@@ -47,6 +47,15 @@ export type AttachmentCapabilities = Record<string, string[]>;
 export type TemperatureCapabilities = Record<string, string[]>;
 export type StructuredOutputCapabilities = Record<string, string[]>;
 
+/** A reasoning control a model accepts, as published by models.dev `reasoning_options`. */
+export type ModelReasoningOption =
+  | { type: 'effort'; values: string[] }
+  | { type: 'budget_tokens'; min?: number; max?: number }
+  | { type: 'toggle' };
+
+/** Provider ID → model ID → the reasoning controls that model accepts. */
+export type ReasoningCapabilities = Record<string, Record<string, ModelReasoningOption[]>>;
+
 /**
  * Union type for language models that can be returned by gateways.
  * Supports AI SDK v5 (LanguageModelV2), v6 (LanguageModelV3), and v7 (LanguageModelV4).

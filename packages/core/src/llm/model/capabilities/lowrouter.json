@@ -1,0 +1,69 @@
+{
+  "attachment": [
+    "auto/mistralai/ministral-14b-2512",
+    "auto/mistralai/ministral-3b-2512",
+    "auto/mistralai/ministral-8b-2512",
+    "auto/mistralai/mistral-large-2512",
+    "auto/mistralai/mistral-large-4",
+    "auto/mistralai/mistral-medium-3.5",
+    "auto/mistralai/mistral-small-2603"
+  ],
+  "temperature": [
+    "auto/mistralai/codestral-2508",
+    "auto/mistralai/ministral-14b-2512",
+    "auto/mistralai/ministral-3b-2512",
+    "auto/mistralai/ministral-8b-2512",
+    "auto/mistralai/mistral-large-2512",
+    "auto/mistralai/mistral-large-4",
+    "auto/mistralai/mistral-medium-3.5",
+    "auto/mistralai/mistral-small-2603",
+    "auto/openai/gpt-oss-120b",
+    "auto/openai/gpt-oss-20b",
+    "auto/openai/gpt-oss-safeguard-120b",
+    "auto/openai/gpt-oss-safeguard-20b"
+  ],
+  "structuredOutput": [
+    "auto/mistralai/codestral-2508",
+    "auto/mistralai/ministral-14b-2512",
+    "auto/mistralai/ministral-3b-2512",
+    "auto/mistralai/ministral-8b-2512",
+    "auto/mistralai/mistral-large-4",
+    "auto/mistralai/mistral-medium-3.5",
+    "auto/openai/gpt-oss-120b",
+    "auto/openai/gpt-oss-20b",
+    "auto/openai/gpt-oss-safeguard-120b",
+    "auto/openai/gpt-oss-safeguard-20b"
+  ],
+  "reasoning": {
+    "auto/mistralai/mistral-large-4": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "auto/mistralai/mistral-medium-3.5": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "auto/mistralai/mistral-small-2603": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "auto/openai/gpt-oss-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "auto/openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ]
+  }
+}

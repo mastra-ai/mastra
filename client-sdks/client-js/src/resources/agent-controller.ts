@@ -1,4 +1,5 @@
 import type {
+  AgentControllerThinkingLevel,
   AgentControllerThread,
   AgentControllerWireEvent,
   MastraDBMessage,
@@ -35,7 +36,7 @@ import type {
   SendNotificationResult,
   ToolCategory,
 } from '../types';
-import { parseClientRequestContext } from '../utils';
+import { isTerminalReconnectError, parseClientRequestContext } from '../utils';
 import { BaseResource } from './base';
 
 /**
@@ -173,6 +174,7 @@ const KNOWN_AGENT_CONTROLLER_EVENT_TYPES = new Set<string>(
     thread_changed: true,
     thread_created: true,
     thread_deleted: true,
+    thread_owner_changed: true,
     thread_title_updated: true,
     subagent_start: true,
     subagent_text_delta: true,
@@ -203,6 +205,7 @@ const KNOWN_AGENT_CONTROLLER_EVENT_TYPES = new Set<string>(
     workspace_ready: true,
     workspace_error: true,
     workspace_status_changed: true,
+    task_complete_evaluation: true,
     info: true,
     error: true,
   } satisfies Record<KnownAgentControllerEvent['type'], true>),
@@ -560,6 +563,13 @@ export class AgentControllerSession extends BaseResource {
           try {
             reconnectedResponse = await requestStream();
           } catch (error) {
+            if (cancelled) return;
+            // Auth denials and other client errors won't resolve by resubscribing;
+            // 408/429 stay retryable.
+            if (isTerminalReconnectError(error)) {
+              safeOnError(error);
+              return;
+            }
             result = { kind: 'transport_error', error };
           }
         }
@@ -687,11 +697,17 @@ export class AgentControllerSession extends BaseResource {
     await this.request(this.url(`${this.base()}/mode`), { method: 'POST', body: { modeId } });
   }
 
-  /** Switch the model. Defaults to thread scope. */
-  async switchModel(modelId: string, options?: { scope?: 'global' | 'thread'; modeId?: string }): Promise<void> {
+  /**
+   * Switch the session model and persist it to the active thread. When
+   * `thinkingLevel` is provided it is applied and persisted with the model.
+   */
+  async switchModel(
+    modelId: string,
+    { thinkingLevel }: { thinkingLevel?: AgentControllerThinkingLevel } = {},
+  ): Promise<void> {
     await this.request(this.url(`${this.base()}/model`), {
       method: 'POST',
-      body: { modelId, scope: options?.scope, modeId: options?.modeId },
+      body: thinkingLevel !== undefined ? { modelId, thinkingLevel } : { modelId },
     });
   }
 

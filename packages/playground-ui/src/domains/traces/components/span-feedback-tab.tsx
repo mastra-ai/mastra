@@ -1,10 +1,8 @@
+import { useUpdateFeedbackReviewStatus } from '@mastra/react/hooks/feedback';
+import { useCreateFeedback, useDeleteFeedback, useSpanFeedback } from '@mastra/react/hooks/traces';
 import { useState } from 'react';
 
-import { useCreateFeedback } from '../hooks/use-create-feedback';
-import { useDeleteFeedback } from '../hooks/use-delete-feedback';
-import { useSpanFeedback } from '../hooks/use-span-feedback';
 import { FeedbackThread } from './feedback-thread';
-import { useUpdateFeedbackReviewStatus } from '@/domains/feedback/hooks/use-feedback';
 
 type SpanFeedbackTabProps = {
   traceId: string;
@@ -17,7 +15,12 @@ type SpanFeedbackTabProps = {
  */
 export function SpanFeedbackTab({ traceId, spanId }: SpanFeedbackTabProps) {
   const [page, setPage] = useState(0);
-  const { data, isLoading } = useSpanFeedback({ traceId, spanId, page });
+  const { data, isLoading } = useSpanFeedback({
+    traceId,
+    spanId,
+    page,
+    queryOptions: { enabled: !!traceId && !!spanId },
+  });
   const { mutateAsync, isPending } = useCreateFeedback({ traceId, spanId });
   const { mutateAsync: deleteFeedback, isPending: isDeleting } = useDeleteFeedback({ traceId, spanId });
   const updateReviewStatus = useUpdateFeedbackReviewStatus();

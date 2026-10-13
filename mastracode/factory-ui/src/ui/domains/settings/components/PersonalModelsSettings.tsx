@@ -2,7 +2,7 @@ import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
 import { useProviderConnectionState } from '../hooks/useProviderConnectionState';
-import { ModelPacksSection } from './ModelPacksSection';
+import { DefaultModelSection } from './DefaultModelSection';
 import { ProviderAccessSection } from './ProviderAccessSection';
 import { SettingsSubsection } from './SettingsSubsection';
 
@@ -14,13 +14,13 @@ export function PersonalModelsSettings({ models }: { models: AvailableModelOptio
       {(!providersKnown || anyConnected) && (
         <SettingsSubsection
           scope="personal"
-          id="model-packs"
+          id="default-model"
           title="Your defaults"
-          description="The pack you run with. Creating or removing a pack changes the list for your whole org."
+          description="The model new chats start on. Applies to every mode."
         >
           <SettingsContainer>
             <div className="p-4">
-              <ModelPacksSection models={models} />
+              <DefaultModelSection models={models} />
             </div>
           </SettingsContainer>
         </SettingsSubsection>

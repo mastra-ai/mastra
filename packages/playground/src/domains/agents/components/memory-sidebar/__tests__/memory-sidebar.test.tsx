@@ -252,9 +252,11 @@ describe('MemorySidebar', () => {
     expect(screen.queryByRole('tab')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Threads' })).toBeNull();
 
-    // The sidebar is still a single standalone bordered block with no nested container.
-    const blocks = container.querySelectorAll('.bg-card.border-border\\/50');
-    expect(blocks.length).toBe(1);
+    // Threads and memory share one panel shell, with no nested panel.
+    const panels = container.querySelectorAll('[data-slot="sidebar-panel"]');
+    expect(panels.length).toBe(1);
+    expect(panels[0]?.contains(card)).toBe(true);
+    expect(panels[0]?.contains(screen.getByTestId('memory-sidebar-thread-layer'))).toBe(true);
   });
 
   it('renders the capabilities footer and reveals capability details on expand', async () => {

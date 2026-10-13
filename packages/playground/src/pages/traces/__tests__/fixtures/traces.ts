@@ -1,7 +1,8 @@
-import type { GetScoresScorers_Response, GetSystemPackagesResponse, MastraClient } from '@mastra/client-js';
+import type { GetObservabilityCapabilitiesResponse, GetScoresScorers_Response, MastraClient } from '@mastra/client-js';
 import type { ListScoresResponse, ScoreRowData } from '@mastra/core/evals';
 import { SpanType } from '@mastra/core/observability';
 import { TraceStatus } from '@mastra/core/storage';
+import { traceQueryCapabilities } from './trace-query';
 
 type ListTracesResponse = Awaited<ReturnType<MastraClient['listTraces']>>;
 type ListBranchesResponse = Awaited<ReturnType<MastraClient['listBranches']>>;
@@ -10,23 +11,11 @@ type GetTraceResponse = Awaited<ReturnType<MastraClient['getTrace']>>;
 type GetBranchResponse = Awaited<ReturnType<MastraClient['getBranch']>>;
 type ListFeedbackResponse = Awaited<ReturnType<MastraClient['listFeedback']>>;
 
-const baseSystemPackages: GetSystemPackagesResponse = {
-  packages: [],
-  isDev: false,
-  cmsEnabled: false,
-  observabilityEnabled: true,
-};
+export const metricsCapableCapabilities: GetObservabilityCapabilitiesResponse = traceQueryCapabilities;
 
-export const metricsCapableSystemPackages: GetSystemPackagesResponse = {
-  ...baseSystemPackages,
-  observabilityStorageType: 'ObservabilityStoragePostgresVNext',
-  observabilityStorageCapabilities: { metrics: true, logs: true, traceQueryDiscovery: false },
-};
-
-export const metricsUnavailableSystemPackages: GetSystemPackagesResponse = {
-  ...baseSystemPackages,
-  observabilityStorageType: 'ObservabilityStoragePostgresVNext',
-  observabilityStorageCapabilities: { metrics: false, logs: true, traceQueryDiscovery: false },
+export const metricsUnavailableCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...traceQueryCapabilities,
+  capabilities: { ...traceQueryCapabilities.capabilities, metrics: false },
 };
 
 const trace = {

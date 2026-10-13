@@ -1,11 +1,10 @@
 'use client';
 
 import type { DatasetItemToolMock, AddDatasetItemParams } from '@mastra/client-js';
+import { useDatasetMutations, useDatasets } from '@mastra/react/hooks/datasets';
 import { DatabaseIcon, Check, X } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { useDatasetMutations } from '../hooks/use-dataset-mutations';
-import { useDatasets } from '../hooks/use-datasets';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Field, FieldLabel } from '@/ds/components/Field';
@@ -14,6 +13,8 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { SideDialog } from '@/ds/components/SideDialog';
 import type { SideDialogRootProps } from '@/ds/components/SideDialog';
 import { TextAndIcon } from '@/ds/components/Text';
+import { Txt } from '@/ds/components/Txt';
+import { useLinkComponent } from '@/lib/framework';
 import { toast } from '@/utils/toast';
 
 export type SaveAsDatasetItemDialogProps = {
@@ -56,6 +57,7 @@ export function SaveAsDatasetItemDialog({
 
   const { data, isLoading: isDatasetsLoading } = useDatasets();
   const { addItem } = useDatasetMutations();
+  const { navigate, paths } = useLinkComponent();
 
   const datasets = data?.datasets ?? [];
 
@@ -177,7 +179,7 @@ export function SaveAsDatasetItemDialog({
     }
 
     try {
-      await addItem.mutateAsync({
+      const item = await addItem.mutateAsync({
         datasetId: selectedDatasetId,
         input: parsedInput,
         groundTruth: parsedGroundTruth,
@@ -187,7 +189,11 @@ export function SaveAsDatasetItemDialog({
       });
 
       const targetDataset = datasets.find(d => d.id === selectedDatasetId);
-      toast.success(`Item saved to "${targetDataset?.name}"`);
+      // Opens the dataset with the new item's drawer; apps without that route return ''.
+      const itemHref = paths.datasetItemLink(selectedDatasetId, item.id);
+      toast.success(`Added to "${targetDataset?.name}"`, {
+        action: itemHref ? { label: 'Go to dataset', onClick: () => navigate(itemHref) } : undefined,
+      });
 
       setSelectedDatasetId('');
       setInput('{}');
@@ -240,7 +246,9 @@ export function SaveAsDatasetItemDialog({
               </SelectTrigger>
               <SelectContent>
                 {datasets.length === 0 ? (
-                  <div className="px-2 py-4 text-center text-body text-muted-foreground">No datasets available</div>
+                  <Txt as="p" variant="body" tone="muted" className="px-2 py-4 text-center">
+                    No datasets available
+                  </Txt>
                 ) : (
                   datasets.map(dataset => (
                     <SelectItem key={dataset.id} value={dataset.id}>

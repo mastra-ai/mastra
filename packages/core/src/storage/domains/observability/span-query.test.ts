@@ -8,8 +8,9 @@ import {
   spanQueryRequestSchema,
   spanQueryResponseSchema,
   spanQueryRowSchema,
+  resolveSpanQueryCost,
 } from './span-query';
-import type { SpanQueryRow } from './span-query';
+import type { SpanQueryCostMetric, SpanQueryRow } from './span-query';
 import {
   digestBinding,
   parseTraceQueryRequest,
@@ -47,7 +48,41 @@ const row: SpanQueryRow = {
   cost: { state: 'unavailable' },
 };
 
-describe('span query contract prototype', () => {
+describe('span query model cost', () => {
+  const input: SpanQueryCostMetric = {
+    ...identity,
+    name: 'mastra_model_total_input_tokens',
+    estimatedCost: 0.01,
+    costUnit: 'usd',
+    allocation: null,
+    costError: false,
+  };
+  const output: SpanQueryCostMetric = { ...input, name: 'mastra_model_total_output_tokens', estimatedCost: 0.02 };
+
+  it.each([
+    [input],
+    [input, input, output],
+    [input, { ...output, costUnit: 'eur' }],
+    [{ ...input, costUnit: 'x'.repeat(17), allocation: 'query_total' }],
+    [input, { ...output, costError: true }],
+    [input, { ...output, estimatedCost: null }],
+    [input, { ...output, estimatedCost: -1 }],
+    [{ ...input, allocation: 'query_total' }, output],
+  ])('does not present incomplete or conflicting pricing as a total (%#)', (...metrics) => {
+    expect(resolveSpanQueryCost(metrics)).toEqual({ state: 'unavailable' });
+  });
+
+  it('counts a provider total once when its companion metric is unpriced', () => {
+    expect(
+      resolveSpanQueryCost([
+        { ...input, allocation: 'query_total' },
+        { ...output, estimatedCost: null },
+      ]),
+    ).toEqual({ state: 'available', amount: 0.01, currency: 'usd' });
+  });
+});
+
+describe('span query contract', () => {
   it('defaults to bounded keyset pagination without accepting authorization in the request', () => {
     expect(parseSpanQueryRequest({ timeRange })).toEqual({
       timeRange,

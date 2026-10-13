@@ -42,7 +42,8 @@ echo "Summarize the repo" | mastracode --prompt -
 | `--max-turns <n>` | Abort after N agentic turns (exit code 1) |
 | `--permission-mode <mode>` | How tool approvals/suspensions resolve: `auto` (default) approves everything; `deny` refuses approvals and aborts on suspension |
 | `--output`, `-o <mode>` | Output mode: `human` (default), `json`, or `jsonl` |
-| `--model`, `-m <id>` | Model override (e.g. a `provider/model` id) |
+| `--model`, `-m <id>` | Model override (e.g. a `provider/model` id). Takes precedence over the pack's model for the active mode |
+| `--pack <id>` | Start with a model pack: a built-in pack id (e.g. `anthropic`, `openai`), `custom:<name>`, or a bare custom-pack name. Applies the pack like `/models` → Activate (mode models, subagent models, model route) and makes it the default pack; also takes precedence over `MASTRACODE_MODEL_ID` |
 | `--mode <build\|plan\|fast>` | Execution mode — defaults to `build` if omitted |
 | `--thinking-level <level>` | Thinking level: `off`, `low`, `medium`, `high`, `xhigh` |
 | `--settings <path>` | Path to a `settings.json` file (default: global settings) |
@@ -80,6 +81,9 @@ mastracode --prompt "Review this PR" --permission-mode deny --max-turns 10
 
 # Use a CI-specific settings file
 mastracode --settings ./settings-ci.json --prompt "Run tests"
+
+# Run on a custom model pack, with one mode's model overridden
+mastracode --pack custom:Kimi --model __GATEWAY_ANTHROPIC_MODEL_OPUS__ --prompt "Review this PR"
 
 # Resume the most recent thread
 mastracode -c --prompt "Continue where you left off"

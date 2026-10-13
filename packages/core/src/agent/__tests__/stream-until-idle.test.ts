@@ -195,6 +195,43 @@ describe('Agent.streamUntilIdle', () => {
     expect(getCallCount()).toBe(1);
   });
 
+  it('does not recurse when untilIdle comes from static defaultOptions (no bg manager)', async () => {
+    const plainMastra = new Mastra({ logger: false, storage, backgroundTasks: { enabled: false } });
+    const { model, getCallCount } = makeScriptedModel([textResponse('ok')]);
+    const agent = new Agent({ id: 'd1', name: 'd1', instructions: 'test', model, defaultOptions: { untilIdle: true } });
+    plainMastra.addAgent(agent, 'd1');
+
+    const result = await agent.stream('hi');
+    const chunks = await drain(result.fullStream as ReadableStream<any>);
+
+    expect(chunks.some(c => c?.type === 'error')).toBe(false);
+    expect(getCallCount()).toBe(1);
+  });
+
+  it('does not recurse when untilIdle comes from dynamic defaultOptions with memory and a bg manager', async () => {
+    const memory = new MockMemory();
+    const { model, getCallCount } = makeScriptedModel([textResponse('ok')]);
+    let defaultsRead = 0;
+    const agent = new Agent({
+      id: 'd2',
+      name: 'd2',
+      instructions: 'test',
+      model,
+      memory,
+      defaultOptions: () => {
+        if (++defaultsRead > 20) throw new Error('untilIdle recursively re-entered defaultOptions');
+        return { untilIdle: true };
+      },
+    });
+    mastra.addAgent(agent, 'd2');
+
+    const result = await agent.stream('hi', { memory: { thread: 'thread-d2', resource: 'user-1' } });
+    await drain(result.fullStream as ReadableStream<any>);
+
+    expect(getCallCount()).toBe(1);
+    expect(defaultsRead).toBeLessThan(5);
+  });
+
   it('keeps a caller runId on the initial turn but not autonomous continuations', async () => {
     const memory = new MockMemory();
     const { model } = makeScriptedModel([textResponse('first response'), textResponse('continuation response')]);
@@ -579,6 +616,56 @@ describe('Agent.streamUntilIdle', () => {
     expect(getCallCount()).toBe(2);
     expect(onAbortCalled).toBe(true);
     expect(onFinishCalled).toBe(false);
+  });
+
+  it('does not recurse when resumeStream inherits untilIdle from defaultOptions', async () => {
+    const memory = new MockMemory();
+    const { model, getCallCount } = makeScriptedModel([toolCallResponse('approval'), textResponse('resumed')]);
+    let defaultsRead = 0;
+    let untilIdleDefault = false;
+    const agent = new Agent({
+      id: 'resume-default-until-idle',
+      name: 'resume-default-until-idle',
+      instructions: 'test',
+      model,
+      memory,
+      defaultOptions: () => {
+        if (untilIdleDefault && ++defaultsRead > 20) {
+          throw new Error('untilIdle recursively re-entered defaultOptions');
+        }
+        return untilIdleDefault ? { untilIdle: true } : {};
+      },
+      tools: {
+        approval: createTool({
+          id: 'approval',
+          description: 'Request approval',
+          inputSchema: z.object({}),
+          suspendSchema: z.object({ question: z.string() }),
+          resumeSchema: z.object({ approved: z.boolean() }),
+          execute: async (_, context) => {
+            if (!context?.agent?.resumeData) return context?.agent?.suspend({ question: 'Continue?' });
+            return context.agent.resumeData;
+          },
+        }),
+      },
+    });
+    mastra.addAgent(agent, 'resume-default-until-idle');
+
+    const memoryOptions = { thread: 'resume-default-thread', resource: 'user-1' };
+    const initial = await agent.stream('start', { memory: memoryOptions });
+    const initialChunks = await drain(initial.fullStream as ReadableStream<any>);
+    expect(initialChunks.some(chunk => chunk.type === 'tool-call-suspended')).toBe(true);
+
+    untilIdleDefault = true;
+    const resumed = await agent.resumeStream(
+      { approved: true },
+      { runId: initial.runId, toolCallId: 'approval', memory: memoryOptions },
+    );
+    const resumedChunks = await drain(resumed.fullStream as ReadableStream<any>);
+
+    expect(resumedChunks.some(chunk => chunk.type === 'error')).toBe(false);
+    expect(getCallCount()).toBe(2);
+    expect(defaultsRead).toBeLessThan(5);
   });
 
   it('drops the resumed runId from a plain Agent autonomous continuation', async () => {

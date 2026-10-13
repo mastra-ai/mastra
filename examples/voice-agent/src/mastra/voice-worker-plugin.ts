@@ -6,7 +6,7 @@
 // model-provider keys: the agent loop (tools, memory, observability) runs on the server.
 //
 // Start the server first (`pnpm dev`), then run this INSTEAD of `pnpm worker` (one worker at a
-// time — all entrypoints register as `mastra-voice`).
+// time — all entrypoints use LIVEKIT_AGENT_NAME, defaulting to `mastra-voice`).
 import { fileURLToPath } from 'node:url';
 import { defineAgent, voice } from '@livekit/agents';
 import type { VAD } from '@livekit/agents';
@@ -14,6 +14,7 @@ import * as livekitPlugin from '@livekit/agents-plugin-livekit';
 import * as silero from '@livekit/agents-plugin-silero';
 import { MastraLLM } from '@mastra/livekit/plugin';
 import { DEFAULT_END_CALL_TOOL, runEndCall, runLiveKitWorker, speakGreeting } from '@mastra/livekit/worker';
+import { liveKitAgentName } from './livekit';
 
 // The example's Mastra server (`pnpm dev`). In production this is wherever the app is deployed —
 // the whole point of the plugin is that the worker reaches it over HTTP.
@@ -117,5 +118,5 @@ export default defineAgent<PluginWorkerUserData>({
 });
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  runLiveKitWorker({ entry: import.meta.url, agentName: 'mastra-voice' });
+  runLiveKitWorker({ entry: import.meta.url, agentName: liveKitAgentName });
 }

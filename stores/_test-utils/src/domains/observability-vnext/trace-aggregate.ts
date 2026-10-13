@@ -1842,4 +1842,90 @@ export const TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES: TraceAggregateConformanceC
       truncated: false,
     },
   },
+  {
+    // A metadata dimension binds its JSON path before the usage stage's parameters; positional
+    // backends must keep both in placeholder order.
+    name: 'token and cost measures grouped by a metadata dimension, with having and orderBy',
+    request: {
+      timeRange: tokenRange,
+      groupBy: ['metadata.resumedFromSpanId'],
+      measures: ['count', 'tokens.total.sum', 'cost.sum'],
+      having: { op: 'gt', left: { path: 'tokens.total.sum' }, right: { literal: 0 } },
+      orderBy: { field: 'tokens.total.sum', direction: 'desc' },
+    },
+    expected: {
+      rows: [
+        {
+          dimensions: { 'metadata.resumedFromSpanId': null },
+          measures: { count: 11, 'tokens.total.sum': 12120, 'cost.sum': null },
+          cost: { coverage: 2 / 3, unit: 'mixed' },
+        },
+        {
+          dimensions: { 'metadata.resumedFromSpanId': 'resume-1-a' },
+          measures: { count: 1, 'tokens.total.sum': 1300, 'cost.sum': 1.25 },
+          cost: { coverage: 1, unit: 'usd' },
+        },
+      ],
+      truncated: false,
+    },
+  },
+];
+
+const edgeRange = { from: '2026-08-21T09:00:00Z', to: '2026-08-23T00:00:00Z' };
+
+/**
+ * Metric-row edge cases the token fixture does not reach, on the two `scheduler` roots of the
+ * token fixture (window `[2026-08-21T09:00, 2026-08-23)`):
+ *
+ * | metricId   | trace | timestamp               | in  | out | cost      | notes                                 |
+ * |------------|-------|-------------------------|-----|-----|-----------|---------------------------------------|
+ * | edge-dup   | sch-1 | 08-21T10:00:01.000      | 100 |     | 0.25 usd  | `costMetadata: { error: null }`       |
+ * | edge-dup   | sch-1 | 08-21T11:00:00.000      | 100 |     | 0.25 usd  | retried copy, different timestamp     |
+ * | edge-out   | sch-1 | 08-21T10:00:01.000      |     | 10  | 0.125 usd | `costMetadata: { error: null }`       |
+ * | edge-from  | sch-2 | 08-21T09:00:00.000      | 50  |     | 0.5 usd   | exactly at `from`: counts             |
+ * | edge-pre   | sch-2 | 08-21T08:59:59.999      | 7   |     | 4 usd     | 1 ms before `from`: pruned            |
+ *
+ * Scheduler: in 150, out 10, cost 0.875 usd, both traces covered.
+ */
+export const TRACE_AGGREGATE_TOKEN_EDGE_FIXTURE_DATA: TraceAggregateFixtureData = {
+  spans: TRACE_AGGREGATE_TOKEN_FIXTURE_DATA.spans.filter(span => span.traceId === 'sch-1' || span.traceId === 'sch-2'),
+  scores: [],
+  feedback: [],
+  metrics: [
+    {
+      ...tokenMetric('edge-dup', 'sch-1', 'sch-1', INPUT, 100, '2026-08-21T10:00:01.000Z', usd(0.25)),
+      costMetadata: { error: null },
+    },
+    {
+      ...tokenMetric('edge-dup', 'sch-1', 'sch-1', INPUT, 100, '2026-08-21T11:00:00.000Z', usd(0.25)),
+      costMetadata: { error: null },
+    },
+    {
+      ...tokenMetric('edge-out', 'sch-1', 'sch-1', OUTPUT, 10, '2026-08-21T10:00:01.000Z', usd(0.125)),
+      costMetadata: { error: null },
+    },
+    tokenMetric('edge-from', 'sch-2', 'sch-2', INPUT, 50, '2026-08-21T09:00:00.000Z', usd(0.5)),
+    tokenMetric('edge-pre', 'sch-2', 'sch-2', INPUT, 7, '2026-08-21T08:59:59.999Z', usd(4)),
+  ],
+};
+
+export const TRACE_AGGREGATE_TOKEN_EDGE_CONFORMANCE_CASES: TraceAggregateConformanceCase[] = [
+  {
+    name: 'edge: retried metricId at a different timestamp, inclusive from, and a JSON-null cost error',
+    request: {
+      timeRange: edgeRange,
+      groupBy: ['entityName'],
+      measures: ['count', 'tokens.input.sum', 'tokens.output.sum', 'cost.sum'],
+    },
+    expected: {
+      rows: [
+        {
+          dimensions: schedulerDims,
+          measures: { count: 2, 'tokens.input.sum': 150, 'tokens.output.sum': 10, 'cost.sum': 0.875 },
+          cost: { coverage: 1, unit: 'usd' },
+        },
+      ],
+      truncated: false,
+    },
+  },
 ];

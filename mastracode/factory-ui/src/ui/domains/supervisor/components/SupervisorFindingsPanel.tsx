@@ -1,11 +1,12 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { overlaySurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Brain, ChevronRight, PanelRightIcon } from 'lucide-react';
+import { Brain, PanelRightIcon } from 'lucide-react';
 import { Link } from 'react-router';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
@@ -58,7 +59,7 @@ function FindingsContent({
     >
       <div className="flex shrink-0 items-center gap-2 px-3 py-3">
         <Brain className="size-4" aria-hidden />
-        <Txt variant="body" className="text-foreground">
+        <Txt tone="ink" variant="body">
           Findings
         </Txt>
         <Badge variant="neutral" size="sm">
@@ -69,7 +70,7 @@ function FindingsContent({
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
         {groups.length === 0 ? (
           <div className="px-2 py-8 text-center">
-            <Txt variant="caption" className="text-muted-foreground">
+            <Txt tone="muted" variant="caption">
               No findings — everything looks healthy.
             </Txt>
           </div>
@@ -77,12 +78,9 @@ function FindingsContent({
           <div className="flex flex-col gap-1">
             {groups.map(([kind, items]) => (
               <Collapsible key={kind}>
-                <CollapsibleTrigger className="group flex w-full items-center gap-2 px-2 py-2 text-left">
-                  <ChevronRight
-                    className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90"
-                    aria-hidden
-                  />
-                  <Txt variant="caption" className="text-foreground min-w-0 flex-1">
+                <CollapsibleTrigger className="flex w-full items-center gap-2 px-2 py-2 text-left">
+                  <DisclosureChevron direction="right" className="size-3.5" />
+                  <Txt tone="ink" variant="caption" className="min-w-0 flex-1">
                     {FINDING_LABELS[kind]}
                   </Txt>
                   <Badge variant="neutral" size="sm">
@@ -95,15 +93,15 @@ function FindingsContent({
                       <li key={finding.id} className="flex flex-col gap-2 px-2 py-2">
                         <div className="flex min-w-0 items-start gap-2">
                           <div className="min-w-0 flex-1">
-                            <Txt variant="caption" className="text-foreground block wrap-anywhere">
+                            <Txt tone="ink" variant="caption" className="block wrap-anywhere">
                               {finding.title}
                             </Txt>
-                            <Txt variant="meta" className="text-muted-foreground mt-0.5 block wrap-anywhere">
+                            <Txt tone="muted" variant="meta" className="mt-0.5 block wrap-anywhere">
                               {finding.evidence}
                             </Txt>
                           </div>
                           {finding.beganAt !== null && (
-                            <Txt variant="meta" className="text-muted-foreground shrink-0">
+                            <Txt tone="muted" variant="meta" className="shrink-0">
                               {relativeTime(finding.beganAt)}
                             </Txt>
                           )}
@@ -124,9 +122,14 @@ function FindingsContent({
       {findings.length > 0 && factoryId && (
         <Link
           to={`/factories/${factoryId}/attention`}
-          className="border-border text-caption text-muted-foreground hover:text-foreground shrink-0 border-t px-4 py-3 text-center transition-colors"
+          className={cn(
+            'text-muted-foreground',
+            'border-border hover:text-foreground shrink-0 border-t px-4 py-3 text-center transition-colors',
+          )}
         >
-          View all in Attention
+          <Txt as="span" variant="caption" className="block">
+            View all in Attention
+          </Txt>
         </Link>
       )}
     </div>

@@ -309,7 +309,13 @@ export const AUTHORIZE_TOOL_PROVIDER_ROUTE = createRoute({
       // userId the runtime will resolve to at execution time. Re-auth (caller
       // passed an existing connectionId) is left untouched.
       const bucket = connectionId && connectionId.length > 0 ? connectionId : ownerAuthorId;
-      const result = await provider.authorize({ toolkit, connectionId: bucket, toolName, config });
+      const result = await provider.authorize({
+        toolkit,
+        connectionId: bucket,
+        toolName,
+        config,
+        scope: effectiveScope,
+      });
 
       // Persist label + scope. Upsert even when label is null/undefined so the
       // row exists for later list-join in the picker.

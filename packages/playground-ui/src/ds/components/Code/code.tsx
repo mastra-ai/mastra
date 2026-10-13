@@ -55,7 +55,7 @@ export const Code = React.memo(function Code({ code, lang, lineClassName, ...pro
 
   return (
     <pre {...props}>
-      <code>
+      <code className="font-[inherit]">
         {usable.tokens.map((line, lineIndex) => {
           const lineOffset = codeOffset;
           let tokenOffset = lineOffset;

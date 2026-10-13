@@ -39,6 +39,18 @@ describe('PageLayout', () => {
     });
   });
 
+  describe('scroll area', () => {
+    it.each(['container', 'fit', 'narrow'] as const)('reserves the scrollbar gutter for the "%s" variant', variant => {
+      render(
+        <PageLayout variant={variant}>
+          <p>Body</p>
+        </PageLayout>,
+      );
+
+      expect(screen.getByRole('main').className).toContain('[scrollbar-gutter:stable]');
+    });
+  });
+
   describe('variant', () => {
     it('pads the body by default and removes padding with "fit"', () => {
       const { rerender } = render(

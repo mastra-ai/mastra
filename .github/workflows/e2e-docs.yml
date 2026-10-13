@@ -16,7 +16,7 @@ concurrency:
 jobs:
   e2e-docs:
     name: Docs E2E tests
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 20
 
     steps:

@@ -12,8 +12,9 @@ import { RequestContext } from '../../request-context';
 import { safeClose, safeEnqueue } from '../../stream/base';
 import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
 import type { ChunkType } from '../../stream/types';
-import { ChunkFrom } from '../../stream/types';
+import { ChunkFrom, isDataChunk } from '../../stream/types';
 import { hydrateRunScopeFromInternal } from '../hydrate-run-scope';
+import { REQUEST_TOOLS_KEY, STEP_TOOLS_KEY } from '../run-scope-keys';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '../timeout';
 import type { LoopRun } from '../types';
 import { AGENTIC_EXECUTION_WORKFLOW_ID } from './agentic-execution';
@@ -79,7 +80,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             writerOptions?: { messageId?: string },
           ) => {
             const emittedMessageId = writerOptions?.messageId ?? responseMessageId;
-            if (data.type.startsWith('data-') && emittedMessageId && !data.transient) {
+            if (isDataChunk(data) && emittedMessageId && !data.transient) {
               // Persistence failures must not drop the frame from the stream —
               // delivery to the client takes priority over saving to memory.
               try {
@@ -146,7 +147,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             }
             if (r.part == null) continue;
             const part = r.part as ChunkType<OUTPUT>;
-            if (part.type.startsWith('data-')) {
+            if (isDataChunk(part)) {
               await dataChunkStreamWriter.custom(part as { type: string; data?: unknown; transient?: boolean });
             } else {
               safeEnqueue(controller, part);
@@ -157,9 +158,9 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         // Handle data-* chunks (custom data chunks from writer.custom())
         // These need to be persisted to storage, not just streamed
         // Transient chunks are streamed to the client but not saved to the DB
-        if (chunk.type.startsWith('data-')) {
+        if (isDataChunk(chunk)) {
           // Run data-* chunks through output processors before persisting
-          let processedChunk = chunk;
+          let processedChunk: ChunkType<OUTPUT> = chunk;
           if (dataChunkProcessorRunner) {
             const {
               part: processed,
@@ -192,8 +193,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
 
           // If a processor rewrote the chunk to a non-data type, skip persistence
           if (
-            typeof processedChunk.type === 'string' &&
-            processedChunk.type.startsWith('data-') &&
+            isDataChunk(processedChunk) &&
             responseMessageId &&
             !('transient' in processedChunk && processedChunk.transient)
           ) {
@@ -329,6 +329,29 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         // refcount is owned by the internal-workflow registration above —
         // no separate release needed here.
         hydrateRunScopeFromInternal(rest.mastra, runId, _internal);
+        // A scope kept alive across suspension still holds the previous request's step tools,
+        // which close over that request's requestContext. Let the tools built for this call
+        // replace the ones the previous request configured, but keep the ones a processor added
+        // or swapped in, since the suspended call may be one of them and the processors do not
+        // run again before it resumes.
+        const runScope = rest.mastra.__getRunScope(runId);
+        const previousStepTools = resumeContext ? runScope?.get(STEP_TOOLS_KEY) : undefined;
+        if (previousStepTools) {
+          const previousRequestTools = runScope!.get(REQUEST_TOOLS_KEY);
+          const stepTools = { ...previousStepTools };
+          for (const [name, tool] of Object.entries(rest.tools ?? {})) {
+            // A name the previous request configured but the step tools lack was withheld by a processor.
+            const refresh =
+              name in previousStepTools
+                ? previousStepTools[name] === previousRequestTools?.[name]
+                : !previousRequestTools || !(name in previousRequestTools);
+            if (refresh) {
+              stepTools[name] = tool;
+            }
+          }
+          runScope!.set(STEP_TOOLS_KEY, stepTools);
+        }
+        if (rest.tools) runScope?.set(REQUEST_TOOLS_KEY, rest.tools);
       }
 
       // Once the run reaches a terminal state its snapshot rows are no longer
@@ -416,20 +439,32 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           });
         }
 
-        const executionPromise = resumeContext
-          ? run.resume({
+        await resumeContext?.claim?.start?.();
+
+        const executionPromise = resumeContext?.claim?.snapshot
+          ? run.resumeClaimed({
               resumeData: resumeContext.resumeData,
               ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
               requestContext,
               actor: rest.actor,
               label: toolCallId,
+              claimedSnapshot: resumeContext.claim.snapshot,
+              onExecutionStarted: resumeContext.claim.onExecutionStarted,
             })
-          : run.start({
-              inputData: initialData,
-              ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
-              requestContext,
-              actor: rest.actor,
-            });
+          : resumeContext
+            ? run.resume({
+                resumeData: resumeContext.resumeData,
+                ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
+                requestContext,
+                actor: rest.actor,
+                label: toolCallId,
+              })
+            : run.start({
+                inputData: initialData,
+                ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
+                requestContext,
+                actor: rest.actor,
+              });
 
         let executionResult: Awaited<typeof executionPromise>;
         try {
@@ -513,6 +548,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         upstreamAbortSignal?.removeEventListener('abort', onUpstreamAbort);
         cleanupTotalTimeout();
         await stopGoalActivity({ agentId, runId, now: _internal?.now });
+        await resumeContext?.claim?.release();
         if (!keepRegisteredForResume) {
           rest.mastra?.__unregisterInternalWorkflow(agenticLoopWorkflow.id, runId);
         }

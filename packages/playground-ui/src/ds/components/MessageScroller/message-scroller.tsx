@@ -746,7 +746,7 @@ export const MessageScroller = React.forwardRef<HTMLDivElement, MessageScrollerP
       <div
         ref={mergeRefs(setRootElement, ref)}
         data-slot="message-scroller"
-        className={cn('group/message-scroller relative flex size-full min-h-0 flex-col overflow-hidden', className)}
+        className={cn('group/message-scroller relative flex size-full min-h-0 flex-col', className)}
         {...props}
       />
     );
@@ -863,7 +863,12 @@ export const MessageScrollerItem = React.forwardRef<HTMLDivElement, MessageScrol
         data-slot="message-scroller-item"
         data-message-id={messageId}
         data-scroll-anchor={scrollAnchor ? 'true' : 'false'}
-        className={cn('min-w-0 shrink-0 [contain-intrinsic-size:auto_10rem] [content-visibility:auto]', className)}
+        // content-visibility contains painting. Reserve room for a 2px outline + 2px offset,
+        // and compensate with negative margins so message alignment and spacing stay unchanged.
+        className={cn(
+          '-m-1 min-w-0 shrink-0 p-1 [contain-intrinsic-size:auto_10rem] [content-visibility:auto]',
+          className,
+        )}
         {...props}
       />
     );
@@ -897,7 +902,7 @@ export const MessageScrollerButton = React.forwardRef<HTMLButtonElement, Message
         tabIndex={active ? tabIndex : -1}
         className={cn(
           overlaySurfaceStyle,
-          'absolute inset-s-1/2 inline-flex min-h-5 min-w-7 -translate-x-1/2 items-center justify-center rounded-full text-foreground transition-[translate,scale,opacity] duration-200 hover:[--surface-tint:var(--fill-subtle)] data-[active=false]:pointer-events-none data-[active=false]:scale-95 data-[active=false]:opacity-0 data-[active=false]:duration-400 data-[active=false]:ease-[cubic-bezier(0.7,0,0.84,0)] data-[active=true]:translate-y-0 data-[active=true]:scale-100 data-[active=true]:opacity-100 data-[active=true]:ease-[cubic-bezier(0.23,1,0.32,1)] data-[direction=end]:bottom-4 data-[direction=end]:data-[active=false]:translate-y-full data-[direction=start]:top-4 data-[direction=start]:data-[active=false]:-translate-y-full rtl:translate-x-1/2 data-[direction=start]:[&_svg]:rotate-180',
+          'absolute inset-s-1/2 inline-flex min-h-5 min-w-7 -translate-x-1/2 items-center justify-center rounded-full text-foreground transition-[scale,opacity] duration-200 hover:[--surface-tint:var(--fill-subtle)] data-[active=false]:pointer-events-none data-[active=false]:scale-95 data-[active=false]:opacity-0 data-[active=false]:duration-400 data-[active=false]:ease-[cubic-bezier(0.7,0,0.84,0)] data-[active=true]:scale-100 data-[active=true]:opacity-100 data-[active=true]:ease-[cubic-bezier(0.23,1,0.32,1)] data-[direction=end]:bottom-4 data-[direction=start]:top-4 rtl:translate-x-1/2 data-[direction=start]:[&_svg]:rotate-180',
           className,
         )}
         onClick={event => {

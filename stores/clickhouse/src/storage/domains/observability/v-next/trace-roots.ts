@@ -19,7 +19,7 @@ import { TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_ROOTS_DELTA } from '.
 import { buildTraceFilterConditions, buildTraceOrderByClause } from './filters';
 import { CH_SETTINGS, rowToLightSpanRecord, rowToSpanRecord } from './helpers';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
-import { assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
+import { appendWhere, assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
 
 // ---------------------------------------------------------------------------
 // getRootSpan
@@ -132,21 +132,19 @@ async function listTraceRows<TSpan>(
   const { conditions, params } = buildTraceFilterConditions(filters, 'r');
 
   if (filters?.hasChildError != null) {
-    if (filters.hasChildError) {
-      conditions.push(`EXISTS (
-        SELECT 1 FROM ${TABLE_SPAN_EVENTS} c
-        WHERE c.traceId = r.traceId
-          AND c.parentSpanId IS NOT NULL
+    // Set-based rather than a correlated EXISTS. When other filters are set,
+    // the span scan is limited to the matching traces so span_events is read
+    // by its traceId sort-key prefix instead of in full.
+    const scope = buildTraceFilterConditions(filters, 'scope_r');
+    const traceScope = scope.conditions.length
+      ? `c.traceId IN (SELECT scope_r.traceId FROM ${TABLE_TRACE_ROOTS} scope_r WHERE ${scope.conditions.join(' AND ')})
+          AND `
+      : '';
+    conditions.push(`r.traceId ${filters.hasChildError ? 'IN' : 'NOT IN'} (
+        SELECT c.traceId FROM ${TABLE_SPAN_EVENTS} c
+        WHERE ${traceScope}c.parentSpanId IS NOT NULL
           AND c.error IS NOT NULL
       )`);
-    } else {
-      conditions.push(`NOT EXISTS (
-        SELECT 1 FROM ${TABLE_SPAN_EVENTS} c
-        WHERE c.traceId = r.traceId
-          AND c.parentSpanId IS NOT NULL
-          AND c.error IS NOT NULL
-      )`);
-    }
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -207,15 +205,30 @@ async function listTraceRows<TSpan>(
   const dataResult = await client.query({
     query: `
       SELECT ${projection.outerSelect} FROM (
+        -- Deferred join: pick the page's sort keys from a narrow sort, then
+        -- read full rows only for those keys. LIMIT 1 BY disables ClickHouse's
+        -- own lazy materialization, so sorting SELECT * directly would carry
+        -- every matching row's payload columns through the sort. The filter is
+        -- applied again on the re-read: a dedupeKey can have unmerged versions
+        -- (in different endedAt partitions) and only a matching one may win.
         SELECT ${projection.innerSelect}
         FROM ${TABLE_TRACE_ROOTS} r
-        ${whereClause}
-        ORDER BY dedupeKey
+        ${appendWhere(
+          whereClause,
+          `(r.startedAt, r.traceId, r.dedupeKey) IN (
+          SELECT startedAt, traceId, dedupeKey
+          FROM ${TABLE_TRACE_ROOTS} r
+          ${whereClause}
+          ORDER BY ${orderClause}, dedupeKey ASC
+          LIMIT 1 BY dedupeKey
+          LIMIT {limit:UInt32}
+          OFFSET {offset:UInt32}
+        )`,
+        )}
+        ORDER BY ${orderClause}, dedupeKey ASC
         LIMIT 1 BY dedupeKey
       )
-      ORDER BY ${orderClause}
-      LIMIT {limit:UInt32}
-      OFFSET {offset:UInt32}
+      ORDER BY ${orderClause}, dedupeKey ASC
     `,
     query_params: {
       ...params,
@@ -277,6 +290,10 @@ async function queryTracesAfterCursor(
   limit: number,
   cursorId: string,
 ): Promise<TraceDeltaRow[]> {
+  // trace_roots drives the scan and is narrowed to the delta keys by its full
+  // sort key, so only the rows past the cursor are read. Only the small delta
+  // slice is built into the join's hash table.
+  const deltaKeys = `SELECT startedAt, traceId, dedupeKey FROM ${TABLE_TRACE_ROOTS_DELTA} WHERE cursorId > {afterCursor:UInt64}`;
   return (await (
     await client.query({
       query: `
@@ -286,12 +303,16 @@ async function queryTracesAfterCursor(
           r.traceId AS traceId,
           r.dedupeKey AS dedupeKey,
           toString(d.cursorId) AS cursorId
-        FROM ${TABLE_TRACE_ROOTS_DELTA} d
-        INNER JOIN ${TABLE_TRACE_ROOTS} r
+        FROM ${TABLE_TRACE_ROOTS} r
+        INNER JOIN (
+          SELECT cursorId, startedAt, traceId, dedupeKey
+          FROM ${TABLE_TRACE_ROOTS_DELTA}
+          WHERE cursorId > {afterCursor:UInt64}
+        ) d
           ON r.startedAt = d.startedAt
          AND r.traceId = d.traceId
          AND r.dedupeKey = d.dedupeKey
-        ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
+        ${appendWhere(whereClause, `(r.startedAt, r.traceId, r.dedupeKey) IN (${deltaKeys})`)}
         ORDER BY d.cursorId ASC
         LIMIT {fetchLimit:UInt32}
       `,
@@ -306,21 +327,29 @@ async function queryTracesAfterCursor(
   ).json()) as TraceDeltaRow[];
 }
 
+/**
+ * Newest delta cursor whose trace root matches the filters. Without filters
+ * every delta row qualifies, so this is the stream head. With filters, the
+ * root scan is bounded below by the oldest `startedAt` still in the delta
+ * table (a 2-day TTL window) instead of reading all of trace_roots.
+ */
 async function getDeltaCursor(
   client: ClickHouseClient,
   whereClause: string,
   params: Record<string, unknown>,
 ): Promise<string> {
+  if (!whereClause) return getStreamHeadCursor(client);
+
   const rows = (await (
     await client.query({
       query: `
         SELECT toString(max(d.cursorId)) AS cursorId
         FROM ${TABLE_TRACE_ROOTS_DELTA} d
-        INNER JOIN ${TABLE_TRACE_ROOTS} r
-          ON r.startedAt = d.startedAt
-         AND r.traceId = d.traceId
-         AND r.dedupeKey = d.dedupeKey
-        ${whereClause}
+        WHERE (d.startedAt, d.traceId, d.dedupeKey) IN (
+          SELECT r.startedAt, r.traceId, r.dedupeKey
+          FROM ${TABLE_TRACE_ROOTS} r
+          ${appendWhere(whereClause, `r.startedAt >= (SELECT min(startedAt) FROM ${TABLE_TRACE_ROOTS_DELTA})`)}
+        )
       `,
       query_params: params,
       format: 'JSONEachRow',
@@ -333,15 +362,7 @@ async function getDeltaCursor(
     return cursorId;
   }
 
-  const streamRows = (await (
-    await client.query({
-      query: `SELECT toString(max(cursorId)) AS cursorId FROM ${TABLE_TRACE_ROOTS_DELTA}`,
-      format: 'JSONEachRow',
-      clickhouse_settings: CH_SETTINGS,
-    })
-  ).json()) as Array<{ cursorId?: string | null }>;
-
-  return streamRows[0]?.cursorId ?? '0';
+  return getStreamHeadCursor(client);
 }
 
 async function getStreamHeadCursor(client: ClickHouseClient): Promise<string> {

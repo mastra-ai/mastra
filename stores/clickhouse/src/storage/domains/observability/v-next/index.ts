@@ -13,6 +13,8 @@ import type { IMastraLogger } from '@mastra/core/logger';
 import * as coreStorage from '@mastra/core/storage';
 import { createStorageErrorId, ObservabilityStorage } from '@mastra/core/storage';
 import type {
+  SpanQueryResponse,
+  TrustedSpanQueryPlan,
   ObservabilityStorageStrategy,
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
@@ -177,10 +179,13 @@ import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { deltaPollingSupported } from './polling';
 import { backfillCurrentScores } from './score-current';
 import * as scoresOps from './scores';
+import * as spanQueryOps from './span-query';
 import * as traceAggregateOps from './trace-aggregate';
 import * as traceQueryOps from './trace-query';
 import * as traceRootsOps from './trace-roots';
 import * as tracingOps from './tracing';
+
+const spanQueryFeatures = typeof coreStorage.planSpanQuery === 'function' ? (['span-query'] as const) : ([] as const);
 
 function buildSignalMigrationRequiredMessage(args: {
   store: 'ClickHouse';
@@ -957,6 +962,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         'feedback',
         'trace-query-context-ids',
         'trace-aggregate',
+        ...spanQueryFeatures,
       ] as const;
     }
 
@@ -978,6 +984,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       'feedback',
       'trace-query-context-ids',
       'trace-aggregate',
+      ...spanQueryFeatures,
     ] as const;
   }
 
@@ -1116,6 +1123,28 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'LIST_TRACES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  override async querySpans(plan: TrustedSpanQueryPlan): Promise<SpanQueryResponse> {
+    try {
+      return await spanQueryOps.querySpans(this.#client, plan, this.#traceQueryTimeoutMs);
+    } catch (error) {
+      if (
+        error instanceof MastraError ||
+        error instanceof coreStorage.TraceQueryExecutionError ||
+        error instanceof coreStorage.TraceQueryCursorError ||
+        error instanceof coreStorage.TraceQueryResourceLimitError
+      )
+        throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'QUERY_SPANS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

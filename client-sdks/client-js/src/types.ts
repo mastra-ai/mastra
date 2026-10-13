@@ -127,34 +127,16 @@ export interface ClientOptions {
 
 export type AgentVersionIdentifier = { versionId: string } | { status: 'draft' | 'published' };
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export type AgentSignalActiveBehavior = 'deliver' | 'persist' | 'discard';
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export type AgentSignalIdleBehavior = 'wake' | 'persist' | 'discard';
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export type SendAgentSignalParams = GeneratedRequest<Body<'POST /agents/:agentId/signals'>>;
 
-/**
- * @experimental Agent message APIs are experimental and may change in a future release.
- */
 export type SendAgentMessageParams = GeneratedRequest<Body<'POST /agents/:agentId/send-message'>>;
 
-/**
- * @experimental Agent message APIs are experimental and may change in a future release.
- */
 export type QueueAgentMessageParams = GeneratedRequest<Body<'POST /agents/:agentId/queue-message'>>;
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export interface SubscribeAgentThreadParams {
   resourceId?: string;
   threadId: string;
@@ -165,10 +147,9 @@ export interface SubscribeAgentThreadParams {
   withInitialHistory?: boolean | { perPage?: number };
 }
 
-/** @experimental Agent thread cancellation is experimental. */
 export type AbortAgentThreadParams = GeneratedRequest<Body<'POST /agents/:agentId/threads/abort'>>;
 
-/** @experimental Cancels pending signals on the server process handling the request. */
+/** Cancels pending signals on the server process handling the request. */
 export type CancelQueuedAgentMessagesParams = GeneratedRequest<Body<'POST /agents/:agentId/threads/signals/cancel'>>;
 
 export type CancelQueuedAgentMessagesResponse = GeneratedResponse<'POST /agents/:agentId/threads/signals/cancel'>;
@@ -188,9 +169,6 @@ export type AgentSuspendedRun = ListAgentSuspendedRunsResponse['runs'][number];
 
 export type AgentSuspendedRunToolCall = AgentSuspendedRun['toolCalls'][number];
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export interface ProcessAgentThreadStreamOptions {
   /** Receives a `thread-history` chunk first when the subscription requested `withInitialHistory`. */
   onChunk: (chunk: ChunkType | ThreadHistoryChunk) => void | Promise<void>;
@@ -944,10 +922,11 @@ export interface StoredAgentToolConfig {
 /**
  * Per-MCP-client/integration tool configuration stored in agent snapshots.
  * Specifies which tools from an MCP client or integration provider are enabled and their overrides.
- * When `tools` is omitted, all tools from the source are included.
+ * An empty `tools` map (`{}`) includes all tools from the source.
+ * When `tools` is omitted, no tools are included.
  */
 export interface StoredMCPClientToolsConfig {
-  /** When omitted, all tools from the source are included. */
+  /** `{}` includes all tools from the source; when omitted, no tools are included. */
   tools?: Record<string, StoredAgentToolConfig>;
 }
 
@@ -2138,7 +2117,11 @@ export type ListDatasetExperimentResultsResponse = Omit<
   results: DatasetExperimentResult[];
 };
 
-export type DatasetExperimentResultRow = Omit<DatasetExperimentResult, 'scores'>;
+export type DatasetExperimentResultRow = DatasetExperimentResult extends infer R
+  ? R extends unknown
+    ? Omit<R, 'scores'>
+    : never
+  : never;
 
 export type RunExperimentItemResponse =
   GeneratedResponse<'POST /datasets/:datasetId/experiments/:experimentId/items/:itemId/run'>;
@@ -2496,7 +2479,7 @@ export type BuilderRegistryInstallResponse = GeneratedResponse<'POST /editor/bui
 // Wire shapes derive from the published route contracts, vocabulary from core.
 // Event-stream types can't derive this way (SSE routes carry no response
 // schema) and stay hand-written in `resources/agent-controller`.
-export type { PermissionPolicy, ToolCategory } from '@mastra/core/agent-controller';
+export type { AgentControllerThinkingLevel, PermissionPolicy, ToolCategory } from '@mastra/core/agent-controller';
 export type { TaskItemSnapshot as AgentControllerTaskSnapshot } from '@mastra/core/tools';
 
 export type AgentControllerInfo = GeneratedResponse<'GET /agent-controller'>['agentControllers'][number];

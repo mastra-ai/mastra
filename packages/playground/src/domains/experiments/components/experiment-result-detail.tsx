@@ -1,18 +1,18 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 
-import { useTraceSpanScores, TraceScoresTab } from '@mastra/playground-ui/domains/scores';
+import { TraceScoresTab } from '@mastra/playground-ui/domains/scores';
 import { SpanFeedbackTab } from '@mastra/playground-ui/domains/traces/components/span-feedback-tab';
 import { TraceFeedbackTab } from '@mastra/playground-ui/domains/traces/components/trace-feedback-tab';
-import { TraceSpanPanel } from '@mastra/playground-ui/domains/traces/components/trace-span-panel';
-import { useSpanFeedback } from '@mastra/playground-ui/domains/traces/hooks/use-span-feedback';
-import { useTraceFeedback } from '@mastra/playground-ui/domains/traces/hooks/use-trace-feedback';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { useExperimentTrace } from '@mastra/react/hooks/experiments';
+import { useTraceSpanScores } from '@mastra/react/hooks/scores';
+import { useSpanFeedback, useTraceFeedback } from '@mastra/react/hooks/traces';
 import { ExperimentResultPanel } from '@/domains/experiments/components/experiment-result-panel';
 import type { ExperimentResultPanelProps } from '@/domains/experiments/components/experiment-result-panel';
 import { ExperimentScorePanel } from '@/domains/experiments/components/experiment-score-panel';
 import { useExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
 import type { ExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
-import { useExperimentTrace } from '@/domains/experiments/hooks/use-experiment-trace';
+import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
 import { traceScoreLink } from '@/lib/app-routing';
 
 export type ExperimentResultDetailProps = Omit<
@@ -29,9 +29,10 @@ export type ExperimentResultDetailProps = Omit<
 };
 
 /**
- * Shared "result + score + trace" drawer stack used by the experiment item page
+ * Shared "result + score + trace" panel stack used by the experiment item page
  * and the review queues, so the Trace / score interactions behave identically.
- * Score and trace are sibling drawers rendered after the result so they stack on top.
+ * The result is a drawer, or an inline card with `variant="inline"`. Score and trace
+ * are sibling drawers rendered after the result so they stack on top.
  */
 export function ExperimentResultDetail({
   result,
@@ -84,19 +85,26 @@ export function ExperimentResultDetail({
     return undefined;
   };
 
-  const { data: traceData, isLoading: isTraceLoading } = useExperimentTrace(featuredTraceId);
+  const { data: traceData, isLoading: isTraceLoading } = useExperimentTrace({
+    traceId: featuredTraceId,
+    queryOptions: { enabled: !!featuredTraceId },
+  });
   const traceSpans = traceData?.spans;
   const anchorSpan = traceSpans?.find(span => !span.parentSpanId);
-  const { data: traceFeedback } = useTraceFeedback({ traceId: featuredTraceId ?? undefined, enabled: withFeedback });
+  const { data: traceFeedback } = useTraceFeedback({
+    traceId: featuredTraceId ?? undefined,
+    queryOptions: { enabled: withFeedback && !!featuredTraceId },
+  });
   const { data: spanFeedback } = useSpanFeedback({
     traceId: featuredTraceId ?? undefined,
     spanId: featuredSpanId,
-    enabled: withFeedback,
+    queryOptions: { enabled: withFeedback && !!featuredTraceId && !!featuredSpanId },
   });
   const { data: anchorSpanScores } = useTraceSpanScores({
     traceId: featuredTraceId ?? undefined,
     spanId: anchorSpan?.spanId,
     page: 0,
+    queryOptions: { enabled: !!featuredTraceId && !!anchorSpan?.spanId },
   });
 
   return (

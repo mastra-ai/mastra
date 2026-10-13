@@ -19,6 +19,9 @@ import { deepMerge } from '../../utils';
 // Constants
 // ---------------------------------------------------------------------------
 
+/** Upper bound on the startup task-adoption lookup; past it the wrapper tracks events only. */
+const ADOPT_LOOKUP_TIMEOUT_MS = 5_000;
+
 export const TERMINAL_BG_CHUNKS = new Set([
   'background-task-completed',
   'background-task-failed',
@@ -316,6 +319,8 @@ export async function runIdleLoop<
   hooks?: PostPipeHooks,
 ): Promise<TReturn> {
   const { maxIdleMs: _maxIdleMs, ...restStreamOptions } = streamOptions ?? {};
+  // Inner calls re-merge defaultOptions; force false so an inherited default cannot re-enter the wrapper.
+  (restStreamOptions as Record<string, any>).untilIdle = false;
 
   const defaultOptions = await agent.getDefaultOptions({
     requestContext: streamOptions?.requestContext,
@@ -358,6 +363,9 @@ export async function runIdleLoop<
   const runningTaskIds = new Set<string>();
   const pendingCompletions: Array<Record<string, unknown>> = [];
   const processedTerminalKeys = new Set<string>();
+  /** Tasks whose terminal bg chunk this wrapper already saw — the startup
+   * adoption lookup must not re-add them from a stale storage snapshot. */
+  const settledTaskIds = new Set<string>();
   let isProcessing = false;
   let closed = false;
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -533,6 +541,16 @@ export async function runIdleLoop<
 
         const taskId = (chunk.payload as { taskId?: string } | undefined)?.taskId;
 
+        // An unscoped wrapper (no thread or resource id) subscribes with
+        // wildcard filters, so it would receive every resource's task events
+        // for this agent — terminal payloads include the task result. Same
+        // semantics as the adoption gate below: unscoped streams own nothing
+        // cross-resource, so only deliver events for tasks this wrapper
+        // observed itself.
+        if (!threadId && !resourceId && taskId && !runningTaskIds.has(taskId) && !settledTaskIds.has(taskId)) {
+          continue;
+        }
+
         const terminalKey = taskId && TERMINAL_BG_CHUNKS.has(chunk.type) ? `${taskId}:${chunk.type}` : undefined;
         if (terminalKey && processedTerminalKeys.has(terminalKey)) {
           continue;
@@ -550,6 +568,7 @@ export async function runIdleLoop<
         if (chunk.type === 'background-task-running' || chunk.type === 'background-task-resumed') {
           runningTaskIds.add(taskId);
         } else if (TERMINAL_BG_CHUNKS.has(chunk.type)) {
+          settledTaskIds.add(taskId);
           runningTaskIds.delete(taskId);
           pendingCompletions.push(chunk);
           if (runningTaskIds.size === 0) void processIfIdle();
@@ -565,6 +584,46 @@ export async function runIdleLoop<
   // --- Initial turn ---
   isProcessing = true;
   clearIdleTimer();
+
+  // Adopt tasks started by a prior wrapper on this scope (#26841): a new
+  // untilIdle stream aborts the previous wrapper via acquireStreamSlot, and
+  // this wrapper's bg subscription (`includeExisting: false`) never saw their
+  // 'running' events. Without this lookup the wrapper closes after its first
+  // turn and those tasks' completions wake nobody. Runs concurrently with the
+  // first turn (isProcessing blocks continuations and tryClose until both
+  // settle); `settledTaskIds` keeps a task whose terminal chunk already
+  // arrived from being re-added off a stale storage snapshot.
+  const bgManager = deps.bgManager;
+  // The storage contract defines no timeout for listTasks; a hung adapter
+  // must not hold isProcessing forever (blocking continuations and the idle
+  // timer). After the bound, continue with event-only tracking and ignore a
+  // late lookup result.
+  let adoptionAbandoned = false;
+  const adoptPriorTasks = (async () => {
+    try {
+      // Adoption requires an authorized scope. Task filters drop undefined
+      // keys, so without a thread or resource id the lookup would return
+      // EVERY running/pending task for the agent — adopting them would let
+      // another resource's task completion drive a continuation on this
+      // stream and disclose its result. An unscoped stream therefore adopts
+      // nothing: it only tracks tasks whose events it observes itself.
+      if (!threadId && !resourceId) return;
+      const { tasks } = await bgManager.listTasks({
+        agentId: agent.id,
+        threadId,
+        resourceId,
+        status: ['running', 'pending'],
+      });
+      if (adoptionAbandoned) return;
+      for (const task of tasks) {
+        if (!settledTaskIds.has(task.id)) runningTaskIds.add(task.id);
+      }
+    } catch {
+      // Best-effort: on a failed lookup the wrapper behaves as before the
+      // adoption pass (tracks only tasks whose events it sees itself).
+    }
+  })();
+
   let first: TFirstResult;
   try {
     first = await firstTurn(initialStreamOpts);
@@ -589,6 +648,21 @@ export async function runIdleLoop<
         // already closed
       }
     }
+    // The adoption lookup must land before the first idle evaluation, or
+    // tryClose below could close the wrapper while an adopted task still
+    // runs — but the wait is bounded so a hung storage adapter cannot block
+    // the wrapper forever.
+    await Promise.race([
+      adoptPriorTasks,
+      new Promise<void>(resolve => {
+        const timer = setTimeout(() => {
+          adoptionAbandoned = true;
+          resolve();
+        }, ADOPT_LOOKUP_TIMEOUT_MS);
+        (timer as { unref?: () => void }).unref?.();
+        void adoptPriorTasks.finally(() => clearTimeout(timer));
+      }),
+    ]);
     isProcessing = false;
     if (runningTaskIds.size === 0 && pendingCompletions.length > 0) {
       void processIfIdle();

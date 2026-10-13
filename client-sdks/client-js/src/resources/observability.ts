@@ -1,5 +1,11 @@
 import type { SpanType } from '@mastra/core/observability';
-import type { QueryThreadsInput, QueryThreadsResult, TraceQueryPredicate } from '@mastra/core/storage';
+import type {
+  QueryThreadsInput,
+  QueryThreadsResult,
+  SpanQueryRequest,
+  SpanQueryResponse,
+  TraceQueryPredicate,
+} from '@mastra/core/storage';
 import type { ClientOptions, GetObservabilityCapabilitiesResponse, ListFeedbackResponse } from '../types';
 import { toQueryParams } from '../utils';
 import { BaseResource } from './base';
@@ -181,6 +187,8 @@ export type QueryTracesUngroupedInput = QueryTracesKeysetInput | QueryTracesPagi
 export type QueryTracesInput = QueryTracesUngroupedInput | QueryTracesGroupedInput;
 export type QueryTraceThreadsInput = QueryThreadsInput;
 export type QueryTraceThreadsResult = QueryThreadsResult;
+export type QuerySpansInput = SpanQueryRequest;
+export type QuerySpansResult = SpanQueryResponse;
 
 // ============================================================================
 // Observability Resource
@@ -344,6 +352,16 @@ export class Observability extends BaseResource {
    */
   queryTraceThreads(params: QueryTraceThreadsInput): Promise<QueryTraceThreadsResult> {
     return this.request('/observability/threads/query', { method: 'POST', body: params });
+  }
+
+  /**
+   * Queries completed spans using a span predicate, returning one row per matching span.
+   *
+   * @param params - Span query, including its required time range
+   * @returns Matching span rows with input/output previews and model cost
+   */
+  querySpans(params: QuerySpansInput): Promise<QuerySpansResult> {
+    return this.request('/observability/spans/query', { method: 'POST', body: params });
   }
 
   /**

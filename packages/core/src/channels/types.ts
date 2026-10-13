@@ -938,9 +938,21 @@ export interface ChannelProvider {
 
   /**
    * List active installations for this platform.
-   * Returns public info only (no secrets).
+   * Returns public info only (no secrets). Must be a pure read — any state
+   * repair belongs in {@link reconcileInstallation}.
    */
   listInstallations?(): Promise<ChannelInstallationInfo[]>;
+
+  /**
+   * Reconcile an agent's installation with external platform state — e.g.
+   * confirm a pending install whose connect flow completed out-of-band, where
+   * the platform offers no callback. May persist changes, but only to this
+   * agent's installation: the server exposes it behind write authorization for
+   * that agent. Returns the (possibly updated) installation's public info, or
+   * `null` when the agent has no installation. Omit on platforms whose
+   * connect flows confirm synchronously or via webhook.
+   */
+  reconcileInstallation?(agentId: string): Promise<ChannelInstallationInfo | null>;
 }
 
 /**

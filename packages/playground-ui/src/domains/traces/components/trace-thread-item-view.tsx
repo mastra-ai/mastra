@@ -1,10 +1,10 @@
+import { useTraceSpans } from '@mastra/react/hooks/traces';
 import { ListTreeIcon } from 'lucide-react';
 import { formatTraceThreadMessages } from './format-trace-thread-messages';
 import { TraceMessagesSkeleton } from './trace-messages-skeleton';
 import { ToolCallProvider } from '@/domains/chat/context/tool-call-context';
 import { MessageRow } from '@/domains/chat/messages/message-row';
 import { TracesErrorContent } from '@/domains/traces/components/traces-error-content';
-import { useTraceSpans } from '@/domains/traces/hooks/use-trace-spans';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/utils/cn';
@@ -19,7 +19,11 @@ export interface TraceThreadItemViewProps {
 const noop = () => {};
 
 export function TraceThreadItemView({ traceId, onHighlightSpans, className }: TraceThreadItemViewProps) {
-  const { data, isLoading, error } = useTraceSpans(traceId, { passive: true });
+  const { data, isLoading, error } = useTraceSpans({
+    traceId: traceId,
+    passive: true,
+    queryOptions: { enabled: !!traceId },
+  });
 
   if (isLoading) return <TraceMessagesSkeleton className={className} />;
 

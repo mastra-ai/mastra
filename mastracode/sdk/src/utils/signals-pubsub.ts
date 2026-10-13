@@ -10,8 +10,10 @@ const THREAD_STREAM_PREFIX = 'agent.thread-stream.';
 const THREAD_KEY_SEPARATOR = '\0';
 const THREAD_CLAIM_LEASE_PREFIX = 'thread-claim:';
 const NOTIFICATION_DISPATCH_LEASE_PREFIX = 'notification-dispatch:';
+const LEASE_SOCKET_NAME = '.leases.sock';
 const OWNER_DISCOVERY_TOPIC = 'agent.thread-owner-discovery';
 const PEER_DISCOVERY_TOPIC = 'agent.thread-peer-discovery';
+const RESERVED_SOCKET_NAME = /^agent_thread-(?:peer|owner)-discovery(?:_|$)/i;
 const MAX_PATH_SEGMENT_LENGTH = 128;
 const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const DISCOVERY_REPLY_TOPIC = new RegExp(`^agent\\.thread-(?:peer|owner)-discovery\\.${UUID_PATTERN}$`, 'i');
@@ -106,9 +108,16 @@ function isPeerDiscoveryTopic(topic: string): boolean {
   return topic === PEER_DISCOVERY_TOPIC || topic.startsWith(`${PEER_DISCOVERY_TOPIC}.`);
 }
 
-/** Whether a name can be a file in a directory: no separators or control characters, not `.`/`..`. */
+/**
+ * Whether a threadId can be the base name of a thread's socket file: no
+ * separators or control characters, not `.`/`..`, and not a name another
+ * socket in the same directory already uses (the lease socket, and the
+ * sanitized peer/owner discovery topics and their reply topics), compared
+ * case-insensitively because default macOS and Windows filesystems are.
+ */
 function isSafeFileName(value: string): boolean {
-  if (!value || value === '.' || value === '..') return false;
+  if (!value || value === '.' || value === '..' || `${value}.sock`.toLowerCase() === LEASE_SOCKET_NAME) return false;
+  if (RESERVED_SOCKET_NAME.test(value)) return false;
   for (const char of value) {
     const code = char.charCodeAt(0);
     if (char === '/' || char === '\\' || code < 0x20 || code === 0x7f) return false;
@@ -372,7 +381,7 @@ class SignalsPubSub extends PubSub {
   #leasesFor(resourceId: string): UnixSocketPubSub {
     let socket = this.#leaseSockets.get(resourceId);
     if (!socket) {
-      socket = new UnixSocketPubSub(join(this.#rootDir, resourceId, '.leases.sock'));
+      socket = new UnixSocketPubSub(join(this.#rootDir, resourceId, LEASE_SOCKET_NAME));
       this.#leaseSockets.set(resourceId, socket);
     }
     return socket;
@@ -449,15 +458,10 @@ class SignalsPubSub extends PubSub {
 
   async #socketPath(topic: string, scope: string): Promise<string> {
     let key = topicKey(topic);
-    // With shared discovery, another project's threadIds reach this process
-    // through discovery; a threadId names a file in that resource's directory,
-    // so never let it reach outside it.
-    if (
-      this.#sharedPeerDiscovery &&
-      scope !== this.#resourceId &&
-      decodeThreadTopic(topic) !== undefined &&
-      !isSafeFileName(key)
-    ) {
+    // A threadId names a file in its resource's directory, so never let it
+    // reach outside that directory, regardless of who owns the thread or
+    // whether cross-project discovery is enabled.
+    if (decodeThreadTopic(topic) !== undefined && !isSafeFileName(key)) {
       throw new Error('Cannot route an agent thread topic whose threadId is not a safe file name');
     }
     const dir = join(this.#rootDir, scope);

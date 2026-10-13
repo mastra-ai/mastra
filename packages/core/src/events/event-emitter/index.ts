@@ -159,9 +159,13 @@ export class EventEmitterPubSub extends PubSub implements LeaseProvider {
       this.subscribeWithGroup(topic, cb, options.group);
     } else {
       const wrapper = (event: Event) => {
-        void Promise.resolve(cb(event, NOOP_ACK, NOOP_ACK)).catch(err => {
+        try {
+          void Promise.resolve(cb(event, NOOP_ACK, NOOP_ACK)).catch(err => {
+            this.logSubscriberError(topic, err);
+          });
+        } catch (err) {
           this.logSubscriberError(topic, err);
-        });
+        }
       };
       let byCb = this.fanoutWrappers.get(topic);
       if (!byCb) {
@@ -367,9 +371,13 @@ export class EventEmitterPubSub extends PubSub implements LeaseProvider {
         this.logBufferError(topic, err, { phase: 'cb' });
       });
     } else {
-      void Promise.resolve(member(eventWithAttempt, ack, nack)).catch(err => {
+      try {
+        void Promise.resolve(member(eventWithAttempt, ack, nack)).catch(err => {
+          this.logSubscriberError(topic, err);
+        });
+      } catch (err) {
         this.logSubscriberError(topic, err);
-      });
+      }
     }
   }
 

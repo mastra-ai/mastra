@@ -96,12 +96,27 @@ describe('board relevance', () => {
   });
 
   it('matches any selected relevance type for the selected teammate', () => {
-    expect(workItemMatchesRelevance(item, activityPage, 'github:octocat', new Set(['authored']))).toBe(true);
-    expect(workItemMatchesRelevance(item, activityPage, 'github:octocat', new Set(['assigned']))).toBe(false);
+    expect(workItemMatchesRelevance(item, activityPage, new Set(['github:octocat']), new Set(['authored']))).toBe(true);
+    expect(workItemMatchesRelevance(item, activityPage, new Set(['github:octocat']), new Set(['assigned']))).toBe(
+      false,
+    );
     expect(
-      workItemMatchesRelevance(item, activityPage, 'github:monalisa', new Set(['authored', 'review-requested'])),
+      workItemMatchesRelevance(
+        item,
+        activityPage,
+        new Set(['github:monalisa']),
+        new Set(['authored', 'review-requested']),
+      ),
     ).toBe(true);
-    expect(workItemMatchesRelevance(item, activityPage, undefined, new Set())).toBe(true);
+    expect(workItemMatchesRelevance(item, activityPage, new Set(), new Set())).toBe(true);
+  });
+
+  it('matches a person through any of their identities', () => {
+    const factoryAndGithub = new Set(['factory:user-octocat', 'github:octocat']);
+    expect(workItemMatchesRelevance(item, activityPage, factoryAndGithub, new Set(['authored']))).toBe(true);
+    expect(workItemMatchesRelevance(item, activityPage, new Set(['factory:user-octocat']), new Set(['authored']))).toBe(
+      false,
+    );
   });
 
   it('applies URL-restored relevance types to distinct review cards', () => {
@@ -110,8 +125,8 @@ describe('board relevance', () => {
       'review',
     );
     const assigned = { ...item, metadata: { ...item.metadata, author: 'another-user', assignees: ['octocat'] } };
-    expect(workItemMatchesRelevance(item, activityPage, authored.participantId, authored.relevanceTypes)).toBe(true);
-    expect(workItemMatchesRelevance(assigned, activityPage, authored.participantId, authored.relevanceTypes)).toBe(
+    expect(workItemMatchesRelevance(item, activityPage, authored.participantIds, authored.relevanceTypes)).toBe(true);
+    expect(workItemMatchesRelevance(assigned, activityPage, authored.participantIds, authored.relevanceTypes)).toBe(
       false,
     );
 
@@ -119,13 +134,13 @@ describe('board relevance', () => {
       new URLSearchParams('teammate=github%3Aoctocat&relevance=authored%2Cassigned'),
       'review',
     );
-    expect(workItemMatchesRelevance(item, activityPage, either.participantId, either.relevanceTypes)).toBe(true);
-    expect(workItemMatchesRelevance(assigned, activityPage, either.participantId, either.relevanceTypes)).toBe(true);
+    expect(workItemMatchesRelevance(item, activityPage, either.participantIds, either.relevanceTypes)).toBe(true);
+    expect(workItemMatchesRelevance(assigned, activityPage, either.participantIds, either.relevanceTypes)).toBe(true);
     expect(
       workItemMatchesRelevance(
         { ...assigned, metadata: { author: 'another-user', assignees: ['hubot'] } },
         activityPage,
-        either.participantId,
+        either.participantIds,
         either.relevanceTypes,
       ),
     ).toBe(false);
@@ -208,15 +223,15 @@ describe('board relevance', () => {
       sourceId: '10001',
     });
 
-    expect(candidateMatchesRelevance(githubIssue, 'github:hubot', new Set(['assigned']))).toBe(true);
-    expect(candidateMatchesRelevance(githubIssue, 'github:monalisa', new Set(['assigned']))).toBe(true);
-    expect(candidateMatchesRelevance(githubPr, 'github:monalisa', new Set(['review-requested']))).toBe(true);
-    expect(candidateMatchesRelevance(gitlab, 'gitlab:ada lovelace', new Set(['authored']))).toBe(true);
-    expect(candidateMatchesRelevance(gitlab, 'gitlab:katherine johnson', new Set(['assigned']))).toBe(true);
-    expect(candidateMatchesRelevance(linear, 'linear:ada lovelace', new Set(['authored']))).toBe(true);
-    expect(candidateMatchesRelevance(linear, 'linear:grace hopper', new Set(['assigned']))).toBe(true);
-    expect(candidateMatchesRelevance(jira, 'jira:ada lovelace', new Set(['authored']))).toBe(true);
-    expect(candidateMatchesRelevance(jira, 'jira:grace hopper', new Set(['assigned']))).toBe(true);
+    expect(candidateMatchesRelevance(githubIssue, new Set(['github:hubot']), new Set(['assigned']))).toBe(true);
+    expect(candidateMatchesRelevance(githubIssue, new Set(['github:monalisa']), new Set(['assigned']))).toBe(true);
+    expect(candidateMatchesRelevance(githubPr, new Set(['github:monalisa']), new Set(['review-requested']))).toBe(true);
+    expect(candidateMatchesRelevance(gitlab, new Set(['gitlab:ada lovelace']), new Set(['authored']))).toBe(true);
+    expect(candidateMatchesRelevance(gitlab, new Set(['gitlab:katherine johnson']), new Set(['assigned']))).toBe(true);
+    expect(candidateMatchesRelevance(linear, new Set(['linear:ada lovelace']), new Set(['authored']))).toBe(true);
+    expect(candidateMatchesRelevance(linear, new Set(['linear:grace hopper']), new Set(['assigned']))).toBe(true);
+    expect(candidateMatchesRelevance(jira, new Set(['jira:ada lovelace']), new Set(['authored']))).toBe(true);
+    expect(candidateMatchesRelevance(jira, new Set(['jira:grace hopper']), new Set(['assigned']))).toBe(true);
 
     const incidentio = incidentioCandidate({
       id: 'incidentio:follow-up:01HFOLLOWUP',
@@ -234,8 +249,12 @@ describe('board relevance', () => {
       updatedAt: '2026-08-01T09:00:00.000Z',
       sourceId: 'incidentio:follow-ups',
     });
-    expect(candidateMatchesRelevance(incidentio, 'incidentio:ada lovelace', new Set(['authored']))).toBe(true);
-    expect(candidateMatchesRelevance(incidentio, 'incidentio:grace hopper', new Set(['assigned']))).toBe(true);
+    expect(candidateMatchesRelevance(incidentio, new Set(['incidentio:ada lovelace']), new Set(['authored']))).toBe(
+      true,
+    );
+    expect(candidateMatchesRelevance(incidentio, new Set(['incidentio:grace hopper']), new Set(['assigned']))).toBe(
+      true,
+    );
   });
 
   it('builds a named teammate list from auth, audit, and provider metadata without raw Factory ids', () => {

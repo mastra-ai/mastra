@@ -3,12 +3,20 @@
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
+import { useScoresByExperimentId } from '@mastra/react/hooks/datasets';
+import { useExperimentsItemUsage } from '@mastra/react/hooks/experiments';
 import { useMemo, useCallback } from 'react';
 
 import { useExperimentItemPanel } from '../context/experiment-item-panel-context';
+import { getOptionalResultColumns } from '../utils/result-output';
 import { ExperimentResultsList } from './experiment-results-list';
 import type { ExperimentResultsSortKey } from './experiment-results-list';
-import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
+
+// An active run with no results yet would otherwise read the same as a finished empty run.
+const emptyMessageByStatus: Record<string, string> = {
+  pending: 'Run queued — waiting to start…',
+  running: 'Run in progress — results appear as items complete',
+};
 
 export type ExperimentResultsSectionProps = {
   experimentId: string;
@@ -20,8 +28,11 @@ export type ExperimentResultsSectionProps = {
   hasNextPage?: boolean;
   selectedIds: Set<string>;
   onToggleSelect: (resultId: string) => void;
+  onToggleSelectAll: () => void;
   sort?: ListSort<ExperimentResultsSortKey>;
   onSortChange?: (direction: 'asc' | 'desc', key: ExperimentResultsSortKey) => void;
+  /** Fetches per-item usage and shows the Cost and Tokens columns. */
+  supportsMetrics?: boolean;
 };
 
 /**
@@ -40,8 +51,10 @@ export function ExperimentResultsSection({
   hasNextPage,
   selectedIds,
   onToggleSelect,
+  onToggleSelectAll,
   sort,
   onSortChange,
+  supportsMetrics = false,
 }: ExperimentResultsSectionProps) {
   const { currentItemId, openItem, close } = useExperimentItemPanel();
 
@@ -51,7 +64,29 @@ export function ExperimentResultsSection({
     [results, currentItemId],
   );
 
-  const { data: scoresByExperimentId } = useScoresByExperimentId(experimentId, experimentStatus);
+  const { data: scoresByExperimentId } = useScoresByExperimentId({
+    experimentId: experimentId,
+    experimentStatus: experimentStatus,
+    queryOptions: { enabled: Boolean(experimentId) },
+  });
+
+  const experimentRefs = useMemo(
+    () => [{ id: experimentId, status: experimentStatus }],
+    [experimentId, experimentStatus],
+  );
+  const { data: usageById } = useExperimentsItemUsage({ experiments: experimentRefs, supportsMetrics });
+  const usageByTraceId = usageById[experimentId]?.traces;
+
+  const rows = useMemo(
+    () =>
+      usageByTraceId
+        ? results.map(result => ({
+            ...result,
+            usage: result.traceId ? usageByTraceId[result.traceId] : undefined,
+          }))
+        : results,
+    [results, usageByTraceId],
+  );
 
   const scorerIds = useMemo(() => {
     if (!scoresByExperimentId) return [];
@@ -80,19 +115,26 @@ export function ExperimentResultsSection({
   const resultsListColumns = useMemo(
     () => [
       { name: 'itemId', label: 'Item ID', size: 'auto' },
-      { name: 'status', label: 'Status', size: 'auto' },
       { name: 'input', label: 'Input', size: '1fr' },
+      ...getOptionalResultColumns(results),
       { name: 'tags', label: 'Tags', size: 'auto' },
       { name: 'startedAt', label: 'Created', size: 'auto' },
+      ...(supportsMetrics
+        ? [
+            { name: 'cost', label: 'Cost', size: 'auto' },
+            { name: 'tokens', label: 'Tokens', size: 'auto' },
+          ]
+        : []),
+      { name: 'duration', label: 'Duration', size: 'auto' },
       ...scorerIds.map(id => ({ name: id, label: id, size: 'auto' })),
     ],
-    [scorerIds],
+    [results, scorerIds, supportsMetrics],
   );
 
   return (
     <div className="h-full min-h-0 min-w-0 overflow-y-auto">
       <ExperimentResultsList
-        results={results}
+        results={rows}
         isLoading={isLoading}
         featuredResultId={featuredResultId}
         onResultClick={handleResultClick}
@@ -102,8 +144,10 @@ export function ExperimentResultsSection({
         setEndOfListElement={setEndOfListElement}
         isFetchingNextPage={isFetchingNextPage}
         hasNextPage={hasNextPage}
+        emptyMessage={emptyMessageByStatus[experimentStatus ?? ''] ?? 'No results yet'}
         selectedIds={selectedIds}
         onToggleSelect={onToggleSelect}
+        onToggleSelectAll={onToggleSelectAll}
         sort={sort}
         onSortChange={onSortChange}
       />

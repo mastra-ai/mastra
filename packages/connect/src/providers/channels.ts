@@ -9,7 +9,17 @@ import { MastraConnectError } from '../errors.js';
 import type { ChannelProviderRegistration } from './channel-provider.js';
 
 function credentialToken(credential: ConnectionCredential): string {
-  return credential.type === 'oauth2' ? credential.accessToken : credential.apiKey;
+  switch (credential.type) {
+    case 'oauth2':
+      return credential.accessToken;
+    case 'two_step':
+      // TWO_STEP credentials (e.g. Slack app-configuration tokens) carry the
+      // rotating access token under `token`; the vendor owns the refresh
+      // cycle and never exposes the refresh token.
+      return credential.token;
+    default:
+      return credential.apiKey;
+  }
 }
 
 /**
@@ -25,7 +35,9 @@ function credentialToken(credential: ConnectionCredential): string {
  *   is a foot-gun (mismatched OAuth redirect URIs, dropped webhook deliveries).
  *   `encryptionKey` is a process-wide at-rest secret sourced from
  *   `MASTRA_ENCRYPTION_KEY`; letting `providerOptions` override it per
- *   integration would fragment the encryption boundary.
+ *   integration would fragment the encryption boundary. Teams enforces the
+ *   env var at wrapper time so its persistent install store can never
+ *   silently fall back to plaintext.
  *
  * Anything on this list is stripped with a warning; the rest of
  * `providerOptions` (handlers, streaming, commands, handlers, threadContext,
@@ -34,16 +46,19 @@ function credentialToken(credential: ConnectionCredential): string {
 const SLACK_RESERVED_KEYS = ['baseUrl', 'refreshToken', 'token', 'tokenResolver', 'encryptionKey'] as const;
 const TELEGRAM_RESERVED_KEYS = ['baseUrl', 'apiBaseUrl', 'botToken', 'tokenResolver', 'encryptionKey'] as const;
 const DISCORD_RESERVED_KEYS = ['baseUrl', 'encryptionKey'] as const;
+const TEAMS_RESERVED_KEYS = ['baseUrl', 'appId', 'appPassword', 'tokenResolver', 'encryptionKey'] as const;
 
 /** Reserved (credential + framework-managed) `providerOptions` keys per integration. */
 export type SlackReservedProviderOption = (typeof SLACK_RESERVED_KEYS)[number];
 export type TelegramReservedProviderOption = (typeof TELEGRAM_RESERVED_KEYS)[number];
 export type DiscordReservedProviderOption = (typeof DISCORD_RESERVED_KEYS)[number];
+export type TeamsReservedProviderOption = (typeof TEAMS_RESERVED_KEYS)[number];
 
 const RESERVED_OPTION_KEYS: Record<string, readonly string[]> = {
-  slack: SLACK_RESERVED_KEYS,
+  'slack-channels': SLACK_RESERVED_KEYS,
   telegram: TELEGRAM_RESERVED_KEYS,
   discord: DISCORD_RESERVED_KEYS,
+  'microsoft-teams': TEAMS_RESERVED_KEYS,
 };
 
 function stripReservedOptions<T extends Record<string, unknown> | undefined>(integrationId: string, options: T): T {
@@ -70,17 +85,26 @@ function stripReservedOptions<T extends Record<string, unknown> | undefined>(int
 }
 
 /**
- * Slack: wraps `@mastra/slack`'s `SlackProvider`. The platform's credential
- * vendor (Nango) owns the Slack App Configuration token refresh cycle, so the
- * provider is constructed with a `tokenResolver` that fetches a fresh access
- * token from the platform before each manifest API call. `SlackProvider`
- * never calls `tooling.tokens.rotate` in this mode — rotating the platform's
- * single-use refresh token locally would burn the vendor's stored copy and
- * permanently break the connection. The provider still handles per-agent app
- * minting via the manifest API, OAuth install flow, and webhook signature
- * verification (the per-app signing secret is minted at install time via the
- * manifest API and stored on `ChannelsStorage`, not sourced from
- * `providerOptions`).
+ * Slack: wraps `@mastra/slack`'s `SlackProvider`, matched to the platform's
+ * `slack-channels` integration — the platform-catalog rename over Nango's
+ * upstream `slack-app-configuration` provider. `slack-channels` serves a
+ * TWO_STEP credential carrying a Slack App Configuration token (the
+ * platform exposes it as `{ type: 'two_step' }` with the rotating config
+ * token under `token`), so the provider is constructed with a
+ * `tokenResolver` that fetches a fresh token from the platform before each
+ * manifest API call. `SlackProvider` never calls `tooling.tokens.rotate` in
+ * this mode — rotating the platform's single-use refresh token locally
+ * would burn the vendor's stored copy and permanently break the
+ * connection. The provider still handles per-agent app minting via the
+ * manifest API, OAuth install flow, and webhook signature verification
+ * (the per-app signing secret is minted at install time via the manifest
+ * API and stored on `ChannelsStorage`, not sourced from `providerOptions`).
+ *
+ * The OAuth-based `slack` integration is deliberately not channel-capable:
+ * its bot token is scoped to a single installed workspace and cannot mint
+ * per-agent apps, which is the whole point of the channel. The `slack`
+ * integration continues to back the generated Slack **tools**
+ * (`providers/slack/`) from its OAuth bot credential.
  *
  * `providerOptions` is spread into the `SlackProvider` constructor after
  * `tokenResolver`; reserved fields (`baseUrl`, `refreshToken`, `token`,
@@ -90,12 +114,12 @@ function stripReservedOptions<T extends Record<string, unknown> | undefined>(int
  * See `@mastra/slack`'s `SlackProviderConfig` for the full option surface.
  */
 const slackChannel: ChannelProviderRegistration = {
-  integrationId: 'slack',
+  integrationId: 'slack-channels',
   async create(options, runtime) {
     const mod = (await import('@mastra/slack')) as {
       SlackProvider: new (config: Record<string, unknown>) => ChannelProvider;
     };
-    const safeOptions = stripReservedOptions('slack', options);
+    const safeOptions = stripReservedOptions('slack-channels', options);
     // The resolver reads the *current* connection through the runtime on
     // every call, so a connection swapped on the platform takes effect on the
     // next manifest operation — no `sync()` needed.
@@ -254,4 +278,88 @@ const discordChannel: ChannelProviderRegistration<DiscordProviderOptions> = {
   },
 };
 
-export const CHANNELS: readonly ChannelProviderRegistration[] = [slackChannel, telegramChannel, discordChannel];
+/**
+ * Microsoft Teams: wraps `@mastra/teams`'s `TeamsProvider` in delegated mode.
+ * Teams provisioning spans two token audiences, so unlike the Slack/Telegram
+ * resolvers this one is scope-aware:
+ *
+ * - **Microsoft Graph** (`TEAMS_GRAPH_SCOPE`): resolved from the connection's
+ *   oauth2 credential. The platform's credential vendor (Nango) owns the
+ *   refresh cycle; each `getCredential()` call may return a newer token.
+ * - **Teams Developer Portal** (`TEAMS_DEV_PORTAL_SCOPE`): resolved from the
+ *   credential's `secondaryAccessTokens.devPortalAccessToken` — the secondary
+ *   token Nango's `microsoft-teams` provider mints when the integration
+ *   requests the `dev.teams.microsoft.com/AppDefinitions.ReadWrite` scope,
+ *   served by the platform alongside the primary Graph token on the same
+ *   credentials response (a single `getCredential()` call triggers the
+ *   vendor refresh cycle that re-mints both). Connections whose integration
+ *   doesn't request that scope get an actionable error instead of a Dev
+ *   Portal 401.
+ *
+ * The manager credential is only used at provisioning time — each provisioned
+ * bot authenticates with its own client secret from the provider's install
+ * store, so the message path never round-trips to the platform.
+ *
+ * Reserved `providerOptions` fields (`baseUrl`, `appId`, `appPassword`,
+ * `tokenResolver`, `encryptionKey`) are rejected at the type level and
+ * stripped at runtime. Non-reserved provider config (`appType`, `streaming`,
+ * `typingStatus`, handlers, etc.) is forwarded unchanged. See
+ * `@mastra/teams`'s `TeamsProviderConfig` for the full option surface.
+ */
+const teamsChannel: ChannelProviderRegistration = {
+  integrationId: 'microsoft-teams',
+  async create(options, runtime) {
+    const mod = (await import('@mastra/teams')) as {
+      TeamsProvider: new (config: Record<string, unknown>) => ChannelProvider;
+      TEAMS_DEV_PORTAL_SCOPE: string;
+    };
+    // Defense-in-depth around Teams' persistent install store: it holds the
+    // per-agent bot `appPassword` at rest, so a missing encryption key would
+    // silently downgrade delegated provisioning to plaintext persistence.
+    // `encryptionKey` is stripped from `providerOptions` (reserved) so the
+    // key can only come from `MASTRA_ENCRYPTION_KEY`. Fail fast at wrapper
+    // time if it is not set — clearer than watching a provisioning call
+    // throw deep inside `@mastra/teams`.
+    if (!process.env.MASTRA_ENCRYPTION_KEY) {
+      throw new MastraConnectError(
+        'invalid_options',
+        'Microsoft Teams channel: MASTRA_ENCRYPTION_KEY is not set. ' +
+          'The Teams install store persists per-agent bot secrets and requires an at-rest ' +
+          'encryption key (a 32-byte value, base64-encoded).',
+      );
+    }
+    const safeOptions = stripReservedOptions('microsoft-teams', options);
+    // Mirrors the Slack/Telegram pattern: fetch the current credential on
+    // every call, let the platform's vendor own rotation, extract the token
+    // the provider asked for. Unlike Slack/Telegram, Teams provisioning
+    // spans two token audiences (Graph + Dev Portal), so the resolver is
+    // scope-aware — a single `getCredential()` call triggers the vendor's
+    // refresh cycle that re-mints the secondary Dev Portal token alongside
+    // the primary Graph token and serves both on the same response.
+    const tokenResolver = async (scope: string | string[]): Promise<string> => {
+      const fresh = await runtime.getCredential();
+      const scopes = Array.isArray(scope) ? scope : [scope];
+      if (!scopes.includes(mod.TEAMS_DEV_PORTAL_SCOPE)) {
+        return credentialToken(fresh);
+      }
+      const token =
+        fresh.type === 'oauth2' ? fresh.secondaryAccessTokens?.devPortalAccessToken?.accessToken : undefined;
+      if (!token) {
+        throw new MastraConnectError(
+          'no_active_connection',
+          `Teams connection ${runtime.getConnectionId()} has no Dev Portal token on its credential. ` +
+            `Reconnect with an integration that requests the ${mod.TEAMS_DEV_PORTAL_SCOPE} scope.`,
+        );
+      }
+      return token;
+    };
+    return { provider: new mod.TeamsProvider({ tokenResolver, ...(safeOptions ?? {}) }) };
+  },
+};
+
+export const CHANNELS: readonly ChannelProviderRegistration[] = [
+  slackChannel,
+  telegramChannel,
+  discordChannel,
+  teamsChannel,
+];
