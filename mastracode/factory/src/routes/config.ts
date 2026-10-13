@@ -289,8 +289,6 @@ function parseCustomProviderBody(body: unknown): CustomProviderSetting | { error
   return { name, url, apiKey, models };
 }
 
-// ── Available models ───────────────────────────────────────────────────────
-
 /**
  * Providers whose credentials can only come from the server process (Amazon
  * Bedrock authenticates through the AWS credential chain). In tenant mode they
@@ -386,8 +384,6 @@ function canUseModelProvider(access: ProviderAccess, provider: string): boolean 
   return Boolean(access[provider]);
 }
 
-// ── Default model ──────────────────────────────────────────────────────────
-
 /** Per-user default model context for the current request. */
 export interface ModelDefaultsContext {
   storage: ModelDefaultsStorage;
@@ -429,7 +425,6 @@ async function resolveModelDefaultsContext({
   };
 }
 
-// ── Observational memory ────────────────────────────────────────────────────
 // Mirrors the TUI `/om` command. Settings are persisted per organization and
 // user in the Factory app database, then loaded into request context for each
 // invocation without copying them into mutable session state.
@@ -856,7 +851,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         },
       }),
 
-      // ── Custom providers (OpenAI-compatible endpoints) ──────────────────────
       // Mirrors the TUI's /custom-providers command, but backed by the
       // `custom-providers` domain (org rows in tenant mode, a sentinel `local`
       // org in no-auth mode) — the server never reads settings.json for these.
@@ -945,7 +939,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         },
       }),
 
-      // ── Available models ────────────────────────────────────────────────────
       // Session-independent model catalog for settings pickers (Factory default
       // model, pack editors). Only models whose provider has a credential are
       // returned — the same filter the session-scoped hook applies client-side.
@@ -1016,8 +1009,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           }
         },
       }),
-
-      // ── Default model ───────────────────────────────────────────────────────
 
       registerApiRoute('/web/config/default-model', {
         method: 'GET',
@@ -1139,7 +1130,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         },
       }),
 
-      // ── Observational memory ──────────────────────────────────────────────────
       // Mirrors the TUI's /om command. All five knobs are durably stored in the
       // per-(org, user) `memory-settings` app table — never settings.json or
       // mutable session state.
