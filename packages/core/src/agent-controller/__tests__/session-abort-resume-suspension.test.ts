@@ -224,14 +224,22 @@ describe('resuming a tool call that parked after its run was aborted (#26871)', 
     const firstAttemptMayFail = new Promise<void>(resolve => {
       failFirstAttempt = resolve;
     });
+    // The failed attempt reports its error after its resume record is cleaned up.
+    const firstAttemptFailed = new Promise<void>(resolve => {
+      session.subscribe(event => {
+        if (event.type === 'error') resolve();
+      });
+    });
     vi.spyOn(agent, 'sendStreamResume')
       .mockImplementationOnce(async () => {
         await firstAttemptMayFail;
         throw new Error('no suspended run');
       })
       .mockImplementationOnce(async options => {
-        // The first attempt fails while this one is in flight, before its segment starts.
+        // Both resumes are recorded now. Let the first fail and finish its
+        // cleanup before this one sends, so its `start` comes after the failure.
         failFirstAttempt();
+        await firstAttemptFailed;
         return sendStreamResume(options);
       });
 
