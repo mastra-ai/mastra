@@ -629,10 +629,18 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               ...deferredStepFinishChunk,
               payload: {
                 ...deferredStepFinishChunk.payload,
+                ...(reason === 'retry' && tripwire ? { processorRetryFeedback: tripwire.reason } : {}),
                 stepResult: {
                   ...deferredStepFinishChunk.payload?.stepResult,
                   ...(reason ? { reason } : {}),
                   isContinued,
+                  ...(reason === 'retry' && tripwire
+                    ? {
+                        retryReason: tripwire.reason,
+                        retryMetadata: tripwire.metadata,
+                        retryProcessorId: tripwire.processorId,
+                      }
+                    : {}),
                 },
                 ...(tripwire ? { output: { ...deferredStepFinishChunk.payload?.output, steps: [{ tripwire }] } } : {}),
               },
