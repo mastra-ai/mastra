@@ -60,7 +60,8 @@ const SETTINGS_SCHEMA = {
 
 /**
  * The settings schema with the provider's effective defaults as `default`:
- * the built-in values, overridden by the host's `defaults` option. The schema
+ * the built-in values, overridden by the host's `idleTimeoutMinutes` option and
+ * then its `defaults` option. The schema
  * is what clients show as placeholders, so it must match what the provider
  * applies when a setting is unset.
  */
@@ -104,8 +105,8 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
   /**
    * Builders by template id from this process's `builds.start` calls. Platform
    * has no build status endpoint; re-calling the same builder's idempotent
-   * `build()` is the status poll. After a restart the builder is recomputed
-   * from the context and settings.
+   * `build()` is the status poll. After a restart earlier builds read as
+   * `unknown`.
    *
    * TODO: once the platform API exposes build status and build history, read
    * `get` from the API instead of this in-memory cache and add `builds.list`.
@@ -120,7 +121,10 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
   constructor(options: PlatformFactorySandboxOptions = {}) {
     super();
     this.#options = options;
-    this.settings = settingsSchema(options.defaults);
+    this.settings = settingsSchema({
+      ...(options.idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes: options.idleTimeoutMinutes } : {}),
+      ...options.defaults,
+    });
   }
 
   template(
@@ -148,7 +152,10 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
       // checkouts there instead of probing the VM's home.
       ...(ctx.workingDirectory ? { workingDirectory: ctx.workingDirectory } : {}),
       idleTimeoutMinutes:
-        settings.idleTimeoutMinutes ?? defaults?.idleTimeoutMinutes ?? DEFAULT_SETTINGS.idleTimeoutMinutes,
+        settings.idleTimeoutMinutes ??
+        defaults?.idleTimeoutMinutes ??
+        options.idleTimeoutMinutes ??
+        DEFAULT_SETTINGS.idleTimeoutMinutes,
     });
   }
 
@@ -163,27 +170,22 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
   }
 
   async #getBuild(
-    ctx: FactorySandboxContext,
-    settings: PlatformFactorySandboxSettings,
+    _ctx: FactorySandboxContext,
+    _settings: PlatformFactorySandboxSettings,
     buildId: string,
   ): Promise<FactorySandboxBuild> {
-    let builder = this.#builders.get(buildId);
+    const builder = this.#builders.get(buildId);
     if (!builder) {
-      // Recompute after a restart. The heads may have moved since the build
-      // started, in which case the recomputed template is a different one and
-      // this build can no longer be polled.
-      builder = await this.#resolveBuilder(ctx, settings);
-    }
-    const result = await builder.build(this.#buildOptions());
-    if (result.templateId !== buildId) {
+      // Polling means submitting a build, so a build this process did not
+      // start (e.g. one from before a restart) cannot be read without
+      // starting a new one.
       return {
         buildId,
         status: 'unknown',
-        error: `Build ${buildId} is not the current template (${result.templateId}); its status cannot be read.`,
+        error: `Build ${buildId} was not started by this process; its status cannot be read.`,
       };
     }
-    this.#builders.set(buildId, builder);
-    return toBuild(result);
+    return toBuild(await builder.build(this.#buildOptions()));
   }
 
   async #resolveBuilder(

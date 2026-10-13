@@ -1618,10 +1618,13 @@ export class PlatformSandbox extends MastraSandbox {
 }
 
 /**
- * Content identity of the serialized template a sandbox was provisioned
+ * Diagnostic fingerprint of the serialized template a sandbox was provisioned
  * with: the same definition (repositories, pinned heads, setup commands,
- * resources) hashes the same on warm and cold boots.
+ * resources) hashes the same on warm and cold boots. `family` is excluded, as
+ * in the server's exact-content identity. Not the server's cache digest, which
+ * also normalizes resources.
  */
 function templateHash(definition: SerializedSandboxTemplate): string {
-  return createHash('sha256').update(JSON.stringify(definition)).digest('hex').slice(0, 16);
+  const { family: _family, ...content } = definition;
+  return createHash('sha256').update(JSON.stringify(content)).digest('hex').slice(0, 16);
 }
