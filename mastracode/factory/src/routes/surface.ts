@@ -41,6 +41,7 @@ import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/bas
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
 import {
+  SessionOwnershipMismatchError,
   SourceControlConnectionNotFoundError,
   type SourceControlStorage,
   type SourceControlStorageHandle,
@@ -356,6 +357,13 @@ export async function prepareFactoryRuleBinding(
         // A person who approved the run is its interactive user: attribute it to
         // them, not the repo connector. An agent's pre-approval names no person.
         attributeToUserId: isAgentActor(approver) ? undefined : approver,
+      }).catch(error => {
+        if (!(error instanceof SessionOwnershipMismatchError)) throw error;
+        throw new FactoryDispatchError(
+          'session_unavailable',
+          `Session ${error.sessionId} on branch ${branch} predates factory ownership and cannot be reused. Delete that session, then retry.`,
+          { cause: error },
+        );
       }));
 
     await coordinator.prepare({
