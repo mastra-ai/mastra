@@ -1,5 +1,3 @@
-import { buildMode } from '@mastra/code-sdk/agents/modes/build';
-import { planMode } from '@mastra/code-sdk/agents/modes/plan';
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
 import type { AgentControllerMode } from '@mastra/core/agent-controller';
@@ -7,7 +5,8 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { Workspace } from '@mastra/core/workspace';
 import { describe, expect, it } from 'vitest';
 
-import { FACTORY_MODES } from './build-only-mode.js';
+import { buildMode } from './build.js';
+import { planMode } from './plan.js';
 
 const withTestAgent = (mode: AgentControllerMode): AgentControllerMode => ({
   ...mode,
@@ -31,15 +30,15 @@ async function startController(storage: InMemoryStore, modes: AgentControllerMod
   return controller;
 }
 
-describe('Factory sessions without modes', () => {
-  it('given a thread saved in Plan mode, when Factory reopens it with only Build, then the session runs in Build', async () => {
-    const storage = new InMemoryStore({ id: 'build-only-mode' });
+describe('modeless hosts (`modes: false`)', () => {
+  it('given a thread saved in Plan mode, when a modeless host reopens it with only Build, then the session runs in Build', async () => {
+    const storage = new InMemoryStore({ id: 'modeless' });
     const before = await startController(storage, [buildMode, planMode].map(withTestAgent));
     const planningSession = await before.createSession({ resourceId: 'resource-1', ownerId: 'user-1' });
     const thread = await planningSession.thread.create();
     await planningSession.mode.switch({ modeId: 'plan' });
 
-    const after = await startController(storage, FACTORY_MODES.map(withTestAgent));
+    const after = await startController(storage, [buildMode].map(withTestAgent));
     const session = await after.createSession({ resourceId: 'resource-1', ownerId: 'user-1' });
     await session.thread.switch({ threadId: thread.id });
 

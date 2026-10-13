@@ -59,7 +59,6 @@ import { hasCredentialStoreProvider } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory, hasSubconsciousTools } from './agents/memory.js';
 import { createMastraCodeGateway, getDynamicModel, getGoalJudgeModel, resolveModel } from './agents/model.js';
-import type { ThinkingResolutionOptions } from './agents/model.js';
 import { buildMode } from './agents/modes/build.js';
 import { fastMode } from './agents/modes/explore.js';
 import { planMode } from './agents/modes/plan.js';
@@ -276,8 +275,12 @@ export interface MastraCodeConfig {
   cwd?: string;
   /** Home directory for global config discovery. Default: os.homedir() */
   homeDir?: string;
-  /** Override modes (model IDs, colors, which modes exist). Default: build/plan/fast */
-  modes?: AgentControllerMode[];
+  /**
+   * Override modes (model IDs, colors, which modes exist). Default: build/plan/fast.
+   * `false` runs every session as the single Build agent with no mode switching:
+   * threads saved in another mode reopen as Build, and per-mode thinking defaults never apply.
+   */
+  modes?: AgentControllerMode[] | false;
   /** Replace subagent definitions. Default: explore/plan/execute. An empty array disables subagents. */
   subagents?: AgentControllerSubagent[];
   /** Extra tools merged into the dynamic tool set. Can be a static record or a (sync or async) function that receives requestContext. */
@@ -314,8 +317,6 @@ export interface MastraCodeConfig {
   omScope?: 'thread' | 'resource';
   /** Path to a custom settings.json file. Default: global settings */
   settingsPath?: string;
-  /** How request-time thinking defaults resolve. Hosts that hide modes pass `{ applyModeDefaults: false }`. */
-  thinkingResolution?: ThinkingResolutionOptions;
   /** Initial state overrides (yolo, thinkingLevel, etc.) */
   initialState?: Partial<MastraCodeState>;
   /** Create a thread during local boot when no existing thread matches. Default: true */
@@ -508,6 +509,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const cwd = config?.cwd ?? process.cwd();
   const homeDir = config?.homeDir ?? config?.initialState?.homeDir;
   const configDir = config?.configDir ?? DEFAULT_CONFIG_DIR;
+  const modeless = config?.modes === false;
   // The single session for this process, assigned once `createSession()` runs
   // below. Config callbacks defined before then (e.g. notification stream
   // options) read it lazily through this holder.
@@ -1183,7 +1185,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     },
     // `settingsPath` matches the source `createMastraCode()` reads from so the
     // per-mode thinking defaults resolve against the same config file.
-    model: ctx => getDynamicModel(ctx, config?.settingsPath, config?.thinkingResolution),
+    model: ctx => getDynamicModel(ctx, config?.settingsPath, { modeless }),
     // Deferred notifications are re-dispatched by the core notification
     // dispatch workflow long after the originating send; the delivery policy
     // rebuilds the request context (model selection included) at delivery time
@@ -1335,7 +1337,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         // discards retry:true, so the processor no-ops instead of rotating.
         maxProcessorRetries: MASTRACODE_MAX_PROCESSOR_RETRIES,
         settingsPath: config?.settingsPath,
-        thinkingResolution: config?.thinkingResolution,
+        modeless,
       }),
     ],
     // Individual processors have tighter limits; this remains a defensive
@@ -1445,7 +1447,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const effectiveObserveAttachments = globalSettings.models.omObserveAttachments ?? 'auto';
 
   const modes = addPluginToolsToModeAllowlists(
-    applyModeDefaultsToModes(config?.modes ? config.modes : defaultModes, effectiveDefaults),
+    applyModeDefaultsToModes(
+      config?.modes === false ? [buildMode] : (config?.modes ?? defaultModes),
+      effectiveDefaults,
+    ),
     Object.keys(pluginTools),
   );
   const defaultModeId =

@@ -275,26 +275,20 @@ export interface ThinkingRequestContext {
  *   1. Session override (`state.thinkingLevel`, set via /think or the session
  *      settings panel).
  *   2. Per-mode default from settings (`models.modeThinkingDefaults[mode]`),
- *      unless the host turns mode defaults off.
+ *      only when the context carries a session mode.
  *   3. Global default (`preferences.thinkingLevel`).
  *
  * Resolved per-request (not seeded at session start) so configuration changes
  * apply to the next request of every session — including automated
  * (rule-driven) Factory runs that nobody ever opens interactively.
  */
-
-export interface ThinkingResolutionOptions {
-  applyModeDefaults?: boolean;
-}
-
 export function resolveRequestThinkingLevel(
   agentControllerContext: ThinkingRequestContext | undefined,
   settingsPath?: string,
-  { applyModeDefaults = true }: ThinkingResolutionOptions = {},
 ): ThinkingLevelSetting {
   const override = agentControllerContext?.state?.thinkingLevel;
   if (isThinkingLevelSetting(override)) return override;
-  const modeId = applyModeDefaults ? agentControllerContext?.session?.modeId : undefined;
+  const modeId = agentControllerContext?.session?.modeId;
   return resolveDefaultThinkingLevel(loadSettings(settingsPath), modeId).level;
 }
 
@@ -307,7 +301,7 @@ export function resolveRequestThinkingLevel(
 export function getDynamicModel(
   { requestContext }: { requestContext: RequestContext },
   settingsPath?: string,
-  thinkingResolution?: ThinkingResolutionOptions,
+  { modeless = false }: { modeless?: boolean } = {},
 ): IdentifiedModelConfig | ModelWithRetries[] {
   const controller = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
   const state = controller?.getState?.() as
@@ -339,7 +333,7 @@ export function getDynamicModel(
     throw new Error('No model selected. Use /models to select a model first.');
   }
 
-  const thinkingLevel = resolveRequestThinkingLevel(controller, settingsPath, thinkingResolution);
+  const thinkingLevel = resolveRequestThinkingLevel(modeless ? { state: controller?.state } : controller, settingsPath);
   const resolveOptions = { thinkingLevel, remapForCodexOAuth: true, requestContext } as const;
   // Label each resolved model with its full ID: the resolved gateway model only
   // knows its bare provider model, and Memory's `'auto'` reads this label.
