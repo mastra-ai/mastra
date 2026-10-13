@@ -19,12 +19,10 @@
     "amazon/nova-2-lite",
     "amazon/nova-lite",
     "amazon/nova-pro",
-    "anthropic/claude-3-haiku",
     "anthropic/claude-fable-5",
     "anthropic/claude-fable-5.1",
     "anthropic/claude-haiku-4.5",
     "anthropic/claude-haiku-5.5",
-    "anthropic/claude-opus-4",
     "anthropic/claude-opus-4.5",
     "anthropic/claude-opus-4.6",
     "anthropic/claude-opus-4.7",
@@ -46,6 +44,7 @@
     "callstack/apex",
     "deepseek/deepseek-v4-flash-vision-exp",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-fast",
     "fireworks/ember-1",
     "google/gemini-2.5-flash",
     "google/gemini-2.5-flash-lite",
@@ -229,9 +228,7 @@
     "amazon/nova-micro",
     "amazon/nova-pro",
     "amazon/titan-embed-text-v2",
-    "anthropic/claude-3-haiku",
     "anthropic/claude-haiku-4.5",
-    "anthropic/claude-opus-4",
     "anthropic/claude-opus-4.5",
     "anthropic/claude-opus-4.6",
     "anthropic/claude-opus-4.7",
@@ -277,6 +274,7 @@
     "deepseek/deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0813",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-fast",
     "google/gemini-2.5-flash",
     "google/gemini-2.5-flash-image",
     "google/gemini-2.5-flash-lite",
@@ -489,6 +487,7 @@
     "deepseek/deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0813",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-fast",
     "google/gemini-2.5-flash",
     "google/gemini-2.5-flash-lite",
     "google/gemini-2.5-pro",
@@ -903,15 +902,6 @@
         "type": "budget_tokens"
       }
     ],
-    "anthropic/claude-opus-4": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1024
-      }
-    ],
     "anthropic/claude-sonnet-4.5": [
       {
         "type": "budget_tokens",
@@ -943,6 +933,12 @@
       }
     ],
     "deepseek/deepseek-v3.2-thinking": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "deepseek/deepseek-v4.1-flash-fast": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]

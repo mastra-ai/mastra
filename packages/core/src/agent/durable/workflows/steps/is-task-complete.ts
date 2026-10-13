@@ -5,7 +5,7 @@ import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
 import { DurableAgentDefaults, DurableStepIds } from '../../constants';
-import { globalRunRegistry } from '../../run-registry';
+import { getRunRegistryEntry, globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent } from '../../stream-adapter';
 import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
 
@@ -55,7 +55,7 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
         requestContextEntries?: Record<string, unknown>;
       };
 
-      const registryEntry = globalRunRegistry.get(state.runId);
+      const registryEntry = getRunRegistryEntry(state.runId, mastra);
       // No scorers → nothing to grade.
       if (!registryEntry?.isTaskComplete?.scorers?.length) return state;
 

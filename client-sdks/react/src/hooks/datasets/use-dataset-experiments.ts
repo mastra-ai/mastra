@@ -8,9 +8,13 @@ import type {
   UseQueryOptions,
   UseQueryResult,
 } from '@tanstack/react-query';
-import { useCallback, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
+import { useCombineByIds } from '../shared/combine-by-ids';
+import type { ExperimentQueriesResult } from '../shared/combine-by-ids';
 import type { MastraInfiniteQueryOptions, MastraQueryOptions } from '../shared/query-options';
+
+export type { ExperimentQueriesResult } from '../shared/combine-by-ids';
 import { useInView } from '../shared/use-in-view';
 
 type DatasetExperimentResponse = Awaited<ReturnType<MastraClient['getDatasetExperiment']>>;
@@ -104,37 +108,6 @@ export const allDatasetExperimentResultsQueryOptions = (
     },
     refetchInterval: isInProgress(experimentStatus) ? POLL_INTERVAL_MS : false,
   });
-
-/** One entry per requested experiment id, in the order the ids were given. */
-export interface ExperimentQueriesResult<T> {
-  data: Record<string, T | undefined>;
-  /** True while any experiment has not loaded yet. */
-  isLoading: boolean;
-  /** First error among the experiments, if any. */
-  error: Error | null;
-}
-
-/**
- * Stable `combine` for `useQueries`: keyed on the ids' contents (callers pass a fresh array every
- * render), so TanStack only recombines when a query result actually changes.
- */
-const useCombineByIds = <T>(ids: string[]) => {
-  const idsKey = JSON.stringify(ids);
-  return useCallback(
-    (results: Array<UseQueryResult<T, Error>>): ExperimentQueriesResult<T> => {
-      const data: Record<string, T | undefined> = {};
-      (JSON.parse(idsKey) as string[]).forEach((id, index) => {
-        data[id] = results[index]?.data;
-      });
-      return {
-        data,
-        isLoading: results.some(result => result.isLoading),
-        error: results.find(result => result.error)?.error ?? null,
-      };
-    },
-    [idsKey],
-  );
-};
 
 /** An experiment id plus its status, which drives polling of its dependent queries. */
 export interface ExperimentRef {
