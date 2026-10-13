@@ -1225,7 +1225,7 @@ export type WorkflowConfig<
    * When provided, the request context will be validated against this schema when the workflow starts.
    * If validation fails, a validation error is thrown.
    */
-  requestContextSchema?: PublicSchema<TRequestContext, any>;
+  requestContextSchema?: PublicSchema<TRequestContext>;
   executionEngine?: ExecutionEngine;
   steps?: TSteps;
   retryConfig?: {

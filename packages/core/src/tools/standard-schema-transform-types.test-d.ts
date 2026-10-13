@@ -3,7 +3,7 @@ import { z } from 'zod/v4';
 import type { AgentConfig } from '../agent/types';
 import type { RequestContext } from '../request-context';
 import type { InferPublicSchema, StandardSchemaWithJSON } from '../schema';
-import { createStep, createWorkflow } from '../workflows';
+import type { WorkflowConfig } from '../workflows';
 import { createTool } from './tool';
 
 // Mirrors a Standard Schema adapter such as Effect's `Schema.toStandardSchemaV1`,
@@ -56,39 +56,36 @@ describe('transformed Standard Schema type inference', () => {
     });
   });
 
-  it('accepts a transforming requestContextSchema on agents', () => {
+  // Agents and workflows validate request context without decoding it, so runtime values
+  // keep their input type. Transforming schemas stay rejected there until decoding is supported.
+  it('rejects a transforming requestContextSchema on agents', () => {
     const config: AgentConfig<'transform-agent', Record<string, never>, undefined, { date: Date }> = {
       id: 'transform-agent',
       name: 'Transform Agent',
       model: {} as any,
+      // @ts-expect-error input and output types differ
       requestContextSchema: dateFromString,
-      instructions: ({ requestContext }) => {
-        expectTypeOf(requestContext.get('date')).toEqualTypeOf<Date>();
-        return 'You are a helpful assistant';
-      },
+      instructions: 'You are a helpful assistant',
     };
     expectTypeOf(config.id).toEqualTypeOf<'transform-agent'>();
   });
 
-  it('accepts a transforming requestContextSchema on workflows', () => {
+  it('rejects a transforming requestContextSchema on workflows', () => {
     const schema = z.object({ value: z.number() });
-    const step = createStep({
-      id: 'transform-step',
-      inputSchema: schema,
-      outputSchema: schema,
-      execute: async ({ inputData, requestContext }) => {
-        expectTypeOf(requestContext.get('date')).toEqualTypeOf<Date>();
-        return inputData;
-      },
-      requestContextSchema: dateFromString,
-    });
-
-    const workflow = createWorkflow({
+    const config: WorkflowConfig<
+      'transform-workflow',
+      unknown,
+      { value: number },
+      { value: number },
+      [],
+      { date: Date }
+    > = {
       id: 'transform-workflow',
       inputSchema: schema,
       outputSchema: schema,
+      // @ts-expect-error input and output types differ
       requestContextSchema: dateFromString,
-    }).then(step);
-    expectTypeOf(workflow).not.toBeNever();
+    };
+    expectTypeOf(config.id).toEqualTypeOf<'transform-workflow'>();
   });
 });
