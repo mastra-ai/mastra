@@ -418,6 +418,12 @@ export interface WorkflowRunState {
   resumeLabels: Record<string, WorkflowResumeLabel>;
   waitingPaths: Record<string, number[]>;
   timestamp: number;
+  /**
+   * Epoch ms when an agent resume claimed this suspended run (status `pending`). Lets a later
+   * resume recognize a claim abandoned by a process that died before starting the run.
+   * @internal
+   */
+  resumeClaimedAt?: number;
   /** Tripwire data when status is 'tripwire' */
   tripwire?: StepTripwireInfo;
   stepExecutionPath?: string[];

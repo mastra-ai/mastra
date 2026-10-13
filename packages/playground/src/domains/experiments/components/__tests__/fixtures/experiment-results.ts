@@ -41,6 +41,17 @@ export const workflowResult: DatasetExperimentResult = {
   output: { answer: 42 },
 };
 
+/** Agent result whose trace has token usage in `experimentUsageBreakdown`. */
+export const agentTracedResult: DatasetExperimentResult = {
+  ...base,
+  id: 'res-agent-traced',
+  itemId: 'item-agent-traced',
+  targetType: 'agent',
+  traceId: 'trace-res-agent-traced',
+  output: { text: 'traced answer' },
+  completedAt: '2026-08-25T10:00:02.500Z',
+};
+
 export const experimentResultsResponse: ListDatasetExperimentResultsResponse = {
   results: [agentMarkdownResult, agentFailedResult, workflowResult],
   pagination: { total: 3, page: 0, perPage: 50, hasMore: false },

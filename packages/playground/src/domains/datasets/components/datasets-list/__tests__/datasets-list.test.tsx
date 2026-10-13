@@ -124,6 +124,20 @@ describe('DatasetsList', () => {
     });
   });
 
+  describe('when no loaded dataset matches and more pages can still load', () => {
+    it('does not claim that no dataset matches', () => {
+      renderList({ tagFilter: 'missing', hasNextPage: true });
+      expect(screen.queryByText('No datasets match your filters')).toBeNull();
+    });
+  });
+
+  describe('when no dataset matches and every page is loaded', () => {
+    it('says that no dataset matches the filters', () => {
+      renderList({ tagFilter: 'missing', hasNextPage: false });
+      expect(screen.getByText('No datasets match your filters')).toBeTruthy();
+    });
+  });
+
   describe('when an onSelectDataset handler is provided', () => {
     it('renders rows as buttons instead of links and reports the clicked dataset', () => {
       const onSelectDataset = vi.fn();
