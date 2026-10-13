@@ -274,6 +274,7 @@ export class InngestRun<
         },
       });
     }
+    return { failed: [] };
   }
 
   async start(

@@ -42,6 +42,14 @@ export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
 export type WorkflowEngineType = string;
 
 /**
+ * Result of `run.cancel()`. `failed` lists every run (the canceled run itself or a persisted
+ * nested run) whose cancellation could not be persisted, so callers can retry or alert.
+ */
+export type WorkflowCancelResult = {
+  failed: Array<{ workflowName: string; runId: string; error: unknown }>;
+};
+
+/**
  * Type of workflow - determines how the workflow is categorized in the UI.
  * - 'default': Standard workflow
  * - 'processor': Workflow used as a processor for agent input/output processing
