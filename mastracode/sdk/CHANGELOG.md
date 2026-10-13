@@ -1,5 +1,18 @@
 # @mastra/code-sdk
 
+## 1.13.0-alpha.3
+
+### Minor Changes
+
+- The `theme` preference now accepts any theme name, not just `auto`, `dark`, or `light`, so callers can persist bundled and custom theme selections. ([#26719](https://github.com/mastra-ai/mastra/pull/26719))
+
+### Patch Changes
+
+- New Mastra Code threads retain a stable local owner identity across sessions. ([#26549](https://github.com/mastra-ai/mastra/pull/26549))
+
+- Updated dependencies [[`54e9dc3`](https://github.com/mastra-ai/mastra/commit/54e9dc3ed0615ee84a6526395a9fefe17320fe7e), [`59164cb`](https://github.com/mastra-ai/mastra/commit/59164cb7f8b298e28e13305b0273ed2ef7f1d9e1), [`aa00f41`](https://github.com/mastra-ai/mastra/commit/aa00f41855e8d6802546f613ffec1669e03409fc), [`8dc4d65`](https://github.com/mastra-ai/mastra/commit/8dc4d65b34aad280c4f6ab265162c4846face7e3), [`aa00f41`](https://github.com/mastra-ai/mastra/commit/aa00f41855e8d6802546f613ffec1669e03409fc), [`226823f`](https://github.com/mastra-ai/mastra/commit/226823ffde55e2dcce01f2111a6a35be3f2c9b85)]:
+  - @mastra/core@1.77.0-alpha.3
+
 ## 1.12.1-alpha.2
 
 ### Patch Changes
