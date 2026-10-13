@@ -1,97 +1,215 @@
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
+import os from 'node:os';
 import path from 'node:path';
-import { PricingModel, PricingTier } from './pricing-model';
-import type { PricingMeter, PricingConditionOperator, PricingConditionField } from './types';
+import { MIN_PRICED_MODELS, MODELS_DEV_API_URL, modelsDevToPricingModels, pickModelsDevCosts } from './models-dev';
+import type { PricingModel } from './pricing-model';
 
-const DATA_FILE_NAME = 'pricing-data.jsonl';
+const DATA_FILE_NAME = 'pricing-data.json';
+const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const MIN_REFRESH_ATTEMPT_INTERVAL_MS = 60 * 60 * 1000;
+const REFRESH_TIMEOUT_MS = 5_000;
+// Same cache folder as the model router. A function, so importing this module never calls
+// os.homedir(), which throws in some sandboxes.
+const CACHE_FILE = () => path.join(os.homedir(), '.cache', 'mastra', 'pricing-data.json');
+// Every installed version of this package shares the cache file. Bump this when the cached
+// prices change shape or meaning, so other versions ignore the file instead of misreading it.
+const CACHE_VERSION = 1;
 const BEDROCK_GEOGRAPHY_PREFIXES = new Set(['global', 'us', 'eu', 'apac', 'jp', 'au']);
 const AI_SDK_VERCEL_GATEWAY_PROVIDER_ID = 'gateway';
 const VERCEL_PRICING_PROVIDER_ID = 'vercel';
 const AI_SDK_PROVIDER_NAMESPACE_ALIASES = new Map([
+  ['fireworks', 'fireworks-ai'],
   ['google.vertex', 'google-vertex'],
   ['vertex.anthropic', 'google-vertex-anthropic'],
   ['vertex.maas', 'google-vertex'],
 ]);
 
-type MinifiedMeterKey = 'it' | 'ot' | 'icrt' | 'icwt' | 'icwt5m' | 'icwt1h' | 'iat' | 'oat' | 'ort';
-type MinifiedConditionFieldKey = 'tit';
-
-interface MinifiedCondition {
-  f: MinifiedConditionFieldKey;
-  op: PricingConditionOperator;
-  value: number;
-}
-
-interface MinifiedTier {
-  w?: MinifiedCondition[];
-  r: Partial<Record<MinifiedMeterKey, { c: number }>>;
-}
-
-interface MinifiedPricingModelRow {
-  i: string;
-  p: string;
-  m: string;
-  s: {
-    v: string;
-    d: {
-      u: string;
-      t: MinifiedTier[];
-    };
-  };
-}
-
-const MINIFIED_METER_TO_CANONICAL: Record<MinifiedMeterKey, PricingMeter> = {
-  it: 'input_tokens',
-  ot: 'output_tokens',
-  icrt: 'input_cache_read_tokens',
-  icwt: 'input_cache_write_tokens',
-  icwt5m: 'input_cache_write_5m_tokens',
-  icwt1h: 'input_cache_write_1h_tokens',
-  iat: 'input_audio_tokens',
-  oat: 'output_audio_tokens',
-  ort: 'output_reasoning_tokens',
-};
-
-const MINIFIED_CONDITION_FIELD_TO_CANONICAL: Record<MinifiedConditionFieldKey, PricingConditionField> = {
-  tit: 'total_input_tokens',
-};
-
 let cachedLoadError: string | null = null;
+let globalRegistry: PricingRegistry | null = null;
+let bundledRegistry: PricingRegistry | null = null;
+// When the global pricing was last confirmed against models.dev. 0 means the bundled snapshot.
+let refreshedAt = 0;
+let lastRefreshAttemptAt = 0;
+let refreshEtag: string | undefined;
+let refreshInFlight = false;
 
 export class PricingRegistry {
-  private static globalRegistry: PricingRegistry | null = null;
-
   constructor(private readonly pricingModels: Map<string, PricingModel>) {}
 
-  static fromText(pricingModelText: string): PricingRegistry {
-    return new PricingRegistry(parsePricingModelText(pricingModelText));
+  /** A registry from models.dev costs, in the shape of `pricing-data.json` or `api.json`. */
+  static fromModelsDev(costs: unknown): PricingRegistry {
+    return new PricingRegistry(modelsDevToPricingModels(costs));
   }
 
+  /**
+   * The registry used for cost estimates. It uses the bundled snapshot. When refresh is on (under
+   * `mastra dev`, or with `MASTRA_AUTO_REFRESH_PRICING=true`), it starts from the models.dev copy
+   * cached in `~/.cache/mastra` instead, and refreshes from models.dev in the background once a day
+   * and when a model has no price. Lookups never wait for a refresh.
+   */
   static getGlobal(): PricingRegistry | null {
-    if (PricingRegistry.globalRegistry) {
-      return PricingRegistry.globalRegistry;
+    if (!globalRegistry) {
+      const cachedPricingModels = loadCachedPricingModels();
+      globalRegistry = cachedPricingModels ? new PricingRegistry(cachedPricingModels) : getBundledRegistry();
     }
 
-    const pricingModels = loadPricingModels();
-    if (!pricingModels) {
-      return null;
+    if (Date.now() - refreshedAt >= REFRESH_INTERVAL_MS) {
+      refreshGlobalPricing();
     }
 
-    PricingRegistry.globalRegistry = new PricingRegistry(pricingModels);
-    return PricingRegistry.globalRegistry;
+    return globalRegistry;
   }
 
   get(args: { provider: string; model: string }): PricingModel | null {
+    const match = this.find(args);
+    if (match || this !== globalRegistry) {
+      return match;
+    }
+
+    // models.dev can drop or rename a model after a release, so refreshed prices may miss a
+    // model the bundled snapshot still has.
+    const bundledMatch = this === bundledRegistry ? null : getBundledRegistry()?.find(args);
+    if (bundledMatch) {
+      return bundledMatch;
+    }
+
+    // A model with no price anywhere may be newer than the pricing in use.
+    refreshGlobalPricing();
+    return null;
+  }
+
+  private find(args: { provider: string; model: string }): PricingModel | null {
     for (const provider of getPricingProviderCandidates(args.provider, args.model)) {
-      const variants = getModelVariants(args.model, provider);
-      for (const variant of variants) {
-        const key = makePricingKey({ provider, model: variant });
-        const match = this.pricingModels.get(key);
+      for (const variant of getModelVariants(args.model, provider)) {
+        const match = this.pricingModels.get(makePricingKey({ provider, model: variant }));
         if (match) return match;
       }
     }
     return null;
+  }
+}
+
+function getBundledRegistry(): PricingRegistry | null {
+  if (!bundledRegistry) {
+    const pricingModels = loadPricingModels();
+    if (pricingModels) {
+      bundledRegistry = new PricingRegistry(pricingModels);
+    }
+  }
+  return bundledRegistry;
+}
+
+/**
+ * Same switches as the model router's auto-refresh in `@mastra/core`: on by default only under
+ * `mastra dev` (`MASTRA_DEV`), opt-in elsewhere, and always off with `MASTRA_OFFLINE`.
+ */
+function isRefreshEnabled(): boolean {
+  const offline = process.env.MASTRA_OFFLINE;
+  if (offline === 'true' || offline === '1') {
+    return false;
+  }
+  const isDev = process.env.MASTRA_DEV === 'true' || process.env.MASTRA_DEV === '1';
+  const setting = process.env.MASTRA_AUTO_REFRESH_PRICING;
+  return setting === 'true' || (setting !== 'false' && isDev);
+}
+
+/**
+ * Start a background refresh from models.dev, unless refresh is off, one is already
+ * running, or the last attempt was less than an hour ago.
+ */
+function refreshGlobalPricing(): void {
+  if (refreshInFlight || !isRefreshEnabled() || Date.now() - lastRefreshAttemptAt < MIN_REFRESH_ATTEMPT_INTERVAL_MS) {
+    return;
+  }
+
+  refreshInFlight = true;
+  lastRefreshAttemptAt = Date.now();
+  void fetchModelsDevPricing()
+    .catch(() => {
+      // Keep the pricing in use. The next attempt can start an hour later.
+    })
+    .finally(() => {
+      refreshInFlight = false;
+    });
+}
+
+async function fetchModelsDevPricing(): Promise<void> {
+  const response = await fetch(MODELS_DEV_API_URL, {
+    headers: refreshEtag ? { 'if-none-match': refreshEtag } : undefined,
+    signal: AbortSignal.timeout(REFRESH_TIMEOUT_MS),
+  });
+
+  if (response.status === 304) {
+    refreshedAt = Date.now();
+    await touchCacheFile();
+    return;
+  }
+  if (!response.ok) {
+    throw new Error(`models.dev responded with ${response.status}`);
+  }
+
+  const costs = pickModelsDevCosts(await response.json());
+  const pricingModels = modelsDevToPricingModels(costs);
+  if (pricingModels.size < MIN_PRICED_MODELS) {
+    throw new Error(`models.dev returned ${pricingModels.size} prices, expected at least ${MIN_PRICED_MODELS}`);
+  }
+
+  globalRegistry = new PricingRegistry(pricingModels);
+  refreshedAt = Date.now();
+  refreshEtag = response.headers.get('etag') ?? undefined;
+  await writeCacheFile(JSON.stringify({ version: CACHE_VERSION, etag: refreshEtag, costs }));
+}
+
+/** The cache file's mtime records when its prices were last confirmed against models.dev. */
+function loadCachedPricingModels(): Map<string, PricingModel> | null {
+  if (!isRefreshEnabled()) {
+    return null;
+  }
+
+  try {
+    const cacheFile = CACHE_FILE();
+    const cached = JSON.parse(fs.readFileSync(cacheFile, 'utf-8')) as {
+      version?: unknown;
+      etag?: unknown;
+      costs?: unknown;
+    };
+    if (cached.version !== CACHE_VERSION) {
+      return null;
+    }
+
+    const pricingModels = modelsDevToPricingModels(cached.costs);
+    if (pricingModels.size < MIN_PRICED_MODELS) {
+      return null;
+    }
+
+    refreshEtag = typeof cached.etag === 'string' ? cached.etag : undefined;
+    refreshedAt = fs.statSync(cacheFile).mtimeMs;
+    return pricingModels;
+  } catch {
+    return null;
+  }
+}
+
+/** Write-to-temp-then-rename, like the model router's cache writes, so readers never see a partial file. */
+async function writeCacheFile(content: string): Promise<void> {
+  try {
+    const cacheFile = CACHE_FILE();
+    const tempFile = `${cacheFile}.${process.pid}.${Date.now()}.tmp`;
+    await fs.promises.mkdir(path.dirname(cacheFile), { recursive: true });
+    await fs.promises.writeFile(tempFile, content, 'utf-8');
+    await fs.promises.rename(tempFile, cacheFile);
+  } catch {
+    // Read-only home folders (some containers and serverless hosts) keep the refresh in memory only.
+  }
+}
+
+async function touchCacheFile(): Promise<void> {
+  try {
+    const now = new Date();
+    await fs.promises.utimes(CACHE_FILE(), now, now);
+  } catch {
+    // Nothing cached yet, or the cache folder is read-only.
   }
 }
 
@@ -101,65 +219,11 @@ function loadPricingModels(): Map<string, PricingModel> | null {
   }
 
   try {
-    const content = fs.readFileSync(resolvePricingModelPath(), 'utf-8');
-    return parsePricingModelText(content);
+    return modelsDevToPricingModels(JSON.parse(fs.readFileSync(resolvePricingModelPath(), 'utf-8')));
   } catch (error) {
     cachedLoadError = error instanceof Error ? error.message : String(error);
     return null;
   }
-}
-
-function parsePricingModelText(content: string): Map<string, PricingModel> {
-  const pricingModels = new Map<string, PricingModel>();
-
-  for (const line of content.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      continue;
-    }
-
-    const parsed = JSON.parse(trimmed) as MinifiedPricingModelRow;
-    const pricingModel = expandPricingModelRow(parsed);
-    pricingModels.set(makePricingKey(pricingModel), pricingModel);
-  }
-
-  return pricingModels;
-}
-
-function expandRates(row: MinifiedPricingModelRow, tier: MinifiedTier): Partial<Record<PricingMeter, number>> {
-  const rates = Object.fromEntries(
-    Object.entries(tier.r).map(([meter, value]) => [MINIFIED_METER_TO_CANONICAL[meter as MinifiedMeterKey], value!.c]),
-  ) as Partial<Record<PricingMeter, number>>;
-
-  const cacheWriteRate = rates.input_cache_write_tokens;
-  if (row.m.includes('claude') && typeof cacheWriteRate === 'number') {
-    rates.input_cache_write_5m_tokens ??= cacheWriteRate;
-    rates.input_cache_write_1h_tokens ??= cacheWriteRate * 1.6;
-  }
-
-  return rates;
-}
-
-function expandPricingModelRow(row: MinifiedPricingModelRow): PricingModel {
-  return new PricingModel({
-    id: row.i,
-    provider: row.p,
-    model: row.m,
-    schema: row.s.v,
-    currency: row.s.d.u,
-    tiers: row.s.d.t.map(
-      (tier, index) =>
-        new PricingTier({
-          index,
-          when: tier.w?.map(condition => ({
-            field: MINIFIED_CONDITION_FIELD_TO_CANONICAL[condition.f],
-            op: condition.op,
-            value: condition.value,
-          })),
-          rates: expandRates(row, tier),
-        }),
-    ),
-  });
 }
 
 function resolvePricingModelPath(): string {
@@ -177,7 +241,7 @@ function resolvePricingModelPath(): string {
     }
   }
 
-  throw new Error(`Unable to locate pricing data JSONL at any known path: ${candidates.join(', ')}`);
+  throw new Error(`Unable to locate pricing data at any known path: ${candidates.join(', ')}`);
 }
 
 function getPackageRoot(): string {

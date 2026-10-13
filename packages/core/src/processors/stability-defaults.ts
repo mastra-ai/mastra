@@ -36,6 +36,31 @@ export function isECONNRESETError(error: unknown): boolean {
 }
 
 /**
+ * Retry policy for Gemini `MALFORMED_FUNCTION_CALL` finishes. The failure is
+ * model-side and intermittent rather than load-related, so the backoff is
+ * shorter than the connection-reset policy.
+ */
+export const MALFORMED_FUNCTION_CALL_MAX_RETRIES = 2;
+export const MALFORMED_FUNCTION_CALL_RETRY_INITIAL_DELAY_MS = 500;
+export const MALFORMED_FUNCTION_CALL_RETRY_MAX_DELAY_MS = 4000;
+
+/**
+ * Matcher for Gemini's `MALFORMED_FUNCTION_CALL` finish reason. Gemini returns
+ * it with HTTP 200 and the AI SDK maps it to finish reason `error`, so the loop
+ * surfaces it as a synthetic `AGENT_STREAM_ERROR` carrying
+ * `details.rawFinishReason`. No tool runs on that step, so resending it
+ * unchanged cannot repeat a side effect.
+ */
+export function isMalformedFunctionCallError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  const { id, details } = error as { id?: unknown; details?: unknown };
+  if (id !== 'AGENT_STREAM_ERROR' || !details || typeof details !== 'object') return false;
+
+  return (details as { rawFinishReason?: unknown }).rawFinishReason === 'MALFORMED_FUNCTION_CALL';
+}
+
+/**
  * The ids of the default stability error processors, in their default order.
  *
  * The order is load-bearing: error processors short-circuit on the first
@@ -66,7 +91,8 @@ export const STABILITY_ERROR_PROCESSOR_IDS = [
  * - assistant-prefill rejections from Anthropic/Qwen-style models;
  * - files the provider SDK refuses because the model doesn't read their type;
  * - transient stream/connection failures — including a bare `500`/`isRetryable`
- *   error that would otherwise surface as an empty response.
+ *   error that would otherwise surface as an empty response — and Gemini's
+ *   intermittent `MALFORMED_FUNCTION_CALL` finish reason.
  *
  * The retry processor keeps `retryUnknownErrors` off by default and carries no
  * bad-request matcher. Transient failures carry provider `isRetryable`
@@ -120,6 +146,15 @@ export function defaultStabilityErrorProcessors(
           maxRetries: ECONNRESET_MAX_RETRIES,
           delayMs: ({ retryCount }) =>
             Math.min(ECONNRESET_RETRY_INITIAL_DELAY_MS * Math.pow(2, retryCount), ECONNRESET_RETRY_MAX_DELAY_MS),
+        },
+        {
+          match: isMalformedFunctionCallError,
+          maxRetries: MALFORMED_FUNCTION_CALL_MAX_RETRIES,
+          delayMs: ({ retryCount }) =>
+            Math.min(
+              MALFORMED_FUNCTION_CALL_RETRY_INITIAL_DELAY_MS * Math.pow(2, retryCount),
+              MALFORMED_FUNCTION_CALL_RETRY_MAX_DELAY_MS,
+            ),
         },
       ],
     }),

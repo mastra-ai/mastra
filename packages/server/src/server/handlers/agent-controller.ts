@@ -31,8 +31,9 @@ import { enforceThreadAccess } from './utils';
  * non-terminal clients — e.g. a browser-based MastraCode — can create sessions,
  * send messages, stream events, and drive run-control. Each route resolves its
  * target AgentController by id, then operates on a session bound to a
- * `resourceId` (get-or-create, so reconnects resume rather than fork the
- * conversation).
+ * `resourceId`. Mutating routes use get-or-create resolution so reconnects
+ * resume rather than fork the conversation; read routes only inspect existing
+ * live sessions.
  */
 
 /**
@@ -94,6 +95,22 @@ async function getSession(
   // stable session id when supplied.
   const id = threadId ?? (scope ? `${resourceId}::${scope}` : resourceId);
   return controller.createSession({ resourceId, id, ownerId: controller.id, tags, scope, threadId, requestContext });
+}
+
+async function getExistingSession(
+  controller: AgentController<any>,
+  resourceId: string,
+  scope?: string,
+  requestContext?: RequestContext,
+): Promise<Session<any>> {
+  await controller.init();
+  const session = await controller.getSessionByResource(resourceId, scope, requestContext);
+  if (session) return session;
+
+  // Read routes inspect an existing session with read permission. If the
+  // in-memory session was lost after a restart, preserve the historical
+  // recovery behavior by recreating it through the execute-authorized path.
+  return getSession(controller, resourceId, { scope }, requestContext);
 }
 
 /**
@@ -198,6 +215,7 @@ const toolApprovalBodySchema = z.object({
 });
 const toolSuspensionBodySchema = z.object({
   toolCallId: z.string().min(1),
+  runId: z.string().min(1).optional(),
   // Free-form resume payload. For ask_user this is a string (or string[] for
   // multi-select); for submit_plan it's `{ action, feedback? }`; for
   // request_access it's "Yes"/"No".
@@ -545,7 +563,7 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   handler: async ({ mastra, controllerId, resourceId, sessionScope, abortSignal, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      const session = await getExistingSession(controller, resourceId, sessionScope, requestContext);
 
       let cleanedUp = false;
       let heartbeat: ReturnType<typeof setTimeout> | undefined;
@@ -588,6 +606,19 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
               scheduleHeartbeat();
             }, 25_000);
           };
+
+          // Live events are not replayed, so seed a late subscriber with the
+          // current display state (including the message in flight). This runs
+          // before subscribe() so it precedes the buffered workspace events
+          // subscribe() replays; both are synchronous, so no event slips between.
+          try {
+            controller.enqueue(
+              toWireEvent({ type: 'display_state_changed', displayState: session.displayState.get() }),
+            );
+          } catch {
+            cleanup(controller);
+            return;
+          }
 
           unsubscribe = session.subscribe(event => {
             if (cleanedUp) return;
@@ -745,7 +776,16 @@ export const AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, toolCallId, resumeData, requestContext }) => {
+  handler: async ({
+    mastra,
+    controllerId,
+    resourceId,
+    sessionScope,
+    toolCallId,
+    runId,
+    resumeData,
+    requestContext,
+  }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
@@ -754,13 +794,12 @@ export const AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE = createRoute({
       // can trip the request timeout and leave CORS mutating an already-sent response.
       // Claim the parked suspension before acking so a concurrent duplicate answer
       // (e.g. while an approved submit_plan awaits its mode switch) is rejected.
-      const claim = session.claimToolSuspension(toolCallId);
+      const claim = session.claimToolSuspension(toolCallId, runId);
       if (!claim.accepted) return { ok: false, reason: claim.reason };
-      const claimedToolCallId = claim.toolCallId;
       ackBackgroundSessionWork({
         work: session
-          .respondToToolSuspension({ toolCallId, resumeData, requestContext })
-          .finally(() => session.releaseToolResponse(claimedToolCallId)),
+          .respondToToolSuspension({ address: claim.address, resumeData, requestContext })
+          .finally(() => session.releaseToolResponse(claim.claimKey)),
         session,
         mastra,
         operation: 'respondToToolSuspension',
@@ -895,7 +934,7 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
   handler: async ({ mastra, controllerId, resourceId, sessionScope, threadId: requestedThreadId, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      const session = await getExistingSession(controller, resourceId, sessionScope, requestContext);
       const ds = session.displayState.get();
       const threadId = requestedThreadId ?? session.thread.getId() ?? undefined;
       const storage = mastra.getStorage();
@@ -1483,7 +1522,7 @@ export const GET_AGENT_CONTROLLER_OM_RECORD_ROUTE = createRoute({
   handler: async ({ mastra, controllerId, resourceId, sessionScope, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      const session = await getExistingSession(controller, resourceId, sessionScope, requestContext);
       const record = await controller.getObservationalMemoryRecord(session);
       return { record: record ?? undefined };
     } catch (error) {
@@ -1536,7 +1575,7 @@ export const GET_AGENT_CONTROLLER_RESOURCE_IDS_ROUTE = createRoute({
   handler: async ({ mastra, controllerId, resourceId, sessionScope, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      const session = await getExistingSession(controller, resourceId, sessionScope, requestContext);
       const resourceIds = await controller.getKnownResourceIds(session);
       return { resourceIds };
     } catch (error) {
@@ -1591,7 +1630,7 @@ export const GET_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
   handler: async ({ mastra, controllerId, resourceId, sessionScope, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      const session = await getExistingSession(controller, resourceId, sessionScope, requestContext);
       const threadId = session.thread.getId();
       if (!threadId) return { goal: undefined };
       const agent = getAgentForSession(controller, session);
@@ -1734,7 +1773,7 @@ export const GET_AGENT_CONTROLLER_PERMISSIONS_ROUTE = createRoute({
   handler: async ({ mastra, controllerId, resourceId, sessionScope, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      const session = await getExistingSession(controller, resourceId, sessionScope, requestContext);
       const rules = session.permissions.getRules();
       return {
         categories: rules.categories as Record<string, 'allow' | 'ask' | 'deny'> | undefined,

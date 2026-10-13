@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mongodb",
-  "version": "1.22.1-alpha.0",
+  "version": "1.23.1-alpha.0",
   "description": "MongoDB provider for Mastra - includes vector store capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -39,6 +39,7 @@
     "mongodb": "^7.5.0"
   },
   "devDependencies": {
+    "@internal/core": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",

@@ -178,6 +178,7 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
   title: 'Work',
   initialPhase: 'intake',
   transitionPolicy: workTransitionPolicy,
+  sourceClosed: { completed: 'done', canceled: 'canceled' },
   tools: { submit_plan: { onResult: advanceApprovedPlan } },
   phases: {
     intake: {

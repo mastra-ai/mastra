@@ -35,6 +35,7 @@ import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import {
+  buildAuthDisabledRoutes,
   buildAuthRoutes,
   createFactoryAuthGate,
   createFactoryRouteAuth,
@@ -674,6 +675,7 @@ export class MastraFactory {
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
     const knowledgeEnabled =
       this.#config.knowledge !== undefined || process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
+    const deploymentOrganizationId = process.env.MASTRACODE_DEPLOYMENT_ORGANIZATION_ID?.trim() || undefined;
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
       | GithubIntegration
       | undefined;
@@ -842,6 +844,17 @@ export class MastraFactory {
                 ],
               });
               return repository ?? null;
+            },
+          }
+        : {}),
+      ...(typeof githubIntegration?.ingestLinkedRepositoryBacklog === 'function'
+        ? {
+            onProjectRepositoryLinked: ({ orgId, projectRepository }) => {
+              void githubIntegration
+                .ingestLinkedRepositoryBacklog({ orgId, projectRepositoryId: projectRepository.id })
+                .catch(error => {
+                  console.warn('[factory] Failed to import a linked repository backlog:', error);
+                });
             },
           }
         : {}),
@@ -1266,8 +1279,8 @@ export class MastraFactory {
           // Public `/auth/*` routes (login/callback/logout/me). Folded in as
           // `apiRoutes` (not plain Hono routes) because the entry can't touch the
           // Hono app the deployer generates. `requiresAuth: false`; the gate
-          // skips `/auth/*`.
-          ...(auth ? buildAuthRoutes(auth, { publicUrl: publicOrigin }) : []),
+          // skips `/auth/*`. Auth-disabled mode still answers `/auth/me` (404).
+          ...(auth ? buildAuthRoutes(auth, { publicUrl: publicOrigin }) : buildAuthDisabledRoutes()),
           ...new TelemetryRoutes({ auth: routeAuth, providerName: auth?.name, publicOrigin, allowedOrigins }).routes(),
           // Custom `/web/*` routes (fs / config / integrations / factory / audit).
           ...assembleFactoryApiRoutes({
@@ -1291,6 +1304,7 @@ export class MastraFactory {
             intakeReady,
             factoryReady,
             knowledgeEnabled,
+            deploymentOrganizationId,
             deploymentModelProviders,
             knowledgeKey: this.#config.knowledge?.key,
             configVersion,

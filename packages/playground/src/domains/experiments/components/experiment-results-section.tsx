@@ -7,8 +7,15 @@ import { useScoresByExperimentId } from '@mastra/react/hooks/datasets';
 import { useMemo, useCallback } from 'react';
 
 import { useExperimentItemPanel } from '../context/experiment-item-panel-context';
+import { getOptionalResultColumns } from '../utils/result-output';
 import { ExperimentResultsList } from './experiment-results-list';
 import type { ExperimentResultsSortKey } from './experiment-results-list';
+
+// An active run with no results yet would otherwise read the same as a finished empty run.
+const emptyMessageByStatus: Record<string, string> = {
+  pending: 'Run queued — waiting to start…',
+  running: 'Run in progress — results appear as items complete',
+};
 
 export type ExperimentResultsSectionProps = {
   experimentId: string;
@@ -84,13 +91,13 @@ export function ExperimentResultsSection({
   const resultsListColumns = useMemo(
     () => [
       { name: 'itemId', label: 'Item ID', size: 'auto' },
-      { name: 'status', label: 'Status', size: 'auto' },
       { name: 'input', label: 'Input', size: '1fr' },
+      ...getOptionalResultColumns(results),
       { name: 'tags', label: 'Tags', size: 'auto' },
       { name: 'startedAt', label: 'Created', size: 'auto' },
       ...scorerIds.map(id => ({ name: id, label: id, size: 'auto' })),
     ],
-    [scorerIds],
+    [results, scorerIds],
   );
 
   return (
@@ -106,6 +113,7 @@ export function ExperimentResultsSection({
         setEndOfListElement={setEndOfListElement}
         isFetchingNextPage={isFetchingNextPage}
         hasNextPage={hasNextPage}
+        emptyMessage={emptyMessageByStatus[experimentStatus ?? ''] ?? 'No results yet'}
         selectedIds={selectedIds}
         onToggleSelect={onToggleSelect}
         sort={sort}

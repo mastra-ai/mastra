@@ -1,5 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -297,7 +298,7 @@ function ScopeTree({
                 else setExpandedIds(current => new Set(current).add(node.id));
               }}
             >
-              <ChevronRight className={cn('size-3 transition-transform', expanded && 'rotate-90')} />
+              <DisclosureChevron direction="right" className="size-3" />
             </button>
           ) : (
             <span className="size-5 shrink-0" />
