@@ -153,7 +153,7 @@ describe('TraceIntelligenceEntityIndex', () => {
 
       await screen.findByText('billing-agent');
       expect(screen.getByText('billing-agent').closest('a')).toBeNull();
-      expect(screen.getByText('Waiting for Traces')).toBeTruthy();
+      expect(screen.getByText('Waiting for traces')).toBeTruthy();
       expect(screen.queryByRole('link', { name: /billing-agent/ })).toBeNull();
       expect(screen.getByRole('link', { name: /support-agent/ })).toBeTruthy();
     });
@@ -163,7 +163,7 @@ describe('TraceIntelligenceEntityIndex', () => {
       renderIndex();
 
       await screen.findByText('billing-agent');
-      fireEvent.focus(closestElement('Waiting for Traces', '[tabindex="0"]'));
+      fireEvent.focus(closestElement('Waiting for traces', '[tabindex="0"]'));
 
       expect((await screen.findByRole('tooltip')).textContent).toBe(
         '42 traces collected so far. Signals appear once enough traces are processed.',
@@ -177,7 +177,7 @@ describe('TraceIntelligenceEntityIndex', () => {
       await screen.findByText('billing-agent');
       expect(closestElement('billing-agent', '[data-entity-card]').querySelector('a')).toBeNull();
       expect(
-        within(closestElement('billing-agent', '[data-entity-card]')).getByText('Waiting for Traces'),
+        within(closestElement('billing-agent', '[data-entity-card]')).getByText('Waiting for traces'),
       ).toBeTruthy();
       expect(screen.getByRole('link', { name: 'Open support-agent' })).toBeTruthy();
     });
@@ -281,7 +281,7 @@ describe('TraceIntelligenceEntityIndex', () => {
       renderIndex();
 
       await screen.findByText('new-agent');
-      fireEvent.focus(closestElement('Waiting for Traces', '[tabindex="0"]'));
+      fireEvent.focus(closestElement('Waiting for traces', '[tabindex="0"]'));
 
       expect((await screen.findByRole('tooltip')).textContent).toBe(expectedDescription);
     });

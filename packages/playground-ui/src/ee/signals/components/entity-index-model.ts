@@ -46,7 +46,7 @@ export function entityIndexMetadata(entity: ThemeLearningEntity): EntityIndexMet
 
 export function entityStatusLabel(status: EntityLearningProgressStatus | undefined): string {
   if (!status) return 'Unavailable';
-  if (status === 'collecting') return 'Waiting for Traces';
+  if (status === 'collecting') return 'Waiting for traces';
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
