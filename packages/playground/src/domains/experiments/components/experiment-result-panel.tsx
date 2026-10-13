@@ -86,6 +86,11 @@ export type ExperimentResultPanelProps = {
    * Feedback tabs; this renders the feedback tab, keyed by trace id.
    */
   feedbackTabSlot?: (args: { traceId: string }) => ReactNode;
+  /**
+   * `drawer` (default) portals the panel over the app. `inline` renders it in the document flow
+   * (e.g. inside the route side panel) and renders nothing while there is no `result`/`itemId`.
+   */
+  variant?: 'drawer' | 'inline';
 };
 
 export function ExperimentResultPanel({
@@ -94,32 +99,44 @@ export function ExperimentResultPanel({
   fallback,
   title,
   onClose,
+  variant = 'drawer',
   ...bodyProps
 }: ExperimentResultPanelProps) {
   const dialogTitle = title ?? (itemId ? `Experiment item ${itemId}` : `Experiment result ${result?.id ?? ''}`);
+  const content = result ? (
+    <ExperimentResultPanelBody result={result} onClose={onClose} {...bodyProps} />
+  ) : itemId ? (
+    <>
+      <DataPanel.Header>
+        <DataPanel.Heading>
+          Experiment item
+          <DataPanel.CopyId id={itemId} />
+        </DataPanel.Heading>
+        <DataPanel.HeaderActions>
+          <DataPanel.CloseButton icon="x" onClick={onClose} />
+        </DataPanel.HeaderActions>
+      </DataPanel.Header>
+      {fallback}
+    </>
+  ) : null;
+
+  if (variant === 'inline') {
+    if (!content) return null;
+    return (
+      <DataPanel variant="inline" title={dialogTitle}>
+        {content}
+      </DataPanel>
+    );
+  }
+
   return (
     <DataPanel open={!!(result ?? itemId)} onClose={onClose} title={dialogTitle} depth={1}>
-      {result ? (
-        <ExperimentResultPanelBody result={result} onClose={onClose} {...bodyProps} />
-      ) : itemId ? (
-        <>
-          <DataPanel.Header>
-            <DataPanel.Heading>
-              Experiment item
-              <DataPanel.CopyId id={itemId} />
-            </DataPanel.Heading>
-            <DataPanel.HeaderActions>
-              <DataPanel.CloseButton icon="x" onClick={onClose} />
-            </DataPanel.HeaderActions>
-          </DataPanel.Header>
-          {fallback}
-        </>
-      ) : null}
+      {content}
     </DataPanel>
   );
 }
 
-type ExperimentResultPanelBodyProps = Omit<ExperimentResultPanelProps, 'result' | 'itemId' | 'fallback'> & {
+type ExperimentResultPanelBodyProps = Omit<ExperimentResultPanelProps, 'result' | 'itemId' | 'fallback' | 'variant'> & {
   result: ExperimentResultPanelResult;
 };
 
