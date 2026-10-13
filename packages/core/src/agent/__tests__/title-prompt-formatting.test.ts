@@ -2,6 +2,7 @@ import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MockMemory } from '../../memory/mock';
+import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 
 function titleGenerationTests(version: 'v1' | 'v2') {
@@ -638,3 +639,25 @@ function titleGenerationTests(version: 'v1' | 'v2') {
 
 titleGenerationTests('v1');
 titleGenerationTests('v2');
+
+describe('default title instructions', () => {
+  it('tell the model to write the title in the language of the conversation (#24688)', async () => {
+    const agent = new Agent({
+      name: 'title-language-agent',
+      instructions: 'test',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          text: 'x',
+          content: [{ type: 'text' as const, text: 'x' }],
+          warnings: [],
+        }),
+      }),
+    });
+
+    const instructions = await agent.resolveTitleInstructions(new RequestContext());
+    expect(instructions).toContain('same language');
+  });
+});
