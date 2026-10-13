@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { MockMemory } from '../../memory/mock';
 import { ToolSearchProcessor } from '../../processors/processors/tool-search';
@@ -97,5 +97,23 @@ describe('ToolSearchProcessor storage: context — resume tool rebuild', () => {
     });
 
     expect(tools.weather).toBeUndefined();
+  });
+
+  // Issue #26851: on a new thread's first message, tool preparation runs in parallel
+  // with prepare-memory-step, which creates the thread. Reading history must not
+  // recall a thread that doesn't exist yet (Memory.recall throws "No thread found").
+  it('does not recall a thread that does not exist yet', async () => {
+    const memory = new MockMemory();
+    const recallSpy = vi.spyOn(memory, 'recall');
+    const agent = createAgent(memory);
+
+    const tools = await agent.getToolsForExecution({
+      threadId: 'new-thread',
+      resourceId: 'user-1',
+      requestContext: new RequestContext(),
+    });
+
+    expect(tools.weather).toBeUndefined();
+    expect(recallSpy).not.toHaveBeenCalled();
   });
 });

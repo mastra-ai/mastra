@@ -4690,17 +4690,22 @@ export class Agent<
     let messagesPromise: Promise<MastraDBMessage[]> | undefined;
     const getMessages = (): Promise<MastraDBMessage[]> => {
       if (!threadId) return Promise.resolve(runMessages ?? []);
-      messagesPromise ??= this.getMemoryMessages({
-        threadId,
-        resourceId,
-        vectorMessageSearch: '',
-        memoryConfig,
-        requestContext,
-      }).then(result => {
+      messagesPromise ??= (async () => {
+        // prepare-memory-step creates the thread in parallel with tool preparation,
+        // so on a new thread's first message it may not exist yet: no persisted history.
+        const memory = await this.getMemory({ requestContext });
+        if (!memory || !(await memory.getThreadById({ threadId }))) return runMessages ?? [];
+        const result = await this.getMemoryMessages({
+          threadId,
+          resourceId,
+          vectorMessageSearch: '',
+          memoryConfig,
+          requestContext,
+        });
         if (!runMessages?.length) return result.messages;
         const seen = new Set(result.messages.map(m => m.id));
         return [...result.messages, ...runMessages.filter(m => !seen.has(m.id))];
-      });
+      })();
       return messagesPromise;
     };
 
