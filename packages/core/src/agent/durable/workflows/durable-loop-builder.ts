@@ -605,6 +605,17 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         state.deferredStepFinishChunk = undefined;
         if (!deferredChunk) return;
 
+        // Carry the step's response messages so `onStepFinish(event).response.messages` and
+        // `output.steps[i].response.messages` match the regular loop (#26780).
+        try {
+          const list = createRunMessageList({ mastra: rt.mastra }).deserialize(
+            (await openMessageListState(params, state)).read(),
+          );
+          deferredChunk.payload._durableResponseMessages = list.get.response.aiV5.model();
+        } catch (error) {
+          rt.logger?.debug?.(`[DurableAgent] Could not rebuild step-finish messages: ${error}`);
+        }
+
         try {
           await this.emitChunk(rt, deferredChunk);
         } catch (error) {

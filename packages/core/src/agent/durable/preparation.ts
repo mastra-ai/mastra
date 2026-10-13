@@ -156,7 +156,7 @@ interface DurablePreparationAgent {
   requestContextSchema?: StandardSchemaWithJSON<unknown>;
   getDefaultOptions(opts: { requestContext: RequestContext }): AgentExecutionOptions | Promise<AgentExecutionOptions>;
   getInstructions(opts: { requestContext: RequestContext }): AgentInstructions | Promise<AgentInstructions>;
-  __getModelAndModelList(opts: { requestContext: RequestContext }): Promise<{
+  __getModelAndModelList(opts: { requestContext: RequestContext; model?: unknown }): Promise<{
     model: MastraLanguageModel;
     modelList: AgentModelManagerConfig[] | null;
     fallbackTimeouts: Array<ModelFallbackSettings['timeout'] | undefined>;
@@ -361,7 +361,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // Resolve and validate the complete model selection before durable preparation
   // can persist a thread or run user-defined processors, tools, or hooks.
-  const { model, modelList, fallbackTimeouts } = await typedAgent.__getModelAndModelList({ requestContext });
+  const { model, modelList, fallbackTimeouts } = await typedAgent.__getModelAndModelList({
+    requestContext,
+    model: (execOptions as { model?: unknown }).model,
+  });
   if (!model) {
     throw new Error('Agent model not available');
   }

@@ -559,7 +559,10 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             }
           } else if (onFinish) {
             try {
-              const steps = (data.output?.steps ?? []) as any[];
+              // The output's buffered steps carry each step's `response` (messages, model id); the
+              // serialized loop steps deliberately don't. The chunk stream is closed, so this resolves (#26780).
+              const bufferedSteps = (await output.steps.catch(() => undefined)) as any[] | undefined;
+              const steps = (bufferedSteps?.length ? bufferedSteps : (data.output?.steps ?? [])) as any[];
               const allToolResults = steps.flatMap((s: any) => s?.toolResults ?? []);
               const allToolCalls = steps.flatMap((s: any) => s?.toolCalls ?? []);
               // The structured object is parsed while the output drains the (now closed) chunk
@@ -593,7 +596,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
                 totalUsage: normalizeUsage(data.output?.usage),
                 warnings: data.stepResult?.warnings ?? [],
                 request: { body: undefined },
-                response: {},
+                response: steps.at(-1)?.response ?? {},
                 reasoningText: undefined,
                 providerMetadata: undefined,
               });
