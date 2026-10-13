@@ -138,6 +138,21 @@ describe('handleError', () => {
     });
   });
 
+  describe.each(['AGENT_RESUME_RUN_NOT_SUSPENDED', 'WORKFLOW_RUN_NOT_SUSPENDED'])('%s', id => {
+    it('maps resuming a run that is not waiting to be resumed to 409', () => {
+      const err = Object.assign(new Error('not suspended'), { id });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, 'default');
+      } catch (e) {
+        caught = e as HTTPException;
+      }
+      expect(caught).toBeInstanceOf(HTTPException);
+      expect(caught!.status).toBe(409);
+      expect(caught!.message).toBe('not suspended');
+    });
+  });
+
   describe('WORKFLOW_RESUME_ALREADY_CLAIMED', () => {
     it('maps a losing concurrent resume to 409', () => {
       const err = Object.assign(new Error('already resumed'), { id: 'WORKFLOW_RESUME_ALREADY_CLAIMED' });

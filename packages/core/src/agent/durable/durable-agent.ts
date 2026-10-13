@@ -2907,10 +2907,10 @@ export class DurableAgent<
       coldSnapshot = snapshot;
       if (snapshot?.status !== 'suspended') {
         throw new MastraError({
-          id: 'AGENT_RESUME_ALREADY_CLAIMED',
+          id: 'AGENT_RESUME_RUN_NOT_SUSPENDED',
           domain: ErrorDomain.AGENT,
           category: ErrorCategory.USER,
-          text: `DurableAgent "${this.name}" resume(${runId}) cannot resume the run because it is not suspended; another resume of it may already have run.`,
+          text: `DurableAgent "${this.name}" resume(${runId}) cannot resume the run because it is not waiting to be resumed (status: ${snapshot?.status}).`,
           details: { agentName: this.name, runId, status: snapshot?.status },
         });
       }
@@ -3409,7 +3409,7 @@ export class DurableAgent<
           } catch (error) {
             // This resume saw the run suspended when it claimed it, so the workflow no longer
             // being suspended means a concurrent resume ran it first.
-            if (error instanceof Error && error.message === 'This workflow run was not suspended') {
+            if (error instanceof MastraError && error.id === 'WORKFLOW_RUN_NOT_SUSPENDED') {
               throw new MastraError({
                 id: 'AGENT_RESUME_ALREADY_CLAIMED',
                 domain: ErrorDomain.AGENT,
