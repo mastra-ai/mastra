@@ -13,8 +13,9 @@ import type { RequestContext } from '../../../request-context';
 import type { MastraOnFinishCallbackContext } from '../../../stream/types';
 import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
-import type { MessageList } from '../../message-list';
+import type { MastraDBMessage, MessageList } from '../../message-list';
 import type { SaveQueueManager } from '../../save-queue';
+import { undoSavedResponseMessages } from '../../save-queue/undo-saved-response-messages';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
 import { isSupportedLanguageModel } from '../../utils';
@@ -74,7 +75,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
   },
   ModelLoopStreamArgs<any, OUTPUT>
 >['execute'] {
-  return async ({ inputData, bail, ..._observabilityContext }) => {
+  return async ({ inputData, bail }) => {
     const memoryData = inputData['prepare-memory-step'];
 
     // Class instances written to runScope by upstream steps. These never travel
@@ -83,6 +84,10 @@ export function createMapResultsStep<OUTPUT = undefined>({
     const convertedTools = runScope.get(CONVERTED_TOOLS_KEY);
 
     let threadCreatedByStep = false;
+
+    // Output only ever merges into the latest message, so that is the only earlier-turn message
+    // snapshotted for undoSavedResponseMessages, after client tool output mapping has enriched it.
+    let earlierTurnSnapshot: MastraDBMessage | undefined;
 
     const result = {
       ...options,
@@ -222,6 +227,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
       tools: convertedTools,
       logger: capabilities.logger,
     });
+
+    const latestMessage = messageList.get.all.db().at(-1);
+    earlierTurnSnapshot = latestMessage?.role === 'assistant' ? structuredClone(latestMessage) : undefined;
 
     // Resolve output processors - overrides replace user-configured but auto-derived (memory) are kept
     let effectiveOutputProcessors = capabilities.outputProcessors
@@ -389,6 +397,19 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
             agentSpan?.end({ endTree: true });
           } else {
+            if (context?.outputResultTripwire) {
+              await undoSavedResponseMessages({
+                memory,
+                threadId: memoryData.thread?.id ?? threadIdFromArgs,
+                memoryConfig,
+                messageList,
+                saveQueueManager,
+                earlierTurnSnapshot,
+                logger: capabilities.logger,
+                runId,
+              });
+            }
+
             try {
               const outputText =
                 options.structuredOutput?.schema && payload.object != null

@@ -63,13 +63,15 @@ const history = await dataset.getItemHistory({ itemId: 'item-id' })
 
 ## Access
 
-`Dataset` isn't instantiated directly. Obtain one via `DatasetsManager`:
+Obtain a `Dataset` through `DatasetsManager`, which resolves the dataset and applies tenancy scope:
 
 ```typescript
 const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 // or
 const dataset = await mastra.datasets.create({ name: 'My dataset' })
 ```
+
+`Dataset` also has a public constructor (`new Dataset(id, mastra)`) that skips the manager's lookup and tenancy scoping.
 
 ## Properties
 

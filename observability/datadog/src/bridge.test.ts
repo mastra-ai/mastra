@@ -68,6 +68,7 @@ const {
       _options: options,
       finish: vi.fn(),
       setTag: vi.fn(),
+      addLinks: vi.fn(),
       context: vi.fn(() => ({
         toSpanId: (hex?: boolean) => (hex ? spanHex : BigInt(`0x${spanHex}`).toString(10)),
         toTraceId: (hex?: boolean) => (hex ? traceHex : BigInt(`0x${traceHex.slice(-16)}`).toString(10)),
@@ -123,6 +124,7 @@ vi.mock('dd-trace', () => {
           flush: mockExporterFlush,
         },
       },
+      extract: (_format: string, carrier: { traceparent: string }) => ({ fromTraceparent: carrier.traceparent }),
       scope: () => ({
         activate: mockScopeActivate,
         active: mockScopeActive,
@@ -609,6 +611,40 @@ describe('DatadogBridge', () => {
         modelName: 'gpt-5.4',
         modelProvider: 'openai',
       });
+    });
+  });
+
+  describe('span links', () => {
+    const startLink = { traceId: '0af7651916cd43dd8448eb211c80319c', spanId: 'b7ad6b7169203331' };
+    const lateLink = { traceId: '1af7651916cd43dd8448eb211c80319c', spanId: 'c7ad6b7169203331' };
+
+    it('starts the APM span with links resolved from W3C traceparents', () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+
+      bridge.createSpan(createMockSpanOptions({ links: [startLink, { traceId: 'xyz', spanId: 'xyz' }] }));
+
+      expect(capturedApmSpans[0]._options.links).toEqual([
+        { context: { fromTraceparent: `00-${startLink.traceId}-${startLink.spanId}-01` } },
+      ]);
+    });
+
+    it('adds links set after the span started before it finishes', async () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const spanResult = bridge.createSpan(createMockSpanOptions({ links: [startLink] }))!;
+      const apmSpan = capturedApmSpans[0];
+
+      await bridge.exportTracingEvent(
+        createTracingEvent(
+          TracingEventType.SPAN_ENDED,
+          createMockSpan({ id: spanResult.spanId, traceId: spanResult.traceId, links: [startLink, lateLink] } as any),
+        ),
+      );
+
+      expect(apmSpan.addLinks).toHaveBeenCalledTimes(1);
+      expect(apmSpan.addLinks).toHaveBeenCalledWith([
+        { context: { fromTraceparent: `00-${lateLink.traceId}-${lateLink.spanId}-01` } },
+      ]);
+      expect(apmSpan.finish).toHaveBeenCalled();
     });
   });
 

@@ -120,6 +120,8 @@ export type StreamInternal = {
   resourceId?: string;
   /** @deprecated Use `runScope.get(MEMORY_KEY)` from `loop/run-scope-keys`. */
   memory?: MastraMemory; // MastraMemory from memory/memory
+  /** @deprecated Use `runScope.get(FIXED_MEMORY_KEY)` from `loop/run-scope-keys`. */
+  fixedMemory?: boolean;
   /** @deprecated Use `runScope.get(THREAD_EXISTS_KEY)` from `loop/run-scope-keys`. */
   threadExists?: boolean;
   // Tools modified by prepareStep/processInputStep - stored here to avoid workflow serialization

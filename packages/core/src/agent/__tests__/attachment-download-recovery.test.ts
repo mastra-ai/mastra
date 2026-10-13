@@ -743,7 +743,7 @@ describe('attachment download recovery', () => {
     expect(fallback.prompts).toHaveLength(0);
     expect(requests).toBe(1);
   });
-  it.each([false])(
+  it.each([false, true])(
     'keeps an attachment skipped when a queued signal interrupts the skip retry (durable: %s)',
     async durable => {
       const prompts: LanguageModelV2Prompt[] = [];

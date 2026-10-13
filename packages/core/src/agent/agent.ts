@@ -43,6 +43,7 @@ import type { ProviderOptions } from '../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
+import { AGENTIC_EXECUTION_WORKFLOW_ID, AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
 import { networkLoop } from '../loop/network';
 import { getRunStreamSlot, getScopeStreamSlot } from '../loop/shared/stream-until-idle-helpers';
 // `Mastra` is imported type-only here: a runtime import would create an ESM
@@ -193,6 +194,7 @@ import { GoalSignalProvider, resolveGoalStore, readObjective, writeObjective, cl
 import { buildMcpServerGuidance } from './mcp-guidance';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
+import { createStoredMessageLoader } from './message-list/memory-message-refs';
 import { buildResumeSpanInput } from './resume-span-input';
 import { SaveQueueManager } from './save-queue';
 import {
@@ -457,6 +459,7 @@ type ProcessorLoadedToolsProvider = {
     requestContext: RequestContext;
     tools?: Record<string, unknown>;
     getMessages?: () => Promise<MastraDBMessage[]>;
+    runMessages?: MastraDBMessage[];
   }) => Record<string, ToolToConvert> | Promise<Record<string, ToolToConvert>>;
 };
 
@@ -535,6 +538,24 @@ export interface AgentListSuspendedRunsResult {
 
 function getInvocationActor(context: unknown): ActorSignal | undefined {
   return (context as { actor?: ActorSignal } | undefined)?.actor;
+}
+
+/**
+ * Whether any step in the workflow (including nested workflows) can suspend.
+ * Mirrors the `canSuspend` rule used when serializing step graphs. Every
+ * builder method (then/parallel/branch/loops/foreach) registers its inner
+ * steps in `workflow.steps`, so no step-graph walk is needed.
+ */
+function workflowCanSuspend(workflow: unknown, seen = new Set<unknown>()): boolean {
+  if (!workflow || seen.has(workflow)) return false;
+  seen.add(workflow);
+  const steps = (workflow as { steps?: Record<string, unknown> }).steps;
+  return Object.values(steps ?? {}).some(step => {
+    const s = step as { suspendSchema?: unknown; resumeSchema?: unknown; component?: string } | undefined;
+    if (!s) return false;
+    if (s.suspendSchema || s.resumeSchema) return true;
+    return s.component === 'WORKFLOW' && workflowCanSuspend(s, seen);
+  });
 }
 
 type ProcessorWorkflowChildrenContainer = {
@@ -1237,6 +1258,12 @@ export class Agent<
   __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[] {
     const pubsub = this.getPubSub();
     return (runId, scope) => agentThreadStreamRuntime.drainPendingSignals(runId, pubsub, scope);
+  }
+
+  /** @internal */
+  __getSubscribePendingSignals(): (runId: string, listener: () => void) => () => void {
+    const pubsub = this.getPubSub();
+    return (runId, listener) => agentThreadStreamRuntime.subscribePendingSignals(runId, listener, pubsub);
   }
 
   /**
@@ -2581,6 +2608,16 @@ export class Agent<
 
   public hasOwnMemory(): boolean {
     return Boolean(this.#memory);
+  }
+
+  /**
+   * Whether the agent's memory is a fixed instance, so it resolves to the same
+   * store on every call. Function memory and memory inherited from a delegating
+   * agent depend on the request context, which a resume may not repeat.
+   * @internal
+   */
+  __hasFixedMemory(): boolean {
+    return Boolean(this.#memory) && typeof this.#memory !== 'function';
   }
 
   /**
@@ -4649,10 +4686,13 @@ export class Agent<
     tools,
     getModel,
     memoryConfig,
+    runMessages,
     ...rest
   }: {
     processors: InputProcessorOrWorkflow[];
     memoryConfig?: MemoryConfigInternal;
+    /** In-flight messages of the run, not yet in memory (durable recovery). */
+    runMessages?: MastraDBMessage[];
     /**
      * Tools already resolved for this request. A processor that made a
      * request-scoped tool searchable needs them to rebuild its executor here,
@@ -4677,14 +4717,18 @@ export class Agent<
     // the persisted thread here. Loaded lazily and at most once.
     let messagesPromise: Promise<MastraDBMessage[]> | undefined;
     const getMessages = (): Promise<MastraDBMessage[]> => {
-      if (!threadId) return Promise.resolve([]);
+      if (!threadId) return Promise.resolve(runMessages ?? []);
       messagesPromise ??= this.getMemoryMessages({
         threadId,
         resourceId,
         vectorMessageSearch: '',
         memoryConfig,
         requestContext,
-      }).then(result => result.messages);
+      }).then(result => {
+        if (!runMessages?.length) return result.messages;
+        const seen = new Set(result.messages.map(m => m.id));
+        return [...result.messages, ...runMessages.filter(m => !seen.has(m.id))];
+      });
       return messagesPromise;
     };
 
@@ -4701,7 +4745,12 @@ export class Agent<
         return;
       }
 
-      const loadedTools = await toolProvider.getLoadedToolsForRequestContext({ requestContext, tools, getMessages });
+      const loadedTools = await toolProvider.getLoadedToolsForRequestContext({
+        requestContext,
+        tools,
+        getMessages,
+        runMessages,
+      });
       if (!loadedTools || Object.keys(loadedTools).length === 0) {
         return;
       }
@@ -6647,6 +6696,9 @@ export class Agent<
           description: workflow.description || `Workflow: ${workflowName}`,
           inputSchema: extendedInputSchema,
           outputSchema,
+          // Advertise suspension so tool-call concurrency gates serialize this tool.
+          // Permissive because any suspending step's payload may be forwarded.
+          ...(workflowCanSuspend(workflow) ? { suspendSchema: z.any() } : {}),
           mastra: this.#mastra,
           // manually wrap workflow tools with tracing, so that we can pass the
           // current tool span onto the workflow to maintain continuity of the trace
@@ -6870,6 +6922,8 @@ export class Agent<
     backgroundTaskEnabled?: boolean;
     backgroundTaskPolicy?: AgentExecutionOptionsBase<any>['backgroundTaskPolicy'];
     model?: MastraLanguageModel | MastraLegacyLanguageModel;
+    /** @internal In-flight run messages, so recovery can restore processor-loaded tools. */
+    runMessages?: MastraDBMessage[];
   }): Promise<Record<string, CoreTool>> {
     const requestContext = options.requestContext ?? new RequestContext();
     const defaultOptions = await this.getDefaultOptions({ requestContext });
@@ -6908,6 +6962,7 @@ export class Agent<
       backgroundTaskEnabled: options.backgroundTaskEnabled,
       backgroundTaskPolicy: mergedOptions.backgroundTaskPolicy,
       model: options.model,
+      runMessages: options.runMessages,
     });
   }
 
@@ -6932,6 +6987,7 @@ export class Agent<
     inputProcessors,
     hooks,
     model,
+    runMessages,
     ...rest
   }: {
     toolsets?: ToolsetsInput;
@@ -6953,6 +7009,7 @@ export class Agent<
     inputProcessors?: InputProcessorOrWorkflow[];
     hooks?: ToolHooks;
     model?: MastraLanguageModel | MastraLegacyLanguageModel;
+    runMessages?: MastraDBMessage[];
   } & Partial<ObservabilityContext>): Promise<Record<string, CoreTool>> {
     const observabilityContext = resolveObservabilityContext(rest);
     let mastraProxy = undefined;
@@ -7125,6 +7182,7 @@ export class Agent<
       processors: configuredInputProcessors,
       tools: requestResolvedTools,
       memoryConfig,
+      runMessages,
       runId,
       resourceId,
       threadId,
@@ -7254,10 +7312,12 @@ export class Agent<
     overrideScorers,
     threadId,
     resourceId,
+    memory,
     ...observabilityContext
   }: {
     messageList: MessageList;
     runId: string;
+    memory?: MastraMemory;
     requestContext: RequestContext;
     structuredOutput?: boolean;
     overrideScorers?:
@@ -7277,6 +7337,10 @@ export class Agent<
       return;
     }
 
+    if (Object.keys(scorers || {}).length === 0) {
+      return;
+    }
+
     const scorerInput: ScorerRunInputForAgent = {
       inputMessages: messageList.getPersisted.input.db(),
       rememberedMessages: messageList.getPersisted.remembered.db(),
@@ -7284,30 +7348,35 @@ export class Agent<
       taggedSystemMessages: messageList.getPersisted.taggedSystemMessages,
     };
 
-    const scorerOutput: ScorerRunOutputForAgent = messageList.getPersisted.response.db();
+    let scorerOutput: ScorerRunOutputForAgent;
+    try {
+      // A resumed run knows the response messages pruned before it suspended by id only.
+      scorerOutput = await messageList.getRunResponseMessages(createStoredMessageLoader(memory));
+    } catch (e) {
+      this.logger.warn('Failed to load run response messages for scorers', { agent: this.name, error: e });
+      return;
+    }
 
-    if (Object.keys(scorers || {}).length > 0) {
-      for (const [_id, scorerObject] of Object.entries(scorers)) {
-        runScorer({
-          mastra: this.#mastra ?? this.#ephemeralMastra,
-          scorerId: scorerObject.scorer.id,
-          scorerObject: scorerObject,
-          runId,
-          input: scorerInput,
-          output: scorerOutput,
-          requestContext,
-          entity: {
-            id: this.id,
-            name: this.name,
-          },
-          source: 'LIVE',
-          entityType: 'AGENT',
-          structuredOutput: !!structuredOutput,
-          threadId,
-          resourceId,
-          ...observabilityContext,
-        });
-      }
+    for (const [_id, scorerObject] of Object.entries(scorers)) {
+      runScorer({
+        mastra: this.#mastra ?? this.#ephemeralMastra,
+        scorerId: scorerObject.scorer.id,
+        scorerObject: scorerObject,
+        runId,
+        input: scorerInput,
+        output: scorerOutput,
+        requestContext,
+        entity: {
+          id: this.id,
+          name: this.name,
+        },
+        source: 'LIVE',
+        entityType: 'AGENT',
+        structuredOutput: !!structuredOutput,
+        threadId,
+        resourceId,
+        ...observabilityContext,
+      });
     }
   }
 
@@ -8668,6 +8737,7 @@ export class Agent<
       overrideScorers,
       threadId,
       resourceId,
+      memory,
       ...observabilityContext,
     });
 
@@ -9282,13 +9352,49 @@ export class Agent<
       wrapperClose();
       return true;
     }
-    return agentThreadStreamRuntime.abortThread(options, this.getPubSub());
+    const runId = agentThreadStreamRuntime.getActiveThreadRunId(options, this.getPubSub());
+    const parked = !!runId && agentThreadStreamRuntime.isRunParked(runId, this.getPubSub());
+    const aborted = agentThreadStreamRuntime.abortThread(options, this.getPubSub());
+    if (aborted && parked) void this.#deleteAbortedSuspendedRun(runId);
+    return aborted;
   }
 
   abortRunStream(runId: string): boolean {
     const wrapperClose = getRunStreamSlot(this.#activeStreamUntilIdle, runId);
     wrapperClose?.();
-    return wrapperClose !== undefined || agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
+    if (wrapperClose !== undefined) return true;
+    const parked = agentThreadStreamRuntime.isRunParked(runId, this.getPubSub());
+    const aborted = agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
+    if (aborted && parked) void this.#deleteAbortedSuspendedRun(runId);
+    return aborted;
+  }
+
+  /**
+   * An aborted suspended run can never be resumed, so drop its workflow
+   * registration and snapshot rows; otherwise it stays listed as suspended.
+   */
+  async #deleteAbortedSuspendedRun(runId: string): Promise<void> {
+    const mastra = this.#mastra;
+    if (!mastra) return;
+    const runtimeLoopWorkflowName = (
+      this.#threadRuntimeAgent as Partial<Pick<DurableAgentLike, 'durableLoopWorkflowName'>> | undefined
+    )?.durableLoopWorkflowName;
+    const workflowNames = new Set([
+      AGENTIC_LOOP_WORKFLOW_ID,
+      AGENTIC_EXECUTION_WORKFLOW_ID,
+      DurableStepIds.AGENTIC_LOOP,
+      DurableStepIds.AGENTIC_EXECUTION,
+    ]);
+    if (typeof runtimeLoopWorkflowName === 'string') workflowNames.add(runtimeLoopWorkflowName);
+    try {
+      mastra.__unregisterInternalWorkflow(AGENTIC_LOOP_WORKFLOW_ID, runId);
+      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+      await Promise.all(
+        [...workflowNames].map(workflowName => workflowsStore?.deleteWorkflowRunById({ runId, workflowName })),
+      );
+    } catch (error) {
+      this.logger.warn(`Failed to delete snapshot of aborted suspended run ${runId}`, { runId, error });
+    }
   }
 
   sendMessage<OUTPUT = TOutput>(

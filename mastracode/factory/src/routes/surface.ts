@@ -637,6 +637,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           memorySettings: deps.domains.memorySettings,
           sessionRetirement: deps.sessionRetirement,
           ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
+          ...(githubStorage ? { githubRepositories: githubStorage.repositories } : {}),
         });
   // Absent known integrations still get their disabled-status stub.
   const absentStubs = ['github', 'linear', 'jira']

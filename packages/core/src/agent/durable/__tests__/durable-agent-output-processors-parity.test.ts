@@ -151,8 +151,9 @@ const THROWS_CONTRACT: Record<string, unknown> = {
  */
 const THROWS_MEMORY: Record<ParityEngine, { messages: number; partTypes: string[] }> = {
   plain: { messages: 0, partTypes: [] },
-  durable: { messages: 2, partTypes: ['tool-invocation', 'error'] },
-  evented: { messages: 2, partTypes: ['tool-invocation', 'error'] },
+  // One assistant message per turn, steps separated by step-start, as in Agent (#26332).
+  durable: { messages: 1, partTypes: ['tool-invocation', 'step-start', 'error'] },
+  evented: { messages: 1, partTypes: ['tool-invocation', 'step-start', 'error'] },
 };
 
 /** Harness `errorChunks`: `error`, `abort` and `tripwire` chunks all count as a surfaced failure. */
