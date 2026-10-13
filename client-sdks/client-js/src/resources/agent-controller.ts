@@ -449,8 +449,15 @@ export class AgentControllerSession extends BaseResource {
         stream: true,
         signal: abort.signal,
       }) as Promise<Response>;
-      // If the timeout wins the race, the losing request must not surface as unhandled.
-      request.catch(() => {});
+      // If the timeout wins the race, a late response must be cancelled and a late
+      // rejection must not surface as unhandled.
+      request
+        .then(response => {
+          if (abort.signal.aborted) {
+            void response.body?.cancel().catch(() => {});
+          }
+        })
+        .catch(() => {});
       let response: Response;
       try {
         if (idleTimeoutMs > 0) {

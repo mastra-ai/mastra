@@ -1180,6 +1180,29 @@ describe('AgentController Resource', () => {
       });
     });
 
+    it('cancels the body of a response that arrives after the open timed out', async () => {
+      const cancel = vi.fn();
+      let resolveLate!: (response: Response) => void;
+      (global.fetch as any).mockImplementationOnce(
+        () =>
+          new Promise<Response>(resolve => {
+            resolveLate = resolve;
+          }),
+      );
+
+      await expect(session().subscribe({ onEvent: () => {}, idleTimeoutMs: 50 })).rejects.toMatchObject({
+        name: 'AgentControllerStreamIdleError',
+      });
+
+      resolveLate(
+        new Response(new ReadableStream({ start() {}, cancel }), {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        }),
+      );
+      await vi.waitFor(() => expect(cancel).toHaveBeenCalled(), { timeout: 1000, interval: 5 });
+    });
+
     it('counts a hung reconnect open as a failed attempt and retries', async () => {
       const endEvent = { type: 'agent_end', reason: 'complete' };
       (global.fetch as any)
