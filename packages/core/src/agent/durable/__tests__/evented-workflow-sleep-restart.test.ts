@@ -9,15 +9,18 @@
  *   the harness checks that the sleep actually held and the result passed
  *   through it.
  *
- * The sleep duration is only checked on the non-restart cells: the harness
- * excludes timing on a mechanism cell because the restarted run re-enters the
- * sleep, and the port does the same. The harness's `wf-evented-redeliver`
- * condition is not ported: it exercises the engine's redelivery path rather
- * than a restart out of the helper's surface (COR-1307 owns the finding).
+ * The sleep duration is only checked on the non-mechanism cells: restart and
+ * redelivery can re-enter the sleep, so those cells assert the result and exact
+ * execution log instead. COR-1307 owns the fresh-id completed-transition
+ * replay observed by the harness's `wf-evented-redeliver` condition.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
+import { Mastra } from '../../../mastra';
+import { MockStore } from '../../../storage/mock';
+import { createEventedWorkflow, createStep } from '../../../workflows';
+import { RedeliveryDriver } from '../../../workflows/evented/test-utils/redelivery-driver';
 import { DEFAULT_TIMEOUT_MS, createGate, createRestartScenario, findRow, loadGraph } from './restart-harness';
 import type { Checkpoint, Gate } from './restart-harness';
 
@@ -198,5 +201,66 @@ describe('T58 wf-sleep: the sleep holds without a restart', () => {
         await app.stopWorkers?.();
       }
     }, 30_000);
+  }
+});
+
+describe('T58 wf-evented-redeliver', () => {
+  for (const variant of ['sleep', 'sleep-until'] as const) {
+    it(`${variant}: pins the harness fresh-id replay of a completed transition`, async () => {
+      const driver = new RedeliveryDriver();
+      const executed: string[] = [];
+      const step = (id: string) =>
+        createStep({
+          id,
+          inputSchema: N,
+          outputSchema: N,
+          execute: async ({ inputData }) => {
+            executed.push(id);
+            return { n: inputData.n + 1 };
+          },
+        });
+      const workflowId = `t58-redeliver-${variant}`;
+      const before = createEventedWorkflow({ id: workflowId, inputSchema: N, outputSchema: N }).then(step('before'));
+      const slept =
+        variant === 'sleep'
+          ? before.sleep(20, { id: 'nap' })
+          : before.sleepUntil(async () => new Date(Date.now() + 20), { id: 'nap' });
+      const workflow = slept.then(step('after')).commit();
+      const mastra = new Mastra({
+        logger: false,
+        storage: new MockStore(),
+        pubsub: driver.pubsub,
+        workflows: { [workflowId]: workflow },
+      });
+      try {
+        await mastra.startWorkers();
+        driver.assertEvented(workflow);
+        const runId = `${workflowId}-run`;
+        const run = await workflow.createRun({ runId });
+        const result = await run.start({ inputData: { n: 1 } });
+        expect(result.status).toBe('success');
+        expect(result.result).toEqual({ n: 3 });
+        expect(executed).toEqual(['before', 'after']);
+
+        const match = { spec: `${workflowId}@0`, runId } as const;
+        const original = driver.stepRuns(match).at(-1)!;
+        expect(original.data).toMatchObject({ workflowId, runId, executionPath: [0] });
+        const deliveriesBefore = driver.deliveryCount(match);
+        const { event, handled } = await driver.redeliver(match, { viaPublish: true });
+
+        expect(event.id).not.toBe(original.id);
+        expect(event.deliveryAttempt).toBe(1);
+        expect(event.data).toMatchObject({ workflowId, runId, executionPath: [0] });
+        expect(handled).toHaveLength(1);
+        expect(handled[0]!.result.ok).toBe(true);
+        expect(driver.deliveryCount(match)).toBe(deliveriesBefore + 1);
+        // COR-1307: the harness publishes a fresh id, so the completed transition
+        // runs again and drives the sleep chain a second time.
+        await vi.waitFor(() => expect(executed).toEqual(['before', 'after', 'before', 'after']));
+      } finally {
+        await mastra.stopWorkers();
+        driver.dispose();
+      }
+    });
   }
 });
