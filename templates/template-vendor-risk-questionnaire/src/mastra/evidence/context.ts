@@ -101,7 +101,9 @@ export function sourceContexts(
     }
   >();
   for (const [name, table] of tables) {
-    const first = table.get(Math.min(...table.keys()))!;
+    let firstRow = Infinity;
+    for (const row of table.keys()) firstRow = Math.min(firstRow, row);
+    const first = table.get(firstRow)!;
     tableGroups.set(name, {
       first,
       rows: new Map(

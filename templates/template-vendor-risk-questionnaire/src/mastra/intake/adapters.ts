@@ -58,7 +58,7 @@ function inputRegions(s: InputSourceSnapshot, p: ParsedInput): InputRegion[] {
     candidateCount: r.rows.filter(nonempty).length,
     candidateRows: r.rows.flatMap((row, index) => (nonempty(row) ? [r.rowIndices[index]!] : [])),
     rowCount: r.rows.length,
-    columnCount: Math.max(0, ...r.rows.map(r => r.length)),
+    columnCount: r.rows.reduce((max, row) => Math.max(max, row.length), 0),
     hidden: r.hidden,
   }));
 }
@@ -156,7 +156,7 @@ export function officeAdapter(format: 'xlsx' | 'docx'): QuestionnaireInputAdapte
             exclusions.push({
               regionId: r.id,
               startRow: 0,
-              endRow: Math.max(0, ...r.rowIndices),
+              endRow: r.rowIndices.reduce((max, row) => Math.max(max, row), 0),
               reason: 'Inspected empty region.',
             });
         }
