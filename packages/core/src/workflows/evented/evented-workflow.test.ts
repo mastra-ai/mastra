@@ -129,8 +129,9 @@ createWorkflowTestSuite({
     //persistWorkflowSnapshot error-handling tests are skipped because it's not used in evented-engine
     errorPersistWithoutStack: true,
     errorPersistMastraError: true,
-    // processWorkflowLoop evaluates the loop condition with stepResults that don't
-    // yet contain the body's latest result, so getStepResult(body) there returns null.
+    // The loop body's result only travels as prevResult/inputData and is never merged
+    // into the stepResults that processWorkflowLoop passes to the condition, so
+    // getStepResult(body) in the loop's own condition returns null on every iteration.
     loopConditionStepResult: true,
   },
 
