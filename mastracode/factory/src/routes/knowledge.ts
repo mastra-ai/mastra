@@ -1696,35 +1696,42 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           // is not visible in the selected scope is skipped entirely, so no action/type/
           // id/time metadata leaks even when an adapter's activity read is lax about it —
           // and a hidden or filtered backlog can never displace visible events from the page.
-          const nodeVisibility = new Map<string, Promise<boolean>>();
-          const isNodeVisible = (nodeId: string): Promise<boolean> => {
+          interface VisibleTargetNode {
+            node: KnowledgeNode;
+            scopeIds: string[];
+          }
+          const nodeVisibility = new Map<string, Promise<VisibleTargetNode | null>>();
+          const visibleNode = (nodeId: string): Promise<VisibleTargetNode | null> => {
             let cached = nodeVisibility.get(nodeId);
             if (!cached) {
               cached = (async () => {
                 const node = await view.store.getNode(nodeId);
-                if (!node) return false;
-                return isKnowledgeScopeVisible(await view.store.getNodeScopeIds(nodeId), [selected.id]);
+                if (!node) return null;
+                const scopeIds = await view.store.getNodeScopeIds(nodeId);
+                return isKnowledgeScopeVisible(scopeIds, [selected.id]) ? { node, scopeIds } : null;
               })();
               nodeVisibility.set(nodeId, cached);
             }
             return cached;
           };
-          const isEventVisible = async (event: KnowledgeActivityEvent): Promise<boolean> => {
-            if (event.contextScopeId && event.contextScopeId !== selected.id) return false;
-            if (action && event.action !== action) return false;
-            if (from && event.createdAt < from) return false;
-            if (to && event.createdAt > to) return false;
-            if (sourceType && (sourceType === 'importer') !== Boolean(event.importRunId)) return false;
-            if (event.targetType === 'node') return isNodeVisible(event.targetId);
+          // Resolves the event's owner node when the event is visible, null otherwise.
+          const visibleEventNode = async (event: KnowledgeActivityEvent): Promise<VisibleTargetNode | null> => {
+            if (event.contextScopeId && event.contextScopeId !== selected.id) return null;
+            if (action && event.action !== action) return null;
+            if (from && event.createdAt < from) return null;
+            if (to && event.createdAt > to) return null;
+            if (sourceType && (sourceType === 'importer') !== Boolean(event.importRunId)) return null;
+            if (event.targetType === 'node') return visibleNode(event.targetId);
             const record = await view.store.getRecord({ id: event.targetId, includeDeleted: true });
-            if (!record) return false;
+            if (!record) return null;
             const recordScopeIds = await view.store.getRecordScopeIds(event.targetId);
-            return isKnowledgeScopeVisible(recordScopeIds, [selected.id]) && (await isNodeVisible(record.nodeId));
+            if (!isKnowledgeScopeVisible(recordScopeIds, [selected.id])) return null;
+            return visibleNode(record.nodeId);
           };
           // Newest-first scan: fill one visible page plus a lookahead row, bounded by
           // the scan cap. When the cap stops the walk early, the scan position comes
           // back as the cursor so the client can continue without skipping events.
-          const collected: KnowledgeActivityEvent[] = [];
+          const collected: Array<{ event: KnowledgeActivityEvent; target: VisibleTargetNode }> = [];
           let after = cursor;
           let scanned = 0;
           let exhausted = false;
@@ -1737,7 +1744,8 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             for (const event of batch) {
               after = event.id;
               scanned += 1;
-              if (await isEventVisible(event)) collected.push(event);
+              const target = await visibleEventNode(event);
+              if (target) collected.push({ event, target });
               if (collected.length > ACTIVITY_PAGE_SIZE || scanned >= ACTIVITY_SCAN_CAP) break;
             }
           }
@@ -1745,23 +1753,33 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const lastVisible = events.at(-1);
           const nextCursor =
             collected.length > ACTIVITY_PAGE_SIZE && lastVisible
-              ? lastVisible.id
+              ? lastVisible.event.id
               : !exhausted && scanned >= ACTIVITY_SCAN_CAP && after
                 ? after
                 : undefined;
           const addresses = await scopeAddressIndex(view.store, [
             selected.id,
-            ...events.flatMap(event => (event.contextScopeId ? [event.contextScopeId] : [])),
+            ...events.flatMap(({ event }) => (event.contextScopeId ? [event.contextScopeId] : [])),
+            ...events.flatMap(({ target }) => target.scopeIds),
           ]);
           const projected = await Promise.all(
-            events.map(async event => {
+            events.map(async ({ event, target }) => {
               const run = event.importRunId ? await view.store.getImportRun(event.importRunId) : undefined;
               const eventScopeIds = event.contextScopeId ? [event.contextScopeId] : [selected.id];
+              const nodeThreadId = target.scopeIds
+                .map(scopeId => sessionThreadId(addresses.get(scopeId)?.address))
+                .find(threadId => threadId !== undefined);
               return {
                 id: event.id,
                 action: event.action,
                 recordType: event.targetType,
                 scope: addressPath(eventScopeIds, addresses),
+                node: {
+                  id: target.node.id,
+                  name: target.node.name,
+                  rung: nodeThreadId ? ('thread' as const) : rungForScopeIds(target.scopeIds, view),
+                  ...(nodeThreadId ? { threadId: nodeThreadId } : {}),
+                },
                 sourceType: run ? ('importer' as const) : ('system' as const),
                 ...(run ? { sourceId: run.importerId, importRunId: run.id } : {}),
                 createdAt: event.createdAt.toISOString(),

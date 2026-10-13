@@ -182,11 +182,25 @@ async function graph(h: Harness, query = ''): Promise<{ status: number; body: Kn
   return { status: response.status, body: (await response.json().catch(() => ({}))) as KnowledgeGraphPayload };
 }
 
-async function activity(h: Harness, query = ''): Promise<{ status: number; body: { events: unknown[] } }> {
+interface ActivityEventBody {
+  id: string;
+  action: string;
+  recordType: string;
+  node?: { id: string; name: string; rung: string; threadId?: string };
+  scope?: string[];
+}
+
+async function activity(
+  h: Harness,
+  query = '',
+): Promise<{ status: number; body: { events: ActivityEventBody[]; nextCursor?: string } }> {
   const response = await h.app.request(
     `/web/factory/projects/${h.projectId}/knowledge/activity${selectedQuery(query)}`,
   );
-  return { status: response.status, body: (await response.json().catch(() => ({}))) as { events: unknown[] } };
+  return {
+    status: response.status,
+    body: (await response.json().catch(() => ({}))) as { events: ActivityEventBody[]; nextCursor?: string },
+  };
 }
 
 async function nodeDetail(
@@ -1526,6 +1540,31 @@ describe('KnowledgeRoutes', () => {
     // Events targeting the deleted record are excluded entirely — never
     // returned with a blanked scope.
     expect(response.body.events).not.toContainEqual(expect.objectContaining({ scope: [] }));
+  });
+
+  it('enriches activity events with the target node (record events resolve their owner)', async () => {
+    const h = await createHarness();
+    const entity = await node(h.knowledge, 'Enriched Entity', h.projectScope);
+    await record(h.knowledge, entity, 'Project fact.', h.projectScope);
+    const threadEntity = await node(h.knowledge, 'Thread Entity', h.threadScope('t-enrich'));
+    await record(h.knowledge, threadEntity, 'Thread fact.', h.threadScope('t-enrich'), 't-enrich');
+
+    const projectView = await activity(h);
+    expect(projectView.status).toBe(200);
+    const recordEvent = projectView.body.events.find(event => event.recordType === 'record');
+    expect(recordEvent?.node).toMatchObject({ id: entity.id, name: 'Enriched Entity', rung: 'resource' });
+    const nodeEvent = projectView.body.events.find(event => event.recordType === 'node');
+    expect(nodeEvent?.node).toMatchObject({ id: entity.id, name: 'Enriched Entity', rung: 'resource' });
+
+    const threadView = await activity(h, '&threadId=t-enrich&scopeLevel=thread');
+    expect(threadView.status).toBe(200);
+    const threadEvent = threadView.body.events.find(event => event.recordType === 'record');
+    expect(threadEvent?.node).toMatchObject({
+      id: threadEntity.id,
+      name: 'Thread Entity',
+      rung: 'thread',
+      threadId: 't-enrich',
+    });
   });
 
   it('authorizes activity targets before window shaping so a hidden backlog cannot displace visible events', async () => {
