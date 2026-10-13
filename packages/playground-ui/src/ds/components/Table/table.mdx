@@ -342,7 +342,7 @@ To remember the choice across visits, store the hidden set where the page keeps 
 
 ### Search and filters
 
-Controls go in an `ActionRow` above the table: search and filters in `ActionRow.Start`, everything else in `ActionRow.End`. Filter the rows yourself and render the empty row when nothing matches.
+Controls go in an `ActionRow` above the table: search and filters in `ActionRow.Start`, everything else in `ActionRow.End`. When the table has an `ActionRow`, put section links such as “Open billing portal” at the end of it rather than beside the heading, so every control sits on one line above the table. Filter the rows yourself and render the empty row when nothing matches.
 
 <Canvas of={TableStories.InsetSearchAndFilter} />
 

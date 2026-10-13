@@ -327,15 +327,21 @@ function formatCreditAmount(value: number) {
   return formatFullNumber(value, { currency: 'USD' });
 }
 
-function CreditHistoryTitle({ id }: { id: string }) {
+function BillingPortalLink() {
+  return (
+    <Button variant="link" size="sm" iconEnd={<ArrowUpRight />} render={<a href="#billing-portal" />}>
+      Open billing portal
+    </Button>
+  );
+}
+
+function CreditHistoryTitle({ id, withLink = true }: { id: string; withLink?: boolean }) {
   return (
     <div className="flex items-center justify-between gap-4">
       <Txt as="h2" id={id} variant="subheading">
         Credit history
       </Txt>
-      <Button variant="link" size="sm" iconEnd={<ArrowUpRight />} render={<a href="#billing-portal" />}>
-        Open billing portal
-      </Button>
+      {withLink ? <BillingPortalLink /> : null}
     </div>
   );
 }
@@ -451,7 +457,7 @@ export const InsetSearchAndFilter: Story = {
 
     return (
       <div className="flex max-w-5xl flex-col gap-3">
-        <CreditHistoryTitle id="credit-history-search" />
+        <CreditHistoryTitle id="credit-history-search" withLink={false} />
         <ActionRow>
           <ActionRow.Start>
             <CreditSearch search={search} onSearch={setSearch} />
@@ -467,6 +473,7 @@ export const InsetSearchAndFilter: Story = {
               onValueChange={setStatuses}
               className="w-40"
             />
+            <BillingPortalLink />
           </ActionRow.End>
         </ActionRow>
         <Table variant="inset" aria-labelledby="credit-history-search">
@@ -515,7 +522,7 @@ export const InsetPropertyFilter: Story = {
 
     return (
       <div className="flex max-w-5xl flex-col gap-3">
-        <CreditHistoryTitle id="credit-history-property-filter" />
+        <CreditHistoryTitle id="credit-history-property-filter" withLink={false} />
         <ActionRow>
           <ActionRow.Start>
             <CreditSearch search={search} onSearch={setSearch} />
@@ -528,6 +535,7 @@ export const InsetPropertyFilter: Story = {
               onTokensChange={setTokens}
               label="Filter"
             />
+            <BillingPortalLink />
           </ActionRow.End>
         </ActionRow>
         <Table variant="inset" aria-labelledby="credit-history-property-filter">
@@ -834,11 +842,14 @@ export const InsetPagination: Story = {
 
     return (
       <div className="flex max-w-5xl flex-col gap-3">
-        <CreditHistoryTitle id="credit-history-pagination" />
+        <CreditHistoryTitle id="credit-history-pagination" withLink={false} />
         <ActionRow>
           <ActionRow.Start>
             <ListSearch label="Search credits" placeholder="Search credits" value={search} onSearch={changeSearch} />
           </ActionRow.Start>
+          <ActionRow.End>
+            <BillingPortalLink />
+          </ActionRow.End>
         </ActionRow>
         <Table variant="inset" aria-labelledby="credit-history-pagination">
           <CreditHeader />
@@ -932,7 +943,7 @@ export const InsetColumnPicker: Story = {
 
     return (
       <div className="flex max-w-5xl flex-col gap-3">
-        <CreditHistoryTitle id="credit-history-columns" />
+        <CreditHistoryTitle id="credit-history-columns" withLink={false} />
         <ActionRow>
           <ActionRow.End>
             <DropdownMenu>
@@ -957,6 +968,7 @@ export const InsetColumnPicker: Story = {
                 ))}
               </DropdownMenu.Content>
             </DropdownMenu>
+            <BillingPortalLink />
           </ActionRow.End>
         </ActionRow>
         <Table variant="inset" aria-labelledby="credit-history-columns">
