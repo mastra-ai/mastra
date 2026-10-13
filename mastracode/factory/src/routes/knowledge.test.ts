@@ -520,6 +520,59 @@ describe('KnowledgeRoutes', () => {
     expect(bad.status).toBe(400);
   });
 
+  it('pages past a huge hidden backlog without skipping or leaking events', async () => {
+    class LeakyStore extends InMemoryKnowledgeStorage {
+      leaked: KnowledgeActivityEvent[] = [];
+      override async listActivity(input: Parameters<KnowledgeStorage['listActivity']>[0]) {
+        const real = await super.listActivity(input);
+        return [...this.leaked, ...real]
+          .filter(event => !input.after || event.id < input.after)
+          .sort((a, b) => b.id.localeCompare(a.id))
+          .slice(0, input.limit ?? 100);
+      }
+    }
+    const store = new LeakyStore({ db: new InMemoryDB() });
+    const h = await createHarness({ knowledge: store });
+    const anchor = await node(store, 'Busy anchor', h.projectScope);
+    for (let index = 0; index < 30; index += 1) {
+      await record(store, anchor, `Evidence ${index}`, h.projectScope);
+    }
+    const foreignScope = [`org:${ORG}`, 'resource:foreign-project', 'resource:foreign-project:thread:thread-x'];
+    await node(store, 'Foreign anchor', foreignScope);
+    const foreignSessionId = (await store.getScopeAddress('resource:foreign-project:thread:thread-x'))!.scopeNodeId;
+    // 1,050 newest rows are all hidden (foreign context) — more than one scan cap.
+    store.leaked = Array.from({ length: 1050 }, (_, index) => ({
+      id: `zzzz-${String(1050 - index).padStart(4, '0')}`,
+      action: 'create' as const,
+      targetType: 'node' as const,
+      targetId: anchor.id,
+      contextScopeId: foreignSessionId,
+      createdAt: new Date(),
+    }));
+
+    const pages: string[][] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < 5; page += 1) {
+      const response = await activity(
+        h,
+        `?scopeLevel=resource${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+      );
+      expect(response.status).toBe(200);
+      const body = response.body as { events: Array<{ id: string }>; nextCursor?: string };
+      pages.push(body.events.map(event => event.id));
+      cursor = body.nextCursor;
+      if (!cursor) break;
+    }
+    // The capped first scan returns no events but a resume cursor, and the walk
+    // eventually surfaces every visible event exactly once with no hidden rows.
+    expect(pages[0]).toEqual([]);
+    const all = pages.flat();
+    expect(all.some(id => id.startsWith('zzzz-'))).toBe(false);
+    expect(new Set(all).size).toBe(all.length);
+    expect(all.length).toBe(31); // 30 record creates + the visible anchor's node create
+    expect(cursor).toBeUndefined();
+  });
+
   it('labels scope nodes by what they are: org, project, session, or the structural kind/topic', async () => {
     const h = await createHarness();
     await h.knowledge.reconcileStructure({
