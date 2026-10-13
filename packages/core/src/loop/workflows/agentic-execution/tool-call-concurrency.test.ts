@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { RequestContext } from '../../../request-context';
 import {
+  canToolCallRunAfterSuspend,
   effectiveToolSetRequiresSequentialExecution,
   normalizeToolCallConcurrency,
   resolveEmittedToolCallConcurrency,
@@ -458,5 +459,32 @@ describe('resolveEmittedToolCallConcurrency', () => {
       });
       expect(concurrency).toBe(5);
     });
+  });
+});
+
+describe('canToolCallRunAfterSuspend', () => {
+  const tools = {
+    safe: {},
+    approval: { requireApproval: true },
+    suspend: { hasSuspendSchema: true },
+    fnApproval: { needsApproval: () => true },
+  } as any;
+  const run = (toolName: string, extra: Record<string, unknown> = {}) =>
+    canToolCallRunAfterSuspend({ tools, toolCall: { toolCallId: 'c1', toolName }, ...extra });
+
+  it('lets plain tools run past a suspended sibling', () => {
+    expect(run('safe')).toBe(true);
+  });
+
+  it('holds back approval-gated, suspend-capable and unknown tools', () => {
+    expect(run('approval')).toBe(false);
+    expect(run('suspend')).toBe(false);
+    expect(run('missing')).toBe(false);
+    expect(run('safe', { requireToolApproval: true })).toBe(false);
+  });
+
+  it('uses the per-call approval verdict when present', () => {
+    expect(run('approval', { approvalVerdicts: new Map([['c1', false]]) })).toBe(true);
+    expect(run('safe', { approvalVerdicts: new Map([['c1', true]]) })).toBe(false);
   });
 });
