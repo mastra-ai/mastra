@@ -301,7 +301,11 @@ requestContext.set(MASTRA_THREAD_ID_KEY, threadId)
 Server ownership checks read only `MASTRA_RESOURCE_ID_KEY` and `MASTRA_THREAD_ID_KEY`. If your middleware sets identity through `MASTRA_SCOPES_KEY` and you want those checks, set `MASTRA_RESOURCE_ID_KEY` too:
 
 ```typescript
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, MASTRA_SCOPES_KEY } from '@mastra/core/request-context'
+import {
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_THREAD_ID_KEY,
+  MASTRA_SCOPES_KEY,
+} from '@mastra/core/request-context'
 
 requestContext.set(MASTRA_SCOPES_KEY, [`org:${user.orgId}`, `resource:${user.id}`])
 requestContext.set(MASTRA_RESOURCE_ID_KEY, user.id)
