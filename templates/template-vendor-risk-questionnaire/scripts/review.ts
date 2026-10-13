@@ -31,6 +31,12 @@ try {
       ]),
     ),
   });
+  if (
+    !['metrics', 'status', 'submit', 'resume', 'export', 'recover-claim', 'cleanup-preview', 'cleanup'].includes(
+      positionals[0]!,
+    )
+  )
+    throw new Error('UNKNOWN_REVIEW_COMMAND');
   const runId = scopedRunId.parse(values['run-id']),
     options = { databaseUrl, runtimeRoot };
   if (['status', 'metrics'].includes(positionals[0]!)) configureReadOnlyAccess();
@@ -100,16 +106,39 @@ try {
           }),
         ),
       );
-    } else throw new Error('Use metrics, status, submit, resume, export, cleanup-preview or cleanup.');
+    }
   } finally {
     review.close();
   }
-} catch {
-  console.error(JSON.stringify({ code: 'REVIEW_OPERATION_FAILED' }));
+} catch (error) {
+  const safeCodes = new Set([
+    'UNKNOWN_REVIEW_COMMAND',
+    'FOREIGN_REVIEW',
+    'FOREIGN_CLEANUP',
+    'FINAL_APPROVAL_REQUIRED',
+    'COMPLETE_EVIDENCE_OVERRIDE_REQUIRED',
+  ]);
+  const code = error instanceof Error && safeCodes.has(error.message) ? error.message : 'REVIEW_OPERATION_FAILED';
+  console.error(JSON.stringify({ code }));
+  if (code === 'UNKNOWN_REVIEW_COMMAND')
+    console.error('Use metrics, status, submit, resume, export, recover-claim, cleanup-preview or cleanup.');
   process.exitCode = 1;
 } finally {
-  await observability.shutdown();
-  await nativeStorage.close();
+  let cleanupFailed = false;
+  try {
+    await observability.shutdown();
+  } catch {
+    cleanupFailed = true;
+  }
+  try {
+    await nativeStorage.close();
+  } catch {
+    cleanupFailed = true;
+  }
+  if (cleanupFailed) {
+    console.error(JSON.stringify({ code: 'STORAGE_FAILURE' }));
+    process.exitCode = 1;
+  }
   if (telemetryHealth.status === 'degraded_incomplete')
     console.error(JSON.stringify({ telemetry: telemetryHealth.status }));
 }

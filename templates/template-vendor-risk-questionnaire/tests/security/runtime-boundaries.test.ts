@@ -56,7 +56,7 @@ async function nativeDiagnosticPrivacyProof() {
           runId: f.runId,
           evidenceRoot: resolve(root, 'evidence'),
           manifestPath: f.manifestPath,
-          policy: { ...defaultExecutionPolicy, maxInputTokens: 500 },
+          policy: { ...defaultExecutionPolicy, maxInputTokens: 125 },
         },
       });
     } finally {

@@ -197,6 +197,25 @@ async function processQuestionImpl(
         throw new ProcessingFailure('INVALID_ATTRIBUTION');
       }
     }
+    if (delivered.size === 0) {
+      const result = questionResultSchema.parse({
+        questionId: question.id,
+        order: question.order,
+        draft: unknownDraft(question.id, interpretation.domain),
+        interpretation,
+        status: 'review_required',
+        reasons: [
+          ...new Set([
+            ...reasons,
+            'MISSING_EVIDENCE',
+            ...(evidence.record.denied.length ? ['SOURCE_UNAVAILABLE'] : []),
+          ]),
+        ],
+        attempts,
+      });
+      await store.persistResult(runId, result);
+      return result;
+    }
     const draftResponse = await generatePhase(
       evidenceAnswerAgent,
       {
@@ -239,27 +258,24 @@ async function processQuestionImpl(
     );
     beforeCall();
     await screen(canonicalJson(draftResponse), 'draft');
-    const draft =
-      delivered.size === 0
-        ? unknownDraft(question.id, interpretation.domain)
-        : draftSchema.parse({
-            ...draftResponse,
-            citations: draftResponse.citations.map(citation => {
-              const excerpt = delivered.get(citation.excerptId);
-              if (!excerpt) throw new ProcessingFailure('INVALID_ATTRIBUTION');
-              return {
-                id: citation.id,
-                documentId: excerpt.documentId,
-                version: excerpt.version,
-                sourceSha256: excerpt.sourceSha256,
-                locator: excerpt.locator,
-                supportingExcerpt: citation.supportingExcerpt,
-              };
-            }),
-          });
+    const draft = draftSchema.parse({
+      ...draftResponse,
+      citations: draftResponse.citations.map(citation => {
+        const excerpt = delivered.get(citation.excerptId);
+        if (!excerpt) throw new ProcessingFailure('INVALID_ATTRIBUTION');
+        return {
+          id: citation.id,
+          documentId: excerpt.documentId,
+          version: excerpt.version,
+          sourceSha256: excerpt.sourceSha256,
+          locator: excerpt.locator,
+          supportingExcerpt: citation.supportingExcerpt,
+        };
+      }),
+    });
     if (draft.questionId !== question.id || draft.domain !== interpretation.domain)
       throw new ProcessingFailure('INVALID_MODEL_OUTPUT');
-    if (draft.value === 'unknown' || delivered.size === 0) reasons.push('MISSING_EVIDENCE');
+    if (draft.value === 'unknown') reasons.push('MISSING_EVIDENCE');
     if (draft.value === 'unknown' && evidence.record.denied.length) reasons.push('SOURCE_UNAVAILABLE');
     for (const citation of draft.citations) {
       const returnedExcerpt = [...delivered.values()].find(
@@ -402,7 +418,7 @@ function unknownDraft(questionId: string, domain: string): AnswerDraft {
     citations: [],
     coveredSubparts: [],
     confidence: 0,
-    limitations: ['No supporting evidence was returnedExcerpt.'],
+    limitations: ['No supporting evidence was returned.'],
   });
 }
 

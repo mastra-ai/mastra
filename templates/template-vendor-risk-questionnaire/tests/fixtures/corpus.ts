@@ -222,7 +222,7 @@ export async function generateCorpus(root: string, rows = questionnaireRows()) {
       approvedBy: 'demo-security-owner',
       approvedAt: '2026-09-30T00:00:00.000Z',
       validFrom: '2026-09-01T00:00:00.000Z',
-      validUntil: '2027-09-01T00:00:00.000Z',
+      validUntil: '2126-09-01T00:00:00.000Z',
       llmAllowed: d.llmAllowed ?? true,
       disclosure: d.disclosure ?? 'shareable',
     });

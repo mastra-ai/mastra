@@ -10,6 +10,7 @@ import { canonicalJson, sha256 } from '../intake/source.ts';
 import { telemetryId } from '../observability/privacy.ts';
 import { containedDirectory } from '../exports/publication.ts';
 import type { MastraStorage } from '@mastra/core/storage';
+import type { Client } from '@libsql/client';
 import type { createQuestionnaireWorkflow } from '../workflows/vendor-risk-questionnaire.ts';
 
 export const cleanupConfirmationSchema = z
@@ -34,8 +35,26 @@ const tables = [
   'vrq_draft_inputs',
   'vrq_interpretations',
   'vrq_consistency',
+  'vrq_questionnaire_lifecycle',
 ] as const;
 const partition = (table: string, runId: string) => (table === 'vrq_diagnostics' ? telemetryId(runId)! : runId);
+// Source bytes are content-addressed and may be shared by questionnaires and evidence
+// across runs. Only collect this run's sources when no other run still references them.
+const cleanableSources = `SELECT s.* FROM vrq_sources s
+  WHERE (EXISTS (SELECT 1 FROM vrq_intakes i WHERE i.run_id = ? AND i.source_digest = s.digest)
+    OR EXISTS (SELECT 1 FROM vrq_evidence_snapshots e, json_each(e.snapshot_json, '$.documents') d
+      WHERE e.run_id = ? AND json_extract(d.value, '$.sha256') = s.digest))
+  AND NOT EXISTS (SELECT 1 FROM vrq_intakes i WHERE i.run_id <> ? AND i.source_digest = s.digest)
+  AND NOT EXISTS (SELECT 1 FROM vrq_evidence_snapshots e, json_each(e.snapshot_json, '$.documents') d
+    WHERE e.run_id <> ? AND json_extract(d.value, '$.sha256') = s.digest)
+  ORDER BY s.rowid`;
+function cleanupRows(client: Pick<Client, 'execute'>, table: string, runId: string) {
+  return client.execute(
+    table === 'vrq_sources'
+      ? { sql: cleanableSources, args: [runId, runId, runId, runId] }
+      : { sql: `SELECT * FROM ${table} WHERE run_id = ? ORDER BY rowid`, args: [partition(table, runId)] },
+  );
+}
 export interface CleanupOptions {
   databaseUrl: string;
   runtimeRoot: string;
@@ -84,11 +103,8 @@ export async function previewCleanup(runId: string, options: CleanupOptions) {
     const files = [];
     for (const p of roots) files.push(...(await tree(options.runtimeRoot, p)));
     const records = [];
-    for (const table of tables) {
-      const rows = await client.execute({
-        sql: `SELECT * FROM ${table} WHERE run_id = ? ORDER BY rowid`,
-        args: [partition(table, runId)],
-      });
+    for (const table of [...tables, 'vrq_sources']) {
+      const rows = await cleanupRows(client, table, runId);
       records.push({ table, count: rows.rows.length, digest: sha256(canonicalJson(rows.rows)) });
     }
     const snapshot = await options.workflow.getWorkflowRunById(state.workflowRunId);
@@ -148,10 +164,7 @@ export async function confirmCleanup(raw: unknown, options: CleanupOptions) {
       if (state.claimToken || rows.rows[0]?.claim_token || state.revision !== preview.revision)
         throw new Error('STALE_CLEANUP_PREVIEW');
       for (const record of preview.records) {
-        const current = await tx.execute({
-          sql: `SELECT * FROM ${record.table} WHERE run_id = ? ORDER BY rowid`,
-          args: [partition(record.table, c.runId)],
-        });
+        const current = await cleanupRows(tx, record.table, c.runId);
         if (sha256(canonicalJson(current.rows)) !== record.digest) throw new Error('STALE_CLEANUP_PREVIEW');
       }
       const token = `cleanup-${c.previewDigest}`;
@@ -175,13 +188,22 @@ export async function confirmCleanup(raw: unknown, options: CleanupOptions) {
         await options.workflow.deleteWorkflowRunById(run.runId);
       else await workflowStore.deleteWorkflowRunById({ workflowName: run.workflowName, runId: run.runId });
     }
-    await writeTransaction(client, async tx => {
+    const deletedRecords = await writeTransaction(client, async tx => {
+      // Recheck shared references inside the final write transaction before removing
+      // either the source bytes or this run's references to them.
+      const sources = await cleanupRows(tx, 'vrq_sources', c.runId);
+      let count = 0;
+      for (const source of sources.rows)
+        count += (await tx.execute({ sql: 'DELETE FROM vrq_sources WHERE digest = ?', args: [source.digest!] }))
+          .rowsAffected;
       for (const table of tables)
-        await tx.execute({ sql: `DELETE FROM ${table} WHERE run_id = ?`, args: [partition(table, c.runId)] });
+        count += (await tx.execute({ sql: `DELETE FROM ${table} WHERE run_id = ?`, args: [partition(table, c.runId)] }))
+          .rowsAffected;
+      return count;
     });
     return {
       runId: c.runId,
-      deletedRecords: preview.records.reduce((sum, r) => sum + r.count, 0),
+      deletedRecords,
       deletedFiles: preview.files.length,
     };
   } finally {

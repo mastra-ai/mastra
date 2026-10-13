@@ -116,7 +116,7 @@ export async function draftingFixture(
     approvedBy: 'operator',
     approvedAt: '2026-01-01T00:00:00.000Z',
     validFrom: '2026-01-01T00:00:00.000Z',
-    validUntil: '2027-01-01T00:00:00.000Z',
+    validUntil: '2126-01-01T00:00:00.000Z',
     llmAllowed: true,
     disclosure: options.disclosure ?? 'shareable',
   };

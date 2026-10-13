@@ -16,6 +16,9 @@ export type ModelPart = ModelStream['stream'] extends ReadableStream<infer Part>
 export type ProviderModel = Pick<ModelRouterLanguageModel, 'doStream' | 'doGenerate'>;
 export type ModelFactory = (phase: UsageRecord['phase'], questionId: string) => ProviderModel;
 export const providerOptions = { openai: { reasoningEffort: 'medium' as const, serviceTier: 'default' as const } };
+// Bound buffered bytes separately from tokens. This is a memory guard, not a tokenizer;
+// provider-reported usage enforces the actual per-call token allowance at finish.
+export const modelByteLimit = (tokens: number) => tokens * 4;
 export function modelEnvelope(call: ModelCall) {
   return {
     inputBytes:
@@ -122,12 +125,11 @@ export function boundedModel(options: {
       await diagnostic('TURN_LIMIT', detector ? 'DETECTOR_FAILED' : 'BUDGET_EXHAUSTED', 'origin');
       throw new ProcessingFailure(detector ? 'DETECTOR_FAILED' : 'BUDGET_EXHAUSTED');
     }
-    // A byte-based upper bound includes serialized schemas/tools and prompt overhead.
+    // Include serialized schemas/tools and prompt overhead in the input byte guard.
     const envelope = modelEnvelope(callOptions);
-    if (envelope.inputBytes > policy.maxInputTokens) {
+    if (envelope.inputBytes > modelByteLimit(policy.maxInputTokens)) {
       options.onFailure?.();
       await diagnostic('INPUT_ENVELOPE', 'TOKEN_LIMIT', 'origin', envelope);
-      await store.stop(runId, 'TOKEN_LIMIT');
       throw new ProcessingFailure('TOKEN_LIMIT');
     }
 
@@ -201,7 +203,7 @@ export function boundedModel(options: {
           if (part.type === 'text-delta' || part.type === 'reasoning-delta' || part.type === 'tool-input-delta')
             outputBytes += Buffer.byteLength(part.delta);
           if (part.type === 'tool-call') outputBytes += Buffer.byteLength(part.input);
-          if (outputBytes > policy.maxOutputTokens) throw new ProcessingFailure('TOKEN_LIMIT');
+          if (outputBytes > modelByteLimit(policy.maxOutputTokens)) throw new ProcessingFailure('TOKEN_LIMIT');
           if (part.type === 'text-delta') text += part.delta;
           // Reconstruct only consumer-required parts. No raw response, warnings, metadata or reasoning escapes.
           if (part.type === 'text-start' || part.type === 'text-end') parts.push({ type: part.type, id: 'text' });
@@ -216,7 +218,6 @@ export function boundedModel(options: {
             const finish = normalizeModelFinish(part, policy);
             observed = finish.observed;
             if (finish.limitExceeded) {
-              await store.stop(runId, 'TOKEN_LIMIT');
               throw new ProcessingFailure('TOKEN_LIMIT');
             }
             if (!finish.validFinish) throw new ProcessingFailure('INVALID_MODEL_OUTPUT');

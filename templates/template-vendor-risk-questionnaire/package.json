@@ -2,7 +2,7 @@
   "name": "template-vendor-risk-questionnaire",
   "version": "0.1.0",
   "private": true,
-  "description": "A local Mastra template for generic vendor risk questionnaires.",
+  "description": "Draft vendor risk questionnaire answers from approved evidence, review them with human oversight, and export completed XLSX or DOCX files in their original format.",
   "license": "Apache-2.0",
   "type": "module",
   "engines": {

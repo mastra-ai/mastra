@@ -68,7 +68,6 @@ export async function flagInconsistentAnswers(inputResults: QuestionResult[], en
 
           // A previously blocked answer cannot be reused in a later comparison.
           if (questionIds.some(id => resultsByQuestionId.get(id)?.status === 'security_review_required')) {
-            await markForReview(questionIds, 'DETECTOR_FAILED');
             continue;
           }
 

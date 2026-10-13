@@ -50,6 +50,25 @@ async function build(manifest: EvidenceManifest, runId = 'evidence-run') {
 }
 
 describe('approved evidence extraction and contained snapshots', () => {
+  it('preserves astral characters at excerpt boundaries and can reopen the same snapshot', async () => {
+    const manifest = await generateCorpus(root);
+    const document = manifest.documents.find(d => d.format === 'markdown')!;
+    const text = 'a'.repeat(3999) + '😀' + 'b'.repeat(3997) + '𐐀' + 'tail';
+    await writeFile(resolve(root, 'evidence', document.relativePath), text);
+    document.sha256 = sha256(text);
+    const selected = { ...manifest, documents: [document] };
+    const first = await build(selected);
+    expect(first.record.excerpts.map(e => e.text).join('')).toBe(text);
+    expect(first.record.excerpts.map(e => e.text.length)).toEqual([3999, 3999, 6]);
+    for (const excerpt of first.record.excerpts) {
+      expect(Buffer.from(excerpt.text).toString('utf8')).toBe(excerpt.text);
+      expect((await first.read(excerpt.id)).text).toBe(excerpt.text);
+    }
+    const reopened = await build(selected);
+    expect(reopened.record).toEqual(first.record);
+    for (const excerpt of reopened.record.excerpts) expect((await reopened.read(excerpt.id)).text).toBe(excerpt.text);
+  });
+
   it('resolves_original_evidence_locators_in_all_five_formats', async () => {
     const manifest = await generateCorpus(root);
     const originals = new Map<string, Buffer>();

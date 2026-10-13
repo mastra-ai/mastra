@@ -1,4 +1,5 @@
 import { createStep } from '@mastra/core/workflows';
+import type { z } from 'zod';
 import { draftInputSchema } from '../../vendor-risk-drafts/contracts.ts';
 import { approvalOutputSchema } from './review.ts';
 import { documentResultSchema } from '../../../contracts/completion.ts';
@@ -11,7 +12,7 @@ export function createExportStep(options: DraftWorkflowOptions) {
     inputSchema: approvalOutputSchema,
     outputSchema: documentResultSchema,
     execute: async ({ inputData, getInitData }) => {
-      const input = draftInputSchema.parse(getInitData());
+      const input = getInitData<z.infer<typeof draftInputSchema>>();
       const { path, manifest } = await publishExport(inputData.runId, {
         databaseUrl: options.databaseUrl ?? databaseUrl,
         runtimeRoot: options.runtimeRoot ?? runtimeRoot,

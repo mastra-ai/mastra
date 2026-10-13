@@ -73,7 +73,7 @@ it('retrieves_two_source_bound_queries_deduplicates_and_screens_the_exact_comple
         expect(checks).toHaveLength(1);
         expect(userText(checks[0]!.call)).toContain(input);
       }
-      expect(provider.calls.every(c => modelEnvelope(c.call).inputBytes <= 8000)).toBe(true);
+      expect(provider.calls.every(c => modelEnvelope(c.call).inputBytes <= 32000)).toBe(true);
     } finally {
       store.close();
     }
@@ -111,7 +111,7 @@ it.each(['repeated', 'distinct'] as const)(
       );
       for (const phase of ['injection', 'pii'])
         expect(provider.calls.some(call => call.phase === phase && userText(call.call).includes(input))).toBe(true);
-      expect(provider.calls.every(call => modelEnvelope(call.call).inputBytes <= 8000)).toBe(true);
+      expect(provider.calls.every(call => modelEnvelope(call.call).inputBytes <= 32000)).toBe(true);
       // executeDraft closes the workflow runtime before this fresh operational connection opens.
       const store = await openProcessingStore(f.url);
       try {
@@ -198,7 +198,7 @@ it('preserves_access_business_status_and_literal_security_obligations_in_source_
     try {
       await store.begin(f.runId, defaultExecutionPolicy);
       const queries: string[] = [];
-      await processQuestion(
+      const result = await processQuestion(
         f.questions[0]!,
         {
           runId: f.runId,
@@ -229,9 +229,9 @@ it('preserves_access_business_status_and_literal_security_obligations_in_source_
       expect(queries[1]).toMatch(/\baccess business status\b/);
       for (const obligation of ['security', 'policy', 'operational', 'evidence'])
         expect(queries[0]).toContain(obligation);
-      const input = JSON.parse(userText(provider.calls.find(c => c.phase === 'draft')!.call));
-      expect(input.required.subparts).toEqual([text]);
-      expect(input.question.text).toBe(text);
+      expect(result.interpretation!.subparts).toEqual([text]);
+      expect(result.draft!.value).toBe('unknown');
+      expect(provider.calls.some(c => c.phase === 'draft')).toBe(false);
     } finally {
       store.close();
     }
@@ -290,9 +290,9 @@ it('fails_explicitly_on_a_complete_context_overflow_without_dropping_selected_ev
     });
     expect(await f.snapshot.search(f.questions[0]!.originalText, 3)).toHaveLength(3);
     const provider = controlledProvider(f);
-    const { status } = await executeDraft(f, provider);
-    expect(status!.run.stopReason).toBe('TOKEN_LIMIT');
-    expect(status!.results[0]).toMatchObject({ draft: null, reasons: ['TOKEN_LIMIT'] });
+    const { status } = await executeDraft(f, provider, { maxInputTokens: 2000 });
+    expect(status!.run.stopReason).toBeNull();
+    expect(status!.results[0]).toMatchObject({ draft: null, reasons: ['DETECTOR_FAILED'] });
     expect(
       provider.calls.some(
         c =>

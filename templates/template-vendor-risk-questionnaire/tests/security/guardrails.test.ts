@@ -278,7 +278,7 @@ describe('native processors and bounded physical provider calls', () => {
         if (mode === 'part-flood') {
           await expect(model.doStream(call)).rejects.toMatchObject({ code: 'TOKEN_LIMIT' });
           await expect(model.doStream(call)).rejects.toMatchObject({ code: 'TOKEN_LIMIT' });
-          expect((await store.status(fixture.runId))?.run.stopReason).toBe('TOKEN_LIMIT');
+          expect((await store.status(fixture.runId))?.run.stopReason).toBeNull();
         } else {
           const response = await model.doStream(call),
             parts: ModelPart[] = [];
@@ -289,7 +289,7 @@ describe('native processors and bounded physical provider calls', () => {
             usage: { inputTokens: undefined, outputTokens: undefined },
           });
         }
-        expect(transfers).toBe(1);
+        expect(transfers).toBe(mode === 'part-flood' ? 2 : 1);
         expect((await store.status(fixture.runId))?.usage[0]).toMatchObject({
           status: 'uncertain',
           inputTokens: null,

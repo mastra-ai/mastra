@@ -89,6 +89,8 @@ Existing profiles retain their own values. For example, to use a 10-minute elaps
 
 `budgetUsd`, `maxPhysicalCalls` and `maxRunElapsedMs` must be positive; call counts and millisecond limits are integers. `rates` needs an ISO date and nonnegative input/output prices per million tokens. Other limits and thresholds have bounded ranges in `src/mastra/contracts/execution-policy.ts`.
 
+Input and output buffers have separate byte guards of four times their respective token limits, including serialized schema and prompt overhead on input. These guards bound memory; they are not exact token counts. Provider-reported usage enforces the per-call token limits at completion. An oversized call fails its question or screening boundary without stopping unrelated questions.
+
 Every physical provider attempt counts. Missing or malformed usage keeps a conservative reservation, and reasoning tokens count toward output usage. These estimates are not a provider billing cap. Reaching a limit may leave gaps, including in the sample questionnaire.
 
 The elapsed-time allowance covers drafting and automated review checks. It pauses while the questionnaire waits for a human decision and resumes when review validation starts. Failed review attempts still consume processing time; retries preserve the remaining time, cost and call allowance. An interrupted active operation conservatively counts elapsed time until its claim is recovered. Older runs awaiting review use their saved drafting completion time to exclude the human wait.

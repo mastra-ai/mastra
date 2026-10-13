@@ -168,7 +168,7 @@ export async function submitReview(raw: ReviewDecision, options: ReviewOptions) 
     // An exhausted run can publish only a deterministic, assertion-free gap set.
     // Original question/source labels are untrusted text, so none enter this projection.
     const minimumReservationUsd =
-      (status.run.policy.rates.inputUsdPerMillion +
+      (status.run.policy.maxInputTokens * status.run.policy.rates.inputUsdPerMillion +
         status.run.policy.maxOutputTokens * status.run.policy.rates.outputUsdPerMillion) /
       1e6;
     const exhaustion =

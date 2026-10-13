@@ -14,7 +14,7 @@ export function createAggregateDraftsStep(runtime: DraftWorkflowRuntime) {
     inputSchema: z.array(questionResultSchema),
     outputSchema: draftOutputSchema,
     execute: async ({ inputData, getInitData }) => {
-      const workflowInput = draftInputSchema.parse(getInitData());
+      const workflowInput = getInitData<z.infer<typeof draftInputSchema>>();
       if (!runtime.stores.has(workflowInput.runId)) await rehydrateDraftRun(runtime, workflowInput.runId);
       const store = runtime.stores.get(workflowInput.runId);
       if (!store) throw new ProcessingFailure('STORAGE_FAILURE');

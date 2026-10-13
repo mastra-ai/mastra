@@ -82,7 +82,7 @@ it('persists_only_safe_draft_callback_invariant_classes_with_observed_usage_and_
       expect(status.usage.every(u => u.status === 'observed')).toBe(true);
       expect(status.usage.filter(u => u.reason === 'INVALID_MODEL_OUTPUT')).toHaveLength(valid ? 0 : 1);
       expect(provider.calls.filter(c => c.phase === 'verification')).toHaveLength(mode === 'factual' ? 1 : 0);
-      expect(Math.max(...provider.calls.map(c => modelEnvelope(c.call).inputBytes))).toBeLessThanOrEqual(8000);
+      expect(Math.max(...provider.calls.map(c => modelEnvelope(c.call).inputBytes))).toBeLessThanOrEqual(32000);
       if (!valid) {
         expect(status.results[0]).toMatchObject({
           draft: null,
@@ -275,7 +275,7 @@ it('grounds_scoped_source_references_with_complete_multipart_unicode_repeated_an
       expect(
         request.spans.every((s: { text: string }) => s.text.length <= 500 && !/[\uD800-\uDBFF]$/u.test(s.text)),
       ).toBe(true);
-      for (const c of provider.calls) expect(modelEnvelope(c.call).inputBytes).toBeLessThanOrEqual(8000);
+      for (const c of provider.calls) expect(modelEnvelope(c.call).inputBytes).toBeLessThanOrEqual(32000);
       if (['unknown', 'stale', 'omitted', 'duplicated-ref', 'wrong-field'].includes(mode)) {
         expect(status!.results[0]!.reasons).toContain('INVALID_MODEL_OUTPUT');
         expect(status!.results[0]!.draft).toBeNull();
@@ -313,7 +313,7 @@ it('fits_complete_native_multi_excerpt_envelopes_in_one_tool_free_structured_tur
     expect(calls).toHaveLength(1);
     expect(calls.at(-1)!.call.toolChoice).toMatchObject({ type: 'none' });
     expect(calls.at(-1)!.call.tools ?? []).toHaveLength(0);
-    for (const c of provider.calls) expect(modelEnvelope(c.call).inputBytes).toBeLessThanOrEqual(8000);
+    for (const c of provider.calls) expect(modelEnvelope(c.call).inputBytes).toBeLessThanOrEqual(32000);
     const final = JSON.parse(userText(calls.at(-1)!.call));
     expect(final.excerpts).toHaveLength(2);
     expect(
@@ -480,7 +480,7 @@ it('native_strict_wire_rejects_invalid_scalar_and_reference_controls_with_observ
       store.close();
       expect(status.usage).toHaveLength(provider.calls.length);
       expect(status.usage.every(u => u.status === 'observed')).toBe(true);
-      for (const c of provider.calls) expect(modelEnvelope(c.call).inputBytes).toBeLessThanOrEqual(8000);
+      for (const c of provider.calls) expect(modelEnvelope(c.call).inputBytes).toBeLessThanOrEqual(32000);
       if (mode === 'valid') {
         expect(status.results[0]!.status).toBe('draft_eligible');
         expect(provider.calls.some(c => c.phase === 'draft')).toBe(true);
@@ -591,7 +591,7 @@ it('preserves_cross_batch_paraphrase_equivalence_and_distinct_source_qualified_p
       f.questions.slice(0, 2).map(q => q.id),
     );
     expect(persisted.usage.every(u => u.status === 'observed')).toBe(true);
-    for (const c of provider.calls) expect(modelEnvelope(c.call).inputBytes).toBeLessThanOrEqual(8000);
+    for (const c of provider.calls) expect(modelEnvelope(c.call).inputBytes).toBeLessThanOrEqual(32000);
   } finally {
     await cleanupDirectory(root);
   }
@@ -660,7 +660,7 @@ it('preserves_full_24_question_demo_catalogue_in_native_envelopes_with_complete_
       expect(JSON.stringify(c.call)).not.toContain(malicious);
     }
     const maxInputBytes = Math.max(...provider.calls.map(c => modelEnvelope(c.call).inputBytes));
-    expect(maxInputBytes).toBeLessThanOrEqual(8000);
+    expect(maxInputBytes).toBeLessThanOrEqual(32000);
     expect(status!.usage).toHaveLength(provider.calls.length);
     expect(status!.usage.every(u => u.status === 'observed')).toBe(true);
   } finally {

@@ -45,5 +45,4 @@ export const globalFailures: readonly Reason[] = [
   'STORAGE_FAILURE',
   'BUDGET_EXHAUSTED',
   'TIME_LIMIT',
-  'TOKEN_LIMIT',
 ];

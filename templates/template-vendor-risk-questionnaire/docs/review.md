@@ -279,6 +279,8 @@ Cleanup removes one run's selected runtime records, revisions, files and workflo
    npm run review -- cleanup --run-id review-1 --confirmation "$PWD/.runtime/cleanup-confirmation.json"
    ```
 
+The preview includes the selected run’s lifecycle records and stored questionnaire and evidence bytes that no other run references. Confirmation rechecks shared references in the final database transaction and preserves bytes still used by another run.
+
 Preview deletes nothing. Missing confirmation, an outdated preview or paths escaping through symlinks fail. This cleanup differs from the UI's **Remove**, which hides a run and disables its HTTP access while retaining audit records and local files.
 
 ## Local process ownership

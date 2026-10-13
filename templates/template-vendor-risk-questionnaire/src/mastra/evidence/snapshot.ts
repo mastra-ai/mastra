@@ -116,7 +116,9 @@ export async function buildEvidenceSnapshot(options: {
     const contexts = sourceContexts(blocks);
     for (const [index, b] of blocks.entries()) {
       const locator = evidenceLocatorSchema.parse({ ...b.locator, sourceId: d.id, sourceSha256: d.sha256 });
-      for (let start = 0; start < b.text.length; start += 4000) {
+      for (let start = 0, end = 0; start < b.text.length; start = end) {
+        end = Math.min(start + 4000, b.text.length);
+        if (end < b.text.length && /[\uD800-\uDBFF]/.test(b.text[end - 1]!)) end--;
         const id = `${d.id}:${index}:${start}`;
         projections.set(id, contexts.get(canonicalJson(b.locator))!);
         excerpts.push({
@@ -128,7 +130,7 @@ export async function buildEvidenceSnapshot(options: {
           kind: d.kind,
           disclosure: d.disclosure,
           locator,
-          text: b.text.slice(start, start + 4000),
+          text: b.text.slice(start, end),
         });
       }
     }

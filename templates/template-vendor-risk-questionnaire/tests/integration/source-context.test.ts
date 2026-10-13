@@ -227,7 +227,7 @@ it('keeps_differing_sibling_raw_citations_and_complete_nested_custom_qualificati
         ),
       ).toBe(false);
     }
-    expect(source.calls.filter(c => c.phase === 'draft').every(c => modelEnvelope(c.call).inputBytes <= 8000)).toBe(
+    expect(source.calls.filter(c => c.phase === 'draft').every(c => modelEnvelope(c.call).inputBytes <= 32000)).toBe(
       true,
     );
     expect(status.usage.every(u => u.status === 'observed')).toBe(true);

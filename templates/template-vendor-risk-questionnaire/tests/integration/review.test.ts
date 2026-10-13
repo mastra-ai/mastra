@@ -450,6 +450,12 @@ describe('Persistent review and approved exports', () => {
     const f = await reviewFixture(root);
     await submitReview(decision(f), f.options);
     const bundle = await publishExport(f.runId, f.options);
+    const lifecycle = await openDatabase(f.url);
+    await lifecycle.execute({
+      sql: "INSERT INTO vrq_questionnaire_lifecycle (run_id,state) VALUES (?,'removed')",
+      args: [f.runId],
+    });
+    lifecycle.close();
     await writeFile(resolve(root, '.env'), 'credential-preserved');
     await mkdir(resolve(root, 'controls'));
     await writeFile(resolve(root, 'controls/goal.json'), 'preserved');
@@ -464,6 +470,8 @@ describe('Persistent review and approved exports', () => {
     const options = { ...f.options, workflow: f.workflow, storage: f.storage },
       preview = await previewCleanup(f.runId, options);
     expect(preview.files.length).toBeGreaterThan(2);
+    expect(preview.records.find(r => r.table === 'vrq_sources')?.count).toBe(2);
+    expect(preview.records.find(r => r.table === 'vrq_questionnaire_lifecycle')?.count).toBe(1);
     expect(await documentText(bundle.path)).toContain('Production workforce MFA');
     await expect(confirmCleanup({ ...preview, confirm: false }, options)).rejects.toThrow();
     await expect(
@@ -494,6 +502,10 @@ describe('Persistent review and approved exports', () => {
     const p = await openProcessingStore(f.url);
     expect(await p.status(f.runId)).toBeUndefined();
     p.close();
+    const cleaned = await openDatabase(f.url);
+    expect((await cleaned.execute('SELECT * FROM vrq_sources')).rows).toEqual([]);
+    expect((await cleaned.execute('SELECT * FROM vrq_questionnaire_lifecycle')).rows).toEqual([]);
+    cleaned.close();
     expect(await readFile(resolve(root, '.env'), 'utf8')).toBe('credential-preserved');
     expect(await readFile(resolve(root, 'controls/goal.json'), 'utf8')).toBe('preserved');
     expect(await readFile(resolve(root, 'runtime/exports/other-run/keep'), 'utf8')).toBe('other');
@@ -512,9 +524,11 @@ describe('Persistent review and approved exports', () => {
     await submitReview(decision(selected), selected.options);
     const selectedBundle = await publishExport(selected.runId, selected.options);
     await selected.mastra.shutdown();
-    const other = await reviewFixture(resolve(root, 'other'), { databasePath, runtimeRoot, runId: 'other-run' }, [
-      { value: 'unknown' },
-    ]);
+    const other = await reviewFixture(
+      resolve(root, 'other'),
+      { databasePath, runtimeRoot, runId: 'other-run', questions: [{ text: 'Is production MFA required?' }] },
+      [{ value: 'unknown' }],
+    );
     await submitReview(decision(other), other.options);
     const otherBundle = await publishExport(other.runId, other.options);
     await other.mastra.shutdown();
@@ -533,6 +547,11 @@ describe('Persistent review and approved exports', () => {
     };
     const beforeSelected = preview(selected.runId),
       beforeOther = preview(other.runId);
+    // Each questionnaire is unique, but both runs still share the same evidence bytes.
+    expect(beforeSelected.records.find((r: { table: string }) => r.table === 'vrq_sources').count).toBe(1);
+    const sourcesBefore = await openDatabase(selected.url);
+    expect((await sourcesBefore.execute('SELECT * FROM vrq_sources')).rows).toHaveLength(3);
+    sourcesBefore.close();
     for (const before of [beforeSelected, beforeOther]) {
       expect(before.files.length).toBeGreaterThan(2);
       for (const table of ['vrq_intakes', 'vrq_results', 'vrq_decisions', 'vrq_document_plans'])
@@ -548,7 +567,7 @@ describe('Persistent review and approved exports', () => {
     await confirm(beforeOther);
     const mismatch = cli('cleanup', '--run-id', selected.runId, '--confirmation', confirmationPath);
     expect(mismatch.status).toBe(1);
-    expect(mismatch.stderr).toContain('REVIEW_OPERATION_FAILED');
+    expect(mismatch.stderr).toContain('FOREIGN_CLEANUP');
     expect(preview(selected.runId)).toEqual(beforeSelected);
     expect(preview(other.runId)).toEqual(beforeOther);
     await confirm(beforeSelected);
@@ -559,7 +578,11 @@ describe('Persistent review and approved exports', () => {
       deletedRecords: beforeSelected.records.reduce((sum: number, r: { count: number }) => sum + r.count, 0),
       deletedFiles: beforeSelected.files.length,
     });
-    expect(preview(other.runId)).toEqual(beforeOther);
+    const afterOther = preview(other.runId);
+    expect(afterOther.records.find((r: { table: string }) => r.table === 'vrq_sources').count).toBe(2);
+    const sourcesAfter = await openDatabase(selected.url);
+    expect((await sourcesAfter.execute('SELECT * FROM vrq_sources')).rows).toHaveLength(2);
+    sourcesAfter.close();
     const review = await openReviewStore(selected.url);
     expect(await review.read(selected.runId)).toBeUndefined();
     expect((await review.read(other.runId))?.state).toBe('exported');
