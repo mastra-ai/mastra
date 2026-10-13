@@ -30,9 +30,7 @@ function appendResponseProviderItemKeys(cacheKey: string, ...providerSources: un
  */
 function appendAnthropicReasoningKeys(cacheKey: string, ...providerSources: unknown[]): string {
   for (const source of providerSources) {
-    const anthropic = (source as Record<string, unknown> | undefined)?.anthropic as
-      | Record<string, unknown>
-      | undefined;
+    const anthropic = (source as Record<string, unknown> | undefined)?.anthropic as Record<string, unknown> | undefined;
     if (!anthropic) continue;
     const identity = anthropic.signature ?? anthropic.redactedData;
     if (typeof identity === 'string' && identity.length > 0) {
