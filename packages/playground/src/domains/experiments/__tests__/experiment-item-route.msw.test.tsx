@@ -31,7 +31,6 @@ import { RouteSidePanelProvider } from '@/lib/route-side-panel';
 import ExperimentPage from '@/pages/experiments/experiment';
 import ReviewQueuePage from '@/pages/experiments/review-queue';
 import { legacyTraceCapabilities, traceQueryCapabilities } from '@/pages/traces/__tests__/fixtures/trace-query';
-import { interactiveRows } from '@/test/keyboard';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
 import { pickTraceSideView, traceSideViewLabel } from '@/test/trace-side-view';
@@ -644,58 +643,6 @@ describe('experiment item sub-route', () => {
       input.remove();
 
       expect(router.state.location.pathname).toBe(`/experiments/${EXPERIMENT_ID}/items/item-2`);
-    });
-  });
-
-  describe('when an item is open and the user presses the arrow keys from anywhere', () => {
-    it('opens the next item on ArrowDown', async () => {
-      const { router } = renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-2`);
-      await findResultPanel('res-2');
-
-      fireEvent.keyDown(document.body, { key: 'ArrowDown' });
-
-      await waitFor(() => {
-        expect(router.state.location.pathname).toBe(`/experiments/${EXPERIMENT_ID}/items/item-3`);
-      });
-    });
-
-    it('opens the previous item on ArrowUp', async () => {
-      const { router } = renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-2`);
-      await findResultPanel('res-2');
-
-      fireEvent.keyDown(document.body, { key: 'ArrowUp' });
-
-      await waitFor(() => {
-        expect(router.state.location.pathname).toBe(`/experiments/${EXPERIMENT_ID}/items/item-1`);
-      });
-    });
-  });
-
-  describe('when no item is open and the user presses ArrowDown from anywhere', () => {
-    it('opens the first item', async () => {
-      const { router } = renderExperimentRoute();
-      await screen.findByText('item-1');
-
-      fireEvent.keyDown(document.body, { key: 'ArrowDown' });
-
-      await waitFor(() => {
-        expect(router.state.location.pathname).toBe(`/experiments/${EXPERIMENT_ID}/items/item-1`);
-      });
-    });
-  });
-
-  describe('when a result row has focus and the user presses ArrowDown', () => {
-    it('opens the next item', async () => {
-      const { router } = renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
-      await findResultPanel('res-1');
-      const [firstRow] = interactiveRows();
-      firstRow!.focus();
-
-      fireEvent.keyDown(firstRow!, { key: 'ArrowDown' });
-
-      await waitFor(() => {
-        expect(router.state.location.pathname).toBe(`/experiments/${EXPERIMENT_ID}/items/item-2`);
-      });
     });
   });
 
