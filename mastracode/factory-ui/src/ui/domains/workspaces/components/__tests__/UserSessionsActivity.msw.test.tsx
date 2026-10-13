@@ -62,9 +62,7 @@ function stubProjectAndSessions(sessions: FactoryUserSession[]) {
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
-      HttpResponse.json({ sessions }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions })),
   );
 }
 
@@ -121,7 +119,7 @@ describe('User sessions sidebar activity', () => {
     // stamped `materializedAt` (registered after the base stub — the most
     // recent handler wins).
     server.use(
-      http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () =>
         HttpResponse.json({
           sessions: [
             makeSession({
@@ -146,7 +144,7 @@ describe('User sessions sidebar activity', () => {
     await client.invalidateQueries({
       queryKey: queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, TEST_BASE_URL),
     });
-    await client.invalidateQueries({ queryKey: queryKeys.sessions(projectRepositoryId) });
+    await client.invalidateQueries({ queryKey: queryKeys.sessions(factoryId) });
     await waitForMutationsIdle(client);
 
     // The belt goes dark on an idle session, not back on (or stuck at) initializing.

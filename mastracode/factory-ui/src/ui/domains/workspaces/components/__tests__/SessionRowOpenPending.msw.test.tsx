@@ -59,9 +59,7 @@ function stubFactoryWithRepository(sessions: FactoryUserSession[]) {
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
-      HttpResponse.json({ sessions }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions })),
   );
 }
 
