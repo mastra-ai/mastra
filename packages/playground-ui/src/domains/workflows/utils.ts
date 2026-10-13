@@ -94,12 +94,27 @@ function mergeStepResults(liveSteps: WorkflowRunStreamResult['steps'], storedSte
   return { ...storedSteps, ...Object.fromEntries(mergedLiveSteps) };
 }
 
+const SETTLED_STEP_STATUSES = ['success', 'failed', 'canceled'];
+
+// Observing a run resumed without streaming (e.g. `run.resume()` or `/resume-async`) replays the
+// suspension that preceded the resume. Persistence has already moved those steps on, so trust it.
+function isStaleSuspension(liveResult: WorkflowRunStreamResult, storedResult: WorkflowRunStreamResult) {
+  if (!isIdleRunStatus(liveResult.status)) return false;
+  return Object.entries(liveResult.steps).some(
+    ([stepId, liveStep]) =>
+      liveStep?.status === 'suspended' && SETTLED_STEP_STATUSES.includes(storedResult.steps[stepId]?.status ?? ''),
+  );
+}
+
 export function resolveWorkflowRunResult(
   liveResult: WorkflowRunStreamResult | null,
   storedResult: WorkflowRunStreamResult | null,
 ) {
   if (!liveResult) return storedResult;
   if (!storedResult) return liveResult;
+  if (isStaleSuspension(liveResult, storedResult)) {
+    return { ...storedResult, input: storedResult.input ?? liveResult.input };
+  }
   return {
     ...liveResult,
     input: liveResult.input ?? storedResult.input,

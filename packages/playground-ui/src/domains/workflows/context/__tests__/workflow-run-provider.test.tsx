@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { StreamVNextChunkType } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -19,6 +20,7 @@ import {
   partialCompletedLoop,
   pausedLoop,
   rawCompletedRun,
+  resumedElsewhereLoop,
   suspendedLoop,
 } from './fixtures/completed-loop';
 import { completedChunks, replayedChunks, runningChunk } from './fixtures/workflow-stream';
@@ -405,6 +407,51 @@ describe('WorkflowRunProvider', () => {
       });
       await waitFor(() => expect(screen.getByLabelText('Run state').textContent).toBe('success'));
       expect(screen.getByLabelText('Child output').textContent).toBe('{"words":2}');
+    });
+  });
+
+  describe('when a run resumed outside Studio is observed', () => {
+    it('keeps the stored running state instead of the replayed suspension', async () => {
+      let observeStarted = false;
+      const staleReplay: StreamVNextChunkType[] = [
+        { ...runningChunk, runId: completedLoop.runId },
+        {
+          type: 'workflow-step-suspended',
+          runId: completedLoop.runId,
+          from: 'WORKFLOW',
+          payload: { id: 'persisted', status: 'suspended', suspendPayload: {}, startedAt: 100, suspendedAt: 105 },
+        },
+        {
+          type: 'workflow-finish',
+          runId: completedLoop.runId,
+          from: 'WORKFLOW',
+          payload: {
+            workflowStatus: 'suspended',
+            output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            metadata: {},
+          },
+        },
+      ];
+      server.use(
+        http.get(`${BASE_URL}/api/workflows/two-step-workflow/runs/completed-loop`, () =>
+          HttpResponse.json(resumedElsewhereLoop),
+        ),
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/create-run`, () =>
+          HttpResponse.json({ runId: completedLoop.runId }),
+        ),
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/observe`, () => {
+          observeStarted = true;
+          return new HttpResponse(staleReplay.map(chunk => JSON.stringify(chunk) + '\x1e').join(''));
+        }),
+      );
+      renderProvider(completedLoop.runId);
+      await waitFor(() => expect(screen.getByLabelText('Run state').textContent).toBe('running'));
+      fireEvent.click(screen.getByRole('button', { name: 'Observe run' }));
+      await waitFor(() => expect(observeStarted).toBe(true));
+      await waitFor(() => expect(screen.getByLabelText('Streaming state').textContent).toBe('false'));
+      expect(screen.getByLabelText('Run state').textContent).toBe('running');
+      expect(screen.getByLabelText('Persisted state').textContent).toBe('success');
+      expect(screen.getByLabelText('Child state').textContent).toBe('running');
     });
   });
 
