@@ -19,6 +19,7 @@ const CACHE_FILE = () => path.join(os.homedir(), '.cache', 'mastra', 'pricing-da
 const CACHE_VERSION = 1;
 const BEDROCK_GEOGRAPHY_PREFIXES = new Set(['global', 'us', 'eu', 'apac', 'jp', 'au']);
 const AI_SDK_VERCEL_GATEWAY_PROVIDER_ID = 'gateway';
+const AZURE_OPENAI_GATEWAY_ID = 'azure-openai';
 const VERCEL_PRICING_PROVIDER_ID = 'vercel';
 const AI_SDK_PROVIDER_NAMESPACE_ALIASES = new Map([
   ['fireworks', 'fireworks-ai'],
@@ -117,16 +118,17 @@ function getBundledRegistry(): PricingRegistry | null {
 }
 
 /**
- * Where to find the model router gateways whose `pricing` fills the gaps in models.dev. Loading
- * starts right away, off the hot path, so the first model call is usually priced; a miss, a
- * gateway added later, or a failed load triggers another attempt (at most one an hour per gateway).
+ * Where to find the model router gateways whose `pricing` fills the gaps in models.dev. Prices
+ * load on the first lookup that has no price, so production does not call gateways at startup;
+ * under the same switches as the models.dev refresh (`mastra dev`, or
+ * `MASTRA_AUTO_REFRESH_PRICING=true`) they also load right away, off the hot path, so the first
+ * model call is priced. Each gateway is read once; a failed read is retried at most once an hour.
  */
 export function setPricingGateways(source: () => Iterable<PricingGateway>): void {
   gatewaySource = source;
-  gatewayLoadAttempts.clear();
-  gatewayCosts = {};
-  gatewayRegistry = null;
-  void loadGatewayPricing();
+  if (isRefreshEnabled()) {
+    void loadGatewayPricing();
+  }
 }
 
 /** Load `pricing` from every custom gateway not loaded yet. Off under `MASTRA_OFFLINE`. */
@@ -169,15 +171,16 @@ export async function loadGatewayPricing(): Promise<void> {
 }
 
 /**
- * The gateways Mastra registers on its own. Their `fetchProviders()` can hit the network and
- * never carries prices. Read from core when it exports the list (1.46+), else the known ids.
+ * The gateways core ships: the ones Mastra registers on its own, plus Azure OpenAI, which users
+ * construct themselves. Their `fetchProviders()` can hit the network and never carries prices.
+ * Read from core when it exports the list (1.46+), else the known ids.
  */
 async function getBuiltInGatewayIds(): Promise<Set<string>> {
   try {
     const { defaultGateways, getGatewayId } = await import('@mastra/core/llm');
-    return new Set(defaultGateways.map(getGatewayId));
+    return new Set([...defaultGateways.map(getGatewayId), AZURE_OPENAI_GATEWAY_ID]);
   } catch {
-    return new Set(['models.dev', 'netlify', 'mastra']);
+    return new Set(['models.dev', 'netlify', 'mastra', AZURE_OPENAI_GATEWAY_ID]);
   }
 }
 
