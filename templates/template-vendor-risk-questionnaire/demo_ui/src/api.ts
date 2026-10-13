@@ -21,6 +21,8 @@ export const setToken = (value: string) => {
   token = value;
 };
 const errorMessages: Record<string, string> = {
+  REQUEST_LIMIT: 'Too many changes were submitted. Wait one minute before trying again.',
+  ACTIVE_RUN_LIMIT: 'Two questionnaires are already active. Finish or cancel one before starting more work.',
   EXHAUSTED_REVIEW_REQUIRES_TRUSTED_GAPS:
     'This run has reached its processing time, call or cost limit. To finish without more model calls, mark every answer as unknown or withheld, using the default reasons and no corrections or evidence releases. To produce supported answers, start a new run with an appropriate execution policy.',
   EXPLANATION_FIELD_REQUIRED:

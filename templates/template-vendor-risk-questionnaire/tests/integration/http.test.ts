@@ -33,10 +33,10 @@ afterAll(async () => {
   await rm(setup.root, { recursive: true, force: true });
 });
 
-it('enables SimpleAuth only in production and requires a configured token', async () => {
-  expect(studioAuth({ NODE_ENV: 'test' })).toBeUndefined();
-  expect(studioAuth({ NODE_ENV: 'production', MASTRA_DEV: 'true' })).toBeUndefined();
-  expect(studioAuth({ NODE_ENV: 'development', MASTRA_STUDIO_TOKEN: 'secret' })).toBeUndefined();
+it('requires a configured token even in development and test modes', async () => {
+  expect(() => studioAuth({ NODE_ENV: 'test' })).toThrow('MASTRA_STUDIO_TOKEN_REQUIRED');
+  expect(() => studioAuth({ NODE_ENV: 'production', MASTRA_DEV: 'true' })).toThrow('MASTRA_STUDIO_TOKEN_REQUIRED');
+  expect(studioAuth({ NODE_ENV: 'development', MASTRA_STUDIO_TOKEN: 'secret' })).toBeDefined();
   expect(() => studioAuth({ NODE_ENV: 'production' })).toThrow('MASTRA_STUDIO_TOKEN_REQUIRED');
   const auth = studioAuth({ NODE_ENV: 'production', MASTRA_STUDIO_TOKEN: 'secret' })!;
   expect(await auth.getCurrentUser(new Request('http://localhost'))).toBeNull();
@@ -225,4 +225,31 @@ it('removes inactive questionnaires and denies every subsequent HTTP operation',
     ).status,
   ).toBe(404);
   expect((await app.request(path, { method: 'DELETE' })).status).toBe(404);
+});
+
+it('limits active jobs across distinct run IDs and releases capacity after completion', async () => {
+  const { startJob } = await import('../../src/mastra/server/questionnaire-jobs.ts');
+  const ids = ['quota-one', 'quota-two', 'quota-three'];
+  const store = await openRespondStore(`file:${setup.root}/test.db`);
+  const { source } = await import('../fixtures/support.ts');
+  for (const id of ids) await store.initialize(id, source(new TextEncoder().encode('content')));
+  store.close();
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  try {
+    await startJob(ids[0]!, () => pending);
+    await startJob(ids[1]!, () => pending);
+    await expect(startJob(ids[2]!, async () => {})).rejects.toThrow('ACTIVE_RUN_LIMIT');
+  } finally {
+    release();
+  }
+  await vi.waitFor(async () =>
+    expect(await (await app.request(`/vrq/questionnaires/${ids[0]}`)).json()).toMatchObject({ state: 'interrupted' }),
+  );
+  await expect(startJob(ids[2]!, async () => {})).resolves.toBeUndefined();
+  await vi.waitFor(async () =>
+    expect(await (await app.request(`/vrq/questionnaires/${ids[2]}`)).json()).toMatchObject({ state: 'interrupted' }),
+  );
 });

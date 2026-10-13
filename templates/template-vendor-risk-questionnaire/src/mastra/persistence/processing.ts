@@ -8,6 +8,7 @@ import { readIntake } from './intake.ts';
 import { readEvidence } from './evidence.ts';
 import { canonicalJson, sha256 } from '../intake/source.ts';
 import { executionPolicySchema } from '../contracts/execution-policy.ts';
+import { serviceLimits } from '../contracts/service-limits.ts';
 import type { ExecutionPolicy } from '../contracts/execution-policy.ts';
 import {
   processingRunSchema,
@@ -38,6 +39,7 @@ export async function openProcessingStore(
         'CREATE TABLE IF NOT EXISTS vrq_processing (run_id TEXT PRIMARY KEY, run_json TEXT NOT NULL)',
         'CREATE TABLE IF NOT EXISTS vrq_results (run_id TEXT NOT NULL, question_id TEXT NOT NULL, result_json TEXT NOT NULL, PRIMARY KEY(run_id,question_id))',
         'CREATE TABLE IF NOT EXISTS vrq_usage (id TEXT PRIMARY KEY, run_id TEXT NOT NULL, usage_json TEXT NOT NULL)',
+        'CREATE TABLE IF NOT EXISTS vrq_service_usage (id TEXT PRIMARY KEY, created_at TEXT NOT NULL, reserved_usd REAL NOT NULL)',
         'CREATE TABLE IF NOT EXISTS vrq_security (id TEXT PRIMARY KEY, run_id TEXT NOT NULL, outcome_json TEXT NOT NULL)',
       ],
       'write',
@@ -225,11 +227,18 @@ export async function openProcessingStore(
           const records = await usageFrom(tx, runId);
           const p = run.policy,
             cost = (inputReserved * p.rates.inputUsdPerMillion + p.maxOutputTokens * p.rates.outputUsdPerMillion) / 1e6;
+          const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+          await tx.execute({ sql: 'DELETE FROM vrq_service_usage WHERE created_at < ?', args: [cutoff] });
+          const aggregate = (
+            await tx.execute('SELECT COUNT(*) AS calls, COALESCE(SUM(reserved_usd), 0) AS usd FROM vrq_service_usage')
+          ).rows[0]!;
           const reason =
             processingElapsedMs(run) >= p.maxRunElapsedMs
               ? 'TIME_LIMIT'
               : records.length >= p.maxPhysicalCalls ||
-                  records.reduce((sum, r) => sum + r.estimatedUsd, 0) + cost > p.budgetUsd
+                  records.reduce((sum, r) => sum + r.estimatedUsd, 0) + cost > p.budgetUsd ||
+                  Number(aggregate.calls) >= serviceLimits.maxDailyCalls ||
+                  Number(aggregate.usd) + cost > serviceLimits.maxDailyReservedUsd
                 ? 'BUDGET_EXHAUSTED'
                 : null;
           if (reason) {
@@ -251,6 +260,10 @@ export async function openProcessingStore(
             status: 'reserved',
             reason: null,
             createdAt: new Date().toISOString(),
+          });
+          await tx.execute({
+            sql: 'INSERT INTO vrq_service_usage (id,created_at,reserved_usd) VALUES (?,?,?)',
+            args: [record.id, record.createdAt, cost],
           });
           await tx.execute({
             sql: 'INSERT INTO vrq_usage (id,run_id,usage_json) VALUES (?,?,?)',

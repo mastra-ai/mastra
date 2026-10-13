@@ -12,11 +12,13 @@ From the template directory:
    npm install
    ```
 
-2. Create `.env` if you haven't configured it yet, then open it and set `OPENAI_API_KEY`:
+2. Create `.env` if you haven't configured it yet, then open it and set `OPENAI_API_KEY` and a private random `MASTRA_STUDIO_TOKEN`:
 
    ```bash
    cp .env.example .env
    ```
+
+   Generate an access token with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"` and paste it into `.env`. The server requires this token in development and production.
 
 3. Prepare the fictional sample files and start both applications:
 
@@ -25,13 +27,21 @@ From the template directory:
    npm run dev
    ```
 
-4. Open [the web demo](http://127.0.0.1:5173). [Mastra Studio](http://127.0.0.1:4111) is available for workflow and trace inspection.
+4. Open [the web demo](http://127.0.0.1:5173) and enter your `MASTRA_STUDIO_TOKEN` when prompted. [Mastra Studio](http://127.0.0.1:4111) is available for workflow and trace inspection.
 
 The demo files are `.runtime/demo/questionnaire.xlsx` and `.runtime/demo/questionnaire.docx`. If the file picker hides `.runtime`, enter the full path or enable hidden files.
 
 `npm run dev` starts both processes in one terminal. Ctrl+C stops both; if either exits, the other stops too. The UI requires port 5173 and reports a conflict if another process owns it.
 
 To start them separately, run `npm run dev:mastra` and `npm run dev:ui` in separate terminals. Stop existing servers before switching to the combined command. For terminal-only use, see [local operation](local-operation.md).
+
+## Shared service limits
+
+The questionnaire API admits at most 60 authenticated mutations per minute and two active background jobs across all run IDs. Waiting for operator input also occupies a job slot. `REQUEST_LIMIT` asks you to wait one minute; `ACTIVE_RUN_LIMIT` asks you to finish or cancel an active job before retrying.
+
+Every model-call reservation, including CLI and workflow calls, shares a rolling 24-hour limit of 10,000 calls and $50 of reserved estimated cost per database. Reservations are atomic across runs and remain in `vrq_service_usage` across restarts and run cleanup. Reservations are not refunded when actual usage is lower. Old entries expire after 24 hours. Exceeding either this allowance or the per-run budget stops that run with `BUDGET_EXHAUSTED`; start a new run after capacity becomes available.
+
+The limits are defined in `src/mastra/contracts/service-limits.ts`. The cost uses each run's configured token rates and is not a provider billing cap. Keep one writer process per database; separate databases have separate allowances.
 
 ## Upload, review and download
 
@@ -89,7 +99,7 @@ Stop the dev server. In the backend environment, set:
 
 Keep `.runtime/profile.json`, evidence files and writable runtime storage available to the backend. Run one Mastra writer process.
 
-`SimpleAuth` protects Studio and the API in production. A missing token prevents startup. Development and tests are unauthenticated. `mastra dev` sets `MASTRA_DEV=true`, which disables this authentication even though that CLI sets `NODE_ENV=production` internally. Use the production start command below, with `MASTRA_DEV` unset.
+`SimpleAuth` protects Studio and the API in every mode. A missing token prevents startup, including with `MASTRA_DEV=true`. A template middleware also requires the bearer token on `/vrq/*`, so multipart requests from another website cannot start work without the secret. The token is entered by the operator and kept only in browser memory; it is never added automatically by the Vite proxy.
 
 ### 2. Build and start Mastra
 
@@ -153,7 +163,7 @@ Create reviewable configuration files; do not deploy or run a questionnaire.
 
 ## HTTP routes
 
-All routes are registered through Mastra `apiRoutes` and inherit its production authentication. `:runId` means the ID returned when you upload a questionnaire.
+All routes are registered through Mastra `apiRoutes` and require authentication in development and production. `:runId` means the ID returned when you upload a questionnaire.
 
 | Method | Route                                 | Operation                                                             |
 | ------ | ------------------------------------- | --------------------------------------------------------------------- |

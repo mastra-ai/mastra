@@ -8,7 +8,7 @@ import { defaultLimits } from './contracts/limits.ts';
 import { createLocalObservability, SafeLogger } from './observability/privacy.ts';
 import { runtimeRoot, storage } from './persistence/database.ts';
 import { ProcessingFailure } from './processing/failure.ts';
-import { studioAuth } from './server/auth.ts';
+import { studioAuth, questionnaireAccess } from './server/auth.ts';
 import { questionnaireRoutes, telemetryRoute } from './server/routes.ts';
 import { vendorRiskDrafts } from './workflows/vendor-risk-drafts.ts';
 import { vendorRiskIntake } from './workflows/vendor-risk-intake.ts';
@@ -37,6 +37,7 @@ export const mastra = new Mastra({
   server: {
     host: '127.0.0.1',
     auth,
+    middleware: [{ path: '/vrq/*', handler: questionnaireAccess() }],
     bodySizeLimit: defaultLimits.maxBytes + 65536,
     apiRoutes: [...questionnaireRoutes, telemetryRoute],
   },

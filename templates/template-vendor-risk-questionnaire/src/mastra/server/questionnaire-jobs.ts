@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { serviceLimits } from '../contracts/service-limits.ts';
 import { databaseUrl, openDatabase, runtimeRoot } from '../persistence/database.ts';
 import { openProcessingStore } from '../persistence/processing.ts';
 import { openReviewStore } from '../persistence/review.ts';
@@ -80,6 +81,7 @@ export async function removeQuestionnaire(runId: string) {
 }
 export async function startJob(runId: string, work: () => Promise<unknown>) {
   if (active.has(runId) || mutations.has(runId)) throw new Error('RUN_BUSY');
+  if (active.size >= serviceLimits.maxActiveJobs) throw new Error('ACTIVE_RUN_LIMIT');
   const controller = beginExecution(runId);
   active.set(runId, controller);
   try {

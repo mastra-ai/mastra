@@ -172,7 +172,7 @@ The default profile allows 1,000 provider calls (`policy.maxPhysicalCalls`), USD
 
 For document intake in Studio, select **vendor-risk-intake** and supply a local document path in `sourcePath`, preferably an absolute path. The **vendor-risk-questionnaire** workflow consumes saved intake and evidence for a run; it does not accept a file upload or questionnaire columns as input. Follow the [Studio intake and review steps](review.md#studio-intake-and-review). Use the [web interface](ui.md) for file uploads. `npm run dev` starts both interfaces together.
 
-For production, follow the [production setup](ui.md#production). It requires `NODE_ENV=production` and `MASTRA_STUDIO_TOKEN`; `mastra dev` remains unauthenticated.
+For production, follow the [production setup](ui.md#production). It requires `NODE_ENV=production` and `MASTRA_STUDIO_TOKEN`. The web server also requires `MASTRA_STUDIO_TOKEN` during development; see [local sign-in and shared limits](ui.md#run-locally).
 
 ## Development checks
 

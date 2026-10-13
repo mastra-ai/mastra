@@ -15,6 +15,7 @@ This template brings approved evidence and cited drafts into one review flow. It
 ## Prerequisites
 
 - **[OpenAI API key](https://platform.openai.com/api-keys)**: set `OPENAI_API_KEY` in `.env`. The default model is `openai/gpt-6.1-sol`. Optionally set `VRQ_MODEL` to another OpenAI model that supports Responses, structured output and medium reasoning.
+- **Local access token**: set `MASTRA_STUDIO_TOKEN` to a private random value. Generate one with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"` and paste it into `.env`. Enter the same token when the web demo asks you to sign in.
 - Sample questionnaires and evidence are included in the demo setup. No external storage or database account is needed.
 
 ## Quickstart 🚀
