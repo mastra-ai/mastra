@@ -360,6 +360,18 @@ describe('Schedules handlers', () => {
       ).rejects.toThrow(HTTPException);
     });
 
+    it('404s when the workflow is a hidden internal workflow', async () => {
+      expect(mastra.getWorkflowById('__mastra_notification_dispatcher')).toBeDefined();
+      await expect(
+        CREATE_SCHEDULE_ROUTE.handler({
+          mastra,
+          workflowId: '__mastra_notification_dispatcher',
+          cron: '0 * * * *',
+          ...baseCtx(),
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
     it('rejects ambiguous bodies carrying both agentId and workflowId', () => {
       const result = CREATE_SCHEDULE_ROUTE.bodySchema!.safeParse({
         agentId: 'agent-1',
