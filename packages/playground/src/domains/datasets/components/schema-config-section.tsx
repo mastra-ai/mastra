@@ -262,11 +262,14 @@ export function SchemaConfigSection({
             </Select>
           )}
 
-          <TabList variant="pill" size="sm" className="ml-auto">
-            <Tab value="input">Input</Tab>
-            <Tab value="groundTruth">Ground truth</Tab>
-            <Tab value="requestContext">Request context</Tab>
-          </TabList>
+          {/* TabList renders inside a w-full scroller; sizing this wrapper to its content keeps it on the select's row when it fits. */}
+          <div className="min-w-0 grow basis-auto">
+            <TabList variant="pill" size="sm" className="ml-auto">
+              <Tab value="input">Input</Tab>
+              <Tab value="groundTruth">Ground truth</Tab>
+              <Tab value="requestContext">Request context</Tab>
+            </TabList>
+          </div>
         </div>
 
         {sourceType === 'workflow' && selectedWorkflow && workflowSchemaLoading && (
