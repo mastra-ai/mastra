@@ -127,7 +127,7 @@ async function createMemoryConfig(
   projectScope: 'thread' | 'resource' = 'thread',
   vector?: unknown,
   settingsPath?: string,
-  options?: { disableSettingsOmSeed?: boolean },
+  options?: { disableSettingsOmSeed?: boolean; titleInstructions?: string },
 ) {
   vi.resetModules();
   memoryConstructorMock.mockClear();
@@ -253,6 +253,21 @@ describe('getDynamicMemory', () => {
 
     expect(config.options.generateTitle).toBe(false);
     expect(config.options.observationalMemory).not.toBe(false);
+  });
+
+  it('passes host titleInstructions through to generateTitle (#24688)', async () => {
+    const { config } = await createMemoryConfig({ projectPath: '/tmp/project' }, 'thread', undefined, undefined, {
+      titleInstructions: 'Écris le titre en français.',
+    });
+
+    expect(config.options.generateTitle).toMatchObject({ instructions: 'Écris le titre en français.' });
+  });
+
+  it('leaves generateTitle instructions unset when the host provides none', async () => {
+    const { config } = await createMemoryConfig({ projectPath: '/tmp/project' });
+
+    expect(config.options.generateTitle).not.toBe(false);
+    expect((config.options.generateTitle as { instructions?: string }).instructions).toBeUndefined();
   });
 
   it('falls back to auto when a Factory run has no authoritative settings result', async () => {

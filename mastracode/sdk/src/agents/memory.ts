@@ -252,7 +252,7 @@ export function getDynamicMemory(
   storage: MastraCompositeStore,
   vector?: MastraVector,
   settingsPath?: string,
-  options?: { disableSettingsOmSeed?: boolean },
+  options?: { disableSettingsOmSeed?: boolean; titleInstructions?: string },
   knowledge?: Knowledge,
 ) {
   // Cache is scoped per storage instance (per getDynamicMemory call) so a
@@ -374,6 +374,9 @@ export function getDynamicMemory(
                   }
                   return Array.isArray(resolved) ? resolved[0]!.model : resolved;
                 },
+                // Host-supplied title instructions (e.g. to pin the title
+                // language); core falls back to its defaults when absent.
+                ...(options?.titleInstructions ? { instructions: options.titleInstructions } : {}),
               },
         observationalMemory:
           process.env.MASTRACODE_DISABLE_OBSERVATIONAL_MEMORY === '1'
