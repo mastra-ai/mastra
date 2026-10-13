@@ -38,11 +38,7 @@ describe('Mastra Code thread ownership', () => {
         createdBy: ownerId,
       });
 
-      await session.thread.transferOwnership({
-        threadId: firstThreadId!,
-        toOwnerId: 'transferred-owner',
-        expectedOwnerId: ownerId,
-      });
+      await session.thread.transferOwnership({ toOwnerId: 'transferred-owner' });
       const secondThread = await session.thread.create({ title: 'Second thread' });
       expect(await session.thread.getOwner()).toBe(ownerId);
 
