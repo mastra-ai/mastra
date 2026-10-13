@@ -673,7 +673,7 @@ export class AgentControllerSession extends BaseResource {
   }
 
   /**
-   * Inject a message into the in-flight run without starting a new turn.
+   * Aborts the in-flight run, then sends the message as a new turn.
    * Pass a structured message to attach files, as with `sendMessage`.
    */
   async steer(

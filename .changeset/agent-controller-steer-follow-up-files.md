@@ -1,7 +1,7 @@
 ---
-'@mastra/core': patch
-'@mastra/server': patch
-'@mastra/client-js': patch
+'@mastra/core': minor
+'@mastra/server': minor
+'@mastra/client-js': minor
 ---
 
 AgentController `steer` and `followUp` now accept file attachments, matching `sendMessage`. Attached files reach the model the same way whether the message is sent right away or queued behind an active run.
