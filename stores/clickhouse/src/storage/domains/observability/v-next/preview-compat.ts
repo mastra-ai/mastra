@@ -1,7 +1,7 @@
 import * as coreStorage from '@mastra/core/storage';
 
 // Namespace access keeps adapters loadable with core versions predating previews.
-const generator = Reflect.get(coreStorage, 'buildStoredPreview') as
+const generator = coreStorage.buildStoredPreview as
   | ((preview: string | null | undefined, value: unknown, serialized?: string | null) => string)
   | undefined;
 export const canGeneratePreviews = typeof generator === 'function';
