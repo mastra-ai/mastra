@@ -108,6 +108,43 @@ describe('runIdleLoop adopts tasks started by a prior wrapper (#26841)', () => {
     expect(texts).toContain('continuation answer');
   });
 
+  it('keeps the wrapper open past the first idle evaluation for an adopted task', async () => {
+    const bg = makeBgStream();
+    const continuation = vi.fn(async () => ({
+      fullStream: streamOf(textChunks('continuation answer')),
+      runId: 'run-2',
+    }));
+    const listTasks = vi.fn(async () => ({ tasks: [{ id: 'task-orphan' }], total: 1 }));
+
+    const ctx = await runIdleLoopWithDeps({ listTasks, bgStream: bg.stream, streamForContinuation: continuation });
+
+    // Read until the first turn has fully finished, then flush the macrotask
+    // queue so the first idle evaluation has run. Only the adopted task in
+    // runningTaskIds keeps the wrapper open here — a completion queued during
+    // the lookup would pass even if adoption discarded the lookup result.
+    const reader = ctx.combinedStream.getReader();
+    const chunks: any[] = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      if (value?.type === 'finish') break;
+    }
+    await new Promise(resolve => setImmediate(resolve));
+    expect(continuation).not.toHaveBeenCalled();
+
+    bg.push(completedChunk('task-orphan'));
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+
+    expect(continuation).toHaveBeenCalledTimes(1);
+    const texts = chunks.filter(c => c.type === 'text-delta').map(c => c.payload.text);
+    expect(texts).toContain('continuation answer');
+  });
+
   it('does not re-adopt a task whose terminal event arrived during the lookup', async () => {
     const bg = makeBgStream();
     const continuation = vi.fn(async () => ({
