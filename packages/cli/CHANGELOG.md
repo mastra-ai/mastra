@@ -1,5 +1,21 @@
 # mastra
 
+## 1.34.1-alpha.2
+
+### Patch Changes
+
+- New datasets and experiments in Studio now come with a default name. Create new dataset pre-fills a name like "Dataset a3f9", and Run experiment names the run after its target plus a short id (for example `mastra-docs-a3f9`), following the target until you type your own. Name no longer blocks running an experiment. ([#26529](https://github.com/mastra-ai/mastra/pull/26529))
+
+- Added the optional run id field to generated Agent Controller CLI route metadata. ([#26058](https://github.com/mastra-ai/mastra/pull/26058))
+
+- Made `mastra traces import` easier to read: the destination flag is now `--target-project` and the date window flags are `--since` and `--until` (the old `--project`, `--from`, and `--to` still work), the summary names the source Langfuse project, and the printed resume command uses the project name you typed. Imported agent, tool, and evaluator spans now show their primitive type and name in Mastra Platform, and Langfuse's placeholder `default` environment is no longer copied, so imported traces show up in Mastra Studio without changing the environment filter. ([#26779](https://github.com/mastra-ai/mastra/pull/26779))
+
+- Fixed Studio failing to auto-connect when Mastra is mounted under a prefix in a host app (for example with `@mastra/next`, `@mastra/hono` or `@mastra/tanstack-start`). Studio now checks the server through `<server-api-prefix>/auth/capabilities` instead of the server root, so `mastra studio --server-api-prefix /api/mastra` connects even when the host app's root returns 401 or redirects. ([#26807](https://github.com/mastra-ai/mastra/pull/26807))
+
+- Updated dependencies [[`2a1bb80`](https://github.com/mastra-ai/mastra/commit/2a1bb80305bca1859504287e1a09f43c8a014330), [`519e97f`](https://github.com/mastra-ai/mastra/commit/519e97f624a15362fec7b143dea4eabcff556712), [`aea91e7`](https://github.com/mastra-ai/mastra/commit/aea91e7f3a4fb066bfda96dca670d7d2a766d770), [`da87b0a`](https://github.com/mastra-ai/mastra/commit/da87b0a1629d5ffc980b434f70fe60f9445ddb1c), [`182f097`](https://github.com/mastra-ai/mastra/commit/182f09745783aa83e42131307085ecf913cfbc38), [`7236b47`](https://github.com/mastra-ai/mastra/commit/7236b472bca9bbc9dddba53f683b15c271350183)]:
+  - @mastra/core@1.77.0-alpha.2
+  - @mastra/deployer@1.77.0-alpha.2
+
 ## 1.34.1-alpha.1
 
 ### Patch Changes

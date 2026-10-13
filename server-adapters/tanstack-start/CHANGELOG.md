@@ -1,5 +1,16 @@
 # @mastra/tanstack-start
 
+## 0.2.35-alpha.2
+
+### Patch Changes
+
+- Route handlers now retry initialization on the next request after a failed init, instead of failing every request until the process restarts. Concurrent requests during initialization still share a single init. ([#26784](https://github.com/mastra-ai/mastra/pull/26784))
+
+- Updated dependencies [[`7236b47`](https://github.com/mastra-ai/mastra/commit/7236b472bca9bbc9dddba53f683b15c271350183), [`2a1bb80`](https://github.com/mastra-ai/mastra/commit/2a1bb80305bca1859504287e1a09f43c8a014330), [`519e97f`](https://github.com/mastra-ai/mastra/commit/519e97f624a15362fec7b143dea4eabcff556712), [`aea91e7`](https://github.com/mastra-ai/mastra/commit/aea91e7f3a4fb066bfda96dca670d7d2a766d770), [`da87b0a`](https://github.com/mastra-ai/mastra/commit/da87b0a1629d5ffc980b434f70fe60f9445ddb1c), [`182f097`](https://github.com/mastra-ai/mastra/commit/182f09745783aa83e42131307085ecf913cfbc38), [`7236b47`](https://github.com/mastra-ai/mastra/commit/7236b472bca9bbc9dddba53f683b15c271350183)]:
+  - @mastra/server@1.77.0-alpha.2
+  - @mastra/core@1.77.0-alpha.2
+  - @mastra/hono@1.7.19-alpha.2
+
 ## 0.2.35-alpha.1
 
 ### Patch Changes
