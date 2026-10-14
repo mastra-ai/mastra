@@ -625,7 +625,7 @@
       }
     },
     {
-      "hash": "85bc8b643481f2e3",
+      "hash": "e658faaeaf5483ae",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -658,7 +658,7 @@
             {
               "role": "tool",
               "tool_call_id": "call_K8knsrXygwOTWmyTVSukRhmJ",
-              "content": "{\"data\":{\"arbitrary\":\"value\",\"count\":42},\"success\":true}"
+              "content": "{\"success\":true,\"data\":{\"arbitrary\":\"value\",\"count\":42}}"
             }
           ],
           "tools": [
@@ -875,7 +875,7 @@
       }
     },
     {
-      "hash": "73a0d8c313f897a2",
+      "hash": "cb28500557db3c48",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -908,7 +908,7 @@
             {
               "role": "tool",
               "tool_call_id": "call_5F2UrhGGcWpgSXKfT5ztNlHi",
-              "content": "{\"email\":\"dero@mail.com\",\"name\":\"Dero Israel\"}"
+              "content": "{\"name\":\"Dero Israel\",\"email\":\"dero@mail.com\"}"
             }
           ],
           "tools": [
@@ -1329,7 +1329,7 @@
       }
     },
     {
-      "hash": "548966c0f868ab84",
+      "hash": "f6c4257019c8a07d",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -1362,7 +1362,7 @@
             {
               "role": "tool",
               "tool_call_id": "call_CUBrTLHVTQt1Mc5NJyAMJE36",
-              "content": "{\"email\":\"joe@mail.com\",\"name\":\"Joe\"}"
+              "content": "{\"name\":\"Joe\",\"email\":\"joe@mail.com\"}"
             }
           ],
           "tools": [
