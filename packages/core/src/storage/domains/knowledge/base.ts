@@ -504,6 +504,17 @@ export interface QueryKnowledgeRecordsBySourceInput {
   limit?: number;
   includeDeleted?: boolean;
 }
+/** Most sources one {@link KnowledgeStorage.listSourcesWithVisibleRecords} call may ask about. */
+export const KNOWLEDGE_SOURCE_PROBE_LIMIT = 1000;
+export interface ListKnowledgeSourcesWithVisibleRecordsInput {
+  /** Sources to test; at most {@link KNOWLEDGE_SOURCE_PROBE_LIMIT}. */
+  sources: string[];
+  scopeIds: KnowledgeScopeIds;
+}
+export function assertKnowledgeSourceProbeLimit(sources: string[]): void {
+  if (sources.length > KNOWLEDGE_SOURCE_PROBE_LIMIT)
+    throw new Error(`listSourcesWithVisibleRecords accepts at most ${KNOWLEDGE_SOURCE_PROBE_LIMIT} sources`);
+}
 export interface SearchKnowledgeInput {
   query: string;
   scopeIds: KnowledgeScopeIds;
@@ -854,6 +865,13 @@ export abstract class KnowledgeStorage extends StorageDomain {
     throw new KnowledgeUnsupportedError();
   }
   async listRecordsBySource(_input: QueryKnowledgeRecordsBySourceInput): Promise<QueryKnowledgeRecordsOutput> {
+    throw new KnowledgeUnsupportedError();
+  }
+  /**
+   * Returns the subset of `sources` that own at least one live record visible in `scopeIds`, using the same record
+   * visibility rule as every other record read. One bounded query regardless of how many records each source holds.
+   */
+  async listSourcesWithVisibleRecords(_input: ListKnowledgeSourcesWithVisibleRecordsInput): Promise<string[]> {
     throw new KnowledgeUnsupportedError();
   }
   async deleteRecord(_input: { id: string; deletedBy: string; importRunId?: string }): Promise<KnowledgeRecord> {
