@@ -1131,8 +1131,23 @@ describe('MastraFactory.prepare', () => {
     }
 
     const READ_TOOLS = ['factory_list_work_items', 'factory_inspect_work_item', 'factory_list_attention'];
+    const MANAGEMENT_TOOLS = [
+      'factory_create_work_item',
+      'factory_transition_work_item',
+      'factory_retry_decision',
+      'factory_dismiss_decision',
+      'factory_resolve_proposal',
+      'factory_subscribe_work_item',
+      'factory_unsubscribe_work_item',
+    ];
+    const ALLOWED_TOOLS = [
+      ...READ_TOOLS,
+      'factory_create_work_item',
+      'factory_subscribe_work_item',
+      'factory_unsubscribe_work_item',
+    ];
 
-    it('gives interactive and non-interactive turns of a user session the read tools, and other sessions none', async () => {
+    it('gives a user session read tools on every turn, management tools only on person-started turns, and other sessions none', async () => {
       const storage = fakeStorage();
       const config = await prepareFactory({ storage });
       await seedUserSession(storage);
@@ -1144,15 +1159,17 @@ describe('MastraFactory.prepare', () => {
       const woken = await extraTools({ requestContext: sessionContext(false) });
       expect(Object.keys(interactive)).toEqual(expect.arrayContaining(READ_TOOLS));
       expect(Object.keys(woken)).toEqual(expect.arrayContaining(READ_TOOLS));
+      expect(Object.keys(interactive)).toEqual(expect.arrayContaining(MANAGEMENT_TOOLS));
+      for (const name of MANAGEMENT_TOOLS) expect(woken).not.toHaveProperty(name);
 
       const stranger = new RequestContext();
       stranger.set('user', { workosId: 'user-2', organizationId: 'org-2' });
       stranger.set('controller', { resourceId: 'session-1', threadId: 'thread-1', getState: () => ({}) });
       const none = await extraTools({ requestContext: stranger });
-      for (const name of READ_TOOLS) expect(none).not.toHaveProperty(name);
+      for (const name of [...READ_TOOLS, ...MANAGEMENT_TOOLS]) expect(none).not.toHaveProperty(name);
     });
 
-    it('persists allow for the read tools on a new session, so listing work items runs without asking', async () => {
+    it('persists allow for the no-approval tools on a new session, so listing work items runs without asking', async () => {
       const storage = fakeStorage();
       const config = await prepareFactory({ storage });
       const project = await seedUserSession(storage);
@@ -1189,10 +1206,11 @@ describe('MastraFactory.prepare', () => {
 
       expect(
         (session.state.get() as { permissionRules?: { tools: Record<string, string> } }).permissionRules?.tools,
-      ).toEqual(Object.fromEntries(READ_TOOLS.map(name => [name, 'allow'])));
+      ).toEqual(Object.fromEntries(ALLOWED_TOOLS.map(name => [name, 'allow'])));
       // The same policy core consults before parking a tool call for approval.
-      for (const name of READ_TOOLS) expect(session.resolveToolApproval(name)).toBe('allow');
-      expect(session.resolveToolApproval('factory_some_other_tool')).toBe('ask');
+      for (const name of ALLOWED_TOOLS) expect(session.resolveToolApproval(name)).toBe('allow');
+      // Moving and settling stay behind the person's approval.
+      expect(session.resolveToolApproval('factory_transition_work_item')).toBe('ask');
 
       const extraTools = config.extraTools as (args: {
         requestContext: RequestContext;

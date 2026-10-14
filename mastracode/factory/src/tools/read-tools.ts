@@ -24,7 +24,14 @@ const DEFAULT_LIST = 25;
 export interface FactoryReadToolDependencies {
   workItems: Pick<
     WorkItemsStorage,
-    'list' | 'getForProject' | 'listRunBindings' | 'listDeferredDecisions' | 'listByIds' | 'listDecisionsForEvaluations'
+    | 'list'
+    | 'getForProject'
+    | 'listRunBindings'
+    | 'listDeferredDecisions'
+    | 'listByIds'
+    | 'listDecisionsForEvaluations'
+    | 'listWorkItemSubscribers'
+    | 'listSessionSubscriptions'
   >;
   comments: Pick<WorkItemCommentsStorage, 'listRecent'>;
   audit: Pick<AuditStorage, 'list'>;
@@ -126,6 +133,10 @@ const listInputSchema = z
     role: z.string().min(1).max(64).optional().describe('Only items that have a session for this role.'),
     active: z.boolean().optional().describe('true: only items with an agent working now; false: only idle items.'),
     requestedBy: z.literal('me').optional().describe('"me": only items you filed.'),
+    subscribed: z
+      .boolean()
+      .optional()
+      .describe('true: only items this session follows; false: only items it does not.'),
     limit: z.number().int().min(1).max(MAX_LIST).optional().describe(`Default ${DEFAULT_LIST}, max ${MAX_LIST}.`),
   })
   .strict();
@@ -137,13 +148,17 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
     factory_list_work_items: createTool({
       id: 'factory_list_work_items',
       description:
-        "List this Factory's work items, newest activity first, with counts per stage for the whole Factory. Filter by text or #number, stage, board, role, whether an agent is working on it, or items you filed. Check here for an existing item before filing a new one.",
+        "List this Factory's work items, newest activity first, with counts per stage for the whole Factory. Filter by text or #number, stage, board, role, whether an agent is working on it, items you filed, or items this session follows. Check here for an existing item before filing a new one.",
       inputSchema: listInputSchema,
       execute: async input => {
-        const [items, bindings] = await Promise.all([
+        const [items, bindings, followed] = await Promise.all([
           deps.workItems.list(project),
           deps.workItems.listRunBindings(scope.orgId, scope.factoryProjectId),
+          input.subscribed === undefined
+            ? undefined
+            : deps.workItems.listSessionSubscriptions({ ...project, sessionId: scope.sessionId }),
         ]);
+        const followedIds = new Set(followed?.map(subscription => subscription.workItemId));
         const byStage: Record<string, number> = {};
         for (const item of items) {
           const stage = workItemStage(item);
@@ -161,6 +176,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
             if (input.role && !item.sessions[input.role]) return false;
             if (input.active !== undefined && (activeWorker(bindings, item.id) !== null) !== input.active) return false;
             if (input.requestedBy === 'me' && item.createdBy !== scope.userId) return false;
+            if (input.subscribed !== undefined && followedIds.has(item.id) !== input.subscribed) return false;
             return true;
           })
           .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime());
@@ -176,19 +192,20 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
     factory_inspect_work_item: createTool({
       id: 'factory_inspect_work_item',
       description:
-        'Everything the Factory knows about one work item: stage history, sessions by role, decisions with errors, recent audit events, recent feed comments, labels and linked items. Use it to explain why an item is where it is.',
+        'Everything the Factory knows about one work item: stage history, sessions by role, decisions with errors, recent audit events, recent feed comments, labels, linked items and the sessions following it. Use it to explain why an item is where it is.',
       inputSchema: z
         .object({ workItem: z.string().trim().min(1).max(64).describe('Work item id, or its number like "#123".') })
         .strict(),
       execute: async ({ workItem }) => {
         const item = await findWorkItem(deps.workItems, scope, workItem);
         if (!item) throw workItemNotFound(workItem);
-        const [bindings, decisions, audit, feed, all] = await Promise.all([
+        const [bindings, decisions, audit, feed, all, subscribers] = await Promise.all([
           deps.workItems.listRunBindings(scope.orgId, scope.factoryProjectId, item.id),
           deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId, { workItemId: item.id }),
           deps.audit.list({ ...project, limit: 200 }),
           deps.comments.listRecent({ ...project, workItemId: item.id, limit: 10 }),
           deps.workItems.list(project),
+          deps.workItems.listWorkItemSubscribers({ orgId: scope.orgId, workItemId: item.id }),
         ]);
         const itemDecisions = decisions.slice(-MAX_LIST);
         const overtaken = await overtakenDecisionIds(
@@ -247,6 +264,11 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
           })),
           parent: parent ? summarizeItem(parent, bindings) : null,
           children: children.slice(0, MAX_LIST).map(child => summarizeItem(child, bindings)),
+          subscribers: subscribers.slice(0, MAX_LIST).map(subscription => ({
+            sessionId: subscription.sessionId,
+            reason: subscription.reason,
+            isCaller: subscription.sessionId === scope.sessionId,
+          })),
         };
       },
     }),
