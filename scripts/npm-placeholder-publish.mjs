@@ -27,7 +27,9 @@ const DEFAULT_REGISTRY = 'https://registry.npmjs.org';
 const PLACEHOLDER_VERSION = '0.0.0';
 // `npm trust` first shipped in npm 11.10.0.
 const NPM_WITH_TRUST = 'npm@^11.10.0';
-const TRUST_ARGS = ['--file', 'npm-publish.yml', '--repo', 'mastra-ai/mastra', '--allow-publish'];
+const TRUST_REPO = 'mastra-ai/mastra';
+const TRUST_FILE = 'npm-publish.yml';
+const TRUST_ARGS = ['--file', TRUST_FILE, '--repo', TRUST_REPO, '--allow-publish'];
 
 function usage() {
   return 'Usage: node scripts/npm-placeholder-publish.mjs <package-name> [--dry-run] [--otp <code>] [--skip-trust] [--registry <url>]';
@@ -94,6 +96,33 @@ function run(command, args, options = {}) {
   if (result.status !== 0) fail(`Failed (exit ${result.status ?? result.signal}): ${commandLine}`);
 }
 
+// `npm trust list --json` prints one JSON object per trusted publisher
+// ({ type, file, repository, ... }), separated by blank lines. Returns
+// undefined when the list can't be read.
+function readTrust(options) {
+  const args = ['--yes', NPM_WITH_TRUST, 'trust', 'list', options.name, '--json', '--registry', options.registry];
+  if (options.otp) args.push('--otp', options.otp);
+  const result = spawnSync('npx', args, { encoding: 'utf8', stdio: ['inherit', 'pipe', 'inherit'] });
+  if (result.status !== 0) return undefined;
+  try {
+    return result.stdout
+      .split(/\n\s*\n/)
+      .map(block => block.trim())
+      .filter(Boolean)
+      .map(block => JSON.parse(block));
+  } catch {
+    return undefined;
+  }
+}
+
+const isPublishWorkflowTrust = config =>
+  config.type === 'github' && config.repository === TRUST_REPO && config.file === TRUST_FILE;
+
+const describeTrust = configs =>
+  configs.length === 0
+    ? 'none'
+    : configs.map(config => `${config.type} ${config.repository ?? '?'} ${config.file ?? '?'}`).join('; ');
+
 function publishPlaceholder(manifest, options) {
   if (!options.dryRun) {
     const whoami = spawnSync('npm', ['whoami', '--registry', options.registry], { encoding: 'utf8' });
@@ -140,8 +169,28 @@ if (options.dryRun || options.skipTrust) {
   console.log('Configure trusted publishing (not run):');
   console.log(`  npx ${trustArgs.join(' ')}`);
 } else {
-  run('npx', [...trustArgs, '--registry', options.registry]);
-  console.log(`Trusted publishing configured for ${options.name}.`);
+  const before = readTrust(options);
+  if (before?.some(isPublishWorkflowTrust)) {
+    console.log(`Trusted publishing for ${TRUST_REPO} ${TRUST_FILE} is already configured for ${options.name}.`);
+  } else {
+    if (before?.length) {
+      console.log(`${options.name} currently trusts: ${describeTrust(before)}.`);
+      console.log(
+        `If npm refuses a second trusted publisher, remove that one with \`npx ${NPM_WITH_TRUST} trust revoke\` first.`,
+      );
+    }
+    run('npx', [...trustArgs, '--registry', options.registry]);
+    // Read it back: publishing only works if it names this repo and workflow.
+    const after = readTrust(options);
+    if (!after)
+      fail(`Configured trusted publishing, but could not read it back with \`npm trust list ${options.name}\`.`);
+    if (!after.some(isPublishWorkflowTrust)) {
+      fail(
+        `npm reports no trusted publisher for ${TRUST_REPO} ${TRUST_FILE} on ${options.name} after configuring it (found: ${describeTrust(after)}).`,
+      );
+    }
+    console.log(`Trusted publishing configured for ${options.name}: verified ${TRUST_REPO} ${TRUST_FILE}.`);
+  }
 }
 
 console.log('');

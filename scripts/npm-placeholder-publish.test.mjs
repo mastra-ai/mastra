@@ -17,8 +17,11 @@ function tempDir(t, prefix) {
 
 // Mock npm registry: `packages` maps a package path to its GET status. Records
 // every request so tests can assert nothing was (or what was) published.
-async function startRegistry(t, { packages = {}, whoami = 200 } = {}) {
+// Trusted publishers POSTed to /-/package/<name>/trust are stored and served
+// back on GET, like npm; `trust` seeds them and `dropTrust` discards POSTs.
+async function startRegistry(t, { packages = {}, whoami = 200, trust = {}, dropTrust = false } = {}) {
   const requests = [];
+  const trusted = new Map(Object.entries(trust));
   const server = createServer((req, res) => {
     let body = '';
     req.setEncoding('utf8');
@@ -28,6 +31,14 @@ async function startRegistry(t, { packages = {}, whoami = 200 } = {}) {
       if (req.url === '/-/whoami') {
         res.writeHead(whoami, { 'content-type': 'application/json' });
         res.end(JSON.stringify(whoami === 200 ? { username: 'npm-admin' } : { error: 'unauthorized' }));
+      } else if (req.url.startsWith('/-/package/') && req.url.endsWith('/trust')) {
+        if (req.method === 'POST' && !dropTrust) {
+          const existing = trusted.get(req.url) ?? [];
+          const added = JSON.parse(body).map((config, index) => ({ id: `cfg-${existing.length + index}`, ...config }));
+          trusted.set(req.url, [...existing, ...added]);
+        }
+        res.writeHead(req.method === 'POST' ? 201 : 200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(req.method === 'POST' ? { ok: true } : (trusted.get(req.url) ?? [])));
       } else if (req.method === 'PUT' || req.method === 'POST') {
         res.writeHead(201, { 'content-type': 'application/json' });
         res.end('{"ok":true}');
@@ -180,7 +191,10 @@ test('configures trusted publishing for npm-publish.yml after publishing', async
   const registry = await startRegistry(t);
   const result = await run(t, makeWorkspace(t), registry.url, ['@mastra/sprites'], 'y\n');
   assert.equal(result.status, 0, result.output);
-  assert.match(result.stdout, /Trusted publishing configured for @mastra\/sprites/);
+  assert.match(
+    result.stdout,
+    /Trusted publishing configured for @mastra\/sprites: verified mastra-ai\/mastra npm-publish\.yml/,
+  );
 
   const methods = registry.requests.map(request => `${request.method} ${request.url}`);
   const publishIndex = methods.indexOf('PUT /@mastra%2fsprites');
@@ -193,4 +207,50 @@ test('configures trusted publishing for npm-publish.yml after publishing', async
       permissions: ['createPackage'],
     },
   ]);
+});
+
+const publishWorkflowTrust = {
+  type: 'github',
+  claims: { repository: 'mastra-ai/mastra', workflow_ref: { file: 'npm-publish.yml' } },
+  permissions: ['createPackage'],
+};
+
+test('fails when npm does not report the trusted publisher after configuring it', async t => {
+  const registry = await startRegistry(t, { dropTrust: true });
+  const result = await run(t, makeWorkspace(t), registry.url, ['@mastra/sprites'], 'y\n');
+  assert.equal(result.status, 1, result.output);
+  assert.match(
+    result.stderr,
+    /npm reports no trusted publisher for mastra-ai\/mastra npm-publish\.yml on @mastra\/sprites .*found: none/,
+  );
+});
+
+test('an existing package with the right trusted publisher is left alone', async t => {
+  const registry = await startRegistry(t, {
+    packages: { '/@mastra%2fsprites': 200 },
+    trust: { '/-/package/@mastra%2fsprites/trust': [{ id: 'cfg-0', ...publishWorkflowTrust }] },
+  });
+  const result = await run(t, makeWorkspace(t), registry.url, ['@mastra/sprites']);
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.stdout, /already configured for @mastra\/sprites/);
+  assert.deepEqual(puts(registry), []);
+  assert.ok(!registry.requests.some(request => request.method === 'POST'));
+});
+
+test('an existing package trusting another workflow gets npm-publish.yml added and verified', async t => {
+  const otherWorkflow = {
+    id: 'cfg-0',
+    type: 'github',
+    claims: { repository: 'mastra-ai/mastra', workflow_ref: { file: 'old-release.yml' } },
+    permissions: ['createPackage'],
+  };
+  const registry = await startRegistry(t, {
+    packages: { '/@mastra%2fsprites': 200 },
+    trust: { '/-/package/@mastra%2fsprites/trust': [otherWorkflow] },
+  });
+  const result = await run(t, makeWorkspace(t), registry.url, ['@mastra/sprites'], 'y\n');
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.stdout, /currently trusts: github mastra-ai\/mastra old-release\.yml/);
+  assert.match(result.stdout, /verified mastra-ai\/mastra npm-publish\.yml/);
+  assert.deepEqual(puts(registry), []);
 });

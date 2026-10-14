@@ -44,9 +44,15 @@ function makeWorkspace(t, packages) {
 
 // Async spawn: the mock registry lives in this process, so a synchronous
 // spawn would block the event loop and deadlock every registry request.
-function run(t, cwd, registry, extraArgs = []) {
+function run(t, cwd, registry, extraArgs = [], env = {}) {
+  const childEnv = { ...process.env, ...env };
+  // Never let a real GitHub Actions OIDC environment leak into the tests.
+  if (!('ACTIONS_ID_TOKEN_REQUEST_URL' in env)) {
+    delete childEnv.ACTIONS_ID_TOKEN_REQUEST_URL;
+    delete childEnv.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
+  }
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [script, '--registry', registry, ...extraArgs], { cwd });
+    const child = spawn(process.execPath, [script, '--registry', registry, ...extraArgs], { cwd, env: childEnv });
     let stdout = '';
     let stderr = '';
     child.stdout.setEncoding('utf8').on('data', chunk => (stdout += chunk));
@@ -161,4 +167,167 @@ test('--retry-404 still fails a package that never appears', async t => {
   const result = await run(t, cwd, registry, ['--retry-404', '1000']);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /@mastra\/sprites .* has never been published to npm/);
+});
+
+// Mock of both sides of the publish-time OIDC exchange: GitHub's id-token
+// endpoint and npm's packument + token-exchange endpoints. `exchange` maps a
+// package path (`@scope%2fname`) to a status or a list of statuses (last one
+// sticks); 200 answers with a fake npm token that must never be printed.
+const ID_TOKEN = 'header.github-id-token-must-not-leak.sig';
+const NPM_TOKEN = 'npm_exchanged-token-must-not-leak';
+const REQUEST_TOKEN = 'actions-request-token-must-not-leak';
+
+async function startOidc(t, { exchange = {}, idTokenStatus = 200 } = {}) {
+  const requests = [];
+  const remaining = new Map(Object.entries(exchange).map(([key, value]) => [key, [value].flat()]));
+  const server = createServer((req, res) => {
+    requests.push({ method: req.method, url: req.url, authorization: req.headers.authorization });
+    const reply = (status, body) => {
+      res.writeHead(status, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(body));
+    };
+    const url = new URL(req.url, 'http://localhost');
+    if (url.pathname === '/_apis/idtoken') {
+      const ok = req.headers.authorization === `Bearer ${REQUEST_TOKEN}` && idTokenStatus === 200;
+      return ok ? reply(200, { value: ID_TOKEN }) : reply(idTokenStatus === 200 ? 401 : idTokenStatus, {});
+    }
+    const exchangeMatch = url.pathname.match(/^\/-\/npm\/v1\/oidc\/token\/exchange\/package\/(.+)$/);
+    if (exchangeMatch && req.method === 'POST') {
+      const statuses = remaining.get(exchangeMatch[1]);
+      const status = statuses ? (statuses.length > 1 ? statuses.shift() : statuses[0]) : 404;
+      if (req.headers.authorization !== `Bearer ${ID_TOKEN}`) return reply(401, { message: 'bad id token' });
+      if (status === 200) return reply(200, { token: NPM_TOKEN });
+      return reply(status, { message: 'OIDC token exchange error - package not found' });
+    }
+    // Packuments: every package exists, published by trusted publishing.
+    return reply(200, { versions: { '1.0.0': { _npmUser: { trustedPublisher: { id: 'github' } } } } });
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const url = `http://127.0.0.1:${server.address().port}`;
+  return {
+    url,
+    requests,
+    env: {
+      ACTIONS_ID_TOKEN_REQUEST_URL: `${url}/_apis/idtoken?api-version=2.0`,
+      ACTIONS_ID_TOKEN_REQUEST_TOKEN: REQUEST_TOKEN,
+    },
+  };
+}
+
+const assertNoTokens = result => {
+  for (const token of [ID_TOKEN, NPM_TOKEN, REQUEST_TOKEN]) {
+    assert.ok(!result.stdout.includes(token) && !result.stderr.includes(token), `${token} was printed`);
+  }
+};
+
+test('--oidc passes when npm grants the token exchange for every package (trust present)', async t => {
+  const cwd = makeWorkspace(t, pkgs);
+  const oidc = await startOidc(t, { exchange: { '@mastra%2fcore': 200, '@mastra%2fsprites': 200 } });
+  const result = await run(t, cwd, oidc.url, ['--oidc'], oidc.env);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /npm trusted publishing works for all 2 package\(s\)/);
+  assertNoTokens(result);
+
+  // Same request pnpm makes at publish time: GitHub token for the registry
+  // audience, then a POST with it as bearer to the exchange endpoint.
+  const idTokenRequests = oidc.requests.filter(request => request.url.startsWith('/_apis/idtoken'));
+  assert.equal(idTokenRequests.length, 2);
+  assert.equal(new URL(idTokenRequests[0].url, oidc.url).searchParams.get('audience'), 'npm:127.0.0.1');
+  const exchanges = oidc.requests.filter(request => request.url.startsWith('/-/npm/v1/oidc/token/exchange/'));
+  assert.deepEqual(exchanges.map(request => `${request.method} ${request.url}`).sort(), [
+    'POST /-/npm/v1/oidc/token/exchange/package/@mastra%2fcore',
+    'POST /-/npm/v1/oidc/token/exchange/package/@mastra%2fsprites',
+  ]);
+  assert.ok(exchanges.every(request => request.authorization === `Bearer ${ID_TOKEN}`));
+  // Nothing is published with the exchanged token.
+  assert.ok(oidc.requests.every(request => request.method !== 'PUT'));
+});
+
+test('--oidc fails, naming the package, when npm refuses the exchange (no trusted publisher)', async t => {
+  const cwd = makeWorkspace(t, pkgs);
+  const oidc = await startOidc(t, { exchange: { '@mastra%2fcore': 200, '@mastra%2fsprites': 404 } });
+  const result = await run(t, cwd, oidc.url, ['--oidc'], oidc.env);
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(
+    result.stderr,
+    /npm refused trusted publishing for @mastra\/sprites \(HTTP 404: OIDC token exchange error/,
+  );
+  assert.match(result.stderr, /node scripts\/npm-placeholder-publish\.mjs @mastra\/sprites/);
+  assert.match(result.stderr, /trust github @mastra\/sprites --file npm-publish\.yml --repo mastra-ai\/mastra/);
+  assert.match(result.stderr, /1 package\(s\) cannot publish through npm trusted publishing: @mastra\/sprites$/m);
+  assert.doesNotMatch(result.stderr, /refused trusted publishing for @mastra\/core/);
+  assert.doesNotMatch(result.stderr, /Every package was refused/);
+  assertNoTokens(result);
+});
+
+test('--oidc flags the job, not just the packages, when every exchange is refused', async t => {
+  const cwd = makeWorkspace(t, pkgs);
+  const oidc = await startOidc(t, { exchange: { '@mastra%2fcore': 401, '@mastra%2fsprites': 401 } });
+  const result = await run(t, cwd, oidc.url, ['--oidc'], oidc.env);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Every package was refused/);
+});
+
+test('--oidc exits 2, not "no trust", when the exchange endpoint is unreachable', async t => {
+  const cwd = makeWorkspace(t, [{ name: '@mastra/core' }]);
+  const oidc = await startOidc(t, { exchange: { '@mastra%2fcore': 503 } });
+  const result = await run(t, cwd, oidc.url, ['--oidc'], oidc.env);
+  assert.equal(result.status, 2, result.stderr);
+  assert.match(
+    result.stderr,
+    /Could not verify 1 package\(s\) for trusted publishing: @mastra\/core \(npm token exchange endpoint errors\)/,
+  );
+  assert.doesNotMatch(result.stderr, /refused/);
+});
+
+test('--oidc recovers when the exchange endpoint errors transiently', async t => {
+  const cwd = makeWorkspace(t, [{ name: '@mastra/core' }]);
+  const oidc = await startOidc(t, { exchange: { '@mastra%2fcore': [503, 429, 200] } });
+  const result = await run(t, cwd, oidc.url, ['--oidc'], oidc.env);
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('--oidc exits 2 when GitHub will not issue an OIDC token', async t => {
+  const cwd = makeWorkspace(t, [{ name: '@mastra/core' }]);
+  const oidc = await startOidc(t, { exchange: { '@mastra%2fcore': 200 }, idTokenStatus: 500 });
+  const result = await run(t, cwd, oidc.url, ['--oidc'], oidc.env);
+  assert.equal(result.status, 2, result.stderr);
+  assert.match(result.stderr, /@mastra\/core \(GitHub OIDC token endpoint errors\)/);
+  assert.ok(!oidc.requests.some(request => request.url.startsWith('/-/npm/v1/oidc/')));
+});
+
+test('--oidc exits 2 without id-token: write', async t => {
+  const cwd = makeWorkspace(t, [{ name: '@mastra/core' }]);
+  const oidc = await startOidc(t);
+  const result = await run(t, cwd, oidc.url, ['--oidc']);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /id-token: write/);
+  assert.deepEqual(oidc.requests, []);
+});
+
+test('--oidc --retry-404 waits out a trusted publisher configured minutes ago', async t => {
+  const cwd = makeWorkspace(t, [{ name: '@mastra/sprites' }]);
+  const oidc = await startOidc(t, { exchange: { '@mastra%2fsprites': [404, 404, 200] } });
+  const result = await run(t, cwd, oidc.url, ['--oidc', '--retry-404', '10000'], oidc.env);
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('without --oidc, a package with no trusted-publishing history only warns', async t => {
+  const cwd = makeWorkspace(t, pkgs);
+  // The default mock packument is `{}`: no version came from trusted publishing.
+  const registry = await startRegistry(t, { '/@mastra%2fcore': 200, '/@mastra%2fsprites': 200 });
+  const result = await run(t, cwd, registry);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /^::warning title=No trusted-publishing history::@mastra\/sprites exists on npm/m);
+  assert.match(result.stdout, /^::warning title=No trusted-publishing history::@mastra\/core exists on npm/m);
+});
+
+test('without --oidc, a package published by trusted publishing does not warn', async t => {
+  const cwd = makeWorkspace(t, [{ name: '@mastra/core' }]);
+  const oidc = await startOidc(t);
+  const result = await run(t, cwd, oidc.url);
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stdout, /::warning/);
+  assert.ok(!oidc.requests.some(request => request.url.includes('oidc') || request.url.includes('idtoken')));
 });
