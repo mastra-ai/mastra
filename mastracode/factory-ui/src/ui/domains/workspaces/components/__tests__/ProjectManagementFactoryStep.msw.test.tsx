@@ -60,7 +60,7 @@ describe('ProjectManagementFactoryStep', () => {
       renderStep();
 
       expect(await screen.findByText('Connected', { exact: true })).toBeInTheDocument();
-      expect(screen.getByRole('heading', { name: 'Jira', exact: true })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Jira' })).toBeInTheDocument();
       expect(screen.getByText('Connected to acme.atlassian.net.')).toBeInTheDocument();
       // Additional accounts are managed in Settings, not during onboarding.
       expect(screen.queryByRole('button', { name: 'Connect another' })).not.toBeInTheDocument();
@@ -78,7 +78,7 @@ describe('ProjectManagementFactoryStep', () => {
       renderStep();
 
       expect(await screen.findByText('Connected', { exact: true })).toBeInTheDocument();
-      expect(screen.getByRole('heading', { name: 'incident.io', exact: true })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'incident.io' })).toBeInTheDocument();
       expect(screen.getByText('Connected to acme.')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
     });

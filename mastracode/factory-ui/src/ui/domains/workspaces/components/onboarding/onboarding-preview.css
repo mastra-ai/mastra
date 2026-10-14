@@ -114,6 +114,7 @@
     height: 100dvh;
     min-height: 0;
     padding-bottom: 76px;
+    scroll-padding-bottom: 76px;
     overflow-y: auto;
   }
   .onboarding-layout {
@@ -182,6 +183,29 @@
     .onboarding-diagram {
       display: block;
     }
+  }
+  /* Intake labels need natural wrapping, independently of the animated SVG's coordinates. */
+  .onboarding-layout:has(.onboarding-preview[data-compact-intake='true']) {
+    height: auto;
+    min-height: 100%;
+  }
+  .onboarding-preview[data-compact-intake='true'] {
+    container-type: normal;
+    align-self: start;
+    height: auto;
+    margin-block: 24px;
+  }
+  .onboarding-preview[data-compact-intake='true'] .onboarding-diagram {
+    display: block;
+    width: 100%;
+    max-width: 400px;
+    aspect-ratio: auto;
+  }
+  .onboarding-preview[data-compact-intake='true'] .onboarding-illustration {
+    display: none;
+  }
+  .onboarding-preview[data-compact-intake='true'] .onboarding-scene[data-active='true'] {
+    position: relative;
   }
   .onboarding-ticket-title {
     display: none;

@@ -1,4 +1,5 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { GitBranch } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ProviderConnectionMethod } from '../../../hooks/useProviderConnection';
@@ -104,8 +105,9 @@ export function OnboardingPreview({
   const personalScene = step === 'personal-provider' || (reviewing && personalIsFactoryModel);
   const scene = sceneForStep(step);
   const mode = accountsMode(personalScene, personalIsFactoryModel);
+  const compactIntake = useIsMobile(900) && scene === 'intake';
   return (
-    <aside className="onboarding-preview min-w-0 px-8 xl:px-12" aria-hidden="true">
+    <aside className="onboarding-preview min-w-0 px-8 xl:px-12" aria-hidden="true" data-compact-intake={compactIntake}>
       <div className="onboarding-diagram relative mx-auto w-full max-w-150">
         <OnboardingIllustration scene={scene} mode={mode} />
         <OnboardingScene active={step === 'initial'}>
@@ -115,7 +117,7 @@ export function OnboardingPreview({
           <OnboardingCodebasePreview repository={repository} />
         </OnboardingScene>
         <OnboardingScene active={step === 'project-management'}>
-          <OnboardingIntakePreview source={source} />
+          <OnboardingIntakePreview source={source} compact={compactIntake} />
         </OnboardingScene>
         <OnboardingScene active={step === 'model-provider' || (reviewing && !personalIsFactoryModel)}>
           <OnboardingSharedModelPreview

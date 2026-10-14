@@ -1,6 +1,7 @@
+import { Card, CardContent } from '@mastra/playground-ui/components/Card';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
-import { Check, CircleDashed, Code2 } from 'lucide-react';
+import { ArrowDown, Check, CircleDashed, Code2 } from 'lucide-react';
 import { useWorkSourceConnections, WORK_SOURCE_NAME } from '../../../hooks/useWorkSourceConnections';
 import type { WorkSource } from '../../../hooks/useWorkSourceConnections';
 import { IncidentIoIcon, JiraIcon } from '../../../../../ui/icons';
@@ -33,10 +34,69 @@ const SOURCES = {
   },
 };
 
-export function OnboardingIntakePreview({ source }: { source: WorkSource }) {
+export function OnboardingIntakePreview({ source, compact = false }: { source: WorkSource; compact?: boolean }) {
   const status = useWorkSourceConnections();
   const name = WORK_SOURCE_NAME[source];
   const { Icon, example, id, previousId, previousExample, kind } = SOURCES[source];
+  if (compact) {
+    return (
+      <section aria-label="Work intake preview" className="grid gap-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <Icon className="size-3.5 shrink-0" />
+            <Txt variant="meta">{name}</Txt>
+          </div>
+          <Txt variant="meta" tone="muted">
+            {status[source] ? 'Connected' : 'Example'}
+          </Txt>
+        </div>
+        <Card>
+          <CardContent className="space-y-2">
+            <Txt variant="meta" tone="muted">
+              {id} · {kind}
+            </Txt>
+            <Txt variant="caption" tone="muted">
+              {example}
+            </Txt>
+          </CardContent>
+        </Card>
+        <div className="flex items-center gap-2">
+          <ArrowDown className="text-muted-foreground size-3 shrink-0" />
+          <Txt variant="meta" tone="muted">
+            Bring into your board
+          </Txt>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { label: 'To do', StageIcon: CircleDashed, ticket: id },
+            { label: 'Build', StageIcon: Code2, ticket: previousId },
+            { label: 'Review', StageIcon: Check },
+          ].map(({ label, StageIcon, ticket }) => (
+            <div key={label} className="min-w-0 space-y-2">
+              <div className="flex items-center gap-1.5">
+                <StageIcon className="text-muted-foreground size-3 shrink-0" />
+                <Txt variant="meta" tone="muted">
+                  {label}
+                </Txt>
+              </div>
+              {ticket && (
+                <Card>
+                  <CardContent density="compact">
+                    <Txt variant="meta" tone="muted">
+                      {ticket}
+                    </Txt>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          ))}
+        </div>
+        <Txt variant="meta" tone="muted">
+          Choose what to bring in after setup.
+        </Txt>
+      </section>
+    );
+  }
   return (
     <section aria-label="Work intake preview" className="relative h-full">
       <SketchLabel x={28} y={24} width={148}>
