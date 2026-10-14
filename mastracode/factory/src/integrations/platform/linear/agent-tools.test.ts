@@ -6,8 +6,8 @@ import { buildPlatformLinearAgentTools } from './agent-tools.js';
 import type { PlatformLinearIntegration } from './integration.js';
 
 const teams = [
-  { id: '11111111-1111-4111-8111-111111111111', key: 'ENG', name: 'Engineering', workspaceId: 'org-acme', workspaceName: 'Acme' },
-  { id: '22222222-2222-4222-8222-222222222222', key: 'OPS', name: 'Operations', workspaceId: 'org-beta', workspaceName: 'Beta' },
+  { id: '11111111-1111-4111-8111-111111111111', key: 'ENG', name: 'Engineering', workspaceId: 'org-acme', workspaceName: 'Acme', connectionId: 'conn-acme' },
+  { id: '22222222-2222-4222-8222-222222222222', key: 'OPS', name: 'Operations', workspaceId: 'org-beta', workspaceName: 'Beta', connectionId: 'conn-beta' },
 ];
 
 let linear: {
@@ -93,7 +93,7 @@ describe('buildPlatformLinearAgentTools', () => {
         identifier: 'ENG-99',
         url: 'https://linear.app/i',
       });
-      expect(linear.createIssue).toHaveBeenCalledWith('org-beta', { teamId: teams[1]!.id, title: 'Bug', priority: 2 });
+      expect(linear.createIssue).toHaveBeenCalledWith('conn-beta', { teamId: teams[1]!.id, title: 'Bug', priority: 2 });
     });
 
     it('resolves the team by name or UUID', async () => {
@@ -105,7 +105,7 @@ describe('buildPlatformLinearAgentTools', () => {
     it('defaults to the only team', async () => {
       linear.listAllTeams.mockResolvedValueOnce([teams[0]]);
       await run('linear_create_issue', { title: 'Bug', description: 'Body' });
-      expect(linear.createIssue).toHaveBeenCalledWith('org-acme', { teamId: teams[0]!.id, title: 'Bug', description: 'Body' });
+      expect(linear.createIssue).toHaveBeenCalledWith('conn-acme', { teamId: teams[0]!.id, title: 'Bug', description: 'Body' });
     });
 
     it('asks for a team listing the keys when ambiguous or unknown', async () => {

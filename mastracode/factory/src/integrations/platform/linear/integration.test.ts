@@ -177,20 +177,62 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+const ACME = { linearWorkspaceId: 'org-acme', connectionId: 'conn-acme' };
+const BETA = { linearWorkspaceId: 'org-beta', connectionId: 'conn-beta' };
+
 describe('PlatformLinearIntegration', () => {
   it('lists projects and teams from every active Connect connection as Intake sources', async () => {
     const { proxied } = fakePlatform();
     const sources = await new PlatformLinearIntegration().intake.listSources({ connection });
 
     expect(sources.map(source => [source.type, source.name, source.id])).toEqual([
-      ['project', 'Platform', encodeSourceId('org-acme', 'project-1')],
-      ['team', 'Engineering', encodeTeamSourceId('org-acme', 'team-eng')],
-      ['team', 'Operations', encodeTeamSourceId('org-beta', 'team-ops')],
+      ['project', 'Platform', encodeSourceId(ACME, 'project-1')],
+      ['team', 'Engineering', encodeTeamSourceId(ACME, 'team-eng')],
+      ['team', 'Operations', encodeTeamSourceId(BETA, 'team-ops')],
     ]);
     expect(proxied).not.toContain('conn-stale');
   });
 
-  it('lists a workspace once when several connections authorize it', async () => {
+  it('lists sources per connection and routes each through the connection it was bound with', async () => {
+    const { proxied } = fakePlatform({
+      connections: [
+        { id: 'conn-acme', status: 'active', accountLabel: 'joel@acme' },
+        { id: 'conn-acme-2', status: 'active', accountLabel: 'factory@acme' },
+      ],
+      workspaces: { 'conn-acme': acme(), 'conn-acme-2': acme() },
+    });
+    const linear = new PlatformLinearIntegration();
+
+    const sources = await linear.intake.listSources({ connection });
+    expect(sources.map(source => [source.name, source.metadata?.connectionLabel])).toEqual([
+      ['Platform', 'joel@acme'],
+      ['Platform', 'factory@acme'],
+      ['Engineering', 'joel@acme'],
+      ['Engineering', 'factory@acme'],
+    ]);
+
+    const factorySource = encodeTeamSourceId({ linearWorkspaceId: 'org-acme', connectionId: 'conn-acme-2' }, 'team-eng');
+    proxied.length = 0;
+    await linear.intake.listIssues({ connection, sourceIds: [factorySource] });
+    expect(new Set(proxied)).toEqual(new Set(['conn-acme-2']));
+
+    const { mutations } = fakePlatform({
+      connections: [
+        { id: 'conn-acme', status: 'active', accountLabel: 'joel@acme' },
+        { id: 'conn-acme-2', status: 'active', accountLabel: 'factory@acme' },
+      ],
+      workspaces: { 'conn-acme': acme(), 'conn-acme-2': acme() },
+    });
+    await new PlatformLinearIntegration().intake.createComment({
+      connection,
+      sourceId: factorySource,
+      issueId: 'ENG-42',
+      body: 'Hi',
+    });
+    expect(mutations.map(mutation => mutation.connectionId)).toEqual(['conn-acme-2']);
+  });
+
+  it('offers agent tools each workspace team once when several connections authorize it', async () => {
     fakePlatform({
       connections: [
         { id: 'conn-acme', status: 'active', accountLabel: 'Acme' },
@@ -198,16 +240,12 @@ describe('PlatformLinearIntegration', () => {
       ],
       workspaces: { 'conn-acme': acme(), 'conn-acme-2': acme() },
     });
-    const linear = new PlatformLinearIntegration();
-
-    const sources = await linear.intake.listSources({ connection });
-    expect(sources.map(source => source.name)).toEqual(['Platform', 'Engineering']);
-    expect((await linear.listAllTeams()).map(team => team.key)).toEqual(['ENG']);
+    expect((await new PlatformLinearIntegration().listAllTeams()).map(team => team.key)).toEqual(['ENG']);
   });
 
   it('lists issues for a team source through the owning connection proxy', async () => {
     const { proxied } = fakePlatform();
-    const teamSource = encodeTeamSourceId('org-beta', 'team-ops');
+    const teamSource = encodeTeamSourceId(BETA, 'team-ops');
 
     const result = await new PlatformLinearIntegration().intake.listIssues({ connection, sourceIds: [teamSource] });
 
@@ -221,7 +259,6 @@ describe('PlatformLinearIntegration', () => {
     fakePlatform();
     // Legacy ids encode the Linear organization id as `workspaceId` — the same value used today.
     const legacy = `linear-project:${Buffer.from(JSON.stringify({ workspaceId: 'org-acme', projectId: 'project-1' })).toString('base64url')}`;
-    expect(legacy).toBe(encodeSourceId('org-acme', 'project-1'));
 
     const result = await new PlatformLinearIntegration().intake.listIssues({ connection, sourceIds: [legacy] });
     expect(result.issues.map(i => i.title)).toEqual(['Fix intake']);
@@ -293,12 +330,12 @@ describe('PlatformLinearIntegration', () => {
     const integration = new PlatformLinearIntegration();
 
     const teams = await integration.listAllTeams();
-    expect(teams.map(t => [t.key, t.workspaceId])).toEqual([
-      ['ENG', 'org-acme'],
-      ['OPS', 'org-beta'],
+    expect(teams.map(t => [t.key, t.workspaceId, t.connectionId])).toEqual([
+      ['ENG', 'org-acme', 'conn-acme'],
+      ['OPS', 'org-beta', 'conn-beta'],
     ]);
 
-    const created = await integration.createIssue('org-beta', { teamId: 'team-ops', title: 'New' });
+    const created = await integration.createIssue('conn-beta', { teamId: 'team-ops', title: 'New' });
     expect(created.identifier).toBe('ENG-99');
     expect(mutations[0]).toMatchObject({ connectionId: 'conn-beta', name: 'issueCreate' });
   });

@@ -50,6 +50,7 @@ type LinearWorkspace = {
   urlKey: string | null;
   connected: boolean;
   connectionId: string;
+  accountLabel: string | null;
 };
 type ProjectSource = { workspace: LinearWorkspace; project: LinearProject };
 type TeamSource = { workspace: LinearWorkspace; team: LinearTeam };
@@ -91,10 +92,12 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     listSources: async () => {
       const [projectSources, teamSources] = await Promise.all([this.#listProjectSources(), this.#listTeamSources()]);
       const projects = projectSources.map(({ workspace, project }) => ({
-        id: encodeSourceId(workspace.linearWorkspaceId, project.id),
+        id: encodeSourceId(workspace, project.id),
         name: project.name,
         type: 'project' as const,
         metadata: {
+          connectionId: workspace.connectionId,
+          connectionLabel: workspace.accountLabel,
           workspaceId: workspace.linearWorkspaceId,
           workspaceName: workspace.linearWorkspaceName,
           workspaceUrlKey: workspace.urlKey,
@@ -103,10 +106,12 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         },
       }));
       const teams = teamSources.map(({ workspace, team }) => ({
-        id: encodeTeamSourceId(workspace.linearWorkspaceId, team.id),
+        id: encodeTeamSourceId(workspace, team.id),
         name: team.name,
         type: 'team' as const,
         metadata: {
+          connectionId: workspace.connectionId,
+          connectionLabel: workspace.accountLabel,
           workspaceId: workspace.linearWorkspaceId,
           workspaceName: workspace.linearWorkspaceName,
           workspaceUrlKey: workspace.urlKey,
@@ -144,7 +149,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       const result = await this.#listIssues(sourceIds, cursor, labels, attributionSourceIds);
       return {
         issues: result.issues.map(({ issue, sourceId, workspace }) => ({
-          ...parseIssue(issue, workspace.linearWorkspaceId),
+          ...parseIssue(issue, workspace),
           sourceId,
         })),
         nextCursor: result.nextCursor,
@@ -154,15 +159,15 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       requireLinearConnection(connection);
       const located = await this.#findIssue(sourceId, issueId);
       if (!located) return null;
-      const comments = await this.#loadComments(located.workspaceId, issueId, located.issue.comments);
-      return parseIssueDetail(located.issue, comments, located.workspaceId);
+      const comments = await this.#loadComments(located.workspace, issueId, located.issue.comments);
+      return parseIssueDetail(located.issue, comments, located.workspace);
     },
     createComment: async ({ connection, sourceId, issueId, body }) => {
       requireLinearConnection(connection);
-      const workspaceId = await this.#resolveWorkspaceForIssue(sourceId, issueId);
-      if (!workspaceId) return null;
+      const workspace = await this.#resolveWorkspaceForIssue(sourceId, issueId);
+      if (!workspace) return null;
       try {
-        const comment = await (await this.#api(workspaceId)).createComment(issueId, body);
+        const comment = await this.#apiFor(workspace).createComment(issueId, body);
         return { id: comment.id, url: comment.url };
       } catch (error) {
         if (isNotFound(error)) return null;
@@ -173,18 +178,18 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       requireLinearConnection(input.connection);
       const located = await this.#findIssue(input.sourceId, input.issueId);
       if (!located) return null;
-      const { workspaceId, issue } = located;
+      const { workspace, issue } = located;
 
       const target = input.state;
       // Idempotency: skip the write entirely if the issue is already at the target state.
       if (target.kind === 'byType' && issue.state.type === target.stateType) {
-        return parseIssue(issue, workspaceId);
+        return parseIssue(issue, workspace);
       }
       if (target.kind === 'byName' && issue.state.name.toLowerCase() === target.name.toLowerCase()) {
-        return parseIssue(issue, workspaceId);
+        return parseIssue(issue, workspace);
       }
 
-      const states = await this.#listWorkflowStates(workspaceId, issue.team.id);
+      const states = await this.#listWorkflowStates(workspace, issue.team.id);
       let matched: LinearWorkflowState | undefined;
       if (target.kind === 'byType') {
         matched = states
@@ -197,7 +202,8 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       }
       if (!matched) {
         logPlatformWarn('Platform Linear: no workflow state matched target; skipping updateIssue.', {
-          workspaceId,
+          workspaceId: workspace.linearWorkspaceId,
+          connectionId: workspace.connectionId,
           teamId: issue.team.id,
           target,
         });
@@ -205,14 +211,14 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       }
 
       try {
-        await (await this.#api(workspaceId)).updateIssueState(issue.id, matched.id);
+        await this.#apiFor(workspace).updateIssueState(issue.id, matched.id);
       } catch (error) {
         if (isNotFound(error)) return null;
         throw error;
       }
 
       const refreshed = await this.#findIssue(input.sourceId, input.issueId);
-      return refreshed ? parseIssue(refreshed.issue, refreshed.workspaceId) : null;
+      return refreshed ? parseIssue(refreshed.issue, refreshed.workspace) : null;
     },
   };
 
@@ -401,20 +407,28 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     return buildPlatformLinearAgentTools({ requestContext, linear: this });
   }
 
-  /** Teams across every active connection, for agent-side team resolution. */
-  async listAllTeams(): Promise<Array<LinearTeam & { workspaceId: string; workspaceName: string }>> {
-    return (await this.#listTeamSources()).map(({ workspace, team }) => ({
+  /**
+   * Teams across every Linear workspace, for agent-side team resolution. A
+   * workspace authorized by several connections is listed once, through its
+   * first connection.
+   */
+  async listAllTeams(): Promise<
+    Array<LinearTeam & { workspaceId: string; workspaceName: string; connectionId: string }>
+  > {
+    const workspaces = uniqueWorkspaces(await this.#listWorkspaces());
+    return (await this.#listTeamSources(workspaces)).map(({ workspace, team }) => ({
       ...team,
       workspaceId: workspace.linearWorkspaceId,
       workspaceName: workspace.linearWorkspaceName,
+      connectionId: workspace.connectionId,
     }));
   }
 
   async createIssue(
-    workspaceId: string,
+    connectionId: string,
     input: { teamId: string; title: string; description?: string; priority?: number },
   ): Promise<LinearCreatedIssue> {
-    return (await this.#api(workspaceId)).createIssue(input);
+    return new LinearProxyApi(this.#client, connectionId).createIssue(input);
   }
 
   /** Locate an issue across connections and return its detail, or null. */
@@ -424,17 +438,25 @@ export class PlatformLinearIntegration implements FactoryIntegration {
 
   /** Comment on an issue in whichever connection owns it. */
   async commentOnIssue(idOrIdentifier: string, body: string): Promise<{ id: string; url: string } | null> {
-    const workspaceId = await this.#resolveWorkspaceForIssue(undefined, idOrIdentifier);
-    if (!workspaceId) return null;
-    return (await this.#api(workspaceId)).createComment(idOrIdentifier, body);
+    const workspace = await this.#resolveWorkspaceForIssue(undefined, idOrIdentifier);
+    if (!workspace) return null;
+    return this.#apiFor(workspace).createComment(idOrIdentifier, body);
   }
 
-  async #api(workspaceId: string): Promise<LinearProxyApi> {
-    const workspace = (await this.#listWorkspaces()).find(candidate => candidate.linearWorkspaceId === workspaceId);
+  /**
+   * The connection a source was bound through. Source ids stored before
+   * connections were stamped only name the Linear workspace; those use the
+   * workspace's first active connection.
+   */
+  async #workspaceFor(source: { workspaceId: string; connectionId: string | null }): Promise<LinearWorkspace> {
+    const workspaces = await this.#listWorkspaces();
+    const workspace =
+      (source.connectionId && workspaces.find(candidate => candidate.connectionId === source.connectionId)) ||
+      workspaces.find(candidate => candidate.linearWorkspaceId === source.workspaceId);
     if (!workspace) {
       throw new PlatformApiError('Linear connection is unavailable or requires reauthentication.', 401);
     }
-    return this.#apiFor(workspace);
+    return workspace;
   }
 
   #apiFor(workspace: LinearWorkspace): LinearProxyApi {
@@ -448,7 +470,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   async listProjects(): Promise<Array<LinearProject & { workspaceId: string }>> {
     return (await this.#listProjectSources()).map(({ workspace, project }) => ({
       ...project,
-      id: encodeSourceId(workspace.linearWorkspaceId, project.id),
+      id: encodeSourceId(workspace, project.id),
       workspaceId: workspace.linearWorkspaceId,
     }));
   }
@@ -457,7 +479,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     return (await this.#listTeamSources()).map(({ workspace, team }) => ({
       ...team,
       workspaceId: workspace.linearWorkspaceId,
-      sourceId: encodeTeamSourceId(workspace.linearWorkspaceId, team.id),
+      sourceId: encodeTeamSourceId(workspace, team.id),
     }));
   }
 
@@ -469,12 +491,12 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   ): Promise<LinearRouteIssueDetail | null> {
     const located = await this.#findIssue(undefined, idOrIdentifier, sourceIds, routedSourceIds);
     if (!located) return null;
-    const comments = await this.#loadComments(located.workspaceId, located.issue.id, located.issue.comments);
+    const comments = await this.#loadComments(located.workspace, located.issue.id, located.issue.comments);
     const issue = located.issue;
     return {
       id: issue.id,
       projectId: issue.project?.id ?? null,
-      workspaceId: located.workspaceId,
+      workspaceId: located.workspace.linearWorkspaceId,
       teamId: issue.team.id,
       identifier: issue.identifier,
       title: issue.title,
@@ -506,11 +528,8 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     return source.kind === 'team' ? issue.teamId === source.teamId : issue.projectId === source.projectId;
   }
 
-  async #listProjectSources(workspaceIds?: ReadonlySet<string>): Promise<ProjectSource[]> {
-    const workspaces = await this.#listWorkspaces();
-    const scopedWorkspaces = workspaceIds
-      ? workspaces.filter(workspace => workspaceIds.has(workspace.linearWorkspaceId))
-      : workspaces;
+  async #listProjectSources(workspaces?: LinearWorkspace[]): Promise<ProjectSource[]> {
+    const scopedWorkspaces = workspaces ?? (await this.#listWorkspaces());
     const projectGroups = await Promise.all(
       scopedWorkspaces.map(async workspace => {
         const projects: LinearProject[] = [];
@@ -529,11 +548,8 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     return projectGroups.flat();
   }
 
-  async #listTeamSources(workspaceIds?: ReadonlySet<string>): Promise<TeamSource[]> {
-    const workspaces = await this.#listWorkspaces();
-    const scopedWorkspaces = workspaceIds
-      ? workspaces.filter(workspace => workspaceIds.has(workspace.linearWorkspaceId))
-      : workspaces;
+  async #listTeamSources(workspaces?: LinearWorkspace[]): Promise<TeamSource[]> {
+    const scopedWorkspaces = workspaces ?? (await this.#listWorkspaces());
     const teamGroups = await Promise.all(
       scopedWorkspaces.map(async workspace => {
         const teams: LinearTeam[] = [];
@@ -571,46 +587,21 @@ export class PlatformLinearIntegration implements FactoryIntegration {
           urlKey: organization.urlKey,
           connected: true,
           connectionId: connection.id,
+          accountLabel: connection.accountLabel,
         } satisfies LinearWorkspace;
       }),
     );
-    // Several connections can authorize the same Linear workspace; keep one so
-    // its projects, teams and issues are listed once.
-    const byWorkspaceId = new Map<string, LinearWorkspace>();
-    for (const workspace of workspaces) {
-      if (!byWorkspaceId.has(workspace.linearWorkspaceId)) byWorkspaceId.set(workspace.linearWorkspaceId, workspace);
-    }
-    return [...byWorkspaceId.values()];
+    return workspaces;
   }
 
   async #listIssues(sourceIds: string[], cursor?: string, labels?: string[], attributionSourceIds = sourceIds) {
     type ListedIssue = { issue: LinearIssue; sourceId: string; workspace: LinearWorkspace };
     if (sourceIds.length === 0) return { issues: [] as ListedIssue[], nextCursor: null };
 
-    // Resolve every selected source to a concrete listing descriptor. Project
-    // and team sources are listed separately: a project source filters by
-    // `projectIds`, a team source filters by `teamId` (and returns projectless
+    // Resolve every selected source to the connection it was bound through.
+    // Project and team sources are listed separately: a project source filters
+    // by `projectId`, a team source filters by `teamId` (and returns projectless
     // issues too). Filters are never combined on one request.
-    const parsedSources = sourceIds.map(sourceId => parseSourceId(sourceId));
-    const projectWorkspaceIds = new Set(
-      parsedSources.flatMap(source => (source.kind === 'project' ? [source.workspaceId] : [])),
-    );
-    const teamWorkspaceIds = new Set(
-      parsedSources.flatMap(source => (source.kind === 'team' ? [source.workspaceId] : [])),
-    );
-    const [projectSources, teamSources] = await Promise.all([
-      projectWorkspaceIds.size > 0
-        ? this.#listProjectSources(projectWorkspaceIds)
-        : Promise.resolve([] as ProjectSource[]),
-      teamWorkspaceIds.size > 0 ? this.#listTeamSources(teamWorkspaceIds) : Promise.resolve([] as TeamSource[]),
-    ]);
-    const projectMap = new Map(
-      projectSources.map(source => [encodeSourceId(source.workspace.linearWorkspaceId, source.project.id), source]),
-    );
-    const teamMap = new Map(
-      teamSources.map(source => [encodeTeamSourceId(source.workspace.linearWorkspaceId, source.team.id), source]),
-    );
-
     type Descriptor = {
       kind: 'project' | 'team';
       sourceId: string;
@@ -618,6 +609,22 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       filter: { projectId?: string; teamId?: string };
     };
     const descriptors: Descriptor[] = [];
+    for (const sourceId of sourceIds) {
+      const source = parseSourceId(sourceId);
+      let workspace: LinearWorkspace;
+      try {
+        workspace = await this.#workspaceFor(source);
+      } catch (error) {
+        if (error instanceof PlatformApiError && error.status === 401) continue;
+        throw error;
+      }
+      descriptors.push({
+        kind: source.kind,
+        sourceId,
+        workspace,
+        filter: source.kind === 'project' ? { projectId: source.projectId } : { teamId: source.teamId },
+      });
+    }
     const selectedProjectIdsByWorkspace = new Map<string, Set<string>>();
     for (const attributionSourceId of attributionSourceIds) {
       const source = parseSourceId(attributionSourceId);
@@ -625,26 +632,6 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       const selectedProjectIds = selectedProjectIdsByWorkspace.get(source.workspaceId) ?? new Set<string>();
       selectedProjectIds.add(source.projectId);
       selectedProjectIdsByWorkspace.set(source.workspaceId, selectedProjectIds);
-    }
-    for (const sourceId of sourceIds) {
-      const projectSource = projectMap.get(sourceId);
-      if (projectSource) {
-        const workspaceId = projectSource.workspace.linearWorkspaceId;
-        const selectedProjectIds = selectedProjectIdsByWorkspace.get(workspaceId) ?? new Set<string>();
-        selectedProjectIds.add(projectSource.project.id);
-        selectedProjectIdsByWorkspace.set(workspaceId, selectedProjectIds);
-        descriptors.push({
-          kind: 'project',
-          sourceId,
-          workspace: projectSource.workspace,
-          filter: { projectId: projectSource.project.id },
-        });
-        continue;
-      }
-      const teamSource = teamMap.get(sourceId);
-      if (teamSource) {
-        descriptors.push({ kind: 'team', sourceId, workspace: teamSource.workspace, filter: { teamId: teamSource.team.id } });
-      }
     }
 
     const cursors = await decodeCursor(cursor, sourceIds, attributionSourceIds);
@@ -693,7 +680,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     sourceIds?: string[],
     routedSourceIds?: string[],
   ): Promise<{
-    workspaceId: string;
+    workspace: LinearWorkspace;
     issue: IssueWithComments;
   } | null> {
     const scopedSourceIds = sourceIds ?? (sourceId ? [sourceId] : undefined);
@@ -702,24 +689,24 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       source: parseSourceId(sourceKey),
     }));
     const routedSourceSet = routedSourceIds ? new Set(routedSourceIds) : undefined;
-    const workspaceIds = routedSourceIds
-      ? [...new Set(routedSourceIds.map(sourceKey => parseSourceId(sourceKey).workspaceId))]
-      : scopedSources
-        ? [...new Set(scopedSources.map(({ source }) => source.workspaceId))]
-        : await this.#candidateWorkspaceIds(undefined);
-    for (const workspaceId of workspaceIds) {
+    const workspaces = routedSourceIds
+      ? await this.#workspacesForSources(routedSourceIds)
+      : scopedSourceIds
+        ? await this.#workspacesForSources(scopedSourceIds)
+        : uniqueWorkspaces(await this.#listWorkspaces());
+    for (const workspace of workspaces) {
       try {
-        const issue = await (await this.#api(workspaceId)).getIssue(issueId, { comments: true });
+        const issue = await this.#apiFor(workspace).getIssue(issueId, { comments: true });
         if (scopedSources) {
           const matching = scopedSources.filter(
             ({ source }) =>
-              source.workspaceId === workspaceId &&
+              source.workspaceId === workspace.linearWorkspaceId &&
               (source.kind === 'team' ? issue.team.id === source.teamId : issue.project?.id === source.projectId),
           );
           const winner = matching.find(({ source }) => source.kind === 'project') ?? matching[0];
           if (!winner || (routedSourceSet && !routedSourceSet.has(winner.sourceKey))) continue;
         }
-        return { workspaceId, issue };
+        return { workspace, issue };
       } catch (error) {
         if (!isNotFound(error)) throw error;
       }
@@ -727,13 +714,14 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     return null;
   }
 
-  async #resolveWorkspaceForIssue(sourceId: string | undefined, issueId: string): Promise<string | null> {
-    const workspaceIds = await this.#candidateWorkspaceIds(sourceId);
-    if (workspaceIds.length === 1) return workspaceIds[0]!;
-    for (const workspaceId of workspaceIds) {
+  async #resolveWorkspaceForIssue(sourceId: string | undefined, issueId: string): Promise<LinearWorkspace | null> {
+    if (sourceId) return this.#workspaceFor(parseSourceId(sourceId));
+    const workspaces = uniqueWorkspaces(await this.#listWorkspaces());
+    if (workspaces.length === 1) return workspaces[0]!;
+    for (const workspace of workspaces) {
       try {
-        await (await this.#api(workspaceId)).getIssue(issueId);
-        return workspaceId;
+        await this.#apiFor(workspace).getIssue(issueId);
+        return workspace;
       } catch (error) {
         if (!isNotFound(error)) throw error;
       }
@@ -741,22 +729,31 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     return null;
   }
 
-  async #listWorkflowStates(workspaceId: string, teamId: string): Promise<LinearWorkflowState[]> {
-    const cacheKey = `${workspaceId}:${teamId}`;
+  /** Connections behind the given sources, one per connection, skipping ones no longer active. */
+  async #workspacesForSources(sourceIds: string[]): Promise<LinearWorkspace[]> {
+    const byConnectionId = new Map<string, LinearWorkspace>();
+    for (const sourceId of sourceIds) {
+      try {
+        const workspace = await this.#workspaceFor(parseSourceId(sourceId));
+        byConnectionId.set(workspace.connectionId, workspace);
+      } catch (error) {
+        if (!(error instanceof PlatformApiError && error.status === 401)) throw error;
+      }
+    }
+    return [...byConnectionId.values()];
+  }
+
+  async #listWorkflowStates(workspace: LinearWorkspace, teamId: string): Promise<LinearWorkflowState[]> {
+    const cacheKey = `${workspace.linearWorkspaceId}:${teamId}`;
     const cached = this.#workflowStatesByTeam.get(cacheKey);
     if (cached) return cached;
-    const states = await (await this.#api(workspaceId)).listWorkflowStates(teamId);
+    const states = await this.#apiFor(workspace).listWorkflowStates(teamId);
     this.#workflowStatesByTeam.set(cacheKey, states);
     return states;
   }
 
-  async #candidateWorkspaceIds(sourceId: string | undefined): Promise<string[]> {
-    if (sourceId) return [parseSourceId(sourceId).workspaceId];
-    return (await this.#listWorkspaces()).map(workspace => workspace.linearWorkspaceId);
-  }
-
   async #loadComments(
-    workspaceId: string,
+    workspace: LinearWorkspace,
     issueId: string,
     embedded: { nodes: LinearComment[]; pageInfo: PageInfo } | undefined,
   ): Promise<LinearComment[]> {
@@ -764,7 +761,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     let pageInfo = embedded?.pageInfo;
     let page = 0;
     while (pageInfo?.hasNextPage && pageInfo.endCursor && page < MAX_COMMENT_PAGES) {
-      const result = await (await this.#api(workspaceId)).listComments(issueId, pageInfo.endCursor);
+      const result = await this.#apiFor(workspace).listComments(issueId, pageInfo.endCursor);
       comments.push(...result.comments);
       if (result.pageInfo.hasNextPage && result.pageInfo.endCursor === pageInfo.endCursor) throw invalidLinearCursor();
       pageInfo = result.pageInfo;
@@ -774,7 +771,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   }
 }
 
-function parseIssue(issue: LinearIssue, workspaceId: string): IntakeIssue {
+function parseIssue(issue: LinearIssue, workspace: SourceOwner): IntakeIssue {
   return {
     id: issue.id,
     identifier: issue.identifier,
@@ -788,7 +785,7 @@ function parseIssue(issue: LinearIssue, workspaceId: string): IntakeIssue {
     source: issue.team.key,
     // Use the same workspace-scoped identity as listProjects and intake bindings.
     // The source may be a team, so it cannot stand in for the issue's project.
-    projectId: issue.project ? encodeSourceId(workspaceId, issue.project.id) : null,
+    projectId: issue.project ? encodeSourceId(workspace, issue.project.id) : null,
     labels: issue.labels.map(label => label.name),
     commentCount: null,
     createdAt: issue.createdAt,
@@ -796,9 +793,9 @@ function parseIssue(issue: LinearIssue, workspaceId: string): IntakeIssue {
   };
 }
 
-function parseIssueDetail(issue: LinearIssue, comments: LinearComment[], workspaceId: string): IntakeIssueDetail {
+function parseIssueDetail(issue: LinearIssue, comments: LinearComment[], workspace: SourceOwner): IntakeIssueDetail {
   return {
-    ...parseIssue(issue, workspaceId),
+    ...parseIssue(issue, workspace),
     commentCount: comments.length,
     description: issue.description?.trim() ? issue.description : null,
     comments: comments.map(comment => ({
@@ -856,44 +853,67 @@ function dedupeIssuesBySource<T extends { issue: { id: string }; sourceId: strin
   return ordered;
 }
 
-export function encodeSourceId(workspaceId: string, projectId: string): string {
-  return `linear-project:${Buffer.from(JSON.stringify({ workspaceId, projectId })).toString('base64url')}`;
-}
+/** Who a source id belongs to: the Linear workspace and the Connect connection it was bound through. */
+type SourceOwner = Pick<LinearWorkspace, 'linearWorkspaceId' | 'connectionId'>;
 
-function decodeSourceId(sourceId: string): { workspaceId: string; projectId: string } {
-  if (!sourceId.startsWith('linear-project:')) throw new Error('Linear project source id is invalid.');
-  try {
-    const parsed = JSON.parse(Buffer.from(sourceId.slice('linear-project:'.length), 'base64url').toString('utf8')) as {
-      workspaceId?: unknown;
-      projectId?: unknown;
-    };
-    if (typeof parsed.workspaceId !== 'string' || !parsed.workspaceId) throw new Error();
-    if (typeof parsed.projectId !== 'string' || !parsed.projectId) throw new Error();
-    return { workspaceId: parsed.workspaceId, projectId: parsed.projectId };
-  } catch {
-    throw new Error('Linear project source id is invalid.');
+/** One entry per Linear workspace, keeping each workspace's first connection. */
+function uniqueWorkspaces(workspaces: LinearWorkspace[]): LinearWorkspace[] {
+  const byWorkspaceId = new Map<string, LinearWorkspace>();
+  for (const workspace of workspaces) {
+    if (!byWorkspaceId.has(workspace.linearWorkspaceId)) byWorkspaceId.set(workspace.linearWorkspaceId, workspace);
   }
+  return [...byWorkspaceId.values()];
 }
 
+const PROJECT_SOURCE_PREFIX = 'linear-project:';
 const TEAM_SOURCE_PREFIX = 'linear-team:';
 
-export function encodeTeamSourceId(workspaceId: string, teamId: string): string {
-  return `${TEAM_SOURCE_PREFIX}${Buffer.from(JSON.stringify({ workspaceId, teamId })).toString('base64url')}`;
+export function encodeSourceId(owner: SourceOwner, projectId: string): string {
+  return encodePayload(PROJECT_SOURCE_PREFIX, owner, { projectId });
 }
 
-export function decodeTeamSourceId(sourceId: string): { workspaceId: string; teamId: string } {
-  if (!sourceId.startsWith(TEAM_SOURCE_PREFIX)) throw new Error('Linear team source id is invalid.');
+export function encodeTeamSourceId(owner: SourceOwner, teamId: string): string {
+  return encodePayload(TEAM_SOURCE_PREFIX, owner, { teamId });
+}
+
+function encodePayload(prefix: string, owner: SourceOwner, ids: Record<string, string>): string {
+  const payload = { connectionId: owner.connectionId, workspaceId: owner.linearWorkspaceId, ...ids };
+  return `${prefix}${Buffer.from(JSON.stringify(payload)).toString('base64url')}`;
+}
+
+/**
+ * Decode a source id payload. `connectionId` is absent from ids stored by the
+ * legacy app-install integration, which only knew the Linear workspace.
+ */
+function decodePayload<K extends string>(
+  sourceId: string,
+  prefix: string,
+  idKey: K,
+  label: string,
+): { workspaceId: string; connectionId: string | null } & Record<K, string> {
+  const invalid = new Error(`Linear ${label} source id is invalid.`);
+  if (!sourceId.startsWith(prefix)) throw invalid;
+  let parsed: Record<string, unknown>;
   try {
-    const parsed = JSON.parse(Buffer.from(sourceId.slice(TEAM_SOURCE_PREFIX.length), 'base64url').toString('utf8')) as {
-      workspaceId?: unknown;
-      teamId?: unknown;
-    };
-    if (typeof parsed.workspaceId !== 'string' || !parsed.workspaceId) throw new Error();
-    if (typeof parsed.teamId !== 'string' || !parsed.teamId) throw new Error();
-    return { workspaceId: parsed.workspaceId, teamId: parsed.teamId };
+    parsed = JSON.parse(Buffer.from(sourceId.slice(prefix.length), 'base64url').toString('utf8')) as Record<
+      string,
+      unknown
+    >;
   } catch {
-    throw new Error('Linear team source id is invalid.');
+    throw invalid;
   }
+  const { workspaceId, connectionId } = parsed;
+  const id = parsed[idKey];
+  if (typeof workspaceId !== 'string' || !workspaceId || typeof id !== 'string' || !id) throw invalid;
+  return {
+    workspaceId,
+    connectionId: typeof connectionId === 'string' && connectionId ? connectionId : null,
+    [idKey]: id,
+  } as { workspaceId: string; connectionId: string | null } & Record<K, string>;
+}
+
+export function decodeTeamSourceId(sourceId: string) {
+  return decodePayload(sourceId, TEAM_SOURCE_PREFIX, 'teamId', 'team');
 }
 
 /**
@@ -902,14 +922,15 @@ export function decodeTeamSourceId(sourceId: string): { workspaceId: string; tea
  * filter and to apply most-specific-wins routing (project beats team).
  */
 export type DecodedSource =
-  { kind: 'project'; workspaceId: string; projectId: string } | { kind: 'team'; workspaceId: string; teamId: string };
+  | { kind: 'project'; workspaceId: string; connectionId: string | null; projectId: string }
+  | { kind: 'team'; workspaceId: string; connectionId: string | null; teamId: string };
 
 /** Discriminate any Linear source id by its prefix and decode it. */
 export function parseSourceId(sourceId: string): DecodedSource {
   if (sourceId.startsWith(TEAM_SOURCE_PREFIX)) {
     return { kind: 'team', ...decodeTeamSourceId(sourceId) };
   }
-  return { kind: 'project', ...decodeSourceId(sourceId) };
+  return { kind: 'project', ...decodePayload(sourceId, PROJECT_SOURCE_PREFIX, 'projectId', 'project') };
 }
 
 function normalizeLabels(labels: string[] | undefined): string[] {

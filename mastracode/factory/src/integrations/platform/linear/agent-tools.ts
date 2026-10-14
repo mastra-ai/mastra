@@ -111,7 +111,7 @@ function createLinearCreateIssueTool(linear: PlatformLinearIntegration) {
         } else {
           return { error: `Specify a team. Available teams: ${listKeys()}.` };
         }
-        const created = await linear.createIssue(target!.workspaceId, {
+        const created = await linear.createIssue(target!.connectionId, {
           teamId: target!.id,
           title,
           ...(description !== undefined ? { description } : {}),
