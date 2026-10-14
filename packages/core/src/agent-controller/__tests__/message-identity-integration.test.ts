@@ -73,7 +73,9 @@ function createFailingModel(identity: { provider: string; modelId: string }) {
   });
 }
 
-type AgentOverrides = Partial<Pick<AgentConfig, 'model' | 'tools' | 'inputProcessors' | 'errorProcessorDefaults'>>;
+type AgentOverrides = Partial<
+  Pick<AgentConfig, 'model' | 'tools' | 'inputProcessors' | 'errorProcessors' | 'errorProcessorDefaults'>
+>;
 type Engine = 'default' | 'durable';
 
 async function sendOneMessage(agentOverrides: AgentOverrides = {}, engine: Engine = 'default') {
@@ -194,12 +196,28 @@ describe('stream ↔ persisted message identity', () => {
     30000,
   );
 
-  it.each<Engine>(['default', 'durable'])(
-    'names the fallback model when the primary fails before answering (%s engine)',
-    async engine => {
+  it.each<{ engine: Engine; announcesHop: boolean }>([
+    { engine: 'default', announcesHop: false },
+    { engine: 'durable', announcesHop: false },
+    { engine: 'default', announcesHop: true },
+    { engine: 'durable', announcesHop: true },
+  ])(
+    'names the fallback model when the primary fails ($engine engine, hop announced: $announcesHop)',
+    async ({ engine, announcesHop }) => {
       const { events, persistedAssistant } = await sendOneMessage(
         {
           errorProcessorDefaults: false,
+          errorProcessors: announcesHop
+            ? [
+                {
+                  id: 'announce-hop',
+                  processAPIError: async ({ writer }) => {
+                    await writer?.custom({ type: 'data-model-fallback', data: { to: 'fallback-model' } });
+                    return { retry: false };
+                  },
+                },
+              ]
+            : [],
           model: [
             { model: createFailingModel({ provider: 'primary-provider', modelId: 'primary-model' }), maxRetries: 0 },
             {
