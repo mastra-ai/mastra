@@ -379,6 +379,31 @@ export function replaceableKnowledgeLayoutIndexNames(
   return null;
 }
 
+/**
+ * The warning to log when replacing a non-canonical layout discards rows, or `null` when it held none.
+ * The access-state row is bookkeeping every init writes, so it alone never warrants a warning.
+ */
+export function discardedKnowledgeRowsWarning(
+  columnsByTable: ReadonlyMap<string, readonly string[]>,
+  rowCounts: ReadonlyMap<string, number>,
+  options: { timestampShadows?: boolean } = {},
+): { message: string; details: { layout: 'published-v1' | 'interim'; discardedRows: Record<string, number> } } | null {
+  const discardedRows: Record<string, number> = {};
+  let total = 0;
+  for (const [table, count] of [...rowCounts].sort(([a], [b]) => a.localeCompare(b))) {
+    if (count === 0 || table === TABLE_KNOWLEDGE_ACCESS_STATE) continue;
+    discardedRows[table] = count;
+    total += count;
+  }
+  if (total === 0) return null;
+  const layout = isPublishedKnowledgeV1Layout(columnsByTable, options) ? 'published-v1' : 'interim';
+  const label = layout === 'published-v1' ? 'published v1' : 'pre-release interim';
+  return {
+    message: `Replaced the ${label} Knowledge storage layout; its ${total} rows were discarded, not migrated`,
+    details: { layout, discardedRows },
+  };
+}
+
 /** Tables a replaceable non-canonical layout may contain. */
 export const REPLACEABLE_KNOWLEDGE_TABLE_NAMES: ReadonlySet<string> = new Set([
   ...PUBLISHED_KNOWLEDGE_V1_COLUMNS.keys(),
