@@ -166,20 +166,23 @@ The author persists under `content.metadata.signal.author`. Read it with `getMes
 
 Queue a message for the next run, or send it immediately while the session is idle. Author metadata persists with the queued message.
 
-#### `steer({ content, requestContext?, author? })`
+#### `steer({ content, files?, requestContext?, author? })`
 
-Queue steering content into an active run.
+Abort the active run, then send `content` as a new message. Pass `files` to attach files in the same shape as `sendMessage()`: `{ data, mediaType, filename? }`, where `data` is raw text or a base64 data URL for text files, and base64 for binary files.
 
 ```typescript
 await session.steer({ content: 'Focus on the failing tests.' })
 ```
 
-#### `followUp({ content, requestContext? })`
+#### `followUp({ content, files?, requestContext? })`
 
-Queue a follow-up while a run is active, or send it immediately while idle.
+Queue a follow-up while a run is active, or send it immediately while idle. Pass `files` to attach files the same way as `steer()`.
 
 ```typescript
-await session.followUp({ content: 'Then propose a fix.' })
+await session.followUp({
+  content: 'Then compare against this screenshot.',
+  files: [{ data: screenshotBase64, mediaType: 'image/png', filename: 'expected.png' }],
+})
 ```
 
 #### `getCurrentRunId()`

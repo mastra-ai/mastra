@@ -3,6 +3,7 @@ import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
 import { useProviderConnectionState } from '../hooks/useProviderConnectionState';
 import { DefaultModelSection } from './DefaultModelSection';
+import { FactoryModelScopeNotice } from './FactoryModelScopeNotice';
 import { ProviderAccessSection } from './ProviderAccessSection';
 import { SettingsSubsection } from './SettingsSubsection';
 
@@ -11,12 +12,13 @@ export function PersonalModelsSettings({ models }: { models: AvailableModelOptio
 
   return (
     <div className="flex flex-col gap-8">
+      <FactoryModelScopeNotice />
       {(!providersKnown || anyConnected) && (
         <SettingsSubsection
           scope="personal"
           id="default-model"
           title="Your defaults"
-          description="The model new chats start on. Applies to every mode."
+          description="The model new chats start on."
         >
           <SettingsContainer>
             <div className="p-4">

@@ -6,9 +6,10 @@ import { checkWorkflowSnapshot, createSampleSuspendedSnapshotWithThread, createS
 
 export interface WorkflowsTestOptions {
   storage: MastraStorage;
+  workflowResultsNoopWhenRunMissing?: boolean;
 }
 
-export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
+export function createWorkflowsTests({ storage, workflowResultsNoopWhenRunMissing }: WorkflowsTestOptions) {
   let workflowsStorage: WorkflowsStorage;
   let supportsConcurrentUpdates: boolean;
 
@@ -847,6 +848,36 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
           endedAt: expect.any(Number),
         },
       });
+    });
+
+    it('should not recreate a deleted workflow run from a late result update', async ctx => {
+      if (!supportsConcurrentUpdates || workflowResultsNoopWhenRunMissing === false) return ctx.skip();
+
+      const workflowName = 'test-workflow';
+      const runId = `run-${randomUUID()}`;
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: { status: 'running', context: {} } as any,
+      });
+      await workflowsStorage.deleteWorkflowRunById({ workflowName, runId });
+
+      const result = await workflowsStorage.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'late-step',
+        result: {
+          status: 'success',
+          output: { data: 'late' },
+          payload: {},
+          startedAt: Date.now(),
+          endedAt: Date.now(),
+        },
+        requestContext: {},
+      });
+
+      expect(result).toEqual({});
+      expect(await workflowsStorage.loadWorkflowSnapshot({ workflowName, runId })).toBeNull();
     });
 
     it('should record workflow state together with the step result', async () => {

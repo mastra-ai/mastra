@@ -49,6 +49,7 @@ type ConsumedDuringPreparation =
   // Memory is resolved during preparation; thread/resource/memoryConfig are
   // extracted and stored in workflow state + registry
   | 'memory'
+  | 'scopes'
   // savePerStep is extracted and stored in workflow state during preparation
   | 'savePerStep'
   // RunId is generated/used during preparation, not forwarded as an "option"

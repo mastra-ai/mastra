@@ -13,7 +13,6 @@ import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatCommandsProvider } from './ChatCommandsProvider';
 import { ChatModelsProvider } from './ChatModelsProvider';
-import { ChatModesProvider } from './ChatModesProvider';
 import { ChatThinkingProvider } from './ChatThinkingProvider';
 import { ChatSessionContext } from './ChatSessionContext';
 import { ChatThreadMessagesContext } from './ChatThreadMessagesContext';
@@ -87,7 +86,7 @@ export function ChatSessionConfigProvider({
   const resolvingSession = inSession && sessionQuery.isPending;
   // Sessions and their threads are provisioned with the session's own id as the
   // memory resourceId and no scope (see FactoryStartCoordinator.prepare and
-  // UserSessionsSection), so the chat surface must address the same
+  // useSessionListRows), so the chat surface must address the same
   // (resourceId, no scope) session to read threads and share the live run.
   const resourceId = userScoped ? (draftSessionId ?? threadId) : (storedSession?.sessionId ?? sessionId ?? factory?.id);
   const projectPath = undefined;
@@ -177,7 +176,7 @@ export function ChatSessionBoundary({
   threadId?: string;
   deferUntilMessagesReady?: boolean;
 }) {
-  const { resourceId, resourceReady, projectPath, baseUrl } = useChatSessionContext();
+  const { resourceId, resourceReady, projectPath, baseUrl, sessionThreadId } = useChatSessionContext();
   const messagesQuery = useAgentControllerThreadMessages({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -185,6 +184,7 @@ export function ChatSessionBoundary({
     threadId,
     baseUrl,
     enabled: resourceReady && Boolean(threadId),
+    isSessionThread: Boolean(threadId) && threadId === sessionThreadId,
   });
   const messages = {
     threadId,
@@ -213,13 +213,11 @@ export function ChatSessionBoundary({
         isLoadingMoreHistory={messagesQuery.isLoadingMore}
         loadMoreHistory={messagesQuery.loadMore}
       >
-        <ChatModesProvider>
-          <ChatModelsProvider>
-            <ChatThinkingProvider>
-              <ChatCommandsProvider>{children}</ChatCommandsProvider>
-            </ChatThinkingProvider>
-          </ChatModelsProvider>
-        </ChatModesProvider>
+        <ChatModelsProvider>
+          <ChatThinkingProvider>
+            <ChatCommandsProvider>{children}</ChatCommandsProvider>
+          </ChatThinkingProvider>
+        </ChatModelsProvider>
       </ChatTranscriptProvider>
     </ChatThreadMessagesContext.Provider>
   );

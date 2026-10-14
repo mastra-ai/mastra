@@ -147,9 +147,10 @@ function parseStartBody(
   body: unknown,
   tenant: { orgId: string; userId: string },
   factoryProjectId: string,
+  modelScope: 'factory' | 'user',
 ): FactoryStartRequest | null {
   const parsed = FACTORY_ROUTE_CONTRACTS.workItemStart.bodySchema.safeParse(body);
-  return parsed.success ? { ...tenant, factoryProjectId, ...parsed.data } : null;
+  return parsed.success ? { ...tenant, factoryProjectId, modelScope, ...parsed.data } : null;
 }
 
 function encodeDecisionCursor(decision: FactoryDeferredDecisionRecord): string {
@@ -227,10 +228,15 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
    * items hang off a project, so listing/creating requires the project to
    * exist in the caller's org.
    */
-  async #resolveProject(
-    c: Context,
-  ): Promise<
-    { orgId: string; userId: string; factoryProjectId: string; defaultModelId: string | null } | { response: Response }
+  async #resolveProject(c: Context): Promise<
+    | {
+        orgId: string;
+        userId: string;
+        factoryProjectId: string;
+        modelScope: 'factory' | 'user';
+        defaultModelId: string | null;
+      }
+    | { response: Response }
   > {
     const tenant = await this.#resolveTenant(c);
     if ('response' in tenant) return tenant;
@@ -246,7 +252,12 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
     if (!project) {
       return { response: c.json({ error: 'Project not found' }, 404) };
     }
-    return { ...tenant, factoryProjectId: projectId, defaultModelId: project.defaultModelId };
+    return {
+      ...tenant,
+      factoryProjectId: projectId,
+      modelScope: project.modelScope,
+      defaultModelId: project.modelScope === 'factory' ? project.defaultModelId : null,
+    };
   }
 
   async #auditWorkItemPatch({
@@ -634,7 +645,12 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (!startCoordinator) {
             return c.json({ error: 'factory_start_unavailable' }, 503);
           }
-          const input = parseStartBody(await readJson(loose(c)), resolved, resolved.factoryProjectId);
+          const input = parseStartBody(
+            await readJson(loose(c)),
+            resolved,
+            resolved.factoryProjectId,
+            resolved.modelScope,
+          );
           if (!input) return c.json({ error: 'invalid_factory_start' }, 400);
           input.requestContext = loose(c).get('requestContext');
           input.defaultModelId = resolved.defaultModelId ?? undefined;

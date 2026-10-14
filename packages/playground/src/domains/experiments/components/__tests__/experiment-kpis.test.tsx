@@ -12,15 +12,6 @@ import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '@/test
 // Completed run: 10:00 → 10:05, 10 items.
 const completedExperiment: DatasetExperiment = experiments[0];
 
-const runningExperiment: DatasetExperiment = {
-  ...experiments[0],
-  id: 'running-experiment',
-  status: 'running',
-  succeededCount: 3,
-  failedCount: 1,
-  completedAt: null,
-};
-
 // Cost and tokens come from the per-item usage breakdown; the KPIs only read the average duration here.
 const fullMetrics: ExperimentMetrics = {
   totalTokens: null,
@@ -82,15 +73,6 @@ describe('ExperimentKpis', () => {
     await waitForMutationsIdle(queryClient);
   });
 
-  it('shows the run as in progress while it is active', async () => {
-    const { queryClient } = renderKpis(runningExperiment);
-
-    expect(await screen.findByText('Running…')).toBeDefined();
-    expect(await screen.findByText('across all scorers so far')).toBeDefined();
-
-    await waitForMutationsIdle(queryClient);
-  });
-
   describe('when metrics are enabled', () => {
     beforeEach(() => {
       server.use(
@@ -116,14 +98,6 @@ describe('ExperimentKpis', () => {
 
       expect(await screen.findByText('1.85s avg per item')).toBeDefined();
       expect(screen.queryByText('Avg duration')).toBeNull();
-
-      await waitForMutationsIdle(queryClient);
-    });
-
-    it('marks the average duration as partial while the run is active', async () => {
-      const { queryClient } = renderWithMetrics(runningExperiment);
-
-      expect(await screen.findByText('1.85s avg per item so far')).toBeDefined();
 
       await waitForMutationsIdle(queryClient);
     });

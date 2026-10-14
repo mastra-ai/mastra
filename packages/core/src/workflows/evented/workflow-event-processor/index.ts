@@ -2263,6 +2263,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (stepResult.status === 'bailed') {
       // @ts-expect-error - bailed status not in type
       stepResult.status = 'success';
+      const updatedState = (stepResult as any).__state ?? currentState;
 
       await this.endWorkflow({
         workflow,
@@ -2275,13 +2276,14 @@ export class WorkflowEventProcessor extends EventProcessor {
         stepResults: {
           ...stepResults,
           [leafId]: stepResult,
+          __state: updatedState,
         },
         prevResult: stepResult,
         activeStepsPath,
         requestContext,
         actor,
         perStep,
-        state: currentState,
+        state: updatedState,
         outputOptions,
       });
       return;
@@ -2790,7 +2792,13 @@ export class WorkflowEventProcessor extends EventProcessor {
 
         // For foreach, store the full suspended result so its resume state is preserved.
         // Completed iterations keep the public output array shape.
-        const iterationResult = prevResult.status === 'suspended' ? prevResult : (prevResult as any).output;
+        // A failed iteration has no output; keep its slot empty so later siblings can't treat the foreach as complete.
+        const iterationResult =
+          prevResult.status === 'suspended'
+            ? prevResult
+            : prevResult.status === 'failed'
+              ? null
+              : (prevResult as any).output;
         const existingSuspendPayload = existingStepResult?.suspendPayload as any;
         const iterationSuspendPayload = prevResult.suspendPayload as any;
         const foreachOutput = [...(existingSuspendPayload?.__workflow_meta?.foreachOutput ?? [])];
@@ -2814,6 +2822,8 @@ export class WorkflowEventProcessor extends EventProcessor {
           newResult = {
             ...existingStepResult, // Preserve step-level properties
             ...prevResult, // Get iteration timing info
+            // An iteration that finishes after a sibling failed must not mark the foreach successful.
+            ...(existingStepResult?.status === 'failed' ? { status: 'failed' as const } : {}),
             output: currentResult,
             payload: originalPayload,
             suspendPayload,
@@ -2894,6 +2904,30 @@ export class WorkflowEventProcessor extends EventProcessor {
               },
             },
           });
+        }
+
+        if (prevResult.status === 'failed') {
+          await this.mastra.pubsub.publish('workflows', {
+            type: 'workflow.fail',
+            runId,
+            data: {
+              workflowId,
+              runId,
+              executionPath: [executionPath[0]!],
+              resumeSteps,
+              parentWorkflow,
+              stepResults,
+              timeTravel,
+              restart,
+              prevResult,
+              activeStepsPath,
+              requestContext,
+              actor,
+              state: currentState,
+              outputOptions,
+            },
+          });
+          return;
         }
 
         if (pendingCount > 0) {

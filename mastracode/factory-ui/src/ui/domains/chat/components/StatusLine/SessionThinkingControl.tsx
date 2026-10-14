@@ -2,12 +2,12 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ThinkingLevelPicker, ThinkingLevelUnavailable } from '@mastra/playground-ui/components/ThinkingLevel';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useParams } from 'react-router';
 
 import { useAvailableModelsQuery, useModelReasoningOptions } from '../../../../../hooks/useAvailableModels';
 import type { ChatThinkingApi } from '../../context/ChatThinkingContext';
-import { useChatModes } from '../../context/useChatModes';
 import { useChatThinking } from '../../context/useChatThinking';
-import { thinkingLevelOptionsForModel, thinkingSourceLabel } from '../../services/thinkingLevels';
+import { GLOBAL_THINKING_SOURCE_LABEL, thinkingLevelOptionsForModel } from '../../services/thinkingLevels';
 import type { EffectiveThinkingLevel, ThinkingLevelOrigin } from '../../services/thinkingLevels';
 
 interface SessionThinkingControlProps {
@@ -37,15 +37,15 @@ function showFailure(fallback: string) {
   return (cause: unknown) => toast.error(cause instanceof Error ? cause.message : fallback);
 }
 
-function originLabel(origin: ThinkingLevelOrigin, modeId: string | undefined) {
-  return origin === 'session' ? 'this session' : thinkingSourceLabel(origin, modeId);
+function originLabel(origin: ThinkingLevelOrigin) {
+  return origin === 'session' ? 'this session' : GLOBAL_THINKING_SOURCE_LABEL;
 }
 
 export function SessionThinkingControl({ modelId, switchingModel }: SessionThinkingControlProps) {
   const thinking = useChatThinking();
-  const { activeModeId } = useChatModes();
-  const catalog = useAvailableModelsQuery();
-  const reasoningOptions = useModelReasoningOptions(modelId);
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const catalog = useAvailableModelsQuery(factoryId);
+  const reasoningOptions = useModelReasoningOptions(modelId, factoryId);
   const options = thinkingLevelOptionsForModel(modelId, reasoningOptions);
   const state = thinkingControlState({ catalog, thinking, switchingModel });
 
@@ -54,7 +54,7 @@ export function SessionThinkingControl({ modelId, switchingModel }: SessionThink
   }
 
   const { level, origin } = state.effective;
-  const source = originLabel(origin, activeModeId);
+  const source = originLabel(origin);
 
   return (
     <ThinkingLevelPicker

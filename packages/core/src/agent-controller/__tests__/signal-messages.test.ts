@@ -713,6 +713,66 @@ describe('AgentController signal messages', () => {
     expect(requestContext.get('controller')).toBeUndefined();
   });
 
+  it('queues active follow-ups with file attachments as message parts', async () => {
+    const activeRunId: string | null = 'run-1';
+    const agent = createAgentMock(() => activeRunId);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'controller-follow-up-files',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const threadId = session.thread.getId()!;
+    session.run.ensureAbortController();
+    session.run.setRunId({ runId: 'run-1' });
+    session.stream.attach({
+      subscription: createSubscription(() => activeRunId) as any,
+      key: `agent-1:resource-1:${threadId}`,
+    });
+
+    await session.followUp({
+      content: 'then review this',
+      files: [
+        { data: 'hello', mediaType: 'text/plain', filename: 'notes.txt' },
+        { data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' },
+      ],
+    });
+
+    expect(agent.queueMessage).toHaveBeenCalledTimes(1);
+    expect(agent.queueMessage.mock.calls[0]![0].contents).toEqual([
+      { type: 'text', text: 'then review this' },
+      { type: 'text', text: '[File: notes.txt]\n```\nhello\n```' },
+      { type: 'file', data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' },
+    ]);
+    expect(agent.queueMessage.mock.calls[0]![1]).toEqual(
+      expect.objectContaining({ resourceId: 'resource-1', threadId }),
+    );
+  });
+
+  it('sends idle follow-ups and steering input with their file attachments', async () => {
+    const agent = createAgentMock(() => null);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'controller-idle-files',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const sendMessage = vi.spyOn(session, 'sendMessage').mockResolvedValue(undefined);
+    const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
+    const requestContext = new RequestContext();
+
+    await session.followUp({ content: 'look at this', files, requestContext });
+    await session.steer({ content: 'use this instead', files, requestContext });
+
+    expect(sendMessage).toHaveBeenNthCalledWith(1, { content: 'look at this', files, requestContext });
+    expect(sendMessage).toHaveBeenNthCalledWith(2, { content: 'use this instead', files, requestContext });
+    expect(agent.queueMessage).not.toHaveBeenCalled();
+  });
+
   it('propagates an idle queued-message submission failure', async () => {
     const agent = createAgentMock(() => null);
     agent.queueMessage.mockReturnValue({
