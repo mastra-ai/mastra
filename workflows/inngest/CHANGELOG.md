@@ -1,5 +1,14 @@
 # @mastra/inngest
 
+## 1.10.6-alpha.0
+
+### Patch Changes
+
+- Inngest agents honor agent `scopes` when used with a `@mastra/core` release that supports them. Memory identity comes from `resource:` and `thread:` scopes, tools and processors see the other scopes, and a resumed run keeps the scopes it started with. Resuming with a scope the run did not hold throws an error and leaves the suspended run untouched. Scopes in the agent's `defaultOptions` count as the agent's own scopes, not the caller's. ([#26593](https://github.com/mastra-ai/mastra/pull/26593))
+
+- Updated dependencies [[`0b1ea6c`](https://github.com/mastra-ai/mastra/commit/0b1ea6ca6266158316defb522feb3d2f9bf33174), [`33eb344`](https://github.com/mastra-ai/mastra/commit/33eb344ebfe918d032e3ad1e410788d4c8bc6526), [`5d12fbf`](https://github.com/mastra-ai/mastra/commit/5d12fbfcd756e5f5b0cae53e45a486a64ad102f5)]:
+  - @mastra/core@1.78.0-alpha.0
+
 ## 1.10.5
 
 ### Patch Changes
