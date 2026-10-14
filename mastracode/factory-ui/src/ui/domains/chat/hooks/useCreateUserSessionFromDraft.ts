@@ -8,9 +8,10 @@ import { createUserSession } from '../../workspaces/services/user-sessions';
 import { useChatModels } from '../context/useChatModels';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatThinking } from '../context/useChatThinking';
-import type { PendingImage } from '../components/useComposerImages';
+import type { PendingImage } from '../context/ComposerImagesContext';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { promptHandoffState, stashHandoffFiles } from './useHandoffPrompt';
+import { stashHandoffFiles } from '../services/handoffFiles';
+import { promptHandoffState } from './useHandoffPrompt';
 
 export function useCreateUserSessionFromDraft() {
   const { baseUrl, factorySessionState } = useChatSessionContext();
@@ -21,7 +22,7 @@ export function useCreateUserSessionFromDraft() {
   const navigate = useNavigate();
 
   return useMutation({
-    mutationFn: async ({ prompt, files = [] }: { prompt: string; files?: PendingImage[] }) => {
+    mutationFn: async ({ prompt, files }: { prompt: string; files: PendingImage[] }) => {
       const projectRepositoryId = factorySessionState?.projectRepositoryId;
       if (!draftSessionId || !factoryId || !projectRepositoryId) {
         throw new Error('Could not create the session. Reload the page and try again.');

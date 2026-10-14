@@ -167,6 +167,39 @@ describe('Composer on a lazy user-session draft', () => {
     expect(preparation.posted).toEqual([]);
   });
 
+  it('puts the text and images back in the composer when the first send fails', async () => {
+    const preparation = stubPreparingSession({ createdSessionTitle: 'look at this', failDispatch: true });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
+        HttpResponse.json({ session: createdDraftSession('look at this') }),
+      ),
+    );
+    const user = userEvent.setup();
+    const { client, container } = renderDraft();
+
+    const message = await screen.findByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Attach image' })).toBeEnabled());
+    const form = container.querySelector('form');
+    assert(form);
+    fireEvent.drop(form, { dataTransfer: { files: [new File(['png'], 'shot.png', { type: 'image/png' })] } });
+    await screen.findByRole('button', { name: 'Remove shot.png' });
+
+    await user.type(message, 'look at this');
+    await user.keyboard('{Enter}');
+    await waitFor(() =>
+      expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`),
+    );
+    await waitFor(() => expect(preparation.postedFiles).toHaveLength(1));
+
+    preparation.finishWorkspace();
+    await waitForMutationsIdle(client);
+
+    expect(await screen.findByText(/Sandbox is gone/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('look at this'));
+    expect(screen.getByRole('button', { name: 'Remove shot.png' })).toBeInTheDocument();
+    expect(preparation.delivered).toEqual([]);
+  });
+
   it('restores an interrupted first prompt as a draft without sending it twice', async () => {
     const preparation = stubPreparingSession({ createdSessionTitle: 'recover this prompt' });
     server.use(

@@ -1,14 +1,8 @@
 import { useRef } from 'react';
 import type { ChangeEvent, ClipboardEvent, DragEvent } from 'react';
 
-import { useChatCommands } from '../context/ChatCommandsProvider';
-
-export interface PendingImage {
-  id: string;
-  data: string;
-  mediaType: string;
-  filename?: string;
-}
+import type { PendingImage } from '../context/ComposerImagesContext';
+import { useComposerImagesState } from '../context/useComposerImagesState';
 
 let pendingImageSequence = 0;
 
@@ -29,8 +23,7 @@ function readFileAsBase64(file: File): Promise<string> {
 }
 
 export function useComposerImages({ disabled }: { disabled: boolean }) {
-  // Lives in the commands provider so a failed first-prompt handoff can put images back.
-  const { composerImages: images, setComposerImages: setImages } = useChatCommands();
+  const { images, setImages } = useComposerImagesState();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const addImageFiles = async (fileList: Iterable<File>) => {

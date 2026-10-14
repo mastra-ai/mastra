@@ -8,8 +8,9 @@ import { useSwitchAgentControllerModelMutation } from '../../../../hooks/useAgen
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatTranscript } from '../context/useChatTranscript';
-import type { PendingImage } from '../components/useComposerImages';
+import { useComposerImagesState } from '../context/useComposerImagesState';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { takeHandoffFiles } from '../services/handoffFiles';
 
 interface PromptHandoff {
   handoffPrompt: string;
@@ -45,21 +46,6 @@ function readHandoffPrompt(state: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
-// Attachments stay in memory rather than history state: base64 images can exceed
-// browsers' history state size limits, and a reload never auto-resends anyway.
-const handoffFiles = new Map<string, PendingImage[]>();
-
-export function stashHandoffFiles(resourceId: string, files: PendingImage[]): void {
-  if (files.length > 0) handoffFiles.set(resourceId, files);
-  else handoffFiles.delete(resourceId);
-}
-
-function takeHandoffFiles(resourceId: string): PendingImage[] {
-  const files = handoffFiles.get(resourceId) ?? [];
-  handoffFiles.delete(resourceId);
-  return files;
-}
-
 const pendingHandoffKey = (resourceId: string) => `factory-pending-handoff:${resourceId}`;
 
 function storePendingHandoff(resourceId: string, prompt: string): void {
@@ -92,6 +78,7 @@ export function useHandoffPrompt(): void {
   const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
   const { localUser, clearPending, pushNotice } = useChatTranscript();
   const { prefillComposer } = useChatCommands();
+  const { setImages } = useComposerImagesState();
   const mutationArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -139,7 +126,8 @@ export function useHandoffPrompt(): void {
       await sendMessage(outgoing.length ? { text: prompt, files: outgoing } : prompt);
       clearPendingHandoff(resourceId);
     })().catch(error => {
-      prefillComposer(prompt, files);
+      prefillComposer(prompt);
+      setImages(current => [...files, ...current]);
       clearPending();
       pushNotice(error instanceof Error ? error.message : 'The message could not be sent.', 'error');
     });
@@ -156,6 +144,7 @@ export function useHandoffPrompt(): void {
     resourceId,
     sendMessage,
     sessionEnabled,
+    setImages,
     switchModel,
     thinkingLevel,
   ]);
