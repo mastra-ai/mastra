@@ -95,13 +95,7 @@ export interface WorkspaceFilesListing {
 }
 
 export type WorkspaceChangeStatus =
-  | 'modified'
-  | 'added'
-  | 'deleted'
-  | 'renamed'
-  | 'copied'
-  | 'untracked'
-  | 'conflicted';
+  'modified' | 'added' | 'deleted' | 'renamed' | 'copied' | 'untracked' | 'conflicted';
 
 export interface WorkspaceChange {
   path: string;
@@ -593,7 +587,8 @@ export async function listSessionRenderedPath(
   if (!handle) return empty;
 
   // One round trip: emit "type\tsize\tmtime\tpath" per entry. `safeRoot` comes
-  // from a fixed allowlist so interpolating it (quoted) is safe.
+  // from a fixed allowlist so interpolating it (quoted) is safe. The listing is
+  // parsed line by line, so retain all of it rather than the default 1 MiB tail.
   const quotedRoot = `'${rootPath.replace(/'/g, `'\\''`)}'`;
   const result = await handle.sandbox.executeCommand(
     'sh',
@@ -601,7 +596,7 @@ export async function listSessionRenderedPath(
       '-c',
       `test -d ${quotedRoot} && find ${quotedRoot} -mindepth 1 -printf '%y\\t%s\\t%T@\\t%p\\n' 2>/dev/null || true`,
     ],
-    { timeout: 30_000 },
+    { timeout: 30_000, maxRetainedBytes: Infinity },
   );
   if (result.exitCode !== 0) return empty;
 
@@ -768,15 +763,20 @@ async function listRepositoryChanges(
 ): Promise<RepositoryChanges> {
   const comparisonBase = await resolveSessionComparisonBase(sandbox, workdir, baseBranch);
 
+  // These outputs are parsed record by record (-z) and per path, so retain all
+  // of them rather than the default 1 MiB tail, which would drop or split entries.
   const [statusResult, trackedResult, statsResult] = await Promise.all([
     sandbox.executeCommand('git', ['-C', workdir, 'status', '--porcelain=v1', '-z', '--untracked-files=all'], {
       timeout: 30_000,
+      maxRetainedBytes: Infinity,
     }),
     sandbox.executeCommand('git', ['-C', workdir, 'diff', '--name-status', '-z', '--find-renames', comparisonBase], {
       timeout: 30_000,
+      maxRetainedBytes: Infinity,
     }),
     sandbox.executeCommand('sh', ['-c', WORKSPACE_NUMSTAT_SCRIPT, 'mastracode-numstat', workdir, comparisonBase], {
       timeout: 30_000,
+      maxRetainedBytes: Infinity,
     }),
   ]);
   if (statusResult.exitCode !== 0) return { available: false, changes: [] };
@@ -918,7 +918,7 @@ export async function readSessionWorkspaceDiff(
     const untracked = await handle.sandbox.executeCommand(
       'git',
       ['--literal-pathspecs', '-C', workdir, 'ls-files', '--others', '--exclude-standard', '--', target.relative],
-      { timeout: 30_000 },
+      { timeout: 30_000, maxRetainedBytes: Infinity },
     );
     if (untracked.exitCode === 0 && untracked.stdout.trim()) {
       result = await executeBoundedGitDiff(
