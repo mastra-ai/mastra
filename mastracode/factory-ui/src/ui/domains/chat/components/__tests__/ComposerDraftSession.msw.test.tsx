@@ -36,21 +36,13 @@ describe('Composer on a lazy user-session draft', () => {
       ),
     );
     const user = userEvent.setup();
-    const { client, container } = renderDraft();
+    const { client } = renderDraft();
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
-    expect(screen.getByRole('button', { name: 'Attach image' })).toBeDisabled();
     expect(createBodies).toEqual([]);
     expect(preparation.controllerCreates).toBe(0);
     expect(preparation.sessionLookups).toBe(0);
-
-    const form = container.querySelector('form');
-    assert(form);
-    fireEvent.drop(form, { dataTransfer: { files: [new File(['png'], 'shot.png', { type: 'image/png' })] } });
-    expect(await screen.findByText('Images can be attached once the session is ready.')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Remove shot.png' })).not.toBeInTheDocument();
-    expect(createBodies).toEqual([]);
 
     await user.type(message, '  fix the login bug  ');
     await user.keyboard('{Enter}');
@@ -75,6 +67,104 @@ describe('Composer on a lazy user-session draft', () => {
     await waitFor(() => expect(preparation.delivered).toEqual(['fix the login bug']));
     expect(preparation.posted).toEqual(['fix the login bug']);
     expect(screen.getAllByText('fix the login bug')).toHaveLength(1);
+  });
+
+  it('carries images attached on the draft into the first prompt', async () => {
+    const preparation = stubPreparingSession({ createdSessionTitle: 'what is wrong here' });
+    const createBodies: unknown[] = [];
+    server.use(
+      http.post(
+        `${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`,
+        async ({ request }) => {
+          createBodies.push(await request.json());
+          return HttpResponse.json({ session: createdDraftSession('what is wrong here') });
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    const { client, container } = renderDraft();
+
+    const message = await screen.findByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Attach image' })).toBeEnabled());
+
+    const form = container.querySelector('form');
+    assert(form);
+    fireEvent.drop(form, { dataTransfer: { files: [new File(['png'], 'shot.png', { type: 'image/png' })] } });
+    expect(await screen.findByRole('button', { name: 'Remove shot.png' })).toBeInTheDocument();
+    expect(createBodies).toEqual([]);
+
+    await user.type(message, 'what is wrong here');
+    await user.keyboard('{Enter}');
+
+    await waitFor(() =>
+      expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`),
+    );
+    expect(createBodies).toEqual([{ sessionId: SESSION_ID, title: 'what is wrong here' }]);
+    await waitFor(() => expect(preparation.posted).toEqual(['what is wrong here']));
+    expect(preparation.postedFiles).toEqual([{ data: 'cG5n', mediaType: 'image/png', filename: 'shot.png' }]);
+    expect(screen.queryByRole('button', { name: 'Remove shot.png' })).not.toBeInTheDocument();
+
+    preparation.finishWorkspace();
+    await waitForMutationsIdle(client);
+    await waitFor(() => expect(preparation.delivered).toEqual(['what is wrong here']));
+  });
+
+  it('starts a session from an image-only first prompt', async () => {
+    const preparation = stubPreparingSession();
+    const createBodies: unknown[] = [];
+    server.use(
+      http.post(
+        `${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`,
+        async ({ request }) => {
+          createBodies.push(await request.json());
+          return HttpResponse.json({ session: createdDraftSession('') });
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    const { client, container } = renderDraft();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Attach image' })).toBeEnabled());
+    const form = container.querySelector('form');
+    assert(form);
+    fireEvent.drop(form, { dataTransfer: { files: [new File(['png'], 'shot.png', { type: 'image/png' })] } });
+    await screen.findByRole('button', { name: 'Remove shot.png' });
+
+    await user.click(screen.getByRole('button', { name: 'Send message' }));
+
+    await waitFor(() => expect(preparation.posted).toEqual(['']));
+    expect(createBodies).toEqual([{ sessionId: SESSION_ID, title: '' }]);
+    expect(preparation.postedFiles).toHaveLength(1);
+
+    preparation.finishWorkspace();
+    await waitForMutationsIdle(client);
+    await waitFor(() => expect(preparation.delivered).toEqual(['']));
+  });
+
+  it('keeps draft images in the composer when session creation fails', async () => {
+    const preparation = stubPreparingSession();
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
+        HttpResponse.json({ message: 'Database unavailable' }, { status: 500 }),
+      ),
+    );
+    const user = userEvent.setup();
+    const { container } = renderDraft();
+
+    const message = await screen.findByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Attach image' })).toBeEnabled());
+    const form = container.querySelector('form');
+    assert(form);
+    fireEvent.drop(form, { dataTransfer: { files: [new File(['png'], 'shot.png', { type: 'image/png' })] } });
+    await screen.findByRole('button', { name: 'Remove shot.png' });
+
+    await user.type(message, 'look at this');
+    await user.keyboard('{Enter}');
+
+    expect(await screen.findByText(/Could not create the session: Database unavailable/)).toBeInTheDocument();
+    expect(message).toHaveValue('look at this');
+    expect(screen.getByRole('button', { name: 'Remove shot.png' })).toBeInTheDocument();
+    expect(preparation.posted).toEqual([]);
   });
 
   it('restores an interrupted first prompt as a draft without sending it twice', async () => {

@@ -79,9 +79,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const createDraftSessionMutation = useCreateUserSessionFromDraft();
   const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
   const draftConfigNotReady = onUserDraft && (modelLoading || modelError !== undefined);
-  const attachDisabled = onUserDraft || blocked || chatPreparing || planFeedback.pending;
+  const attachDisabled = blocked || chatPreparing || planFeedback.pending;
   const { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange } = useComposerImages({
-    onUserDraft,
     disabled: chatPreparing || planFeedback.pending,
   });
   const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;
@@ -206,10 +205,13 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       return;
     }
     if (onUserDraft) {
+      const files = images;
+      setImages([]);
       try {
-        await createDraftSessionMutation.mutateAsync(text);
+        await createDraftSessionMutation.mutateAsync({ prompt: text, files });
       } catch (error) {
         updateDraft(text);
+        setImages(current => [...files, ...current]);
         throw error;
       }
       return;

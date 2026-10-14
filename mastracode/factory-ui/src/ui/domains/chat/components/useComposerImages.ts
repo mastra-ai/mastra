@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import type { ChangeEvent, ClipboardEvent, DragEvent } from 'react';
 
-import { useChatTranscript } from '../context/useChatTranscript';
+import { useChatCommands } from '../context/ChatCommandsProvider';
 
 export interface PendingImage {
   id: string;
@@ -28,16 +28,12 @@ function readFileAsBase64(file: File): Promise<string> {
   });
 }
 
-export function useComposerImages({ onUserDraft, disabled }: { onUserDraft: boolean; disabled: boolean }) {
-  const { pushNotice } = useChatTranscript();
-  const [images, setImages] = useState<PendingImage[]>([]);
+export function useComposerImages({ disabled }: { disabled: boolean }) {
+  // Lives in the commands provider so a failed first-prompt handoff can put images back.
+  const { composerImages: images, setComposerImages: setImages } = useChatCommands();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const addImageFiles = async (fileList: Iterable<File>) => {
-    if (onUserDraft) {
-      pushNotice('Images can be attached once the session is ready.');
-      return;
-    }
     const imageFiles = Array.from(fileList).filter(
       file => file.type.startsWith('image/') && file.size <= MAX_IMAGE_BYTES,
     );
@@ -52,14 +48,12 @@ export function useComposerImages({ onUserDraft, disabled }: { onUserDraft: bool
     if (accepted.length === 0) return;
 
     const additions = await Promise.all(
-      accepted.map(
-        async (file): Promise<PendingImage> => ({
-          id: `pending-image-${pendingImageSequence++}`,
-          data: await readFileAsBase64(file),
-          mediaType: file.type,
-          filename: file.name || undefined,
-        }),
-      ),
+      accepted.map(async (file): Promise<PendingImage> => ({
+        id: `pending-image-${pendingImageSequence++}`,
+        data: await readFileAsBase64(file),
+        mediaType: file.type,
+        filename: file.name || undefined,
+      })),
     );
     setImages(current => [...current, ...additions]);
   };
