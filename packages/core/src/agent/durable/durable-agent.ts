@@ -6,6 +6,7 @@ import { CachingPubSub } from '../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
 import { isRunLocalTopic } from '../../events/topics';
+import type { MastraModelConfig } from '../../llm/model/shared.types';
 import { getRunStreamSlot, getScopeStreamSlot } from '../../loop/shared/stream-until-idle-helpers';
 import { createTimeoutAbortSignal } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
@@ -25,6 +26,7 @@ import type {
 } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import type { CoreTool } from '../../tools/types';
+import type { DynamicArgument } from '../../types';
 import { deepMerge } from '../../utils';
 import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { Agent } from '../agent';
@@ -230,6 +232,13 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   requestContext?: AgentExecutionOptions<OUTPUT>['requestContext'];
   /** Maximum number of steps to run */
   maxSteps?: number;
+  /**
+   * Model to run for this call instead of the agent's model.
+   *
+   * A model instance can't be persisted, so `recover()` in another process falls back to the
+   * agent's own model and logs a warning.
+   */
+  model?: DynamicArgument<MastraModelConfig>;
   /**
    * Conditions for stopping execution (e.g., step count, token limit).
    *
@@ -1323,6 +1332,16 @@ export class DurableAgent<
       model = await wrapped.getModel({ requestContext });
     } catch (error) {
       this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to resolve model during recover(${runId}): ${error}`);
+    }
+    // A per-call `model` is a live instance and cannot be persisted, so recovery
+    // resolves the agent's own model instead. Say so rather than switching silently.
+    const persistedModelId = workflowInput.modelConfig?.modelId;
+    if (model && persistedModelId && model.modelId !== persistedModelId) {
+      this.#mastra
+        ?.getLogger?.()
+        ?.warn?.(
+          `[DurableAgent] recover(${runId}) continues with the agent's model '${model.modelId}'; the run started with '${persistedModelId}', which cannot be restored.`,
+        );
     }
     executionFence.throwIfLost();
 

@@ -3801,14 +3801,19 @@ export class Agent<
   /** @internal */
   public async __getModelAndModelList({
     requestContext = new RequestContext(),
+    model: modelOverride,
   }: {
     requestContext?: RequestContext;
+    /** Per-call model override (`stream(msgs, { model })`). */
+    model?: Parameters<Agent['resolveModelSelection']>[0];
   } = {}): Promise<{
     model: MastraLanguageModel | MastraLegacyLanguageModel;
     modelList: Array<AgentModelManagerConfig> | null;
     fallbackTimeouts: Array<ModelFallbackSettings['timeout'] | undefined>;
   }> {
-    const resolvedSelection = await this.resolveModelSelection(this.model, requestContext);
+    let selectionInput: Parameters<Agent['resolveModelSelection']>[0] = this.model;
+    if (modelOverride) selectionInput = modelOverride;
+    const resolvedSelection = await this.resolveModelSelection(selectionInput, requestContext);
     const model = await this.resolveModelFromSelection(resolvedSelection, requestContext);
     if (!Array.isArray(resolvedSelection)) {
       return { model, modelList: null, fallbackTimeouts: [] };

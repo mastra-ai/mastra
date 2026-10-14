@@ -629,6 +629,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       const initData = params.getInitData() as DurableAgenticWorkflowInput;
       const rt = this.resolveRuntime(params);
 
+      // Opened once per step; the abort exits below emit before it is opened.
+      let transcript: Awaited<ReturnType<typeof openMessageListState>> | undefined;
       const emitStepFinish = async (isContinued: boolean) => {
         if (state.lastStepResult) {
           state.lastStepResult.isContinued = isContinued;
@@ -637,6 +639,17 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         const deferredChunk = buildDeferredStepFinishChunk(state, isContinued);
         state.deferredStepFinishChunk = undefined;
         if (!deferredChunk) return;
+
+        // Carry the step's response messages so `onStepFinish(event).response.messages` and
+        // `output.steps[i].response.messages` match the regular loop (#26780).
+        try {
+          const list = createRunMessageList({ mastra: rt.mastra }).deserialize(
+            (transcript ?? (await openMessageListState(params, state))).read(),
+          );
+          deferredChunk.payload._durableResponseMessages = list.get.response.aiV5.model();
+        } catch (error) {
+          rt.logger?.warn?.(`[DurableAgent] Could not rebuild step-finish messages: ${error}`);
+        }
 
         try {
           await this.emitChunk(rt, deferredChunk);
@@ -678,7 +691,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       // The transcript lives in workflow state, or on the iteration state for
       // runs that thread it through step payloads. Writes below land on
       // whichever object holds it; both persist into the next iteration.
-      const transcript = await openMessageListState(params, state);
+      transcript = await openMessageListState(params, state);
 
       // ── Inter-iteration signal drain ──────────────────────────────
       // Mirror the non-durable agentic-loop predicate: drain pending
