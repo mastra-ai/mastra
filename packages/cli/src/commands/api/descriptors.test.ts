@@ -144,9 +144,9 @@ describe('api command descriptors', () => {
       factoryAttentionRead: ['attentionRead', ['id', 'kind', 'sourceId', 'occurrence'], false, false, false],
       factoryAttentionArchive: ['attentionArchive', ['id', 'kind', 'sourceId', 'occurrence'], false, false, false],
       factoryAttentionRestore: ['attentionRestore', ['id', 'kind', 'sourceId', 'occurrence'], false, false, false],
-      factorySupervisorSession: ['supervisorSession', ['id'], false, false, false],
-      factorySupervisorHealth: ['supervisorHealth', ['id'], false, false, false],
     } as const;
+    // Routes the server still declares but the CLI deliberately does not expose.
+    const unexposed = [FACTORY_API_ROUTE_CATALOG.supervisorSession, FACTORY_API_ROUTE_CATALOG.supervisorHealth];
 
     const exposedRouteKeys = new Set<string>();
     for (const [descriptorKey, [contractKey, positionals, acceptsInput, inputRequired, list]] of Object.entries(
@@ -169,7 +169,7 @@ describe('api command descriptors', () => {
       exposedRouteKeys.add(generatedRouteKey);
     }
 
-    expect(exposedRouteKeys).toEqual(new Set(Object.values(FACTORY_API_ROUTE_CATALOG)));
+    expect(new Set([...exposedRouteKeys, ...unexposed])).toEqual(new Set(Object.values(FACTORY_API_ROUTE_CATALOG)));
   });
 
   it('keeps targeted regressions for commands with non-obvious input behavior', () => {
