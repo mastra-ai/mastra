@@ -1075,8 +1075,9 @@ async function teamsProvisionFlow(
       return steps;
     }
     // Delegated connect() refuses to register a bot without a messaging
-    // endpoint; a local placeholder is fine because nothing ever calls it.
-    await provider.configure?.({ baseUrl: 'http://127.0.0.1:4111' });
+    // endpoint; a placeholder is fine because nothing ever calls it, but the
+    // Dev Portal rejects non-HTTPS endpoints so it must be an https URL.
+    await provider.configure?.({ baseUrl: 'https://smoke.invalid' });
 
     if (typeof provider.connect !== 'function' || typeof provider.disconnect !== 'function') {
       steps.push(
