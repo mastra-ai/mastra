@@ -329,11 +329,16 @@ describe('source-control session routes', () => {
         branch: `user/session-${sessionId}`,
         baseBranch: 'main',
         title: 'Build GitLab issue',
+        visibility: 'private',
       },
     });
     await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({
       projectRepositoryId: projectRepository.id,
+      visibility: 'private',
     });
+    await expect(
+      sourceControl.sessions.list({ projectRepositoryId: projectRepository.id, viewerUserId: 'user-2' }),
+    ).resolves.toEqual([]);
   });
 
   it('stamps the factory of the link on the session it creates', async () => {

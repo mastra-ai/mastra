@@ -1428,7 +1428,7 @@ function buildProjectGitRoutes({
             branch,
             baseBranch,
             title: normalizedTitle,
-            visibility: 'org',
+            visibility: 'private',
           })
           .catch(async error => {
             if (!(error instanceof UniqueViolationError) || requestedSessionId === undefined) throw error;
