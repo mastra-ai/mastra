@@ -50,10 +50,10 @@ describe('thinking model capabilities', () => {
       ['off', 'low', 'medium', 'high', 'xhigh'],
     ],
     [
-      'Mastra gateway ids offer only off, since the gateway forwards the body as is to an org key',
+      'gateway-prefixed ids follow the routed provider',
       'mastra/anthropic/claude-haiku-4-5',
       undefined,
-      ['off'],
+      ['off', 'low', 'medium', 'high', 'xhigh'],
     ],
     [
       'adaptive Claude offers the efforts the model publishes',
@@ -107,6 +107,18 @@ describe('thinking model capabilities', () => {
       'models that always reason drop off, since sending nothing leaves the effort to the provider',
       'groq/openai/gpt-oss-120b',
       effort('low', 'medium', 'high'),
+      ['low', 'medium', 'high'],
+    ],
+    [
+      'gateway-prefixed ids keep off, since without a gateway key they run direct and can turn thinking off',
+      'mastra/groq/openai/gpt-oss-120b',
+      effort('low', 'medium', 'high'),
+      ['off', 'low', 'medium', 'high'],
+    ],
+    [
+      'Together drops off on a model listing none, since its API takes only low to high',
+      'togetherai/thinkingmachines/Inkling',
+      effort('max', 'xhigh', 'high', 'medium', 'low', 'none'),
       ['low', 'medium', 'high'],
     ],
     [

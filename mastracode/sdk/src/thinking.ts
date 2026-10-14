@@ -5,7 +5,7 @@ import {
   supportsAnthropicXhighEffort,
 } from './providers/anthropic-thinking.js';
 import { runGeminiThinkingLevel } from './providers/google-thinking.js';
-import { normalizeAnthropicModelId, stripMastraGatewayPrefix } from './providers/model-ids.js';
+import { MASTRA_GATEWAY_PREFIX, normalizeAnthropicModelId, stripMastraGatewayPrefix } from './providers/model-ids.js';
 import {
   isRoutedWithoutThinking,
   isThinkingAdapterProvider,
@@ -132,8 +132,9 @@ function lowestEffortWhenThinkingCannotBeOff(
   modelId: string,
   reasoningOptions: readonly ModelReasoningOption[] | undefined,
 ): ActiveThinkingLevel | undefined {
+  const mayRouteThroughMastraGateway = modelId.startsWith(MASTRA_GATEWAY_PREFIX);
   const format = thinkingRequestFormatFor(modelId);
-  if (!format || thinkingOffOptions(format, reasoningOptions)) return undefined;
+  if (!format || mayRouteThroughMastraGateway || thinkingOffOptions(format, reasoningOptions)) return undefined;
   if (reasoningOptions?.some(option => option.type === 'toggle')) return undefined;
   return offeredEffortLevels(requestableReasoningOptions(modelId, reasoningOptions))[0];
 }
@@ -143,7 +144,6 @@ export function runThinkingLevel(
   level: ThinkingLevelSetting,
   reasoningOptions: readonly ModelReasoningOption[] | undefined,
 ): ThinkingLevelSetting {
-  if (isRoutedWithoutThinking(modelId)) return 'off';
   if (level === 'off') return lowestEffortWhenThinkingCannotBeOff(modelId, reasoningOptions) ?? 'off';
   const { provider, bareModelId } = splitProvider(modelId);
   if (provider === 'google') return runGeminiThinkingLevel(bareModelId, level);
