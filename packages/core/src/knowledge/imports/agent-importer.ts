@@ -210,7 +210,9 @@ export async function runAgenticKnowledgeImport(input: {
       ...(input.organizationId ? { scope: { org: input.organizationId } } : {}),
       permissions: ['knowledge-importers:execute'],
     },
-    memory: { resource: resourceId, thread: threadId },
+    // Identity travels as resource:/thread: agent scopes; scope resolution folds them into the
+    // run's Memory identity, and the run's scope set stays authoritative for suspend/resume.
+    scopes: [`resource:${resourceId}`, `thread:${threadId}`],
     toolsets: { knowledgeImport: tools },
     prepareStep: () => ({ activeTools }),
     maxSteps: input.config.maxSteps ?? 20,

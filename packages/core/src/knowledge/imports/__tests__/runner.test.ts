@@ -573,8 +573,13 @@ describe('Knowledge importer runner', () => {
     expect(first).toMatchObject({ status: 'succeeded', importKind: 'agentic' });
     expect(first.transcriptThreadId).toBe(`knowledge-import-run:${first.id}`);
     expect(second.transcriptThreadId).toBe(`knowledge-import-run:${second.id}`);
-    expect(executions[0]!.options.memory.resource).toBe(executions[1]!.options.memory.resource);
-    expect(executions[0]!.options.memory.thread).not.toBe(executions[1]!.options.memory.thread);
+    // Identity travels as resource:/thread: agent scopes instead of a synthetic memory option.
+    const scopeOf = (run: number, type: string) =>
+      (executions[run]!.options.scopes as string[]).find(scope => scope.startsWith(`${type}:`));
+    expect(executions[0]!.options.memory).toBeUndefined();
+    expect(executions[0]!.options.scopes).toHaveLength(2);
+    expect(scopeOf(0, 'resource')).toBe(scopeOf(1, 'resource'));
+    expect(scopeOf(0, 'thread')).not.toBe(scopeOf(1, 'thread'));
     expect(executions[0]!.options.maxSteps).toBe(8);
     expect(
       executions[0]!.options.prepareStep().activeTools.map((name: string) => name.slice(name.lastIndexOf('_') + 1)),
