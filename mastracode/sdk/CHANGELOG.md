@@ -1,5 +1,30 @@
 # @mastra/code-sdk
 
+## 1.14.0-alpha.2
+
+### Minor Changes
+
+- Removed cross-scope credential fallback in deployed sessions so each session uses only Factory or user credentials. ([#26934](https://github.com/mastra-ai/mastra/pull/26934))
+
+  Custom credential store providers must replace `orgFirst` with an explicit `credentialScope`:
+
+  ```ts
+  // Before
+  const tenant = { orgId, userId, orgFirst: true };
+
+  // After
+  const tenant = { orgId, userId, credentialScope: 'factory' as const };
+  ```
+
+  Use `"user"` to resolve only personal credentials. Hosts that select credentials for a session owner rather than the signed-in caller can register an asynchronous policy resolver as the second argument to `setCredentialStoreProvider`. Resolve that policy from authenticated identity and durable session records, not client-writable session state. Call `prepareCredentialTenant(requestContext)` before resolving a model; the SDK’s built-in model, memory, and goal-judge resolvers do this automatically and refresh the policy again before provider calls.
+
+### Patch Changes
+
+- Updated dependencies [[`460b600`](https://github.com/mastra-ai/mastra/commit/460b600abe3b7563537cfb8a676d649c638a9190), [`2362057`](https://github.com/mastra-ai/mastra/commit/2362057cedc6b90b9fd71c424df40eedf3a4ecf3), [`9daf547`](https://github.com/mastra-ai/mastra/commit/9daf547f810df721eaca9c9dafc18f8ce1727b77), [`2362057`](https://github.com/mastra-ai/mastra/commit/2362057cedc6b90b9fd71c424df40eedf3a4ecf3), [`e496762`](https://github.com/mastra-ai/mastra/commit/e49676258181017f50eb5739d4a97c0da7317dd9)]:
+  - @mastra/core@1.78.0-alpha.2
+  - @mastra/observability@1.20.1-alpha.1
+  - @mastra/mcp@2.4.1-alpha.0
+
 ## 1.14.0-alpha.1
 
 ### Minor Changes
