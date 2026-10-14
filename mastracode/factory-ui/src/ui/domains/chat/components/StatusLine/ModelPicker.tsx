@@ -49,7 +49,7 @@ export function ModelPicker() {
   const { status } = useChatConnection();
   const { activeModelId, defaultModelId, setModel, isLoading, error } = useChatModels();
   const { factoryId } = useParams<{ factoryId: string }>();
-  const modelsQuery = useAvailableModelsQuery(factoryId);
+  const modelsQuery = useAvailableModelsQuery({ factoryProjectId: factoryId });
   const organizationScoped = useOrganizationScopedFactory(factoryId);
   const [open, setOpen] = useState(false);
   const [pendingModelId, setPendingModelId] = useState<string>();

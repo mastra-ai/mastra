@@ -19,7 +19,7 @@ describe('personal model catalog', () => {
     );
 
     const { result } = renderHookWithProviders(() => ({
-      factory: useAvailableModelsQuery('fp-1'),
+      factory: useAvailableModelsQuery({ factoryProjectId: 'fp-1' }),
       personal: usePersonalAvailableModelsQuery(),
     }));
 

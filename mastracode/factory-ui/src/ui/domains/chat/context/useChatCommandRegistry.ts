@@ -50,7 +50,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const { transcript, busy, localUser, pushNotice } = useChatTranscript();
   const { usage, omPhase } = useChatRuntime();
   const { activeModelId, setModel } = useChatModels();
-  const activeModelReasoningOptions = useModelReasoningOptions(activeModelId, factoryId);
+  const activeModelReasoningOptions = useModelReasoningOptions(activeModelId, { factoryProjectId: factoryId });
   const availableThinkingLevels = getAvailableThinkingLevelsForModel(activeModelId ?? '', activeModelReasoningOptions);
 
   const hookArgs = {

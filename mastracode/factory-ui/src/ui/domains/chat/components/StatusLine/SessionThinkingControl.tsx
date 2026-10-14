@@ -44,8 +44,8 @@ function originLabel(origin: ThinkingLevelOrigin) {
 export function SessionThinkingControl({ modelId, switchingModel }: SessionThinkingControlProps) {
   const thinking = useChatThinking();
   const { factoryId } = useParams<{ factoryId: string }>();
-  const catalog = useAvailableModelsQuery(factoryId);
-  const reasoningOptions = useModelReasoningOptions(modelId, factoryId);
+  const catalog = useAvailableModelsQuery({ factoryProjectId: factoryId });
+  const reasoningOptions = useModelReasoningOptions(modelId, { factoryProjectId: factoryId });
   const options = thinkingLevelOptionsForModel(modelId, reasoningOptions);
   const state = thinkingControlState({ catalog, thinking, switchingModel });
 
