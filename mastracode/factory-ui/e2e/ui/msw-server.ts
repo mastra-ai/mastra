@@ -55,9 +55,7 @@ export const server = setupServer(
   // errors as expected. Tests that assert logo/display-name plumbing must
   // override this with `server.use(...)` — anything else means a real
   // catalog regression would silently pass with an "empty catalog" default.
-  http.get('*/web/integrations/platform/catalog', () =>
-    HttpResponse.json({ error: 'not_found' }, { status: 404 }),
-  ),
+  http.get('*/web/integrations/platform/catalog', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
   // Ambient GitHub label routing (read by every board's intake feed); label-routing
   // tests override it with `server.use(...)`.
   http.get('*/web/intake/label-routes', () => HttpResponse.json({ routes: [] })),

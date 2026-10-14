@@ -190,14 +190,8 @@ describe('factoryProjectScopes', () => {
         routing: new Map([['conn-all', { mode: 'all' as const, projectIds: [] }]]),
       });
       const scopes = factoryProjectScopes(storage);
-      await expect(scopes(scopesContext('conn-all'))).resolves.toEqual([
-        'project:p1',
-        'project:p2',
-      ]);
-      await expect(scopes(scopesContext('conn-unrouted'))).resolves.toEqual([
-        'project:p1',
-        'project:p2',
-      ]);
+      await expect(scopes(scopesContext('conn-all'))).resolves.toEqual(['project:p1', 'project:p2']);
+      await expect(scopes(scopesContext('conn-unrouted'))).resolves.toEqual(['project:p1', 'project:p2']);
     });
 
     it('resolves zero scopes for a connection routed to no projects — connected but syncing nowhere', async () => {
@@ -234,9 +228,7 @@ describe('factoryProjectScopes', () => {
 
     it('ignores routing entirely when the routing domain is not registered', async () => {
       const { storage } = fakeStorageWithProjects([{ id: 'p1' }]);
-      await expect(factoryProjectScopes(storage)(scopesContext('conn-any'))).resolves.toEqual([
-        'project:p1',
-      ]);
+      await expect(factoryProjectScopes(storage)(scopesContext('conn-any'))).resolves.toEqual(['project:p1']);
     });
   });
 });

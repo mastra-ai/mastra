@@ -229,7 +229,12 @@ function ConnectionRow({
       </span>
       <span className="flex shrink-0 items-center gap-1">
         {needsReauth ? (
-          <ProviderConnectControl provider={provider} reconnectConnectionId={connection.id} label="Reconnect" size="xs" />
+          <ProviderConnectControl
+            provider={provider}
+            reconnectConnectionId={connection.id}
+            label="Reconnect"
+            size="xs"
+          />
         ) : (
           <RoutingMenu provider={provider} connectionId={connection.id} />
         )}
@@ -276,12 +281,12 @@ function KnowledgeImporterCard({ provider, logoUrl }: { provider: PlatformConnec
       </Txt>
 
       {isLoading && (
-        <Txt as="span" variant="ui-xs" className="text-icon3 mt-auto border-t border-border1 pt-3">
+        <Txt as="span" variant="ui-xs" className="text-icon3 border-border1 mt-auto border-t pt-3">
           Loading connection status…
         </Txt>
       )}
       {isError && !unavailable && (
-        <div className="mt-auto flex items-center justify-between gap-2 border-t border-border1 pt-3">
+        <div className="border-border1 mt-auto flex items-center justify-between gap-2 border-t pt-3">
           <Txt as="span" variant="ui-xs" className="text-icon3">
             Couldn't load connections.
           </Txt>
@@ -291,12 +296,12 @@ function KnowledgeImporterCard({ provider, logoUrl }: { provider: PlatformConnec
         </div>
       )}
       {isError && unavailable && (
-        <Txt as="span" variant="ui-xs" className="text-icon3 mt-auto border-t border-border1 pt-3">
+        <Txt as="span" variant="ui-xs" className="text-icon3 border-border1 mt-auto border-t pt-3">
           Platform connect isn't available in this deployment.
         </Txt>
       )}
       {!isLoading && !isError && isConnected && (
-        <ul className="mt-auto flex flex-col gap-1 border-t border-border1 pt-2">
+        <ul className="border-border1 mt-auto flex flex-col gap-1 border-t pt-2">
           {liveConnections.map(connection => (
             <ConnectionRow
               key={connection.id}

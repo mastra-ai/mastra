@@ -143,7 +143,7 @@ function RemoteLogo({
   if (!sourceUrl) {
     return (
       <span aria-label={displayName} className={wrapperClass}>
-        <Blocks aria-hidden="true" className="size-4 text-icon3" />
+        <Blocks aria-hidden="true" className="text-icon3 size-4" />
       </span>
     );
   }

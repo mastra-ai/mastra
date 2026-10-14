@@ -45,11 +45,7 @@ const IMPORTER_PROVIDERS = ['notion', 'confluence', 'linear', 'zendesk', 'firefl
 
 /** Stub `/web/config/features` with a `knowledge` flag value. */
 function useFeaturesHandler(knowledge: boolean | undefined) {
-  server.use(
-    http.get(FEATURES_URL, () =>
-      HttpResponse.json(knowledge === undefined ? {} : { knowledge }),
-    ),
-  );
+  server.use(http.get(FEATURES_URL, () => HttpResponse.json(knowledge === undefined ? {} : { knowledge })));
 }
 
 interface ConnectionRow {
@@ -217,7 +213,12 @@ describe('KnowledgeImportersSection', () => {
     function useProjectsHandler() {
       server.use(
         http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-          HttpResponse.json({ projects: [{ id: 'p1', name: 'Alpha' }, { id: 'p2', name: 'Beta' }] }),
+          HttpResponse.json({
+            projects: [
+              { id: 'p1', name: 'Alpha' },
+              { id: 'p2', name: 'Beta' },
+            ],
+          }),
         ),
       );
     }

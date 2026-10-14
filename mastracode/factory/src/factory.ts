@@ -72,8 +72,8 @@ import { PlatformIncidentioIntegration } from './integrations/platform/incidenti
 import { PlatformJiraIntegration } from './integrations/platform/jira/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { prepareSessionRunContext } from './integrations/subscription-session.js';
-import { resolveDeploymentModelProviders } from './routes/config.js';
 import { withProjectScopedIntegrations } from './knowledge/project-scopes.js';
+import { resolveDeploymentModelProviders } from './routes/config.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
 import { ProjectRoutes } from './routes/projects.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';

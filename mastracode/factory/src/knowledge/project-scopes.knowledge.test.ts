@@ -127,7 +127,9 @@ describe('Factory connection imports on a real Wave 2 Knowledge', () => {
 
     const binding = await bind(knowledge, connections.notion);
     expect(binding.scope).toBe('project:p1');
-    await expect(knowledge.runImporter('notion', binding, undefined, { triggerKind: 'cron' })).resolves.toMatchObject({ status: 'succeeded' });
+    await expect(knowledge.runImporter('notion', binding, undefined, { triggerKind: 'cron' })).resolves.toMatchObject({
+      status: 'succeeded',
+    });
 
     expect(await readable(knowledge, await sessionReadScopeIds(knowledge, 'p1'), 'runbook')).not.toHaveLength(0);
     expect(await readable(knowledge, await sessionReadScopeIds(knowledge, 'p2'), 'runbook')).toHaveLength(0);
@@ -153,7 +155,9 @@ describe('Factory connection imports on a real Wave 2 Knowledge', () => {
 
     // Notion re-syncs with page-2 gone: only Notion's stale page is removed.
     upstream['notion:conn-notion'] = [{ address: 'page-1', name: 'Runbook', text: 'notion runbook' }];
-    await expect(knowledge.runImporter('notion', notion, undefined, { triggerKind: 'cron' })).resolves.toMatchObject({ status: 'succeeded' });
+    await expect(knowledge.runImporter('notion', notion, undefined, { triggerKind: 'cron' })).resolves.toMatchObject({
+      status: 'succeeded',
+    });
     expect(await readable(knowledge, p1, 'oncall')).toHaveLength(0);
     expect(await readable(knowledge, p1, 'runbook')).not.toHaveLength(0);
     expect(await readable(knowledge, p1, 'roadmap')).not.toHaveLength(0);
