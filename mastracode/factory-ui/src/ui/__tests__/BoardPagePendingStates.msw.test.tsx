@@ -204,7 +204,7 @@ function stubBoardEndpoints() {
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, () =>
       HttpResponse.json({ issues: [], nextPage: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
       HttpResponse.json({
         sessions: [
           {
@@ -681,7 +681,7 @@ describe('Board card pending states', () => {
         }),
       ),
 
-      http.get(`${TEST_BASE_URL}/web/source-control/projects/repo-2/sessions`, () =>
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
         HttpResponse.json({ sessions: [] }),
       ),
       http.patch(`${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}`, async ({ request }) => {
@@ -1391,7 +1391,7 @@ describe('Board card pending states', () => {
         }),
       ),
       http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
-      http.get(`${TEST_BASE_URL}/web/source-control/projects/repo-2/sessions`, () =>
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
         HttpResponse.json({ sessions: [] }),
       ),
       http.get(`${TEST_BASE_URL}/web/intake/config`, async () => {

@@ -294,6 +294,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     finishReason: undefined,
   };
   #bufferedText: LLMStepResult<OUTPUT>['text'][] = [];
+  /** Length of `#bufferedText` when the current step began; a retried step is cut back to it. */
+  #bufferedTextAtStepStart = 0;
   #bufferedObject: OUTPUT | undefined;
   #usedFallbackValue = false;
   #bufferedTextChunks: Record<string, LLMStepResult<OUTPUT>['text'][]> = {};
@@ -332,6 +334,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     totalTokens: undefined,
   };
   #usageCountMissing = new Set<(typeof primaryUsageCountKeys)[number]>();
+  /**
+   * Usage of the most recently completed step. Kept apart from `#bufferedSteps`
+   * because goal truncation clears that buffer while usage keeps accumulating.
+   */
+  #lastStepUsage: LLMStepResult<OUTPUT>['usage'] | undefined = undefined;
   #finishUsageIsTotal = false;
   #tripwire: StepTripwireData | undefined = undefined;
   #wasSuspended = false;
@@ -691,6 +698,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               // cancelled by a queued signal ends without step-finish, so drop what it streamed.
               self.#bufferedByStep.reasoning = [];
               self.#bufferedByStepReasoningDetails = {};
+              // Text works the same way: a request that streamed text and then failed into an
+              // API-error retry (the durable agent starts each attempt with a new step-start)
+              // must not leave its partial text in front of the next request's answer (#26081).
+              if (self.#bufferedByStep.text) {
+                self.#bufferedByStep.text = '';
+                self.#bufferedText.length = Math.min(self.#bufferedText.length, self.#bufferedTextAtStepStart);
+              }
               if (self.#reasoningAtStepStart) {
                 self.#bufferedReasoning.length = self.#reasoningAtStepStart.length;
                 self.#bufferedReasoningDetails = self.#reasoningAtStepStart.details;
@@ -917,8 +931,17 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               const currentPayloadStep = payloadSteps[payloadSteps.length - 1];
               const stepTripwire = currentPayloadStep?.tripwire;
 
+              // A retried attempt is thrown away (a processor rejected it, or an error processor
+              // answered its API error with a retry), so it contributes no text: neither to
+              // this step nor to the run's text, which would otherwise begin with the failed
+              // attempt's partial output (#26081).
+              const isRetriedStep = (chunk.payload.stepResult.reason as string) === 'retry';
+              if (isRetriedStep) {
+                self.#bufferedText.length = Math.min(self.#bufferedText.length, self.#bufferedTextAtStepStart);
+              }
+
               // If step has tripwire, text should be empty (rejected response)
-              const stepText = stepTripwire ? '' : self.#bufferedByStep.text;
+              const stepText = stepTripwire || isRetriedStep ? '' : self.#bufferedByStep.text;
 
               const stepResult: LLMStepResult<OUTPUT> = {
                 stepType: self.#bufferedSteps.length === 0 ? 'initial' : 'tool-result',
@@ -932,7 +955,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 // may be a stale reference (each workflow step deserializes
                 // a fresh instance).  Fall back to the live messageList for
                 // non-durable agents.
-                content: (chunk.payload as any)?._durableStepContent ?? messageList.get.response.aiV5.modelContent(-1),
+                // A retried attempt was rolled back, so the last response content belongs to an earlier step.
+                content: isRetriedStep
+                  ? []
+                  : ((chunk.payload as any)?._durableStepContent ?? messageList.get.response.aiV5.modelContent(-1)),
                 text: stepText,
                 // Include tripwire data if present
                 tripwire: stepTripwire,
@@ -970,7 +996,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   ...otherMetadata,
                   modelId:
                     (chunk.payload.metadata?.modelId as string) || (chunk.payload.metadata?.model as string) || '',
-                  messages: chunk.payload.messages?.nonUser || [],
+                  messages: (chunk.payload as any)?._durableResponseMessages ?? chunk.payload.messages?.nonUser ?? [],
                   dbMessages: self.messageList.get.response.db(),
                   // We have to cast this until messageList can take generics also and type metadata, it was too
                   // complicated to do this in this PR, it will require a much bigger change.
@@ -985,6 +1011,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               });
 
               self.#bufferedSteps.push(stepResult);
+              self.#lastStepUsage = stepResult.usage;
 
               // `text` is excluded from a rejected attempt via the empty `stepText`
               // above; the structured object needs the same treatment. Drop the
@@ -1025,6 +1052,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               };
               self.#bufferedByStepReasoningDetails = {};
               self.#reasoningAtStepStart = undefined;
+              self.#bufferedTextAtStepStart = self.#bufferedText.length;
 
               // A continuing goal evaluation arrived while this step was still
               // in flight (in-process chunk ordering): this step-finish belongs
@@ -1167,6 +1195,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   messages: messageList.get.response.aiV5.model(),
                   uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
                 };
+              } else if (self.#bufferedSteps.length > 0) {
+                // Durable finish chunks carry no model metadata; the last step's response
+                // already holds the run's response messages and model id (#26780).
+                response = { ...self.#bufferedSteps[self.#bufferedSteps.length - 1]!.response };
               }
 
               if (self.#finishUsageIsTotal) {
@@ -1222,6 +1254,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 },
               };
 
+              let outputResultTripwire: StepTripwireData | undefined;
               try {
                 if (self.processorRunner && !self.#options.isLLMExecutionStep) {
                   // Run output processors when NOT in LLM execution step context
@@ -1321,6 +1354,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     metadata: error.options?.metadata,
                     processorId: error.processorId,
                   };
+                  outputResultTripwire = self.#tripwire;
                   // A tripwire rejects the output without erasing it; keep `text` in sync with
                   // steps/response messages and report the rejection via `tripwire`.
                   self.resolvePromises({
@@ -1431,7 +1465,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
                 if (!self.#finishCallbackSent) {
                   self.#finishCallbackSent = true;
-                  await options?.onFinish?.(onFinishPayload, { writer: outputResultWriter });
+                  await options?.onFinish?.(onFinishPayload, {
+                    writer: outputResultWriter,
+                    ...(outputResultTripwire && { outputResultTripwire }),
+                  });
                 }
               }
 
@@ -1859,15 +1896,19 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       | undefined;
 
     if (this.#returnScorerData) {
-      scoringData = {
-        input: {
-          inputMessages: this.messageList.getPersisted.input.db(),
-          rememberedMessages: this.messageList.getPersisted.remembered.db(),
-          systemMessages: this.messageList.getSystemMessages(),
-          taggedSystemMessages: this.messageList.getPersisted.taggedSystemMessages,
-        },
-        output: this.messageList.getPersisted.response.db(),
-      };
+      try {
+        scoringData = {
+          input: {
+            inputMessages: this.messageList.getPersisted.input.db(),
+            rememberedMessages: this.messageList.getPersisted.remembered.db(),
+            systemMessages: this.messageList.getSystemMessages(),
+            taggedSystemMessages: this.messageList.getPersisted.taggedSystemMessages,
+          },
+          output: await this.messageList.getRunResponseMessages(this.#options.loadStoredMessages),
+        };
+      } catch (error) {
+        this.logger.warn('Failed to load run response messages for scoring data', { error });
+      }
     }
 
     const steps = await this.steps;
@@ -2145,6 +2186,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #createAbortedOnFinishPayload(): MastraOnFinishCallbackArgs<OUTPUT> {
     // Capture only text buffered before the abort event. Providers may continue producing
     // chunks after cancellation, but those chunks cannot extend this terminal snapshot.
+    const emptyUsage = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
+    // Steps that completed before the abort were already billed by the provider, so keep their usage.
     return {
       finishReason: 'aborted',
       text: this.#bufferedText.join(''),
@@ -2159,13 +2202,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       dynamicToolCalls: [],
       dynamicToolResults: [],
       content: [],
-      usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+      usage: this.#lastStepUsage ?? emptyUsage,
       warnings: [],
       providerMetadata: undefined,
       request: {},
       response: {},
       steps: [],
-      totalUsage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+      totalUsage: this.#lastStepUsage ? this.#getTotalUsage() : emptyUsage,
       object: undefined as OUTPUT,
     };
   }
@@ -2251,6 +2294,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#bufferedChunks.length = 0;
     this.#bufferedSteps.length = 0;
     this.#bufferedText.length = 0;
+    this.#bufferedTextAtStepStart = 0;
     this.#bufferedTextChunks = {};
     this.#bufferedSources.length = 0;
     this.#bufferedReasoning.length = 0;
@@ -2347,6 +2391,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       bufferedByStepReasoningDetails: this.#bufferedByStepReasoningDetails,
       bufferedByStep: this.#bufferedByStep,
       bufferedText: this.#bufferedText,
+      bufferedTextAtStepStart: this.#bufferedTextAtStepStart,
       bufferedTextChunks: this.#bufferedTextChunks,
       bufferedSources: this.#bufferedSources,
       bufferedReasoning: this.#bufferedReasoning,
@@ -2362,6 +2407,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       request: this.#request,
       usageCount: this.#usageCount,
       usageCountMissing: [...this.#usageCountMissing],
+      lastStepUsage: this.#lastStepUsage,
       tripwire: this.#tripwire,
       wasSuspended: this.#wasSuspended,
       messageList: this.messageList.serialize(),
@@ -2374,6 +2420,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#bufferedByStepReasoningDetails = state.bufferedByStepReasoningDetails ?? {};
     this.#bufferedByStep = state.bufferedByStep;
     this.#bufferedText = state.bufferedText;
+    this.#bufferedTextAtStepStart = state.bufferedTextAtStepStart ?? state.bufferedText.length;
     this.#bufferedTextChunks = state.bufferedTextChunks;
     this.#bufferedSources = state.bufferedSources;
     this.#bufferedReasoning = state.bufferedReasoning;
@@ -2408,6 +2455,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     }
 
     this.#tripwire = state.tripwire;
+    this.#lastStepUsage = state.lastStepUsage ?? state.bufferedSteps?.at(-1)?.usage;
     this.#wasSuspended = state.wasSuspended ?? state.status === 'suspended';
     this.messageList = this.messageList.deserialize(state.messageList);
     // Buffered steps hold only the IDs of the response messages they had seen;

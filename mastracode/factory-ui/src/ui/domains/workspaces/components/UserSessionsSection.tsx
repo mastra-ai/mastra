@@ -49,9 +49,10 @@ export function UserSessionsSection() {
   const [filterChanges, setFilterChanges] = useState<Partial<UserSessionFiltersState>>({});
   const { pinnedSessions, setPinned } = usePinnedSessions();
 
-  const repository = factoryQuery.data?.repositories[0];
-  const sessionsEnabled = Boolean(repository);
-  const sessionsQuery = useWorkspacesQuery(repository?.projectRepositoryId);
+  const sessionsEnabled = (factoryQuery.data?.repositories.length ?? 0) > 0;
+  const sessionsQuery = useWorkspacesQuery(sessionsEnabled ? factoryId : undefined);
+  const sessionsFailed = sessionsQuery.isError;
+  const sessionsLoaded = sessionsEnabled && sessionsQuery.isSuccess;
   const auth = useFactoryAuth();
   const viewerUserId = auth.data?.user?.userId;
   const defaultFilters = defaultUserSessionFilters(viewerUserId);
@@ -82,7 +83,7 @@ export function UserSessionsSection() {
     .map(([userId, name]) => ({ userId, name }))
     .sort((a, b) => a.name.localeCompare(b.name));
   const invalidate = () => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(repository?.projectRepositoryId) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(factoryId) });
   };
 
   const deleteSession = useMutation({
@@ -92,7 +93,7 @@ export function UserSessionsSection() {
     },
     onSuccess: session => {
       setConfirmDelete(null);
-      removeCachedSession(queryClient, repository?.projectRepositoryId, session.sessionId);
+      removeCachedSession(queryClient, factoryId, session.sessionId);
       queryClient.removeQueries({ queryKey: queryKeys.userSession(session.sessionId) });
       invalidate();
       toast('Session deleted');
@@ -190,7 +191,7 @@ export function UserSessionsSection() {
             );
           })}
         </Sidebar.NavList>
-        {sessionsQuery.isError && (
+        {sessionsFailed && (
           <div className="flex items-center gap-2 px-2 py-1">
             <Txt as="p" variant="meta" className="text-destructive-foreground m-0">
               Couldn’t load sessions
@@ -200,7 +201,7 @@ export function UserSessionsSection() {
             </Button>
           </div>
         )}
-        {sessionsQuery.isSuccess && sessions.length === 0 && (
+        {sessionsLoaded && sessions.length === 0 && (
           <Txt as="p" variant="meta" tone="muted" role="status" className="m-0 px-2 py-1">
             {allSessions.length === 0
               ? 'No sessions yet'

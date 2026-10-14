@@ -19,12 +19,19 @@ function isAbortError(error: unknown, abortSignal?: AbortSignal): boolean {
   return abortSignal?.aborted === true || hasAbortInChain(error);
 }
 
+function hasEmptyObjectValue(object: Record<string, unknown>, extractor: Extractor<any>): boolean {
+  const value = object[extractor.slug];
+  return typeof value === 'object' && value !== null && !Array.isArray(value) && Object.keys(value).length === 0;
+}
+
 function shouldRetryEmptyStructuredObject(
   object: Record<string, unknown>,
   extractors: readonly Extractor<any>[],
 ): boolean {
-  return (
-    Object.keys(object).length === 0 && extractors.some(extractor => extractor.retryStructuredExtractionOnEmptyObject)
+  return extractors.some(
+    extractor =>
+      extractor.retryStructuredExtractionOnEmptyObject &&
+      (Object.keys(object).length === 0 || hasEmptyObjectValue(object, extractor)),
   );
 }
 
@@ -133,17 +140,28 @@ ${extractorInstructions}${priorLines.length > 0 ? `\n\n## Prior Extracted Values
   if (retryEmptyObject) {
     try {
       const fallbackJsonPromptInjection = coreFeatures.has('json-prompt-injection:inline') ? 'inline' : true;
-      object = await streamWithStructuredOutput(fallbackJsonPromptInjection);
+      // Retry values win, but keep first-response values the retry omitted.
+      object = { ...object, ...(await streamWithStructuredOutput(fallbackJsonPromptInjection)) };
     } catch (fallbackError) {
       if (isAbortError(fallbackError, opts.abortSignal)) {
         throw fallbackError;
       }
 
       const message = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
-      return {
-        values,
-        failures: structuredExtractors.map(extractor => ({ slug: extractor.slug, error: message })),
-      };
+      if (Object.keys(object).length === 0) {
+        return {
+          values,
+          failures: structuredExtractors.map(extractor => ({ slug: extractor.slug, error: message })),
+        };
+      }
+
+      // Keep the first response's other values; only the extractors that came back empty failed.
+      for (const extractor of structuredExtractors) {
+        if (extractor.retryStructuredExtractionOnEmptyObject && hasEmptyObjectValue(object, extractor)) {
+          failures.push({ slug: extractor.slug, error: message });
+          delete object[extractor.slug];
+        }
+      }
     }
   }
 

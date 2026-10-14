@@ -360,6 +360,60 @@ describe('Schedules handlers', () => {
       ).rejects.toThrow(HTTPException);
     });
 
+    it('404s when the workflow is a hidden internal workflow', async () => {
+      expect(mastra.getWorkflowById('__mastra_notification_dispatcher')).toBeDefined();
+      await expect(
+        CREATE_SCHEDULE_ROUTE.handler({
+          mastra,
+          workflowId: '__mastra_notification_dispatcher',
+          cron: '0 * * * *',
+          ...baseCtx(),
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('404s when a public workflow shares its id with a hidden internal workflow', async () => {
+      const step = createStep({
+        id: 'noop',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: async () => ({}),
+      });
+      const colliding = createWorkflow({
+        id: '__mastra_notification_dispatcher',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      })
+        .then(step)
+        .commit();
+      const collidingMastra = new Mastra({
+        logger: false,
+        storage,
+        workflows: { colliding },
+      });
+      expect(collidingMastra.getWorkflowById('__mastra_notification_dispatcher')).not.toBe(colliding);
+
+      await expect(
+        CREATE_SCHEDULE_ROUTE.handler({
+          mastra: collidingMastra,
+          workflowId: '__mastra_notification_dispatcher',
+          cron: '0 * * * *',
+          ...baseCtx(),
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('404s for workflow ids that only match inherited object properties', async () => {
+      await expect(
+        CREATE_SCHEDULE_ROUTE.handler({
+          mastra,
+          workflowId: 'toString',
+          cron: '0 * * * *',
+          ...baseCtx(),
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
     it('rejects ambiguous bodies carrying both agentId and workflowId', () => {
       const result = CREATE_SCHEDULE_ROUTE.bodySchema!.safeParse({
         agentId: 'agent-1',

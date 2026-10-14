@@ -26,9 +26,8 @@ export function PageTitle() {
     sessionId?: string;
     threadId?: string;
   }>();
-  const { resourceId, projectPath, baseUrl, resourceReady, factorySessionState } = useChatSessionContext();
+  const { resourceId, projectPath, baseUrl, resourceReady } = useChatSessionContext();
   const queryClient = useQueryClient();
-  const projectRepositoryId = factorySessionState?.projectRepositoryId;
   const routeSessionId = sessionId ?? threadId;
 
   const workItems = useWorkItemsQuery(factoryId);
@@ -46,8 +45,8 @@ export function PageTitle() {
 
   useEffect(() => {
     if (!routeSessionId || !threadTitle) return;
-    void updateCachedSessionTitle(queryClient, projectRepositoryId, routeSessionId, threadTitle);
-  }, [projectRepositoryId, queryClient, routeSessionId, threadTitle]);
+    void updateCachedSessionTitle(queryClient, factoryId, routeSessionId, threadTitle);
+  }, [factoryId, queryClient, routeSessionId, threadTitle]);
 
   useDocumentTitle(identifier ?? threadTitle);
   return null;

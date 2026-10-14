@@ -35,7 +35,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
 import type { ApiRoute } from '@mastra/core/server';
 import { TaskSignalProvider } from '@mastra/core/signals';
-import { InMemoryHarness, MastraCompositeStore } from '@mastra/core/storage';
+import { MastraCompositeStore } from '@mastra/core/storage';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '@mastra/core/tools';
 import type { MastraVector } from '@mastra/core/vector';
 import { DuckDBStore } from '@mastra/duckdb';
@@ -63,9 +63,10 @@ import { buildMode } from './agents/modes/build.js';
 import { fastMode } from './agents/modes/explore.js';
 import { planMode } from './agents/modes/plan.js';
 import {
-  createGitRefInstructionReader,
   createGitRefReminderReader,
-  getStaticallyLoadedInstructionPaths,
+  instructionSourcePaths,
+  loadSessionInstructions,
+  sessionInstructionRoots,
 } from './agents/prompts/agent-instructions.js';
 import { executeSubagent } from './agents/subagents/execute.js';
 import { exploreSubagent } from './agents/subagents/explore.js';
@@ -105,6 +106,7 @@ import type { PluginProcessorEntries } from './plugins/types.js';
 import { PlanRejectionAbortProcessor } from './processors/plan-rejection-abort.js';
 import { createAmazonBedrockGateway } from './providers/amazon-bedrock-gateway.js';
 import { setAuthStorage } from './providers/claude-max.js';
+import { createGitHubCopilotGateway } from './providers/github-copilot-gateway.js';
 import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
 import { setAuthStorage as setKimiCodingAuthStorage } from './providers/kimi-coding.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
@@ -177,9 +179,14 @@ const TRANSIENT_SERVER_ERROR_MESSAGE_PATTERN = /internal server|server error|api
  */
 function getInjectorSessionState(
   requestContext: { get: (key: string) => unknown } | undefined,
-): { untrustedCheckout?: boolean; baseRef?: string; projectPath?: string } | undefined {
+): { untrustedCheckout?: boolean; baseRef?: string; projectPath?: string; instructionRoots?: string[] } | undefined {
   const agentControllerContext = requestContext?.get('controller') as
-    | AgentControllerRequestContext<{ untrustedCheckout?: boolean; baseRef?: string; projectPath?: string }>
+    | AgentControllerRequestContext<{
+        untrustedCheckout?: boolean;
+        baseRef?: string;
+        projectPath?: string;
+        instructionRoots?: string[];
+      }>
     | undefined;
   return agentControllerContext?.getState();
 }
@@ -589,6 +596,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     settingsPath: config?.settingsPath,
   });
   const amazonBedrockGateway = createAmazonBedrockGateway();
+  const githubCopilotGateway = createGitHubCopilotGateway();
 
   // Project detection
   const project = detectProject(cwd);
@@ -601,9 +609,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   const cloudObservabilityConfig = resolveCloudObservabilityConfig(globalSettings, authStorage, project.resourceId);
 
-  // Stable session id unique to this project/resource, and a machine-bound owner
-  // id. resourceId encodes root path + git identity and honors overrides, so it
-  // is the right input for scoping the session to the cwd/project.
+  // Stable session id unique to this project/resource. Mastra Code has no
+  // authenticated user identity in settings, so local sessions use a stable
+  // machine-and-project host identity. Core stamps it onto new threads as the
+  // ownerId/createdBy fallback; it is not a user id.
   const sessionId = `mastracode-session-${shortHash(project.resourceId)}`;
   const ownerId = `mastracode-${shortHash(`${hostname()}\0${project.rootPath}`)}`;
 
@@ -688,7 +697,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     }
   }
 
-  const harnessStorage = new InMemoryHarness();
   // mastracode's scorers persist every result through the scores domain, but
   // nothing reads scores back. Accept the writes and keep nothing, so they
   // neither grow mastra.db nor the process heap.
@@ -701,7 +709,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // When local tracing is off, disable the observability domain entirely so
       // trace/score/feedback writes never fall through to the default libsql store.
       observability: observabilityDomain ?? false,
-      harness: harnessStorage,
       scores: scoresStorage,
     },
   });
@@ -1095,19 +1102,38 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       getReader: ({ requestContext }) => {
         const state = getInjectorSessionState(requestContext);
         if (state?.untrustedCheckout !== true || typeof state?.baseRef !== 'string') return undefined;
-        return createGitRefReminderReader(state?.projectPath ?? project.rootPath, state.baseRef);
+        const projectPath = state?.projectPath ?? project.rootPath;
+        const [primary] = sessionInstructionRoots(projectPath, state.instructionRoots);
+        const reader = createGitRefReminderReader(primary!, state.baseRef);
+        if (primary === projectPath) return reader;
+        // The base ref covers the session's own checkout only; the other
+        // checkouts under the working directory are never read off disk.
+        const outsidePrimary = (filePath: string) => {
+          const inProject = path.relative(projectPath, filePath);
+          const inPrimary = path.relative(primary!, filePath);
+          const under = (rel: string) => rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
+          return under(inProject) && !under(inPrimary);
+        };
+        return {
+          ...reader,
+          pathExists: filePath => !outsidePrimary(filePath) && reader.pathExists(filePath),
+          isDirectory: filePath => !outsidePrimary(filePath) && reader.isDirectory(filePath),
+        };
       },
       getIgnoredInstructionPaths: ({ requestContext }) => {
         const state = getInjectorSessionState(requestContext);
         const projectPath = state?.projectPath ?? project.rootPath;
-        // On untrusted checkouts the static prompt loads from the base ref,
-        // so compute the statically-loaded paths through the same reader to
-        // keep the dedup consistent.
-        const projectReader =
-          state?.untrustedCheckout === true && typeof state?.baseRef === 'string'
-            ? createGitRefInstructionReader(projectPath, state.baseRef)
-            : undefined;
-        return getStaticallyLoadedInstructionPaths(projectPath, undefined, projectReader);
+        // Same sources, through the same readers, as the static prompt, so the
+        // dedup stays consistent on untrusted checkouts and across roots.
+        const untrusted = state?.untrustedCheckout === true && typeof state?.baseRef === 'string';
+        const roots = sessionInstructionRoots(projectPath, state?.instructionRoots);
+        const sources = loadSessionInstructions({
+          workingDir: projectPath,
+          instructionRoots: state?.instructionRoots,
+          untrustedCheckout: untrusted,
+          baseRef: untrusted ? state?.baseRef : undefined,
+        });
+        return instructionSourcePaths(sources, roots);
       },
     }),
   ];
@@ -1558,11 +1584,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       routesToOtherGateway(
         modelId,
         Object.values(controller.getMastra()?.listGateways() ?? {}),
-        new Set([mastraCodeGateway.id, amazonBedrockGateway.id, 'models.dev']),
+        new Set([mastraCodeGateway.id, amazonBedrockGateway.id, githubCopilotGateway.id, 'models.dev']),
       )
         ? modelId
         : resolveModel(modelId, { requestContext }),
-    gateways: [amazonBedrockGateway, mastraCodeGateway],
+    gateways: [amazonBedrockGateway, githubCopilotGateway, mastraCodeGateway],
     workspace: config?.workspace ?? (args => getDynamicWorkspace({ ...args, backgroundToolsEnabled })),
     browser: config?.browser,
     idGenerator: config?.idGenerator,

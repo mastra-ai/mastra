@@ -111,7 +111,7 @@ function stubThreadRoute(workItem: ReturnType<typeof createWireWorkItem>, subscr
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [workspaceSession] }),
     ),
     http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, () =>

@@ -5,7 +5,8 @@ import { RequestContext } from '../../../../request-context';
 import type { ChunkType } from '../../../../stream/types';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
-import { globalRunRegistry } from '../../run-registry';
+import { restoreRunAgentScopes } from '../../../scopes';
+import { getRunRegistryEntry, globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent } from '../../stream-adapter';
 import { createRunMessageList } from '../../utils/run-message-list';
 import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
@@ -54,7 +55,7 @@ export function createDurableGoalStep() {
         requestContextEntries?: Record<string, unknown>;
       };
 
-      const registryEntry = globalRunRegistry.get(state.runId);
+      const registryEntry = getRunRegistryEntry(state.runId, mastra);
       // This is shared agent configuration (judge, scorer, tools, defaults), not per-goal state.
       // The objective and its progress are isolated by thread and loaded from storage in the core.
       let goalConfig = registryEntry?.goal;
@@ -68,6 +69,7 @@ export function createDurableGoalStep() {
         for (const [key, value] of Object.entries(initData.requestContextEntries)) {
           requestContext.set(key, value);
         }
+        restoreRunAgentScopes(requestContext);
       }
 
       // No goal configured on the agent → nothing to judge.

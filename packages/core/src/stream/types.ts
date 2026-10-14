@@ -15,6 +15,7 @@ import type {
 } from '@internal/ai-sdk-v4';
 import type { CallSettings, ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
 import type { AIV5ResponseMessage } from '../agent/message-list';
+import type { StoredMessageLoader } from '../agent/message-list/memory-message-refs';
 import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
 import type { AgentSignalType } from '../agent/signals';
 import type { StructuredOutputOptions } from '../agent/types';
@@ -1202,6 +1203,12 @@ export type CustomChunkWriter = {
 /** Context passed as the second argument to `MastraOnFinishCallback`. */
 export type MastraOnFinishCallbackContext = {
   writer?: CustomChunkWriter;
+  /**
+   * Set when an output processor aborted the run from `processOutputResult`. The run-level
+   * message save never happens in that case, so the agent removes any response messages the
+   * run already saved (before a tool-approval suspension, or with `savePerStep`).
+   */
+  outputResultTripwire?: StepTripwireData;
 };
 
 export type MastraOnFinishCallback<OUTPUT = undefined> = (
@@ -1247,6 +1254,8 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
    */
   deferErrorChunks?: boolean;
   returnScorerData?: boolean;
+  /** Loads response messages the run pruned from its message list (kept there by id only) for scorer data. */
+  loadStoredMessages?: StoredMessageLoader;
   processorStates?: Map<string, any>;
   requestContext?: RequestContext;
   /** The run's abort signal, forwarded to output processors. */

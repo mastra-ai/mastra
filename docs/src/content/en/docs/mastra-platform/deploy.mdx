@@ -76,7 +76,14 @@ A local `.env` file is optional. Environment variables stored on the platform ar
 
     :::
 
-    If the build statically finds `backgroundTasks.enabled: true`, the deploy artifact includes a worker manifest. Mastra Cloud automatically provisions or updates a dedicated worker service from the same artifact. No separate toggle or add-on is required.
+    If the build statically finds `backgroundTasks.enabled: true`, the CLI decides whether to run background tasks on a dedicated worker service or in-process inside the API server container:
+
+    - A dedicated worker service requires Redis for coordination. Without a usable `REDIS_URL` in the deploy env, background tasks run in-process.
+    - With Redis available, the CLI uses a dedicated worker service when the environment already has one, when you pass `--yes`, or when the deploy runs headless. Otherwise it asks whether to provision one.
+    - Pass `--workers dedicated` or `--workers in-process` to skip the decision. `--workers dedicated` fails if `REDIS_URL` is missing.
+    - Dedicated worker services are rolling out gradually, so for organizations without access the CLI omits the worker manifest and background tasks run in-process, even with Redis and `--workers dedicated`.
+
+    When a dedicated worker service is chosen, the deploy artifact includes a worker manifest, and Mastra Cloud provisions or updates the worker service from the same artifact.
 
     Removing `backgroundTasks` or setting `enabled: false` in a later deploy removes the manifest and spins down the existing worker service. Values that can't be determined statically are omitted from the manifest display, but the worker process still reads the complete configuration from your bundled code.
   </StepItem>

@@ -6,6 +6,9 @@ import type { MastraTUIOptions } from '../../src/tui/index.js';
 export type ScenarioName =
   | 'startup'
   | 'abort-followup'
+  | 'abort-escape-off'
+  | 'abort-escape-durable'
+  | 'abort-escape-evented'
   | 'abort-queued-followup'
   | 'startup-interrupted'
   | 'account-rotation'
@@ -97,6 +100,7 @@ export type ScenarioName =
   | 'initial-prompt-resume'
   | 'tui-prompt-resume'
   | 'openai-strict-schema'
+  | 'pack-flag-startup'
   | 'plan-approval-goal-handoff'
   | 'plan-approval-goal-replaces-active'
   | 'plan-approval-handoff'
@@ -284,6 +288,7 @@ export type McE2eStartMastraCodeAppOptions = {
       MastraTUIOptions,
       | 'appName'
       | 'initialMessage'
+      | 'initialPackId'
       | 'resumeSkipNotice'
       | 'inlineQuestions'
       | 'processMemoryDiagnostics'
