@@ -243,6 +243,58 @@ describe('resolveFactoryToolScope', () => {
     expect(scope?.kind).toBe('worker');
   });
 
+  it('resolves a worker session with no signed-in caller, as its row owner', async () => {
+    const { seed, project, createSession, sessions, workItems, bindRun } = await seedFactory();
+    await createSession('session-1', 'user-1', 'private');
+    await bindRun('session-1', 'thread-1');
+    const scope = await resolveFactoryToolScope({
+      requestContext: context({ interactive: false }),
+      authEnabled: true,
+      sessions,
+      projects: seed.projects,
+      workItems,
+    });
+    expect(scope).toEqual({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      userId: 'user-1',
+      sessionId: 'session-1',
+      resourceId: 'session-1',
+      threadId: 'thread-1',
+      kind: 'worker',
+      interactive: false,
+    });
+  });
+
+  it('refuses a worker session to a caller from another org', async () => {
+    const { seed, createSession, sessions, workItems, bindRun } = await seedFactory();
+    await createSession('session-1', 'user-1');
+    await bindRun('session-1', 'thread-1');
+    await expect(
+      resolveFactoryToolScope({
+        requestContext: context({ user: { workosId: 'user-9', organizationId: 'org-9' } }),
+        authEnabled: true,
+        sessions,
+        projects: seed.projects,
+        workItems,
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it('resolves a user session woken by a notification as the row owner, not interactive', async () => {
+    const { seed, createSession, sessions, workItems } = await seedFactory();
+    await createSession('session-1', 'user-1', 'private');
+    // A wake's context carries the target row's owner (prepareSessionRunContext) and no interactive marker.
+    const scope = await resolveFactoryToolScope({
+      requestContext: context({ user: { workosId: 'user-1', organizationId: 'org-1' }, interactive: false }),
+      authEnabled: true,
+      sessions,
+      projects: seed.projects,
+      workItems,
+    });
+    expect(scope).toMatchObject({ userId: 'user-1', kind: 'user', interactive: false });
+  });
+
   it('resolves the local tenant when auth is disabled', async () => {
     const { seed, createSession, sessions, workItems } = await seedFactory('local');
     await createSession('session-1', 'local');
