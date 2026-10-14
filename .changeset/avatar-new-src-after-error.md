@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Fixed `Avatar` staying on the initial after its image failed once. When `src` changes to a new image, the new image now shows.
+Fixed avatars that stayed on the fallback initial after an image failed. They now show the new image when `src` changes.
