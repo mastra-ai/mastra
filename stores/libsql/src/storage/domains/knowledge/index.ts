@@ -1053,7 +1053,6 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     return result.rows.map(row => String(row.source));
   }
 
-
   async deleteRecord(input: { id: string; deletedBy: string; importRunId?: string }): Promise<KnowledgeRecord> {
     return this.#transaction(tx => this.#deleteRecord(tx, input));
   }
