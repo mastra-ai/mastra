@@ -1285,7 +1285,7 @@ describe('Workflow (Evented Engine Specific)', () => {
       try {
         const run = await workflow.createRun();
         const result: any = await raceHang(run.start({ inputData: {} }));
-        return { result, runId: run.runId, mastra };
+        return { result, run, runId: run.runId, mastra };
       } catch (e) {
         await mastra.stopWorkers();
         throw e;
@@ -1445,6 +1445,58 @@ describe('Workflow (Evented Engine Specific)', () => {
         expect(snapshot?.status).toBe('failed');
         expect(snapshot?.context?.[`${id}-boom`]?.status).toBe('failed');
         expect(snapshot?.context?.[`${id}-boom`]?.error?.message).toBe('first failure');
+        expect(published.filter(t => t === 'workflow.fail')).toHaveLength(1);
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+
+    it('fails a time-travel replay when a previously failed iteration fails again', async () => {
+      const id = 'foreach-iter-fail-time-travel';
+      const executions: Record<number, number> = {};
+      const boom = createStep({
+        id: `${id}-boom`,
+        inputSchema: itemSchema,
+        outputSchema: itemSchema,
+        retries: 0,
+        execute: async ({ inputData }) => {
+          executions[inputData.n] = (executions[inputData.n] ?? 0) + 1;
+          if (inputData.n === 1) throw new Error('always fails');
+          if (inputData.n === 2 && executions[2] === 1) {
+            await new Promise(r => setTimeout(r, 100));
+            throw new Error('fails once');
+          }
+          return inputData;
+        },
+      });
+
+      const pubsub = new EventEmitterPubSub();
+      const published: string[] = [];
+      const publish = pubsub.publish.bind(pubsub);
+      pubsub.publish = async (topic: string, event: any) => {
+        if (topic === 'workflows') published.push(event.type);
+        return publish(topic, event);
+      };
+      const { result, run, runId, mastra } = await runForeach(id, boom, 3, { pubsub });
+      try {
+        expect(result.status).toBe('failed');
+        const workflowsStore = await testStorage.getStore('workflows');
+        await vi.waitFor(
+          async () => {
+            const snapshot = (await workflowsStore?.getWorkflowRunById({ runId, workflowName: id }))?.snapshot as any;
+            const statuses = snapshot?.context?.[`${id}-boom`]?.suspendPayload?.__workflow_meta?.foreachOutput?.map(
+              (r: any) => r?.status,
+            );
+            expect(statuses).toEqual(['failed', 'failed', 'success']);
+          },
+          { timeout: 2000 },
+        );
+
+        published.length = 0;
+        const replay: any = await raceHang(run.timeTravel({ step: `${id}-boom` }));
+        expect(replay.status).toBe('failed');
+        expect(replay.error?.message).toBe('always fails');
+        expect(executions[1]).toBe(2);
         expect(published.filter(t => t === 'workflow.fail')).toHaveLength(1);
       } finally {
         await mastra.stopWorkers();
