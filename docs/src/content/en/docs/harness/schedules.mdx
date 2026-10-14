@@ -91,7 +91,7 @@ await mastra.schedules.create({
 })
 ```
 
-Threaded schedules accept extra fields that control how the signal behaves, including the signal type, XML tag, tag attributes, and active-or-idle delivery behavior. They mirror the options [`agent.sendSignal()`](/docs/harness/signals) accepts and stay JSON-serializable so they persist with the schedule.
+Threaded schedules accept extra fields that control how the signal behaves, including the signal type, XML tag, tag attributes, and active-or-idle delivery behavior. They mirror the options [`agent.sendSignal()`](/docs/harness/custom-signals#send-a-signal) accepts and stay JSON-serializable so they persist with the schedule.
 
 These fields require a `threadId`. For the full threaded input shape, see the [agent schedule input reference](/reference/schedules/overview#createinput).
 

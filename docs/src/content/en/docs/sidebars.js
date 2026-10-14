@@ -177,6 +177,21 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'harness/signals-messages',
+              label: 'Messages and Steering',
+            },
+            {
+              type: 'doc',
+              id: 'harness/notifications',
+              label: 'Notifications',
+            },
+            {
+              type: 'doc',
+              id: 'harness/custom-signals',
+              label: 'Custom Signals',
+            },
+            {
+              type: 'doc',
               id: 'harness/signal-providers',
               label: 'Signal Providers',
             },
