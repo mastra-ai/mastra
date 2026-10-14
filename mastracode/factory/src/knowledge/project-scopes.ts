@@ -25,13 +25,12 @@ function sourceScopeName(integrationId: string, accountLabel?: string | null): s
 
 /**
  * Destination sub-scope for one source account under one Factory project.
- * General form `provider:resource` — the same rung grammar as repository
- * knowledge (`resource:<pid>:github:<owner/repo>`). For a platform source
- * the resource is the connected account/workspace, addressed by its stable
- * connection id; the human label lives on the scope name, not the address.
+ * Addressed `project:<pid>:<provider>:<connectionId>`: the connected
+ * account/workspace is identified by its stable connection id; the human
+ * label lives on the scope name, not the address.
  */
 export function connectSourceScopeAddress(projectId: string, integrationId: string, connectionId: string): string {
-  return `resource:${projectId}:${integrationId}:${connectionId}`;
+  return `project:${projectId}:${integrationId}:${connectionId}`;
 }
 
 export interface FactoryProjectScopesOptions {
@@ -42,7 +41,7 @@ export interface FactoryProjectScopesOptions {
    * that's empty during construction and set before the first cron fire.
    *
    * When present, each resolution materializes the destination sub-scopes —
-   * `org → resource → resource:<pid>:<provider>:<connectionId>` in dependency
+   * `org → project → project:<pid>:<provider>:<connectionId>` in dependency
    * order — so imports work for projects nobody has visited yet. Without it
    * the resolver only returns addresses and relies on the scopes existing.
    */
@@ -51,13 +50,11 @@ export interface FactoryProjectScopesOptions {
 
 /**
  * Knowledge-importer scopes resolver over the Factory project inventory: one
- * `resource:<projectId>:<provider>:<connectionId>` sub-scope per project per
+ * `project:<projectId>:<provider>:<connectionId>` sub-scope per project per
  * source account, resolved live at each cron fire so projects created or
  * deleted after startup start/stop syncing automatically.
  *
- * Each source account gets its own sub-scope under the project — the same
- * `provider:resource` rung grammar as repository knowledge
- * (`resource:<pid>:github:<owner/repo>`) — so Notion, Linear, etc. show up
+ * Each source account gets its own sub-scope under the project, so Notion, Linear, etc. show up
  * as distinct scopes in the knowledge graph instead of flattening into the
  * project root. Two connections of the same provider get two scopes.
  *
@@ -68,8 +65,8 @@ export interface FactoryProjectScopesOptions {
  *
  * Reads storage domains registered by `MastraFactory` during prepare.
  * Resolution before that registration throws — the core importer runner logs
- * the failure, falls back to the last successfully resolved set, and retries
- * on the next fire.
+ * the failure, falls back to the static bindings for that fire, and retries
+ * on the next one.
  *
  * With `mode: 'all'`, enumerates projects across every org in the storage
  * backend — the platform connection feeding the importers is deployment-level,
@@ -78,7 +75,7 @@ export interface FactoryProjectScopesOptions {
  * accordingly (or route each connection to selected projects).
  *
  * Pair with a parameterized access map so every source sub-scope is writable:
- * `{ access: { 'resource:$projectId:notion:$accountId': 'owner' }, scopes: factoryProjectScopes(storage, { knowledge }) }`.
+ * `{ access: { 'project:$projectId:notion:$accountId': 'owner' }, scopes: factoryProjectScopes(storage, { knowledge }) }`.
  */
 export function factoryProjectScopes(
   storage: FactoryStorage,
@@ -111,48 +108,50 @@ export function factoryProjectScopes(
 }
 
 /**
- * Materialize `org → resource → source` in dependency order, skipping rungs
- * that already exist. The org and resource shapes mirror the built-in scopes
- * Factory's knowledge routes materialize on first visit (same addresses,
- * same parameters, no name overrides), so whichever side runs first the
- * other coalesces idempotently. The source rung carries the provider's
- * display name — that's what the graph renders on the scope node.
+ * Materialize `org → project → source` in dependency order, skipping rungs
+ * that already exist. The org and project inputs are the ones Factory's
+ * knowledge routes pass when a project is first viewed (same addresses, name
+ * and parameters), so whichever side runs first, `materializeScope` coalesces
+ * the other. The source rung carries the provider's display name — that's
+ * what the graph renders on the scope node.
  *
  * A failure here (storage blip, concurrent materialization conflict) throws
- * up to the importer runner, which keeps the last-good binding set and
- * retries on the next fire — the same contract as inventory enumeration.
+ * up to the importer runner, which falls back to the static bindings for
+ * that fire and retries on the next one.
  */
 async function materializeSourceScopeChain(
   knowledge: Knowledge,
   project: FactoryProject,
   connection: { id: string; integrationId: string; accountLabel?: string | null },
 ): Promise<void> {
+  const store = await knowledge.getStorage();
   const orgAddress = `org:${project.orgId}`;
-  const resourceAddress = `resource:${project.id}`;
+  const projectAddress = `project:${project.id}`;
   const sourceAddress = connectSourceScopeAddress(project.id, connection.integrationId, connection.id);
 
-  if (!(await knowledge.resolveScopeAddress(orgAddress))) {
+  if (!(await store.getScopeAddress(orgAddress))) {
     await knowledge.materializeScope({
       address: orgAddress,
       contextualScopeAddress: orgAddress,
       parameters: { orgId: project.orgId },
     });
   }
-  if (!(await knowledge.resolveScopeAddress(resourceAddress))) {
+  if (!(await store.getScopeAddress(projectAddress))) {
     await knowledge.materializeScope({
-      address: resourceAddress,
+      address: projectAddress,
+      name: project.name,
       parentAddresses: [orgAddress],
       contextualScopeAddress: orgAddress,
-      parameters: { resourceId: project.id },
+      parameters: { orgId: project.orgId, resourceId: project.id },
     });
   }
-  if (!(await knowledge.resolveScopeAddress(sourceAddress))) {
+  if (!(await store.getScopeAddress(sourceAddress))) {
     await knowledge.materializeScope({
       address: sourceAddress,
       name: sourceScopeName(connection.integrationId, connection.accountLabel),
-      parentAddresses: [resourceAddress],
-      contextualScopeAddress: resourceAddress,
-      parameters: { resourceId: project.id, sourceId: connection.integrationId, accountId: connection.id },
+      parentAddresses: [projectAddress],
+      contextualScopeAddress: projectAddress,
+      parameters: { projectId: project.id, sourceId: connection.integrationId, accountId: connection.id },
     });
   }
 }
@@ -175,7 +174,7 @@ const KNOWLEDGE_IMPORTER_DEFAULT_ROLES: Readonly<Record<string, 'owner' | 'edit'
 /**
  * Fill in the default per-project integration config when the host didn't
  * pass one: every catalogue provider syncs each connected account into its
- * own `resource:<projectId>:<provider>:<connectionId>` sub-scope per Factory
+ * own `project:<projectId>:<provider>:<connectionId>` sub-scope per Factory
  * project via {@link factoryProjectScopes}. Host-supplied `integrations` are
  * used verbatim — the host owns the destination topology.
  */
@@ -189,7 +188,7 @@ export function withProjectScopedIntegrations(
   const integrations = Object.fromEntries(
     Object.entries(KNOWLEDGE_IMPORTER_DEFAULT_ROLES).map(([integrationId, role]) => [
       integrationId,
-      { access: { [`resource:$projectId:${integrationId}:$accountId`]: role }, scopes },
+      { access: { [`project:$projectId:${integrationId}:$accountId`]: role }, scopes },
     ]),
   );
   return { ...options, integrations };
