@@ -62,12 +62,13 @@ export function workItemStage(item: Pick<WorkItemRow, 'stages'>): string {
 export const workItemRefSchema = z
   .string()
   .trim()
+  .max(64)
   .refine(ref => z.string().uuid().safeParse(ref).success || /^#?\d+$/.test(ref), {
     message: 'Use a work item id (UUID) or its number like "#123".',
   })
   .describe('Work item id, or its number like "#123".');
 
-/** Resolve `<uuid>` or `#123` to an item in this Factory only. */
+/** Resolve `<uuid>` or `#123` to an item in this Factory only. Pass a ref validated by `workItemRefSchema`. */
 export async function findWorkItem(
   workItems: Pick<WorkItemsStorage, 'list' | 'getForProject'>,
   scope: Pick<FactoryToolScope, 'orgId' | 'factoryProjectId'>,
