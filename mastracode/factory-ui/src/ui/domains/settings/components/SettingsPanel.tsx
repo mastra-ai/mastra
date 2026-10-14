@@ -52,7 +52,10 @@ export function SettingsPanel() {
     enabled: resourceEnabled,
   };
 
-  const modelsQuery = useAvailableModelsQuery();
+  // Factory-level pickers only offer what the Factory's model scope can run;
+  // personal pickers keep the caller's full catalog.
+  const factoryScoped = section === 'models' || section === 'factory-memory';
+  const modelsQuery = useAvailableModelsQuery(factoryScoped ? factoryId : undefined);
   const settingsQuery = useAgentControllerSettings(hookArgs);
   const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
   const models = modelsQuery.data ?? [];

@@ -9,7 +9,7 @@ import { queryKeys } from '../../../../../api/keys';
 import type { AvailableModelOption } from '../../../../../hooks/useAvailableModels';
 import { Composer } from '../Composer';
 import { Transcript } from '../Transcript';
-import { OverlayTestProviders, useOverlayControllerHandlers } from './overlay-test-utils';
+import { OVERLAY_FACTORY_ID, OverlayTestProviders, useOverlayControllerHandlers } from './overlay-test-utils';
 
 const SESSION_API = `${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId`;
 const THINKING_CONFIG_API = `${TEST_BASE_URL}/web/config/thinking`;
@@ -156,7 +156,9 @@ describe('the /think command', () => {
       );
       const input = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Message' });
       await waitFor(() => expect(input).toBeEnabled());
-      await waitFor(() => expect(client.getQueryData(queryKeys.availableModels())).toEqual([proModel]));
+      await waitFor(() =>
+        expect(client.getQueryData(queryKeys.availableModels(OVERLAY_FACTORY_ID))).toEqual([proModel]),
+      );
       return input;
     }
 
