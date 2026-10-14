@@ -23,6 +23,7 @@ import type {
 } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { RouteAuth } from './route.js';
+import { canViewSourceControlSession } from './session-access.js';
 
 type RouteContext = Context;
 
@@ -475,11 +476,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         if ('response' in resolved) return resolved.response;
         const match = await resolveSession(options.sourceControls, c.req.param('sessionId'));
         const session = match?.session;
-        if (
-          !session ||
-          session.orgId !== resolved.tenant.orgId ||
-          (session.visibility === 'private' && session.userId !== resolved.tenant.userId)
-        ) {
+        if (!session || !canViewSourceControlSession(session, resolved.tenant)) {
           return c.json({ error: 'Session not found' }, 404);
         }
         const owners = await resolveOwnerProfiles([session.userId]);

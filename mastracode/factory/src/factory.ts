@@ -81,6 +81,7 @@ import {
   registerCustomProvidersSource,
 } from './routes/custom-provider-source.js';
 import { ProjectRoutes } from './routes/projects.js';
+import { createSessionAccessGuard } from './routes/session-access.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
 import type { FactoryApiRoutesDeps } from './routes/surface.js';
 import { TelemetryRoutes } from './routes/telemetry.js';
@@ -1790,10 +1791,11 @@ export class MastraFactory {
           // middleware sets `c.set('mastra', mastra)` and BEFORE routes, so:
           //   1. gate   — validates the auth session, stashes the user, and 401s /
           //               redirects unauthenticated requests. Skips public `/auth/*`.
-          //   2. primers — hydrate the caller's model-credential and custom
+          //   2. access — 404s requests addressing another user's private session.
+          //   3. primers — hydrate the caller's model-credential and custom
           //               provider snapshots so the request's first model call
           //               resolves tenant credentials and custom providers.
-          //   3. spa    — serves the built UI for everything the server doesn't own.
+          //   4. spa    — serves the built UI for everything the server doesn't own.
           // `auth` also lands on `server.auth` so the core auth middleware (and
           // Studio's dual-auth routing — see `studio.auth` on the returned args)
           // authenticates core `/api/*` routes with the same provider.
@@ -1802,6 +1804,7 @@ export class MastraFactory {
             middleware: [
               ...timing,
               createFactoryAuthGate(auth),
+              createSessionAccessGuard({ auth: routeAuth, sessions: sourceControlSessions }),
               createTenantCredentialPrimer({ auth: routeAuth, credentials: modelCredentialsStorage }),
               createCustomProvidersPrimer({
                 auth: routeAuth,

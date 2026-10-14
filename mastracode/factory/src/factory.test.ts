@@ -1819,11 +1819,12 @@ describe('MastraFactory.prepare', () => {
     expect(json).toHaveBeenCalledWith({ authEnabled: false, authenticated: false }, 404);
   });
 
-  it('installs the auth gate and tenant credential primer when auth is configured', async () => {
+  it('installs the auth gate, session access guard and tenant credential primer when auth is configured', async () => {
     // Both modes mount the custom-providers primer and the SPA static
     // middleware is environment-dependent (present when ui/dist exists), so
-    // assert the delta: the gate and the credential primer replace the open
-    // mode's interactive marker (the gate marks signed-in requests itself).
+    // assert the delta: the gate, the session access guard and the credential
+    // primer replace the open mode's interactive marker (the gate marks
+    // signed-in requests itself).
     const openConfig = await prepareFactory({ storage: fakeStorage(), auth: null });
     const openMiddleware = (openConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
 
@@ -1831,7 +1832,7 @@ describe('MastraFactory.prepare', () => {
 
     const gatedConfig = await prepareFactory({ storage: fakeStorage(), auth: fakeProvider() });
     const gatedMiddleware = (gatedConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
-    expect(gatedMiddleware).toHaveLength(openMiddleware.length + 1);
+    expect(gatedMiddleware).toHaveLength(openMiddleware.length + 2);
   });
 
   it('passes the resolved auth provider to both server.auth and studio.auth', async () => {
