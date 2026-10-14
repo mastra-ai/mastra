@@ -1,7 +1,6 @@
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import type { DropdownMenuRadioOption } from '@mastra/playground-ui/components/DropdownMenu';
 import {
   Dialog,
   DialogAction,
@@ -31,14 +30,12 @@ import { useSessionSort } from '../hooks/useSessionSort';
 import { deleteUserSession, regenerateSessionTitle } from '../services/user-sessions';
 import type { FactoryUserSession } from '../services/user-sessions';
 import {
-  ALL_SESSION_OWNERS,
-  MY_SESSIONS,
   USER_SESSION_STATUS_OPTIONS,
   USER_SESSION_UPDATED_OPTIONS,
   activeUserSessionFilterCount,
   defaultUserSessionFilters,
   filterUserSessions,
-  sessionOwnerFilterValue,
+  userSessionOwnerOptions,
 } from '../services/sessionFilters';
 import type { UserSessionFiltersState } from '../services/sessionFilters';
 import { DEFAULT_USER_SESSION_SORT, USER_SESSION_SORT_OPTIONS, compareUserSessions } from '../services/sessionSort';
@@ -83,18 +80,9 @@ export function UserSessionsSection() {
         : ('idle' as const),
   }));
   const sessions = filterUserSessions(candidates, filters, viewerUserId).map(candidate => candidate.session);
-  const ownersById = new Map<string, string>();
-  for (const candidate of candidates) ownersById.set(candidate.session.userId, candidate.ownerName);
-  const viewerOwnerOptions = viewerUserId ? [{ value: MY_SESSIONS, label: 'Mine' }] : [];
-  const namedOwnerOptions = Array.from(ownersById, ([userId, name]) => ({
-    value: sessionOwnerFilterValue(userId),
-    label: name,
-  })).toSorted((a, b) => a.label.localeCompare(b.label));
-  const ownerOptions: DropdownMenuRadioOption<string>[] = [
-    { value: ALL_SESSION_OWNERS, label: 'All owners' },
-    ...viewerOwnerOptions,
-    ...namedOwnerOptions,
-  ];
+  const ownerOptions = userSessionOwnerOptions(candidates, viewerUserId);
+  const changeFilters = (changes: Partial<UserSessionFiltersState>) =>
+    setFilterChanges(current => ({ ...current, ...changes }));
   const activeFilterCount = activeUserSessionFilterCount(filters, defaultFilters);
   const changedCount = activeFilterCount + Number(sort !== DEFAULT_USER_SESSION_SORT);
   const invalidate = () => {
@@ -168,21 +156,21 @@ export function UserSessionsSection() {
                 icon={<UserRound aria-hidden />}
                 options={ownerOptions}
                 value={filters.owner}
-                onValueChange={owner => setFilterChanges(current => ({ ...current, owner }))}
+                onValueChange={owner => changeFilters({ owner })}
               />
               <DropdownMenu.RadioSub
                 label="Status"
                 icon={<CircleDashed aria-hidden />}
                 options={USER_SESSION_STATUS_OPTIONS}
                 value={filters.status}
-                onValueChange={status => setFilterChanges(current => ({ ...current, status }))}
+                onValueChange={status => changeFilters({ status })}
               />
               <DropdownMenu.RadioSub
                 label="Updated"
                 icon={<Clock aria-hidden />}
                 options={USER_SESSION_UPDATED_OPTIONS}
                 value={filters.updated}
-                onValueChange={updated => setFilterChanges(current => ({ ...current, updated }))}
+                onValueChange={updated => changeFilters({ updated })}
               />
             </SessionListProperties>
             <Button

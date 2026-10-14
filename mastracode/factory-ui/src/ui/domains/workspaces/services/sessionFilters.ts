@@ -99,3 +99,16 @@ export function filterUserSessions(
     return true;
   });
 }
+
+export function userSessionOwnerOptions(
+  candidates: readonly UserSessionFilterCandidate[],
+  viewerUserId: string | undefined,
+): DropdownMenuRadioOption<string>[] {
+  const ownerNameById = new Map(candidates.map(candidate => [candidate.session.userId, candidate.ownerName]));
+  const viewerOption = viewerUserId ? [{ value: MY_SESSIONS, label: 'Mine' }] : [];
+  const namedOptions = Array.from(ownerNameById, ([userId, name]) => ({
+    value: sessionOwnerFilterValue(userId),
+    label: name,
+  })).toSorted((a, b) => a.label.localeCompare(b.label));
+  return [{ value: ALL_SESSION_OWNERS, label: 'All owners' }, ...viewerOption, ...namedOptions];
+}
