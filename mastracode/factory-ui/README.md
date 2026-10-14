@@ -36,7 +36,7 @@ Successful run completions continue to use the live Ready indicator and completi
 
 ## User menu and settings
 
-The sidebar footer opens a user menu with shortcuts to **My account**, **Preferences**, **Your models**, **Your memory**, and **Connections**. **Settings** opens the shared Factory model settings, and **Log out** ends the current session. Deployments without authentication show a **Settings** menu without account or logout actions.
+The sidebar footer shows your profile picture (or an initial), name, and email. It opens a user menu with shortcuts to **My account**, **Preferences**, **Your models**, **Your memory**, and **Connections**. **Settings** opens the shared Factory model settings, the theme control switches between system, light, and dark appearance, and **Log out** ends the current session. Deployments without authentication show a **Settings** menu without account or logout actions.
 
 Settings pages keep their existing URLs and searchable navigation. **Back to app** returns to the page where settings was opened, including its filters, even after switching sections through the user menu.
 

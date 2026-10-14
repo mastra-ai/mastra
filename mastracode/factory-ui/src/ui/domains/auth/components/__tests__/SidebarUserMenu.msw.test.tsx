@@ -1,5 +1,5 @@
 import { Sidebar, SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
@@ -58,9 +58,12 @@ describe('SidebarUserMenu', () => {
 
     const trigger = await screen.findByRole('button', { name: 'User menu' });
     expect(trigger).toHaveTextContent('Dev');
+    expect(trigger).toHaveTextContent('dev@mastra.ai');
+    expect(within(trigger).getByRole('img', { name: 'Dev' })).toHaveAttribute('src', signedInAccount.user.avatarUrl);
     await user.click(trigger);
 
     const menu = await screen.findByRole('menu', { name: 'User menu' });
+    expect(within(menu).getByText('dev@mastra.ai')).toBeInTheDocument();
     expect(
       within(menu)
         .getAllByRole('menuitem')
@@ -73,6 +76,45 @@ describe('SidebarUserMenu', () => {
     expect(screen.getByRole('status', { name: 'Current path' })).toHaveTextContent(
       '/factories/fp-1/work?status=active#sessions',
     );
+  });
+
+  it('keeps an initial and accessible menu when the profile image fails', async () => {
+    stubSignedIn();
+    renderUserMenu(undefined, true);
+
+    const trigger = await screen.findByRole('button', { name: 'User menu' });
+    fireEvent.error(within(trigger).getByRole('img', { name: 'Dev' }));
+
+    expect(within(trigger).queryByRole('img')).not.toBeInTheDocument();
+    expect(within(trigger).getByText('D')).toBeInTheDocument();
+    expect(trigger).toHaveAccessibleName('User menu');
+  });
+
+  it('uses the email and an initial when the profile has no name or image', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/auth/me`, () =>
+        HttpResponse.json({ ...signedInAccount, user: { ...signedInAccount.user, name: '', avatarUrl: undefined } }),
+      ),
+    );
+    renderUserMenu();
+
+    const trigger = await screen.findByRole('button', { name: 'User menu' });
+    expect(within(trigger).getByText('dev@mastra.ai')).toBeInTheDocument();
+    expect(within(trigger).getByText('D')).toBeInTheDocument();
+    expect(within(trigger).queryByRole('img')).not.toBeInTheDocument();
+  });
+
+  it('changes and remembers the theme without closing the user menu', async () => {
+    const user = userEvent.setup();
+    stubSignedIn();
+    renderUserMenu();
+
+    await user.click(await screen.findByRole('button', { name: 'User menu' }));
+    await user.click(await screen.findByRole('radio', { name: 'Dark' }));
+
+    expect(window.localStorage.getItem('mastracode.theme')).toBe('dark');
+    expect(screen.getByRole('menu', { name: 'User menu' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Dark' })).toBeChecked();
   });
 
   it.each([

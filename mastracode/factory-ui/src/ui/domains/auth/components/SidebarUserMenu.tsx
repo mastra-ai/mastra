@@ -1,7 +1,11 @@
+import { Avatar } from '@mastra/playground-ui/components/Avatar';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { Bot, Brain, Cable, ChevronsUpDown, CircleUserRound, LogOut, Palette, Settings } from 'lucide-react';
+import { ThemeToggle } from '@mastra/playground-ui/components/ThemeToggle';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Bot, Brain, Cable, CircleUserRound, LogOut, Palette, Settings } from 'lucide-react';
 import { Link, useLocation, useMatch, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
@@ -30,7 +34,8 @@ export function SidebarUserMenu() {
 
   const account = auth.data;
   const signedIn = account?.authEnabled && account.authenticated;
-  const identity = signedIn ? (account.user?.name ?? account.user?.email ?? 'User') : 'Settings';
+  const identity = signedIn ? account.user?.name?.trim() || account.user?.email || 'User' : 'Settings';
+  const email = signedIn ? account.user?.email : undefined;
   const menuLabel = signedIn ? 'User menu' : 'Settings menu';
   // Switching sections from the menu must retain the original Back to app destination.
   const settingsState = settingsOpen ? location.state : { from: location };
@@ -38,14 +43,44 @@ export function SidebarUserMenu() {
 
   return (
     <DropdownMenu>
-      <Sidebar.NavLink asChild link={{ name: menuLabel, url: '#', icon: <CircleUserRound /> }} isActive={settingsOpen}>
-        <DropdownMenu.Trigger id="settings-trigger" render={<button type="button" />} aria-label={menuLabel}>
-          {signedIn ? <CircleUserRound aria-hidden="true" /> : <Settings aria-hidden="true" />}
-          <Sidebar.NavLabel>{identity}</Sidebar.NavLabel>
-          {sidebarState !== 'collapsed' && <ChevronsUpDown aria-hidden="true" />}
+      <Sidebar.NavLink asChild link={{ name: menuLabel, url: '#' }} isActive={settingsOpen}>
+        <DropdownMenu.Trigger
+          id="settings-trigger"
+          render={<button type="button" />}
+          aria-label={menuLabel}
+          className={signedIn ? 'h-auto min-h-10 py-1.5' : undefined}
+        >
+          {signedIn ? (
+            <Avatar key={account.user?.avatarUrl} src={account.user?.avatarUrl} name={identity} size="sm" />
+          ) : (
+            <Settings aria-hidden="true" />
+          )}
+          <Sidebar.NavLabel>
+            <span className="flex min-w-0 flex-col">
+              <Txt as="span" variant="label" tone="ink" className="truncate">
+                {identity}
+              </Txt>
+              {email && email !== identity && (
+                <Txt as="span" variant="meta" tone="muted" className="truncate">
+                  {email}
+                </Txt>
+              )}
+            </span>
+          </Sidebar.NavLabel>
+          {sidebarState !== 'collapsed' && <DisclosureChevron direction="up" />}
         </DropdownMenu.Trigger>
       </Sidebar.NavLink>
-      <DropdownMenu.Content side="top" align="start" className="w-64" aria-label={menuLabel}>
+      <DropdownMenu.Content side="top" align="start" className="max-h-(--available-height) w-72" aria-label={menuLabel}>
+        {signedIn && (
+          <>
+            <div className="min-w-0 px-3 py-2">
+              <Txt variant="caption" tone="muted" className="truncate" title={email ?? identity}>
+                {email ?? identity}
+              </Txt>
+            </div>
+            <DropdownMenu.Separator />
+          </>
+        )}
         <DropdownMenu.Label>Your settings</DropdownMenu.Label>
         {signedIn && (
           <DropdownMenu.Item
@@ -92,6 +127,13 @@ export function SidebarUserMenu() {
           <Settings aria-hidden="true" />
           Settings
         </DropdownMenu.Item>
+        <DropdownMenu.Separator />
+        <div className="flex items-center justify-between gap-3 px-3 py-1">
+          <Txt as="span" variant="caption" tone="muted">
+            Theme
+          </Txt>
+          <ThemeToggle size="sm" />
+        </div>
         {signedIn && (
           <>
             <DropdownMenu.Separator />
