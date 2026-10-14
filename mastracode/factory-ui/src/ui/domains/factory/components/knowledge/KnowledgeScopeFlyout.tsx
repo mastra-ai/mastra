@@ -34,8 +34,6 @@ export function KnowledgeScopeFlyout({
   const activity = useKnowledgeActivity(factoryProjectId, selection, threadId);
   const recentActivity = activity.data?.pages[0]?.events.slice(0, 5) ?? [];
   const activityTruncated = activity.data?.pages[0]?.truncated === true;
-  const displayAddress =
-    scope.address === `resource:${factoryProjectId}` ? `project:${factoryProjectId}` : scope.address;
   return (
     <aside
       data-testid="knowledge-scope-flyout"
@@ -63,7 +61,7 @@ export function KnowledgeScopeFlyout({
         {scope.description?.trim() ? <p className="text-foreground leading-relaxed">{scope.description}</p> : null}
         <dl className="text-muted-foreground grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-xs">
           <dt>Address</dt>
-          <dd className="text-foreground text-right break-all">{displayAddress}</dd>
+          <dd className="text-foreground text-right break-all">{scope.address}</dd>
           <dt>Kind</dt>
           <dd className="text-foreground text-right">{scope.kind ?? 'scope'}</dd>
           <dt>Content nodes</dt>

@@ -276,7 +276,7 @@ function metadataString(metadata: Record<string, unknown> | undefined, key: stri
   return typeof value === 'string' ? value : undefined;
 }
 
-const SESSION_ADDRESS_RE = /^resource:[^:]+:thread:([^:]+)$/;
+const SESSION_ADDRESS_RE = /^project:[^:]+:thread:([^:]+)$/;
 const SESSION_NAME_CONCURRENCY = 8;
 /** Sessions probed for a visible captured record at once. */
 const SESSION_PROBE_CONCURRENCY = 8;
@@ -292,7 +292,7 @@ const SCOPE_PAGE_SIZE = 25;
 /** Bound storage pressure while calculating direct-member counts. */
 const SCOPE_COUNT_CONCURRENCY = 8;
 
-/** The thread id of a session (`resource:<project>:thread:<id>`) scope address. */
+/** The thread id of a session (`project:<project>:thread:<id>`) scope address. */
 function compareScopeNodes(a: KnowledgeScopeNodeSummary, b: KnowledgeScopeNodeSummary): number {
   return a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
 }
@@ -308,7 +308,7 @@ function sessionThreadId(address: string | undefined): string | undefined {
 function scopeKindLabel(address: string | undefined, kind: string | null | undefined): string {
   if (address?.startsWith('org:')) return 'org';
   if (sessionThreadId(address)) return 'session';
-  if (address?.startsWith('resource:')) return 'project';
+  if (address?.startsWith('project:')) return 'project';
   return kind || 'topic';
 }
 
@@ -416,7 +416,7 @@ function importBinding(binding: string): { source?: string; scope?: string } {
 }
 
 function importScopeBelongsToProject(scope: string | undefined, projectId: string): boolean {
-  const resourceAddress = `resource:${projectId}`;
+  const resourceAddress = `project:${projectId}`;
   const threadPrefix = `${resourceAddress}:thread:`;
   return scope === resourceAddress || (scope?.startsWith(threadPrefix) === true && scope.length > threadPrefix.length);
 }
@@ -619,12 +619,12 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     const requestedThreadId = c.req.query('threadId');
     const threadId = boundedThreadId(requestedThreadId);
     if (requestedThreadId !== undefined && !threadId) return { response: c.json({ error: 'thread_not_found' }, 404) };
-    const threadAddress = threadId ? `resource:${projectId}:thread:${threadId}` : undefined;
+    const threadAddress = threadId ? `project:${projectId}:thread:${threadId}` : undefined;
     const thread = threadAddress ? await store.getScopeAddress(threadAddress) : undefined;
     if (threadAddress && !thread) return { response: c.json({ error: 'thread_not_found' }, 404) };
 
     const orgAddress = `org:${tenant.orgId}`;
-    const resourceAddress = `resource:${projectId}`;
+    const resourceAddress = `project:${projectId}`;
     if (preflight.scopeId || preflight.nodeId) {
       const [existingOrg, existingResource] = await Promise.all([
         store.getScopeAddress(orgAddress),
@@ -659,7 +659,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const sessionThread = sessionThreadId(summary.address);
           if (sessionThread) {
             const ownSession =
-              summary.address.startsWith(`resource:${projectId}:thread:`) &&
+              summary.address.startsWith(`project:${projectId}:thread:`) &&
               summary.parentIds.includes(existingResource.scopeNodeId);
             if (!ownSession) return { response: c.json({ error: 'scope_not_found' }, 404) };
             const probe = await store.listRecordsBySource({
@@ -784,7 +784,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
   ): Promise<Set<string>> {
     const hidden = new Set<string>();
     const sessions: Array<{ id: string; threadId: string }> = [];
-    const ownSessionPrefix = `resource:${view.projectId}:thread:`;
+    const ownSessionPrefix = `project:${view.projectId}:thread:`;
     for (const node of nodes) {
       const threadId = sessionThreadId(node.address);
       if (!threadId) continue;
@@ -1096,8 +1096,8 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               // evict it in favor of earlier-sorting structural scopes.
               const identityAddresses = new Set([
                 `org:${view.orgId}`,
-                `resource:${view.projectId}`,
-                ...(view.threadId ? [`resource:${view.projectId}:thread:${view.threadId}`] : []),
+                `project:${view.projectId}`,
+                ...(view.threadId ? [`project:${view.projectId}:thread:${view.threadId}`] : []),
               ]);
               const includeWithParents = (node: KnowledgeScopeNodeSummary): void => {
                 if (returnedById.has(node.id) || returnedById.size >= this.#limits.maxNodes) return;
@@ -1132,7 +1132,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               // The viewed project's first page of children (its sessions among
               // them) loads with the tree, so a session is listed without
               // expanding the project first.
-              const projectNode = storedScopeNodes.find(node => node.address === `resource:${view.projectId}`);
+              const projectNode = storedScopeNodes.find(node => node.address === `project:${view.projectId}`);
               if (projectNode && returnedById.has(projectNode.id)) addFirstChildPage(projectNode);
             }
 
@@ -1154,7 +1154,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                     return {
                       id: scope.id,
                       address: scope.address,
-                      name: scope.address === `resource:${view.projectId}` ? view.projectName : scope.name,
+                      name: scope.address === `project:${view.projectId}` ? view.projectName : scope.name,
                       kind: scopeKindLabel(scope.address, scope.kind),
                       ...(scope.description ? { description: scope.description } : {}),
                       parentIds: scope.parentIds,
@@ -1183,26 +1183,26 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const scopeNodeByAddress = new Map(storedScopeNodes.map(node => [node.address, node]));
           const identity = [
             { level: 'org' as const, id: view.orgId, address: `org:${view.orgId}` },
-            { level: 'resource' as const, id: view.projectId, address: `resource:${view.projectId}` },
+            { level: 'resource' as const, id: view.projectId, address: `project:${view.projectId}` },
             ...(view.threadId
               ? [
                   {
                     level: 'thread' as const,
                     id: view.threadId,
-                    address: `resource:${view.projectId}:thread:${view.threadId}`,
+                    address: `project:${view.projectId}:thread:${view.threadId}`,
                   },
                 ]
               : []),
           ];
           const threadRoot = view.threadId
-            ? scopeNodeByAddress.get(`resource:${view.projectId}:thread:${view.threadId}`)
+            ? scopeNodeByAddress.get(`project:${view.projectId}:thread:${view.threadId}`)
             : undefined;
           const threadRootName = threadRoot ? (await this.#sessionNames([threadRoot])).get(threadRoot.id) : undefined;
           return loose(c).json({
             roots: identity.map(({ level, id, address }) => {
               const scopeNode = scopeNodeByAddress.get(address);
               const name =
-                scopeNode?.address === `resource:${view.projectId}`
+                scopeNode?.address === `project:${view.projectId}`
                   ? view.projectName
                   : scopeNode && level === 'thread'
                     ? (threadRootName ?? scopeNode.name)
@@ -1281,7 +1281,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           );
           const results: KnowledgeSearchResult[] = [
             ...structuralScopes.map(scope => {
-              const projectScope = scope.address === `resource:${view.projectId}`;
+              const projectScope = scope.address === `project:${view.projectId}`;
               return {
                 id: scope.id,
                 name: projectScope ? view.projectName : (sessionNames.get(scope.id) ?? scope.name),
@@ -1787,7 +1787,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               const nodeThreadId = target.scopeIds
                 .map(scopeId => {
                   const address = addresses.get(scopeId)?.address;
-                  return address?.startsWith(`resource:${view.projectId}:thread:`)
+                  return address?.startsWith(`project:${view.projectId}:thread:`)
                     ? sessionThreadId(address)
                     : undefined;
                 })
