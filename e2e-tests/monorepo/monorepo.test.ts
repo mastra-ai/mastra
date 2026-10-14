@@ -327,7 +327,6 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         const inputFile = join(fixturePath, 'apps', 'custom');
         const mastraIndexPath = join(inputFile, 'src', 'mastra', 'index.ts');
         originalMastraIndex = await readFile(mastraIndexPath, 'utf8');
-        // The versionless route is dev-only: `mastra build` cannot pack a workspace package without a version.
         const mastraIndex = originalMastraIndex
           .replace(
             "import { testRoute } from '@/api/route/test';",
@@ -421,7 +420,6 @@ export const environmentRoute = registerApiRoute('/environment', {
           }
         }
       } finally {
-        // Restore the index so the build/start suites never import the versionless package.
         if (originalMastraIndex) {
           await writeFile(join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts'), originalMastraIndex);
         }
@@ -596,12 +594,30 @@ export const environmentRoute = registerApiRoute('/environment', {
 
       try {
         // Keep the lockfile probe external so optimization cannot remove it from the output manifest.
+        // The versionless route makes the build pack a workspace package without a version (#27033).
+        await writeFile(
+          join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'api', 'route', 'versionless.ts'),
+          `import { registerApiRoute } from '@mastra/core/server';
+import { versionlessValue } from '@inner/versionless';
+
+export const versionlessRoute = registerApiRoute('/versionless', {
+  method: 'GET',
+  handler: async c => c.json({ value: versionlessValue }),
+});
+`,
+        );
         await writeFile(
           mastraConfigPath,
-          originalMastraConfig.replace(
-            "externals: ['bcrypt', '@inner/subpath-only']",
-            "externals: ['bcrypt', '@inner/subpath-only', 'unicorn-magic']",
-          ),
+          originalMastraConfig
+            .replace(
+              "externals: ['bcrypt', '@inner/subpath-only']",
+              "externals: ['bcrypt', '@inner/subpath-only', 'unicorn-magic']",
+            )
+            .replace(
+              "import { testRoute } from '@/api/route/test';",
+              "import { testRoute } from '@/api/route/test';\nimport { versionlessRoute } from '@/api/route/versionless';",
+            )
+            .replace(/apiRoutes: \[\s*testRoute,/, 'apiRoutes: [testRoute, versionlessRoute,'),
         );
         for (const [index, packageJsonPath] of packageJsonPaths.entries()) {
           const packageJson = JSON.parse(originalPackageJsons[index]!);
@@ -845,6 +861,12 @@ export const mastra = new Mastra({
     }, timeout);
 
     runApiTests(port);
+
+    it('should bundle a workspace package that has no version (#27033)', async () => {
+      const res = await fetch(`http://localhost:${port}/versionless`);
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({ value: 'versionless-workspace-package' });
+    });
   });
 
   describe.sequential('start', async () => {
