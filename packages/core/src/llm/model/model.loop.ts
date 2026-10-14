@@ -137,6 +137,7 @@ export class MastraLLMVNext extends MastraBase {
     _internal,
     agentId,
     agentVersionId,
+    resolvedScopes,
     agentName,
     toolCallId,
     requestContext,
@@ -254,6 +255,7 @@ export class MastraLLMVNext extends MastraBase {
         eagerToolExecution,
         agentId,
         agentVersionId,
+        resolvedScopes,
         agentName,
         requestContext,
         actor,
@@ -325,7 +327,10 @@ export class MastraLLMVNext extends MastraBase {
 
           onFinish: async (props, context) => {
             const usageIncomplete = isUsageIncomplete(props?.totalUsage);
-            const observedUsage = usageIncomplete ? calculateObservedUsage(props?.steps ?? []) : props?.totalUsage;
+            const steps = props?.steps ?? [];
+            // Aborted payloads carry no steps, so keep their reported totalUsage instead of an empty recount.
+            const observedUsage =
+              usageIncomplete && steps.length > 0 ? calculateObservedUsage(steps) : props?.totalUsage;
 
             // End the model generation span BEFORE calling the user's onFinish callback
             // This ensures the model span ends before the agent span

@@ -413,8 +413,8 @@ describe('ClickHouse advanced trace query', () => {
     );
 
     const seed = compiled.query.slice(
-      compiled.query.indexOf('SELECT traceId\n        FROM mastra_trace_roots r'),
-      compiled.query.indexOf('ORDER BY dedupeKey'),
+      compiled.query.indexOf('SELECT traceId\n      FROM mastra_trace_roots r'),
+      compiled.query.indexOf('ORDER BY traceId, dedupeKey'),
     );
     expect(seed).toContain('AND (ifNull(r.entityName = {trace_query_3:String}, 0))');
     expect(seed).not.toContain('current_spans');
@@ -464,6 +464,10 @@ describe('ClickHouse advanced trace query', () => {
     const prefilter = compiled.query.slice(prefilterStart, rootStart);
     expect(prefilter).toMatch(/AND organizationId = \{trace_query_\d+:String\}/);
     expect(prefilter).toMatch(/AND resourceId = \{trace_query_\d+:String\}/);
+    // The re-read of every root of those traces is scoped too, before the dedupe picks one.
+    expect(compiled.query).toMatch(
+      /current_roots AS \(\s+SELECT \*\s+FROM mastra_trace_roots\s+WHERE traceId IN \([\s\S]+?\)\s+AND organizationId = \{trace_query_\d+:String\}\s+AND resourceId = \{trace_query_\d+:String\}\s+ORDER BY traceId, dedupeKey\s+LIMIT 1 BY traceId/,
+    );
     const scores = compiled.query.slice(scoresStart);
     for (const cte of [rootScope, scores]) {
       expect(cte).toMatch(/AND organizationId = \{trace_query_\d+:String\}/);
@@ -494,9 +498,9 @@ describe('ClickHouse advanced trace query', () => {
     expect(compiled.query).toContain('FROM mastra_trace_roots');
     expect(compiled.query).toContain('FROM mastra_span_events');
     expect(compiled.query).not.toContain('WHERE parentSpanId IS NULL');
-    expect(compiled.query).toContain('ORDER BY dedupeKey');
+    // Spans dedupe by dedupeKey; roots keep the lowest dedupeKey of each trace.
+    expect(compiled.query).toMatch(/FROM mastra_span_events[\s\S]+ORDER BY dedupeKey\s+LIMIT 1 BY dedupeKey/);
     expect(compiled.query).toContain('ORDER BY traceId, dedupeKey');
-    expect(compiled.query).toContain('LIMIT 1 BY dedupeKey');
     expect(compiled.query).toContain('LIMIT 1 BY traceId');
     // The time range narrows the dedupe input instead of filtering the whole deduped table.
     expect(compiled.query).toMatch(

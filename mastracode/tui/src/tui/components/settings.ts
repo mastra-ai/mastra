@@ -23,8 +23,7 @@ export interface SettingsConfig {
   thinkingLevel: string;
   currentModelId: string;
   escapeAsCancel: boolean;
-  quietMode: boolean;
-  quietModeMaxToolPreviewLines: number;
+  previewLines: number;
   storageBackend: StorageBackend;
   pgConnectionString: string;
   libsqlUrl: string;
@@ -43,8 +42,7 @@ export interface SettingsCallbacks {
   onYoloChange: (enabled: boolean) => void;
   onThinkingLevelChange: (level: string) => void;
   onEscapeAsCancelChange: (enabled: boolean) => void;
-  onQuietModeChange: (enabled: boolean) => void;
-  onQuietModeMaxToolPreviewLinesChange: (lines: number) => void;
+  onPreviewLinesChange: (lines: number) => void;
   onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => void;
   onExperimentalGithubSignalsChange: (enabled: boolean) => boolean | void | Promise<boolean | void>;
   onExperimentalCrossAgentSignalsChange: (enabled: boolean) => boolean | void | Promise<boolean | void>;
@@ -197,7 +195,7 @@ class StorageBackendSubmenu extends Container {
 // Helpers
 // =============================================================================
 
-function quietPreviewLinesLabel(lines: number): string {
+function previewLinesLabel(lines: number): string {
   return lines === 0 ? 'None' : `${lines} line${lines === 1 ? '' : 's'}`;
 }
 
@@ -357,61 +355,29 @@ export class SettingsComponent extends Box implements Focusable {
           ),
       },
       {
-        id: 'quietMode',
-        label: 'Quiet mode',
-        description: 'Render tool calls compactly and collapse subagent output after completion.',
-        currentValue: config.quietMode ? 'On' : 'Off',
+        id: 'previewLines',
+        label: 'Preview lines',
+        description: 'Preview lines shown under each tool, including shell output. Set to None to hide previews.',
+        currentValue: previewLinesLabel(config.previewLines),
         submenu: (_currentValue, done) =>
           new SelectSubmenu(
-            [
-              {
-                value: 'on',
-                label: '  On',
-                description: 'Compact older tool calls and completed subagents',
-              },
-              {
-                value: 'off',
-                label: '  Off',
-                description: 'Keep normal tool and subagent rendering',
-              },
-            ],
-            config.quietMode ? 'on' : 'off',
+            [0, 1, 2, 4, 8].map(lines => ({
+              value: String(lines),
+              label: `  ${previewLinesLabel(lines)}`,
+              description:
+                lines === 0
+                  ? 'Hide tool previews and shell output'
+                  : `Show up to ${lines} preview line${lines === 1 ? '' : 's'}`,
+            })),
+            String(config.previewLines),
             value => {
-              config.quietMode = value === 'on';
-              callbacks.onQuietModeChange(config.quietMode);
-              done(config.quietMode ? 'On' : 'Off');
+              config.previewLines = Number(value);
+              callbacks.onPreviewLinesChange(config.previewLines);
+              done(previewLinesLabel(config.previewLines));
             },
             () => done(),
           ),
       },
-      ...(config.quietMode
-        ? [
-            {
-              id: 'quietModeMaxToolPreviewLines',
-              label: 'Quiet mode tool preview lines',
-              description: 'Preview lines shown under each tool, including shell output. Set to None to hide previews.',
-              currentValue: quietPreviewLinesLabel(config.quietModeMaxToolPreviewLines),
-              submenu: (_currentValue: string, done: (value?: string) => void) =>
-                new SelectSubmenu(
-                  [0, 1, 2, 4, 8].map(lines => ({
-                    value: String(lines),
-                    label: `  ${quietPreviewLinesLabel(lines)}`,
-                    description:
-                      lines === 0
-                        ? 'Hide tool previews and shell output'
-                        : `Show up to ${lines} preview line${lines === 1 ? '' : 's'}`,
-                  })),
-                  String(config.quietModeMaxToolPreviewLines),
-                  value => {
-                    config.quietModeMaxToolPreviewLines = Number(value);
-                    callbacks.onQuietModeMaxToolPreviewLinesChange(config.quietModeMaxToolPreviewLines);
-                    done(quietPreviewLinesLabel(config.quietModeMaxToolPreviewLines));
-                  },
-                  () => done(),
-                ),
-            },
-          ]
-        : []),
       {
         id: 'webSearchProvider',
         label: 'Web search provider',

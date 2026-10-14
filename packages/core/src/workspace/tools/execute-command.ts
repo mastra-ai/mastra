@@ -89,6 +89,7 @@ function extractTailPipe(command: string): { command: string; tail?: number } {
 
 const ABORTED_COMMAND_NOTE =
   'Command aborted: the run was cancelled (by the user or system) while this command was running, so it was killed before it finished.';
+const CANCELLED_RUN_NOTE = 'The run was cancelled (by the user or system) while this command was running.';
 
 /** Format command streams consistently with get_process_output. */
 function formatCommandOutput(stdout: string, stderr: string): string[] {
@@ -331,10 +332,12 @@ async function executeCommand(input: Record<string, any>, context: any) {
       // The exit code of an aborted command is a provider-specific kill code (LocalSandbox
       // reports 128, which also means "fatal" for git), so the abort signal is the only
       // reliable way to tell the model why it stopped. `killed: false` means the command
-      // exited on its own just before the abort.
+      // exited on its own just before the abort. Only claim a kill when the provider confirms
+      // it; missing kill metadata is not confirmation that remote work stopped.
       const aborted = abortedWhenSettled && result.killed !== false && !result.timedOut;
+      const abortNote = result.killed === true ? ABORTED_COMMAND_NOTE : CANCELLED_RUN_NOTE;
       const exitLine = `Exit code: ${result.exitCode}`;
-      return appendTerminalLine(parts, aborted ? `${ABORTED_COMMAND_NOTE}\n${exitLine}` : exitLine);
+      return appendTerminalLine(parts, aborted ? `${abortNote}\n${exitLine}` : exitLine);
     }
 
     return (
@@ -360,7 +363,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
     );
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorLine = `Error: ${errorMessage}`;
-    return appendTerminalLine(parts, abortedWhenSettled ? `${ABORTED_COMMAND_NOTE}\n${errorLine}` : errorLine);
+    return appendTerminalLine(parts, abortedWhenSettled ? `${CANCELLED_RUN_NOTE}\n${errorLine}` : errorLine);
   }
 }
 

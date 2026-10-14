@@ -12,6 +12,7 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { releaseBoard } from '../../../../../../e2e/ui/board-catalog';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { GithubStatus } from '../../services/github';
@@ -587,6 +588,50 @@ describe('Create Factory wizard', () => {
       },
     ]);
   });
+
+  it.each([
+    { integrationId: 'linear', project: /Mobile App/, sourceId: 'lin-1' },
+    { integrationId: 'jira', project: /Engineering/, sourceId: 'jira-source-1' },
+  ])(
+    'routes the picked $integrationId project without a board when Work is not installed',
+    async ({ integrationId, project, sourceId }) => {
+      const calls: string[] = [];
+      seedDraft('project-management');
+      if (integrationId === 'linear') {
+        stubConnectedLinear();
+      } else {
+        stubConnectedJira();
+        server.use(
+          http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+            HttpResponse.json({ enabled: false, connected: false, workspace: null, reason: 'missing_config' }),
+          ),
+        );
+      }
+      const { intakeConfigs } = stubModelStepEndpoints(calls);
+      const bindings: unknown[] = [];
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/boards`, () =>
+          HttpResponse.json({ boards: [releaseBoard] }),
+        ),
+        http.put(`${TEST_BASE_URL}/web/intake/bindings`, async ({ request }) => {
+          bindings.push(await request.json());
+          return HttpResponse.json({ bindings: [] });
+        }),
+      );
+      const user = userEvent.setup();
+
+      const { client } = renderFlow();
+
+      await user.click(await screen.findByRole('option', { name: project }));
+      await user.click(await screen.findByRole('option', { name: /Anthropic/ }));
+      await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
+
+      await waitForMutationsIdle(client);
+      expect(bindings).toEqual([{ integrationId, sourceId, factoryProjectId: 'fp-1', board: null }]);
+      expect(intakeConfigs.at(-1)).toMatchObject({ [integrationId]: { enabled: true, sourceIds: [sourceId] } });
+      await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1'));
+    },
+  );
 
   it('keeps project-management intake disabled when it is skipped', async () => {
     const calls: string[] = [];

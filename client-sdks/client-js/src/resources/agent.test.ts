@@ -14,6 +14,7 @@ import type {
   SendAgentSignalParams,
   SubscribeAgentThreadParams,
 } from '../types';
+import { MastraClientError } from '../types';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraStream } from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
@@ -1681,6 +1682,85 @@ describe('Agent signal routes', () => {
     expect(mockRequest).toHaveBeenCalledTimes(3);
     expect(onChunk).toHaveBeenNthCalledWith(1, firstChunk);
     expect(onChunk).toHaveBeenNthCalledWith(2, secondChunk);
+  });
+
+  describe('thread subscription reconnect on terminal HTTP errors', () => {
+    const chunk = { type: 'text-delta', runId: 'run-1', from: 'AGENT', payload: { id: 'text-1', text: 'first' } };
+    const encode = (value: unknown) => new TextEncoder().encode(`data: ${JSON.stringify(value)}\n\n`);
+    const endedStream = () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(encode(chunk));
+            controller.close();
+          },
+        }),
+      );
+
+    it.each([401, 403, 404])('stops reconnecting and rejects with the original %s error', async status => {
+      const agent = new Agent(mockClientOptions, 'test-agent');
+      const denied = new MastraClientError(status, 'Denied', `HTTP error! status: ${status}`);
+      const mockRequest = vi.fn().mockResolvedValueOnce(endedStream()).mockRejectedValue(denied);
+      agent['request'] = mockRequest as (typeof agent)['request'];
+
+      const response = await agent.subscribeToThread({ resourceId: 'resource-123', threadId: 'thread-123' });
+
+      await expect(
+        response.processDataStream({ onChunk: vi.fn(), reconnect: { maxRetries: Infinity, delayMs: 0 } }),
+      ).rejects.toBe(denied);
+      expect(mockRequest).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([408, 429, 503])('keeps retrying %s errors within the reconnect limit', async status => {
+      const agent = new Agent(mockClientOptions, 'test-agent');
+      const mockRequest = vi
+        .fn()
+        .mockResolvedValueOnce(endedStream())
+        .mockRejectedValueOnce(new MastraClientError(status, 'Retry later', `HTTP error! status: ${status}`))
+        .mockResolvedValueOnce(endedStream());
+      agent['request'] = mockRequest as (typeof agent)['request'];
+
+      const response = await agent.subscribeToThread({ resourceId: 'resource-123', threadId: 'thread-123' });
+      const onChunk = vi.fn();
+
+      await response.processDataStream({ onChunk, reconnect: { maxRetries: 2, delayMs: 0 } });
+
+      expect(mockRequest).toHaveBeenCalledTimes(3);
+      expect(onChunk).toHaveBeenCalledTimes(2);
+    });
+
+    it('resolves quietly when a denial arrives after unsubscribe', async () => {
+      const agent = new Agent(mockClientOptions, 'test-agent');
+      let rejectResubscribe!: (error: unknown) => void;
+      let resubscribeStarted!: () => void;
+      const started = new Promise<void>(resolve => {
+        resubscribeStarted = resolve;
+      });
+      const mockRequest = vi
+        .fn()
+        .mockResolvedValueOnce(endedStream())
+        .mockImplementationOnce(
+          () =>
+            new Promise((_, reject) => {
+              rejectResubscribe = reject;
+              resubscribeStarted();
+            }),
+        );
+      agent['request'] = mockRequest as (typeof agent)['request'];
+
+      const response = await agent.subscribeToThread({ resourceId: 'resource-123', threadId: 'thread-123' });
+      const processing = response.processDataStream({
+        onChunk: vi.fn(),
+        reconnect: { maxRetries: Infinity, delayMs: 0 },
+      });
+
+      await started;
+      response.unsubscribe();
+      rejectResubscribe(new MastraClientError(401, 'Unauthorized', 'HTTP error! status: 401'));
+
+      await expect(processing).resolves.toBeUndefined();
+      expect(mockRequest).toHaveBeenCalledTimes(2);
+    });
   });
 });
 
