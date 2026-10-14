@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ConsoleLogger } from '../../logger';
 import { Mastra } from '../../mastra';
-import { InMemoryStore, MastraCompositeStore } from '../../storage';
+import { InMemoryStore, KnowledgeInvisibleRecordError, MastraCompositeStore } from '../../storage';
 import { Knowledge } from '../index';
 
 const scopeIds = ['10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002'];
@@ -489,5 +489,43 @@ describe('Knowledge', () => {
     await expect(new Knowledge({ storage: unsupportedStorage }).getStorage()).rejects.toThrow(
       'InMemoryKnowledgeStorage does not support Knowledge.',
     );
+  });
+  describe('record placement', () => {
+    async function setup() {
+      const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'placement' }) });
+      const storage = await knowledge.getStorage();
+      await storage.init();
+      const org = await storage.createNode({ name: 'Org', isScope: true, scopeIds: [] });
+      const project = await storage.createNode({ name: 'Project', isScope: true, scopeIds: [org.id] });
+      const other = await storage.createNode({ name: 'Other', isScope: true, scopeIds: [] });
+      const node = await storage.createNode({ name: 'Subject', scopeIds: [project.id] });
+      return { knowledge, storage, org, project, other, node };
+    }
+
+    it('rejects creating a record no viewer of its subject can see', async () => {
+      const { knowledge, storage, other, node } = await setup();
+      await expect(knowledge.createRecord({ node, text: 'Hidden', scopeIds: [other.id] })).rejects.toBeInstanceOf(
+        KnowledgeInvisibleRecordError,
+      );
+      expect(await storage.listActivity({ scopeIds: [other.id] })).toEqual([]);
+    });
+
+    it('rejects a rescope that leaves the record invisible without changing it', async () => {
+      const { knowledge, storage, project, other, node } = await setup();
+      const record = await knowledge.createRecord({ node, text: 'Evidence', scopeIds: [project.id] });
+      await expect(
+        knowledge.setRecordScopes({ id: record.id, version: record.version, scopeIds: [other.id] }),
+      ).rejects.toBeInstanceOf(KnowledgeInvisibleRecordError);
+      expect(await storage.getRecord({ id: record.id })).toEqual(record);
+      expect(await storage.getRecordScopeIds(record.id)).toEqual([project.id]);
+    });
+
+    it('creates and widens records that stay visible', async () => {
+      const { knowledge, storage, org, project, node } = await setup();
+      const record = await knowledge.createRecord({ node, text: 'Evidence', scopeIds: [project.id] });
+      const widened = await knowledge.setRecordScopes({ id: record.id, version: record.version, scopeIds: [org.id] });
+      expect(widened.version).toBe(record.version + 1);
+      expect(await storage.getRecordScopeIds(record.id)).toEqual([org.id]);
+    });
   });
 });

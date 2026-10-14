@@ -568,6 +568,12 @@ export class KnowledgeNotFoundError extends Error {
     this.name = 'KnowledgeNotFoundError';
   }
 }
+export class KnowledgeInvisibleRecordError extends Error {
+  constructor(nodeId: string, scopeIds: KnowledgeScopeIds) {
+    super(`Knowledge record scopes ${scopeIds.join(', ')} would hide the record from every viewer of node ${nodeId}`);
+    this.name = 'KnowledgeInvisibleRecordError';
+  }
+}
 export class KnowledgeUnsupportedError extends Error {
   constructor(adapter?: string) {
     super(`${adapter ?? 'This storage adapter'} does not support Knowledge.`);
@@ -639,6 +645,44 @@ export function isKnowledgeNodeVisible(
   visibleScopeIds: KnowledgeScopeIds,
 ): boolean {
   return (node.isScope && visibleScopeIds.includes(node.id)) || isKnowledgeScopeVisible(nodeScopeIds, visibleScopeIds);
+}
+
+/**
+ * Rejects a record placement no viewer could read. A viewer holds a scope plus its parent chain, and reads a
+ * record only when that chain includes one of the record scopes and shows the subject node. Only a viewer at one
+ * of the record scopes or of the subject's own scopes can satisfy both, so those are the chains checked. The
+ * node half uses the store's own visibility rule through {@link KnowledgeStorage.listVisibleKnowledgeIds}.
+ * A missing subject or scope is left to the write, which reports it.
+ */
+export async function assertKnowledgeRecordScopesVisible(
+  storage: KnowledgeStorage,
+  input: { node: KnowledgeNodeReference; scopeIds: KnowledgeScopeIds },
+): Promise<void> {
+  const nodeId = typeof input.node === 'string' ? input.node : input.node.id;
+  const recordScopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+  const node = await storage.getNode(nodeId);
+  if (!node || node.deletedAt || recordScopeIds.length === 0) return;
+  const nodeScopeIds = await storage.getNodeScopeIds(nodeId);
+  const viewers = new Set([...recordScopeIds, ...nodeScopeIds, ...(node.isScope ? [node.id] : [])]);
+  for (const viewer of viewers) {
+    const chain = await knowledgeScopeChain(storage, viewer);
+    if (!isKnowledgeScopeVisible(recordScopeIds, chain)) continue;
+    const visible = await storage.listVisibleKnowledgeIds({ nodeIds: [nodeId], recordIds: [], scopeIds: chain });
+    if (visible.nodeIds.length > 0) return;
+  }
+  throw new KnowledgeInvisibleRecordError(nodeId, recordScopeIds);
+}
+
+async function knowledgeScopeChain(storage: KnowledgeStorage, scopeId: string): Promise<KnowledgeScopeIds> {
+  const chain = new Set<string>();
+  const stack = [scopeId];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (chain.has(current)) continue;
+    chain.add(current);
+    stack.push(...(await storage.getNodeScopeIds(current)));
+  }
+  return canonicalizeKnowledgeScopeIds([...chain]);
 }
 
 export function parseKnowledgeWikilinks(text: string): string[] {
