@@ -36,43 +36,44 @@ type SettingsNavGroup = {
   items: SettingsNavItem[];
 };
 
+export const PERSONAL_SETTINGS_ITEMS: SettingsNavItem[] = [
+  {
+    id: 'account',
+    label: SETTINGS_SECTION_LABELS.account,
+    icon: CircleUserRound,
+    searchText: 'my account profile identity email authentication session log out sign out user',
+  },
+  {
+    id: 'preferences',
+    label: SETTINGS_SECTION_LABELS.preferences,
+    icon: Palette,
+    searchText: 'preferences general theme appearance color scheme completion sound',
+  },
+  {
+    id: 'personal-models',
+    label: SETTINGS_SECTION_LABELS['personal-models'],
+    icon: Bot,
+    searchText: 'your personal models default model api keys providers credentials sign in oauth',
+  },
+  {
+    id: 'memory',
+    label: SETTINGS_SECTION_LABELS.memory,
+    icon: Brain,
+    searchText: 'your personal memory observational recall observer reflector thresholds attachments summarize context',
+  },
+  {
+    id: 'connections',
+    label: SETTINGS_SECTION_LABELS.connections,
+    icon: Cable,
+    searchText: 'your personal connections connected accounts slack communication integrations',
+  },
+];
+
 const SETTINGS_GROUPS: SettingsNavGroup[] = [
   {
     id: 'personal',
     label: 'Your settings',
-    items: [
-      {
-        id: 'account',
-        label: SETTINGS_SECTION_LABELS.account,
-        icon: CircleUserRound,
-        searchText: 'my account profile identity email authentication session log out sign out user',
-      },
-      {
-        id: 'preferences',
-        label: SETTINGS_SECTION_LABELS.preferences,
-        icon: Palette,
-        searchText: 'preferences general theme appearance color scheme completion sound',
-      },
-      {
-        id: 'personal-models',
-        label: SETTINGS_SECTION_LABELS['personal-models'],
-        icon: Bot,
-        searchText: 'your personal models default model api keys providers credentials sign in oauth',
-      },
-      {
-        id: 'memory',
-        label: SETTINGS_SECTION_LABELS.memory,
-        icon: Brain,
-        searchText:
-          'your personal memory observational recall observer reflector thresholds attachments summarize context',
-      },
-      {
-        id: 'connections',
-        label: SETTINGS_SECTION_LABELS.connections,
-        icon: Cable,
-        searchText: 'your personal connections connected accounts slack communication integrations',
-      },
-    ],
+    items: PERSONAL_SETTINGS_ITEMS,
   },
   {
     id: 'factory',
