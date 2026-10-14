@@ -60,8 +60,9 @@ export function PageLayout({
       <main className="flex min-h-0 flex-1 flex-col">
         <ScrollArea mask={mask} className="min-h-0 flex-1">
           <ScrollAreaViewport
+            className={cn(variant === 'container' && 'p-4')}
             contentClassName={cn(
-              variant === 'container' && 'p-4',
+              variant === 'container' && 'h-full min-h-min',
               variant === 'narrow' && 'grid min-h-full grid-cols-1',
               // `fit` hands the remaining body height to its child (panels, graphs, tables that own their scroll).
               variant === 'fit' &&

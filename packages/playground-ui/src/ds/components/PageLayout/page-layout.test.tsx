@@ -5,6 +5,8 @@ import { PageLayout } from './index';
 
 afterEach(cleanup);
 
+const viewportOf = (text: string) => screen.getByText(text).closest<HTMLElement>('[style*="overflow"]');
+
 const contentOf = (text: string) =>
   screen.getByText(text).closest('[data-slot="page-layout-container"]')?.parentElement ??
   screen.getByText(text).parentElement;
@@ -92,14 +94,14 @@ describe('PageLayout', () => {
           <p>Body</p>
         </PageLayout>,
       );
-      expect(contentOf('Body')?.className).toContain('p-4');
+      expect(viewportOf('Body')?.className).toContain('p-4');
 
       rerender(
         <PageLayout variant="fit">
           <p>Body</p>
         </PageLayout>,
       );
-      expect(contentOf('Body')?.className).not.toContain('p-4');
+      expect(viewportOf('Body')?.className).not.toContain('p-4');
     });
 
     it.each([undefined, <h1 key="title">Title</h1>])('constrains the "fit" column to the page width', header => {
