@@ -18,6 +18,7 @@ interface SessionChatSurfaceProps {
   secondaryBar?: ReactNode;
   emptyState: ReactNode;
   composerLabel: string;
+  composerFooter?: ReactNode;
   className?: string;
   contentRef?: RefObject<HTMLDivElement | null>;
   contentOverlay?: ReactNode;
@@ -29,6 +30,7 @@ export function SessionChatSurface({
   secondaryBar,
   emptyState,
   composerLabel,
+  composerFooter,
   className,
   contentRef,
   contentOverlay,
@@ -71,6 +73,7 @@ export function SessionChatSurface({
                 <div role="region" aria-label={composerLabel}>
                   <ComposerPanel />
                 </div>
+                {composerFooter}
               </ChatShell.Column>
             </ChatShell.Dock>
           </div>
