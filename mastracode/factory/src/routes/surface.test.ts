@@ -124,6 +124,24 @@ describe('prepareFactoryRuleBinding', () => {
     );
   });
 
+  it('stamps the factory on the session it creates', async () => {
+    const { seeded, sourceControl, project, github } = await seedFactoryWithRepository();
+    const prepare = vi.fn(async () => ({}) as never);
+
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      boards,
+      bindingInput(project.id),
+    );
+
+    const { sessionId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string };
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(
+      expect.objectContaining({ factoryProjectId: project.id }),
+    );
+  });
+
   it("keeps a run an agent pre-approved on the repo connector, never on the agent's id", async () => {
     const { seeded, sourceControl, project, github } = await seedFactoryWithRepository();
     const prepare = vi.fn(async () => ({}) as never);

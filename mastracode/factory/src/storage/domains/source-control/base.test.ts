@@ -1,8 +1,9 @@
+import { UniqueViolationError } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FactoryProjectsStorage } from '../projects/base.js';
-import { SourceControlStorage } from './base.js';
+import { SessionOwnershipMismatchError, SourceControlStorage } from './base.js';
 import type { ProjectRepository, SourceControlStorageHandle } from './base.js';
 import { SourceControlStorageInMemory } from './inmemory.js';
 
@@ -520,6 +521,436 @@ describe('SourceControlStorage', () => {
 
     expect(await github.installations.list({ orgId: 'org-1' })).toEqual([]);
     expect(await github.projectRepositories.get({ orgId: 'org-1', id: link.id })).toBeNull();
+  });
+
+  describe('session factory', () => {
+    const sessionInput = (sessionId: string, projectRepositoryId: string, userId = 'user-1', branch = 'feat/x') => ({
+      sessionId,
+      projectRepositoryId,
+      orgId: 'org-1',
+      userId,
+      branch,
+      baseBranch: 'main',
+    });
+
+    /** A session row written the way the code before `factory_project_id` wrote it. */
+    async function insertLegacySession(args: {
+      sessionId: string;
+      projectRepositoryId: string;
+      userId?: string;
+      branch?: string;
+      createdAt: Date;
+    }) {
+      return backend.ops.insertOne<{ id: string }>('source_control_sessions', {
+        session_id: args.sessionId,
+        project_repository_id: args.projectRepositoryId,
+        org_id: 'org-1',
+        user_id: args.userId ?? 'user-1',
+        branch: args.branch ?? 'feat/x',
+        base_branch: 'main',
+        title: null,
+        visibility: null,
+        sandbox_id: null,
+        sandbox_workdir: null,
+        materialized_at: null,
+        first_message_at: null,
+        created_at: args.createdAt,
+        updated_at: args.createdAt,
+      });
+    }
+
+    const factoryOf = async (sessionId: string) =>
+      (
+        await backend.ops.findOne<{ factory_project_id: string | null }>('source_control_sessions', {
+          session_id: sessionId,
+        })
+      )?.factory_project_id;
+
+    async function twoLinks(factoryProjectId: string) {
+      const installation = await createInstallation(github);
+      const first = await linkRepository({ factoryProjectId, installationId: installation.id });
+      const second = await linkRepository({
+        factoryProjectId,
+        installationId: installation.id,
+        repositoryExternalId: 'repo-2',
+        repositorySlug: 'mastra-ai/second',
+      });
+      return { first, second };
+    }
+
+    it('create derives the factory from the link and rejects a mismatching one', async () => {
+      const project = await createProject();
+      const other = await createProject({ name: 'other' });
+      const link = await linkRepository({ factoryProjectId: project.id });
+
+      const session = await github.sessions.create(sessionInput('00000000-0000-4000-8000-000000000101', link.id));
+      expect(session.factoryProjectId).toBe(project.id);
+      expect(await factoryOf(session.sessionId)).toBe(project.id);
+      expect(
+        await github.sessions.create({
+          ...sessionInput('00000000-0000-4000-8000-000000000102', link.id),
+          factoryProjectId: project.id,
+        }),
+      ).toMatchObject({ id: session.id });
+      await expect(
+        github.sessions.create({
+          ...sessionInput('00000000-0000-4000-8000-000000000103', link.id, 'user-1', 'feat/y'),
+          factoryProjectId: other.id,
+        }),
+      ).rejects.toThrow(/does not match/);
+      expect(
+        await github.sessions.getForBranch({ factoryProjectId: project.id, userId: 'user-1', branch: 'feat/x' }),
+      ).toMatchObject({ id: session.id });
+      expect(
+        await github.sessions.getForBranch({ projectRepositoryId: link.id, userId: 'user-1', branch: 'feat/x' }),
+      ).toMatchObject({ id: session.id });
+    });
+
+    it('rejects the same (factory, user, branch) across two links and allows it across two factories', async () => {
+      const project = await createProject();
+      const other = await createProject({ name: 'other' });
+      const { first, second } = await twoLinks(project.id);
+      const elsewhere = await linkRepository({ factoryProjectId: other.id });
+
+      const session = await github.sessions.create(sessionInput('00000000-0000-4000-8000-000000000111', first.id));
+      // Reuse stays keyed by the link; the same branch on another link of the factory is a violation.
+      expect((await github.sessions.create(sessionInput('00000000-0000-4000-8000-000000000111', first.id))).id).toBe(
+        session.id,
+      );
+      await expect(
+        github.sessions.create(sessionInput('00000000-0000-4000-8000-000000000112', second.id)),
+      ).rejects.toBeInstanceOf(UniqueViolationError);
+      const forced = await insertLegacySession({
+        sessionId: '00000000-0000-4000-8000-000000000113',
+        projectRepositoryId: second.id,
+        createdAt: new Date(),
+      });
+      await expect(
+        backend.ops.updateMany('source_control_sessions', { id: forced.id }, { factory_project_id: project.id }),
+      ).rejects.toBeInstanceOf(UniqueViolationError);
+      const otherFactory = await github.sessions.create(
+        sessionInput('00000000-0000-4000-8000-000000000114', elsewhere.id),
+      );
+      expect(otherFactory.factoryProjectId).toBe(other.id);
+      expect(otherFactory.id).not.toBe(session.id);
+    });
+
+    it('backfills factory_project_id on legacy rows, reports stale links and keeps the oldest of a collision', async () => {
+      const project = await createProject();
+      const { first, second } = await twoLinks(project.id);
+      const plain = await insertLegacySession({
+        sessionId: '00000000-0000-4000-8000-000000000121',
+        projectRepositoryId: first.id,
+        branch: 'solo',
+        createdAt: new Date(Date.UTC(2026, 0, 1)),
+      });
+      const older = await insertLegacySession({
+        sessionId: '00000000-0000-4000-8000-000000000122',
+        projectRepositoryId: first.id,
+        createdAt: new Date(Date.UTC(2026, 0, 2)),
+      });
+      const newer = await insertLegacySession({
+        sessionId: '00000000-0000-4000-8000-000000000123',
+        projectRepositoryId: second.id,
+        createdAt: new Date(Date.UTC(2026, 0, 3)),
+      });
+      const stale = await insertLegacySession({
+        sessionId: '00000000-0000-4000-8000-000000000124',
+        projectRepositoryId: '00000000-0000-4000-8000-0000000000ff',
+        branch: 'stale',
+        createdAt: new Date(Date.UTC(2026, 0, 4)),
+      });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        await domain.init();
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn.mock.calls[0]![0]).toContain('1 sessions have no resolvable factory, 1 sessions collide');
+
+        expect(await factoryOf('00000000-0000-4000-8000-000000000121')).toBe(project.id);
+        expect(await factoryOf('00000000-0000-4000-8000-000000000122')).toBe(project.id);
+        expect(await factoryOf('00000000-0000-4000-8000-000000000123')).toBeNull();
+        expect(await factoryOf('00000000-0000-4000-8000-000000000124')).toBeNull();
+        const ids = (await backend.ops.findMany<{ id: string }>('source_control_sessions', {})).map(r => r.id).sort();
+        expect(ids).toEqual([plain.id, older.id, newer.id, stale.id].sort());
+
+        // Re-running reports the same rows and changes nothing.
+        const before = await backend.ops.findMany('source_control_sessions', {}, { orderBy: [['id', 'asc']] });
+        await domain.init();
+        expect(warn).toHaveBeenCalledTimes(2);
+        expect(await backend.ops.findMany('source_control_sessions', {}, { orderBy: [['id', 'asc']] })).toEqual(before);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('never reuses a session the migration left without factory ownership', async () => {
+      const project = await createProject();
+      const { first, second } = await twoLinks(project.id);
+      await insertLegacySession({
+        sessionId: '00000000-0000-4000-8000-000000000131',
+        projectRepositoryId: first.id,
+        createdAt: new Date(Date.UTC(2026, 0, 1)),
+      });
+      await insertLegacySession({
+        sessionId: '00000000-0000-4000-8000-000000000132',
+        projectRepositoryId: second.id,
+        createdAt: new Date(Date.UTC(2026, 0, 2)),
+      });
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      await domain.init();
+      expect(await factoryOf('00000000-0000-4000-8000-000000000132')).toBeNull();
+
+      // Same owner, link and branch as the collision loser: rejected instead of returned unowned.
+      const attempt = github.sessions.create({
+        ...sessionInput('00000000-0000-4000-8000-000000000133', second.id),
+        factoryProjectId: project.id,
+      });
+      await expect(attempt).rejects.toBeInstanceOf(SessionOwnershipMismatchError);
+      await expect(attempt).rejects.toMatchObject({ sessionId: '00000000-0000-4000-8000-000000000132' });
+    });
+
+    it('create rejects a caller from another organization', async () => {
+      const project = await createProject();
+      const link = await linkRepository({ factoryProjectId: project.id });
+      await expect(
+        github.sessions.create({ ...sessionInput('00000000-0000-4000-8000-000000000141', link.id), orgId: 'org-2' }),
+      ).rejects.toThrow(/not found/);
+      expect(await factoryOf('00000000-0000-4000-8000-000000000141')).toBeUndefined();
+    });
+
+    it('listByProject spans the links of one project within the handle integration and respects visibility', async () => {
+      const project = await createProject();
+      const other = await createProject({ name: 'other' });
+      const { first, second } = await twoLinks(project.id);
+      const gitlabLink = await linkRepository({ handle: gitlab, factoryProjectId: project.id });
+      const elsewhere = await linkRepository({ factoryProjectId: other.id });
+
+      const a = await github.sessions.create(
+        sessionInput('00000000-0000-4000-8000-000000000131', first.id, 'user-1', 'a'),
+      );
+      const b = await github.sessions.create(
+        sessionInput('00000000-0000-4000-8000-000000000132', second.id, 'user-2', 'b'),
+      );
+      const mine = await github.sessions.create({
+        ...sessionInput('00000000-0000-4000-8000-000000000133', second.id, 'user-2', 'c'),
+        visibility: 'private',
+      });
+      await github.sessions.create({
+        ...sessionInput('00000000-0000-4000-8000-000000000134', first.id, 'user-1', 'd'),
+        visibility: 'private',
+      });
+      const viaGitlab = await gitlab.sessions.create(
+        sessionInput('00000000-0000-4000-8000-000000000135', gitlabLink.id, 'user-1', 'e'),
+      );
+      await github.sessions.create(sessionInput('00000000-0000-4000-8000-000000000136', elsewhere.id, 'user-1', 'a'));
+
+      const listed = await github.sessions.listByProject({
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+        viewerUserId: 'user-2',
+      });
+      expect(listed.map(s => s.id).sort()).toEqual([a.id, b.id, mine.id].sort());
+      expect(
+        (
+          await gitlab.sessions.listByProject({ orgId: 'org-1', factoryProjectId: project.id, viewerUserId: 'user-1' })
+        ).map(s => s.id),
+      ).toEqual([viaGitlab.id]);
+      expect(
+        await github.sessions.listByProject({ orgId: 'org-2', factoryProjectId: project.id, viewerUserId: 'user-2' }),
+      ).toEqual([]);
+    });
+
+    it('session repository rows round-trip, are unique per (session, link) and go away with the session', async () => {
+      const project = await createProject();
+      const { first, second } = await twoLinks(project.id);
+      const session = await github.sessions.create(sessionInput('00000000-0000-4000-8000-000000000141', first.id));
+
+      const pushed = await github.sessionRepositories.upsert({
+        sessionId: session.sessionId,
+        projectRepositoryId: first.id,
+        branch: 'feat/x',
+      });
+      expect(pushed).toMatchObject({ branch: 'feat/x', changeRequestId: null, changeRequestUrl: null });
+      const withPr = await github.sessionRepositories.upsert({
+        sessionId: session.sessionId,
+        projectRepositoryId: first.id,
+        branch: 'feat/x',
+        changeRequestId: '42',
+        changeRequestUrl: 'https://example.test/pr/42',
+      });
+      expect(withPr.id).toBe(pushed.id);
+      expect(withPr.createdAt).toEqual(pushed.createdAt);
+      expect(withPr).toMatchObject({ changeRequestId: '42', changeRequestUrl: 'https://example.test/pr/42' });
+      await github.sessionRepositories.upsert({
+        sessionId: session.sessionId,
+        projectRepositoryId: second.id,
+        branch: 'feat/x',
+      });
+      const rows = await github.sessionRepositories.listBySession({ sessionId: session.sessionId });
+      expect(rows.map(r => r.projectRepositoryId)).toEqual([first.id, second.id]);
+      expect(await backend.ops.findMany('source_control_session_repositories', {})).toHaveLength(2);
+
+      await github.sessions.delete(session.id);
+      expect(await github.sessionRepositories.listBySession({ sessionId: session.sessionId })).toEqual([]);
+      expect(await backend.ops.findMany('source_control_session_repositories', {})).toHaveLength(0);
+    });
+
+    it('unlink removes the link sessions and their repository rows', async () => {
+      const project = await createProject();
+      const { first, second } = await twoLinks(project.id);
+      const session = await github.sessions.create(sessionInput('00000000-0000-4000-8000-000000000151', first.id));
+      const kept = await github.sessions.create(
+        sessionInput('00000000-0000-4000-8000-000000000152', second.id, 'user-1', 'other'),
+      );
+      await github.sessionRepositories.upsert({
+        sessionId: session.sessionId,
+        projectRepositoryId: second.id,
+        branch: 'feat/x',
+      });
+      await github.sessionRepositories.upsert({
+        sessionId: kept.sessionId,
+        projectRepositoryId: first.id,
+        branch: 'other',
+      });
+      await github.sessionRepositories.upsert({
+        sessionId: kept.sessionId,
+        projectRepositoryId: second.id,
+        branch: 'other',
+      });
+
+      await github.projectRepositories.unlink({ orgId: 'org-1', id: first.id });
+
+      expect(await github.sessions.getBySessionId(session.sessionId)).toBeNull();
+      expect(await github.sessions.getBySessionId(kept.sessionId)).toMatchObject({ id: kept.id });
+      expect(
+        (await github.sessionRepositories.listBySession({ sessionId: kept.sessionId })).map(r => r.projectRepositoryId),
+      ).toEqual([second.id]);
+      expect(await backend.ops.findMany('source_control_session_repositories', {})).toHaveLength(1);
+    });
+
+    it('deleting a connection removes its sessions and every repository row touching them or its links', async () => {
+      const project = await createProject();
+      const removedLink = await linkRepository({ factoryProjectId: project.id });
+      const otherInstallation = await createInstallation(github, { externalId: 'other-installation' });
+      const keptLink = await linkRepository({
+        factoryProjectId: project.id,
+        installationId: otherInstallation.id,
+        repositoryExternalId: 'repo-2',
+        repositorySlug: 'mastra-ai/second',
+      });
+      expect(keptLink.connectionId).not.toBe(removedLink.connectionId);
+      const removed = await github.sessions.create(
+        sessionInput('00000000-0000-4000-8000-000000000161', removedLink.id),
+      );
+      const kept = await github.sessions.create(
+        sessionInput('00000000-0000-4000-8000-000000000162', keptLink.id, 'user-1', 'other'),
+      );
+      // The removed session's row on the surviving connection's link.
+      await github.sessionRepositories.upsert({
+        sessionId: removed.sessionId,
+        projectRepositoryId: keptLink.id,
+        branch: 'feat/x',
+      });
+      // The surviving session's row on the removed link.
+      await github.sessionRepositories.upsert({
+        sessionId: kept.sessionId,
+        projectRepositoryId: removedLink.id,
+        branch: 'other',
+      });
+      // Unrelated to the removed connection.
+      await github.sessionRepositories.upsert({
+        sessionId: kept.sessionId,
+        projectRepositoryId: keptLink.id,
+        branch: 'other',
+      });
+
+      expect(await github.connections.delete({ orgId: 'org-1', id: removedLink.connectionId })).toBe(true);
+
+      expect(await github.sessions.getBySessionId(removed.sessionId)).toBeNull();
+      expect(await github.sessionRepositories.listBySession({ sessionId: removed.sessionId })).toEqual([]);
+      expect(await github.sessions.getBySessionId(kept.sessionId)).toMatchObject({ id: kept.id });
+      expect(
+        (await github.sessionRepositories.listBySession({ sessionId: kept.sessionId })).map(r => r.projectRepositoryId),
+      ).toEqual([keptLink.id]);
+      expect(await backend.ops.findMany('source_control_session_repositories', {})).toHaveLength(1);
+    });
+
+    it('the in-memory handle mirrors factory derivation, listByProject and session repositories', async () => {
+      const store = new SourceControlStorageInMemory('github');
+      const installation = await store.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: 'inst',
+      });
+      const repoA = await store.repositories.upsert({
+        orgId: 'org-1',
+        input: { installationId: installation.id, externalId: 'a', slug: 'acme/a', defaultBranch: 'main' },
+      });
+      const repoB = await store.repositories.upsert({
+        orgId: 'org-1',
+        input: { installationId: installation.id, externalId: 'b', slug: 'acme/b', defaultBranch: 'main' },
+      });
+      const connection = await store.connections.create({
+        orgId: 'org-1',
+        factoryProjectId: 'project-1',
+        installationId: installation.id,
+        createdByUserId: 'user-1',
+      });
+      const linkInput = { orgId: 'org-1', connectionId: connection.id, ...projectRepositoryInput };
+      const first = await store.projectRepositories.link({ ...linkInput, repositoryId: repoA.id });
+      const second = await store.projectRepositories.link({ ...linkInput, repositoryId: repoB.id });
+
+      const session = await store.sessions.create(sessionInput('s-1', first.id));
+      expect(session.factoryProjectId).toBe('project-1');
+      expect((await store.sessions.create(sessionInput('s-1', first.id))).id).toBe(session.id);
+      await expect(store.sessions.create(sessionInput('s-2', second.id))).rejects.toBeInstanceOf(UniqueViolationError);
+      // Callers pass the factory too; it must not widen reuse to another link's session.
+      expect(
+        (await store.sessions.create({ ...sessionInput('s-1', first.id), factoryProjectId: 'project-1' })).id,
+      ).toBe(session.id);
+      await expect(
+        store.sessions.create({ ...sessionInput('s-2', second.id), factoryProjectId: 'project-1' }),
+      ).rejects.toBeInstanceOf(UniqueViolationError);
+      await expect(
+        store.sessions.create({ ...sessionInput('s-3', first.id, 'user-1', 'y'), factoryProjectId: 'project-2' }),
+      ).rejects.toThrow(/does not match/);
+      const priv = await store.sessions.create({
+        ...sessionInput('s-4', second.id, 'user-2', 'z'),
+        visibility: 'private',
+      });
+      const listFor = async (viewerUserId: string) =>
+        (await store.sessions.listByProject({ orgId: 'org-1', factoryProjectId: 'project-1', viewerUserId })).map(
+          s => s.id,
+        );
+      expect(await listFor('user-1')).toEqual([session.id]);
+      expect(await listFor('user-2')).toEqual([session.id, priv.id]);
+      expect(
+        await store.sessions.getForBranch({ factoryProjectId: 'project-1', userId: 'user-1', branch: 'feat/x' }),
+      ).toBe(session);
+
+      const row = await store.sessionRepositories.upsert({
+        sessionId: 's-1',
+        projectRepositoryId: second.id,
+        branch: 'feat/x',
+      });
+      const updated = await store.sessionRepositories.upsert({
+        sessionId: 's-1',
+        projectRepositoryId: second.id,
+        branch: 'feat/x',
+        changeRequestId: '7',
+      });
+      expect(updated.id).toBe(row.id);
+      expect(await store.sessionRepositories.listBySession({ sessionId: 's-1' })).toHaveLength(1);
+      await store.sessions.delete(session.id);
+      expect(await store.sessionRepositories.listBySession({ sessionId: 's-1' })).toEqual([]);
+
+      const another = await store.sessions.create(sessionInput('s-2', first.id));
+      await store.sessionRepositories.upsert({ sessionId: 's-2', projectRepositoryId: second.id, branch: 'feat/y' });
+      expect(await store.connections.delete({ orgId: 'org-1', id: connection.id })).toBe(true);
+      expect(await store.sessions.getBySessionId(another.sessionId)).toBeNull();
+      expect(await store.sessionRepositories.listBySession({ sessionId: 's-2' })).toEqual([]);
+      expect(await store.projectRepositories.get({ orgId: 'org-1', id: second.id })).toBeNull();
+    });
   });
 
   describe('environment', () => {

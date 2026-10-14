@@ -21,7 +21,6 @@ import {
   ensureFactorySourceSession,
   FactorySourceSessionResolutionError,
   resolveFactoryDefaultModelId,
-  resolveFactoryProjectForSession,
   resolveFactorySourceControl,
   resolveFactorySourceRepository,
 } from '../session/factory-session.js';
@@ -43,6 +42,7 @@ import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/bas
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
 import {
+  SessionOwnershipMismatchError,
   SourceControlConnectionNotFoundError,
   type SourceControlStorage,
   type SourceControlStorageHandle,
@@ -202,16 +202,14 @@ async function reuseBoundSession(
   if (!ref) return undefined;
   // At least as strict as the coordinator's resolveSourceSession: a ref it
   // would reject must fall through to minting, not hard-fail the run.
-  const resolved = await resolveFactoryProjectForSession({ sourceControl, sessionId: ref.sessionId });
+  const session = await sourceControl.sessions.getBySessionId(ref.sessionId);
   if (
-    !resolved ||
-    resolved.orgId !== input.record.orgId ||
-    resolved.factoryProjectId !== input.record.factoryProjectId
+    !session?.projectRepositoryId ||
+    session.orgId !== input.record.orgId ||
+    session.factoryProjectId !== input.record.factoryProjectId
   ) {
     return undefined;
   }
-  const session = await sourceControl.sessions.getBySessionId(ref.sessionId);
-  if (!session) return undefined;
   return {
     sessionId: session.sessionId,
     userId: session.userId,
@@ -372,6 +370,13 @@ export async function prepareFactoryRuleBinding(
         // A person who approved the run is its interactive user: attribute it to
         // them, not the repo connector. An agent's pre-approval names no person.
         attributeToUserId: isAgentActor(approver) ? undefined : approver,
+      }).catch(error => {
+        if (!(error instanceof SessionOwnershipMismatchError)) throw error;
+        throw new FactoryDispatchError(
+          'session_unavailable',
+          `Session ${error.sessionId} on branch ${branch} predates factory ownership and cannot be reused. Delete that session, then retry.`,
+          { cause: error },
+        );
       }));
 
     await coordinator.prepare({
@@ -632,6 +637,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       : buildSourceControlSessionRoutes({
           auth: deps.auth,
           sourceControls,
+          projects: deps.domains.projects,
           ...(deps.users ? { users: deps.users } : {}),
           controller: deps.controller,
           memorySettings: deps.domains.memorySettings,

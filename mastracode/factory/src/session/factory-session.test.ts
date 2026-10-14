@@ -1,3 +1,5 @@
+import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
+import { UniqueViolationError } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -6,7 +8,6 @@ import {
   ensureFactorySourceSession,
   hydrateFactorySession,
   resolveFactoryDefaultModelId,
-  resolveFactoryProjectForSession,
   resolveFactorySourceControl,
   resolveFactorySourceRepository,
 } from './factory-session.js';
@@ -146,6 +147,8 @@ describe('ensureFactorySourceSession', () => {
     await expect(sourceControl.sessions.getBySessionId(result.sessionId)).resolves.toEqual(
       expect.objectContaining({
         projectRepositoryId: projectRepository.id,
+        // The session row carries its factory directly, so readers no longer walk link -> connection.
+        factoryProjectId: project.id,
         userId: 'user-1',
         branch: 'factory/issue-49',
         baseBranch: 'main',
@@ -153,6 +156,46 @@ describe('ensureFactorySourceSession', () => {
         visibility: 'org',
       }),
     );
+  });
+
+  it('rejects the same branch for the same user on a second link of the factory', async () => {
+    const { sourceControl, project, repository, projectRepository } = await seedLinkedRepository();
+    const other = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: {
+        installationId: repository.installationId,
+        externalId: '457',
+        slug: 'mastra-ai/mastra-website',
+        defaultBranch: 'main',
+      },
+    });
+    await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: projectRepository.connectionId,
+      repositoryId: other.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/mastra-website',
+    });
+    const first = await ensureFactorySourceSession({
+      sourceControl,
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      repositorySlug: repository.slug,
+      branch: 'factory/issue-7',
+    });
+    expect(first.projectRepositoryId).toBe(projectRepository.id);
+
+    // Branches are unique per (factory, user, branch) now; the second link does not get its own session.
+    await expect(
+      ensureFactorySourceSession({
+        sourceControl,
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+        repositorySlug: other.slug,
+        branch: 'factory/issue-7',
+      }),
+    ).rejects.toBeInstanceOf(UniqueViolationError);
   });
 
   it('requires the repository target when creating a source-control session', async () => {
@@ -531,35 +574,5 @@ describe('resolveFactorySourceRepository', () => {
         firstLinkedRepository: true,
       }),
     ).resolves.toEqual({ found: false, reason: 'repository' });
-  });
-});
-
-/**
- * A repo-backed channel thread is keyed by its Factory session id, and that id
- * is the only handle a session-start hook receives. This is the walk back to
- * the project whose configuration the session should adopt.
- */
-describe('resolveFactoryProjectForSession', () => {
-  it('walks a session id back to its project, org, and owner', async () => {
-    const { sourceControl, project, repository } = await seedLinkedRepository();
-    const created = await ensureFactorySourceSession({
-      sourceControl,
-      orgId: 'org-1',
-      factoryProjectId: project.id,
-      repositorySlug: repository.slug,
-      branch: 'slack/1700-42',
-    });
-
-    await expect(resolveFactoryProjectForSession({ sourceControl, sessionId: created.sessionId })).resolves.toEqual({
-      factoryProjectId: project.id,
-      orgId: 'org-1',
-      userId: 'user-1',
-    });
-  });
-
-  it('resolves nothing for a session id that does not exist', async () => {
-    const { sourceControl } = await seedLinkedRepository();
-
-    await expect(resolveFactoryProjectForSession({ sourceControl, sessionId: 'not-a-session' })).resolves.toBeNull();
   });
 });
