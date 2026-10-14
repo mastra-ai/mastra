@@ -631,9 +631,9 @@ which is why the cleanup client stays exempt.
 | Q3 `spans.some`             | 635–640 MiB, ok     | 630–631 MiB, ok     |
 | E4 token/cost on raw tables | 1,022–1,040 MiB, ok | 1,019–1,023 MiB, ok |
 
-The plan's "old `queryTraces()` shapes use 2.6–4 GiB" came from the lab's synthetic data; on production they stay
-under 650 MiB. E4 on the raw tables now sits at the 1 GiB cap (991 MiB in FINDINGS, data has grown): a raw-table
-token aggregate over 30 d on the largest project will start failing with 422. Token/cost aggregates for large
+The aggregate bench's Q0 `queryTraces()` baseline peaks at 528–536 MiB on the largest project; the keyset/delta shapes
+measured in the trace-query bench (QX02/QX14) reached 2.9–4 GiB on prod and are what the cap stops. E4 on the raw tables now
+sits at the 1 GiB cap (991 MiB in FINDINGS, data has grown): a raw-table token aggregate over 30 d on the largest project will start failing with 422. Token/cost aggregates for large
 projects need the per-call usage table (`mastra_model_usage`, 338 MiB in X35) before they ship.
 
 **Conclusions.**
