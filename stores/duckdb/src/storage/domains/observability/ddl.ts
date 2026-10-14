@@ -88,7 +88,14 @@ CREATE TABLE IF NOT EXISTS span_events (
   -- not carry that payload.
   inputPreview VARCHAR,
   outputPreview VARCHAR,
-  errorPreview VARCHAR
+  errorPreview VARCHAR,
+
+  -- Whether this row carries a non-null input/output/error payload. Lets the
+  -- light trace list pick each preview's row without reading the payloads.
+  -- NULL on rows written before these columns existed.
+  hasInputPayload BOOLEAN,
+  hasOutputPayload BOOLEAN,
+  hasErrorPayload BOOLEAN
 )`;
 
 /** DDL for the metric_events append-only table. */
@@ -347,6 +354,9 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS inputPreview VARCHAR`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS outputPreview VARCHAR`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS errorPreview VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS hasInputPayload BOOLEAN`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS hasOutputPayload BOOLEAN`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS hasErrorPayload BOOLEAN`,
 
   // Metrics. Legacy rows remain page-visible but are not part of delta polling.
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS cursorId BIGINT`,

@@ -16,7 +16,8 @@ afterAll(() => store.close());
 /** Clears a span's stored previews, leaving its event rows as the writer wrote them before previews. */
 async function clearPreviews(traceId: string, spanId: string): Promise<void> {
   await store.db.execute(
-    `UPDATE span_events SET inputPreview = NULL, outputPreview = NULL, errorPreview = NULL
+    `UPDATE span_events SET inputPreview = NULL, outputPreview = NULL, errorPreview = NULL,
+       hasInputPayload = NULL, hasOutputPayload = NULL, hasErrorPayload = NULL
      WHERE traceId = ? AND spanId = ?`,
     [traceId, spanId],
   );
@@ -90,6 +91,46 @@ describe('DuckDB stored previews', () => {
     ]);
   });
 
+  it('keeps the older payload preview when an upgraded end row carries no payload', async () => {
+    await storage.batchCreateSpans({ records: [span({ endedAt: null })] });
+    await clearPreviews('trace-rows', 'root-rows');
+    await storage.batchCreateSpans({ records: [span({ input: null })] });
+
+    const { spans } = await storage.listTracesLight({ pagination: { page: 0, perPage: 10 } });
+    expect(spans[0]!.inputPreview).toBe('the input');
+  });
+
+  it('lists traces without scanning the input or output payloads', async () => {
+    await storage.batchCreateSpans({ records: [span({ endedAt: null })] });
+    await storage.batchCreateSpans({ records: [span()] });
+    const query = vi.spyOn(store.db, 'query');
+    let calls: unknown[][];
+    try {
+      const { spans } = await storage.listTracesLight({ pagination: { page: 0, perPage: 10 } });
+      expect(spans[0]).toMatchObject({ inputPreview: 'the input', outputPreview: 'the output' });
+      calls = query.mock.calls;
+    } finally {
+      query.mockRestore();
+    }
+
+    const scanned: string[][] = [];
+    for (const [sql, params] of calls) {
+      const plan = await store.db.query<{ explain_value: string }>(`EXPLAIN ${sql}`, params as unknown[]);
+      const text = plan.map(row => row.explain_value).join('\n');
+      for (const [, projections] of text.matchAll(/SCAN[\s\S]*?Projections:([\s\S]*?)(?:Filters:|Estimated|└)/g)) {
+        scanned.push(
+          projections!
+            .split(/[│\n]/)
+            .map(column => column.trim())
+            .filter(Boolean),
+        );
+      }
+    }
+    expect(scanned.some(columns => columns.includes('inputPreview'))).toBe(true);
+    expect(scanned.flat()).not.toContain('input');
+    expect(scanned.flat()).not.toContain('output');
+  });
+
   it('keeps an upstream preview recorded without a payload', async () => {
     await storage.batchCreateSpans({ records: [span({ input: null, inputPreview: 'upstream input' })] });
 
@@ -151,6 +192,11 @@ describe('DuckDB stored previews', () => {
          WHERE table_name = 'span_events' AND column_name LIKE '%Preview' ORDER BY column_name`,
       );
       expect(columns.map(c => c.column_name)).toEqual(['errorPreview', 'inputPreview', 'outputPreview']);
+      const flags = await legacy.db.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+         WHERE table_name = 'span_events' AND column_name LIKE 'has%Payload' ORDER BY column_name`,
+      );
+      expect(flags.map(c => c.column_name)).toEqual(['hasErrorPayload', 'hasInputPayload', 'hasOutputPayload']);
       const rows = await legacy.db.query<{ inputPreview: string | null }>(`SELECT inputPreview FROM span_events`);
       expect(rows).toEqual([{ inputPreview: null }]);
     } finally {

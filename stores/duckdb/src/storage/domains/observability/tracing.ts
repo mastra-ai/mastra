@@ -89,6 +89,9 @@ const COLUMNS = [
   'inputPreview',
   'outputPreview',
   'errorPreview',
+  'hasInputPayload',
+  'hasOutputPayload',
+  'hasErrorPayload',
 ] as const;
 
 const COLUMNS_SQL = COLUMNS.join(', ');
@@ -106,21 +109,23 @@ function argMaxNonNull(col: string): string {
   return `arg_max(${col}, timestamp) FILTER (WHERE ${col} IS NOT NULL${placeholder}) as ${col}`;
 }
 
-/** The payload column each stored preview column describes. */
+/** The payload column each stored preview column describes, and its payload-presence flag. */
 const PREVIEW_PAYLOADS = [
-  ['inputPreview', 'input'],
-  ['outputPreview', 'output'],
-  ['errorPreview', 'error'],
+  ['inputPreview', 'input', 'hasInputPayload'],
+  ['outputPreview', 'output', 'hasOutputPayload'],
+  ['errorPreview', 'error', 'hasErrorPayload'],
 ] as const;
 
 /**
  * Select the preview from the latest event carrying its payload (or an explicit preview).
  * Wrapping the preview preserves NULL on that event instead of reviving an older preview.
- * Payload presence must be checked here to distinguish blank content from a payload-less event.
+ * The stored presence flag tells blank content from a payload-less event without reading the
+ * payload. Rows written before the flag (NULL) always qualify: their NULL preview sends the span
+ * to {@link fillMissingReconstructedPreviews}, which rebuilds it from the payloads.
  */
 const RECONSTRUCT_PREVIEWS_SQL = PREVIEW_PAYLOADS.map(
-  ([preview, payload]) =>
-    `(coalesce(arg_max(struct_pack(value := ${preview}), timestamp) FILTER (WHERE (${payload} IS NOT NULL AND CAST(${payload} AS VARCHAR) <> '${JSON_NULL_PLACEHOLDER}') OR ${preview} <> ''), arg_max(struct_pack(value := ${preview}), timestamp))).value as ${preview}`,
+  ([preview, , present]) =>
+    `(coalesce(arg_max(struct_pack(value := ${preview}), timestamp) FILTER (WHERE coalesce(${present}, true) OR ${preview} <> ''), arg_max(struct_pack(value := ${preview}), timestamp))).value as ${preview}`,
 ).join(',\n    ');
 
 const SPAN_RECONSTRUCT_SELECT = `
@@ -644,6 +649,10 @@ interface SpanEventRow {
   inputPreview: string | null;
   outputPreview: string | null;
   errorPreview: string | null;
+  /** Whether the row carries a non-null payload in each slot. See {@link RECONSTRUCT_PREVIEWS_SQL}. */
+  hasInputPayload: boolean;
+  hasOutputPayload: boolean;
+  hasErrorPayload: boolean;
 }
 
 /** JSON text of a payload value, or null when it is missing. */
@@ -709,6 +718,9 @@ function toValuesTuple(row: SpanEventRow): string {
     v(row.inputPreview),
     v(row.outputPreview),
     v(row.errorPreview),
+    v(row.hasInputPayload),
+    v(row.hasOutputPayload),
+    v(row.hasErrorPayload),
   ].join(', ');
 }
 
@@ -768,6 +780,9 @@ function createStartSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     inputPreview: input.preview,
     outputPreview: '',
     errorPreview: '',
+    hasInputPayload: input.json !== null,
+    hasOutputPayload: false,
+    hasErrorPayload: false,
   };
 }
 
@@ -814,6 +829,9 @@ function createEndSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     inputPreview: input.preview,
     outputPreview: output.preview,
     errorPreview: error.preview,
+    hasInputPayload: input.json !== null,
+    hasOutputPayload: output.json !== null,
+    hasErrorPayload: error.json !== null,
   };
 }
 
