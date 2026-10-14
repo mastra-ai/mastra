@@ -3,6 +3,7 @@ import { isKnowledgeScopeVisible, KnowledgeConflictError } from '@mastra/core/st
 import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
+import { knowledgeRecordWriter } from './knowledge-tools';
 
 type SubconsciousScopeSelection = 'org' | 'resource' | 'thread';
 
@@ -41,7 +42,9 @@ const dateTimeSchema: JSONSchema7 = {
 type KnowledgeWriteToolsMemory = {
   getKnowledgeStore?: () => Promise<KnowledgeStorage>;
   getKnowledgeInstance?: () =>
-    | { __getVisibleStructureScopes(heldAddresses: string[]): Promise<Array<{ address: string }>> }
+    | (Pick<KnowledgeStorage, 'createRecord' | 'setRecordScopes'> & {
+        __getVisibleStructureScopes(heldAddresses: string[]): Promise<Array<{ address: string }>>;
+      })
     | undefined;
   storage?: {
     getStore(name: 'knowledge'): Promise<KnowledgeStorage | undefined>;
@@ -213,7 +216,11 @@ export function createKnowledgeWriteTools(
         if (!value.confirmDistinct) {
           const { exact, similar } = await findSimilarNodes(store, options.scopeIds, value.name);
           // An exact-name visible node is reused rather than duplicated at another scope.
-          if (exact) return { node: exact, record: await store.createRecord({ ...record, node: exact }) };
+          if (exact)
+            return {
+              node: exact,
+              record: await knowledgeRecordWriter(memory, store).createRecord({ ...record, node: exact }),
+            };
           if (similar.length > 0) {
             throw new Error(
               `Similar nodes already exist: ${similar.map(node => `${node.id} "${node.name}"`).join(', ')}. Append to one of them with knowledge_append, or retry with confirmDistinct: true if this is a different thing.`,
@@ -249,7 +256,7 @@ export function createKnowledgeWriteTools(
         await requireVisible(store, 'node', parent.id, options, 'Knowledge node');
         const when = value.when ? new Date(value.when) : undefined;
         if (when && Number.isNaN(when.getTime())) throw new Error('KnowledgeRecord when must be a valid date.');
-        return store.createRecord({
+        return knowledgeRecordWriter(memory, store).createRecord({
           node: parent,
           text: value.text,
           scopeIds: resolveWriteScopeIds(options, value.scope),
@@ -399,7 +406,7 @@ export function createKnowledgeWriteTools(
         if (!record) throw new Error(`KnowledgeRecord not found: ${value.recordId}`);
         await requireVisible(store, 'record', record.id, options, 'KnowledgeRecord');
         if (record.version !== value.expectedVersion) throw new KnowledgeConflictError(record.id);
-        return store.setRecordScopes({
+        return knowledgeRecordWriter(memory, store).setRecordScopes({
           id: record.id,
           version: record.version,
           scopeIds: resolveWriteScopeIds(options, value.scope),
