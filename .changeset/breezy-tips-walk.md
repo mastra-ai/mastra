@@ -2,9 +2,6 @@
 '@mastra/core': patch
 ---
 
-Server telemetry events can now carry an optional secondary project identifier, `project_id2`, while all existing project identifiers remain unchanged. It is derived from the `MASTRA_PROJECT_ID` environment variable when set (prefixed `mp_`), falling back to a SHA-256 hash of the project's git `origin` remote URL, and is omitted when neither is available.
+Added an optional `project_id2` to server feature and model-usage telemetry while preserving existing project identifiers and usage cursors. UUID-shaped `MASTRA_PROJECT_ID` values are sent unhashed with an `mp_` prefix for direct Platform lookup. Other values fall back to a hash of the normalized Git `origin` remote, discovered asynchronously without blocking startup. The field is omitted when neither source is available.
 
-```bash
-# Optional: give telemetry a stable project identity across machines and deployments
-MASTRA_PROJECT_ID=<your-platform-project-id> mastra start
-```
+These events are project-linked, not anonymous. Git-derived identifiers can also be matched against known repository URLs. Set `MASTRA_TELEMETRY_DISABLED=1` to disable telemetry and skip Git discovery.

@@ -1,3 +1,4 @@
+import { execFile } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -13,6 +14,7 @@ const { capture, flush, PostHog } = vi.hoisted(() => {
 });
 
 vi.mock('posthog-node', () => ({ PostHog }));
+vi.mock('node:child_process', { spy: true });
 
 import type { Mastra } from '../mastra';
 import type { CreateMetricRecord } from '../storage/domains';
@@ -55,8 +57,9 @@ describe('syncUsageTelemetry', () => {
     tmpDir = mkdtempSync(path.join(os.tmpdir(), 'mastra-usage-telemetry-'));
     cursorPath = path.join(tmpDir, 'cursors', 'usage-telemetry.json');
     process.env['MASTRA_PROJECT_ROOT'] = tmpDir;
-    process.env['MASTRA_PROJECT_ID'] = 'platform-project-id';
+    process.env['MASTRA_PROJECT_ID'] = '550e8400-e29b-41d4-a716-446655440000';
     store = new InMemoryStore();
+    vi.mocked(execFile).mockClear();
     capture.mockClear();
     flush.mockClear();
     PostHog.mockClear();
@@ -111,7 +114,7 @@ describe('syncUsageTelemetry', () => {
       total_input_tokens: 150,
       total_output_tokens: 30,
       project_id: hashTelemetryValue(tmpDir).slice(0, 16),
-      project_id2: 'mp_platform-project-id',
+      project_id2: 'mp_550e8400-e29b-41d4-a716-446655440000',
       is_first_sync: true,
       window_start: null,
       window_end: '2026-06-03T00:00:00.000Z',
@@ -181,12 +184,14 @@ describe('syncUsageTelemetry', () => {
     expect(JSON.parse(readFileSync(cursorPath, 'utf-8')).projects).not.toEqual({});
   });
 
-  it('does nothing when telemetry is disabled', async () => {
-    process.env['MASTRA_TELEMETRY_DISABLED'] = 'true';
+  it.each(['1', 'true', 'yes'])('skips Git discovery and usage telemetry when disabled with %s', async value => {
+    process.env['MASTRA_TELEMETRY_DISABLED'] = value;
+    delete process.env['MASTRA_PROJECT_ID'];
     await seedUsage();
 
     await syncUsageTelemetry(makeMastra(store), { cursorPath, now: new Date('2026-06-03T00:00:00Z') });
 
+    expect(execFile).not.toHaveBeenCalled();
     expect(PostHog).not.toHaveBeenCalled();
     expect(capture).not.toHaveBeenCalled();
     expect(() => readFileSync(cursorPath, 'utf-8')).toThrow();
