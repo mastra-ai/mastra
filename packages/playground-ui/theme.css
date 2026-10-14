@@ -32,7 +32,7 @@
    the darkest surface, sitting behind everything, and the sidebar and cards
    share one lighter surface on top: lighter reads as nearer on a dark canvas.
    Light keeps the usual order, a grey rail beside a near-white page with white
-   cards. Popovers sit one rung above cards in both. */
+   cards. In dark, popovers sit one rung above the cards. */
 :root {
   --background: var(--background-1);
   --sidebar: var(--background-2);
