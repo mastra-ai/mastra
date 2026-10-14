@@ -259,7 +259,7 @@ function ScopeTree({
     if (path.has(node.id)) return null;
     const nextPath = new Set(path).add(node.id);
     const marker = markerByNodeId.get(node.id);
-    const sessionPrefix = `resource:${factoryProjectId}:thread:`;
+    const sessionPrefix = `project:${factoryProjectId}:thread:`;
     const sessionId =
       !marker && factoryProjectId && node.address.startsWith(sessionPrefix)
         ? node.address.slice(sessionPrefix.length)
