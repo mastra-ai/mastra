@@ -1,10 +1,11 @@
 import { Agent, isDurableAgentLike } from '@mastra/core/agent';
 import type {
   AgentEditorConfig,
-  AgentMessageInput,
   AgentModelManagerConfig,
   AgentSignalInput,
   DurableAgentLike,
+  SendAgentSignalOptions,
+  SendAgentSignalResult,
 } from '@mastra/core/agent';
 import { AGENT_STREAM_TOPIC, DurableStepIds } from '@mastra/core/agent/durable';
 import type { AIV5Type } from '@mastra/core/agent/message-list';
@@ -2123,24 +2124,24 @@ async function handleAgentMessageRoute({
   mastra,
   agentId,
   requestContext: serverRequestContext,
-  payload,
   runId,
   resourceId,
   threadId,
   ifActive,
   ifIdle,
   methodName,
+  invoke,
 }: {
   mastra: any;
   agentId: string;
   requestContext: RequestContext;
-  payload: AgentMessageInput | AgentSignalInput;
   runId?: string;
   resourceId?: string;
   threadId?: string;
   ifActive?: { behavior?: 'deliver' | 'persist' | 'discard' };
   ifIdle?: { behavior?: 'wake' | 'persist' | 'discard'; streamOptions?: Record<string, unknown> };
   methodName: 'sendMessage' | 'queueMessage' | 'queueSignal';
+  invoke: (agent: Agent, target: SendAgentSignalOptions) => SendAgentSignalResult;
 }) {
   const idleStreamOptions = ifIdle?.streamOptions as
     | (Record<string, unknown> & { requestContext?: Record<string, unknown>; versions?: VersionOverrides })
@@ -2179,12 +2180,12 @@ async function handleAgentMessageRoute({
   }
 
   if (runId) {
-    const result = await (agent as any)[methodName](payload, {
+    const result = await invoke(agent, {
       runId,
       ...(effectiveResourceId ? { resourceId: effectiveResourceId } : {}),
       ...(effectiveThreadId ? { threadId: effectiveThreadId } : {}),
       ...(ifActive ? { ifActive } : {}),
-    } as any);
+    } as SendAgentSignalOptions);
     const settled = await result.accepted;
     const settledRunId: string = settled && 'runId' in settled ? settled.runId : runId;
     return result.signal === undefined
@@ -2196,12 +2197,12 @@ async function handleAgentMessageRoute({
     throw new HTTPException(400, { message: 'resourceId and threadId are required when runId is not provided' });
   }
 
-  const result = await (agent as any)[methodName](payload, {
+  const result = await invoke(agent, {
     resourceId: effectiveResourceId,
     threadId: effectiveThreadId,
     ...(ifActive ? { ifActive } : {}),
     ...ifIdleWithContext,
-  } as any);
+  } as SendAgentSignalOptions);
   const settled = await result.accepted;
   const settledRunId: string = settled && 'runId' in settled ? settled.runId : result.signal?.id;
   return result.signal === undefined
@@ -2223,7 +2224,11 @@ export const SEND_AGENT_MESSAGE_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async params => {
     try {
-      return await handleAgentMessageRoute({ ...params, payload: params.message, methodName: 'sendMessage' });
+      return await handleAgentMessageRoute({
+        ...params,
+        methodName: 'sendMessage',
+        invoke: (agent, target) => agent.sendMessage(params.message, target),
+      });
     } catch (error) {
       return handleSignalRoutingError(error, 'error sending agent message');
     }
@@ -2245,7 +2250,11 @@ export const QUEUE_AGENT_MESSAGE_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async params => {
     try {
-      return await handleAgentMessageRoute({ ...params, payload: params.message, methodName: 'queueMessage' });
+      return await handleAgentMessageRoute({
+        ...params,
+        methodName: 'queueMessage',
+        invoke: (agent, target) => agent.queueMessage(params.message, target),
+      });
     } catch (error) {
       return handleSignalRoutingError(error, 'error queueing agent message');
     }
@@ -2267,7 +2276,11 @@ export const QUEUE_AGENT_SIGNAL_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async params => {
     try {
-      return await handleAgentMessageRoute({ ...params, payload: params.signal, methodName: 'queueSignal' });
+      return await handleAgentMessageRoute({
+        ...params,
+        methodName: 'queueSignal',
+        invoke: (agent, target) => agent.queueSignal(params.signal, target),
+      });
     } catch (error) {
       return handleSignalRoutingError(error, 'error queueing agent signal');
     }

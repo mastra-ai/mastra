@@ -3408,6 +3408,32 @@ describe('Agent Routes Authorization', () => {
       expect(capturedTarget.ifIdle.streamOptions.requestContext).toBe(requestContext);
     });
 
+    it('should reject queueing a signal on a thread owned by another resource', async () => {
+      await mockMemory.createThread({
+        threadId: 'queue-signal-thread-owned-by-b',
+        resourceId: 'user-b',
+        title: 'Queue Signal Thread B',
+      });
+      (mockAgent as any).queueSignal = vi.fn();
+
+      await expect(
+        (QUEUE_AGENT_SIGNAL_ROUTE.handler as any)({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          signal: {
+            type: 'reactive',
+            tagName: 'skill',
+            attributes: { name: 'factory-triage' },
+            contents: 'Triage it.',
+          },
+          resourceId: 'user-a',
+          threadId: 'queue-signal-thread-owned-by-b',
+        }),
+      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      expect((mockAgent as any).queueSignal).not.toHaveBeenCalled();
+    });
+
     it('should merge idle stream request context before waking a thread with a signal', async () => {
       await mockMemory.createThread({
         threadId: 'signal-thread-with-context',

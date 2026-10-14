@@ -8681,14 +8681,23 @@ describe('Agent signals', () => {
     await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
     const result = agent.queueSignal(
       { type: 'reactive', tagName: 'skill', attributes: { name: 'factory-triage' }, contents: 'Triage the card.' },
-      { resourceId: 'queue-signal-user', threadId: 'queue-signal-thread' },
+      {
+        resourceId: 'queue-signal-user',
+        threadId: 'queue-signal-thread',
+        ifIdle: { attributes: { delivery: 'queued' } },
+      },
     );
 
-    expect(result.signal).toMatchObject({ type: 'reactive', tagName: 'skill', attributes: { name: 'factory-triage' } });
+    expect(result.signal).toMatchObject({
+      type: 'reactive',
+      tagName: 'skill',
+      attributes: { name: 'factory-triage', delivery: 'queued' },
+    });
     const settled = await result.accepted;
     const queuedRunId = 'runId' in settled ? settled.runId : undefined;
     expect(settled.action).toBe('deliver');
     expect(queuedRunId).not.toBe(stream.runId);
+    await vi.waitFor(() => expect(streamCount).toBe(1));
     await nextTick();
     expect(streamCount).toBe(1);
 
@@ -8700,7 +8709,9 @@ describe('Agent signals', () => {
     expect(secondRun.value.text).toBe('skill response');
     expect(streamCount).toBe(2);
     expect(JSON.stringify(prompts[0])).not.toContain('Triage the card.');
-    expect(JSON.stringify(prompts[1])).toContain('<skill name=\\"factory-triage\\">Triage the card.</skill>');
+    expect(JSON.stringify(prompts[1])).toContain(
+      '<skill delivery=\\"queued\\" name=\\"factory-triage\\">Triage the card.</skill>',
+    );
 
     subscription.unsubscribe();
   });

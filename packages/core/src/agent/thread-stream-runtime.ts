@@ -5534,10 +5534,12 @@ export class AgentThreadStreamRuntime {
       : baseQueuedStreamOptions;
 
     if (activeRecord || state.activeThreadRunIds.has(key)) {
+      // The queued run starts once the thread is idle, so idle delivery attributes apply.
+      const queuedSignal = resolveDeliveryAttributes(signal, target.ifIdle?.attributes);
       const idleQueue = state.pendingIdleSignalsByThread.get(key) ?? [];
       idleQueue.push({
         agent,
-        signal,
+        signal: queuedSignal,
         runId: queuedRunId,
         resourceId,
         threadId,
@@ -5551,7 +5553,7 @@ export class AgentThreadStreamRuntime {
         this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
       }
       return {
-        signal,
+        signal: queuedSignal,
         accepted: control.ready.then(() => ({ action: 'deliver' as const, runId: queuedRunId })),
       };
     }
