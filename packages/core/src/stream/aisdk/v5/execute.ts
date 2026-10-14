@@ -96,6 +96,7 @@ export function hasFreeFormObject(schema: unknown): boolean {
   const items = node.items;
   if (Array.isArray(items)) subschemas.push(...items);
   else if (items) subschemas.push(items);
+  if (Array.isArray(node.prefixItems)) subschemas.push(...node.prefixItems);
   return subschemas.some(hasFreeFormObject);
 }
 

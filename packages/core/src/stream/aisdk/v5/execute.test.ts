@@ -630,6 +630,12 @@ describe('execute OpenAI strict-mode schema preparation (issue #23795)', () => {
     expect(captured.options.providerOptions?.openai?.strictJsonSchema).toBe(true);
   });
 
+  it('sends schemas with a record inside a tuple non-strict for OpenAI models', async () => {
+    const { model, captured } = makeCapturingModel('openai.responses');
+    await run(model, { schema: z.object({ pair: z.tuple([z.string(), z.record(z.string(), z.string())]) }) });
+    expect(captured.options.providerOptions?.openai?.strictJsonSchema).toBe(false);
+  });
+
   describe('hasFreeFormObject', () => {
     it('ignores a property that is named like a schema keyword', () => {
       const schema = {
@@ -662,6 +668,7 @@ describe('execute OpenAI strict-mode schema preparation (issue #23795)', () => {
       expect(hasFreeFormObject({ type: 'array', items: record })).toBe(true);
       expect(hasFreeFormObject({ anyOf: [{ type: 'null' }, record] })).toBe(true);
       expect(hasFreeFormObject({ $defs: { Labels: record } })).toBe(true);
+      expect(hasFreeFormObject({ type: 'array', prefixItems: [{ type: 'string' }, record] })).toBe(true);
     });
   });
 
