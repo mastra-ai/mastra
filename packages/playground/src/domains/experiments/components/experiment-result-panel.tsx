@@ -53,7 +53,7 @@ export type ExperimentResultPanelResult = Pick<DatasetExperimentResult, 'id' | '
     tags?: string[] | null;
   };
 
-export type ExperimentResultPanelScore = { id: string; scorerId: string; score: number };
+export type ExperimentResultPanelScore = { id: string; scorerId: string; score: number; reason?: string | null };
 
 export type ExperimentResultPanelProps = {
   /** Keep the panel mounted and pass `undefined` to close it, so the drawer animates out. */
@@ -249,6 +249,7 @@ function ExperimentResultPanelBody({
       scores: (scores ?? []).map(score => ({
         scorerId: score.scorerId,
         value: score.score,
+        reason: score.reason,
         label: onScoreClick ? (
           <ScoreButton
             scorerId={score.scorerId}

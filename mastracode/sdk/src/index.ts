@@ -106,6 +106,7 @@ import type { PluginProcessorEntries } from './plugins/types.js';
 import { PlanRejectionAbortProcessor } from './processors/plan-rejection-abort.js';
 import { createAmazonBedrockGateway } from './providers/amazon-bedrock-gateway.js';
 import { setAuthStorage } from './providers/claude-max.js';
+import { createGitHubCopilotGateway } from './providers/github-copilot-gateway.js';
 import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
 import { setAuthStorage as setKimiCodingAuthStorage } from './providers/kimi-coding.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
@@ -281,8 +282,12 @@ export interface MastraCodeConfig {
   cwd?: string;
   /** Home directory for global config discovery. Default: os.homedir() */
   homeDir?: string;
-  /** Override modes (model IDs, colors, which modes exist). Default: build/plan/fast */
-  modes?: AgentControllerMode[];
+  /**
+   * Override modes (model IDs, colors, which modes exist). Default: build/plan/fast.
+   * `false` runs every session as the single Build agent with no mode switching:
+   * threads saved in another mode reopen as Build, and per-mode thinking defaults never apply.
+   */
+  modes?: AgentControllerMode[] | false;
   /** Replace subagent definitions. Default: explore/plan/execute. An empty array disables subagents. */
   subagents?: AgentControllerSubagent[];
   /** Extra tools merged into the dynamic tool set. Can be a static record or a (sync or async) function that receives requestContext. */
@@ -511,6 +516,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const cwd = config?.cwd ?? process.cwd();
   const homeDir = config?.homeDir ?? config?.initialState?.homeDir;
   const configDir = config?.configDir ?? DEFAULT_CONFIG_DIR;
+  const modeless = config?.modes === false;
   // The single session for this process, assigned once `createSession()` runs
   // below. Config callbacks defined before then (e.g. notification stream
   // options) read it lazily through this holder.
@@ -595,6 +601,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     settingsPath: config?.settingsPath,
   });
   const amazonBedrockGateway = createAmazonBedrockGateway();
+  const githubCopilotGateway = createGitHubCopilotGateway();
 
   // Project detection
   const project = detectProject(cwd);
@@ -1204,7 +1211,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     },
     // `settingsPath` matches the source `createMastraCode()` reads from so the
     // per-mode thinking defaults resolve against the same config file.
-    model: ctx => getDynamicModel(ctx, config?.settingsPath),
+    model: ctx => getDynamicModel(ctx, config?.settingsPath, { modeless }),
     // Deferred notifications are re-dispatched by the core notification
     // dispatch workflow long after the originating send; the delivery policy
     // rebuilds the request context (model selection included) at delivery time
@@ -1356,6 +1363,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         // discards retry:true, so the processor no-ops instead of rotating.
         maxProcessorRetries: MASTRACODE_MAX_PROCESSOR_RETRIES,
         settingsPath: config?.settingsPath,
+        modeless,
       }),
     ],
     // Individual processors have tighter limits; this remains a defensive
@@ -1465,7 +1473,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const effectiveObserveAttachments = globalSettings.models.omObserveAttachments ?? 'auto';
 
   const modes = addPluginToolsToModeAllowlists(
-    applyModeDefaultsToModes(config?.modes ? config.modes : defaultModes, effectiveDefaults),
+    applyModeDefaultsToModes(
+      config?.modes === false ? [buildMode] : (config?.modes ?? defaultModes),
+      effectiveDefaults,
+    ),
     Object.keys(pluginTools),
   );
   const defaultModeId =
@@ -1582,11 +1593,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       routesToOtherGateway(
         modelId,
         Object.values(controller.getMastra()?.listGateways() ?? {}),
-        new Set([mastraCodeGateway.id, amazonBedrockGateway.id, 'models.dev']),
+        new Set([mastraCodeGateway.id, amazonBedrockGateway.id, githubCopilotGateway.id, 'models.dev']),
       )
         ? modelId
         : resolveModel(modelId, { requestContext }),
-    gateways: [amazonBedrockGateway, mastraCodeGateway],
+    gateways: [amazonBedrockGateway, githubCopilotGateway, mastraCodeGateway],
     workspace: config?.workspace ?? (args => getDynamicWorkspace({ ...args, backgroundToolsEnabled })),
     browser: config?.browser,
     idGenerator: config?.idGenerator,
