@@ -236,6 +236,17 @@ export const CASES: CaseDef[] = [
   },
   {
     ...base,
+    id: 'T12',
+    api: 'traces',
+    title: `spans.some(durationMs gt ${SLOW_MS})`,
+    kind: 'unseeded',
+    relations: ['spans'],
+    stages: listStages,
+    cost: 40,
+    request: () => keyset({ where: spansSome(gt('durationMs', SLOW_MS)) }),
+  },
+  {
+    ...base,
     id: 'T8',
     api: 'traces',
     title: 'spans.some(spanType eq model_generation AND status eq error)',

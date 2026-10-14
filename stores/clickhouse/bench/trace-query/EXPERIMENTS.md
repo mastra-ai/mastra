@@ -57,44 +57,46 @@ trace has exactly one root span; traces with several are a bug to fix at the sou
 
 ## Experiment register
 
-| ID    | Env  | Question                                                                                         | Result (short)                                                                                                                         | Status                     |
-| ----- | ---- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
-| QX00  | prod | Duplicate census: do a trace's root copies differ?                                               | Rare (≤ 11 traces / 30d), all exact copies under one `dedupeKey`                                                                       | done                       |
-| QX01  | prod | Is the ~165 MiB floor the same for `queryTraces()`?                                              | Yes; prefetch off → 8–36 MiB until the query's own state dominates                                                                     | done                       |
-| QX02  | prod | Is sorting the blobs the p99/largest driver? (diagnostic `noblob`)                               | Yes: p99 30d 2.9–3.9 GiB → 174–184 MiB; largest 7d ✗ → 243–353 MiB                                                                     | done                       |
-| QX03  | prod | Narrow-then-hydrate, one statement (`nh`) or two (`nh2`)?                                        | Both fix the blow-up; `nh2` reads half as much. 52 / 52 equivalent                                                                     | done → I1                  |
-| QX04  | prod | Does scoping / time-bounding the re-read (`rs`) cut memory?                                      | Bytes 1.3–10× less, memory unchanged on its own                                                                                        | done                       |
-| QX05  | prod | Top-N in sort-key order (`topn`, `topn2`)?                                                       | `topn` doesn't read in order for the default sort; `topn2` is window-independent (33–57 MiB at largest 7d)                             | done → I2                  |
-| QX05b | prod | `nh2+topn2`, and one thread                                                                      | 19–43 MiB warm everywhere with `nopf+t1`; `bs` dead end                                                                                | done (see QX09)            |
-| QX06  | prod | Page mode without window functions (`pg`)                                                        | 18–27 MiB through p99, 73 at largest (warm, `nopf+t1`); 9 / 9 equivalent                                                               | done → I3                  |
-| QX07  | prod | Delta (`dtop`) and groups (`rs`)                                                                 | Delta fixed (42–81 MiB); groups at largest stuck at 245                                                                                | done                       |
-| QX08  | prod | Relation filters (`sp`); `dtop+rs`; groups `g2`                                                  | `sp` 18–27 MiB list; `rs` halves delta bytes; `g2` largest 275 → 13                                                                    | done → I4, I5, I7          |
-| QX09  | prod | Cold: prefetch × threads × rewrites                                                              | One thread / 2 threads not shippable cold; 4 threads + `pf8` never slower than base; `rb`, `nopf@2`, `bs@2`, `dtop+rs+nh` dead ends    | done → I6, I8              |
-| QX10  | prod | The rewritten compiler (exact current roots) vs main                                             | 80 / 80 lists equivalent; no 4 GiB failures; ≤ 50 MiB per statement to p99 except payloads (≤ 86); ≤ 180 at largest                    | done                       |
-| QX11  | prod | Merge total-and-bound and list into one statement?                                               | Equivalent, but 1.75–2× QX10's memory and cold timeouts at heavy p99                                                                   | dead end                   |
-| QX12  | prod | Keys + total, then rows by exact key (no list bound)                                             | 56 equivalent; keyset at or below old cold; page ~5 s slower cold than QX10; largest T0 206 MiB                                        | superseded                 |
-| QX13  | prod | QX12 with the current root picked by a window function                                           | 62 equivalent; cold at or below old for keyset / page / groups; groups largest 174 → 108 MiB                                           | done → I9                  |
-| QX14  | prod | I9 ported to the compiler vs the old one (+ delta at a live anchor)                              | 90 / 90 lists, 0 payload differences; cold no worse except delta p99 (+10–20 %) and T7 (old ✗ too)                                     | done                       |
-| QX15  | prod | Delta filters its index by its tenant columns (Platform)                                         | 8 / 8 equivalent (2 old-side OOM); cold p99 9–12 s vs old 22–24, largest 7d ✗ → 13–15 s                                                | done → I10                 |
-| QX16  | lab  | Lab baseline: old vs current compiler                                                            | Same shape as prod with a ~7 MiB floor instead of ~14; current compiler ≈ 0.7× prod's numbers                                          | done                       |
-| QX17  | lab  | Span-name index for span filters                                                                 | 16 / 16 equivalent; T7 keys statement bytes ×0.11–0.33, memory ×0.65–0.72                                                              | done → I13                 |
-| QX18  | lab  | Stored input preview                                                                             | Rows by key bytes ×0.06–0.2, memory ×0.68–0.88; keys statement unchanged                                                               | done → I12                 |
-| QX19  | lab  | Narrow current-roots table (upper bound)                                                         | 32 / 32 equivalent; keys statement ×0.36–0.73; groups 22–64 → 8–10 MiB                                                                 | done → I11                 |
-| QX20  | lab  | I11 + I12 + I13 together                                                                         | 15 / 15 lists equivalent; every statement ≤ 23 MiB to p99, ≤ 83 at largest 7d (current: 48 / 165)                                      | done                       |
-| QX21  | prod | Build the preview in SQL at read time instead of a stored column?                                | No: same bytes as reading `input`, memory equal or up to ×1.2; dropping `input` (stored-column bound) ×0.3–0.8 memory, ×0.02–0.5 bytes | dead end → I12             |
-| QX22  | lab  | Insert cost of filling I12 with a `MATERIALIZED` SQL column?                                     | Root-row insert CPU ×2.5 (6 KiB inputs) to ×5.9 (117 KiB); ~60 µs / ~1.2 ms per root vs 4 / 41 µs for `buildInputPreview()` in Node    | done → I12 in the writer   |
-| QX23  | prod | How many root spans does a trace have, and do copies of one differ?                              | 0.22% of traces (10 orgs) have 2–352 distinct root spans: resumes, shared `traceId`s, rootless tool calls; 1 re-sent copy in 7 days    | done → I11 not recommended |
-| QX24  | prod | Drop the current-root rule (one root per trace, team decision)?                                  | 65 / 65 lists equivalent; first statement ×0.5–0.8 memory, ×0.3–0.6 bytes, cold about halved; with I10, delta largest 7d ✗ → 8 s       | done → I14                 |
-| QX25  | prod | Platform's merged trace query (#3499) as it is, every endpoint                                   | Keyset lists, delta and span filters 0.6–1.5 GiB at p99, > 4 GiB at largest 7d; `/spans/query` 676 MiB, span values 537 MiB at largest | done                       |
-| QX26  | prod | Platform: collapse roots within the window only (one root per trace)                             | Re-read-bound endpoints ×0.5–0.9 memory, ×0.3–0.5 bytes, cold about halved; keyset / delta / span filters unchanged (blob sorts)       | done                       |
-| QX26b | prod | Platform: exact alternative (latest root among all of a trace's roots)                           | ×1.2–3.1 QX26's memory, ×2–3 bytes, cold ×2–3; worse than #3499 at largest                                                             | dead end → QX26's rule     |
-| QX27  | prod | Platform: sort narrow rows, hydrate the page's payloads                                          | Keyset lists > 4 GiB → 170–207 MiB at largest 7d, 1.2 GiB → 73–81 at heavy p99                                                         | done                       |
-| QX29  | prod | Platform: delta collapses only the changed traces                                                | > 4 GiB → 45 MiB at largest 7d (cold 22 → 5.5 s); 1.2 GiB → 51 at heavy p99                                                            | done                       |
-| QX30  | prod | Platform: span filters without the per-span collapse                                             | 470–544 → 195–224 MiB at largest 7d; 177–185 → 83–84 at heavy p99                                                                      | done                       |
-| QX31  | prod | Platform: `/spans/query` reads its range once                                                    | 674 → 293 MiB at largest 7d; 301 → 189 at heavy p99                                                                                    | done                       |
-| QX32  | prod | Platform: QX26–QX31 on top of main's stored previews (#3445), every endpoint                     | Same as the steps; payload reads use `inputPreview` (17 MiB, 0.3 MB at T0) and fall back to `input` only for older roots               | done                       |
-| QX33  | prod | Platform: span values count distinct spans instead of collapsing span copies                     | V6 576 → 138 MiB at largest 7d, 884 → 223 at 30d; identical value/count lists on 12 project × window cells                             | done                       |
-| QX34  | prod | Platform: final branch vs #3499, every endpoint, p90 / p99 / heavy p99 / largest × 1d / 7d / 30d | Every request < 512 MiB at largest 7d; at largest 30d all but `/spans/query` (1457 → 576); discovery ≤ 223 MiB                         | done (cold partial)        |
+| ID    | Env  | Question                                                                                                | Result (short)                                                                                                                         | Status                     |
+| ----- | ---- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| QX00  | prod | Duplicate census: do a trace's root copies differ?                                                      | Rare (≤ 11 traces / 30d), all exact copies under one `dedupeKey`                                                                       | done                       |
+| QX01  | prod | Is the ~165 MiB floor the same for `queryTraces()`?                                                     | Yes; prefetch off → 8–36 MiB until the query's own state dominates                                                                     | done                       |
+| QX02  | prod | Is sorting the blobs the p99/largest driver? (diagnostic `noblob`)                                      | Yes: p99 30d 2.9–3.9 GiB → 174–184 MiB; largest 7d ✗ → 243–353 MiB                                                                     | done                       |
+| QX03  | prod | Narrow-then-hydrate, one statement (`nh`) or two (`nh2`)?                                               | Both fix the blow-up; `nh2` reads half as much. 52 / 52 equivalent                                                                     | done → I1                  |
+| QX04  | prod | Does scoping / time-bounding the re-read (`rs`) cut memory?                                             | Bytes 1.3–10× less, memory unchanged on its own                                                                                        | done                       |
+| QX05  | prod | Top-N in sort-key order (`topn`, `topn2`)?                                                              | `topn` doesn't read in order for the default sort; `topn2` is window-independent (33–57 MiB at largest 7d)                             | done → I2                  |
+| QX05b | prod | `nh2+topn2`, and one thread                                                                             | 19–43 MiB warm everywhere with `nopf+t1`; `bs` dead end                                                                                | done (see QX09)            |
+| QX06  | prod | Page mode without window functions (`pg`)                                                               | 18–27 MiB through p99, 73 at largest (warm, `nopf+t1`); 9 / 9 equivalent                                                               | done → I3                  |
+| QX07  | prod | Delta (`dtop`) and groups (`rs`)                                                                        | Delta fixed (42–81 MiB); groups at largest stuck at 245                                                                                | done                       |
+| QX08  | prod | Relation filters (`sp`); `dtop+rs`; groups `g2`                                                         | `sp` 18–27 MiB list; `rs` halves delta bytes; `g2` largest 275 → 13                                                                    | done → I4, I5, I7          |
+| QX09  | prod | Cold: prefetch × threads × rewrites                                                                     | One thread / 2 threads not shippable cold; 4 threads + `pf8` never slower than base; `rb`, `nopf@2`, `bs@2`, `dtop+rs+nh` dead ends    | done → I6, I8              |
+| QX10  | prod | The rewritten compiler (exact current roots) vs main                                                    | 80 / 80 lists equivalent; no 4 GiB failures; ≤ 50 MiB per statement to p99 except payloads (≤ 86); ≤ 180 at largest                    | done                       |
+| QX11  | prod | Merge total-and-bound and list into one statement?                                                      | Equivalent, but 1.75–2× QX10's memory and cold timeouts at heavy p99                                                                   | dead end                   |
+| QX12  | prod | Keys + total, then rows by exact key (no list bound)                                                    | 56 equivalent; keyset at or below old cold; page ~5 s slower cold than QX10; largest T0 206 MiB                                        | superseded                 |
+| QX13  | prod | QX12 with the current root picked by a window function                                                  | 62 equivalent; cold at or below old for keyset / page / groups; groups largest 174 → 108 MiB                                           | done → I9                  |
+| QX14  | prod | I9 ported to the compiler vs the old one (+ delta at a live anchor)                                     | 90 / 90 lists, 0 payload differences; cold no worse except delta p99 (+10–20 %) and T7 (old ✗ too)                                     | done                       |
+| QX15  | prod | Delta filters its index by its tenant columns (Platform)                                                | 8 / 8 equivalent (2 old-side OOM); cold p99 9–12 s vs old 22–24, largest 7d ✗ → 13–15 s                                                | done → I10                 |
+| QX16  | lab  | Lab baseline: old vs current compiler                                                                   | Same shape as prod with a ~7 MiB floor instead of ~14; current compiler ≈ 0.7× prod's numbers                                          | done                       |
+| QX17  | lab  | Span-name index for span filters                                                                        | 16 / 16 equivalent; T7 keys statement bytes ×0.11–0.33, memory ×0.65–0.72                                                              | done → I13                 |
+| QX18  | lab  | Stored input preview                                                                                    | Rows by key bytes ×0.06–0.2, memory ×0.68–0.88; keys statement unchanged                                                               | done → I12                 |
+| QX19  | lab  | Narrow current-roots table (upper bound)                                                                | 32 / 32 equivalent; keys statement ×0.36–0.73; groups 22–64 → 8–10 MiB                                                                 | done → I11                 |
+| QX20  | lab  | I11 + I12 + I13 together                                                                                | 15 / 15 lists equivalent; every statement ≤ 23 MiB to p99, ≤ 83 at largest 7d (current: 48 / 165)                                      | done                       |
+| QX21  | prod | Build the preview in SQL at read time instead of a stored column?                                       | No: same bytes as reading `input`, memory equal or up to ×1.2; dropping `input` (stored-column bound) ×0.3–0.8 memory, ×0.02–0.5 bytes | dead end → I12             |
+| QX22  | lab  | Insert cost of filling I12 with a `MATERIALIZED` SQL column?                                            | Root-row insert CPU ×2.5 (6 KiB inputs) to ×5.9 (117 KiB); ~60 µs / ~1.2 ms per root vs 4 / 41 µs for `buildInputPreview()` in Node    | done → I12 in the writer   |
+| QX23  | prod | How many root spans does a trace have, and do copies of one differ?                                     | 0.22% of traces (10 orgs) have 2–352 distinct root spans: resumes, shared `traceId`s, rootless tool calls; 1 re-sent copy in 7 days    | done → I11 not recommended |
+| QX24  | prod | Drop the current-root rule (one root per trace, team decision)?                                         | 65 / 65 lists equivalent; first statement ×0.5–0.8 memory, ×0.3–0.6 bytes, cold about halved; with I10, delta largest 7d ✗ → 8 s       | done → I14                 |
+| QX25  | prod | Platform's merged trace query (#3499) as it is, every endpoint                                          | Keyset lists, delta and span filters 0.6–1.5 GiB at p99, > 4 GiB at largest 7d; `/spans/query` 676 MiB, span values 537 MiB at largest | done                       |
+| QX26  | prod | Platform: collapse roots within the window only (one root per trace)                                    | Re-read-bound endpoints ×0.5–0.9 memory, ×0.3–0.5 bytes, cold about halved; keyset / delta / span filters unchanged (blob sorts)       | done                       |
+| QX26b | prod | Platform: exact alternative (latest root among all of a trace's roots)                                  | ×1.2–3.1 QX26's memory, ×2–3 bytes, cold ×2–3; worse than #3499 at largest                                                             | dead end → QX26's rule     |
+| QX27  | prod | Platform: sort narrow rows, hydrate the page's payloads                                                 | Keyset lists > 4 GiB → 170–207 MiB at largest 7d, 1.2 GiB → 73–81 at heavy p99                                                         | done                       |
+| QX29  | prod | Platform: delta collapses only the changed traces                                                       | > 4 GiB → 45 MiB at largest 7d (cold 22 → 5.5 s); 1.2 GiB → 51 at heavy p99                                                            | done                       |
+| QX30  | prod | Platform: span filters without the per-span collapse                                                    | 470–544 → 195–224 MiB at largest 7d; 177–185 → 83–84 at heavy p99                                                                      | done                       |
+| QX31  | prod | Platform: `/spans/query` reads its range once                                                           | 674 → 293 MiB at largest 7d; 301 → 189 at heavy p99                                                                                    | done                       |
+| QX32  | prod | Platform: QX26–QX31 on top of main's stored previews (#3445), every endpoint                            | Same as the steps; payload reads use `inputPreview` (17 MiB, 0.3 MB at T0) and fall back to `input` only for older roots               | done                       |
+| QX33  | prod | Platform: span values count distinct spans instead of collapsing span copies                            | V6 576 → 138 MiB at largest 7d, 884 → 223 at 30d; identical value/count lists on 12 project × window cells                             | done                       |
+| QX34  | prod | Platform: final branch vs #3499, every endpoint, p90 / p99 / heavy p99 / largest × 1d / 7d / 30d        | Every request < 512 MiB at largest 7d; at largest 30d all but `/spans/query` (1457 → 576); discovery ≤ 223 MiB                         | done (cold partial)        |
+| QX35  | prod | Platform: prod equivalence, branch vs #3499, lists / pages / delta / threads / span filters / discovery | 167 / 167 compared cells identical; 23 differ only in `inputPreview` (main's stored-preview format)                                    | done                       |
+| QX36  | prod | Platform: span filters on endedAt / durationMs read the latest copy of each span                        | Collapsing every span: 842 MiB largest 30d; collapsing only copied spans: 408 MiB; identical results on 16 cells                       | done                       |
 
 ## Entries
 
@@ -1080,5 +1082,58 @@ Findings:
   have cold reps (1 each). Where measured, cold is roughly halved (groups / threads / fields 20–25 → 8–16 s, S0
   26 → 17 s). Pages at largest 30d and span filters at heavy p99 30d exceed 30 s on both arms; TH2 / V5 heavy p99 30d
   read 2–3 s slower (single rep). Cold is first-read object-storage latency; #3499 is over 9 s cold in the same cells.
-- **Equivalence on prod** was run for V6 only (QX33, 12/12). Lists, delta, threads and paging are covered by the
-  Platform ClickHouse integration test, not by a prod hash comparison.
+- **Equivalence on prod** was run for V6 only here (QX33, 12/12); QX35 covers the other endpoints.
+
+### QX35: prod equivalence, branch vs #3499 (2026-10-14, prod)
+
+`platform.ts equiv`, old = #3499 (`e994813bf`), new = the branch, each cell walked old → new → old (control). Each
+arm's responses are reduced to SHA-256 hashes in memory; only hashes and counts are recorded. Cases T0, T1, T4, O2, P0,
+P1, D1, G0, T7, T9, T10, TH0, TH2, OF0, V1, V5, V6 on p90 / p99 / heavy p99 × 1d / 7d / 30d, and largest at 1d (#3499
+fails above 4 GiB at largest 7d and 30d, so nothing to compare there). Keyset cases walk 3 pages with the returned
+cursor; delta walks a pinned head; pages compare totals.
+
+`inputPreview` is hashed separately: main's stored previews (#3445) changed the format the branch returns (last user
+message instead of all messages joined), so it is reported as `previewDiffs`, not as a mismatch.
+
+Findings:
+
+- **167 / 167 compared cells identical** in order, set and totals, with a stable control. 0 mismatches, 0 drift. T4
+  skipped 3 cells (no `metadataValue` literal for that project).
+- 23 cells differ only in `inputPreview`, as expected.
+- No multi-root differences showed up: the documented trade-off (a trace judged on its in-window roots only) didn't
+  change any compared page.
+
+### QX36: span duration filters read the latest span copy (2026-10-14, prod)
+
+Review question on #3529: span filters no longer collapse copies of a span, while `/spans/query` shows the latest copy.
+A one-off aggregate on prod (counts only) over copied spans (same org / project / trace / span stored more than once):
+
+| Project / window | Spans | Copied | status / name / entity / type / attributes / dedupeKey differ | endedAt, error text differ |
+| ---------------- | ----: | -----: | ------------------------------------------------------------: | -------------------------: |
+| heavy p99, 30d   | 1.31M |  1,360 |                                                             0 |                      1,360 |
+| largest, 30d     | 3.00M |  8,825 |                                                             0 |                      8,825 |
+| heavy p99, 7d    |  308K |    224 |                                                             0 |                        224 |
+| p99, 7d          |  299K |      0 |                                                             – |                          – |
+
+Copies are errored spans stored again later with another error message. Predicates can't read error text (`error` is
+presence-only), so only `endedAt` and `durationMs` can answer differently per copy. The branch now collapses copies
+only when a span filter reads one of those. New case T12 = `spans.some(durationMs gt SLOW_MS)`; warm MiB, main
+statement:
+
+| Variant                                          | heavy p99 7d | heavy p99 30d | largest 7d | largest 30d |
+| ------------------------------------------------ | -----------: | ------------: | ---------: | ----------: |
+| #3499                                            |         1461 |          3056 |      >4096 |       >4096 |
+| collapse every span (`LIMIT 1 BY spanId`)        |          176 |           557 |        525 |         840 |
+| **kept: drop older copies of copied spans only** |       **86** |       **137** |    **218** |     **408** |
+
+The kept form aggregates a 64-bit span hash once (`HAVING count() > 1`, keeping `max(endedAt)`), then the span scan
+drops the older copies of those spans. It reads the spans twice (largest 30d 860 → 1797 MB, warm 3.6 → 6.2 s) in
+exchange for half the memory; memory is the cap.
+
+Findings:
+
+- **Every T12 cell fits the 512 MiB cap**; the full collapse didn't at heavy p99 30d and largest 7d / 30d.
+- **Identical results**: `equiv` of the full-collapse commit vs the kept form, T12 and T9 on p90 / p99 / heavy p99 /
+  largest × 7d / 30d: 16 / 16 cells match (3 pages each), stable control.
+- Other span filters (T7, T9, T10) and span values (V6) are unchanged: they still read any copy.
+- Integration test: a span stored twice with a later `endedAt`; removing the copy filter fails it.

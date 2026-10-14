@@ -796,6 +796,23 @@ function items(response: Json): Json[] {
   return [];
 }
 
+/**
+ * Main's stored previews (#3445) changed the preview format the branch returns, so previews are compared on their own
+ * and left out of the structural page hash.
+ */
+function withoutPreviews(response: Json): Json {
+  const strip = (item: Json) => {
+    const { inputPreview: _preview, ...rest } = item;
+    return rest;
+  };
+  return Object.fromEntries(
+    Object.entries(response).map(([k, v]) => [
+      k,
+      Array.isArray(v) ? (v as Json[]).map(i => (i && typeof i === 'object' ? strip(i) : i)) : v,
+    ]),
+  );
+}
+
 function itemKey(item: Json): string {
   return JSON.stringify([item.projectId, item.traceId ?? item.threadId ?? item.spanId ?? item.value ?? item.path]);
 }
@@ -808,6 +825,8 @@ interface Walk {
   keys: string[];
   totals: unknown[];
   count: number;
+  /** Item key -> preview hash, in memory only. */
+  previews: Map<string, string>;
 }
 
 async function walk(
@@ -818,7 +837,7 @@ async function walk(
   caseId: string,
   pages: number,
 ): Promise<Walk> {
-  const out: Walk = { ok: true, pages: [], set: '', keys: [], totals: [], count: 0 };
+  const out: Walk = { ok: true, pages: [], set: '', keys: [], totals: [], count: 0, previews: new Map() };
   const all: string[] = [];
   let after: string | undefined;
   for (let i = 0; i < pages; i++) {
@@ -827,12 +846,14 @@ async function walk(
     const response = executed.response;
     const list = items(response);
     // Cursors are opaque but deterministic for a position; hashing the whole response compares them too.
-    out.pages.push(sha(response));
+    out.pages.push(sha(withoutPreviews(response)));
     out.totals.push((response.pagination as Json | undefined)?.total ?? null);
     out.count += list.length;
     for (const item of list) {
       out.keys.push(itemKey(item));
-      all.push(sha(item));
+      const { inputPreview, ...rest } = item;
+      all.push(sha(rest));
+      if (inputPreview !== undefined) out.previews.set(itemKey(item), sha(inputPreview));
     }
     const next = request.next(response);
     if (!next) break;
@@ -843,58 +864,70 @@ async function walk(
 }
 
 async function equiv(
-  session: Session,
+  parent: Session,
   arms: PlatformArm[],
   cases: string[],
   targets: SelectedProject[],
   windows: string[],
   pages: number,
+  concurrency: number,
 ) {
   const [old, next] = arms;
   if (!old || !next) throw new Error('equiv needs --old and --new');
-  for (const project of targets) {
-    for (const windowId of windows) {
-      for (const caseId of cases) {
-        const meta = { caseId, window: windowId, bucket: project.bucket, hash: project.hash };
-        const request = buildRequest(session, caseId, project, windowId);
-        if (typeof request === 'string') {
-          log(`${caseId} ${project.bucket}:${project.hash} ${windowId}: skipped (${request})`);
-          continue;
+  const queue = targets.flatMap(project =>
+    windows.flatMap(windowId => cases.map(caseId => ({ project, windowId, caseId }))),
+  );
+  await Promise.all(
+    Array.from({ length: Math.max(1, concurrency) }, async () => {
+      const session: Session = Object.create(parent);
+      session.lastEnd = 0;
+      session.pinnedHead = undefined;
+      for (let cell = queue.shift(); cell; cell = queue.shift()) {
+        const { project, windowId, caseId } = cell;
+        {
+          const meta = { caseId, window: windowId, bucket: project.bucket, hash: project.hash };
+          const request = buildRequest(session, caseId, project, windowId);
+          if (typeof request === 'string') {
+            log(`${caseId} ${project.bucket}:${project.hash} ${windowId}: skipped (${request})`);
+            continue;
+          }
+          session.pinnedHead = request.api === 'delta' || request.api === 'page' ? await deltaHead(session) : undefined;
+          const a = await walk(session, old, request, project, caseId, pages);
+          const b = await walk(session, next, request, project, caseId, pages);
+          const control = await walk(session, old, request, project, caseId, pages);
+          const controlStable = a.ok && control.ok && JSON.stringify(a.pages) === JSON.stringify(control.pages);
+          const match = a.ok && b.ok && JSON.stringify(a.pages) === JSON.stringify(b.pages);
+          const setMatch = a.ok && b.ok && a.set === b.set;
+          const totalsMatch = JSON.stringify(a.totals) === JSON.stringify(b.totals);
+          const previewDiffs = [...b.previews].filter(([k, h]) => a.previews.has(k) && a.previews.get(k) !== h).length;
+          let differing: Json | undefined;
+          if (a.ok && b.ok && !match) differing = await classify(session, project, a, b, request.api);
+          const record: PlatformRecord = {
+            runId: session.runId,
+            exp: session.exp,
+            kind: 'equiv',
+            ...meta,
+            arm: 'old-vs-new',
+            ok: a.ok && b.ok,
+            data: {
+              match,
+              setMatch,
+              totalsMatch,
+              controlStable,
+              previewDiffs,
+              pages: [a.pages.length, b.pages.length],
+              rows: [a.count, b.count],
+              errors: [a.error ?? null, b.error ?? null, control.error ?? null],
+              ...(differing ? { differing } : {}),
+            },
+            ts: new Date().toISOString(),
+          };
+          append(record);
+          log(`${caseId} ${project.bucket}:${project.hash} ${windowId}: ${JSON.stringify(record.data)}`);
         }
-        session.pinnedHead = request.api === 'delta' || request.api === 'page' ? await deltaHead(session) : undefined;
-        const a = await walk(session, old, request, project, caseId, pages);
-        const b = await walk(session, next, request, project, caseId, pages);
-        const control = await walk(session, old, request, project, caseId, pages);
-        const controlStable = a.ok && control.ok && JSON.stringify(a.pages) === JSON.stringify(control.pages);
-        const match = a.ok && b.ok && JSON.stringify(a.pages) === JSON.stringify(b.pages);
-        const setMatch = a.ok && b.ok && a.set === b.set;
-        const totalsMatch = JSON.stringify(a.totals) === JSON.stringify(b.totals);
-        let differing: Json | undefined;
-        if (a.ok && b.ok && !match) differing = await classify(session, project, a, b, request.api);
-        const record: PlatformRecord = {
-          runId: session.runId,
-          exp: session.exp,
-          kind: 'equiv',
-          ...meta,
-          arm: 'old-vs-new',
-          ok: a.ok && b.ok,
-          data: {
-            match,
-            setMatch,
-            totalsMatch,
-            controlStable,
-            pages: [a.pages.length, b.pages.length],
-            rows: [a.count, b.count],
-            errors: [a.error ?? null, b.error ?? null, control.error ?? null],
-            ...(differing ? { differing } : {}),
-          },
-          ts: new Date().toISOString(),
-        };
-        append(record);
-        log(`${caseId} ${project.bucket}:${project.hash} ${windowId}: ${JSON.stringify(record.data)}`);
       }
-    }
-  }
+    }),
+  );
 }
 
 /**
@@ -1082,7 +1115,7 @@ async function main() {
         values['cold-only']!,
       );
     } else {
-      await equiv(session, arms, cases, targets, windows, Number(values.pages));
+      await equiv(session, arms, cases, targets, windows, Number(values.pages), Number(values.concurrency));
     }
   } catch (error) {
     if (error instanceof StatementBudgetExhausted)
