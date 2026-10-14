@@ -44,7 +44,9 @@ export function boardFilterFields({
       icon: Inbox,
       operators: ['in'],
       strict: true,
-      suggestions: BOARD_SOURCE_OPTIONS.filter(option => option.value === 'manual' || connectedSources?.has(option.value)),
+      suggestions: BOARD_SOURCE_OPTIONS.filter(
+        option => option.value === 'manual' || connectedSources?.has(option.value),
+      ),
     },
     {
       id: BOARD_FILTER_FIELD.linearProject,

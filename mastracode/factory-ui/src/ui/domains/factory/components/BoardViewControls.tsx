@@ -7,17 +7,12 @@ import { Kanban, List, ListFilter } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
-import { useChannelAccountsQuery } from '../../../../hooks/useChannelAccounts';
-import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
-import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
-import { useIncidentioStatusQuery } from '../../../../hooks/useIncidentioData';
-import { useJiraStatusQuery } from '../../../../hooks/useJiraData';
-import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import { boardFilterItems, boardFiltersActive } from '../boardFilters';
 import type { BoardLayout } from '../boardLayout';
 import type { BoardParticipant } from '../boardRelevance';
 import type { BoardViewSettings } from '../boardSavedViews';
 import type { BoardKind } from '../boardStages';
+import { useBoardFilterSources } from '../hooks/useBoardFilterSources';
 import type { BoardView } from '../hooks/useBoardView';
 import { BOARD_FILTER_OPERATORS, BoardFilters, boardFilterFields } from './BoardFilters';
 import { BOARD_SORT_LABELS, BoardSortControl } from './BoardSortControl';
@@ -50,27 +45,13 @@ export function BoardViewControls({
 }) {
   const { savedViews } = view;
   const [pageFiltersOpen, setPageFiltersOpen] = useState(false);
-  const githubStatus = useGithubStatusQuery();
-  const gitlabStatus = useGitLabStatusQuery();
-  const linearStatus = useLinearStatusQuery();
-  const jiraStatus = useJiraStatusQuery();
-  const incidentioStatus = useIncidentioStatusQuery();
-  const channelAccounts = useChannelAccountsQuery();
-  const linearProjects = useLinearProjectsQuery(Boolean(linearStatus.data?.connected));
-  const connectedSources = new Set([
-    ...(githubStatus.data?.connected ? ['github'] : []),
-    ...(gitlabStatus.data?.enabled && gitlabStatus.data.configured ? ['gitlab'] : []),
-    ...(linearStatus.data?.enabled && linearStatus.data.connected ? ['linear'] : []),
-    ...(jiraStatus.data?.enabled && jiraStatus.data.configured ? ['jira'] : []),
-    ...(incidentioStatus.data?.enabled && incidentioStatus.data.configured ? ['incidentio'] : []),
-    ...(channelAccounts.data?.accounts.some(account => account.platform === 'slack') ? ['slack'] : []),
-  ]);
+  const { connectedSources, linearProjects } = useBoardFilterSources();
   const fields = boardFilterFields({
     kind,
     participants,
     availableLabels,
     connectedSources,
-    linearProjects: linearProjects.data,
+    linearProjects,
     currentUserId,
     teammateSelected: view.filters.participantIds.size > 0,
   });
