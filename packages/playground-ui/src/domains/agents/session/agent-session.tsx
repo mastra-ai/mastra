@@ -56,7 +56,10 @@ export function AgentSession({
               <div
                 className={cn(
                   'grid h-full min-h-0 gap-3',
-                  showConfigPanel ? 'grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)]' : 'grid-cols-1',
+                  // Note: a fixed-width track, not minmax(length,length) — some CSS
+                  // minifiers (lightningcss) drop grid templates whose minmax() has
+                  // no flexible argument.
+                  showConfigPanel ? 'grid-cols-[minmax(0,1fr)_20rem]' : 'grid-cols-1',
                   className,
                 )}
               >
