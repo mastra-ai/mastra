@@ -42,6 +42,8 @@ const linkedProject = {
 };
 
 describe('resolveTarget', () => {
+  let consoleError: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
@@ -53,6 +55,7 @@ describe('resolveTarget', () => {
     mocks.getCurrentOrgId.mockResolvedValue('org-current');
     mocks.getToken.mockResolvedValue('platform-token');
     mocks.loadProjectConfig.mockResolvedValue(null);
+    consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -60,6 +63,7 @@ describe('resolveTarget', () => {
     delete process.env.MASTRA_PROJECT_ID;
     delete process.env.MASTRA_ORGANIZATION_ID;
     vi.unstubAllGlobals();
+    consoleError.mockRestore();
   });
 
   it('uses an explicit URL with only custom headers and no discovery', async () => {
@@ -344,6 +348,25 @@ describe('resolveTarget', () => {
       );
     });
 
+    it.each(['eu', 'EU', 'europe-west4'])('treats region %s as EU', async region => {
+      mocks.loadProjectConfig.mockResolvedValueOnce(linkedProject);
+      fetchMock.mockResolvedValueOnce(environmentsResponse([{ type: 'production', region }]));
+
+      await expect(resolveTarget(options(), fetchMock as typeof fetch, '/observability/traces')).resolves.toMatchObject(
+        { baseUrl: 'https://observability.eu.mastra.ai' },
+      );
+    });
+
+    it('uses the US host without a warning when the project has no environments', async () => {
+      mocks.loadProjectConfig.mockResolvedValueOnce(linkedProject);
+      fetchMock.mockResolvedValueOnce(environmentsResponse([]));
+
+      await expect(resolveTarget(options(), fetchMock as typeof fetch, '/observability/traces')).resolves.toMatchObject(
+        { baseUrl: 'https://observability.mastra.ai' },
+      );
+      expect(consoleError).not.toHaveBeenCalled();
+    });
+
     it('routes to the US host for non-EU regions', async () => {
       mocks.loadProjectConfig.mockResolvedValueOnce(linkedProject);
       fetchMock.mockResolvedValueOnce(environmentsResponse([{ type: 'production', region: 'iad' }]));
@@ -362,6 +385,20 @@ describe('resolveTarget', () => {
         { baseUrl: 'https://observability.mastra.ai' },
       );
       expect(cancel).toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalledWith(
+        'Warning: could not determine project region (status 403); defaulting to US observability. ' +
+          'Set MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT or pass --url to override.',
+      );
+    });
+
+    it('warns with the error message when the lookup request fails', async () => {
+      mocks.loadProjectConfig.mockResolvedValueOnce(linkedProject);
+      fetchMock.mockRejectedValueOnce(new Error('getaddrinfo ENOTFOUND platform.mastra.ai'));
+
+      await expect(resolveTarget(options(), fetchMock as typeof fetch, '/observability/traces')).resolves.toMatchObject(
+        { baseUrl: 'https://observability.mastra.ai' },
+      );
+      expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('(getaddrinfo ENOTFOUND platform.mastra.ai)'));
     });
 
     it('caps the lookup at five seconds and falls back to the US host when it hangs', async () => {
@@ -378,6 +415,7 @@ describe('resolveTarget', () => {
         const pending = resolveTarget(options(), fetchMock as typeof fetch, '/observability/traces');
         await vi.advanceTimersByTimeAsync(5_000);
         await expect(pending).resolves.toMatchObject({ baseUrl: 'https://observability.mastra.ai' });
+        expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('(timed out after 5000ms)'));
       } finally {
         vi.useRealTimers();
       }

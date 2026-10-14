@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'dotenv';
+import { isEuRegion } from '../../utils/platform-region.js';
 import { MASTRA_PLATFORM_API_URL } from '../auth/client.js';
 import { getCurrentOrgId, getToken, type LoginOptions } from '../auth/credentials.js';
 import { fetchServerProjects } from '../server/platform-api.js';
@@ -12,8 +13,6 @@ const LOCAL_URL = 'http://localhost:4111';
 const OBSERVABILITY_URL = 'https://observability.mastra.ai';
 const OBSERVABILITY_EU_URL = 'https://observability.eu.mastra.ai';
 const TRUSTED_OBSERVABILITY_ORIGINS = new Set([OBSERVABILITY_URL, OBSERVABILITY_EU_URL]);
-/** Platform environment region served by the EU observability host. */
-const EU_REGION = 'ams';
 const REGION_LOOKUP_TIMEOUT_MS = 5_000;
 const LEARNING_URL = 'https://output.signals.mastra.ai';
 const AUTHORIZATION_HEADER = 'Authorization';
@@ -235,17 +234,33 @@ async function lookupObservabilityUrl(
     );
     if (!response.ok) {
       await response.body?.cancel();
+      warnRegionFallback(`status ${response.status}`);
       return OBSERVABILITY_URL;
     }
     const body = (await response.json()) as { environments?: { type?: string; region?: string }[] };
     const environments = body.environments ?? [];
     const environment = environments.find(candidate => candidate.type === 'production') ?? environments[0];
-    return environment?.region === EU_REGION ? OBSERVABILITY_EU_URL : OBSERVABILITY_URL;
-  } catch {
+    return isEuRegion(environment?.region) ? OBSERVABILITY_EU_URL : OBSERVABILITY_URL;
+  } catch (error) {
+    warnRegionFallback(
+      controller.signal.aborted
+        ? `timed out after ${params.timeoutMs}ms`
+        : error instanceof Error
+          ? error.message
+          : String(error),
+    );
     return OBSERVABILITY_URL;
   } finally {
     clearTimeout(timeout);
   }
+}
+
+/** Goes to stderr so stdout stays parseable JSON. */
+function warnRegionFallback(reason: string): void {
+  console.error(
+    `Warning: could not determine project region (${reason}); defaulting to US observability. ` +
+      'Set MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT or pass --url to override.',
+  );
 }
 
 function trustedObservabilityOrigin(url?: string): string | undefined {
