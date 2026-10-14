@@ -889,6 +889,86 @@ describe('OpenAISchemaCompatLayer', () => {
       expect(nullResult).not.toHaveProperty('issues');
       expect(nullResult.value).toEqual({ value: undefined, requiredValue: 'fast' });
     });
+
+    it('adds a null alternative when a containing enum rejects a nested null branch', async () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          value: {
+            anyOf: [
+              {
+                anyOf: [{ type: 'string' }, { type: 'null' }],
+                enum: ['ok'],
+              },
+            ],
+          },
+          openEnum: {
+            anyOf: [
+              {
+                anyOf: [{ type: 'string' }, { type: 'null' }],
+                enum: ['ok', null],
+              },
+            ],
+          },
+        },
+        additionalProperties: false,
+      };
+      const compatSchema = compat.processToCompatSchema(schema);
+      const result = compatSchema['~standard'].jsonSchema.input({ target: 'draft-07' }) as Record<string, any>;
+
+      // The nested `{ type: 'null' }` stays, and so does the enum that rejects it.
+      // Null is represented by a sibling alternative that is not constrained by that enum.
+      expect(result.properties.value.anyOf).toEqual([
+        {
+          anyOf: [{ type: 'string' }, { type: 'null' }],
+          enum: ['ok'],
+        },
+        { type: 'null' },
+      ]);
+      expect(result.properties.openEnum.anyOf).toEqual([
+        {
+          anyOf: [{ type: 'string' }, { type: 'null' }],
+          enum: ['ok', null],
+        },
+      ]);
+
+      const validate = new Ajv({ strict: false }).compile(result);
+      expect(validate({ value: null, openEnum: null })).toBe(true);
+      expect(validate({ value: 'ok', openEnum: 'ok' })).toBe(true);
+      expect(validate({ value: 'no', openEnum: null })).toBe(false);
+      expect(validate({ value: null, openEnum: 'no' })).toBe(false);
+
+      const nullResult: any = await compatSchema['~standard'].validate({ value: null, openEnum: null });
+      expect(nullResult).not.toHaveProperty('issues');
+      expect(nullResult.value).toEqual({ value: undefined, openEnum: undefined });
+    });
+
+    it('drops a branch instead of emitting an empty enum intersection', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          value: {
+            anyOf: [
+              { type: 'string', enum: ['x'] },
+              { type: 'number', enum: [1] },
+            ],
+            enum: [1],
+          },
+        },
+        additionalProperties: false,
+      };
+      const result = compat.processToJSONSchema(schema) as Record<string, any>;
+      const value = result.properties.value;
+
+      expect(value).not.toHaveProperty('enum');
+      expect(value.anyOf).toEqual([{ type: 'number', enum: [1] }, { type: 'null' }]);
+      expect(JSON.stringify(value)).not.toContain('"enum":[]');
+
+      const validate = new Ajv({ strict: false }).compile(result);
+      expect(validate({ value: null })).toBe(true);
+      expect(validate({ value: 1 })).toBe(true);
+      expect(validate({ value: 'x' })).toBe(false);
+    });
   });
 
   // OpenAI strict mode rejects `propertyNames`, which z.record() emits for its key type.

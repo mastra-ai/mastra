@@ -72,29 +72,26 @@ function jsonValuesEqual(left: unknown, right: unknown): boolean {
 }
 
 /**
- * A branch accepts null when it is the open boolean schema, an explicit null type,
- * a const/enum constrained to null, or a nested anyOf that already accepts null.
- * `defaultUnionHandler` rewrites `{ const: null }` and `{ enum: [null] }` into a
- * nested anyOf, so a shallow `type === 'null'` check misses them and appends a duplicate.
+ * A branch accepts null only when every constraint on that branch allows it.
+ * `defaultUnionHandler` keeps a sibling `enum` on the branch that contains a nested
+ * anyOf, so `{ anyOf: [{ type: 'null' }], enum: ['ok'] }` still rejects null.
+ * A shallow nested check would skip adding a real null alternative.
  */
 function allowsNull(branch: JSONSchema7 | boolean): boolean {
   if (branch === true) return true;
   if (typeof branch !== 'object' || branch === null) return false;
 
-  if (branch.type === 'null' || (Array.isArray(branch.type) && branch.type.includes('null'))) {
-    return true;
-  }
+  // Keywords on this schema apply together with nested anyOf. An enum or const that
+  // excludes null rejects it even when a nested branch is `{ type: 'null' }`.
+  if (Array.isArray(branch.enum) && !branch.enum.includes(null)) return false;
+  if ('const' in branch && branch.const !== null) return false;
 
-  // No explicit type means const/enum are the value constraint. A null const or an
-  // enum that includes null therefore accepts null. An explicit non-null type does not.
-  if (
-    branch.type === undefined &&
-    (branch.const === null || (Array.isArray(branch.enum) && branch.enum.includes(null)))
-  ) {
-    return true;
-  }
+  const typeIncludesNull = branch.type === 'null' || (Array.isArray(branch.type) && branch.type.includes('null'));
+  if (branch.type !== undefined && !typeIncludesNull) return false;
 
-  return Array.isArray(branch.anyOf) && branch.anyOf.some(allowsNull);
+  if (Array.isArray(branch.anyOf)) return branch.anyOf.some(allowsNull);
+
+  return typeIncludesNull || branch.const === null || (Array.isArray(branch.enum) && branch.enum.includes(null));
 }
 
 function schemaValuesEqual(left: unknown, right: unknown, keyword?: string): boolean {
@@ -495,16 +492,26 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
                 // alternative can validate. Branch-local enums stay in force by intersection.
                 if (Array.isArray(prop.enum) && !prop.enum.includes(null)) {
                   const siblingEnum = prop.enum;
+                  const branches: typeof prop.anyOf = [];
                   for (const branch of prop.anyOf) {
-                    if (typeof branch === 'boolean' || allowsNull(branch)) continue;
+                    if (typeof branch === 'boolean' || allowsNull(branch)) {
+                      branches.push(branch);
+                      continue;
+                    }
                     if (Array.isArray(branch.enum)) {
-                      branch.enum = branch.enum.filter(value =>
+                      // Draft-07 forbids `enum: []`. Drop the branch when nothing it
+                      // allows is also in the sibling enum.
+                      const intersection = branch.enum.filter(value =>
                         siblingEnum.some(allowed => jsonValuesEqual(allowed, value)),
                       );
+                      if (intersection.length === 0) continue;
+                      branch.enum = intersection;
                     } else {
                       branch.enum = [...siblingEnum];
                     }
+                    branches.push(branch);
                   }
+                  prop.anyOf = branches;
                   delete prop.enum;
                 }
 
