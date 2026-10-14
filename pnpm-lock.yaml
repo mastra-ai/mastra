@@ -2529,6 +2529,9 @@ importers:
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../stores/pg
+      '@mastra/server':
+        specifier: workspace:*
+        version: link:../../packages/server
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15

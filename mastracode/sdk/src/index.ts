@@ -55,7 +55,7 @@ import { AgentConnectionsSignalProvider } from './agent-connections/signal-provi
 import type { AgentConnectionsSignalProviderOptions } from './agent-connections/signal-provider.js';
 import { createBackgroundCompletionEvents } from './agents/background-completion-events.js';
 import { createBackgroundCompletionCallbacks } from './agents/background-completion.js';
-import { hasCredentialStoreProvider } from './agents/credential-resolver.js';
+import { hasCredentialStoreProvider, withCredentialTenantPreparation } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory, hasSubconsciousTools } from './agents/memory.js';
 import { createMastraCodeGateway, getDynamicModel, getGoalJudgeModel, resolveModel } from './agents/model.js';
@@ -807,11 +807,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       ? new Knowledge({ id: 'mastracode', name: 'MastraCode Knowledge', storage })
       : undefined);
   const knowledgeKey = configuredKnowledgeKey ?? 'default';
-  const memory =
-    config?.memory === false
-      ? undefined
-      : (config?.memory ??
-        getDynamicMemory(
+  const dynamicMemory =
+    config?.memory === undefined
+      ? getDynamicMemory(
           storage,
           vector,
           config?.settingsPath,
@@ -819,7 +817,15 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
             disableSettingsOmSeed: config?.disableSettingsOmSeed,
           },
           knowledge,
-        ));
+        )
+      : undefined;
+  const memory =
+    config?.memory === false
+      ? undefined
+      : (config?.memory ??
+        // Keep settled() so shutdown still drains background memory work.
+        (dynamicMemory &&
+          Object.assign(withCredentialTenantPreparation(dynamicMemory), { settled: dynamicMemory.settled })));
   // Only the default memory wiring registers the subconscious tools; a
   // caller-supplied memory is opaque here, so its prompt must not advertise them.
   const hasSubconscious =
@@ -1211,7 +1217,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     },
     // `settingsPath` matches the source `createMastraCode()` reads from so the
     // per-mode thinking defaults resolve against the same config file.
-    model: ctx => getDynamicModel(ctx, config?.settingsPath, { modeless }),
+    model: withCredentialTenantPreparation(ctx => getDynamicModel(ctx, config?.settingsPath, { modeless })),
     // Deferred notifications are re-dispatched by the core notification
     // dispatch workflow long after the originating send; the delivery policy
     // rebuilds the request context (model selection included) at delivery time
@@ -1283,7 +1289,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // judge model is configured, keeping the goal step a no-op. Bind the same
       // `settingsPath` used above so the judge model and `maxRuns` come from one
       // config (a custom settings file would otherwise diverge).
-      judge: ctx => getGoalJudgeModel(ctx, config?.settingsPath),
+      judge: withCredentialTenantPreparation(ctx => getGoalJudgeModel(ctx, config?.settingsPath)),
       maxRuns: globalSettings.models.goalMaxTurns ?? 50,
       maxSteps: 1000,
       prompt: DEFAULT_GOAL_JUDGE_PROMPT,

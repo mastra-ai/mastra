@@ -17,7 +17,7 @@ const CACHE_FILE = () => path.join(os.homedir(), '.cache', 'mastra', 'pricing-da
 // Every installed version of this package shares the cache file. Bump this when the cached
 // prices change shape or meaning, so other versions ignore the file instead of misreading it.
 const CACHE_VERSION = 1;
-const BEDROCK_GEOGRAPHY_PREFIXES = new Set(['global', 'us', 'eu', 'apac', 'jp', 'au']);
+const BEDROCK_GEOGRAPHY_PREFIXES = new Set(['global', 'us', 'eu', 'apac', 'jp', 'au', 'in']);
 const AI_SDK_VERCEL_GATEWAY_PROVIDER_ID = 'gateway';
 const AZURE_OPENAI_GATEWAY_ID = 'azure-openai';
 const VERCEL_PRICING_PROVIDER_ID = 'vercel';

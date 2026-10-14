@@ -1,5 +1,16 @@
 # @mastra/pg
 
+## 1.31.2-alpha.0
+
+### Patch Changes
+
+- Fixed `mastra_notifications` being created without its `("threadId", "id")` primary key. Without it, duplicate notification ids could be stored, and on PostgreSQL the table had no replica identity, so updates and deletes failed when the table was part of a logical replication publication. ([#26664](https://github.com/mastra-ai/mastra/pull/26664))
+
+  New tables now get the key, and `exportSchemas()` includes it. Existing tables are upgraded the next time storage initializes: PostgreSQL adds the primary key, and LibSQL adds a unique index on the same columns. If the key cannot be added because an existing table already contains duplicate rows, or because the database role does not own the table, initialization still succeeds and logs a warning with the SQL needed to add the key.
+
+- Updated dependencies [[`bed1ccc`](https://github.com/mastra-ai/mastra/commit/bed1cccea5817d68faa42a15fda3a0b329f70680), [`02e2eae`](https://github.com/mastra-ai/mastra/commit/02e2eae3aee1c5b5b9c807a6a3389b88eca1440c), [`b2dd0c6`](https://github.com/mastra-ai/mastra/commit/b2dd0c6333691467e61406ac920eb6f861db6bc0), [`ad16eae`](https://github.com/mastra-ai/mastra/commit/ad16eae7eec9af386c9eee81f4f30ef65d0df48b)]:
+  - @mastra/core@1.78.0-alpha.1
+
 ## 1.31.1
 
 ### Patch Changes
