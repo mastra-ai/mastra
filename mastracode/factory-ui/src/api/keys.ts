@@ -23,6 +23,8 @@ export const queryKeys = {
   persistedFactories: () => ['factories', 'persisted'] as const,
   factoryCreateFlow: () => ['factories', 'create-flow'] as const,
   factoryProject: (factoryProjectId: string | undefined) => ['factory', 'project', factoryProjectId ?? null] as const,
+  factoryEnvironment: (factoryProjectId: string | undefined) =>
+    ['factory', 'environment', factoryProjectId ?? null] as const,
   githubStatus: () => ['github', 'status'] as const,
   githubPat: () => ['github', 'pat'] as const,
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
