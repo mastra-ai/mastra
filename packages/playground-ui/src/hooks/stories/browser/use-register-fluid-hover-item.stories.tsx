@@ -22,7 +22,7 @@ function StepRow({
   const ref = useRef<HTMLDivElement>(null);
   useRegisterFluidHoverItem(registerItem, index, ref);
   return (
-    <div ref={ref} className={index === undefined ? 'text-muted-foreground px-3 py-2' : 'px-3 py-2'}>
+    <div ref={ref} className={index === undefined ? 'px-3 py-2 text-muted-foreground' : 'px-3 py-2'}>
       <Txt>{label}</Txt>
     </div>
   );
@@ -41,9 +41,9 @@ function RegisterFluidHoverItemDemo() {
       <div
         ref={containerRef}
         {...hover.handlers}
-        className="border-border relative isolate flex max-w-80 flex-col gap-1 rounded-xl border p-3"
+        className="relative isolate flex max-w-80 flex-col gap-1 rounded-xl border border-border p-3"
       >
-        <FluidHoverHighlight hover={hover} className="bg-fill -z-1 rounded-lg" />
+        <FluidHoverHighlight hover={hover} className="-z-1 rounded-lg bg-fill" />
         {steps.map((label, index) => (
           <StepRow
             key={label}
