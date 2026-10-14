@@ -460,7 +460,7 @@ describe('Global search', () => {
     expect(await screen.findByText('research-notes')).toBeInTheDocument();
     expect(within(results).getByText('Work Sessions')).toBeInTheDocument();
     expect(within(results).getByText('Review Sessions')).toBeInTheDocument();
-    expect(within(results).getByText('User Sessions')).toBeInTheDocument();
+    expect(within(results).getByText('Sessions')).toBeInTheDocument();
     expect(screen.getByText('Mastra Factory')).toBeInTheDocument();
     expect(screen.getByText('Docs Factory')).toBeInTheDocument();
     for (const label of [
@@ -498,7 +498,7 @@ describe('Global search', () => {
     expect(within(rail).getByRole('button', { name: /Navigation/ })).toBeInTheDocument();
     expect(within(rail).getByRole('button', { name: /Work Sessions/ })).toBeInTheDocument();
     expect(within(rail).getByRole('button', { name: /Review Sessions/ })).toBeInTheDocument();
-    expect(within(rail).getByRole('button', { name: /User Sessions/ })).toBeInTheDocument();
+    expect(within(rail).getByRole('button', { name: /^Sessions/ })).toBeInTheDocument();
     expect(within(rail).getByRole('button', { name: /Factories/ })).toBeInTheDocument();
 
     await user.click(within(rail).getByRole('button', { name: /Review Sessions/ }));

@@ -164,7 +164,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
             />
           )}
           {scopeIncludes(activeScope, 'user') && (
-            <GlobalSearchSessionResults title="User Sessions" results={sessionGroups.user} onSelect={selectPath} />
+            <GlobalSearchSessionResults title="Sessions" results={sessionGroups.user} onSelect={selectPath} />
           )}
           {isSessionScope(activeScope) && hasRepositories && (
             <GlobalSearchSessionsStatus pending={sessionsPending} failed={sessions.failed} onRetry={sessions.retry} />

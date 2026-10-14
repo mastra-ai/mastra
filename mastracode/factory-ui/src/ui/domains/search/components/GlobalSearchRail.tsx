@@ -51,7 +51,7 @@ export function GlobalSearchRail({
       />
       <CommandPaletteScope
         icon={<GitBranch />}
-        label="User Sessions"
+        label="Sessions"
         count={counts.user}
         active={activeScope === 'user'}
         onSelect={() => onScopeChange('user')}

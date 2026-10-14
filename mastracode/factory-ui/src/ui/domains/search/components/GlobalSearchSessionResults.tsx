@@ -22,7 +22,7 @@ export function GlobalSearchSessionResults({
   results,
   onSelect,
 }: {
-  title: 'Work Sessions' | 'Review Sessions' | 'User Sessions';
+  title: 'Work Sessions' | 'Review Sessions' | 'Sessions';
   results: SessionSearchResult[];
   onSelect: GlobalSearchSelectHandler;
 }) {
