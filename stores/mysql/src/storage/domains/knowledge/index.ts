@@ -100,6 +100,9 @@ import type {
   ListKnowledgeNodesInput,
   ListKnowledgeProposalsInput,
   ListKnowledgeProposalsOutput,
+  ListKnowledgeSourcesWithVisibleRecordsInput,
+  ListVisibleKnowledgeIdsInput,
+  ListVisibleKnowledgeIdsOutput,
   SearchKnowledgeInput,
   SearchKnowledgeResult,
   ReviewKnowledgeProposalInput,
@@ -228,6 +231,10 @@ function assertImportRunTransition(
         : false;
   if (!allowed) throw new KnowledgeConflictError(`Import run cannot transition from ${from} to ${to}`);
 }
+
+// Same per-call caps as the Core storage contract; kept local so older Core peers still load this adapter.
+const KNOWLEDGE_SOURCE_PROBE_LIMIT = 1000;
+const KNOWLEDGE_VISIBILITY_PROBE_LIMIT = 1000;
 
 function escapeLikePattern(value: string): string {
   return value.replaceAll('=', '==').replaceAll('%', '=%').replaceAll('_', '=_');
@@ -1175,6 +1182,43 @@ export class KnowledgeMySQL extends KnowledgeStorage {
       records: records.slice(0, limit),
       nextCursor: records.length > limit ? records[limit - 1]?.id : undefined,
     };
+  }
+
+  async listSourcesWithVisibleRecords(input: ListKnowledgeSourcesWithVisibleRecordsInput): Promise<string[]> {
+    if (input.sources.length > KNOWLEDGE_SOURCE_PROBE_LIMIT) {
+      throw new Error(`listSourcesWithVisibleRecords accepts at most ${KNOWLEDGE_SOURCE_PROBE_LIMIT} sources`);
+    }
+    const found = new Set<string>();
+    for (const probe of input.sources) {
+      if (found.has(probe.source)) continue;
+      const scopeIds = probe.scopeId ? [...input.scopeIds, probe.scopeId] : input.scopeIds;
+      const { records } = await this.listRecordsBySource({ source: probe.source, scopeIds, limit: 1 });
+      if (records.length > 0) found.add(probe.source);
+    }
+    return [...found];
+  }
+
+  async listVisibleKnowledgeIds(input: ListVisibleKnowledgeIdsInput): Promise<ListVisibleKnowledgeIdsOutput> {
+    if (input.nodeIds.length + input.recordIds.length > KNOWLEDGE_VISIBILITY_PROBE_LIMIT) {
+      throw new Error(`listVisibleKnowledgeIds accepts at most ${KNOWLEDGE_VISIBILITY_PROBE_LIMIT} ids`);
+    }
+    const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    const recordScopeIds = input.recordScopeIds ? canonicalizeKnowledgeScopeIds(input.recordScopeIds) : undefined;
+    const nodeIds: string[] = [];
+    for (const id of new Set(input.nodeIds)) {
+      const node = await this.#getNode(this.#executor, id);
+      if (node && isKnowledgeNodeVisible(node, await this.#getNodeScopeIds(this.#executor, id), scopeIds)) {
+        nodeIds.push(id);
+      }
+    }
+    const recordIds: string[] = [];
+    for (const id of new Set(input.recordIds)) {
+      const record = await this.#getRecord(this.#executor, id, false);
+      if (record && (await this.#isRecordVisible(this.#executor, record, scopeIds, recordScopeIds))) {
+        recordIds.push(id);
+      }
+    }
+    return { nodeIds, recordIds, ...(recordScopeIds ? { recordScopeIdsApplied: true as const } : {}) };
   }
 
   async deleteRecord(input: {
@@ -2907,8 +2951,10 @@ export class KnowledgeMySQL extends KnowledgeStorage {
     executor: Executor,
     record: KnowledgeRecord,
     visibleScopeIds: KnowledgeScopeIds,
+    recordScopeIds?: KnowledgeScopeIds,
   ): Promise<boolean> {
-    if (!isKnowledgeScopeVisible(await this.#getRecordScopeIds(executor, record.id), visibleScopeIds)) return false;
+    const scopeIds = recordScopeIds ?? (await this.#getRecordScopeIds(executor, record.id));
+    if (!isKnowledgeScopeVisible(scopeIds, visibleScopeIds)) return false;
     const mentions = await executor.execute({
       sql: `SELECT targetNodeId FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE recordId=?`,
       args: [record.id],

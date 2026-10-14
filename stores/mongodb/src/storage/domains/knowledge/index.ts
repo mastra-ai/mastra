@@ -50,6 +50,9 @@ import type {
   ResolveKnowledgeGapProposalInput,
   ListKnowledgeProposalsInput,
   ListKnowledgeProposalsOutput,
+  ListKnowledgeSourcesWithVisibleRecordsInput,
+  ListVisibleKnowledgeIdsInput,
+  ListVisibleKnowledgeIdsOutput,
   ReviewKnowledgeProposalInput,
   CreateKnowledgeImportRunInput,
   CreateKnowledgeNodeInput,
@@ -98,6 +101,9 @@ const loadKnowledgeCore = createKnowledgeCoreLoader(coreFeatures, () => import('
 const ACTIVITY_VISIBILITY_SCOPE_IDS = '__visibilityScopeIds';
 const canonicalName = (name: string) => name.trim().toLowerCase();
 const sessionOptions = (session?: ClientSession) => (session ? { session } : {});
+// Same per-call caps as the Core storage contract; kept local so older Core peers still load this adapter.
+const KNOWLEDGE_SOURCE_PROBE_LIMIT = 1000;
+const KNOWLEDGE_VISIBILITY_PROBE_LIMIT = 1000;
 
 function nodeReferenceId(node: KnowledgeNode | string): string {
   return typeof node === 'string' ? node : node.id;
@@ -1653,8 +1659,10 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     record: KnowledgeRecord,
     scopeIds: KnowledgeScopeIds,
     session?: ClientSession,
+    recordScopeIds?: KnowledgeScopeIds,
   ): Promise<boolean> {
-    if (!isKnowledgeScopeVisible(await this.#getRecordScopeIds(record.id, session), scopeIds)) return false;
+    const placement = recordScopeIds ?? (await this.#getRecordScopeIds(record.id, session));
+    if (!isKnowledgeScopeVisible(placement, scopeIds)) return false;
     const mentions = await (
       await this.#collection(TABLE_KNOWLEDGE_MENTIONS)
     )
@@ -1678,6 +1686,41 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
 
   async listRecordsBySource(input: QueryKnowledgeRecordsBySourceInput): Promise<QueryKnowledgeRecordsOutput> {
     return this.#queryRecords(input, { source: input.source }, 1);
+  }
+
+  async listSourcesWithVisibleRecords(input: ListKnowledgeSourcesWithVisibleRecordsInput): Promise<string[]> {
+    if (input.sources.length > KNOWLEDGE_SOURCE_PROBE_LIMIT) {
+      throw new Error(`listSourcesWithVisibleRecords accepts at most ${KNOWLEDGE_SOURCE_PROBE_LIMIT} sources`);
+    }
+    const found = new Set<string>();
+    for (const probe of input.sources) {
+      if (found.has(probe.source)) continue;
+      const scopeIds = probe.scopeId ? [...input.scopeIds, probe.scopeId] : input.scopeIds;
+      const { records } = await this.listRecordsBySource({ source: probe.source, scopeIds, limit: 1 });
+      if (records.length > 0) found.add(probe.source);
+    }
+    return [...found];
+  }
+
+  async listVisibleKnowledgeIds(input: ListVisibleKnowledgeIdsInput): Promise<ListVisibleKnowledgeIdsOutput> {
+    if (input.nodeIds.length + input.recordIds.length > KNOWLEDGE_VISIBILITY_PROBE_LIMIT) {
+      throw new Error(`listVisibleKnowledgeIds accepts at most ${KNOWLEDGE_VISIBILITY_PROBE_LIMIT} ids`);
+    }
+    const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    const recordScopeIds = input.recordScopeIds ? canonicalizeKnowledgeScopeIds(input.recordScopeIds) : undefined;
+    const nodeIds: string[] = [];
+    for (const id of new Set(input.nodeIds)) {
+      const node = await this.getNode(id);
+      if (node && isKnowledgeNodeVisible(node, await this.#getNodeScopeIds(id), scopeIds)) {
+        nodeIds.push(id);
+      }
+    }
+    const recordIds: string[] = [];
+    for (const id of new Set(input.recordIds)) {
+      const record = await this.getRecord({ id });
+      if (record && (await this.#isRecordVisible(record, scopeIds, undefined, recordScopeIds))) recordIds.push(id);
+    }
+    return { nodeIds, recordIds, ...(recordScopeIds ? { recordScopeIdsApplied: true as const } : {}) };
   }
 
   async listMentioningRecords(input: QueryKnowledgeRecordsInput): Promise<QueryKnowledgeRecordsOutput> {
