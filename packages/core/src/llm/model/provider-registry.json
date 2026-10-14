@@ -866,6 +866,7 @@
         "kimi-k2-instruct-fast",
         "lightonai/LightOnOCR-2-1B",
         "liquid/lfm-2.5-2.6b",
+        "liquid/lfm-2.5-24b-a2b",
         "longcat-2.0",
         "longcat-2.0:thinking",
         "longcat-2.5-preview",
@@ -1116,8 +1117,8 @@
         "thinkingmachines/Inkling-Small:thinking",
         "thinkingmachines/inkling",
         "thinkingmachines/inkling:thinking",
-        "unbiased/pareto",
         "unbiased/pareto-26.10-preview",
+        "unbiased/pareto-26.9",
         "undi95/remm-slerp-l2-13b",
         "universal-summarizer",
         "unsloth/gemma-3-12b-it",
@@ -1921,7 +1922,6 @@
         "azure-anthropic/claude-sonnet-5-5",
         "azure/gpt-4.1",
         "azure/gpt-4.1-mini",
-        "azure/gpt-4.1-nano",
         "azure/gpt-4o",
         "azure/gpt-5",
         "azure/gpt-5-mini",
@@ -1983,6 +1983,7 @@
         "consensusprotocol/gemma-4-31b-it",
         "consensusprotocol/glm-5.3-flash",
         "consensusprotocol/gpt-oss-20b",
+        "consensusprotocol/mimo-v2.6-flash",
         "deepinfra/deepseek-v3.2",
         "deepinfra/deepseek-v4-flash",
         "deepinfra/deepseek-v4-pro",
@@ -2263,8 +2264,6 @@
         "xai/grok-4-6",
         "xai/grok-4-7",
         "xai/grok-build-0-1",
-        "xiaomi/mimo-v2.5",
-        "xiaomi/mimo-v2.5-pro",
         "xiaomi/mimo-v2.6-flash",
         "xiaomi/mimo-v2.6-pro",
         "zai/glm-4-32b-0414-128k",
@@ -2650,8 +2649,8 @@
         "thinkingmachines/inkling",
         "thinkingmachines/inkling-small",
         "thinkingmachines/inkling-small:free",
-        "unbiased/pareto",
         "unbiased/pareto-26.10-preview",
+        "unbiased/pareto-26.9",
         "undi95/remm-slerp-l2-13b",
         "upstage/solar-mini4",
         "upstage/solar-pro-3",
@@ -2700,6 +2699,7 @@
         "~openai/gpt-mini-latest",
         "~openai/gpt-sol-latest",
         "~openai/gpt-terra-latest",
+        "~unbiased/pareto-latest",
         "~x-ai/grok-latest",
         "~z-ai/glm-flash-latest",
         "~z-ai/glm-latest"
@@ -3629,7 +3629,6 @@
         "thinkingmachines/inkling-small",
         "thinkingmachines/inkling-small:free",
         "thinkingmachines/inkling:free",
-        "unbiased/pareto",
         "unbiased/pareto-26.10-preview",
         "unbiased/pareto-26.9",
         "undi95/remm-slerp-l2-13b",
@@ -3680,6 +3679,7 @@
         "~openai/gpt-mini-latest",
         "~openai/gpt-sol-latest",
         "~openai/gpt-terra-latest",
+        "~unbiased/pareto-latest",
         "~x-ai/grok-latest",
         "~z-ai/glm-flash-latest",
         "~z-ai/glm-latest"
@@ -7143,6 +7143,7 @@
         "claude-fable-5",
         "claude-fable-5-1",
         "claude-haiku-4-5",
+        "claude-haiku-5-5",
         "claude-opus-4-1",
         "claude-opus-4-5",
         "claude-opus-4-6",
@@ -7153,14 +7154,19 @@
         "claude-sonnet-4-5",
         "claude-sonnet-4-6",
         "claude-sonnet-5",
+        "claude-sonnet-5-5",
+        "deepseek-v4-1-flash",
         "gemini-3-1-flash-lite",
         "gemini-3-1-pro",
         "gemini-3-5-flash",
         "gemini-3-5-flash-lite",
         "gemini-3-6-flash",
+        "gemini-3-7-flash",
+        "gemini-3-8-flash",
         "gemini-3-flash",
         "gemma-3-12b",
         "glm-5-2",
+        "glm-5-3",
         "glm-5-3-flash",
         "gpt-5",
         "gpt-5-1",
@@ -7176,10 +7182,14 @@
         "gpt-5-6-terra",
         "gpt-5-mini",
         "gpt-5-nano",
+        "gpt-6-1-sol",
         "gpt-6-astra",
+        "gpt-6-luna",
+        "gpt-6-sol",
         "gpt-oss-120b",
         "gpt-oss-20b",
         "grok-4-6",
+        "grok-4-7",
         "inkling",
         "kimi-k3",
         "llama-4-maverick",
@@ -7251,6 +7261,11 @@
           "shape": "responses",
           "npm": "@ai-sdk/openai"
         },
+        "gpt-6-luna": {
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/openai/v1",
+          "shape": "responses",
+          "npm": "@ai-sdk/openai"
+        },
         "gpt-5-2": {
           "api": "${NEON_AI_GATEWAY_BASE_URL}/openai/v1",
           "shape": "responses",
@@ -7261,12 +7276,27 @@
           "shape": "responses",
           "npm": "@ai-sdk/openai"
         },
+        "grok-4-7": {
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/openai/v1",
+          "shape": "responses",
+          "npm": "@ai-sdk/openai"
+        },
         "gpt-5-1": {
           "api": "${NEON_AI_GATEWAY_BASE_URL}/openai/v1",
           "shape": "responses",
           "npm": "@ai-sdk/openai"
         },
+        "gpt-6-1-sol": {
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/openai/v1",
+          "shape": "responses",
+          "npm": "@ai-sdk/openai"
+        },
         "gpt-5": {
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/openai/v1",
+          "shape": "responses",
+          "npm": "@ai-sdk/openai"
+        },
+        "gpt-6-sol": {
           "api": "${NEON_AI_GATEWAY_BASE_URL}/openai/v1",
           "shape": "responses",
           "npm": "@ai-sdk/openai"
@@ -7946,6 +7976,7 @@
         "deepseek-v4-flash-vision-exp",
         "deepseek-v4-pro",
         "deepseek-v4.1-flash",
+        "gemini-4-argon-contributor",
         "glm-5.2",
         "glm-5.3",
         "glm-5.3-flash",
@@ -7984,6 +8015,9 @@
         "grok-4.7": {
           "npm": "@ai-sdk/openai"
         },
+        "gemini-4-argon-contributor": {
+          "npm": "@ai-sdk/google"
+        },
         "qwen3.8-max": {
           "npm": "@ai-sdk/anthropic"
         },
@@ -8021,7 +8055,15 @@
           "npm": "@ai-sdk/anthropic"
         }
       },
-      "deprecatedModels": ["grok-4.5", "kimi-k2.6", "qwen3.6-plus", "qwen3.7-max", "space-bunny-free"]
+      "deprecatedModels": [
+        "deepseek-v4-flash",
+        "deepseek-v4-flash-vision-exp",
+        "grok-4.5",
+        "kimi-k2.6",
+        "qwen3.6-plus",
+        "qwen3.7-max",
+        "space-bunny-free"
+      ]
     },
     "openreason": {
       "url": "https://api.openreason.app/v1",
@@ -8404,6 +8446,7 @@
         "scaleway/qwen3-235b-a22b-instruct-2507",
         "scaleway/qwen3-coder-30b-a3b-instruct",
         "tencent/deepseek-v4-pro-0813",
+        "tencent/deepseek-v4.1-flash",
         "tencent/hy3",
         "tencent/hy4-preview",
         "tensorx/deepseek/deepseek-r1-0528",
@@ -8524,6 +8567,22 @@
         "tc-code-latest"
       ],
       "docUrl": "https://cloud.tencent.com/document/product/1772/128947",
+      "gateway": "models.dev"
+    },
+    "sambanova": {
+      "url": "https://api.sambanova.ai/v1",
+      "apiKeyEnvVar": "SAMBANOVA_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "SambaNova",
+      "models": [
+        "DeepSeek-V3.1",
+        "DeepSeek-V3.2",
+        "Meta-Llama-3.3-70B-Instruct",
+        "MiniMax-M3",
+        "gemma-4-31B-it",
+        "gpt-oss-120b"
+      ],
+      "docUrl": "https://docs.sambanova.ai/cloud/docs/get-started/supported-models",
       "gateway": "models.dev"
     },
     "tempr": {
@@ -9199,7 +9258,6 @@
         "gpt-oss-120b",
         "gpt-oss-20b",
         "meta-llama-3_3-70b-instruct",
-        "mistral-7b-instruct-v0.3",
         "mistral-nemo-instruct-2407",
         "mistral-small-3.2-24b-instruct-2506",
         "qwen2.5-vl-72b-instruct",
@@ -11881,6 +11939,7 @@
       "kimi-k2-instruct-fast",
       "lightonai/LightOnOCR-2-1B",
       "liquid/lfm-2.5-2.6b",
+      "liquid/lfm-2.5-24b-a2b",
       "longcat-2.0",
       "longcat-2.0:thinking",
       "longcat-2.5-preview",
@@ -12131,8 +12190,8 @@
       "thinkingmachines/Inkling-Small:thinking",
       "thinkingmachines/inkling",
       "thinkingmachines/inkling:thinking",
-      "unbiased/pareto",
       "unbiased/pareto-26.10-preview",
+      "unbiased/pareto-26.9",
       "undi95/remm-slerp-l2-13b",
       "universal-summarizer",
       "unsloth/gemma-3-12b-it",
@@ -12650,7 +12709,6 @@
       "azure-anthropic/claude-sonnet-5-5",
       "azure/gpt-4.1",
       "azure/gpt-4.1-mini",
-      "azure/gpt-4.1-nano",
       "azure/gpt-4o",
       "azure/gpt-5",
       "azure/gpt-5-mini",
@@ -12712,6 +12770,7 @@
       "consensusprotocol/gemma-4-31b-it",
       "consensusprotocol/glm-5.3-flash",
       "consensusprotocol/gpt-oss-20b",
+      "consensusprotocol/mimo-v2.6-flash",
       "deepinfra/deepseek-v3.2",
       "deepinfra/deepseek-v4-flash",
       "deepinfra/deepseek-v4-pro",
@@ -12992,8 +13051,6 @@
       "xai/grok-4-6",
       "xai/grok-4-7",
       "xai/grok-build-0-1",
-      "xiaomi/mimo-v2.5",
-      "xiaomi/mimo-v2.5-pro",
       "xiaomi/mimo-v2.6-flash",
       "xiaomi/mimo-v2.6-pro",
       "zai/glm-4-32b-0414-128k",
@@ -13362,8 +13419,8 @@
       "thinkingmachines/inkling",
       "thinkingmachines/inkling-small",
       "thinkingmachines/inkling-small:free",
-      "unbiased/pareto",
       "unbiased/pareto-26.10-preview",
+      "unbiased/pareto-26.9",
       "undi95/remm-slerp-l2-13b",
       "upstage/solar-mini4",
       "upstage/solar-pro-3",
@@ -13412,6 +13469,7 @@
       "~openai/gpt-mini-latest",
       "~openai/gpt-sol-latest",
       "~openai/gpt-terra-latest",
+      "~unbiased/pareto-latest",
       "~x-ai/grok-latest",
       "~z-ai/glm-flash-latest",
       "~z-ai/glm-latest"
@@ -14209,7 +14267,6 @@
       "thinkingmachines/inkling-small",
       "thinkingmachines/inkling-small:free",
       "thinkingmachines/inkling:free",
-      "unbiased/pareto",
       "unbiased/pareto-26.10-preview",
       "unbiased/pareto-26.9",
       "undi95/remm-slerp-l2-13b",
@@ -14260,6 +14317,7 @@
       "~openai/gpt-mini-latest",
       "~openai/gpt-sol-latest",
       "~openai/gpt-terra-latest",
+      "~unbiased/pareto-latest",
       "~x-ai/grok-latest",
       "~z-ai/glm-flash-latest",
       "~z-ai/glm-latest"
@@ -16605,6 +16663,7 @@
       "claude-fable-5",
       "claude-fable-5-1",
       "claude-haiku-4-5",
+      "claude-haiku-5-5",
       "claude-opus-4-1",
       "claude-opus-4-5",
       "claude-opus-4-6",
@@ -16615,14 +16674,19 @@
       "claude-sonnet-4-5",
       "claude-sonnet-4-6",
       "claude-sonnet-5",
+      "claude-sonnet-5-5",
+      "deepseek-v4-1-flash",
       "gemini-3-1-flash-lite",
       "gemini-3-1-pro",
       "gemini-3-5-flash",
       "gemini-3-5-flash-lite",
       "gemini-3-6-flash",
+      "gemini-3-7-flash",
+      "gemini-3-8-flash",
       "gemini-3-flash",
       "gemma-3-12b",
       "glm-5-2",
+      "glm-5-3",
       "glm-5-3-flash",
       "gpt-5",
       "gpt-5-1",
@@ -16638,10 +16702,14 @@
       "gpt-5-6-terra",
       "gpt-5-mini",
       "gpt-5-nano",
+      "gpt-6-1-sol",
       "gpt-6-astra",
+      "gpt-6-luna",
+      "gpt-6-sol",
       "gpt-oss-120b",
       "gpt-oss-20b",
       "grok-4-6",
+      "grok-4-7",
       "inkling",
       "kimi-k3",
       "llama-4-maverick",
@@ -17192,6 +17260,7 @@
       "deepseek-v4-flash-vision-exp",
       "deepseek-v4-pro",
       "deepseek-v4.1-flash",
+      "gemini-4-argon-contributor",
       "glm-5.2",
       "glm-5.3",
       "glm-5.3-flash",
@@ -17544,6 +17613,7 @@
       "scaleway/qwen3-235b-a22b-instruct-2507",
       "scaleway/qwen3-coder-30b-a3b-instruct",
       "tencent/deepseek-v4-pro-0813",
+      "tencent/deepseek-v4.1-flash",
       "tencent/hy3",
       "tencent/hy4-preview",
       "tensorx/deepseek/deepseek-r1-0528",
@@ -17638,6 +17708,14 @@
       "kimi-k2.5",
       "minimax-m2.5",
       "tc-code-latest"
+    ],
+    "sambanova": [
+      "DeepSeek-V3.1",
+      "DeepSeek-V3.2",
+      "Meta-Llama-3.3-70B-Instruct",
+      "MiniMax-M3",
+      "gemma-4-31B-it",
+      "gpt-oss-120b"
     ],
     "tempr": [
       "anthropic/claude-fable-5",
@@ -17981,7 +18059,6 @@
       "gpt-oss-120b",
       "gpt-oss-20b",
       "meta-llama-3_3-70b-instruct",
-      "mistral-7b-instruct-v0.3",
       "mistral-nemo-instruct-2407",
       "mistral-small-3.2-24b-instruct-2506",
       "qwen2.5-vl-72b-instruct",

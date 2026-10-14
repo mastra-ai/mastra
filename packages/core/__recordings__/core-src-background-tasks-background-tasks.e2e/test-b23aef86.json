@@ -254,7 +254,7 @@
       }
     },
     {
-      "hash": "6361a0f151d836a3",
+      "hash": "7310e69255c4d87c",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -278,7 +278,7 @@
               "type": "function_call",
               "call_id": "call_6AOmBTF7R44f9N5MpeKirwbz",
               "name": "research",
-              "arguments": "{\"topic\":\"artificial intelligence\",\"_background\":{\"enabled\":true,\"disposition\":\"deferred\",\"timeoutMs\":30000,\"maxRetries\":3}}"
+              "arguments": "{\"_background\":{\"disposition\":\"deferred\",\"enabled\":true,\"maxRetries\":3,\"timeoutMs\":30000},\"topic\":\"artificial intelligence\"}"
             },
             {
               "type": "function_call_output",

@@ -16,7 +16,7 @@ export function PersonalModelsSettings({ models }: { models: AvailableModelOptio
           scope="personal"
           id="default-model"
           title="Your defaults"
-          description="The model new chats start on. Applies to every mode."
+          description="The model new chats start on."
         >
           <SettingsContainer>
             <div className="p-4">

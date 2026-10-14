@@ -21,6 +21,7 @@ import {
   RequestContext,
   MASTRA_AUTH_TOKEN_KEY,
   MASTRA_INHERITED_MEMORY_KEY,
+  MASTRA_SCOPES_KEY,
   MASTRA_VERSIONS_KEY,
   mergeVersionOverrides,
 } from '../../request-context';
@@ -39,6 +40,7 @@ import { assertThreadOwnedByResource } from '../memory-thread-ownership';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
+import { applyResolvedAgentScopes, resolveAgentScopes } from '../scopes';
 import type { CreatedAgentSignal } from '../signals';
 import { mastraDBMessageToSignal } from '../signals';
 import { TripWire } from '../trip-wire';
@@ -156,6 +158,7 @@ interface DurablePreparationAgent {
   maxRetries?: number;
   requestContextSchema?: StandardSchemaWithJSON<unknown>;
   getDefaultOptions(opts: { requestContext: RequestContext }): AgentExecutionOptions | Promise<AgentExecutionOptions>;
+  getScopes?(opts: { requestContext: RequestContext }): Promise<string[] | undefined>;
   getInstructions(opts: { requestContext: RequestContext }): AgentInstructions | Promise<AgentInstructions>;
   __getModelAndModelList(opts: { requestContext: RequestContext; model?: unknown }): Promise<{
     model: MastraLanguageModel;
@@ -235,6 +238,17 @@ export interface PreparationOptions<OUTPUT = undefined> {
   options?: AgentExecutionOptions<OUTPUT>;
   /** Whether execution options already include the agent defaults. */
   optionsAreResolved?: boolean;
+  /**
+   * Whether agent scopes were already applied to `options` (DurableAgent does this itself).
+   * When false, preparation resolves scopes so wrappers that call it directly honor them.
+   */
+  scopesResolved?: boolean;
+  /**
+   * Scopes the caller passed. When the property is absent, `options.scopes`; set it (even to
+   * undefined) when `options` already include the agent defaults, so the Agent's own
+   * `defaultOptions.scopes` are not treated as caller input.
+   */
+  callScopes?: string[];
   /** Run ID (will be generated if not provided) */
   runId?: string;
   /** Request context */
@@ -282,6 +296,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     messages,
     options: rawExecOptions,
     optionsAreResolved = false,
+    scopesResolved = false,
     runId: providedRunId,
     requestContext: providedRequestContext,
     logger,
@@ -304,7 +319,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   const messageId = crypto.randomUUID();
 
   // 2. Get request context
-  const requestContext = providedRequestContext ?? new RequestContext();
+  let requestContext = providedRequestContext ?? new RequestContext();
 
   // 2a. Validate the request context against the agent's requestContextSchema,
   // mirroring Agent.stream()/generate(). Without this, schema violations are
@@ -337,12 +352,38 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // mirroring the non-durable Agent.stream()/generate() paths. Without this the
   // agent's configured defaults (maxSteps, providerOptions, etc.) are silently
   // dropped and durable runs fall back to DurableAgentDefaults.MAX_STEPS.
-  const execOptions: AgentExecutionOptions<OUTPUT> = optionsAreResolved
+  let defaultOptions: AgentExecutionOptions<OUTPUT> | undefined;
+  const loadDefaultOptions = async () =>
+    (defaultOptions ??= ((await typedAgent.getDefaultOptions({ requestContext })) ??
+      {}) as AgentExecutionOptions<OUTPUT>);
+  let execOptions: AgentExecutionOptions<OUTPUT> = optionsAreResolved
     ? (rawExecOptions ?? ({} as AgentExecutionOptions<OUTPUT>))
     : (deepMerge(
-        ((await typedAgent.getDefaultOptions({ requestContext })) ?? {}) as Record<string, unknown>,
+        (await loadDefaultOptions()) as Record<string, unknown>,
         (rawExecOptions ?? {}) as Record<string, unknown>,
       ) as AgentExecutionOptions<OUTPUT>);
+
+  // An explicit `callScopes`, even undefined, means `options` already carry the Agent defaults.
+  const callScopes = 'callScopes' in options ? options.callScopes : rawExecOptions?.scopes;
+
+  // 2b. Resolve agent scopes for callers that did not (DurableAgent resolves its own).
+  // Durable runs read identity from `memory` only, so nothing changes without scopes.
+  if (!scopesResolved) {
+    const configuredScopes = (await typedAgent.getScopes?.({ requestContext })) ?? [];
+    const defaultScopes = (await loadDefaultOptions()).scopes ?? [];
+    const agentScopes = [...configuredScopes, ...defaultScopes];
+    if (agentScopes.length || callScopes?.length || requestContext.has(MASTRA_SCOPES_KEY)) {
+      const resolved = resolveAgentScopes({
+        requestContext,
+        agentScopes,
+        callScopes,
+        memory: execOptions.memory,
+        mastra,
+      });
+      execOptions = applyResolvedAgentScopes({ ...execOptions, requestContext }, resolved, requestContext);
+      requestContext = execOptions.requestContext ?? requestContext;
+    }
+  }
 
   validateModelTimeoutSettings(execOptions.modelSettings?.timeout);
 
@@ -625,6 +666,14 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // caller's own value (captured at step 3, before the merge) so persisted
   // input still reflects only caller intent.
   let requestContextEntriesSnapshot = snapshotRequestContextEntries(requestContext);
+  // Persist the run's scope set unconditionally — [] included — so a cold resume can tell
+  // "held no scopes" (recorded [], re-supplied scopes are rejected) from a pre-upgrade
+  // snapshot (key absent, supplied scopes are adopted). The live run context deliberately
+  // omits the key when the run has no non-identity scopes, so only the persisted entries
+  // carry the empty marker.
+  if (!Array.isArray(requestContextEntriesSnapshot?.[MASTRA_SCOPES_KEY])) {
+    requestContextEntriesSnapshot = { ...requestContextEntriesSnapshot, [MASTRA_SCOPES_KEY]: [] };
+  }
   if (requestVersions !== undefined) {
     const requestVersionsJson = boundedStringify(requestVersions);
     if (requestVersionsJson !== undefined) {

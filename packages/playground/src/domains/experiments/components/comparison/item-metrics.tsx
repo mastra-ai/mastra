@@ -13,6 +13,7 @@ import {
 } from './comparison-metric-format';
 import { ScorerLabel } from './comparison-metric-list';
 import type { ComparisonMetric } from './comparison-metric-list';
+import { ScoreReasonHoverCard } from './score-reason-hover-card';
 
 export interface ItemMetricScore {
   scorerId: string;
@@ -21,6 +22,8 @@ export interface ItemMetricScore {
   delta?: number | null;
   /** Replaces the default scorer link, e.g. with a button opening the score. */
   label?: ReactNode;
+  /** Explanation from the scorer, shown in a hover card next to the value. */
+  reason?: string | null;
 }
 
 export interface ItemMetricsParams {
@@ -96,7 +99,14 @@ export function itemMetrics({
       id: `scorer:${score.scorerId}`,
       icon: <ScorersIcon />,
       label: score.label ?? <ScorerLabel scorerId={score.scorerId} />,
-      value: formatScore(score.value),
+      value: score.reason?.trim() ? (
+        <span className="flex items-center gap-1.5">
+          {formatScore(score.value)}
+          <ScoreReasonHoverCard scorerId={score.scorerId} reason={score.reason} />
+        </span>
+      ) : (
+        formatScore(score.value)
+      ),
       delta: score.delta ?? null,
     })),
   ];

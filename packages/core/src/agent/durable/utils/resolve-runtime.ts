@@ -18,6 +18,7 @@ import type { CoreTool, RequireToolApproval, ToolApprovalContext } from '../../.
 import type { Workspace } from '../../../workspace';
 import type { MessageList } from '../../message-list';
 import { SaveQueueManager } from '../../save-queue';
+import { restoreRunAgentScopes } from '../../scopes';
 import type { ToolsInput } from '../../types';
 import { recordRunSavedMessages } from '../run-message-refs';
 import { getRunRegistryEntry, globalRunRegistry, setRunRegistryEntry } from '../run-registry';
@@ -128,6 +129,7 @@ export function restoreRequestContext(entries?: Record<string, unknown>, runLeve
     if (liveToken !== undefined) {
       restored.setRaw(MASTRA_AUTH_TOKEN_KEY, liveToken);
     }
+    restoreRunAgentScopes(restored);
     return restored;
   }
   return runLevel ?? new RequestContext();
