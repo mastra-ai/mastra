@@ -18,7 +18,7 @@ export function ProjectManagementFactoryStep({
   const anyConnected = Object.values(useWorkSourceConnections()).some(Boolean);
   return (
     <div className="flex min-h-0 w-full flex-col">
-      <section aria-label="Project management connections" className="min-h-0 space-y-1 overflow-y-auto">
+      <section aria-label="Project management connections" className="-mx-3 min-h-0 space-y-1 overflow-y-auto px-3">
         <div onMouseEnter={() => onPreviewSource?.('linear')} onFocus={() => onPreviewSource?.('linear')}>
           <OnboardingLinearConnection onConnect={onConnect} />
         </div>
