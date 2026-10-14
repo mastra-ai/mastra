@@ -19,7 +19,7 @@ vi.mock('../../onboarding/settings.js', async importOriginal => ({
 }));
 
 vi.mock('../prompts/agent-instructions.js', () => ({
-  loadAgentInstructions: vi.fn(() => []),
+  loadSessionInstructions: vi.fn(() => []),
   formatAgentInstructions: vi.fn(() => ''),
 }));
 
@@ -78,9 +78,9 @@ describe('getDynamicInstructions', () => {
 
   it('never leaks the host cwd, branch, or instruction files into a session without a project', async () => {
     const { getCurrentGitBranchAsync } = await import('../../utils/project.js');
-    const { loadAgentInstructions } = await import('../prompts/agent-instructions.js');
+    const { loadSessionInstructions } = await import('../prompts/agent-instructions.js');
     vi.mocked(getCurrentGitBranchAsync).mockClear();
-    vi.mocked(loadAgentInstructions).mockClear();
+    vi.mocked(loadSessionInstructions).mockClear();
 
     const prompt = await getDynamicInstructions({
       requestContext: {
@@ -106,7 +106,7 @@ describe('getDynamicInstructions', () => {
     // locations would resolve against the server cwd, globals against the
     // server homedir).
     expect(getCurrentGitBranchAsync).not.toHaveBeenCalled();
-    expect(loadAgentInstructions).not.toHaveBeenCalled();
+    expect(loadSessionInstructions).not.toHaveBeenCalled();
   });
 
   it('appends active plugin instructions to the base prompt', async () => {

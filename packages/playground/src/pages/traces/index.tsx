@@ -46,6 +46,7 @@ import { hasTraceUsageColumn, isTraceUsageColumn } from '@mastra/playground-ui/d
 import {
   buildTraceQueryRequest,
   clampTraceDiscoveryTimeRange,
+  TRACE_QUERY_MAX_RANGE_MS,
   TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS,
 } from '@mastra/playground-ui/domains/traces/trace-query-filters';
 import type { TraceQueryRelatedScope } from '@mastra/playground-ui/domains/traces/trace-query-filters';
@@ -428,6 +429,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
                   onDateChange={url.handleDateChange}
                   onDateRangeChange={url.handleDateRangeChange}
                   disabled={isTracesLoading}
+                  // The legacy list endpoint has no range cap.
+                  maxRangeMs={withQueryTrace ? TRACE_QUERY_MAX_RANGE_MS : undefined}
                   presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
                 />
               ) : (

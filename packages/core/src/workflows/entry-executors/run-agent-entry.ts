@@ -91,89 +91,99 @@ export async function runAgentEntry(
     void agentOptions?.onFinish?.(result);
   };
 
-  if (
-    (await agent.getModel({ requestContext })).specificationVersion === 'v1' &&
-    typeof agent.streamLegacy === 'function'
-  ) {
-    const { fullStream } = await agent.streamLegacy((inputData as { prompt: string }).prompt, {
-      ...agentOptions,
-      requestContext,
-      actor: resolvedActor,
-      ...observabilityContext,
-      onFinish: handleFinish,
-      abortSignal,
-    });
-    stream = fullStream as any;
-  } else {
-    const modelOutput = await agent.stream((inputData as { prompt: string }).prompt, {
-      ...agentOptions,
-      requestContext,
-      actor: resolvedActor,
-      ...observabilityContext,
-      onFinish: handleFinish,
-      abortSignal,
-    });
+  let cleanup: (() => void) | undefined;
 
-    // handleFinish (the agent's onFinish) is the sole source of truth for the
-    // final text — the success side of .text is intentionally a no-op.
-    // `modelOutput.text` can resolve with '' if a downstream output-processor
-    // throws inside the base output's try/catch (see output.ts:970-973,978-981)
-    // and it fires BEFORE handleFinish, so racing here would poison
-    // streamPromise. Only the rejection channel below is wired up so genuine
-    // stream errors still propagate.
-    void modelOutput.text.then(
-      () => {},
-      (err: unknown) => streamPromise.reject(err),
-    );
-    stream = modelOutput.fullStream as ReadableStream<ChunkType>;
+  try {
+    if (
+      (await agent.getModel({ requestContext })).specificationVersion === 'v1' &&
+      typeof agent.streamLegacy === 'function'
+    ) {
+      const { fullStream } = await agent.streamLegacy((inputData as { prompt: string }).prompt, {
+        ...agentOptions,
+        requestContext,
+        actor: resolvedActor,
+        ...observabilityContext,
+        onFinish: handleFinish,
+        abortSignal,
+      });
+      stream = fullStream as any;
+    } else {
+      const streamResult = await agent.stream((inputData as { prompt: string }).prompt, {
+        ...agentOptions,
+        requestContext,
+        actor: resolvedActor,
+        ...observabilityContext,
+        onFinish: handleFinish,
+        abortSignal,
+      });
+      const isDurableStreamResult =
+        typeof streamResult.cleanup === 'function' && streamResult.output && typeof streamResult.output === 'object';
+      const modelOutput = isDurableStreamResult ? streamResult.output : streamResult;
+      cleanup = isDurableStreamResult ? streamResult.cleanup : undefined;
+
+      // handleFinish (the agent's onFinish) is the sole source of truth for the
+      // final text — the success side of .text is intentionally a no-op.
+      // `modelOutput.text` can resolve with '' if a downstream output-processor
+      // throws inside the base output's try/catch (see output.ts:970-973,978-981)
+      // and it fires BEFORE handleFinish, so racing here would poison
+      // streamPromise. Only the rejection channel below is wired up so genuine
+      // stream errors still propagate.
+      void modelOutput.text.then(
+        () => {},
+        (err: unknown) => streamPromise.reject(err),
+      );
+      stream = modelOutput.fullStream as ReadableStream<ChunkType>;
+    }
+
+    const tripwireChunk =
+      streamFormat === 'legacy'
+        ? await bridgeLegacyWatchEvents({ stream, pubsub, runId, toolData })
+        : await consumeStreamForTripwire(stream, writer);
+
+    // If a tripwire was detected, throw TripWire to abort the workflow step
+    if (tripwireChunk) {
+      throw new TripWire(
+        tripwireChunk.payload?.reason || 'Agent tripwire triggered',
+        {
+          retry: tripwireChunk.payload?.retry,
+          metadata: tripwireChunk.payload?.metadata,
+        },
+        tripwireChunk.payload?.processorId,
+      );
+    }
+
+    if (abortSignal.aborted) {
+      return abort();
+    }
+
+    // A step that declared a structured-output schema but finished without an
+    // object must fail closed rather than silently returning `{ text }` as
+    // success. Reuse STRUCTURED_OUTPUT_OBJECT_UNDEFINED so this matches what
+    // isStructuredOutputFormatError already recognises across the agent stack.
+    if (agentOptions?.structuredOutput?.schema && !structuredResultProduced) {
+      throw new MastraError({
+        id: 'STRUCTURED_OUTPUT_OBJECT_UNDEFINED',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: `Agent step '${entry.id}' declared structuredOutput.schema but the agent finished without producing an object.`,
+        details: {
+          stepId: entry.id,
+          finishReason: finishResult?.finishReason ?? 'unknown',
+          usage: finishResult?.usage,
+        },
+      });
+    }
+
+    // Return structured output if available, otherwise default text
+    if (structuredResultProduced) {
+      return structuredResult;
+    }
+    return {
+      text: await streamPromise.promise,
+    };
+  } finally {
+    cleanup?.();
   }
-
-  const tripwireChunk =
-    streamFormat === 'legacy'
-      ? await bridgeLegacyWatchEvents({ stream, pubsub, runId, toolData })
-      : await consumeStreamForTripwire(stream, writer);
-
-  // If a tripwire was detected, throw TripWire to abort the workflow step
-  if (tripwireChunk) {
-    throw new TripWire(
-      tripwireChunk.payload?.reason || 'Agent tripwire triggered',
-      {
-        retry: tripwireChunk.payload?.retry,
-        metadata: tripwireChunk.payload?.metadata,
-      },
-      tripwireChunk.payload?.processorId,
-    );
-  }
-
-  if (abortSignal.aborted) {
-    return abort();
-  }
-
-  // A step that declared a structured-output schema but finished without an
-  // object must fail closed rather than silently returning `{ text }` as
-  // success. Reuse STRUCTURED_OUTPUT_OBJECT_UNDEFINED so this matches what
-  // isStructuredOutputFormatError already recognises across the agent stack.
-  if (agentOptions?.structuredOutput?.schema && !structuredResultProduced) {
-    throw new MastraError({
-      id: 'STRUCTURED_OUTPUT_OBJECT_UNDEFINED',
-      domain: ErrorDomain.MASTRA_WORKFLOW,
-      category: ErrorCategory.USER,
-      text: `Agent step '${entry.id}' declared structuredOutput.schema but the agent finished without producing an object.`,
-      details: {
-        stepId: entry.id,
-        finishReason: finishResult?.finishReason ?? 'unknown',
-        usage: finishResult?.usage,
-      },
-    });
-  }
-
-  // Return structured output if available, otherwise default text
-  if (structuredResultProduced) {
-    return structuredResult;
-  }
-  return {
-    text: await streamPromise.promise,
-  };
 }
 
 /**

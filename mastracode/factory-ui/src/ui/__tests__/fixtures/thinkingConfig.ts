@@ -5,7 +5,5 @@ import type { ThinkingConfigInfo } from '../../../api/types';
 export const thinkingConfig: ThinkingConfigInfo = {
   levels: THINKING_LEVEL_VALUES,
   globalDefault: 'medium',
-  modeDefaults: {},
-  modes: ['build', 'plan'],
   editable: true,
 };

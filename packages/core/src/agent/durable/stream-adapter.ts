@@ -93,6 +93,33 @@ export function createRunGenerationFilter({
  * Map workflow usage (which may use legacy promptTokens/completionTokens) to
  * the canonical LanguageModelUsage shape (inputTokens/outputTokens).
  */
+/**
+ * The run's serialized steps are the authoritative step list (a resumed segment's output only buffered
+ * its own suffix), but only the buffered steps carry each step's `response` and `content` (#26780).
+ * Overlay those onto the run steps, aligned from the last finished step.
+ */
+async function withBufferedStepResponses(
+  runSteps: unknown[] | undefined,
+  output: { steps: Promise<unknown[]> },
+): Promise<unknown[]> {
+  const buffered = ((await output.steps.catch(() => undefined)) ?? []) as Record<string, unknown>[];
+  if (!runSteps?.length) return buffered;
+  // An aborted run ends with a step that never finished, so it was never buffered.
+  const trailingAborted =
+    (runSteps.at(-1) as { finishReason?: string } | undefined)?.finishReason === 'abort' &&
+    buffered.at(-1)?.finishReason !== 'abort';
+  const offset = runSteps.length - (trailingAborted ? 1 : 0) - buffered.length;
+  return runSteps.map((step, i) => {
+    const match = i >= offset ? buffered[i - offset] : undefined;
+    if (!match) return step;
+    return {
+      ...(step as Record<string, unknown>),
+      ...(match.response !== undefined ? { response: match.response } : {}),
+      ...(match.content !== undefined ? { content: match.content } : {}),
+    };
+  });
+}
+
 function normalizeUsage(raw?: Record<string, unknown>): LanguageModelUsage {
   const inputTokens = (raw?.inputTokens as number | undefined) ?? (raw?.promptTokens as number | undefined);
   const outputTokens = (raw?.outputTokens as number | undefined) ?? (raw?.completionTokens as number | undefined);
@@ -545,8 +572,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           // consume the stream (for example, resume() with a delay-only wait).
           if (finishReason === 'abort') {
             try {
+              const steps = onAbort ? await withBufferedStepResponses(data.output?.steps, output) : [];
               await onAbort?.({
-                steps: (data.output?.steps ?? []) as unknown[],
+                steps,
                 text: (data.output?.text ?? '') as string,
               });
             } catch (callbackError) {
@@ -571,7 +599,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             }
           } else if (onFinish) {
             try {
-              const steps = (data.output?.steps ?? []) as any[];
+              const steps = (await withBufferedStepResponses(data.output?.steps, output)) as any[];
               const allToolResults = steps.flatMap((s: any) => s?.toolResults ?? []);
               const allToolCalls = steps.flatMap((s: any) => s?.toolCalls ?? []);
               // The structured object is parsed while the output drains the (now closed) chunk
@@ -605,7 +633,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
                 totalUsage: normalizeUsage(data.output?.usage),
                 warnings: data.stepResult?.warnings ?? [],
                 request: { body: undefined },
-                response: {},
+                response: steps.at(-1)?.response ?? {},
                 reasoningText: undefined,
                 providerMetadata: undefined,
               });

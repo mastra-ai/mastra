@@ -67,21 +67,22 @@ function renderPanel(
 ) {
   const onTagsChange = vi.fn();
   const { wrapper: Wrapper } = makeWrapper();
-  render(
+  const tree = (current: DatasetExperimentResult) => (
     <Wrapper>
       <TestLinkProvider>
         <ExperimentResultPanel
           open
-          result={result}
+          result={current}
           onClose={() => {}}
           onTagsChange={onTagsChange}
           tagVocabulary={['alpha', 'beta']}
           {...props}
         />
       </TestLinkProvider>
-    </Wrapper>,
+    </Wrapper>
   );
-  return { onTagsChange };
+  const { rerender } = render(tree(result));
+  return { onTagsChange, showResult: (next: DatasetExperimentResult) => rerender(tree(next)) };
 }
 
 describe('ExperimentResultPanel output', () => {
@@ -294,6 +295,23 @@ describe('ExperimentResultPanel trace usage', () => {
     });
   });
 
+  describe('when switching to another agent result whose usage is still loading', () => {
+    it('keeps the cost and tokens rows reserved', async () => {
+      setUsageHandlers({ capabilities: metricsCapableCapabilities, rootEntityType: EntityType.AGENT });
+      const { showResult } = renderPanel(makeResult({ targetType: 'agent', traceId: 'trace-a' }));
+      await screen.findByText('$0.001');
+
+      server.use(http.post(`${TEST_BASE_URL}/api/observability/metrics/breakdown`, () => delay('infinite')));
+      showResult(makeResult({ id: 'res-2', itemId: 'item-2', targetType: 'agent', traceId: 'trace-b' }));
+      await waitFor(() => expect(screen.queryByText('$0.001')).toBeNull());
+      // Let the trace load and the next usage request start, the window where the rows used to vanish.
+      await waitFor(() => expect(onTraceRequest).toHaveBeenCalledTimes(2));
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(termLabels().slice(0, 2)).toEqual(['Cost', 'Tokens']);
+    });
+  });
+
   describe('when the result is a workflow run', () => {
     it('does not reserve usage rows while the trace loads', () => {
       setUsageHandlers({ capabilities: metricsCapableCapabilities, rootEntityType: EntityType.WORKFLOW });
@@ -402,6 +420,34 @@ describe('ExperimentResultPanel summary', () => {
   });
 });
 
+describe('ExperimentResultPanel score reason', () => {
+  describe('when a score has a reason', () => {
+    const scores = [{ id: 'score-1', scorerId: 'accuracy', score: 0.5, reason: 'Because **bold**' }];
+
+    it('shows an info button next to the score', () => {
+      renderPanel(makeResult(), { scores });
+
+      expect(screen.getByRole('button', { name: 'Show accuracy reason' })).toBeDefined();
+    });
+
+    it('renders the reason as markdown when the info button is focused', async () => {
+      renderPanel(makeResult(), { scores });
+
+      fireEvent.focus(screen.getByRole('button', { name: 'Show accuracy reason' }));
+
+      expect((await screen.findByText('bold')).tagName).toBe('STRONG');
+    });
+  });
+
+  describe('when a score has no reason', () => {
+    it('does not show an info button', () => {
+      renderPanel(makeResult(), { scores: [{ id: 'score-1', scorerId: 'accuracy', score: 0.5, reason: null }] });
+
+      expect(screen.queryByRole('button', { name: 'Show accuracy reason' })).toBeNull();
+    });
+  });
+});
+
 describe('ExperimentResultPanel payloads', () => {
   describe('when the result has a ground truth', () => {
     it('shows Input, Ground Truth, then Output', () => {
@@ -425,6 +471,32 @@ describe('ExperimentResultPanel payloads', () => {
 
       expect(regionNames()).toEqual(['Input', 'Error']);
       expect(screen.getByRole('region', { name: 'Error' }).textContent).toContain('model exploded');
+    });
+  });
+});
+
+describe('ExperimentResultPanel inline variant', () => {
+  describe('when variant is inline and a result is given', () => {
+    it('renders the result as an inline section in the document flow', () => {
+      renderPanel(agentMarkdownResult, { variant: 'inline' });
+
+      const panel = document.querySelector('[data-slot="data-panel"]');
+      expect(panel?.tagName).toBe('SECTION');
+      expect(panel?.getAttribute('data-variant')).toBe('inline');
+    });
+
+    it('does not render a modal dialog', () => {
+      renderPanel(agentMarkdownResult, { variant: 'inline' });
+
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+  });
+
+  describe('when variant is inline and neither a result nor an item id is given', () => {
+    it('renders nothing', () => {
+      renderPanel(agentMarkdownResult, { variant: 'inline', result: undefined });
+
+      expect(document.querySelector('[data-slot="data-panel"]')).toBeNull();
     });
   });
 });
