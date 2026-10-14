@@ -2,7 +2,7 @@ import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.js
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { resolveFactoryProjectForSession, type SourceControlSessionLookup } from './factory-session.js';
+import type { SourceControlSessionLookup } from './factory-session.js';
 
 export interface DefaultModelApplicableSession {
   model: { switch(modelId: string): Promise<unknown> };
@@ -30,7 +30,7 @@ async function applyDefaultModel(session: DefaultModelApplicableSession, modelId
 }
 
 export interface DefaultModelHydrationDependencies {
-  sourceControl: Pick<SourceControlSessionLookup, 'getBySessionId' | 'getSourceControlBySessionId'>;
+  sourceControl: Pick<SourceControlSessionLookup, 'getBySessionId'>;
   projects: Pick<FactoryProjectsStorage, 'getById'>;
   workItems: Pick<WorkItemsStorage, 'findActiveRunBindingByThread'>;
   modelDefaults: Pick<ModelDefaultsStorage, 'get'>;
@@ -56,17 +56,11 @@ export async function hydrateSessionDefaultModel(
       await clearFactoryIdentity();
       return;
     }
-    const sourceControlHandle = await sourceControl.getSourceControlBySessionId(resourceId);
-    if (!sourceControlHandle) {
+    if (!sourceSession.factoryProjectId) {
       await clearFactoryIdentity();
       return;
     }
-    const owner = await resolveFactoryProjectForSession({ sourceControl: sourceControlHandle, sessionId: resourceId });
-    if (!owner) {
-      await clearFactoryIdentity();
-      return;
-    }
-    const project = await projects.getById({ id: owner.factoryProjectId });
+    const project = await projects.getById({ id: sourceSession.factoryProjectId });
     if (!project) {
       await clearFactoryIdentity();
       return;

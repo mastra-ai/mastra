@@ -339,8 +339,6 @@
     "inception/mercury-2",
     "inception/mercury-2.5",
     "inclusionai/ling-3.0-flash",
-    "inclusionai/ling-3.0-flash-fin",
-    "inclusionai/ling-3.0-flash-sante",
     "inclusionai/ling-3.0-flash-vl",
     "inclusionai/ling-3.1-flash",
     "inference-net/schematron-v2-small",
@@ -351,6 +349,7 @@
     "kilo-auto/frontier",
     "kilo-auto/small",
     "liquid/lfm-2.5-2.6b:free",
+    "liquid/lfm-2.5-24b-a2b",
     "mancer/weaver",
     "meituan/longcat-2.0",
     "meta-llama/llama-3.1-70b-instruct",
@@ -652,6 +651,7 @@
     "inference-net/schematron-v2-small",
     "inference-net/schematron-v2-turbo",
     "liquid/lfm-2.5-2.6b:free",
+    "liquid/lfm-2.5-24b-a2b",
     "meta-llama/llama-3.1-70b-instruct",
     "meta-llama/llama-3.1-8b-instruct",
     "meta-llama/llama-3.2-3b-instruct",
@@ -1572,6 +1572,12 @@
         "values": ["high"]
       }
     ],
+    "liquid/lfm-2.5-24b-a2b": [
+      {
+        "type": "effort",
+        "values": ["high"]
+      }
+    ],
     "google/gemma-4-31b-it": [
       {
         "type": "effort",
@@ -1776,19 +1782,7 @@
         "values": ["none", "high"]
       }
     ],
-    "inclusionai/ling-3.0-flash-sante": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
     "inclusionai/ling-3.0-flash-vl": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "inclusionai/ling-3.0-flash-fin": [
       {
         "type": "effort",
         "values": ["none", "high"]

@@ -69,7 +69,7 @@ function stubSidebar(status: PullRequestSubscription['status']) {
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryProjectId}/decisions`, () =>
       HttpResponse.json({ decisions: [] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () =>
       HttpResponse.json({ sessions: [reviewSession] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryProjectId}/work-items`, () =>

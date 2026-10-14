@@ -50,6 +50,8 @@
     "gemini-3.7-flash@eu",
     "gemini-3.8-flash",
     "gemini-3.8-flash@eu",
+    "gemini-4-argon",
+    "gemini-4-argon@eu",
     "gemma-4-26b-a4b-it",
     "gemma-4-31b-it",
     "glm-5.3-flash",
@@ -299,6 +301,8 @@
     "gemini-3.7-flash@eu",
     "gemini-3.8-flash",
     "gemini-3.8-flash@eu",
+    "gemini-4-argon",
+    "gemini-4-argon@eu",
     "gemma-4-26b-a4b-it",
     "glm-5.1@eu",
     "glm-5.2",
@@ -729,6 +733,12 @@
       }
     ],
     "claude-opus-5-5@eu": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "gemini-4-argon@eu": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -1317,6 +1327,12 @@
       }
     ],
     "claude-opus-4-5@eu": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "gemini-4-argon": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]

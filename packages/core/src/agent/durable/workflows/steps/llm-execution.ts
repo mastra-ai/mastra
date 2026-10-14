@@ -629,10 +629,18 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               ...deferredStepFinishChunk,
               payload: {
                 ...deferredStepFinishChunk.payload,
+                ...(reason === 'retry' && tripwire ? { processorRetryFeedback: tripwire.reason } : {}),
                 stepResult: {
                   ...deferredStepFinishChunk.payload?.stepResult,
                   ...(reason ? { reason } : {}),
                   isContinued,
+                  ...(reason === 'retry' && tripwire
+                    ? {
+                        retryReason: tripwire.reason,
+                        retryMetadata: tripwire.metadata,
+                        retryProcessorId: tripwire.processorId,
+                      }
+                    : {}),
                 },
                 ...(tripwire ? { output: { ...deferredStepFinishChunk.payload?.output, steps: [{ tripwire }] } } : {}),
               },
@@ -1817,7 +1825,16 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 let processedChunk: typeof clientChunk | null | undefined;
                 if (pubsub && rawChunk.type !== 'error' && rawChunk.type !== 'response-metadata') {
                   if (rawChunk.type === 'step-finish') {
-                    deferredStepFinishChunk = clientChunk;
+                    deferredStepFinishChunk = {
+                      ...clientChunk,
+                      payload: {
+                        ...clientChunk.payload,
+                        metadata: {
+                          ...clientChunk.payload?.metadata,
+                          modelId: clientChunk.payload?.metadata?.modelId || model.modelId,
+                        },
+                      },
+                    };
                   } else if (effectiveOutputProcessors.length > 0 && registryEntry?.processorStates) {
                     try {
                       processedChunk = await processAndEmitChunk(clientChunk, {

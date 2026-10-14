@@ -24,6 +24,7 @@ function sourceControlRow(): SourceControlSession {
     id: 'row-1',
     sessionId: 'session-1',
     projectRepositoryId: 'repo-1',
+    factoryProjectId: 'factory-1',
     orgId: 'org-1',
     userId: 'user-1',
     branch: 'user/session-1',
@@ -61,15 +62,9 @@ function createDependencies(
   modelScope: 'factory' | 'user' = 'user',
 ): DefaultModelHydrationDependencies {
   const sourceSession = sourceControlRow();
-  const sourceControlHandle = {
-    sessions: { getBySessionId: vi.fn().mockResolvedValue(sourceSession) },
-    projectRepositories: { get: vi.fn().mockResolvedValue({ connectionId: 'connection-1' }) },
-    connections: { get: vi.fn().mockResolvedValue({ factoryProjectId: 'factory-1' }) },
-  };
   return {
     sourceControl: {
       getBySessionId: vi.fn().mockResolvedValue(sourceSession),
-      getSourceControlBySessionId: vi.fn().mockResolvedValue(sourceControlHandle),
     },
     projects: {
       getById: vi.fn().mockResolvedValue({

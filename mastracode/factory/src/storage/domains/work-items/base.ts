@@ -1807,12 +1807,16 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           factory_project_id: input.factoryProjectId,
           identity: input.ingress.identity,
         });
-        if (prior)
-          return {
-            status: 'replayed',
-            item: await this.getForProject(input.orgId, input.factoryProjectId, input.workItemId),
-            result: prior.result as Record<string, unknown>,
-          };
+        if (prior) {
+          // Read through the transaction: on a single-connection database the
+          // root client waits for this transaction, which would never finish.
+          const row = await ops.findOne<WorkItemDbRow>('work_items', {
+            id: input.workItemId,
+            org_id: input.orgId,
+            factory_project_id: input.factoryProjectId,
+          });
+          return { status: 'replayed', item: row ? toRow(row) : null, result: prior.result as Record<string, unknown> };
+        }
 
         const now = new Date();
         let item: WorkItemRow | null = null;

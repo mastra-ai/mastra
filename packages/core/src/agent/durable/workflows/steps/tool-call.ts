@@ -14,6 +14,7 @@ import { processAndEmitChunk } from '../../../../loop/shared/steps/process-chunk
 import { resolveFrameworkSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import type { ResolvedSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import { applyToolPayloadTransformToChunk } from '../../../../loop/shared/tool-payload-transform';
+import { runBeforeApprovalHook } from '../../../../loop/workflows/agentic-execution/tool-approval-verdict';
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
@@ -937,7 +938,59 @@ export function createDurableToolCallStep() {
         suspendData != null &&
         typeof suspendData === 'object' &&
         (suspendData as { type?: unknown }).type === 'approval';
-      const approvalGated = suspendedForApproval || (requiresApproval && suspendData === undefined);
+      const isFreshCall = suspendData === undefined;
+      const approvalGated = suspendedForApproval || (requiresApproval && isFreshCall);
+
+      if (approvalGated && !approvalDecision && isFreshCall) {
+        const rejection = await runBeforeApprovalHook({
+          tool,
+          input: args,
+          context: { toolCallId, toolName, requestContext: approvalRequestContext, workspace, actor },
+          logger: logger as any,
+        });
+        if (rejection) {
+          const result = rejection.output;
+          if (pubsub) {
+            try {
+              const resultChunk = await applyToolPayloadTransformToChunk(
+                {
+                  type: 'tool-result' as const,
+                  runId,
+                  from: ChunkFrom.AGENT,
+                  payload: { toolCallId, toolName, args, result, providerExecuted },
+                },
+                {
+                  policy: toolPayloadTransform,
+                  toolTransform: (tool as { transform?: any })?.transform,
+                  tools: toolsForTransform,
+                  logger: logger as any,
+                },
+              );
+              await processChunkThroughOutputProcessors(
+                resultChunk,
+                registryEntry,
+                pubsub,
+                runId,
+                initData.agentId,
+                logger,
+                messageList,
+                processorObservabilityContext,
+                collectProcessorDataPart,
+              );
+            } catch (emitError) {
+              if (emitError instanceof DurableOutputProcessorError) {
+                throw emitError;
+              }
+              logger?.warn?.(`[DurableAgent] Failed to emit tool-result chunk for ${toolName}: ${emitError}`);
+            }
+          }
+          return {
+            ...typedInput,
+            result,
+            ...(processorDataParts.length ? { processorDataParts } : {}),
+          };
+        }
+      }
 
       if (approvalGated && !approvalDecision) {
         // Persist active goal time before exposing the approval wait.

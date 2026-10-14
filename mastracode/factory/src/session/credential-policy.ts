@@ -8,7 +8,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { parseSupervisorResourceId } from '../supervisor/session.js';
-import { resolveFactoryProjectForSession, type SourceControlSessionLookup } from './factory-session.js';
+import type { SourceControlSessionLookup } from './factory-session.js';
 
 /** Resolve billing authority from authenticated identity and durable bindings, never session state. */
 export async function resolveFactoryCredentialTenant(
@@ -53,14 +53,8 @@ export async function resolveFactoryCredentialTenant(
   ) {
     throw new Error('Factory session is not available to the current user.');
   }
-  const sourceControl = await deps.sourceControl.getSourceControlBySessionId(controller.resourceId);
-  const owner = sourceControl
-    ? await resolveFactoryProjectForSession({ sourceControl, sessionId: controller.resourceId })
-    : null;
-  if (!owner || owner.orgId !== sourceSession.orgId || owner.userId !== sourceSession.userId) {
-    throw new Error('Factory session ownership is unavailable.');
-  }
-  const projectId = binding?.factoryProjectId ?? owner.factoryProjectId;
+  if (!sourceSession.factoryProjectId) throw new Error('Factory session ownership is unavailable.');
+  const projectId = binding?.factoryProjectId ?? sourceSession.factoryProjectId;
   const project = await deps.projects.getById({ id: projectId });
   if (!project || project.orgId !== sourceSession.orgId) throw new Error('Factory model policy is unavailable.');
   return { orgId: project.orgId, userId: sourceSession.userId, credentialScope: project.modelScope };
