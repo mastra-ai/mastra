@@ -1,5 +1,5 @@
 /**
- * The sessions sidebar lists sessions from every repository linked to the Factory, not just the first.
+ * The sessions sidebar lists the Factory's sessions in one request, whichever linked repository each one is on.
  */
 import { screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -30,7 +30,8 @@ function userSession(projectRepositoryId: string, sessionId: string, title: stri
   };
 }
 
-function stubRepositories(sessionsByRepository: Record<string, FactoryUserSession[] | 'error'>) {
+function stubRepositories(repositoryIds: string[], sessions: FactoryUserSession[] | 'error') {
+  const requestedFactoryIds: string[] = [];
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authEnabled: true, authenticated: true, user: { userId: 'user-1' } }),
@@ -44,7 +45,7 @@ function stubRepositories(sessionsByRepository: Record<string, FactoryUserSessio
           {
             id: 'conn-1',
             installationId: 'inst-7',
-            repositories: Object.keys(sessionsByRepository).map(id => ({
+            repositories: repositoryIds.map(id => ({
               id,
               branch: 'main',
               sandboxWorkdir: `/workspace/${id}`,
@@ -54,12 +55,13 @@ function stubRepositories(sessionsByRepository: Record<string, FactoryUserSessio
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/:id/sessions`, ({ params }) => {
-      const sessions = sessionsByRepository[String(params.id)];
-      if (sessions === 'error' || !sessions) return HttpResponse.json({ error: 'boom' }, { status: 500 });
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, ({ params }) => {
+      requestedFactoryIds.push(String(params.factoryId));
+      if (sessions === 'error') return HttpResponse.json({ error: 'boom' }, { status: 500 });
       return HttpResponse.json({ sessions });
     }),
   );
+  return requestedFactoryIds;
 }
 
 function renderSection() {
@@ -73,24 +75,24 @@ function renderSection() {
 }
 
 describe('UserSessionsSection across linked repositories', () => {
-  it('lists sessions from every linked repository', async () => {
-    stubRepositories({
-      'ghp-1': [userSession('ghp-1', 'sess-1', 'Fix the app')],
-      'ghp-2': [userSession('ghp-2', 'sess-2', 'Tune the api')],
-    });
+  it('lists sessions from every linked repository with one Factory request', async () => {
+    const requested = stubRepositories(
+      ['ghp-1', 'ghp-2'],
+      [userSession('ghp-1', 'sess-1', 'Fix the app'), userSession('ghp-2', 'sess-2', 'Tune the api')],
+    );
 
     renderSection();
 
     expect(await screen.findByText('Fix the app')).toBeTruthy();
     expect(await screen.findByText('Tune the api')).toBeTruthy();
+    expect(requested).toEqual(['fp-1']);
   });
 
-  it('keeps the other repositories listed and offers a retry when one repository fails', async () => {
-    stubRepositories({ 'ghp-1': 'error', 'ghp-2': [userSession('ghp-2', 'sess-2', 'Tune the api')] });
+  it('offers a retry when the Factory sessions fail to load', async () => {
+    stubRepositories(['ghp-1', 'ghp-2'], 'error');
 
     renderSection();
 
-    expect(await screen.findByText('Tune the api')).toBeTruthy();
     expect(await screen.findByText('Couldn’t load sessions')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
   });

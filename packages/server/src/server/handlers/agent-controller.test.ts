@@ -7,6 +7,7 @@ import { Workspace } from '@mastra/core/workspace';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
 
+import { MASTRA_USER_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import {
   LIST_AGENT_CONTROLLERS_ROUTE,
@@ -370,6 +371,7 @@ describe('agent-controller routes', () => {
     function makeRequestContext() {
       const requestContext = new RequestContext();
       requestContext.set('tenantId', 'acme');
+      requestContext.set(MASTRA_USER_KEY, { id: 'user-123', name: 'Ada' });
       return requestContext;
     }
 
@@ -386,7 +388,48 @@ describe('agent-controller routes', () => {
         requestContext,
       } as any);
 
+      expect(spy).toHaveBeenCalledWith({
+        content: 'hello',
+        requestContext,
+        author: { id: 'user-123' },
+      });
+    });
+
+    it('does not stamp an author without an authenticated user id', async () => {
+      const session = await getRouteSession('user-no-author');
+      const spy = vi.spyOn(session, 'sendMessage').mockResolvedValue(undefined);
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_USER_KEY, { name: 'Missing id' });
+
+      await SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-no-author',
+        message: 'hello',
+        requestContext,
+      } as any);
+
       expect(spy).toHaveBeenCalledWith({ content: 'hello', requestContext });
+    });
+
+    it('forwards the authenticated user as the steer author', async () => {
+      const session = await getRouteSession('user-steer-author');
+      const spy = vi.spyOn(session, 'steer').mockResolvedValue(undefined);
+      const requestContext = makeRequestContext();
+
+      await STEER_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-steer-author',
+        message: 'change direction',
+        requestContext,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({
+        content: 'change direction',
+        requestContext,
+        author: { id: 'user-123' },
+      });
     });
 
     it('forwards requestContext to session.thread.switch', async () => {
@@ -504,7 +547,28 @@ describe('agent-controller routes', () => {
         requestContext,
       } as any);
 
-      expect(spy).toHaveBeenCalledWith({ content: 'change course', requestContext });
+      expect(spy).toHaveBeenCalledWith({
+        content: 'change course',
+        files: undefined,
+        requestContext,
+        author: { id: 'user-123' },
+      });
+    });
+
+    it('forwards files to session.steer', async () => {
+      const session = await getRouteSession('user-rc');
+      const spy = vi.spyOn(session, 'steer').mockResolvedValue(undefined);
+      const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
+
+      await STEER_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        message: 'look at this instead',
+        files,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({ content: 'look at this instead', files, requestContext: undefined });
     });
 
     it('forwards requestContext to session.followUp', async () => {
@@ -520,7 +584,41 @@ describe('agent-controller routes', () => {
         requestContext,
       } as any);
 
-      expect(spy).toHaveBeenCalledWith({ content: 'and another thing', requestContext });
+      expect(spy).toHaveBeenCalledWith({ content: 'and another thing', files: undefined, requestContext });
+    });
+
+    it('forwards files to session.followUp', async () => {
+      const session = await getRouteSession('user-rc');
+      const spy = vi.spyOn(session, 'followUp').mockResolvedValue(undefined);
+      const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
+
+      await FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        message: 'also this',
+        files,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({ content: 'also this', files, requestContext: undefined });
+    });
+
+    it.each([
+      ['steer', STEER_AGENT_CONTROLLER_SESSION_ROUTE],
+      ['follow-up', FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE],
+    ])('applies the message attachment limits to the %s body schema', (_name, route) => {
+      const schema = route.bodySchema!;
+
+      expect(schema.safeParse({ message: 'hi' }).success).toBe(true);
+      expect(schema.safeParse({ message: 'hi', files: [{ data: 'aGVsbG8=', mediaType: 'image/png' }] }).success).toBe(
+        true,
+      );
+
+      const oversized = { data: 'a'.repeat(14 * 1024 * 1024 + 1), mediaType: 'image/png' };
+      expect(schema.safeParse({ message: 'hi', files: [oversized] }).success).toBe(false);
+
+      const large = { data: 'a'.repeat(10 * 1024 * 1024), mediaType: 'image/png' };
+      expect(schema.safeParse({ message: 'hi', files: [large, large, large] }).success).toBe(false);
     });
 
     it('forwards requestContext to session.respondToToolApproval', async () => {

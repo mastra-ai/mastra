@@ -41,7 +41,7 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 import { getWorkflowInfo, WorkflowRegistry } from '../utils';
 import { handleError } from './error';
-import { getEffectiveResourceId, validateRunOwnership } from './utils';
+import { getEffectiveResourceId, getPublicWorkflowById, validateRunOwnership } from './utils';
 
 /**
  * Statuses a run cannot come back from. Streaming one of these runIds again would
@@ -125,11 +125,7 @@ async function listWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) 
   workflow = WorkflowRegistry.getWorkflow(workflowId);
 
   if (!workflow) {
-    try {
-      workflow = mastra.getWorkflowById(workflowId);
-    } catch (error) {
-      logger.debug('Error getting workflow, searching agents for workflow', error);
-    }
+    workflow = getPublicWorkflowById(mastra, workflowId);
   }
 
   if (!workflow) {

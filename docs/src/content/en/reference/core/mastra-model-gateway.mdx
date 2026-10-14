@@ -130,6 +130,13 @@ Fetches provider configurations from the gateway.
     isOptional: true,
     description: 'Optional documentation URL',
   },
+  {
+    name: 'pricing',
+    type: 'Record<string, ModelPricing>',
+    isOptional: true,
+    description:
+      'Prices per model ID in USD per 1 million tokens, with the same keys as a models.dev `cost` (`input`, `output`, `cache_read`, `cache_write`, `reasoning`, `input_audio`, `output_audio`). Optional `tiers` hold long-context rates. `@mastra/observability` uses them for cost metrics when models.dev has no price for the model.',
+  },
 ]}
 />
 

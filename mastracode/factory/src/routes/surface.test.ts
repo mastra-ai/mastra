@@ -124,6 +124,61 @@ describe('prepareFactoryRuleBinding', () => {
     );
   });
 
+  it("files the session under the card's repository, not the environment's first link", async () => {
+    const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository();
+    const installation = await sourceControl.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: '123',
+    });
+    const otherRepository = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: '789', slug: 'mastra-ai/other', defaultBranch: 'dev' },
+    });
+    const otherLink = await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: projectRepository.connectionId,
+      repositoryId: otherRepository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/other',
+    });
+    const prepare = vi.fn(async () => ({}) as never);
+    const input = bindingInput(project.id);
+    input.item.metadata = { githubIssueNumber: 49, repository: 'mastra-ai/other' };
+
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      boards,
+      input,
+    );
+
+    const { sessionId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string };
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(
+      expect.objectContaining({ projectRepositoryId: otherLink.id, baseBranch: 'dev' }),
+    );
+  });
+
+  it('stamps the factory on the session it creates', async () => {
+    const { seeded, sourceControl, project, github } = await seedFactoryWithRepository();
+    const prepare = vi.fn(async () => ({}) as never);
+
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      boards,
+      bindingInput(project.id),
+    );
+
+    const { sessionId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string };
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(
+      expect.objectContaining({ factoryProjectId: project.id }),
+    );
+  });
+
   it("keeps a run an agent pre-approved on the repo connector, never on the agent's id", async () => {
     const { seeded, sourceControl, project, github } = await seedFactoryWithRepository();
     const prepare = vi.fn(async () => ({}) as never);

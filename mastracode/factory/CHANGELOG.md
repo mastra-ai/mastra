@@ -1,5 +1,365 @@
 # @mastra/factory
 
+## 0.22.0
+
+### Minor Changes
+
+- Added environment builds. When the Factory sandbox implements the `builds` capability, Factory builds the environment template ahead of sessions instead of on the first session boot. ([#26479](https://github.com/mastra-ai/mastra/pull/26479))
+
+  - `POST /web/factory/projects/:id/environment/build` starts a build now (the Environment page's **Build now** button, or `mastra api factory project environment build <project-id>`).
+  - `GET /web/factory/projects/:id/environment/builds` and `GET /web/factory/projects/:id/environment/builds/:buildId` read the provider's build history and live status.
+  - The environment payload carries `buildTriggers`: a cron schedule and a push trigger with a debounce window.
+  - Scheduled and push builds skip when the last build is ready and nothing it was built from changed. Only one build starts at a time, and no trigger starts a build while the last one is still running. Saving settings never starts a build.
+  - Hosts that spread `prepare()`'s result into `new Mastra` pick up the `factory-environment-build` workflow.
+  - After a session's own setup, each repository link records `configured` or `failed` with the redacted error.
+
+  Turn on a nightly rebuild and push builds for a project:
+
+  ```ts
+  await fetch(`${baseUrl}/web/factory/projects/${projectId}/environment`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      buildTriggers: {
+        schedule: { enabled: true, cron: '0 3 * * *', timezone: 'UTC' },
+        push: { enabled: true, debounceMinutes: 10 },
+      },
+    }),
+  });
+  ```
+
+- Sessions boot every repository in the Factory environment instead of one linked repository. ([#26169](https://github.com/mastra-ai/mastra/pull/26169))
+
+  - The sandbox template is built from every environment repository, in the order shown on the Environment page. Each is cloned under the workspace root, which becomes the session's working directory.
+  - The session branch is resumed where the remote has it. A new session branch starts from the latest remote default branch, and local work in an existing checkout is kept.
+  - A repository's setup command is skipped when the template already ran it, and the workspace setup command runs last.
+  - A `factory-environment` state signal tells the agent which repositories are present, where, and on which branch.
+  - Every repository is torn down when the session retires.
+  - The agent loads each environment repository's `AGENTS.md` or `CLAUDE.md` and project skills, starting with the session's own repository. Review sessions load only the session's own repository's instructions, from its base branch.
+  - The provider receives the project's stored sandbox settings when a session's sandbox is constructed. Settings saved later apply to sandboxes constructed after that.
+
+  ```ts
+  class MyFactorySandbox extends FactorySandbox<{ cpuCount?: number }> {
+    readonly provider = 'my-provider';
+    readonly settings = z.object({ cpuCount: z.number().int().min(1).optional() });
+
+    create(ctx: FactorySandboxContext, settings: { cpuCount?: number }) {
+      // ctx.repos lists every environment repository; ctx.workingDirectory is the workspace root.
+      return new MySandbox({ id: ctx.sessionId, cpus: settings.cpuCount ?? 2, workingDirectory: ctx.workingDirectory });
+    }
+  }
+  ```
+
+- Added `FactorySandbox` support to `MastraFactoryConfig.sandbox`. Pass a provider instance (`PlatformFactorySandbox`, `E2BFactorySandbox`, `DockerFactorySandbox`, or the new `LocalFactorySandbox` exported from `@mastra/factory`) and the factory gains that provider's environment settings and template builds. The callback form still works and is wrapped as a `provider: 'custom'` sandbox with no settings. ([#26467](https://github.com/mastra-ai/mastra/pull/26467))
+
+  ```ts
+  import { MastraFactory, LocalFactorySandbox } from '@mastra/factory';
+  import { E2BFactorySandbox } from '@mastra/e2b';
+
+  // Before: a callback building one sandbox per session
+  new MastraFactory({ sandbox: ctx => new E2BSandbox({ id: ctx.sessionId, sandboxId: ctx.sandboxId }) });
+
+  // After: a provider instance, which also carries settings and builds
+  new MastraFactory({ sandbox: new E2BFactorySandbox() });
+
+  // Or run sessions on the host machine, one directory per session
+  new MastraFactory({ sandbox: new LocalFactorySandbox({ root: '/var/sandboxes' }) });
+  ```
+
+- Added a sandbox environment to each Factory project. Provider settings, the workspace setup command, the working directory and the order repositories are checked out in now live on the project and are read and written through one route, `GET` and `PATCH /web/factory/projects/:id/environment`. ([#26115](https://github.com/mastra-ai/mastra/pull/26115))
+
+  ```json
+  {
+    "settings": { "cpuCount": 8 },
+    "workspaceSetupCommand": "pnpm -r build",
+    "sandboxWorkingDirectory": "/home/user",
+    "repositories": [
+      { "projectRepositoryId": "…web", "position": 1 },
+      { "projectRepositoryId": "…docs", "position": 2, "inEnvironment": false }
+    ]
+  }
+  ```
+
+  **Settings:** only the keys you set are stored; anything unset keeps the provider default. A patch is merged onto the stored settings, `null` removes a key, and the result is checked against the provider's schema before anything is written. A rejected value answers 400 `invalid_environment` naming the field; a factory without a sandbox answers 400 `no_sandbox`.
+
+  **Repositories:** to reorder, list every repository with positions 1 through n. A second link to the same repository starts outside the environment.
+
+  Existing projects keep working: their links get an order on the next start and nothing is deleted.
+
+- Sessions in a multi-repository environment can push and open change requests in any environment repository. ([#26334](https://github.com/mastra-ai/mastra/pull/26334))
+
+  - Every `source_control_*` tool except `source_control_refresh_change_request_checkout` (the GitLab checkout refresh) takes an optional `repository` slug; the default is the repository the session is filed under, and each tool description lists the valid slugs.
+  - The first push to another repository sends the commits checked out there as the session branch, and the agent's later commits in that repository go to the same branch and are sent by its next push.
+  - Pushing a repository that has no checkout in the session fails with a clear error.
+  - Every push and change request is recorded per repository, and a push after a change request keeps the change request fields.
+  - The `gh pr create` observer and auto-subscribe attribute a pull request to its repository and accept any environment repository. Only a pull request from the session branch is recorded on the session; subscribing to someone else's leaves the record alone.
+  - `github_subscribe_pr` / `github_unsubscribe_pr` and pull request subscriptions are gated on the Factory, so web user sessions get them too.
+  - On the platform GitHub provider, `GH_TOKEN` covers every environment repository when they share one installation and number at most ten; otherwise it covers the session repository and the agent is told to use the `source_control_*` tools for the others.
+
+  For example, an agent in a session filed under `acme/api` pushes and opens a change request in `acme/docs`:
+
+  ```json
+  { "tool": "source_control_push_branch", "input": { "repository": "acme/docs" } }
+  { "tool": "source_control_create_change_request", "input": { "repository": "acme/docs", "title": "Document the new endpoint" } }
+  ```
+
+- **Sessions belong to a Factory.** A session now records the Factory it belongs to, not only the repository link it was created on. This is groundwork for sessions that span every repository in the Factory environment. ([#26123](https://github.com/mastra-ai/mastra/pull/26123))
+
+  - List every session of a Factory the caller can see, across all source-control providers, with `GET /web/factory/projects/:id/sessions`. The sidebar, search and board use it instead of one request per repository.
+  - `sessions.create` on the source-control handle now requires the Factory and rejects one that does not match the repository link.
+
+  ```ts
+  // Before
+  await sourceControl.sessions.create({ sessionId, projectRepositoryId, orgId, userId, branch, baseBranch });
+
+  // After
+  await sourceControl.sessions.create({
+    sessionId,
+    projectRepositoryId,
+    factoryProjectId,
+    orgId,
+    userId,
+    branch,
+    baseBranch,
+  });
+  ```
+
+  **Upgrading:** existing sessions are assigned their Factory on the next start. A session whose repository link no longer exists, or that holds the same branch for the same user as an older session on another repository of the Factory, stays unassigned. Unassigned sessions don't appear in the Factory session list, and Slack replies in their threads skip Factory model defaults. Continue that work in a new Slack thread or a new session. A board run that would reuse one fails with an error naming the session to delete before retrying.
+
+### Patch Changes
+
+- Fixed environment updates that reorder repositories leaving two repositories at the same position. The project fields, settings and every repository change in one `PATCH /web/factory/projects/:id/environment` now save together or not at all, and concurrent reorders apply one after the other. ([#26115](https://github.com/mastra-ai/mastra/pull/26115))
+
+- Fixed concurrent environment settings patches losing updates by merging and validating against the current project inside a database transaction. ([#26115](https://github.com/mastra-ai/mastra/pull/26115))
+
+- Fixed the Factory web UI hanging on the splash screen when authentication is disabled (`auth: null` or `MASTRACODE_AUTH_DISABLED=1`). `GET /auth/me` now returns 404, so the UI shows that no authentication provider is configured instead of retrying forever. ([#26797](https://github.com/mastra-ai/mastra/pull/26797))
+
+- Fixed a reused Factory workspace keeping the reviewer GitHub token when the run-binding lookup fails. A session whose role cannot be read now falls back to the worker token (or repository access), and refresh callbacks from the earlier reviewer context are rejected. The reviewer token comes back once the review binding is readable again. ([#26804](https://github.com/mastra-ai/mastra/pull/26804))
+
+- Redesigned Factory onboarding around an editable draft and a final review. Repository and model choices stay editable and survive redirects and reloads in the onboarding draft. They are applied to the Factory only when you select **Create factory**. If confirmation fails, retrying reuses the same pending Factory instead of creating a duplicate and only replaces repository links onboarding created. **Create factory** stops with a clear message when the chosen model is no longer available. ([#26509](https://github.com/mastra-ai/mastra/pull/26509))
+
+  **Model providers**
+
+  - API keys and provider sign-in are now separate choices, each with explicit organization or personal scope.
+  - Provider and model lists offer **Retry** when they fail to load.
+  - Members without shared organization access choose a personal model, which becomes both the Factory default and their own default.
+
+  **Codebase and work**
+
+  - Selecting a repository no longer moves you on by itself; **Continue** does.
+  - Repository lists and GitLab status offer **Retry** when they fail to load, instead of reporting GitLab as unavailable.
+  - Jira, incident.io, and Linear offer **Reconnect** when a connection needs to be authorized again.
+  - **Create factory** starts a fresh Factory when the pending one is no longer accessible.
+
+  A contextual illustration follows each step with smooth transitions and continuous work previews. The artwork and animation are implemented in the app, pause when offscreen, and respect reduced-motion settings.
+
+- Fixed enabling `secretEncryption` on an existing Factory database. Model credentials, custom provider API keys, and integration tokens saved before encryption was turned on now read back correctly and are encrypted in place. Previously, they were encrypted as JSON text, so stored credentials stopped working. ([#26890](https://github.com/mastra-ai/mastra/pull/26890))
+
+- Factory skills settings now flag a skill the agent cannot load. Skills are checked with the same frontmatter parser the agent uses, so a `SKILL.md` with invalid YAML (for example an unquoted `: ` in the `description`) shows "Failed to load" with the parse error, instead of looking healthy and then failing at kickoff with "skill not found". ([#26788](https://github.com/mastra-ai/mastra/pull/26788))
+
+- Added a persisted `modelScope` field to Factory projects, defaulting to `factory` to preserve the existing Factory-level behavior. This release saves and exposes the selection for future support; it does not change session model or credential resolution. ([#26803](https://github.com/mastra-ai/mastra/pull/26803))
+
+  Consumers can inspect the saved setting through the exported `FactoryProject` type:
+
+  ```ts
+  import type { FactoryProject } from '@mastra/factory';
+
+  function usesFactoryDefaults(project: FactoryProject) {
+    return project.modelScope === 'factory';
+  }
+  ```
+
+- Fixed environment migration to leave the workspace root unset instead of copying a legacy repository checkout path. Preserve explicitly configured roots and cleared values across initialization. ([#26115](https://github.com/mastra-ai/mastra/pull/26115))
+
+- Removed the commit id from the review verdict badge on Reviewing cards. The badge now reads "Approved" or "Changes requested", and still adds "(outdated)" once new commits are pushed after the review. ([#26770](https://github.com/mastra-ai/mastra/pull/26770))
+
+- Sessions with several repositories now report changes and touched files per repository. ([#26542](https://github.com/mastra-ai/mastra/pull/26542))
+
+  - Each repository's changes carry its slug and provider.
+  - Touched files are grouped by checkout directory, and files written at the workspace root during the session are listed too. Dotfiles such as `.env` are never listed.
+  - The agent's file tools and project path start at the workspace root, and each repository's `AGENTS.md` and project skills load.
+
+  Sessions with one repository work as before.
+
+- Improved GitHub API latency in Factory. GitHub calls for an installation now reuse its access token until it nears expiry, instead of requesting a new token before every call. After the first call, each GitHub call takes about half as long, and Factory requests far fewer tokens, reducing the risk of hitting GitHub's token rate limits. ([#26709](https://github.com/mastra-ai/mastra/pull/26709))
+
+- Updated dependencies [[`54e9dc3`](https://github.com/mastra-ai/mastra/commit/54e9dc3ed0615ee84a6526395a9fefe17320fe7e), [`f8c0ce2`](https://github.com/mastra-ai/mastra/commit/f8c0ce2646427327b63c05d2eb09e76a3b04133e), [`eaa9d12`](https://github.com/mastra-ai/mastra/commit/eaa9d12407f4962e94e0d5cd49a643e6e317d60a), [`5a70664`](https://github.com/mastra-ai/mastra/commit/5a7066478c1924a6e9a94e1ba3210f9b67a35535), [`59164cb`](https://github.com/mastra-ai/mastra/commit/59164cb7f8b298e28e13305b0273ed2ef7f1d9e1), [`7236b47`](https://github.com/mastra-ai/mastra/commit/7236b472bca9bbc9dddba53f683b15c271350183), [`2a1bb80`](https://github.com/mastra-ai/mastra/commit/2a1bb80305bca1859504287e1a09f43c8a014330), [`4df792b`](https://github.com/mastra-ai/mastra/commit/4df792b5b9146b5a2d6726193ee82d9db31180a4), [`958bdc9`](https://github.com/mastra-ai/mastra/commit/958bdc942aa78f00c9ec25f8adfb8e14a0dd4fd9), [`0017956`](https://github.com/mastra-ai/mastra/commit/001795671cf329997bee74541f5de9056e6b1cec), [`aa00f41`](https://github.com/mastra-ai/mastra/commit/aa00f41855e8d6802546f613ffec1669e03409fc), [`36fc7ea`](https://github.com/mastra-ai/mastra/commit/36fc7eabf79ca70bd489e4022eb39a3d8382ace5), [`2ec9c07`](https://github.com/mastra-ai/mastra/commit/2ec9c07eddb142c965f1201f5c6e5dbb288405f9), [`e384817`](https://github.com/mastra-ai/mastra/commit/e3848177f2a0051ea1469a06fb6502164bfada7c), [`519e97f`](https://github.com/mastra-ai/mastra/commit/519e97f624a15362fec7b143dea4eabcff556712), [`e384817`](https://github.com/mastra-ai/mastra/commit/e3848177f2a0051ea1469a06fb6502164bfada7c), [`821b8d4`](https://github.com/mastra-ai/mastra/commit/821b8d4253dcac5d8cf886994884e4645899bedc), [`878e0e2`](https://github.com/mastra-ai/mastra/commit/878e0e2f5adf9669158c7a8a8d67cd8809633c24), [`1b3b35e`](https://github.com/mastra-ai/mastra/commit/1b3b35eff32fe8833c9d938e4d4f0e37c5bbed4e), [`aea91e7`](https://github.com/mastra-ai/mastra/commit/aea91e7f3a4fb066bfda96dca670d7d2a766d770), [`380e9f5`](https://github.com/mastra-ai/mastra/commit/380e9f57ea9ba7c37950b989d145b70c03a09a6c), [`4029a96`](https://github.com/mastra-ai/mastra/commit/4029a964848512399f27bca283915d49fd106717), [`8dc4d65`](https://github.com/mastra-ai/mastra/commit/8dc4d65b34aad280c4f6ab265162c4846face7e3), [`ca92c02`](https://github.com/mastra-ai/mastra/commit/ca92c02696427baad81dd7a61b049ef37c332452), [`3504acd`](https://github.com/mastra-ai/mastra/commit/3504acdb2833b71db61dc9387c0f25f3cd0a3070), [`5bb6d71`](https://github.com/mastra-ai/mastra/commit/5bb6d711680d17370eacdcdab105e5af69202c5f), [`dab6849`](https://github.com/mastra-ai/mastra/commit/dab6849945ab2a0e4c946f5b31fb6f41b2c1cd7d), [`da87b0a`](https://github.com/mastra-ai/mastra/commit/da87b0a1629d5ffc980b434f70fe60f9445ddb1c), [`aa00f41`](https://github.com/mastra-ai/mastra/commit/aa00f41855e8d6802546f613ffec1669e03409fc), [`182f097`](https://github.com/mastra-ai/mastra/commit/182f09745783aa83e42131307085ecf913cfbc38), [`58a4674`](https://github.com/mastra-ai/mastra/commit/58a46743c6253166c0398ae253801b4d6f5ebafc), [`d9da0da`](https://github.com/mastra-ai/mastra/commit/d9da0da5e5d36023469b527f7be55c017634b186), [`097f002`](https://github.com/mastra-ai/mastra/commit/097f00297b0d46aa304eba3a7203248e21d1a70a), [`958bdc9`](https://github.com/mastra-ai/mastra/commit/958bdc942aa78f00c9ec25f8adfb8e14a0dd4fd9), [`4659a11`](https://github.com/mastra-ai/mastra/commit/4659a1130842f07364d4778aa360f3cb7877679d), [`aa00f41`](https://github.com/mastra-ai/mastra/commit/aa00f41855e8d6802546f613ffec1669e03409fc), [`5227c95`](https://github.com/mastra-ai/mastra/commit/5227c95d54d0b4846220530450063f259797b587), [`226823f`](https://github.com/mastra-ai/mastra/commit/226823ffde55e2dcce01f2111a6a35be3f2c9b85), [`67a6b30`](https://github.com/mastra-ai/mastra/commit/67a6b30769f041244f75f9093a181cdf38e1f2e7), [`7236b47`](https://github.com/mastra-ai/mastra/commit/7236b472bca9bbc9dddba53f683b15c271350183)]:
+  - @mastra/core@1.77.0
+  - @mastra/code-sdk@1.13.0
+
+## 0.22.0-alpha.4
+
+### Minor Changes
+
+- Added environment builds. When the Factory sandbox implements the `builds` capability, Factory builds the environment template ahead of sessions instead of on the first session boot. ([#26479](https://github.com/mastra-ai/mastra/pull/26479))
+
+  - `POST /web/factory/projects/:id/environment/build` starts a build now (the Environment page's **Build now** button, or `mastra api factory project environment build <project-id>`).
+  - `GET /web/factory/projects/:id/environment/builds` and `GET /web/factory/projects/:id/environment/builds/:buildId` read the provider's build history and live status.
+  - The environment payload carries `buildTriggers`: a cron schedule and a push trigger with a debounce window.
+  - Scheduled and push builds skip when the last build is ready and nothing it was built from changed. Only one build starts at a time, and no trigger starts a build while the last one is still running. Saving settings never starts a build.
+  - Hosts that spread `prepare()`'s result into `new Mastra` pick up the `factory-environment-build` workflow.
+  - After a session's own setup, each repository link records `configured` or `failed` with the redacted error.
+
+  Turn on a nightly rebuild and push builds for a project:
+
+  ```ts
+  await fetch(`${baseUrl}/web/factory/projects/${projectId}/environment`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      buildTriggers: {
+        schedule: { enabled: true, cron: '0 3 * * *', timezone: 'UTC' },
+        push: { enabled: true, debounceMinutes: 10 },
+      },
+    }),
+  });
+  ```
+
+- Sessions boot every repository in the Factory environment instead of one linked repository. ([#26169](https://github.com/mastra-ai/mastra/pull/26169))
+
+  - The sandbox template is built from every environment repository, in the order shown on the Environment page. Each is cloned under the workspace root, which becomes the session's working directory.
+  - The session branch is resumed where the remote has it. A new session branch starts from the latest remote default branch, and local work in an existing checkout is kept.
+  - A repository's setup command is skipped when the template already ran it, and the workspace setup command runs last.
+  - A `factory-environment` state signal tells the agent which repositories are present, where, and on which branch.
+  - Every repository is torn down when the session retires.
+  - The agent loads each environment repository's `AGENTS.md` or `CLAUDE.md` and project skills, starting with the session's own repository. Review sessions load only the session's own repository's instructions, from its base branch.
+  - The provider receives the project's stored sandbox settings when a session's sandbox is constructed. Settings saved later apply to sandboxes constructed after that.
+
+  ```ts
+  class MyFactorySandbox extends FactorySandbox<{ cpuCount?: number }> {
+    readonly provider = 'my-provider';
+    readonly settings = z.object({ cpuCount: z.number().int().min(1).optional() });
+
+    create(ctx: FactorySandboxContext, settings: { cpuCount?: number }) {
+      // ctx.repos lists every environment repository; ctx.workingDirectory is the workspace root.
+      return new MySandbox({ id: ctx.sessionId, cpus: settings.cpuCount ?? 2, workingDirectory: ctx.workingDirectory });
+    }
+  }
+  ```
+
+- Added `FactorySandbox` support to `MastraFactoryConfig.sandbox`. Pass a provider instance (`PlatformFactorySandbox`, `E2BFactorySandbox`, `DockerFactorySandbox`, or the new `LocalFactorySandbox` exported from `@mastra/factory`) and the factory gains that provider's environment settings and template builds. The callback form still works and is wrapped as a `provider: 'custom'` sandbox with no settings. ([#26467](https://github.com/mastra-ai/mastra/pull/26467))
+
+  ```ts
+  import { MastraFactory, LocalFactorySandbox } from '@mastra/factory';
+  import { E2BFactorySandbox } from '@mastra/e2b';
+
+  // Before: a callback building one sandbox per session
+  new MastraFactory({ sandbox: ctx => new E2BSandbox({ id: ctx.sessionId, sandboxId: ctx.sandboxId }) });
+
+  // After: a provider instance, which also carries settings and builds
+  new MastraFactory({ sandbox: new E2BFactorySandbox() });
+
+  // Or run sessions on the host machine, one directory per session
+  new MastraFactory({ sandbox: new LocalFactorySandbox({ root: '/var/sandboxes' }) });
+  ```
+
+- Added a sandbox environment to each Factory project. Provider settings, the workspace setup command, the working directory and the order repositories are checked out in now live on the project and are read and written through one route, `GET` and `PATCH /web/factory/projects/:id/environment`. ([#26115](https://github.com/mastra-ai/mastra/pull/26115))
+
+  ```json
+  {
+    "settings": { "cpuCount": 8 },
+    "workspaceSetupCommand": "pnpm -r build",
+    "sandboxWorkingDirectory": "/home/user",
+    "repositories": [
+      { "projectRepositoryId": "…web", "position": 1 },
+      { "projectRepositoryId": "…docs", "position": 2, "inEnvironment": false }
+    ]
+  }
+  ```
+
+  **Settings:** only the keys you set are stored; anything unset keeps the provider default. A patch is merged onto the stored settings, `null` removes a key, and the result is checked against the provider's schema before anything is written. A rejected value answers 400 `invalid_environment` naming the field; a factory without a sandbox answers 400 `no_sandbox`.
+
+  **Repositories:** to reorder, list every repository with positions 1 through n. A second link to the same repository starts outside the environment.
+
+  Existing projects keep working: their links get an order on the next start and nothing is deleted.
+
+- Sessions in a multi-repository environment can push and open change requests in any environment repository. ([#26334](https://github.com/mastra-ai/mastra/pull/26334))
+
+  - Every `source_control_*` tool except `source_control_refresh_change_request_checkout` (the GitLab checkout refresh) takes an optional `repository` slug; the default is the repository the session is filed under, and each tool description lists the valid slugs.
+  - The first push to another repository sends the commits checked out there as the session branch, and the agent's later commits in that repository go to the same branch and are sent by its next push.
+  - Pushing a repository that has no checkout in the session fails with a clear error.
+  - Every push and change request is recorded per repository, and a push after a change request keeps the change request fields.
+  - The `gh pr create` observer and auto-subscribe attribute a pull request to its repository and accept any environment repository. Only a pull request from the session branch is recorded on the session; subscribing to someone else's leaves the record alone.
+  - `github_subscribe_pr` / `github_unsubscribe_pr` and pull request subscriptions are gated on the Factory, so web user sessions get them too.
+  - On the platform GitHub provider, `GH_TOKEN` covers every environment repository when they share one installation and number at most ten; otherwise it covers the session repository and the agent is told to use the `source_control_*` tools for the others.
+
+  For example, an agent in a session filed under `acme/api` pushes and opens a change request in `acme/docs`:
+
+  ```json
+  { "tool": "source_control_push_branch", "input": { "repository": "acme/docs" } }
+  { "tool": "source_control_create_change_request", "input": { "repository": "acme/docs", "title": "Document the new endpoint" } }
+  ```
+
+- **Sessions belong to a Factory.** A session now records the Factory it belongs to, not only the repository link it was created on. This is groundwork for sessions that span every repository in the Factory environment. ([#26123](https://github.com/mastra-ai/mastra/pull/26123))
+
+  - List every session of a Factory the caller can see, across all source-control providers, with `GET /web/factory/projects/:id/sessions`. The sidebar, search and board use it instead of one request per repository.
+  - `sessions.create` on the source-control handle now requires the Factory and rejects one that does not match the repository link.
+
+  ```ts
+  // Before
+  await sourceControl.sessions.create({ sessionId, projectRepositoryId, orgId, userId, branch, baseBranch });
+
+  // After
+  await sourceControl.sessions.create({
+    sessionId,
+    projectRepositoryId,
+    factoryProjectId,
+    orgId,
+    userId,
+    branch,
+    baseBranch,
+  });
+  ```
+
+  **Upgrading:** existing sessions are assigned their Factory on the next start. A session whose repository link no longer exists, or that holds the same branch for the same user as an older session on another repository of the Factory, stays unassigned. Unassigned sessions don't appear in the Factory session list, and Slack replies in their threads skip Factory model defaults. Continue that work in a new Slack thread or a new session. A board run that would reuse one fails with an error naming the session to delete before retrying.
+
+### Patch Changes
+
+- Fixed environment updates that reorder repositories leaving two repositories at the same position. The project fields, settings and every repository change in one `PATCH /web/factory/projects/:id/environment` now save together or not at all, and concurrent reorders apply one after the other. ([#26115](https://github.com/mastra-ai/mastra/pull/26115))
+
+- Fixed concurrent environment settings patches losing updates by merging and validating against the current project inside a database transaction. ([#26115](https://github.com/mastra-ai/mastra/pull/26115))
+
+- Fixed environment migration to leave the workspace root unset instead of copying a legacy repository checkout path. Preserve explicitly configured roots and cleared values across initialization. ([#26115](https://github.com/mastra-ai/mastra/pull/26115))
+
+- Sessions with several repositories now report changes and touched files per repository. ([#26542](https://github.com/mastra-ai/mastra/pull/26542))
+
+  - Each repository's changes carry its slug and provider.
+  - Touched files are grouped by checkout directory, and files written at the workspace root during the session are listed too. Dotfiles such as `.env` are never listed.
+  - The agent's file tools and project path start at the workspace root, and each repository's `AGENTS.md` and project skills load.
+
+  Sessions with one repository work as before.
+
+- Updated dependencies [[`f8c0ce2`](https://github.com/mastra-ai/mastra/commit/f8c0ce2646427327b63c05d2eb09e76a3b04133e), [`4df792b`](https://github.com/mastra-ai/mastra/commit/4df792b5b9146b5a2d6726193ee82d9db31180a4), [`0017956`](https://github.com/mastra-ai/mastra/commit/001795671cf329997bee74541f5de9056e6b1cec), [`36fc7ea`](https://github.com/mastra-ai/mastra/commit/36fc7eabf79ca70bd489e4022eb39a3d8382ace5), [`2ec9c07`](https://github.com/mastra-ai/mastra/commit/2ec9c07eddb142c965f1201f5c6e5dbb288405f9), [`380e9f5`](https://github.com/mastra-ai/mastra/commit/380e9f57ea9ba7c37950b989d145b70c03a09a6c), [`4029a96`](https://github.com/mastra-ai/mastra/commit/4029a964848512399f27bca283915d49fd106717), [`ca92c02`](https://github.com/mastra-ai/mastra/commit/ca92c02696427baad81dd7a61b049ef37c332452), [`58a4674`](https://github.com/mastra-ai/mastra/commit/58a46743c6253166c0398ae253801b4d6f5ebafc), [`d9da0da`](https://github.com/mastra-ai/mastra/commit/d9da0da5e5d36023469b527f7be55c017634b186), [`67a6b30`](https://github.com/mastra-ai/mastra/commit/67a6b30769f041244f75f9093a181cdf38e1f2e7)]:
+  - @mastra/core@1.77.0-alpha.4
+  - @mastra/code-sdk@1.13.0-alpha.4
+
+## 0.21.1-alpha.3
+
+### Patch Changes
+
+- Redesigned Factory onboarding around an editable draft and a final review. Repository and model choices stay editable and survive redirects and reloads in the onboarding draft. They are applied to the Factory only when you select **Create factory**. If confirmation fails, retrying reuses the same pending Factory instead of creating a duplicate and only replaces repository links onboarding created. **Create factory** stops with a clear message when the chosen model is no longer available. ([#26509](https://github.com/mastra-ai/mastra/pull/26509))
+
+  **Model providers**
+
+  - API keys and provider sign-in are now separate choices, each with explicit organization or personal scope.
+  - Provider and model lists offer **Retry** when they fail to load.
+  - Members without shared organization access choose a personal model, which becomes both the Factory default and their own default.
+
+  **Codebase and work**
+
+  - Selecting a repository no longer moves you on by itself; **Continue** does.
+  - Repository lists and GitLab status offer **Retry** when they fail to load, instead of reporting GitLab as unavailable.
+  - Jira, incident.io, and Linear offer **Reconnect** when a connection needs to be authorized again.
+  - **Create factory** starts a fresh Factory when the pending one is no longer accessible.
+
+  A contextual illustration follows each step with smooth transitions and continuous work previews. The artwork and animation are implemented in the app, pause when offscreen, and respect reduced-motion settings.
+
+- Fixed enabling `secretEncryption` on an existing Factory database. Model credentials, custom provider API keys, and integration tokens saved before encryption was turned on now read back correctly and are encrypted in place. Previously, they were encrypted as JSON text, so stored credentials stopped working. ([#26890](https://github.com/mastra-ai/mastra/pull/26890))
+
+- Updated dependencies [[`54e9dc3`](https://github.com/mastra-ai/mastra/commit/54e9dc3ed0615ee84a6526395a9fefe17320fe7e), [`59164cb`](https://github.com/mastra-ai/mastra/commit/59164cb7f8b298e28e13305b0273ed2ef7f1d9e1), [`aa00f41`](https://github.com/mastra-ai/mastra/commit/aa00f41855e8d6802546f613ffec1669e03409fc), [`1b3b35e`](https://github.com/mastra-ai/mastra/commit/1b3b35eff32fe8833c9d938e4d4f0e37c5bbed4e), [`8dc4d65`](https://github.com/mastra-ai/mastra/commit/8dc4d65b34aad280c4f6ab265162c4846face7e3), [`aa00f41`](https://github.com/mastra-ai/mastra/commit/aa00f41855e8d6802546f613ffec1669e03409fc), [`aa00f41`](https://github.com/mastra-ai/mastra/commit/aa00f41855e8d6802546f613ffec1669e03409fc), [`226823f`](https://github.com/mastra-ai/mastra/commit/226823ffde55e2dcce01f2111a6a35be3f2c9b85)]:
+  - @mastra/core@1.77.0-alpha.3
+  - @mastra/code-sdk@1.13.0-alpha.3
+
 ## 0.21.1-alpha.2
 
 ### Patch Changes

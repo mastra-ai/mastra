@@ -1,0 +1,241 @@
+---
+title: "Reference: FactorySandbox | Workspace"
+description: "The host contract Mastra Factory uses to construct a session sandbox, build its repository template, validate environment settings and run template builds."
+packages:
+  - "@mastra/core"
+  - "@mastra/factory"
+---
+
+# FactorySandbox
+
+A `FactorySandbox` is the one object a host gives `MastraFactory` to describe where sessions run. It owns the session sandbox constructor, the repository template built for a session, the schema of settings a user can tune per project, and optionally the ability to build that template ahead of time.
+
+Factory stores each project's settings and passes them to `create` on every session boot. A setting the project leaves unset falls back to the provider's default. `factory.sandboxDescription` reports the provider, the settings schema as JSON Schema and the available capabilities. Everything provider-specific stays inside the object: Factory only calls the contract and reads `provider` for display.
+
+## Usage
+
+Pass an instance of one of the provider classes as the `sandbox` option:
+
+```typescript title="src/mastra/index.ts"
+import { MastraFactory } from '@mastra/factory'
+import { PlatformFactorySandbox } from '@mastra/platform-workspace'
+
+export const factory = new MastraFactory({
+  sandbox: new PlatformFactorySandbox({
+    // Provider defaults for an environment that sets nothing.
+    defaults: { cpuCount: 4, memoryMb: 8192 },
+  }),
+})
+```
+
+## Provider classes
+
+| Class | Package | Settings | Builds |
+| - | - | - | - |
+| `PlatformFactorySandbox` | `@mastra/platform-workspace` | `cpuCount`, `memoryMb`, `idleTimeoutMinutes` | `start`, `get` |
+| `E2BFactorySandbox` | `@mastra/e2b` | `cpuCount`, `memoryMb`, `idleTimeoutMinutes` | `start`, `get`, `list` |
+| `DockerFactorySandbox` | `@mastra/docker` | `baseImage`, `owner` | `start`, `get` |
+| `LocalFactorySandbox` | `@mastra/factory` | None | No |
+
+Each provider class takes the same runtime options as its sandbox class (minus `id`, `sandboxId` and `template`, which the class fills in per session), plus `template` options for the repository template and `defaults` for settings the environment leaves unset.
+
+```typescript
+import { PlatformFactorySandbox } from '@mastra/platform-workspace'
+import { E2BFactorySandbox } from '@mastra/e2b'
+import { DockerFactorySandbox } from '@mastra/docker'
+import { LocalFactorySandbox } from '@mastra/factory'
+
+new PlatformFactorySandbox() // reads MASTRA_PLATFORM_ACCESS_TOKEN and MASTRA_ENVIRONMENT_ID
+new E2BFactorySandbox() // reads E2B_API_KEY
+new DockerFactorySandbox({ defaults: { baseImage: 'node:22-slim' } })
+new LocalFactorySandbox({ root: '/var/sandboxes', env: { PATH: process.env.PATH! } })
+```
+
+`LocalFactorySandbox` runs every session on the host machine under `join(root, sessionId)`.
+
+For an unset setting, the provider applies its own default: 2 CPUs, 1024 MB and a 5 minute idle timeout on Platform and E2B, overridable through `defaults`. On Platform, a top-level `idleTimeoutMinutes` option also applies when `defaults` doesn't set one. The schema's `default` values show the effective defaults.
+
+Platform polls a build through the builder that started it. After a host restart, an earlier build reads as `unknown`.
+
+Keep schema changes additive: add fields, and read both names for a release when you rename one. The stored document outlives the schema that wrote it, so a key the current schema no longer declares can appear in it, for example after the host switches provider. When such a key makes an update fail validation, Factory drops the undeclared keys and retries before refusing the update. Keys the update itself sets are never dropped.
+
+### Callback form
+
+The bare callback `sandbox: ctx => new E2BSandbox({ id: ctx.sessionId })` is also supported. Factory wraps it as a `provider: 'custom'` sandbox. Everything about the sandbox stays inside the callback, and the environment exposes nothing to tune.
+
+## Class
+
+```typescript
+abstract class FactorySandbox<TSettings extends Record<string, unknown> = Record<string, unknown>> {
+  readonly provider: string
+  readonly settings: PublicSchema<TSettings>
+  create(ctx: FactorySandboxContext, settings: TSettings): MastraSandbox
+  template?(ctx: FactorySandboxContext, settings: TSettings): unknown
+  builds?: FactorySandboxBuilds<TSettings>
+}
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'provider',
+    type: 'string',
+    description: 'Short identifier shown to users, such as "platform", "e2b", "docker", "local" or "custom".',
+  },
+  {
+    name: 'settings',
+    type: 'PublicSchema<TSettings>',
+    description:
+      'Schema of the settings a user can tune per project: a Zod schema, a JSON Schema or a Standard Schema that can emit JSON Schema. `factory.sandboxDescription` reports the input side as JSON Schema. Author an object of primitive fields; nested objects are not rendered. Defaults to no settings.',
+  },
+  {
+    name: 'create',
+    type: '(ctx, settings) => MastraSandbox',
+    description:
+      'Constructs the sandbox for one session. Synchronous and side-effect free: the VM is provisioned on start(), not here. Factory passes the stored project settings.',
+  },
+  {
+    name: 'template',
+    type: '(ctx, settings) => unknown',
+    description:
+      'Builds the repository template the session sandbox boots from. Returns undefined for a session with no repository.',
+    isOptional: true,
+  },
+  {
+    name: 'builds',
+    type: 'FactorySandboxBuilds<TSettings>',
+    description:
+      'Builds the template ahead of a session. Its presence is the capability: `start(ctx, settings)` begins or finds a build, `get(ctx, settings, buildId)` reads its status and logs, and the optional `list(ctx, settings)` returns the history. Platform and Docker implement `start` and `get`; E2B also implements `list`.',
+    isOptional: true,
+  },
+]}
+/>
+
+To write your own provider, extend `FactorySandbox` from `@mastra/core/workspace`. Factory recognizes subclasses by a brand the base class sets, so a plain object with the same shape isn't accepted.
+
+```typescript
+import { FactorySandbox } from '@mastra/core/workspace'
+import type { FactorySandboxContext } from '@mastra/core/workspace'
+import type { PublicSchema } from '@mastra/core/schema'
+
+interface Settings {
+  region?: 'us' | 'eu'
+}
+
+class MyFactorySandbox extends FactorySandbox<Settings> {
+  readonly provider = 'my-cloud'
+  readonly settings: PublicSchema<Settings> = {
+    type: 'object',
+    properties: { region: { type: 'string', enum: ['us', 'eu'], default: 'us' } },
+    additionalProperties: false,
+  }
+
+  create(ctx: FactorySandboxContext, settings: Settings) {
+    return new MyCloudSandbox({
+      id: ctx.sessionId,
+      sandboxId: ctx.sandboxId,
+      template: this.template(ctx, settings),
+      workingDirectory: ctx.workingDirectory,
+      region: settings.region ?? 'us',
+    })
+  }
+
+  // Optional: the sandbox template image Factory can build ahead of time
+  template(ctx: FactorySandboxContext, settings: Settings) {
+    return myCloudTemplate(ctx, settings)
+  }
+
+  // Optional: build that template ahead of time and report on it
+  readonly builds = {
+    start: async (ctx: FactorySandboxContext, settings: Settings) =>
+      myCloud.startBuild(this.template(ctx, settings)),
+    get: async (ctx: FactorySandboxContext, settings: Settings, buildId: string) =>
+      myCloud.buildStatus(buildId),
+    list: async (ctx: FactorySandboxContext, settings: Settings) =>
+      myCloud.builds(this.template(ctx, settings).name),
+  }
+}
+```
+
+## FactorySandboxContext
+
+Everything Factory knows about the session, passed to `create`, `template` and the build methods.
+
+<PropertiesTable
+  content={[
+  { name: 'sessionId', type: 'string', description: 'Stable session id and the sandbox identity.' },
+  {
+    name: 'sandboxId',
+    type: 'string',
+    description:
+      'The provider sandbox id persisted from a prior start. Forward it so resume reattaches the original VM.',
+    isOptional: true,
+  },
+  { name: 'repoFullName', type: 'string', description: 'owner/name of the session repository.', isOptional: true },
+  {
+    name: 'setupCommand',
+    type: 'string',
+    description: 'The repository setup command, part of the template identity.',
+    isOptional: true,
+  },
+  {
+    name: 'getRepositoryAccess',
+    type: '(() => Promise<FactoryRepositoryAccess>) | undefined',
+    description:
+      'Resolves the clone URL and a short-lived credential for the session repository. Undefined when the session has no repository.',
+  },
+  {
+    name: 'repos',
+    type: 'Array<{ getRepositoryAccess, setupCommand? }>',
+    description:
+      'Every repository of the session environment in position order, each with its own access resolver and setup command. Set instead of getRepositoryAccess when the environment has repositories.',
+    isOptional: true,
+  },
+  {
+    name: 'workspaceSetupCommand',
+    type: 'string | string[]',
+    description: 'Command run once at the workspace root after every repository is set up. Only with repos.',
+    isOptional: true,
+  },
+  {
+    name: 'continueOnSetupFailure',
+    type: 'boolean',
+    description: 'Record a failing repository setup and continue the build instead of failing it. Only with repos.',
+    isOptional: true,
+  },
+  {
+    name: 'workingDirectory',
+    type: 'string',
+    description: 'Absolute workspace root the repositories check out under. The provider default when absent.',
+    isOptional: true,
+  },
+  {
+    name: 'resolveHead',
+    type: '(cloneUrl, token?) => Promise<string | undefined>',
+    description:
+      'Resolves the commit a repository template pins, given its clone URL and the credential minted for it. When absent, the provider resolves the default branch head itself.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Build status
+
+`FactorySandboxBuild.status` is one of `pending`, `building`, `ready`, `failed` or `unknown`. `unknown` means the provider can't read the status of a build it didn't start in this process.
+
+## Environment builds
+
+When the sandbox declares `builds`, factory builds the environment template ahead of sessions and registers a `factory-environment-build` workflow through `prepare()`. A build runs:
+
+- on `POST /web/factory/projects/:id/environment/build` (the Environment page's Build now, or `mastra api factory project environment build <project-id>`)
+- on a cron schedule kept in core `Schedules`, enabled through `PATCH { buildTriggers: { schedule: { enabled: true, cron, timezone } } }`; needs a storage adapter with the schedules domain, otherwise the route reports `scheduleAvailable: false`
+- after a push to a linked repository's default branch when `buildTriggers.push.enabled` is set, at most once per `debounceMinutes`
+
+Saving environment settings never starts a build. Scheduled and push builds skip when the last build is ready, no repository head moved and no template input changed (settings, repositories and their order, setup commands or the working directory). Factory stores only the last build id and the active template. Status and history come from the provider through `GET …/environment/builds/:buildId` and `GET …/environment/builds` (404 `no_history` when the provider keeps none).
+
+## Related
+
+- [PlatformSandbox](/reference/workspace/platform-sandbox)
+- [LocalSandbox](/reference/workspace/local-sandbox)
+- [E2B sandbox integration](/integrations/sandboxes/e2b)
+- [Docker sandbox integration](/integrations/sandboxes/docker)

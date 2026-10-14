@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createProcessorSendSignal } from '../../../processors/send-signal';
 import { createSignal, mastraDBMessageToSignal } from '../../signals';
 import type { MastraDBMessage } from '../../types';
 import type { MessageListInput } from '../index';
@@ -718,5 +719,91 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
       });
       expect(texts).toEqual(['First', 'Second', 'Third', 'Fourth']);
     });
+  });
+});
+
+/**
+ * Regression tests for GitHub issue #26751
+ * https://github.com/mastra-ai/mastra/issues/26751
+ *
+ * A signal that names the message it precedes (memory's temporal-gap reminder)
+ * must sort directly before that message instead of being stamped after it.
+ */
+describe('addSignal with precedesMessageId (Issue #26751)', () => {
+  const historyTime = new Date('2024-01-01T08:00:00.000Z');
+  const userTime = new Date('2024-01-01T10:00:00.000Z');
+
+  function createListWithUserTurn() {
+    const list = new MessageList();
+    list.add(
+      {
+        id: 'history-1',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Earlier reply' }] },
+        createdAt: historyTime,
+      },
+      'memory',
+    );
+    list.add(
+      {
+        id: 'user-1',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Book the meeting' }] },
+        createdAt: userTime,
+      },
+      'input',
+    );
+    return list;
+  }
+
+  const gapSignalInput = (precedesMessageId: string) => ({
+    id: 'gap',
+    type: 'system-reminder' as const,
+    contents: '2 hours later',
+    createdAt: new Date(userTime.getTime() + 60_000),
+    acceptedAt: userTime,
+    metadata: { precedesMessageId },
+  });
+
+  it('places the signal just before the message named by precedesMessageId', () => {
+    const list = createListWithUserTurn();
+
+    const signalForTranscript = list.addSignal(createSignal(gapSignalInput('user-1')));
+
+    const anchoredTime = userTime.getTime() - 1;
+    expect(list.get.all.db().map(message => message.id)).toEqual(['history-1', 'gap', 'user-1']);
+    expect(signalForTranscript.createdAt.getTime()).toBe(anchoredTime);
+    const storedSignal = list.get.all.db().find(message => message.id === 'gap')!;
+    expect(storedSignal.createdAt.getTime()).toBe(anchoredTime);
+    expect(storedSignal.content.metadata?.signal).toMatchObject({
+      createdAt: new Date(anchoredTime).toISOString(),
+    });
+  });
+
+  it('places the signal before its target when sent through the processor sendSignal', async () => {
+    const list = createListWithUserTurn();
+    const sendSignal = createProcessorSendSignal({ messageList: list });
+
+    await sendSignal(gapSignalInput('user-1'));
+
+    expect(list.get.all.db().map(message => message.id)).toEqual(['history-1', 'gap', 'user-1']);
+  });
+
+  it('keeps arrival order when precedesMessageId names no message in the list', () => {
+    const list = createListWithUserTurn();
+
+    const signalForTranscript = list.addSignal(createSignal(gapSignalInput('missing')));
+
+    expect(list.get.all.db().map(message => message.id)).toEqual(['history-1', 'user-1', 'gap']);
+    expect(signalForTranscript.createdAt.getTime()).toBeGreaterThan(userTime.getTime());
+  });
+
+  it('still appends later signals after the latest message', () => {
+    const list = createListWithUserTurn();
+    list.addSignal(createSignal(gapSignalInput('user-1')));
+
+    list.addSignal(createSignal({ id: 'later', type: 'system-reminder', contents: 'Later reminder' }));
+
+    expect(list.get.all.db().map(message => message.id)).toEqual(['history-1', 'gap', 'user-1', 'later']);
   });
 });
