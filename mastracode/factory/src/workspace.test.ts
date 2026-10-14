@@ -1558,11 +1558,18 @@ describe('GitHub session workspace preparation', () => {
 
   it('opens no workspace for a project-keyed resourceId from a retired session kind', async () => {
     const projects = { get: vi.fn() };
-    const resolver = createWorkspaceFactory({ projects: projects as any });
+    const sourceControl = fakeGithubIntegration().sourceControlStorage;
+    const getBySessionId = vi.spyOn(sourceControl.sessions, 'getBySessionId');
+    const resolver = createWorkspaceFactory({
+      projects: projects as any,
+      sourceControls: [{ id: 'github', versionControl: {} as any, storage: sourceControl as any }],
+    });
     const requestContext = createGithubRequestContext('project-1', 'factory-retired-kind:project-1');
 
     await expect(resolver({ requestContext } as any)).resolves.toBeUndefined();
+    expect(getBySessionId).toHaveBeenCalledWith('factory-retired-kind:project-1');
     expect(projects.get).not.toHaveBeenCalled();
+    expect(mocks.materializeRepo).not.toHaveBeenCalled();
   });
 
   it('opens the session for a session-shaped auth user, whose org lives on the session half', async () => {
