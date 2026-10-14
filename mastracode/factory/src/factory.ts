@@ -725,7 +725,8 @@ export class MastraFactory {
       this.#config.knowledge !== undefined || process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
     const deploymentOrganizationId = process.env.MASTRACODE_DEPLOYMENT_ORGANIZATION_ID?.trim() || undefined;
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
-      GithubIntegration | undefined;
+      | GithubIntegration
+      | undefined;
     const gitlabIntegration = integrations.find(
       integration => integration.id === 'gitlab' && integration.intake && integration.versionControl,
     );
@@ -1094,7 +1095,8 @@ export class MastraFactory {
         disableSettingsOmSeed: true,
         hostInstructions: async ({ requestContext }) => {
           const context = requestContext.get('controller') as
-            AgentControllerRequestContext<MastraCodeState> | undefined;
+            | AgentControllerRequestContext<MastraCodeState>
+            | undefined;
           if (parseSupervisorResourceId(context?.resourceId)) return SUPERVISOR_INSTRUCTIONS;
           // The SDK resolves this callback before it loads repository
           // AGENTS.md/CLAUDE.md. A controller recreated after restart has
