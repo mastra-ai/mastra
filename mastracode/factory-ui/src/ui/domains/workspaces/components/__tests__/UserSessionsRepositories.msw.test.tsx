@@ -100,4 +100,13 @@ describe('User sessions across linked repositories', () => {
     expect(await screen.findByText('Couldn’t load sessions')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
   });
+
+  it('offers a retry when the sessions fail to load and no repository is linked', async () => {
+    stubRepositories([], 'error');
+
+    renderSection();
+
+    expect(await screen.findByText('Couldn’t load sessions')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+  });
 });
