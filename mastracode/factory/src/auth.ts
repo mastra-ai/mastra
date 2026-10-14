@@ -848,6 +848,21 @@ const SESSION_FAVICON_PATHS = new Set([
  * login and XHR/API calls get a 401 JSON. Shared by the local Hono server
  * (`mountFactoryAuth`) and the platform Mastra entry (`server.middleware`).
  */
+/**
+ * Request-context key marking a turn a signed-in person started over HTTP.
+ * Wakes, webhooks, channels and the dispatcher build their own request context
+ * and never carry it, so Factory management tools stay off those turns.
+ */
+export const FACTORY_INTERACTIVE_KEY = 'factoryInteractive';
+
+/** With auth disabled there is no gate; this marks every HTTP request as interactive instead. */
+export function createFactoryInteractiveMarker() {
+  return async (c: Context, next: () => Promise<void>): Promise<void> => {
+    c.get('requestContext')?.set(FACTORY_INTERACTIVE_KEY, true);
+    await next();
+  };
+}
+
 export function createFactoryAuthGate(provider: IMastraAuthProvider) {
   return async (c: Context, next: () => Promise<void>): Promise<Response | void> => {
     const path = c.req.path;
@@ -922,6 +937,7 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
       const requestContext = c.get('requestContext');
       requestContext?.set('user', user);
       requestContext?.set(MASTRA_MESSAGE_AUTHOR_KEY, messageAuthor(user));
+      requestContext?.set(FACTORY_INTERACTIVE_KEY, true);
       return next();
     }
 
