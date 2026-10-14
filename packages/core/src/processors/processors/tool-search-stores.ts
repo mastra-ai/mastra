@@ -104,13 +104,15 @@ export function deriveLoadedNamesFromMessages(args: Pick<ProcessInputStepArgs, '
  * in the messages on the next step. It is only ever additive to the message-derived
  * set and is never the durable record, so:
  *
- * - Restart-safe: after a restart the messages alone still yield the loaded set.
+ * - Restart-safe only with memory: after a restart the persisted thread messages yield
+ *   the loaded set. Without memory there are no persisted messages to read, so only
+ *   the same-process supplemental set applies and nothing is restored.
  * - De-loads automatically when the result block leaves the messages (native parity):
  *   the supplemental set is intersected with what the messages can still confirm
  *   once messages are available.
  * - No `'default'` thread-ID leak: the supplemental set is keyed by real thread IDs
  *   only and is never populated for anonymous requests.
- * - Requires no memory configuration.
+ * - Works without memory configuration (same-process only, see above).
  */
 export class ContextLoadedToolStore implements LoadedToolStore {
   /** Same-process supplemental set, keyed by real thread ID. Additive only. */
