@@ -123,4 +123,17 @@ describe('Default grouped issue list', () => {
     expect(stageToggle('Planning')).toHaveAttribute('aria-expanded', 'false');
     await waitFor(() => expect(screen.getByText('Moved recently')).toBeVisible());
   });
+
+  it('reveals the group again when a link to another comment on the same issue arrives', async () => {
+    const router = renderBoard();
+    const user = userEvent.setup();
+    await screen.findByText('Moved recently');
+    await act(() => router.navigate(`/factories/${FACTORY_ID}/work?item=recent-card&comment=comment-a`));
+    await user.click(stageToggle('Triage'));
+    expect(stageToggle('Triage')).toHaveAttribute('aria-expanded', 'false');
+
+    await act(() => router.navigate(`/factories/${FACTORY_ID}/work?item=recent-card&comment=comment-b`));
+
+    await waitFor(() => expect(stageToggle('Triage')).toHaveAttribute('aria-expanded', 'true'));
+  });
 });

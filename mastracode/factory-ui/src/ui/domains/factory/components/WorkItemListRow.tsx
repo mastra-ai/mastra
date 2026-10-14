@@ -10,6 +10,7 @@ import type { CardAction } from '../cardPrimaryAction';
 import type { CardMorph } from '../hooks/useCardMorph';
 import type { AuditActorProfile } from '../services/audit';
 import type { WorkItem } from '../services/workItems';
+import type { BoardStageId } from '../stages';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
 import {
   CardActions,
@@ -22,9 +23,11 @@ import {
 } from './BoardCardParts';
 import { BoardListRow } from './BoardListRow';
 import { WorkItemActivity } from './WorkItemActivity';
+import { columnReviewVerdict, ReviewVerdictBadge } from './WorkItemCardRows';
 
 export function WorkItemListRow({
   item,
+  columnStage,
   morph,
   deepLinkRef,
   highlighted,
@@ -40,6 +43,7 @@ export function WorkItemListRow({
   menu,
 }: {
   item: WorkItem;
+  columnStage: BoardStageId;
   morph: CardMorph;
   deepLinkRef: (element: HTMLElement | null) => void;
   highlighted: boolean;
@@ -55,6 +59,7 @@ export function WorkItemListRow({
   menu: ReactNode;
 }) {
   const external = knownExternalAuthor(item);
+  const verdict = columnReviewVerdict(item, columnStage);
   return (
     <BoardListRow
       testId="work-item-card"
@@ -85,9 +90,10 @@ export function WorkItemListRow({
             <MetadataLabels metadata={item.metadata} />
           </span>
         ),
-        status: (status.kind !== 'idle' || external) && (
+        status: (status.kind !== 'idle' || external || verdict) && (
           <span className="flex items-center gap-2">
             <CardStatus status={status} />
+            {verdict && <ReviewVerdictBadge verdict={verdict} />}
             {external && <ExternalAuthorBadge />}
           </span>
         ),

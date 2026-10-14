@@ -70,5 +70,13 @@ function InstalledBoard({ factory, definition }: { factory: FactoryProject; defi
   const kind = definition.id;
   const repository = factory.repositories[0];
   if (!repository) return <ConnectRepositoryEmptyState factoryId={factory.id} review={kind === 'review'} />;
-  return <BoardContent factory={factory} repository={repository} kind={kind} definition={definition} />;
+  return (
+    <BoardContent
+      key={`${factory.id}:${kind}`}
+      factory={factory}
+      repository={repository}
+      kind={kind}
+      definition={definition}
+    />
+  );
 }

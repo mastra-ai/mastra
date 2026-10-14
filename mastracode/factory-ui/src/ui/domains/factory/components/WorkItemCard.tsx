@@ -233,6 +233,7 @@ export function WorkItemCard({
       <>
         <WorkItemListRow
           item={item}
+          columnStage={columnStage}
           morph={morph}
           deepLinkRef={deepLinkRef}
           highlighted={highlighted}

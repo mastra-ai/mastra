@@ -54,7 +54,7 @@ export function WorkItemCardRows({
 }) {
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const external = knownExternalAuthor(item);
-  const verdict = columnStage === 'review' ? reviewVerdict(item.metadata) : undefined;
+  const verdict = columnReviewVerdict(item, columnStage);
 
   return (
     <>
@@ -93,11 +93,7 @@ export function WorkItemCardRows({
       {(status.kind !== 'idle' || external || verdict) && (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
           <CardStatus status={status} />
-          {verdict && (
-            <Badge size="xs" variant={verdict.outdated ? 'neutral' : verdict.approved ? 'green' : 'orange'}>
-              {verdict.label}
-            </Badge>
-          )}
+          {verdict && <ReviewVerdictBadge verdict={verdict} />}
           {external && <ExternalAuthorBadge className="ml-auto" />}
         </div>
       )}
@@ -110,14 +106,14 @@ export function WorkItemCardRows({
   );
 }
 
+type ReviewVerdict = { approved: boolean; outdated: boolean; label: string };
+
 /**
  * The last verdict a review pass recorded; the card rests in Reviewing until the PR merges.
  * Once a push moves the PR past the reviewed head the verdict is kept but marked outdated,
  * so a stale approval never reads as current while the next pass runs.
  */
-export function reviewVerdict(
-  metadata: Record<string, unknown>,
-): { approved: boolean; outdated: boolean; label: string } | undefined {
+export function reviewVerdict(metadata: Record<string, unknown>): ReviewVerdict | undefined {
   const verdict = metadata.reviewVerdict;
   if (verdict !== 'approve' && verdict !== 'request changes') return undefined;
   const reviewed = typeof metadata.reviewedHeadSha === 'string' ? metadata.reviewedHeadSha : undefined;
@@ -125,4 +121,16 @@ export function reviewVerdict(
   const outdated = reviewed !== undefined && head !== undefined && reviewed.toLowerCase() !== head.toLowerCase();
   const label = `${verdict === 'approve' ? 'Approved' : 'Changes requested'}${outdated ? ' (outdated)' : ''}`;
   return { approved: verdict === 'approve' && !outdated, outdated, label };
+}
+
+export function columnReviewVerdict(item: WorkItem, columnStage: BoardStageId) {
+  return columnStage === 'review' ? reviewVerdict(item.metadata) : undefined;
+}
+
+export function ReviewVerdictBadge({ verdict }: { verdict: ReviewVerdict }) {
+  return (
+    <Badge size="xs" variant={verdict.outdated ? 'neutral' : verdict.approved ? 'green' : 'orange'}>
+      {verdict.label}
+    </Badge>
+  );
 }

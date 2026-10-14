@@ -586,4 +586,21 @@ describe('Board work-item activity', () => {
     expect(screen.getByLabelText('Closed pull request')).toBeInTheDocument();
     expect(screen.getByLabelText('Merged pull request')).toBeInTheDocument();
   });
+
+  it('shows the recorded review verdict on review list rows', async () => {
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [
+            { ...reviewItem, sessions: {}, metadata: { ...reviewItem.metadata, reviewVerdict: 'request changes' } },
+          ],
+        }),
+      ),
+    );
+    renderBoard('review');
+
+    const row = await screen.findByRole('article', { name: reviewItem.title });
+    expect(within(row).getByText('Changes requested')).toBeVisible();
+  });
 });

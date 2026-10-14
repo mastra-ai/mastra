@@ -222,7 +222,9 @@ export function BoardContent({
     .filter(stage => workItemsByStage.get(stage.id)?.some(item => item.id === targetItemId))
     .map(stage => stage.id);
   const collapsedStages = useCollapsedStages(
-    targetItemId && targetStages.length > 0 ? { itemId: targetItemId, stages: targetStages } : undefined,
+    targetItemId && targetStages.length > 0
+      ? { itemId: targetItemId, commentId: targetCommentId, stages: targetStages }
+      : undefined,
   );
 
   if (items.error !== undefined) {
