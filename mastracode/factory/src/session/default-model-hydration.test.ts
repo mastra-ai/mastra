@@ -48,7 +48,7 @@ function createSession(state: Record<string, unknown> = {}): DefaultModelHydrati
     subagents: { model: { set: vi.fn().mockResolvedValue(undefined) } },
     thread: {
       getId: () => 'session-1',
-      listActiveMessages: vi.fn().mockResolvedValue([]),
+      firstUserMessage: vi.fn().mockResolvedValue(null),
     },
   };
 }
@@ -75,9 +75,9 @@ describe('hydrateSessionDefaultModel', () => {
     expect(session.subagents.model.set).toHaveBeenCalledWith({ modelId, agentType: 'execute' });
   });
 
-  it('keeps the model of a chat that already has messages when the session is recreated', async () => {
+  it('keeps the model of a chat that already has a user message when the session is recreated', async () => {
     const session = createSession();
-    vi.mocked(session.thread.listActiveMessages).mockResolvedValue([{ id: 'message-1' }]);
+    vi.mocked(session.thread.firstUserMessage).mockResolvedValue({ id: 'message-1' });
     const dependencies = createDependencies();
 
     await hydrateSessionDefaultModel(session, dependencies);
@@ -88,8 +88,8 @@ describe('hydrateSessionDefaultModel', () => {
 
   it('does not apply a default when thread messages cannot be read', async () => {
     const session = createSession();
-    delete (session.thread as { listActiveMessages?: DefaultModelHydrationSession['thread']['listActiveMessages'] })
-      .listActiveMessages;
+    delete (session.thread as { firstUserMessage?: DefaultModelHydrationSession['thread']['firstUserMessage'] })
+      .firstUserMessage;
     const dependencies = createDependencies();
 
     await hydrateSessionDefaultModel(session, dependencies);

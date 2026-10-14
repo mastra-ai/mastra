@@ -5,14 +5,18 @@ import { Workspace } from '@mastra/core/workspace';
 import { describe, expect, it } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { hydrateSessionDefaultModel } from './default-model-hydration.js';
 
-async function mountController() {
-  const seed = await createFactoryStorageForTests();
+async function mountController(
+  storage = new InMemoryStore({ id: 'default-model-hydration' }),
+  existingSeed?: FactoryStorageTestSeed,
+) {
+  const seed = existingSeed ?? (await createFactoryStorageForTests());
   const controller = new AgentController({
     workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
     id: 'code',
-    storage: new InMemoryStore({ id: 'default-model-hydration' }),
+    storage,
     stateSchema: undefined,
     modes: [
       {
@@ -41,7 +45,7 @@ async function mountController() {
       }),
     { blocking: true },
   );
-  return { seed, controller };
+  return { seed, storage, controller };
 }
 
 describe('scenario: a new user session starts on its owner default model', () => {
@@ -52,5 +56,31 @@ describe('scenario: a new user session starts on its owner default model', () =>
     const session = await controller.createSession({ resourceId: 'session-1', ownerId: 'user-1' });
 
     expect(session.model.get()).toBe('anthropic/claude-opus-4-6');
+  });
+
+  it('given a chat holding only coordinator signals, when the server restarts, then it starts on the current default', async () => {
+    const { seed, storage, controller } = await mountController();
+    await seed.modelDefaults.set({ orgId: 'org-1', userId: 'user-1', modelId: 'anthropic/claude-opus-4-6' });
+    const first = await controller.createSession({ resourceId: 'session-1', ownerId: 'user-1' });
+    const threadId = first.thread.requireId();
+    const memory = await storage.getStore('memory');
+    await memory!.saveMessages({
+      messages: [
+        {
+          id: 'signal-1',
+          threadId,
+          resourceId: 'session-1',
+          role: 'signal',
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text', text: 'skill loaded' }] },
+        },
+      ],
+    });
+
+    await seed.modelDefaults.set({ orgId: 'org-1', userId: 'user-1', modelId: 'openai/gpt-5.6' });
+    const restarted = await mountController(storage, seed);
+    const reopened = await restarted.controller.createSession({ resourceId: 'session-1', ownerId: 'user-1', threadId });
+
+    expect(reopened.model.get()).toBe('openai/gpt-5.6');
   });
 });

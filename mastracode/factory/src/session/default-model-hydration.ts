@@ -12,7 +12,7 @@ export interface DefaultModelHydrationSession extends DefaultModelApplicableSess
   state: { get(): Record<string, unknown> | undefined };
   thread: {
     getId(): string | null | undefined;
-    listActiveMessages(args: { limit: number }): Promise<unknown[]>;
+    firstUserMessage(args: { threadId: string }): Promise<unknown>;
   };
 }
 
@@ -32,13 +32,13 @@ export interface DefaultModelHydrationDependencies {
   modelDefaults: Pick<ModelDefaultsStorage, 'get'>;
 }
 
-/** Seed the user's default model into a new interactive chat; a chat with messages keeps its model. */
+/** Seed the user's default model into a new interactive chat; a chat with a user message keeps its model. */
 export async function hydrateSessionDefaultModel(
   session: DefaultModelHydrationSession,
   { sourceControl, workItems, modelDefaults }: DefaultModelHydrationDependencies,
 ): Promise<void> {
   const resourceId = session.identity.getResourceId();
-  if (session.state.get()?.factoryProjectId || typeof session.thread.listActiveMessages !== 'function') return;
+  if (session.state.get()?.factoryProjectId || typeof session.thread.firstUserMessage !== 'function') return;
   try {
     const sourceSession = await sourceControl.sessions.getBySessionId(resourceId);
     if (!sourceSession) return;
@@ -54,7 +54,7 @@ export async function hydrateSessionDefaultModel(
     ) {
       return;
     }
-    if ((await session.thread.listActiveMessages({ limit: 1 })).length > 0) return;
+    if (threadId && (await session.thread.firstUserMessage({ threadId }))) return;
 
     const modelDefault = await modelDefaults.get({ orgId: sourceSession.orgId, userId: sourceSession.userId });
     if (modelDefault) await applyDefaultModel(session, modelDefault.modelId);
