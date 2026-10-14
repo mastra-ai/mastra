@@ -1,4 +1,9 @@
-import { abortFollowupScenario } from './abort-followup.js';
+import {
+  abortEscapeDurableScenario,
+  abortEscapeEventedScenario,
+  abortEscapeOffScenario,
+  abortFollowupScenario,
+} from './abort-followup.js';
 import { abortQueuedFollowupScenario } from './abort-queued-followup.js';
 import { accountRotationScenario } from './account-rotation.js';
 import { accountRoutingTargetedScenario } from './account-routing-targeted.js';
@@ -140,6 +145,7 @@ import { omThresholdPersistenceScenario } from './om-threshold-persistence.js';
 import { onboardingOmFollowsLoginScenario } from './onboarding-om-follows-login.js';
 import { openaiStrictSchemaScenario } from './openai-strict-schema.js';
 import { packFallbackScenario } from './pack-fallback.js';
+import { packFlagStartupScenario } from './pack-flag-startup.js';
 import { permissionRequestHookScenario } from './permission-request-hook.js';
 import { persistentGoalCommandsScenario } from './persistent-goal-commands.js';
 import { persistentGoalJudgeDecisionScenario } from './persistent-goal-judge-decision.js';
@@ -247,6 +253,9 @@ export type { McE2eScenario, McE2eScenarioRuntime, ScenarioName } from './types.
 export const scenarios: Record<ScenarioName, McE2eScenario> = {
   startup: startupScenario,
   'abort-followup': abortFollowupScenario,
+  'abort-escape-off': abortEscapeOffScenario,
+  'abort-escape-durable': abortEscapeDurableScenario,
+  'abort-escape-evented': abortEscapeEventedScenario,
   'abort-queued-followup': abortQueuedFollowupScenario,
   'startup-interrupted': startupInterruptedScenario,
   'branch-context-long-name': branchContextLongNameScenario,
@@ -450,6 +459,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'account-rotation': accountRotationScenario,
   'account-routing-targeted': accountRoutingTargetedScenario,
   'pack-fallback': packFallbackScenario,
+  'pack-flag-startup': packFlagStartupScenario,
   'multi-account-login': multiAccountLoginScenario,
   'streaming-render-stability': streamingRenderStabilityScenario,
   'streaming-tool-args': streamingToolArgsScenario,

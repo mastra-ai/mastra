@@ -12,8 +12,9 @@ import { withToolPayloadTransformProviderMetadata } from '../../../../tools/payl
 import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
 import { DurableStepIds } from '../../constants';
+import { assertExecutionOwned, isExecutionFenceError } from '../../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
-import { globalRunRegistry } from '../../run-registry';
+import { getRunRegistryEntry } from '../../run-registry';
 import type {
   DurableLLMStepOutput,
   DurableToolCallOutput,
@@ -99,7 +100,7 @@ export function createDurableLLMMappingStep() {
       // consumers holding a reference to it — e.g. the stream adapter's
       // MastraModelOutput, which reads it for scoringData — keep seeing state
       // updates. A fresh instance here would orphan those references.
-      const registryEntry = globalRunRegistry.get(_runId);
+      const registryEntry = getRunRegistryEntry(_runId, mastra as Mastra | undefined);
       const messageList = (
         registryEntry?.messageList ??
         new MessageList({
@@ -434,7 +435,7 @@ export function createDurableLLMMappingStep() {
         state.threadId &&
         state.resourceId
       ) {
-        const authorizationEntry = globalRunRegistry.get(_runId);
+        const authorizationEntry = getRunRegistryEntry(_runId, mastra as Mastra | undefined);
         const authorizationRequestContext = authorizationEntry?.requestContext ?? requestContext;
         const authorizeMemory = (permission: Parameters<typeof authorizeDurableMemory>[1]['permission']) =>
           authorizeDurableMemory(getDurableMemoryAuthorizationChecks(authorizationEntry), {
@@ -452,8 +453,8 @@ export function createDurableLLMMappingStep() {
         try {
           // Re-read the entry: tool-call may have rebuilt the save queue into it. A connect()
           // worker in another process has none until something rebuilds it.
-          let saveQueueManager = globalRunRegistry.get(_runId)?.saveQueueManager;
-          let memory = globalRunRegistry.get(_runId)?.memory;
+          let saveQueueManager = getRunRegistryEntry(_runId, mastra as Mastra | undefined)?.saveQueueManager;
+          let memory = getRunRegistryEntry(_runId, mastra as Mastra | undefined)?.memory;
           if (!saveQueueManager && mastra) {
             const rebuilt = await rebuildRunToolsFromMastra({
               mastra: mastra as Mastra,
@@ -477,9 +478,13 @@ export function createDurableLLMMappingStep() {
               }
               output.state = { ...output.state, threadExists: true };
             }
-            await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
+            await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig, {
+              beforePersist: () =>
+                assertExecutionOwned({ runId: _runId, agentId: _agentId, requestContext, mastra: mastra as Mastra }),
+            });
           }
         } catch (error) {
+          if (isExecutionFenceError(error)) throw error;
           mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to save step: ${error}`);
         }
       }

@@ -98,6 +98,104 @@ For a free-text prompt, replace `AskUser.Options` with `AskUser.TextAnswer` and 
 
 Interactive examples live under **AI / Ask User** in Storybook, including composed layouts with the submit control outside the options.
 
+### Tables
+
+`Table variant="inset"` renders a data table from the native `table`, `thead`, `tbody`, `tr`, `th`, and `td` elements with the same raised surface as `DataList`. Each part takes its element's props, so `colSpan` and `aria-*` work as they do in HTML, and any component can go in a cell.
+
+```tsx
+import { Table } from '@mastra/playground-ui/components/Table';
+
+export function CreditHistory({ credits }: { credits: Credit[] }) {
+  return (
+    <Table variant="inset" aria-labelledby="credit-history">
+      <Table.Header>
+        <Table.Row>
+          <Table.Head>Type</Table.Head>
+          <Table.Head className="w-full">Description</Table.Head>
+          <Table.Head align="end">Balance</Table.Head>
+        </Table.Row>
+      </Table.Header>
+      <Table.Body>
+        {credits.map(credit => (
+          <Table.Row key={credit.id}>
+            <Table.Cell>
+              <Table.RowLink href={`/billing/credits/${credit.id}`}>{credit.type}</Table.RowLink>
+            </Table.Cell>
+            <Table.Cell>{credit.title}</Table.Cell>
+            <Table.Cell align="end">{credit.balance}</Table.Cell>
+          </Table.Row>
+        ))}
+      </Table.Body>
+    </Table>
+  );
+}
+```
+
+- `Table` takes `variant="inset"` for the DataList surface. Omit `variant` to preserve the existing default appearance and sizing. `columnDividers` draws lines between columns in inset mode.
+- `Table.Head` takes `align` (`start`, `center`, or `end`).
+- `Table.Cell` takes `align` and `tone` (`ink` or `muted`).
+- Every column is the same color. Use `Txt tone="muted"` only for secondary text inside a cell, such as a second line, or mute every column except the first.
+- `Table.SortButton` goes inside a sortable `Table.Head` and shows the sort arrow.
+- `Table.RowLink` makes the whole row a link. `Table.RowButton` makes it a button, for opening a drawer or dialog. Pass `render={<Link to="…" />}` for a router link.
+- `Table.Pagination` goes below the table: Previous, numbered pages, and Next. It takes a zero-based `page`, `pageCount`, and `onPageChange`. The caller supplies the current page’s rows, from a local slice or a server query.
+- Text is left-aligned; numbers are right-aligned with `align="end"` on the head and cells. Negative amounts keep their minus sign and use `tone="muted"`; never red, since usage isn't an error.
+- Rows are at least 36px tall and grow with their content. Cells stay on one line unless you wrap their text in an element with `whitespace-normal`.
+
+Use `Table` for data people read and compare, such as billing history or usage. Use `DataList` for lists of entities people click into, such as agents or traces, which need row keyboard navigation, sticky or reorderable columns, or virtualization. Search and filters go in an `ActionRow` above either one. Choose based on the rows rendered at once, not the total dataset size; large server-paginated datasets can use Table.
+
+The full guide, with recipes for column dividers, editable cells, sorting, client-side and server-side pagination, loading, and empty states, is the **DataDisplay / Table** docs page in Storybook.
+
+Legacy named parts remain supported. `Thead` creates its own row; `Table.Header` takes an explicit `Table.Row`. In inset mode, `className` applies to the outer surface and native props (including `ref` and `style`) apply to the `table`.
+
+### Pagination
+
+`Pagination` is page navigation built from parts, shaped like shadcn's: `Pagination`, `PaginationContent`, `PaginationItem`, `PaginationLink`, `PaginationPrevious`, `PaginationNext`, and `PaginationEllipsis`. The current page wears a raised pill that slides between pages, and a fluid highlight follows the pointer. The caller owns the page.
+
+```tsx
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+  getPaginationRange,
+} from '@mastra/playground-ui/components/Pagination';
+
+<Pagination aria-label="Credit history pages">
+  <PaginationContent>
+    <PaginationItem>
+      <PaginationPrevious disabled={page === 0} onClick={() => setPage(page - 1)} />
+    </PaginationItem>
+    {getPaginationRange(page, pageCount).map(item => {
+      if (item.kind === 'ellipsis') {
+        return (
+          <PaginationItem key={item.key}>
+            <PaginationEllipsis />
+          </PaginationItem>
+        );
+      }
+      return (
+        <PaginationItem key={item.page}>
+          <PaginationLink isActive={item.page === page} onClick={() => setPage(item.page)}>
+            {item.page + 1}
+          </PaginationLink>
+        </PaginationItem>
+      );
+    })}
+    <PaginationItem>
+      <PaginationNext disabled={page === pageCount - 1} onClick={() => setPage(page + 1)} />
+    </PaginationItem>
+  </PaginationContent>
+</Pagination>;
+```
+
+- Page indexes are zero-based. `getPaginationRange(page, pageCount)` returns the pages to show, with ellipses past seven pages.
+- `PaginationLink` renders a button. Pass `render={<a href="?page=2" />}`, or a router link, when each page has a URL.
+- `disabled` keeps Previous and Next in place and focusable, and ignores their clicks.
+- For a table, `Table.Pagination` takes `page`, `pageCount`, and `onPageChange` and renders this composition for you.
+
 ### Semantic color tokens
 
 `theme.css` declares the semantic color tokens (`--background`, `--card`, `--foreground`, and friends) at the document root, so utilities such as `bg-card` and `text-foreground` resolve anywhere in the app, portalled content included. Importing `style.css` once is enough to get both the compiled utilities and those tokens.

@@ -72,6 +72,7 @@ import type { DynamicArgument } from '../types';
 import { PUBSUB_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ClassifierStepOutput } from './entry-executors';
+import { withoutAuthToken } from './evented/helpers';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import { validateTemplate } from './mapping-template';
 import { derivePredicateLabel, evaluatePredicate } from './predicate';
@@ -124,6 +125,7 @@ import type {
   WorkflowRunStartOptions,
   ForeachOptions,
   StepFlowEntryOptions,
+  InferWorkflowRequestContext,
 } from './types';
 import {
   cleanStepResult,
@@ -382,7 +384,7 @@ export function createStep<
   TResumeSchema extends PublicSchema ? InferPublicSchema<TResumeSchema> : unknown,
   TSuspendSchema extends PublicSchema ? InferPublicSchema<TSuspendSchema> : unknown,
   DefaultEngineType,
-  TRequestContextSchema extends PublicSchema ? InferPublicSchema<TRequestContextSchema> : unknown
+  InferWorkflowRequestContext<TRequestContextSchema>
 >;
 
 /**
@@ -492,7 +494,7 @@ export function createStep<
   TResumeSchema extends PublicSchema ? InferPublicSchema<TResumeSchema> : unknown,
   TSuspendSchema extends PublicSchema ? InferPublicSchema<TSuspendSchema> : unknown,
   DefaultEngineType,
-  TRequestContextSchema extends PublicSchema ? InferPublicSchema<TRequestContextSchema> : unknown
+  InferWorkflowRequestContext<TRequestContextSchema>
 >;
 
 // ============================================
@@ -1913,6 +1915,8 @@ export class Workflow<
       shouldPersistSnapshot: options.shouldPersistSnapshot ?? (() => true),
       evaluatePersistencePredicateBeforeDurableOperation: options.evaluatePersistencePredicateBeforeDurableOperation,
       allowUnclaimedResumes: options.allowUnclaimedResumes,
+      isOwnershipLostError: options.isOwnershipLostError,
+      isForeignExecution: options.isForeignExecution,
       pruneSnapshot: options.pruneSnapshot,
       tracingPolicy: options.tracingPolicy,
       onStart: options.onStart,
@@ -3064,7 +3068,10 @@ export class Workflow<
     actor,
     engine: _engine,
     bail: _bail,
-    ...rest
+    tracing,
+    tracingContext,
+    loggerVNext,
+    metrics,
   }: {
     runId?: string;
     resourceId?: string;
@@ -3101,7 +3108,7 @@ export class Workflow<
     perStep?: boolean;
     actor?: ActorSignal;
   } & Partial<ObservabilityContext>): Promise<TOutput | undefined> {
-    const observabilityContext = resolveObservabilityContext(rest);
+    const observabilityContext = resolveObservabilityContext({ tracing, tracingContext, loggerVNext, metrics });
     this.__registerMastra(mastra);
 
     // FGA authorization check
@@ -4143,7 +4150,7 @@ export class Run<
           status: 'waiting',
           value: initialStateToUse as Record<string, any>,
           context: inputDataToUse !== undefined ? ({ input: inputDataToUse } as any) : ({} as any),
-          requestContext: (requestContext ?? new RequestContext()).toJSON(),
+          requestContext: withoutAuthToken((requestContext ?? new RequestContext()).toJSON()),
           activePaths: [0],
           activeStepsPath: {},
           serializedStepGraph: this.serializedStepGraph,
@@ -4775,6 +4782,17 @@ export class Run<
     return this._resume({ ...params, skipParentWorkflowClaim: true });
   }
 
+  /**
+   * Resumes a run whose suspension the caller already claimed (`suspended -> running`) in storage.
+   * Skips the built-in claim and the `suspended` status check, which a claimed run no longer passes.
+   * @internal
+   */
+  async resumeClaimed(
+    params: Parameters<this['resume']>[0] & { claimedSnapshot: WorkflowRunState; onExecutionStarted?: () => void },
+  ) {
+    return this._resume(params);
+  }
+
   async resume<TResume>(
     params: {
       resumeData?: TResume;
@@ -5020,7 +5038,13 @@ export class Run<
     }
 
     if (!params.claimedSnapshot && snapshot.status !== 'suspended') {
-      throw new Error('This workflow run was not suspended');
+      throw new MastraError({
+        id: 'WORKFLOW_RUN_NOT_SUSPENDED',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: 'This workflow run was not suspended',
+        details: { workflowId: this.workflowId, runId: this.runId, status: snapshot.status },
+      });
     }
 
     const snapshotResumeLabel = params.label ? snapshot?.resumeLabels?.[params.label] : undefined;

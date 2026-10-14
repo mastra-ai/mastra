@@ -13,8 +13,8 @@ The `.branch()` method creates conditional branches between workflow steps, allo
 
 ```typescript
 workflow.branch([
-  [async ({ context }) => true, step1],
-  [async ({ context }) => false, step2],
+  [async () => true, step1],
+  [async () => false, step2],
 ])
 ```
 
@@ -24,9 +24,9 @@ workflow.branch([
   content={[
   {
     name: 'steps',
-    type: '[() => boolean, Step]',
+    type: '[ConditionFunction | { predicate: Predicate }, Step][]',
     description:
-      'An array of tuples, each containing a condition function and a step to execute if the condition is true',
+      'An array of tuples, each containing a condition (a function returning a boolean, or a declarative { predicate } object) and a step to execute if the condition is true',
     isOptional: false,
   },
   {
@@ -65,7 +65,7 @@ workflow.branch([
   content={[
   {
     name: 'workflow',
-    type: 'NewWorkflow',
+    type: 'Workflow',
     description: 'The workflow instance for method chaining',
   },
 ]}

@@ -234,12 +234,10 @@ export class HttpTransport extends LoggerTransport {
   _transform(chunk: string, _enc: string, cb: Function): void {
     try {
       // Parse the log line if it's a string
-      const log = typeof chunk === 'string' ? JSON.parse(chunk) : chunk;
+      const parsed = typeof chunk === 'string' ? JSON.parse(chunk) : chunk;
 
-      // Add timestamp if not present
-      if (!log.time) {
-        log.time = Date.now();
-      }
+      // Add timestamp if not present, on a copy so caller-owned (possibly frozen) records stay untouched
+      const log = parsed.time === undefined || parsed.time === null ? { ...parsed, time: Date.now() } : parsed;
 
       // Add to buffer
       this.logBuffer.push(log);
@@ -305,7 +303,7 @@ export class HttpTransport extends LoggerTransport {
     return {
       logs: [],
       total: 0,
-      page: params?.page ?? 1,
+      page: params?.page === 0 ? 1 : (params?.page ?? 1),
       perPage: params?.perPage ?? 100,
       hasMore: false,
     };
@@ -343,7 +341,7 @@ export class HttpTransport extends LoggerTransport {
     return {
       logs: [],
       total: 0,
-      page: page ?? 1,
+      page: page === 0 ? 1 : (page ?? 1),
       perPage: perPage ?? 100,
       hasMore: false,
     };

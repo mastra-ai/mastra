@@ -1,6 +1,6 @@
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
-import type { ComboboxOption } from '@mastra/playground-ui/components/Combobox';
+import type { ComboboxOption, ComboboxVariant } from '@mastra/playground-ui/components/Combobox';
 import { Check, Tag } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -11,8 +11,7 @@ export interface ExperimentResultsTagPickerProps {
   vocabulary: string[];
   onAddTag: (tag: string) => void;
   disabled?: boolean;
-  /** `toolbar` (default) for the selection row; `inline` for the compact editor in the result panel. */
-  appearance?: 'toolbar' | 'inline';
+  variant?: ComboboxVariant;
 }
 
 /**
@@ -26,7 +25,7 @@ export function ExperimentResultsTagPicker({
   vocabulary,
   onAddTag,
   disabled,
-  appearance = 'toolbar',
+  variant,
 }: ExperimentResultsTagPickerProps) {
   const [search, setSearch] = useState('');
 
@@ -71,8 +70,8 @@ export function ExperimentResultsTagPicker({
       }
       searchPlaceholder="Search or create tag..."
       emptyText="Type to create a tag"
-      variant={appearance === 'inline' ? 'ghost' : 'default'}
-      size={appearance === 'inline' ? 'sm' : 'md'}
+      variant={variant}
+      size="sm"
       className="w-auto min-w-0"
       disabled={disabled}
     />

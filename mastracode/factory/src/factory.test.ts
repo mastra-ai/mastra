@@ -1102,11 +1102,18 @@ describe('MastraFactory.prepare', () => {
     }
   });
 
-  it('omits auth routes when auth is explicitly disabled (auth: null)', async () => {
+  it('registers only a 404 /auth/me when auth is explicitly disabled (auth: null)', async () => {
     const config = await prepareFactory({ storage: fakeStorage(), auth: null });
-    const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
-    const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
-    expect(paths.some(p => p.startsWith('/auth/'))).toBe(false);
+    const buildApiRoutes = config.buildApiRoutes as (
+      deps: object,
+    ) => Array<{ path: string; method: string; handler: (c: unknown) => unknown }>;
+    const authRoutes = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).filter(r =>
+      r.path.startsWith('/auth/'),
+    );
+    expect(authRoutes.map(r => [r.method, r.path])).toEqual([['GET', '/auth/me']]);
+    const json = vi.fn((payload: unknown, status: number) => ({ payload, status }));
+    authRoutes[0]!.handler({ json } as never);
+    expect(json).toHaveBeenCalledWith({ authEnabled: false, authenticated: false }, 404);
   });
 
   it('installs the auth gate and tenant credential primer when auth is configured', async () => {
