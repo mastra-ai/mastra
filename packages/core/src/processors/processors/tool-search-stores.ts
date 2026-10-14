@@ -26,10 +26,9 @@ export interface LoadedToolStoreContext {
  *   map with TTL cleanup. This preserves the original processor behavior.
  * - {@link ContextLoadedToolStore} ('context' mode, opt-in) derives loaded state
  *   from the conversation messages. Works without memory, and survives a restart
- *   whenever the thread's messages can be supplied again (Agent memory with message
- *   history, or a caller-provided `getMessages`); de-loads a tool once its result
- *   block has been observed and then leaves the messages — parity with native
- *   provider tool-search.
+ *   whenever the messages are available again (Agent memory with message history, or
+ *   the caller resending the conversation); de-loads a tool once its result block has
+ *   been observed and then leaves the messages — parity with native provider tool-search.
  */
 export interface LoadedToolStore {
   /** Resolve the set of currently-loaded tool names for this context. */
@@ -106,11 +105,10 @@ export function deriveLoadedNamesFromMessages(args: Pick<ProcessInputStepArgs, '
  * in the messages on the next step. It is only ever additive to the message-derived
  * set and is never the durable record, so:
  *
- * - Restart-safe when the thread's messages can be supplied again: after a restart the
- *   persisted messages yield the loaded set. That source is Agent memory with message
- *   history, or a caller-provided `getMessages` (for example a workflow that persists
- *   and returns its own history). Without either, nothing is restored and the loaded
- *   set lasts only for the current process.
+ * - Restart-safe when the messages are available again: after a restart the loaded set
+ *   is rebuilt from them. Those messages are Agent memory with message history, or the
+ *   caller resending the conversation (it arrives as `args.messages`). Without either,
+ *   nothing is restored and the loaded set lasts only for the current process.
  * - De-loads automatically once the result block has been observed and then leaves the
  *   messages (native parity): a name becomes message-owned as soon as it appears in the
  *   messages and is pruned from the supplemental set, so a later omission is what
