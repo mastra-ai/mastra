@@ -600,6 +600,19 @@ describe('Deps.pack', () => {
     expect(await readFile(manifestPath, 'utf-8')).toBe(original);
   });
 
+  it('names the manifest path when package.json is malformed', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mastra-deps-pack-'));
+    tempDirs.push(root);
+    await writeFile(join(root, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n", 'utf-8');
+    const manifestPath = join(root, 'package.json');
+    await writeFile(manifestPath, '{ not json', 'utf-8');
+
+    await expect(
+      new DepsService(root).pack({ dir: root, destination, sanitizedName: 'pkg', version: '0.0.0' }),
+    ).rejects.toThrow(`Failed to parse ${manifestPath}`);
+    expect(runChildProcess).not.toHaveBeenCalled();
+  });
+
   it('does not rewrite a manifest that already has a version', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mastra-deps-pack-'));
     tempDirs.push(root);

@@ -353,7 +353,12 @@ export class Deps extends MastraBase {
       if (originalManifest === undefined) {
         return runPack();
       }
-      const manifest = JSON.parse(originalManifest) as PackageJson;
+      let manifest: PackageJson;
+      try {
+        manifest = JSON.parse(originalManifest) as PackageJson;
+      } catch (error) {
+        throw new Error(`Failed to parse ${manifestPath}: ${(error as Error).message}`, { cause: error });
+      }
       if (manifest.version) {
         return runPack();
       }
