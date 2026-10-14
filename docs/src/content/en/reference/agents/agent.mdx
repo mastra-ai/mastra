@@ -363,6 +363,24 @@ The count includes messages waiting in the local FIFO and a non-cancelled messag
 
 Use [`cancelQueuedMessages()`](#cancelqueuedmessagesoptions) to cancel selected pending input or an owner group. Queue-count events still count only `queueMessage()` entries, not the other pending signal queues. Owner-scoped observation and cancellation match the calling Agent, its local runtime, resource, thread, and owner ID.
 
+### `queueSignal(signal, options)`
+
+Queues a typed signal for the next turn on a thread. It behaves like `queueMessage()`, but accepts any signal input, so the queued run keeps the signal's `type`, `tagName`, and `attributes`.
+
+```typescript
+agent.queueSignal(
+  {
+    type: 'reactive',
+    tagName: 'skill',
+    attributes: { name: 'triage' },
+    contents: 'Triage the new issue.',
+  },
+  { resourceId: 'user-123', threadId: 'thread-abc' },
+)
+```
+
+`queueSignal()` accepts the same `options` as `queueMessage()`, including `queueOwnerId`, and returns the same result shape. Queued signals share the `queueMessage()` queue, so queue-count events include them and `cancelQueuedMessages()` can cancel them.
+
 ### `cancelQueuedMessages(options)`
 
 Cancels pending input without aborting the active run. Supply exactly one selector:

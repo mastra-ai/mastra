@@ -166,6 +166,13 @@ export interface AgentRunAttributes extends AIBaseAttributes {
   maxSteps?: number;
   /** The resolved agent version ID used for this execution */
   resolvedVersionId?: string;
+  /** The agent signal that started this run, when the run input was a signal */
+  signal?: {
+    id: string;
+    type: string;
+    tagName?: string;
+    attributes?: Record<string, string | number | boolean | null>;
+  };
   /** Tripwire abort details when a processor triggered a tripwire */
   tripwireAbort?: {
     /** Abort reason */

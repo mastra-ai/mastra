@@ -19,6 +19,7 @@ Server adapters register these routes when you call `server.init()`. All routes 
 | `POST` | `/api/agents/:agentId/stream` | Stream agent response |
 | `POST` | `/api/agents/:agentId/send-message` | Send a user message to an active or idle thread |
 | `POST` | `/api/agents/:agentId/queue-message` | Queue a user message for the next thread turn |
+| `POST` | `/api/agents/:agentId/queue-signal` | Queue a typed signal for the next thread turn |
 | `POST` | `/api/agents/:agentId/signals` | Send a lower-level signal to an active or idle thread |
 | `POST` | `/api/agents/:agentId/threads/subscribe` | Subscribe to a thread stream |
 | `POST` | `/api/agents/:agentId/threads/abort` | Abort a thread, optionally clearing pending signals |
@@ -85,6 +86,8 @@ GET /api/agents/my-agent?versionId=abc123
 ### Agent message routes
 
 Use `POST /api/agents/:agentId/send-message` to send a user message to the active agent loop or wake an idle thread. Use `POST /api/agents/:agentId/queue-message` when the active run should finish before Mastra starts a follow-up run.
+
+To queue a typed signal with the same ordering, use `POST /api/agents/:agentId/queue-signal` with a `signal` field in place of `message`. The `signal` field takes the same shape as `POST /api/agents/:agentId/signals`.
 
 Both routes accept the same request body:
 

@@ -18,7 +18,7 @@ import type { AgentExecutionOptions } from './agent.types';
 import type { MessageListInput } from './message-list';
 import { createRecentRequests } from './recent-requests';
 import { resolveAgentScopes } from './scopes';
-import { createMessageSignal, createSignal, resolveDeliveryAttributes } from './signals';
+import { createSignal, resolveDeliveryAttributes } from './signals';
 import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
 import { applyStateSignal } from './state-signals';
 import { createThreadHistoryFilter, getPartProducedAt, stampPartProducedAt } from './thread-history';
@@ -40,6 +40,8 @@ import type {
   SubscribeAgentThreadEventsOptions,
   QueueAgentMessageOptions,
   QueueAgentMessageResult,
+  QueueAgentSignalOptions,
+  QueueAgentSignalResult,
   SendAgentMessageOptions,
   SendAgentMessageResult,
   SendAgentSignalOptions,
@@ -5471,6 +5473,19 @@ export class AgentThreadStreamRuntime {
     target: QueueAgentMessageOptions<OUTPUT>,
     pubsub?: PubSub,
   ): QueueAgentMessageResult<OUTPUT> {
+    return this.queueSignal<OUTPUT>(agent, this.#createMessageSignalInput(message), target, pubsub);
+  }
+
+  /**
+   * Queues a signal to start a new run after the active thread run completes, or wakes the
+   * thread immediately when it is idle. Unlike `sendSignal`, it never joins the active run.
+   */
+  queueSignal<OUTPUT = unknown>(
+    agent: Agent<any, any, any, any>,
+    signalInput: AgentSignal,
+    target: QueueAgentSignalOptions<OUTPUT>,
+    pubsub?: PubSub,
+  ): QueueAgentSignalResult<OUTPUT> {
     const state = this.#getState(pubsub);
     const acceptedAt = new Date();
     let key: string | undefined;
@@ -5502,8 +5517,9 @@ export class AgentThreadStreamRuntime {
     }
 
     key ??= this.#threadKey(resourceId, threadId);
-    const signal = createMessageSignal(message, {
-      id: this.#generateSignalMessageId(agent, { resourceId, threadId }),
+    const signal = createSignal({
+      ...signalInput,
+      id: signalInput.id ?? this.#generateSignalMessageId(agent, { resourceId, threadId }),
       acceptedAt,
     });
     const queuedRunId = globalThis.crypto.randomUUID();

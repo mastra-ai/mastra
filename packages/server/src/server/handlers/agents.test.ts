@@ -25,6 +25,7 @@ import {
   approveToolCallBodySchema,
   declineToolCallBodySchema,
   queueAgentMessageBodySchema,
+  queueAgentSignalBodySchema,
   sendAgentMessageBodySchema,
   sendAgentSignalBodySchema,
   subscribeAgentThreadBodySchema,
@@ -47,6 +48,7 @@ import {
   SEND_TOOL_APPROVAL_ROUTE,
   LIST_SUSPENDED_RUNS_ROUTE,
   QUEUE_AGENT_MESSAGE_ROUTE,
+  QUEUE_AGENT_SIGNAL_ROUTE,
   SEND_AGENT_MESSAGE_ROUTE,
   SEND_AGENT_SIGNAL_ROUTE,
   ABORT_AGENT_THREAD_ROUTE,
@@ -2656,6 +2658,26 @@ describe('Agent Routes Authorization', () => {
       ).toBe(false);
     });
 
+    it('should validate queue signal route bodies', () => {
+      const parsed = queueAgentSignalBodySchema.parse({
+        signal: { type: 'reactive', tagName: 'skill', attributes: { name: 'factory-triage' }, contents: 'Triage it.' },
+        resourceId: 'user-a',
+        threadId: 'thread-a',
+      });
+      expect(parsed.signal).toMatchObject({
+        type: 'reactive',
+        tagName: 'skill',
+        attributes: { name: 'factory-triage' },
+      });
+      expect(
+        queueAgentSignalBodySchema.safeParse({
+          message: 'hello',
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(false);
+    });
+
     it.each([undefined, false, true])(
       'requires a nonempty abort thread ID with clearPendingSignals=%s',
       clearPendingSignals => {
@@ -3345,6 +3367,45 @@ describe('Agent Routes Authorization', () => {
         },
         defaultStatus: 'published',
       });
+    });
+
+    it('should queue a typed signal through Agent.queueSignal', async () => {
+      await mockMemory.createThread({
+        threadId: 'queue-signal-thread',
+        resourceId: 'user-a',
+        title: 'Queue Signal Thread',
+      });
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+      let capturedSignal: any;
+      let capturedTarget: any;
+
+      (mockAgent as any).queueSignal = vi.fn((signal: unknown, target: unknown) => {
+        capturedSignal = signal;
+        capturedTarget = target;
+        return {
+          accepted: Promise.resolve({ action: 'deliver', runId: 'queued-signal-run-id' }),
+          signal: { id: 'queued-signal-id' },
+        };
+      });
+
+      const result = await (QUEUE_AGENT_SIGNAL_ROUTE.handler as any)({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        signal: { type: 'reactive', tagName: 'skill', attributes: { name: 'factory-triage' }, contents: 'Triage it.' },
+        resourceId: 'user-a',
+        threadId: 'queue-signal-thread',
+      });
+
+      expect(result).toEqual({ accepted: true, runId: 'queued-signal-run-id', signal: { id: 'queued-signal-id' } });
+      expect(capturedSignal).toEqual({
+        type: 'reactive',
+        tagName: 'skill',
+        attributes: { name: 'factory-triage' },
+        contents: 'Triage it.',
+      });
+      expect(capturedTarget).toMatchObject({ resourceId: 'user-a', threadId: 'queue-signal-thread' });
+      expect(capturedTarget.ifIdle.streamOptions.requestContext).toBe(requestContext);
     });
 
     it('should merge idle stream request context before waking a thread with a signal', async () => {

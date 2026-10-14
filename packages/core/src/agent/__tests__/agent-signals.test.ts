@@ -8626,6 +8626,144 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('queues a typed queueSignal until the active run completes', async () => {
+    let releaseFirst!: () => void;
+    const firstFinished = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    let streamCount = 0;
+    const prompts: any[][] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        streamCount += 1;
+        prompts.push(prompt);
+        const responseText = streamCount === 1 ? 'first response' : 'skill response';
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            async start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({
+                type: 'response-metadata',
+                id: `queue-signal-${streamCount}`,
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: responseText });
+              controller.enqueue({ type: 'text-end', id: 'text-1' });
+              if (streamCount === 1) {
+                await firstFinished;
+              }
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        };
+      },
+    });
+    const agent = new Agent({ id: 'queue-signal-agent', name: 'Queue Signal Agent', instructions: 'Test', model });
+    const subscription = await agent.subscribeToThread({
+      threadId: 'queue-signal-thread',
+      resourceId: 'queue-signal-user',
+    });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+    const firstRun = readNextRunWithParts(iterator);
+
+    const stream = await agent.stream('Hello', {
+      memory: { thread: 'queue-signal-thread', resource: 'queue-signal-user' },
+    });
+    await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
+    const result = agent.queueSignal(
+      { type: 'reactive', tagName: 'skill', attributes: { name: 'factory-triage' }, contents: 'Triage the card.' },
+      { resourceId: 'queue-signal-user', threadId: 'queue-signal-thread' },
+    );
+
+    expect(result.signal).toMatchObject({ type: 'reactive', tagName: 'skill', attributes: { name: 'factory-triage' } });
+    const settled = await result.accepted;
+    const queuedRunId = 'runId' in settled ? settled.runId : undefined;
+    expect(settled.action).toBe('deliver');
+    expect(queuedRunId).not.toBe(stream.runId);
+    await nextTick();
+    expect(streamCount).toBe(1);
+
+    releaseFirst();
+    await expect(stream.text).resolves.toBe('first response');
+    await firstRun;
+    const secondRun = await readNextRunWithParts(iterator);
+    expect(secondRun.value.runId).toBe(queuedRunId);
+    expect(secondRun.value.text).toBe('skill response');
+    expect(streamCount).toBe(2);
+    expect(JSON.stringify(prompts[0])).not.toContain('Triage the card.');
+    expect(JSON.stringify(prompts[1])).toContain('<skill name=\\"factory-triage\\">Triage the card.</skill>');
+
+    subscription.unsubscribe();
+  });
+
+  it('cancels a queued typed signal before it runs', async () => {
+    let releaseFirst!: () => void;
+    const firstFinished = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    const prompts: any[][] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        prompts.push(prompt);
+        const isFirst = prompts.length === 1;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            async start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'response' });
+              controller.enqueue({ type: 'text-end', id: 'text-1' });
+              if (isFirst) await firstFinished;
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        };
+      },
+    });
+    const agent = new Agent({ id: 'cancel-signal-agent', name: 'Cancel Signal Agent', instructions: 'Test', model });
+    const subscription = await agent.subscribeToThread({ threadId: 'cancel-signal-thread', resourceId: 'cancel-user' });
+
+    const stream = await agent.stream('Hello', { memory: { thread: 'cancel-signal-thread', resource: 'cancel-user' } });
+    await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
+    const result = agent.queueSignal(
+      { type: 'reactive', tagName: 'skill', contents: 'Cancelled skill' },
+      { resourceId: 'cancel-user', threadId: 'cancel-signal-thread' },
+    );
+    await result.accepted;
+
+    expect(
+      agent.cancelQueuedMessages({
+        resourceId: 'cancel-user',
+        threadId: 'cancel-signal-thread',
+        signalIds: [result.signal.id],
+      }),
+    ).toEqual({ cancelledSignalIds: [result.signal.id] });
+
+    releaseFirst();
+    await expect(stream.text).resolves.toBe('response');
+    await nextTick();
+    await nextTick();
+    expect(prompts).toHaveLength(1);
+
+    subscription.unsubscribe();
+  });
+
   it('observes only relevant owner-scoped queue changes and validates cancellation selectors', async () => {
     const runtime = new AgentThreadStreamRuntime();
     const pubsub = new ControlledLeasePubSub();

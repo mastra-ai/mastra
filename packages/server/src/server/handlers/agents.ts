@@ -63,6 +63,7 @@ import {
   sendAgentMessageBodySchema,
   sendAgentSignalBodySchema,
   queueAgentMessageBodySchema,
+  queueAgentSignalBodySchema,
   subscribeAgentThreadBodySchema,
   abortAgentThreadBodySchema,
   abortAgentThreadResponseSchema,
@@ -2122,7 +2123,7 @@ async function handleAgentMessageRoute({
   mastra,
   agentId,
   requestContext: serverRequestContext,
-  message,
+  payload,
   runId,
   resourceId,
   threadId,
@@ -2133,13 +2134,13 @@ async function handleAgentMessageRoute({
   mastra: any;
   agentId: string;
   requestContext: RequestContext;
-  message: AgentMessageInput;
+  payload: AgentMessageInput | AgentSignalInput;
   runId?: string;
   resourceId?: string;
   threadId?: string;
   ifActive?: { behavior?: 'deliver' | 'persist' | 'discard' };
   ifIdle?: { behavior?: 'wake' | 'persist' | 'discard'; streamOptions?: Record<string, unknown> };
-  methodName: 'sendMessage' | 'queueMessage';
+  methodName: 'sendMessage' | 'queueMessage' | 'queueSignal';
 }) {
   const idleStreamOptions = ifIdle?.streamOptions as
     | (Record<string, unknown> & { requestContext?: Record<string, unknown>; versions?: VersionOverrides })
@@ -2178,7 +2179,7 @@ async function handleAgentMessageRoute({
   }
 
   if (runId) {
-    const result = await agent[methodName](message, {
+    const result = await (agent as any)[methodName](payload, {
       runId,
       ...(effectiveResourceId ? { resourceId: effectiveResourceId } : {}),
       ...(effectiveThreadId ? { threadId: effectiveThreadId } : {}),
@@ -2195,7 +2196,7 @@ async function handleAgentMessageRoute({
     throw new HTTPException(400, { message: 'resourceId and threadId are required when runId is not provided' });
   }
 
-  const result = await agent[methodName](message, {
+  const result = await (agent as any)[methodName](payload, {
     resourceId: effectiveResourceId,
     threadId: effectiveThreadId,
     ...(ifActive ? { ifActive } : {}),
@@ -2222,7 +2223,7 @@ export const SEND_AGENT_MESSAGE_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async params => {
     try {
-      return await handleAgentMessageRoute({ ...params, methodName: 'sendMessage' });
+      return await handleAgentMessageRoute({ ...params, payload: params.message, methodName: 'sendMessage' });
     } catch (error) {
       return handleSignalRoutingError(error, 'error sending agent message');
     }
@@ -2244,9 +2245,31 @@ export const QUEUE_AGENT_MESSAGE_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async params => {
     try {
-      return await handleAgentMessageRoute({ ...params, methodName: 'queueMessage' });
+      return await handleAgentMessageRoute({ ...params, payload: params.message, methodName: 'queueMessage' });
     } catch (error) {
       return handleSignalRoutingError(error, 'error queueing agent message');
+    }
+  },
+});
+
+export const QUEUE_AGENT_SIGNAL_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/queue-signal',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: queueAgentSignalBodySchema,
+  responseSchema: sendAgentSignalResponseSchema,
+  summary: 'Queue agent signal',
+  description:
+    'Queues a typed signal to run after the active thread run completes, or starts a memory thread run when idle',
+  tags: ['Agents', 'Streaming'],
+  requiresAuth: true,
+  requiresPermission: 'agents:execute',
+  handler: async params => {
+    try {
+      return await handleAgentMessageRoute({ ...params, payload: params.signal, methodName: 'queueSignal' });
+    } catch (error) {
+      return handleSignalRoutingError(error, 'error queueing agent signal');
     }
   },
 });
