@@ -821,6 +821,7 @@ export class MastraFactory {
       : undefined;
     const projectRoutes = new ProjectRoutes({
       auth: routeAuth,
+      sandbox: this.#sandbox,
       projects: factoryProjectsStorage,
       sourceControl: sourceControlStorage,
       versionControlIntegrationIds: integrations

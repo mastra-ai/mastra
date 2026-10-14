@@ -8,6 +8,7 @@ import type {
   LinkProjectRepositoryInput,
   ProjectRepository,
   ProjectSourceControlConnection,
+  SetProjectRepositoryBuildStatusInput,
   SourceControlInstallation,
   SourceControlRepository,
   SourceControlSession,
@@ -267,6 +268,16 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       }
       return targets;
     },
+    listByProject: async ({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }) => {
+      const connectionIds = new Set(
+        (await this.connections.list({ orgId, factoryProjectId }))
+          .filter(row => row.integrationId === this.integrationId)
+          .map(row => row.id),
+      );
+      return this.projectRepositoriesRows
+        .filter(row => connectionIds.has(row.connectionId))
+        .sort((a, b) => a.position - b.position || a.createdAt.getTime() - b.createdAt.getTime());
+    },
     get: async ({ orgId, id }: { orgId: string; id: string }): Promise<ProjectRepository | null> => {
       const row = this.projectRepositoriesRows.find(candidate => candidate.id === id);
       if (!row) return null;
@@ -282,6 +293,17 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         row => row.connectionId === input.connectionId && row.repositoryId === input.repositoryId,
       );
       if (existing) return existing;
+      // Mirrors base.ts: order and dedupe span every connection of the project.
+      const siblingConnectionIds = new Set(
+        this.connectionsRows.filter(row => row.factoryProjectId === connection.factoryProjectId).map(row => row.id),
+      );
+      const siblings = this.projectRepositoriesRows.filter(row => siblingConnectionIds.has(row.connectionId));
+      const position = 1 + Math.max(0, ...siblings.map(row => row.position));
+      const inEnvironment = !siblings.some(
+        row =>
+          row.inEnvironment &&
+          this.repositoriesRows.find(candidate => candidate.id === row.repositoryId)?.slug === repository.slug,
+      );
       const now = new Date();
       const created: ProjectRepository = {
         id: globalThis.crypto.randomUUID(),
@@ -293,6 +315,11 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         sandboxWorkdir: input.sandboxWorkdir,
         setupCommand: input.setupCommand ?? null,
         teardownCommand: input.teardownCommand ?? null,
+        position,
+        inEnvironment,
+        lastBuildStatus: 'unbuilt',
+        lastBuildError: null,
+        lastBuiltAt: null,
         createdAt: now,
         updatedAt: now,
       };
@@ -311,6 +338,23 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       const row = await this.projectRepositories.get({ orgId, id });
       if (!row) return null;
       Object.assign(row, input, { updatedAt: new Date() });
+      return row;
+    },
+    setBuildStatus: async ({
+      orgId,
+      id,
+      status,
+      error,
+      builtAt,
+    }: SetProjectRepositoryBuildStatusInput): Promise<ProjectRepository | null> => {
+      const row = await this.projectRepositories.get({ orgId, id });
+      if (!row) return null;
+      Object.assign(row, {
+        lastBuildStatus: status,
+        lastBuildError: error ?? null,
+        lastBuiltAt: builtAt ?? null,
+        updatedAt: new Date(),
+      });
       return row;
     },
     unlink: async ({ orgId, id }: { orgId: string; id: string }): Promise<boolean> => {

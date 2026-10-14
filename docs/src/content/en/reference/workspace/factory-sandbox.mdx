@@ -10,7 +10,7 @@ packages:
 
 A `FactorySandbox` is the one object a host gives `MastraFactory` to describe where sessions run. It owns the session sandbox constructor, the repository template built for a session, the schema of settings a user can tune per project, and optionally the ability to build that template ahead of time.
 
-Factory doesn't store settings yet. Every session boots with an empty settings document and the provider's defaults. `factory.sandboxDescription` reports the provider, the settings schema as JSON Schema and the available capabilities. Everything provider-specific stays inside the object: Factory only calls the contract and reads `provider` for display.
+Factory stores each project's settings, but sessions don't boot with them yet. Every session boots with an empty settings document and the provider's defaults. `factory.sandboxDescription` reports the provider, the settings schema as JSON Schema and the available capabilities. Everything provider-specific stays inside the object: Factory only calls the contract and reads `provider` for display.
 
 ## Usage
 
@@ -56,6 +56,8 @@ new LocalFactorySandbox({ root: '/var/sandboxes', env: { PATH: process.env.PATH!
 For an unset setting, the provider applies its own default: 2 CPUs, 1024 MB and a 5 minute idle timeout on Platform and E2B, overridable through `defaults`. On Platform, a top-level `idleTimeoutMinutes` option also applies when `defaults` doesn't set one. The schema's `default` values show the effective defaults.
 
 Platform polls a build through the builder that started it. After a host restart, an earlier build reads as `unknown`.
+
+Keep schema changes additive: add fields, and read both names for a release when you rename one. The stored document outlives the schema that wrote it, so a key the current schema no longer declares can appear in it, for example after the host switches provider. When such a key makes an update fail validation, Factory drops the undeclared keys and retries before refusing the update. Keys the update itself sets are never dropped.
 
 ### Callback form
 
