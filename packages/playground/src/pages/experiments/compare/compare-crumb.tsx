@@ -1,9 +1,7 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { useDataset, useDatasetExperimentsQueries } from '@mastra/react/hooks/datasets';
+import { useDatasetExperimentsQueries } from '@mastra/react/hooks/datasets';
 import { ChevronDown, StarIcon } from 'lucide-react';
 import { ExperimentIdLink } from './experiment-id-link';
 import { useComparedExperimentIds } from './use-compared-experiment-ids';
@@ -17,31 +15,6 @@ function useExperimentIds() {
 export function CompareCrumb() {
   const { experimentIds } = useExperimentIds();
   return experimentIds.length > 0 ? `Comparing ${experimentIds.length} experiments` : 'Comparing';
-}
-
-/** Completes the crumb with the compared dataset: `Comparing 3 experiments on <dataset>`. Falls back to its id. */
-export function CompareCrumbDataset() {
-  const { datasetId } = useComparedExperimentIds();
-  const { Link, paths } = useLinkComponent();
-  const { data: dataset, isLoading } = useDataset({
-    datasetId: datasetId ?? '',
-    queryOptions: { enabled: Boolean(datasetId) },
-  });
-  if (!datasetId || isLoading) return null;
-
-  // `ml-3` mirrors the label's end padding, so the chevron sits evenly between the label and this text.
-  return (
-    <Txt as="span" variant="caption" tone="muted" className="ml-3 flex min-w-0 items-center gap-1 whitespace-nowrap">
-      on
-      {/* Positioned so it sits above the switcher, whose hit area covers the whole current crumb. */}
-      <Link
-        href={paths.datasetLink(datasetId)}
-        className="relative max-w-48 min-w-0 truncate text-foreground hover:underline"
-      >
-        {dataset?.name || datasetId}
-      </Link>
-    </Txt>
-  );
 }
 
 /** Icon-only switcher, like the entity crumbs: hovering it lists the compared experiments. */

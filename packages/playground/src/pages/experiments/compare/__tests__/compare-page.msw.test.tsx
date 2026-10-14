@@ -24,7 +24,7 @@ const allExperiments = [sameDatasetA, sameDatasetB, otherDataset, ...moreSameDat
 
 beforeEach(() => {
   server.use(
-    // Named in the breadcrumb.
+    // Named in the header.
     http.get(`${TEST_BASE_URL}/api/datasets/:datasetId`, ({ params }) =>
       HttpResponse.json(buildDataset({ id: String(params.datasetId), name: 'Support tickets' })),
     ),
@@ -79,25 +79,23 @@ const breadcrumb = () => screen.getByRole('navigation', { name: 'Breadcrumb' });
 
 describe('CompareExperimentsPage', () => {
   describe('when the dataset loads', () => {
-    it('names the compared dataset in the breadcrumb, linking to it', async () => {
+    it('shows the compared dataset in the header, linking to it', async () => {
       renderPage('?dataset=dataset-1&baseline=exp-a&contender=exp-b');
 
-      const link = await within(breadcrumb()).findByRole('link', { name: 'Support tickets' });
+      const link = await screen.findByRole('link', { name: 'Open dataset Support tickets' });
       expect(link.getAttribute('href')).toBe('/datasets/dataset-1');
     });
 
-    it('completes the comparison crumb instead of adding a crumb of its own', async () => {
+    it('keeps the dataset out of the breadcrumb', async () => {
       renderPage('?dataset=dataset-1&baseline=exp-a&contender=exp-b');
 
-      const link = await within(breadcrumb()).findByRole('link', { name: 'Support tickets' });
-      const comparisonCrumb = within(breadcrumb()).getByText('Comparing 2 experiments').closest('li');
-      expect(comparisonCrumb?.contains(link)).toBe(true);
-      expect(link.closest('li')?.textContent).toMatch(/Comparing 2 experiments.*on\s*Support tickets/);
+      await screen.findByRole('link', { name: 'Open dataset Support tickets' });
+      expect(within(breadcrumb()).queryByText('Support tickets')).toBeNull();
     });
   });
 
   describe('when the dataset cannot be loaded', () => {
-    it('names the dataset by its id in the breadcrumb', async () => {
+    it('names the dataset by its id in the header', async () => {
       server.use(
         http.get(`${TEST_BASE_URL}/api/datasets/:datasetId`, () =>
           HttpResponse.json({ error: 'Forbidden' }, { status: 403 }),
@@ -105,7 +103,7 @@ describe('CompareExperimentsPage', () => {
       );
       renderPage('?dataset=dataset-1&baseline=exp-a&contender=exp-b');
 
-      const link = await within(breadcrumb()).findByRole('link', { name: 'dataset-1' });
+      const link = await screen.findByRole('link', { name: 'Open dataset dataset-1' });
       expect(link.getAttribute('href')).toBe('/datasets/dataset-1');
     });
   });
