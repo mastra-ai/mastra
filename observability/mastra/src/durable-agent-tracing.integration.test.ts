@@ -250,6 +250,16 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
     expect(steps.map(clockOf)).toEqual(inferences.map(clockOf));
     expect(clockOf(testExporter.getSpansByType('model_generation' as any)[0])).toBe(first);
     expect(clockOf(testExporter.getSpansByType('agent_run' as any)[0])).toBe(first);
+
+    // Later iterations rebuild the generation and AGENT_RUN from the run-start
+    // snapshot; the second step's chunk must not overwrite the clock mid-run,
+    // so every exported update and end carries the first one.
+    for (const type of ['model_generation', 'agent_run']) {
+      const { events } = testExporter.getBySpanId(idOf(testExporter.getSpansByType(type as any)[0]));
+      const clocks = events.map(e => clockOf((e as any).exportedSpan)).filter(c => c !== undefined);
+      expect(clocks.length).toBeGreaterThan(0);
+      expect(new Set(clocks)).toEqual(new Set([first]));
+    }
   });
 
   it('DurableAgent simple run: generation and AGENT_RUN carry the inference clock', async () => {

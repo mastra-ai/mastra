@@ -536,6 +536,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               accumulatedSteps: state.accumulatedSteps,
               agentSpanData: state.agentSpanData,
               modelSpanData: state.modelSpanData,
+              completionStartTime: state.completionStartTime,
             };
           },
           { id: 'map-to-llm-input' },

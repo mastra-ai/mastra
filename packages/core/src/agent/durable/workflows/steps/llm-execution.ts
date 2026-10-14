@@ -144,6 +144,8 @@ const durableLLMInputSchema = z.object({
   agentSpanData: z.any().optional(),
   // Model span data (ONE span for entire agent run, created before workflow)
   modelSpanData: z.any().optional(),
+  // First-chunk clock carried from earlier iterations (first write wins)
+  completionStartTime: z.coerce.date().optional(),
   // Step index for continuation (step: 0, 1, 2, ...)
   stepIndex: z.number().optional(),
   signalPreempted: z.boolean().optional(),
@@ -687,8 +689,17 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // after a resume the registry override points steps at the resumed generation.
             const inputModelSpanData = (getRunRegistryEntry(runId, mastra as Mastra | undefined)?.resumeModelSpanData ??
               inputData.modelSpanData) as ExportedSpan<SpanType.MODEL_GENERATION> | undefined;
+            // Rebuilt spans come from the run-start snapshot, so re-apply the carried
+            // first-chunk clock before the tracker sees them; otherwise a later step's
+            // chunk would overwrite it mid-run.
+            const withCarriedClock = <T extends ExportedSpan<SpanType.MODEL_GENERATION | SpanType.AGENT_RUN>>(
+              data: T,
+            ): T =>
+              inputData.completionStartTime && !data.attributes?.completionStartTime
+                ? { ...data, attributes: { ...data.attributes, completionStartTime: inputData.completionStartTime } }
+                : data;
             const modelSpan = inputModelSpanData
-              ? (observability?.rebuildSpan(inputModelSpanData) as AIModelGenerationSpan | undefined)
+              ? (observability?.rebuildSpan(withCarriedClock(inputModelSpanData)) as AIModelGenerationSpan | undefined)
               : undefined;
 
             // On remote engines (Inngest) the step's tracingContext span is not part of the
@@ -696,7 +707,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const inputAgentSpanData = (getRunRegistryEntry(runId, mastra as Mastra | undefined)?.resumeAgentSpanData ??
               inputData.agentSpanData) as ExportedSpan<SpanType.AGENT_RUN> | undefined;
             const agentRunSpan = inputAgentSpanData
-              ? (observability?.rebuildSpan(inputAgentSpanData) as AnySpan | undefined)
+              ? (observability?.rebuildSpan(withCarriedClock(inputAgentSpanData)) as AnySpan | undefined)
               : undefined;
 
             // Create model span tracker for MODEL_STEP and MODEL_CHUNK spans

@@ -195,6 +195,8 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           agentSpanData: state.agentSpanData,
           // Pass model span data (ONE span for entire agent run)
           modelSpanData: state.modelSpanData,
+          // First-chunk clock carried from earlier iterations (first write wins)
+          completionStartTime: state.completionStartTime,
           // Pass step index for continuation (step: 0, 1, 2, ...)
           stepIndex: state.stepIndex,
           accumulatedSteps: state.accumulatedSteps,

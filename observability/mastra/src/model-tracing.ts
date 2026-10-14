@@ -16,7 +16,6 @@ import { TransformStream } from 'node:stream/web';
 import { coreFeatures } from '@mastra/core/features';
 import { SpanType } from '@mastra/core/observability';
 import type {
-  AnySpan,
   EndGenerationOptions,
   ErrorSpanOptions,
   ModelInferenceContext,
@@ -431,7 +430,7 @@ export class ModelSpanTracker {
     const now = new Date();
     this.#inferenceCompletionStartTime = now;
     this.#completionStartTime ??= now;
-    for (const span of [this.#currentStepSpan, this.#modelSpan, this.#agentRunSpan] as (AnySpan | undefined)[]) {
+    for (const span of [this.#currentStepSpan, this.#modelSpan, this.#agentRunSpan]) {
       if (span && !span.attributes?.completionStartTime) {
         span.update({ attributes: { completionStartTime: now } });
       }
