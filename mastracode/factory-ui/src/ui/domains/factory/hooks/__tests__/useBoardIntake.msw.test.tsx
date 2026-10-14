@@ -649,7 +649,7 @@ describe('useBoardIntake Jira gating', () => {
     expect(result.current.candidates).toEqual([]);
   });
 
-  it('given another feed is active, when the board loads, then Jira issues still feed participant candidates', async () => {
+  it('given GitHub and Jira are available, when the board loads, then both feed intake candidates', async () => {
     stubJiraIntake([workBinding], {
       githubEnabled: true,
     });
@@ -657,38 +657,37 @@ describe('useBoardIntake Jira gating', () => {
     const { result } = renderIntake('factory-1');
 
     await waitFor(() => expect(result.current.available).toEqual(['github', 'jira']));
-    expect(result.current.active).toBe('github');
-
-    // The Jira feed is not displayed, but its issues are fetched for teammate filtering.
     await waitFor(() =>
-      expect(result.current.participantCandidates.map(candidate => candidate.sourceKey)).toContain(
-        'jira-issue-acme-eng-42',
-      ),
+      expect(result.current.candidates.map(candidate => candidate.sourceKey)).toContain('jira-issue-acme-eng-42'),
     );
-    expect(result.current.candidates.map(candidate => candidate.sourceKey)).not.toContain('jira-issue-acme-eng-42');
+    expect(result.current.candidates.find(candidate => candidate.source === 'jira-issue')?.column).toBe('intake');
   });
 });
 
 describe('useBoardIntake query loading', () => {
   describe('when GitHub intake is ready and Linear status is still loading', () => {
-    it('keeps the active intake feed ready', async () => {
+    it('keeps intake pending until all configured sources are discovered', async () => {
       stubIntake([]);
       let release = () => {};
       const held = new Promise<void>(resolve => {
         release = resolve;
       });
+      let statusRequested = false;
       server.use(
         http.get(`${TEST_BASE_URL}/web/intake/config`, () => HttpResponse.json({ config: githubWithLinearConfig })),
         http.get(`${TEST_BASE_URL}/web/linear/status`, async () => {
+          statusRequested = true;
           await held;
           return HttpResponse.json(connectedLinear);
         }),
       );
       const { result, unmount } = renderIntake('factory-1');
       try {
+        await waitFor(() => expect(statusRequested).toBe(true));
+        expect(result.current.isPending).toBe(true);
+        release();
         await waitFor(() => expect(result.current.isPending).toBe(false));
         expect(result.current.active).toBe('github');
-        expect(result.current.isPending).toBe(false);
       } finally {
         release();
         unmount();

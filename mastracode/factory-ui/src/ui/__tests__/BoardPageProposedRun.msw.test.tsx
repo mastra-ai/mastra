@@ -250,7 +250,7 @@ describe('Board card with a proposed run', () => {
     await waitFor(() => expect(within(card).getByRole('button', { name: 'Details for Fix login bug' })).toHaveFocus());
   });
 
-  it('keeps a targeted Linear intake card visible while GitHub is selected', async () => {
+  it('highlights a targeted Linear intake card in the unified feed', async () => {
     stubBoardEndpoints();
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
@@ -292,7 +292,6 @@ describe('Board card with a proposed run', () => {
     );
     const { client } = renderBoard('work', `/factories/${FACTORY_ID}/work?item=${ITEM_ID}`);
 
-    expect(await screen.findByRole('button', { name: 'Issues' })).toHaveAttribute('aria-pressed', 'true');
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
     await waitForMutationsIdle(client);
     expect(card).toHaveAttribute('data-highlighted', 'true');

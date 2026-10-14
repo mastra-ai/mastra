@@ -233,7 +233,7 @@ describe('Board source and Linear project filters', () => {
     expect(view.router.state.location.search).toContain('label=feature');
   });
 
-  it('merges selected source feeds and restores the Intake selector after clearing the filter', async () => {
+  it('merges selected source feeds and restores all sources after clearing the filter', async () => {
     stubSources();
     const view = renderBoard();
     await screen.findByText('GitHub: update dependencies');
@@ -245,7 +245,7 @@ describe('Board source and Linear project filters', () => {
     expect(screen.queryByText('Manual follow-up')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Remove Intake source filter' }));
     await screen.findByText('Manual follow-up');
-    expect(screen.queryByText('Portal: add account switcher')).not.toBeInTheDocument();
+    expect(screen.getByText('Portal: add account switcher')).toBeInTheDocument();
     expect(view.router.state.location.search).not.toContain('source=');
   });
 

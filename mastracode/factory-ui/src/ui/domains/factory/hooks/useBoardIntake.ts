@@ -1,6 +1,4 @@
 import { AUTO_TRIAGED_LABEL } from '@mastra/factory/rules/types';
-import { useState } from 'react';
-
 import { useProjectIssuesQuery, useProjectPullRequestsQuery } from '../../../../hooks/useFactoryData';
 import {
   useGitLabIssuesQuery,
@@ -27,21 +25,18 @@ import {
 } from '../boardCandidates';
 import type { BoardCandidate, IntakeFeed, IntakeSource } from '../boardCandidates';
 import type { BoardFilterState } from '../boardFilters';
-import { hasBoardSourceFilters } from '../boardSourceFilters';
 import { hasLabel, isPersistedCandidate } from '../boardItems';
 import type { IntakeSourceBinding } from '../services/intake';
 import type { InstalledBoardInfo } from '../../../../api/types';
 import type { BoardStageId } from '../stages';
 
 /**
- * The Intake swimlane's feed: which candidate source is browsed, the queries
- * behind it, and the candidates left once anything already on the board is
- * dropped.
+ * The Intake swimlane's feeds and the candidates left once anything already
+ * on the board is dropped.
  *
  * Work Intake gates GitHub issues org-wide; the Review pull-request feed is
- * always enabled. Any board (Work included) only gets a Linear or Jira feed
- * from the sources explicitly routed to it, offered on the board's initial
- * phase.
+ * always enabled. Provider issues only appear on boards explicitly routed
+ * to them, together on the board's initial phase.
  */
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
 const NO_REPOSITORIES: readonly string[] = [];
@@ -215,14 +210,7 @@ export function useBoardIntake({
         ...(jiraReady ? (['jira'] as const) : []),
         ...(incidentioReady ? (['incidentio'] as const) : []),
       ];
-  const [selected, setSelected] = useState<IntakeSource>(
-    review ? (gitlabRepository ? 'gitlab-prs' : 'github-prs') : 'github',
-  );
-  const active: IntakeSource | undefined = available.includes(selected) ? selected : available[0];
-
-  const sourceFiltered = sourceFilters !== undefined && hasBoardSourceFilters(sourceFilters);
   const browsedSources = available.filter(source => {
-    if (!sourceFiltered) return source === active;
     const provider = source.split('-')[0];
     if (sourceFilters && sourceFilters.sources.size > 0 && !sourceFilters.sources.has(provider)) return false;
     return !sourceFilters?.linearProjectIds.size || source === 'linear';
@@ -230,7 +218,7 @@ export function useBoardIntake({
   const browsesGithub = browsedSources.includes('github');
 
   // Fetch every configured source so teammate filters can include provider identities
-  // even when a different intake feed is visible. Only the browsed feeds affect loading.
+  // even when a source filter hides its feed. Only browsed feeds affect loading.
   const issues = useProjectIssuesQuery(!review && githubIntakeActive ? githubRepositoryIds : NO_REPOSITORIES);
   // Auto-triage is a Work-only lane, so only Work browses the triaged feed.
   const triageIssues = useProjectIssuesQuery(
@@ -329,8 +317,7 @@ export function useBoardIntake({
     ...(kind === 'work' && browsesGithub ? { triage: triageIssues } : {}),
   };
 
-  // Discovery can add more source tabs without holding the selected feed's
-  // loading state. Keep an unresolved board pending until a source is known.
+  // Keep an unresolved board pending while discovering its routed sources.
   const discoveringSources =
     ((config?.gitlab.enabled ?? false) && gitlabStatusQuery.isPending) ||
     ((config?.linear.enabled ?? false) && linearStatusQuery.isPending) ||
@@ -339,15 +326,12 @@ export function useBoardIntake({
     bindingsPending ||
     routesPending;
   const isConfigurationPending = !review && configQuery.isPending;
-  const isSourcePending = (sourceFiltered || !active) && discoveringSources;
   const isRoutingPending = browsesGithub && routesPending;
-  const isPending = isConfigurationPending || isSourcePending || isRoutingPending || Boolean(feed?.isPending);
+  const isPending = isConfigurationPending || discoveringSources || isRoutingPending || Boolean(feed?.isPending);
 
   return {
+    active: failedSource ?? browsedSources[0],
     available,
-    active: failedSource ?? browsedSources[0] ?? active,
-    showSwitch: available.length > 1,
-    select: setSelected,
     candidates,
     alreadyMaterialized,
     participantCandidates,
