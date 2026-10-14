@@ -15,6 +15,7 @@ import type {
 import {
   isKnowledgeNodeVisible,
   isKnowledgeScopeVisible,
+  KNOWLEDGE_SOURCE_PROBE_LIMIT,
   KnowledgeUnsupportedError,
   MAX_KNOWLEDGE_SCOPE_NODES,
   knowledgeScopeIdsKey,
@@ -793,17 +794,36 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         sessions.push({ id: node.id, threadId });
       }
     }
-    for (let index = 0; index < sessions.length; index += SESSION_PROBE_CONCURRENCY) {
-      await Promise.all(
-        sessions.slice(index, index + SESSION_PROBE_CONCURRENCY).map(async ({ id, threadId }) => {
-          const { records } = await view.store.listRecordsBySource({
-            source: threadId,
-            scopeIds: [view.orgScopeId, view.resourceScopeId, id],
-            limit: 1,
-          });
-          if (records.length === 0) hidden.add(id);
-        }),
-      );
+    // One bounded storage query per KNOWLEDGE_SOURCE_PROBE_LIMIT sessions answers which threads hold a visible
+    // record, so the work no longer grows with one probe per session. Every candidate is an own-project session the
+    // viewer may already see, so their scope ids widen visibility only within the project.
+    for (let index = 0; index < sessions.length; index += KNOWLEDGE_SOURCE_PROBE_LIMIT) {
+      const batch = sessions.slice(index, index + KNOWLEDGE_SOURCE_PROBE_LIMIT);
+      let live: Set<string>;
+      try {
+        live = new Set(
+          await view.store.listSourcesWithVisibleRecords({
+            sources: batch.map(session => session.threadId),
+            scopeIds: [view.orgScopeId, view.resourceScopeId, ...batch.map(session => session.id)],
+          }),
+        );
+      } catch (error) {
+        if (!(error instanceof KnowledgeUnsupportedError)) throw error;
+        live = new Set();
+        for (let at = 0; at < batch.length; at += SESSION_PROBE_CONCURRENCY) {
+          await Promise.all(
+            batch.slice(at, at + SESSION_PROBE_CONCURRENCY).map(async ({ id, threadId }) => {
+              const { records } = await view.store.listRecordsBySource({
+                source: threadId,
+                scopeIds: [view.orgScopeId, view.resourceScopeId, id],
+                limit: 1,
+              });
+              if (records.length > 0) live.add(threadId);
+            }),
+          );
+        }
+      }
+      for (const session of batch) if (!live.has(session.threadId)) hidden.add(session.id);
     }
     return hidden;
   }
