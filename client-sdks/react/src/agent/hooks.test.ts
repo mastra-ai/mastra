@@ -1214,6 +1214,7 @@ describe('useChat forwards clientTools', () => {
     expect(subscribeToThreadMock).toHaveBeenCalledTimes(2);
     expect((sendError as Error | undefined)?.name).toBe('AbortError');
     expect(result.current.isRunning).toBe(false);
+    expect(result.current.messages.filter(m => m.role === 'user')).toEqual([]);
   });
 
   it('resets isRunning when the signal send request itself fails', async () => {
