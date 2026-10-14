@@ -7,7 +7,7 @@ packages:
 
 # Workflow\.classifier()
 
-The `.classifier()` method adds a configured [`Classifier`](/reference/classifier/classifier) as a declarative workflow step. It returns a JSON-safe `{ answers, usage }` object that can be consumed by later steps and existing control-flow methods such as [`.branch()`](/reference/workflows/workflow-methods/branch).
+The `.classifier()` method adds a configured [`Classifier`](/reference/classifier/classifier) as a declarative workflow step and returns the workflow for chaining. The step outputs a JSON-safe `{ answers, usage }` object that can be consumed by later steps and existing control-flow methods such as [`.branch()`](/reference/workflows/workflow-methods/branch).
 
 ## Usage example
 

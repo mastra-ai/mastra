@@ -14,8 +14,7 @@ import type { Context } from 'hono';
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { EXTERNAL_SOURCE_MISSING_KEY } from '../integrations/issue-reconciler.js';
-import { overtakenDecisionIds } from '../rules/decision-applicability.js';
-import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
+import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 import type {
   FactoryStartCoordinator,
   FactoryStartPreparedResult,
@@ -192,7 +191,7 @@ function decisionSummary(boards: BoardRegistry, decision: FactoryDeferredDecisio
     attempts: decision.attempts,
     failureOccurrence: decision.failureOccurrence,
     failureCode: decision.failureCode,
-    canRetry: !overtaken && factoryDispatchFailureMetadata(decision.failureCode).canRetry,
+    canRetry: decisionRetryable(decision, overtaken),
     lastError: decision.lastError?.slice(0, 512) ?? null,
     createdAt: decision.createdAt.toISOString(),
     updatedAt: decision.updatedAt.toISOString(),
@@ -483,11 +482,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const { decisionId } = parsedPath.data;
           await workItems.ensureReady();
           const current = await workItems.getDeferredDecision(resolved.orgId, resolved.factoryProjectId, decisionId);
-          if (
-            !current ||
-            current.status !== 'failed' ||
-            !factoryDispatchFailureMetadata(current.failureCode).canRetry
-          ) {
+          if (!current || !decisionRetryable(current, false)) {
             return c.json({ error: 'decision_not_retryable' }, 409);
           }
           // A run decided for a phase the card has left would seat the old role on it.

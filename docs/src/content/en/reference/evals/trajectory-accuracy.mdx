@@ -106,13 +106,14 @@ The discriminated union includes these additional step types:
 | Step type | Key properties |
 | - | - |
 | `mcp_tool_call` | `toolArgs`, `toolResult`, `mcpServer`, `success` |
+| `provider_tool_call` | `toolArgs`, `toolResult`, `success` |
 | `model_generation` | `modelId`, `promptTokens`, `completionTokens`, `finishReason` |
 | `agent_run` | `agentId` |
 | `workflow_run` | `workflowId`, `status` |
 | `workflow_conditional` | `conditionCount`, `selectedSteps` |
 | `workflow_parallel` | `branchCount`, `parallelSteps` |
 | `workflow_loop` | `loopType`, `totalIterations` |
-| `workflow_sleep` | `durationMs`, `sleepType` |
+| `workflow_sleep` | `sleepDurationMs`, `sleepType` |
 | `workflow_wait_event` | `eventName`, `eventReceived` |
 | `processor_run` | `processorId` |
 
@@ -329,7 +330,7 @@ Only checks that each expected step is present. Order is ignored, and extra step
 
 ## Code-based scoring details
 
-- **Continuous scores**: Returns values between 0.0 and 1.0 in relaxed mode; binary (0 or 1) in strict mode
+- **Continuous scores**: Returns values between 0.0 and 1.0 in every ordering mode. In strict mode, the score is the share of expected steps matched in order, minus penalties for extra steps and, when `allowRepeatedSteps` is `false`, repeated steps
 - **Deterministic**: Same input always produces the same output
 - **Fast**: No external API calls
 

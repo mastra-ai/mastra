@@ -78,6 +78,63 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       });
     }
 
+    it('ignores special object keys in query params while preserving legitimate params', async () => {
+      await setup.adapter.registerRoute(app, {
+        method: 'GET',
+        path: '/test/query-special-keys',
+        responseType: 'json',
+        handler: async (params: any) => ({
+          filter: typeof params.filter === 'string' ? JSON.parse(params.filter) : null,
+          tag: params.tag ?? null,
+          keys: Object.keys(params).filter(
+            k =>
+              ![
+                'mastra',
+                'requestContext',
+                'tools',
+                'taskStore',
+                'abortSignal',
+                'registeredTools',
+                'routePrefix',
+                'request',
+              ].includes(k),
+          ),
+        }),
+      });
+
+      const response = await executeHttpRequest(app, {
+        method: 'GET',
+        path: '/api/test/query-special-keys',
+        query: Object.fromEntries([
+          // Keys that must never be written onto parsed objects
+          ['__proto__[polluted]', 'yes'],
+          ['constructor[prototype]', 'yes'],
+          ['prototype[x]', 'yes'],
+          ['filter[__proto__]', 'yes'],
+          // Legitimate params alongside them
+          ['filter[status]', 'active'],
+          ['tag', ['a', 'b']],
+          ['page', '2'],
+        ]),
+      });
+
+      expect(response.status).toBe(200);
+      const data = response.data as any;
+      // Bracket-notation groups still reconstruct as before
+      expect(data.filter).toEqual({ status: 'active' });
+      // Repeated keys still arrive (as an array where the framework preserves
+      // them; some frameworks collapse them to the last value — both are the
+      // pre-existing behavior and must not change)
+      const tags = Array.isArray(data.tag) ? data.tag : [data.tag];
+      expect(tags).toContain('b');
+      // Special keys are dropped, not parsed
+      expect(data.keys).not.toContain('__proto__');
+      expect(data.keys).not.toContain('constructor');
+      expect(data.keys).not.toContain('prototype');
+      // The process-wide Object.prototype must be untouched
+      expect(({} as any).polluted).toBeUndefined();
+    });
+
     describe.each([
       {
         version: 'v3',

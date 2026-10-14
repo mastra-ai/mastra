@@ -1048,6 +1048,13 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
     description: 'Scoring configuration for runtime evaluation and telemetry. Can be static or dynamically provided.',
   },
   {
+    name: 'scopes',
+    type: 'string[] | ({ requestContext: RequestContext }) => string[] | Promise<string[]>',
+    isOptional: true,
+    description:
+      'Scopes every run of this agent acts as, written as `<type>:<value>`. Combined with per-call `scopes` and the `mastra__scopes` request context key.',
+  },
+  {
     name: 'memory',
     type: 'MastraMemory | ({ requestContext: RequestContext }) => MastraMemory | Promise<MastraMemory>',
     isOptional: true,

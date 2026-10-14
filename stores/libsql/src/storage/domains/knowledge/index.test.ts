@@ -664,7 +664,7 @@ describe('KnowledgeLibSQL shared-database concurrency', () => {
   });
 });
 
-describe('KnowledgeLibSQL interim canonical-model layout', () => {
+describe('KnowledgeLibSQL interim and released 1.76.0 canonical-model layout', () => {
   const INTERIM_FIXTURE = 'interim-1.76.0-alpha.3.sql';
 
   it('replaces the layout the interim release created, discarding its rows and keeping other storage', async () => {
@@ -745,6 +745,62 @@ describe('KnowledgeLibSQL interim canonical-model layout', () => {
       }
     },
   );
+
+  describe('replacement warning', () => {
+    // Written by the published 0.0.0-knowledge-w1-20261009054256 snapshot through its own public API;
+    // fixtures/generate-snapshot-w1-dbs.mjs regenerates them.
+    async function openSnapshotW1Database(kind: 'used' | 'idle') {
+      const client = createClient({ url: ':memory:' });
+      fixtures.push({ client, path: '' });
+      await seedPublishedKnowledgeV1(client, `snapshot-w1-20261009054256-${kind}.sql`);
+      const warn = vi.fn();
+      const store = new KnowledgeLibSQL({ client });
+      store.__setLogger({
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn,
+        error: vi.fn(),
+        trackException: vi.fn(),
+        getLogs: vi.fn(),
+        getLogsByRunId: vi.fn(),
+      } as any);
+      return { client, store, warn };
+    }
+
+    it('warns with the replaced layout and the rows it discards', async () => {
+      const { client, store, warn } = await openSnapshotW1Database('used');
+      expect((await client.execute('SELECT text FROM mastra_knowledge_records')).rows.map(row => row.text)).toEqual([
+        'Launch is in Q4',
+      ]);
+
+      await store.init();
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(
+        'Replaced the pre-release interim Knowledge storage layout; its 6 rows were discarded, not migrated',
+        {
+          layout: 'interim',
+          discardedRows: {
+            mastra_knowledge_activity: 2,
+            mastra_knowledge_nodes: 1,
+            mastra_knowledge_records: 1,
+            mastra_knowledge_semantic_outbox: 2,
+          },
+        },
+      );
+      expect((await client.execute('SELECT id FROM mastra_knowledge_records')).rows).toEqual([]);
+    });
+
+    it('does not warn when the replaced database was initialized but never used', async () => {
+      const { client, store, warn } = await openSnapshotW1Database('idle');
+
+      await store.init();
+
+      expect(warn).not.toHaveBeenCalled();
+      const marker = await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
+      expect(marker.rows[0]?.version).toBe(1);
+    });
+  });
 
   it('replaces an early-snapshot layout that later interim builds re-initialized', async () => {
     const client = createClient({ url: ':memory:' });

@@ -219,3 +219,125 @@ describe('knowledge semantic index lost claims', () => {
     expect(indexed.get(`knowledge:node:${node.id}`)).toBe('Version two');
   });
 });
+
+describe('knowledge semantic search result shape', () => {
+  it('returns hits that join lexical results on type and id with the same recordId', async () => {
+    const { store, scopeIds } = await fixture();
+    const { embedder, vector } = createFakes();
+    const coordinator = new KnowledgeSemanticIndexCoordinator({ knowledge: store, vector, embedder });
+    const node = await store.createNode({ name: 'Atlas joinable', kind: 'project', scopeIds });
+    const record = await store.createRecord({ node: { id: node.id }, text: 'Atlas joinable launch note', scopeIds });
+    await coordinator.drain(scopeIds);
+    vector.query = async () => [
+      { id: `knowledge:node:${node.id}`, score: 0.9, metadata: { document_type: 'node' } },
+      { id: `knowledge:record:${record.id}`, score: 0.8, metadata: { document_type: 'record' } },
+    ];
+
+    const semantic = await coordinator.search('atlas joinable', scopeIds);
+    const lexical = await store.search({ query: 'atlas joinable', scopeIds });
+    const key = (hit: { type: string; id: string }) => `${hit.type}:${hit.id}`;
+    const lexicalByKey = new Map(lexical.map(hit => [key(hit), hit]));
+
+    expect(semantic.map(key).sort()).toEqual([`node:${node.id}`, `record:${record.id}`].sort());
+    for (const hit of semantic) {
+      const match = lexicalByKey.get(key(hit));
+      expect(match).toBeDefined();
+      expect(hit.recordId).toBe(match!.recordId);
+      expect(hit.name).toBe(match!.name);
+      expect(hit.scopeIds).toEqual(match!.scopeIds);
+      expect(typeof hit.score).toBe('number');
+    }
+    expect(semantic.find(hit => hit.type === 'record')!.recordId).toBe(node.id);
+  });
+});
+
+describe('knowledge semantic search when this caller cannot fully drain', () => {
+  function searchable(store: any, apply?: () => Promise<void>) {
+    const { embedder, vector } = createFakes();
+    const warnings: Array<{ message: string; meta: unknown }> = [];
+    const logger = { warn: (message: string, meta: unknown) => warnings.push({ message, meta }) } as any;
+    const upsert = vector.upsert;
+    vector.upsert = async (input: any) => {
+      await apply?.();
+      return upsert(input);
+    };
+    const coordinator = new KnowledgeSemanticIndexCoordinator({
+      knowledge: store,
+      vector,
+      embedder,
+      batchSize: 1,
+      workerId: 'worker-b',
+      getLogger: () => logger,
+    });
+    return { coordinator, warnings, vector };
+  }
+
+  it('serves the current index with one warning while another worker holds the visible rows', async () => {
+    const { store, scopeIds } = await fixture();
+    const indexed = await store.createNode({ name: 'Indexed', kind: 'project', scopeIds });
+    const { coordinator, warnings, vector } = searchable(store);
+    await coordinator.drain(scopeIds);
+    vector.query = async () => [{ id: `knowledge:node:${indexed.id}`, score: 1, metadata: {} }];
+
+    await store.createNode({ name: 'Held by worker A', kind: 'project', scopeIds });
+    const held = await store.claimSemanticOutbox({ workerId: 'worker-a', scopeIds });
+    expect(held.length).toBeGreaterThan(0);
+
+    const hits = await coordinator.search('indexed', scopeIds);
+    expect(hits.map(hit => hit.id)).toEqual([indexed.id]);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]!.meta).toEqual({
+      cause: 'held-by-another-worker',
+      pendingVisible: false,
+      processingVisible: true,
+      heldBy: 'worker-a',
+      workerId: 'worker-b',
+      scopeCount: scopeIds.length,
+    });
+
+    // A second search in the same stale period does not warn again.
+    await coordinator.search('indexed', scopeIds);
+    expect(warnings).toHaveLength(1);
+
+    // Once worker A finishes, the period ends; the next stale period warns again.
+    await store.completeSemanticOutbox({ ids: held.map((entry: { id: string }) => entry.id), workerId: 'worker-a' });
+    await coordinator.search('indexed', scopeIds);
+    expect(warnings).toHaveLength(1);
+    await store.createNode({ name: 'Held again', kind: 'project', scopeIds });
+    await store.claimSemanticOutbox({ workerId: 'worker-a', scopeIds });
+    await coordinator.search('indexed', scopeIds);
+    expect(warnings).toHaveLength(2);
+  });
+
+  it('still throws when this caller fails to apply its own claimed operation', async () => {
+    const { store, scopeIds } = await fixture();
+    await store.createNode({ name: 'Indexed', kind: 'project', scopeIds });
+    const { coordinator, warnings } = searchable(store, async () => {
+      throw new Error('vector store down');
+    });
+    await expect(coordinator.search('indexed', scopeIds)).rejects.toThrow('could not be applied');
+    expect(warnings).toHaveLength(0);
+  });
+
+  it('serves the current index with one warning when the backlog outlasts the drain budget', async () => {
+    const { store, scopeIds } = await fixture();
+    const indexed = await store.createNode({ name: 'Indexed', kind: 'project', scopeIds });
+    // Every apply enqueues one more operation, so the backlog never empties within the batch budget.
+    let more = 0;
+    const { coordinator, warnings, vector } = searchable(store, async () => {
+      await store.createNode({ name: `Backlog ${more++}`, kind: 'project', scopeIds });
+    });
+    vector.query = async () => [{ id: `knowledge:node:${indexed.id}`, score: 1, metadata: {} }];
+
+    const hits = await coordinator.search('indexed', scopeIds);
+    expect(hits.map(hit => hit.id)).toEqual([indexed.id]);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]!.meta).toEqual({
+      cause: 'backlog-exceeded-drain',
+      batchesDrained: 100,
+      operationsApplied: 100,
+      workerId: 'worker-b',
+      scopeCount: scopeIds.length,
+    });
+  });
+});

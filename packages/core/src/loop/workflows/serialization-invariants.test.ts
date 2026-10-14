@@ -8,6 +8,7 @@ import {
   MEMORY_KEY,
   SAVE_QUEUE_MANAGER_KEY,
   STEP_TOOLS_KEY,
+  SUBSCRIBE_PENDING_SIGNALS_KEY,
   TRANSPORT_REF_KEY,
 } from '../run-scope-keys';
 import { llmIterationOutputSchema, llmIterationStepResultSchema, toolCallOutputSchema } from './schema';
@@ -38,6 +39,7 @@ describe('agentic-execution / agentic-loop serialization invariants', () => {
       'stepActiveTools',
       'stepWorkspace',
       'drainPendingSignals',
+      'subscribePendingSignals',
       'agentBackgroundConfig',
       'backgroundTaskManagerConfig',
       // pure functions never belong on the wire
@@ -139,6 +141,23 @@ describe('agentic-execution / agentic-loop serialization invariants', () => {
       const stored = scope.get(STEP_TOOLS_KEY) as Record<string, any>;
       expect(stored.search).toBe(tool);
       expect(stored.search.execute()).toBe('ran');
+    });
+
+    it('SUBSCRIBE_PENDING_SIGNALS preserves its callback and unsubscribe off the wire', () => {
+      const scope = createRunScope();
+      const unsubscribe = () => {};
+      const subscribe = (_runId: string, listener: () => void) => {
+        listener();
+        return unsubscribe;
+      };
+      scope.set(SUBSCRIBE_PENDING_SIGNALS_KEY, subscribe);
+      let notified = false;
+      expect(
+        scope.getOrThrow(SUBSCRIBE_PENDING_SIGNALS_KEY)('run-id', () => {
+          notified = true;
+        }),
+      ).toBe(unsubscribe);
+      expect(notified).toBe(true);
     });
 
     it('DRAIN_PENDING_SIGNALS holds a function, which would be lost via JSON', () => {

@@ -183,6 +183,14 @@ If you set a custom `traceName` via `mastra.metadata.traceName`, your value take
 
 A run started with `tracingOptions.nestUnderParent` doesn't own the trace, so the exporter doesn't write the trace name, input, output, metadata, user, or session from it. See [Nesting a run under an earlier Mastra run](/docs/observability/tracing/overview#nesting-a-run-under-an-earlier-mastra-run).
 
+## Filtering observations by span attributes
+
+Observation-level evaluators in Langfuse filter on top-level observation metadata. The exporter promotes each scalar span attribute (string, number, or boolean) that the OpenTelemetry exporter writes as `mastra.<span_type>.<key>` to `langfuse.observation.metadata.<key>`, with the key converted to camelCase. The exporter also sets `agentId`, `agentName`, `spanType`, and `operationName` on each observation.
+
+For a `MODEL_STEP` span this produces `stepIndex` and `isContinued`. To judge each agent run once, against the step that produced the final answer, filter an observation-level evaluator on `spanType` equals `model_step` and `isContinued` equals `"false"`.
+
+Values are sent as strings, so compare against string values such as `"false"` or `"1"`. Span input and output keep their own mapping, and attributes that hold objects or arrays stay in the nested `attributes` metadata only.
+
 ## Custom trace metadata
 
 Langfuse filters and groups traces by top-level metadata only. Nested metadata keys can't be used for filtering or grouping.

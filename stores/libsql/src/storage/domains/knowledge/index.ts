@@ -22,6 +22,7 @@ import {
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
   KNOWLEDGE_RESET_GUIDANCE,
   KNOWLEDGE_TABLE_NAMES,
+  discardedKnowledgeRowsWarning,
   knowledgeScopeIdsKey,
   REPLACEABLE_KNOWLEDGE_TABLE_NAMES,
   replaceableKnowledgeLayoutIndexNames,
@@ -40,6 +41,8 @@ import {
 import { coreFeatures } from '@mastra/core/features';
 import {
   createKnowledgeUlid,
+  assertKnowledgeSourceProbeLimit,
+  assertKnowledgeVisibilityProbeLimit,
   isKnowledgeScopeVisible,
   KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
   KNOWLEDGE_ACTIVITY_SCHEMA,
@@ -89,6 +92,9 @@ import type {
   KnowledgeStructureReconcileResult,
   KnowledgeSemanticOperation,
   KnowledgeSemanticOutboxEntry,
+  ListKnowledgeSourcesWithVisibleRecordsInput,
+  ListVisibleKnowledgeIdsInput,
+  ListVisibleKnowledgeIdsOutput,
   QueryKnowledgeRecordsBySourceInput,
   QueryKnowledgeRecordsInput,
   QueryKnowledgeRecordsOutput,
@@ -179,17 +185,35 @@ function escapeLikePattern(value: string): string {
 }
 
 /** Mirrors `isKnowledgeNodeVisible`: a member of a visible scope, or a visible scope itself. Binds `scopeIds` twice. */
-function visibleNodeSql(scopeIds: KnowledgeScopeIds, alias = 'n'): string {
-  const ids = scopeIds.map(() => '?').join(',');
+function visibleNodeSql(scopeIds: KnowledgeScopeIds, alias = 'n', extraScopeSql?: string): string {
+  const ids = scopeIdListSql(scopeIds, extraScopeSql);
   return `((${alias}.isScope=TRUE AND ${alias}.id IN (${ids})) OR EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" v WHERE v.nodeId=${alias}.id AND v.scopeNodeId IN (${ids})))`;
 }
 
-/** A record is visible when one of its scopes is, its parent is live and visible, and so is every mention target. */
-function visibleRecordSql(scopeIds: KnowledgeScopeIds): { sql: string; args: string[] } {
-  const visibleNode = (alias: string) => `${alias}.deletedAt IS NULL AND ${visibleNodeSql(scopeIds, alias)}`;
+/** `?` placeholders for `scopeIds`, plus an optional SQL expression naming one more scope id per row. */
+function scopeIdListSql(scopeIds: KnowledgeScopeIds, extraScopeSql?: string): string {
+  return [...scopeIds.map(() => '?'), ...(extraScopeSql ? [extraScopeSql] : [])].join(',');
+}
+
+/**
+ * A record is visible when one of its scopes is, its parent is live and visible, and so is every mention target.
+ * `extraScopeSql` adds one more visible scope per row (e.g. a probed source's own session scope).
+ */
+function visibleRecordSql(scopeIds: KnowledgeScopeIds, extraScopeSql?: string): { sql: string; args: string[] } {
+  const scoped = visibleRecordContentSql(scopeIds, extraScopeSql);
   return {
-    sql: `EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" rs WHERE rs.recordId=r.id AND rs.scopeNodeId IN (${scopeIds.map(() => '?').join(',')})) AND ${visibleNode('p')} AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" m WHERE m.recordId=r.id AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODES}" t WHERE t.id=m.targetNodeId AND ${visibleNode('t')}))`,
-    args: [...scopeIds, ...scopeIds, ...scopeIds, ...scopeIds, ...scopeIds],
+    sql: `EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" rs WHERE rs.recordId=r.id AND rs.scopeNodeId IN (${scopeIdListSql(scopeIds, extraScopeSql)})) AND ${scoped.sql}`,
+    args: [...scopeIds, ...scoped.args],
+  };
+}
+
+/** The scope-independent half of {@link visibleRecordSql}: a live, visible parent and visible mention targets. */
+function visibleRecordContentSql(scopeIds: KnowledgeScopeIds, extraScopeSql?: string): { sql: string; args: string[] } {
+  const visibleNode = (alias: string) =>
+    `${alias}.deletedAt IS NULL AND ${visibleNodeSql(scopeIds, alias, extraScopeSql)}`;
+  return {
+    sql: `${visibleNode('p')} AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" m WHERE m.recordId=r.id AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODES}" t WHERE t.id=m.targetNodeId AND ${visibleNode('t')}))`,
+    args: [...scopeIds, ...scopeIds, ...scopeIds, ...scopeIds],
   };
 }
 
@@ -521,7 +545,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
    * unfamiliar tables, views, triggers, and extra indexes all leave the database untouched.
    */
   async #replacePublishedV1(): Promise<boolean> {
-    return this.#transaction(async tx => {
+    const warning = await this.#transaction(async tx => {
       const objects = await tx.execute(
         "SELECT type, name FROM sqlite_master WHERE name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR tbl_name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR sql LIKE '%mastra\\_knowledge\\_%' ESCAPE '\\'",
       );
@@ -545,12 +569,19 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       const knownIndexes = replaceableKnowledgeLayoutIndexNames(columnsByTable);
       if (!knownIndexes) return false;
       if (!indexes.every(name => knownIndexes.has(name) || name.startsWith('sqlite_autoindex_'))) return false;
+      const rowCounts = new Map<string, number>();
+      for (const table of tables) {
+        const count = await tx.execute(`SELECT COUNT(*) AS count FROM "${table}"`);
+        rowCounts.set(table, Number(count.rows[0]?.count ?? 0));
+      }
       // Children before the tables they reference.
       const dropOrder: string[] = [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()];
       tables.sort((a, b) => dropOrder.indexOf(a) - dropOrder.indexOf(b));
       for (const table of tables) await tx.execute(`DROP TABLE "${table}"`);
-      return true;
+      return discardedKnowledgeRowsWarning(columnsByTable, rowCounts) ?? true;
     });
+    if (typeof warning === 'object') this.logger?.warn?.(warning.message, warning.details);
+    return warning !== false;
   }
 
   override async dangerouslyReset(): Promise<void> {
@@ -767,6 +798,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async #updateNode(tx: Transaction, input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
+    if (input.name !== undefined && !input.name.trim()) throw new Error('Knowledge node names must not be blank.');
     const existing = await this.#getNode(tx, input.id);
     if (!existing) throw new KnowledgeNotFoundError('node', input.id);
     const existingScopeIds = await this.#getNodeScopeIds(tx, input.id);
@@ -1023,6 +1055,52 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     return {
       records: records.slice(0, limit),
       nextCursor: records.length > limit ? records[limit - 1]?.id : undefined,
+    };
+  }
+
+  async listSourcesWithVisibleRecords(input: ListKnowledgeSourcesWithVisibleRecordsInput): Promise<string[]> {
+    assertKnowledgeSourceProbeLimit(input.sources);
+    if (input.sources.length === 0) return [];
+    // Each probe row pairs a source with its own extra scope, so one query applies a per-source visibility set.
+    const probes = input.sources
+      .map(() => `SELECT CAST(? AS TEXT) AS source, CAST(? AS TEXT) AS scopeId`)
+      .join(' UNION ALL ');
+    const visibleRecord = visibleRecordSql(canonicalizeKnowledgeScopeIds(input.scopeIds), 'q.scopeId');
+    const result = await this.#client.execute({
+      sql: `SELECT DISTINCT q.source FROM (${probes}) q JOIN "${TABLE_KNOWLEDGE_RECORDS}" r ON r.source=q.source JOIN "${TABLE_KNOWLEDGE_NODES}" p ON p.id=r.nodeId WHERE r.deletedAt IS NULL AND ${visibleRecord.sql}`,
+      args: [...input.sources.flatMap(probe => [probe.source, probe.scopeId ?? null]), ...visibleRecord.args],
+    });
+    return result.rows.map(row => String(row.source));
+  }
+
+  async listVisibleKnowledgeIds(input: ListVisibleKnowledgeIdsInput): Promise<ListVisibleKnowledgeIdsOutput> {
+    assertKnowledgeVisibilityProbeLimit(input);
+    const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    const nodeIds = [...new Set(input.nodeIds)];
+    const recordIds = [...new Set(input.recordIds)];
+    if (scopeIds.length === 0) return { nodeIds: [], recordIds: [] };
+    const marks = (ids: string[]) => ids.map(() => '?').join(',');
+    const visibleNodes = nodeIds.length
+      ? await this.#client.execute({
+          sql: `SELECT n.id FROM "${TABLE_KNOWLEDGE_NODES}" n WHERE n.id IN (${marks(nodeIds)}) AND n.deletedAt IS NULL AND ${visibleNodeSql(scopeIds)}`,
+          args: [...nodeIds, ...scopeIds, ...scopeIds],
+        })
+      : { rows: [] };
+    // A prospective scope set replaces the stored-scope clause; the parent and mention rules still apply.
+    const prospective = input.recordScopeIds;
+    const visibleRecord = prospective ? visibleRecordContentSql(scopeIds) : visibleRecordSql(scopeIds);
+    const probeRecords = prospective ? isKnowledgeScopeVisible(prospective, scopeIds) : true;
+    const visibleRecords =
+      recordIds.length && probeRecords
+        ? await this.#client.execute({
+            sql: `SELECT r.id FROM "${TABLE_KNOWLEDGE_RECORDS}" r JOIN "${TABLE_KNOWLEDGE_NODES}" p ON p.id=r.nodeId WHERE r.id IN (${marks(recordIds)}) AND r.deletedAt IS NULL AND ${visibleRecord.sql}`,
+            args: [...recordIds, ...visibleRecord.args],
+          })
+        : { rows: [] };
+    return {
+      nodeIds: visibleNodes.rows.map(row => String(row.id)),
+      recordIds: visibleRecords.rows.map(row => String(row.id)),
+      ...(prospective ? { recordScopeIdsApplied: true as const } : {}),
     };
   }
 
@@ -1369,20 +1447,20 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       const node = await this.#getNode(tx, String(nodeId));
       if (!node) throw new KnowledgeNotFoundError('node', String(nodeId));
       if (node.isScope) throw new KnowledgeConflictError(`Knowledge scopes cannot be permanently deleted: ${node.id}`);
-      await tx.execute({
-        sql: `DELETE FROM "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" WHERE source=? AND address=? AND nodeId=?`,
-        args: [input.source, input.address, node.id],
-      });
       const owned = await tx.execute({
         sql: `SELECT r.id FROM "${TABLE_KNOWLEDGE_RECORDS}" r WHERE r.nodeId=? AND r.source=? AND (SELECT COUNT(*) FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" rs WHERE rs.recordId=r.id)=1 AND EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" rs WHERE rs.recordId=r.id AND rs.scopeNodeId=?)`,
         args: [node.id, input.source, input.scopeId],
       });
       for (const row of owned.rows) await this.#deleteRecordPermanently(tx, String(row.id), input.importRunId);
       const remaining = await tx.execute({
-        sql: `SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" WHERE nodeId=? UNION ALL SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE nodeId=? LIMIT 1`,
-        args: [node.id, node.id],
+        sql: `SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" WHERE nodeId=? AND NOT (source=? AND address=?) UNION ALL SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE nodeId=? LIMIT 1`,
+        args: [node.id, input.source, input.address, node.id],
       });
       if (remaining.rows[0]) return { node, deleted: false };
+      await tx.execute({
+        sql: `DELETE FROM "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" WHERE source=? AND address=? AND nodeId=?`,
+        args: [input.source, input.address, node.id],
+      });
       const scopeIds = await this.#getNodeScopeIds(tx, node.id);
       await this.#activity(tx, 'delete', 'node', node.id, scopeIds[0], input.importRunId);
       await this.#outbox(tx, 'node', node.id, 'delete', node.version + 1, scopeIds);
@@ -1978,6 +2056,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     input: CreateKnowledgeNodeInput,
     { coalesceByName = true } = {},
   ): Promise<KnowledgeNode> {
+    if (!input.name.trim()) throw new Error('Knowledge node names must not be blank.');
     const scopeIds = await this.#assertScopeNodes(executor, input.scopeIds);
     const existing = await this.#getNodeByName(executor, input.name, scopeIds);
     if (existing) {
@@ -2299,11 +2378,14 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     details?: Record<string, unknown>,
   ): Promise<void> {
     if (importRunId) {
+      // Checked inside the mutation's transaction so a worker whose run was recovered (or otherwise ended)
+      // after it authorized a write cannot commit that write: recovery always replaces the run under a new id.
       const run = await executor.execute({
-        sql: `SELECT id FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE id=?`,
+        sql: `SELECT status FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE id=?`,
         args: [importRunId],
       });
       if (!run.rows[0]) throw new KnowledgeNotFoundError('import run', importRunId);
+      if (run.rows[0].status !== 'running') throw new Error(`Knowledge import run ${importRunId} is not active`);
     }
     await executor.execute({
       sql: `INSERT INTO "${TABLE_KNOWLEDGE_ACTIVITY}" (id,action,targetType,targetId,contextScopeId,importRunId,details,createdAt) VALUES (?,?,?,?,?,?,jsonb(?),?)`,
