@@ -1,12 +1,14 @@
 import type { IntegrationTools } from '../integrations/base.js';
+import { createFactoryReadTools } from './read-tools.js';
+import type { FactoryReadToolDependencies } from './read-tools.js';
 import type { FactoryToolScope } from './scope.js';
 
 export { FACTORY_TOOLS_WITHOUT_APPROVAL, applyFactoryToolPermissions } from './permissions.js';
 export { FACTORY_INTERACTIVE_KEY, resolveFactoryToolScope } from './scope.js';
 export type { FactoryToolScope } from './scope.js';
 
-/** Storage and services the Factory tools act through. Filled in per tool. */
-export type FactoryToolDependencies = Record<string, never>;
+/** Storage and services the Factory tools act through. */
+export type FactoryToolDependencies = FactoryReadToolDependencies;
 
 export interface CreateFactoryToolsOptions {
   scope: FactoryToolScope;
@@ -22,9 +24,9 @@ export interface CreateFactoryToolsOptions {
  * wakes, webhooks, dispatcher notices) get the read-only set: text from other
  * people reaches those turns, and the management tools act as the session owner.
  */
-export function createFactoryTools({ scope }: CreateFactoryToolsOptions): IntegrationTools {
+export function createFactoryTools({ scope, deps }: CreateFactoryToolsOptions): IntegrationTools {
   if (scope.kind !== 'user') return {};
-  const readTools: IntegrationTools = {};
+  const readTools = createFactoryReadTools(scope, deps);
   if (!scope.interactive) return readTools;
   return { ...readTools };
 }
