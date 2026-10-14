@@ -598,6 +598,31 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         return c.json({ removed: true });
       },
     }),
+    registerApiRoute('/web/user-sessions/:sessionId/visibility', {
+      method: 'PUT',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), options.auth);
+        if ('response' in resolved) return resolved.response;
+        const body = (await c.req.json().catch(() => undefined)) as { visibility?: unknown } | undefined;
+        const visibility = body?.visibility;
+        if (visibility !== 'private' && visibility !== 'org') {
+          return c.json({ error: "visibility must be 'private' or 'org'" }, 400);
+        }
+        const sessionId = c.req.param('sessionId');
+        const match = await resolveSession(options.sourceControls, sessionId);
+        const row = match?.session;
+        // Only the owner may share or unshare; everyone else gets the same 404
+        // as a missing session so org-visible ids are not confirmed either.
+        if (!match || !row || row.orgId !== resolved.tenant.orgId || row.userId !== resolved.tenant.userId) {
+          return c.json({ error: 'Session not found' }, 404);
+        }
+        const updated = await match.sourceControl.sessions.setVisibility({ sessionId, visibility });
+        if (!updated) return c.json({ error: 'Session not found' }, 404);
+        const owners = await resolveOwnerProfiles([updated.userId]);
+        return c.json({ session: withOwnerProfile(updated, owners) });
+      },
+    }),
     registerApiRoute('/web/user-sessions/:sessionId/title', {
       method: 'POST',
       requiresAuth: false,

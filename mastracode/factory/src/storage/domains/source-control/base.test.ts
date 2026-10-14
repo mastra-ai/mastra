@@ -400,6 +400,29 @@ describe('SourceControlStorage', () => {
     ).resolves.toMatchObject({ visibility: 'private' });
   });
 
+  it('updates session visibility in place and reports missing sessions', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const created = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000014',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-000000000014',
+      baseBranch: 'main',
+    });
+
+    const shared = await github.sessions.setVisibility({ sessionId: created.sessionId, visibility: 'org' });
+    expect(shared).toMatchObject({ id: created.id, visibility: 'org' });
+    await expect(github.sessions.list({ projectRepositoryId: link.id, viewerUserId: 'user-2' })).resolves.toEqual([
+      expect.objectContaining({ id: created.id }),
+    ]);
+
+    await github.sessions.setVisibility({ sessionId: created.sessionId, visibility: 'private' });
+    await expect(github.sessions.list({ projectRepositoryId: link.id, viewerUserId: 'user-2' })).resolves.toEqual([]);
+    await expect(github.sessions.setVisibility({ sessionId: 'missing', visibility: 'org' })).resolves.toBeNull();
+  });
+
   it('reads NULL visibility as org for rows created before the column existed', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });

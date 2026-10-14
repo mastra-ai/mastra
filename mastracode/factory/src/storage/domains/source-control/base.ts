@@ -511,6 +511,11 @@ export interface SourceControlStorageHandle {
     rename(args: { sessionId: string; title: string }): Promise<void>;
     /** Mute or unmute the side session's reports to its origin. Keyed by the controller-facing `sessionId`. */
     setOriginMuted(args: { sessionId: string; muted: boolean }): Promise<void>;
+    /** Change who can see the session. Returns the updated row, or null when it does not exist. */
+    setVisibility(args: {
+      sessionId: string;
+      visibility: SourceControlSessionVisibility;
+    }): Promise<SourceControlSession | null>;
     /** Keyed by the link (today's callers) or by the factory. */
     getForBranch(args: SessionBranchKey): Promise<SourceControlSession | null>;
     create(input: CreateSourceControlSessionInput): Promise<SourceControlSession>;
@@ -1460,6 +1465,13 @@ export class SourceControlStorage extends FactoryStorageDomain {
             origin_muted_at: muted ? new Date() : null,
             updated_at: new Date(),
           }));
+        },
+        setVisibility: async ({ sessionId, visibility }) => {
+          const row = await db().updateAtomic<SessionDbRow>(SESSIONS, { session_id: sessionId }, () => ({
+            visibility,
+            updated_at: new Date(),
+          }));
+          return row ? toSession(row) : null;
         },
         getForBranch: async args => {
           if ('factoryProjectId' in args) {

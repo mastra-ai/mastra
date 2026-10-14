@@ -37,10 +37,11 @@ function buildApp(
   { memorySettings, projects, users }: Pick<RouteOptions, 'memorySettings' | 'projects' | 'users'>,
   controller?: RouteOptions['controller'],
   workItems?: RouteOptions['workItems'],
+  viewer: { workosId: string; organizationId: string } = user,
 ) {
   const app = new Hono();
   app.use('*', async (context, next) => {
-    context.set('factoryAuthUser' as never, user as never);
+    context.set('factoryAuthUser' as never, viewer as never);
     await next();
   });
   mountApiRoutes(
@@ -592,6 +593,74 @@ describe('source-control session routes', () => {
 
     expect(response.status).toBe(404);
     await expect(response.json()).resolves.toEqual({ error: 'Factory not found' });
+  });
+
+  describe('PUT /web/user-sessions/:sessionId/visibility', () => {
+    const teammate = { workosId: 'user-2', organizationId: 'org-1' };
+    const putVisibility = (app: Hono, sessionId: string, body: unknown) =>
+      app.request(`/web/user-sessions/${sessionId}/visibility`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    async function seedPrivateSession() {
+      const seeded = await seedGitLabRepository();
+      const session = await seeded.sourceControl.sessions.create({
+        sessionId: 'visibility-session',
+        projectRepositoryId: seeded.projectRepository.id,
+        factoryProjectId: seeded.project.id,
+        orgId: 'org-1',
+        userId: 'user-1',
+        branch: 'user/session-visibility',
+        baseBranch: 'main',
+      });
+      return { ...seeded, session };
+    }
+
+    it('lets the owner share a private session with the org and make it private again', async () => {
+      const { seed, sourceControl, projectRepository, session } = await seedPrivateSession();
+      const owner = buildApp([sourceControl], seed);
+      const viewer = buildApp([sourceControl], seed, undefined, undefined, teammate);
+      expect(session.visibility).toBe('private');
+      expect((await viewer.request(`/web/user-sessions/${session.sessionId}`)).status).toBe(404);
+
+      const shared = await putVisibility(owner, session.sessionId, { visibility: 'org' });
+      expect(shared.status).toBe(200);
+      await expect(shared.json()).resolves.toMatchObject({
+        session: { sessionId: session.sessionId, visibility: 'org' },
+      });
+      expect((await viewer.request(`/web/user-sessions/${session.sessionId}`)).status).toBe(200);
+      await expect(
+        sourceControl.sessions.list({ projectRepositoryId: projectRepository.id, viewerUserId: 'user-2' }),
+      ).resolves.toEqual([expect.objectContaining({ sessionId: session.sessionId })]);
+
+      const unshared = await putVisibility(owner, session.sessionId, { visibility: 'private' });
+      expect(unshared.status).toBe(200);
+      expect((await viewer.request(`/web/user-sessions/${session.sessionId}`)).status).toBe(404);
+    });
+
+    it('404s non-owners, including teammates who can see an org session', async () => {
+      const { seed, sourceControl, session } = await seedPrivateSession();
+      await sourceControl.sessions.setVisibility({ sessionId: session.sessionId, visibility: 'org' });
+      const viewer = buildApp([sourceControl], seed, undefined, undefined, teammate);
+
+      const res = await putVisibility(viewer, session.sessionId, { visibility: 'private' });
+      expect(res.status).toBe(404);
+      await expect(res.json()).resolves.toEqual({ error: 'Session not found' });
+      await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+        visibility: 'org',
+      });
+    });
+
+    it('rejects an unknown visibility value', async () => {
+      const { seed, sourceControl, session } = await seedPrivateSession();
+      const res = await putVisibility(buildApp([sourceControl], seed), session.sessionId, { visibility: 'public' });
+      expect(res.status).toBe(400);
+      await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+        visibility: 'private',
+      });
+    });
   });
 });
 
