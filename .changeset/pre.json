@@ -192,5 +192,14 @@
     "@mastra/sprites": "0.1.0",
     "@mastra/vercel": "1.6.0"
   },
-  "changesets": []
+  "changesets": [
+    "agent-scopes-core",
+    "agent-scopes-inngest",
+    "agent-scopes-nestjs",
+    "agent-scopes-server",
+    "lemon-waves-punch",
+    "quiet-threads-wait",
+    "rare-banks-carry",
+    "scoped-background-task-streams"
+  ]
 }
