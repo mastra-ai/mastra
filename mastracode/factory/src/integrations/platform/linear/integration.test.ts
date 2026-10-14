@@ -212,6 +212,14 @@ describe('PlatformLinearIntegration', () => {
     expect(result.issues.map(i => i.title)).toEqual(['Fix intake']);
   });
 
+  it('keeps resolving team source ids stored by the legacy app-install integration', async () => {
+    fakePlatform();
+    const legacy = `linear-team:${Buffer.from(JSON.stringify({ workspaceId: 'org-acme', teamId: 'team-eng' })).toString('base64url')}`;
+
+    const result = await new PlatformLinearIntegration().intake.listIssues({ connection, sourceIds: [legacy] });
+    expect(result.issues.map(i => i.title)).toContain('Fix intake');
+  });
+
   it('fetches issue detail with comments across connections', async () => {
     fakePlatform();
     const detail = await new PlatformLinearIntegration().intake.getIssue({ connection, issueId: 'ENG-42' });
