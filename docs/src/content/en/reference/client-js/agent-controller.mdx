@@ -292,7 +292,7 @@ A message lifecycle uses three event shapes:
 
 - `message_start` carries the initial `MastraDBMessage`, with `createdAt` hydrated to `Date`.
 - `message_update` carries the message `id` and a compact text, reasoning, or part update.
-- `message_end` carries the `id` of the completed message.
+- `message_end` carries the `id` of the completed message and its final `metadata`, such as `modelId`, `provider`, and `stopReason`. Prefer it over the metadata from `message_start`, which names the first model even when a fallback or a later step finished the reply.
 
 `thread_created` also carries a thread with timestamps hydrated to `Date`.
 
@@ -357,7 +357,10 @@ function handleEvent(event: AgentControllerEvent) {
       const message = activeMessages.get(event.id)
       if (!message) break
 
-      renderComplete(message)
+      const completed = event.metadata
+        ? { ...message, content: { ...message.content, metadata: event.metadata } }
+        : message
+      renderComplete(completed)
       activeMessages.delete(event.id)
       break
     }

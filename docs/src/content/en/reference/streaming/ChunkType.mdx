@@ -958,6 +958,18 @@ Signals the start of a processing step.
             description: 'Optional message identifier',
           },
           {
+            name: 'modelId',
+            type: 'string',
+            isOptional: true,
+            description: 'ID of the model this step calls. After a fallback, the fallback model.',
+          },
+          {
+            name: 'provider',
+            type: 'string',
+            isOptional: true,
+            description: 'Provider of the model this step calls',
+          },
+          {
             name: 'request',
             type: 'object',
             description: 'Request information including body and other data',

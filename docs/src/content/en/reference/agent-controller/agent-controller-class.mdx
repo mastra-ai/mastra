@@ -47,7 +47,7 @@ await session.sendMessage({ content: 'Review the project structure.' })
 unsubscribe()
 ```
 
-A message lifecycle starts with the initial message in `message_start`. Compact `message_update` events address the message by ID and carry text, reasoning, or part changes. `message_end` carries the ID to finalize.
+A message lifecycle starts with the initial message in `message_start`. Compact `message_update` events address the message by ID and carry text, reasoning, or part changes. `message_end` carries the ID to finalize and the message's final metadata, such as `modelId`, `provider`, and `stopReason`.
 
 ## Constructor parameters
 
