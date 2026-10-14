@@ -725,6 +725,7 @@ export class Memory extends MastraMemory {
               vector: this.vector!,
               embedder: this.embedder!,
               embedderOptions: this.embedderOptions,
+              getLogger: () => this.logger,
             }),
         )
         .catch(error => {

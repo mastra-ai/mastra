@@ -250,3 +250,67 @@ describe('knowledge semantic search result shape', () => {
     expect(semantic.find(hit => hit.type === 'record')!.recordId).toBe(node.id);
   });
 });
+
+describe('knowledge semantic search when this caller cannot fully drain', () => {
+  function searchable(store: any, apply?: () => Promise<void>) {
+    const { embedder, vector } = createFakes();
+    const warnings: Array<{ message: string; meta: unknown }> = [];
+    const logger = { warn: (message: string, meta: unknown) => warnings.push({ message, meta }) } as any;
+    const upsert = vector.upsert;
+    vector.upsert = async (input: any) => {
+      await apply?.();
+      return upsert(input);
+    };
+    const coordinator = new KnowledgeSemanticIndexCoordinator({
+      knowledge: store,
+      vector,
+      embedder,
+      batchSize: 1,
+      getLogger: () => logger,
+    });
+    return { coordinator, warnings, vector };
+  }
+
+  it('serves the current index with one warning while another worker holds the visible rows', async () => {
+    const { store, scopeIds } = await fixture();
+    const indexed = await store.createNode({ name: 'Indexed', kind: 'project', scopeIds });
+    const { coordinator, warnings, vector } = searchable(store);
+    await coordinator.drain(scopeIds);
+    vector.query = async () => [{ id: `knowledge:node:${indexed.id}`, score: 1, metadata: {} }];
+
+    await store.createNode({ name: 'Held by worker A', kind: 'project', scopeIds });
+    const held = await store.claimSemanticOutbox({ workerId: 'worker-a', scopeIds });
+    expect(held.length).toBeGreaterThan(0);
+
+    const hits = await coordinator.search('indexed', scopeIds);
+    expect(hits.map(hit => hit.id)).toEqual([`knowledge:node:${indexed.id}`]);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]!.message).toMatch(/stale/i);
+  });
+
+  it('still throws when this caller fails to apply its own claimed operation', async () => {
+    const { store, scopeIds } = await fixture();
+    await store.createNode({ name: 'Indexed', kind: 'project', scopeIds });
+    const { coordinator, warnings } = searchable(store, async () => {
+      throw new Error('vector store down');
+    });
+    await expect(coordinator.search('indexed', scopeIds)).rejects.toThrow('could not be applied');
+    expect(warnings).toHaveLength(0);
+  });
+
+  it('serves the current index with one warning when the backlog outlasts the drain budget', async () => {
+    const { store, scopeIds } = await fixture();
+    const indexed = await store.createNode({ name: 'Indexed', kind: 'project', scopeIds });
+    // Every apply enqueues one more operation, so the backlog never empties within the batch budget.
+    let more = 0;
+    const { coordinator, warnings, vector } = searchable(store, async () => {
+      await store.createNode({ name: `Backlog ${more++}`, kind: 'project', scopeIds });
+    });
+    vector.query = async () => [{ id: `knowledge:node:${indexed.id}`, score: 1, metadata: {} }];
+
+    const hits = await coordinator.search('indexed', scopeIds);
+    expect(hits.map(hit => hit.id)).toEqual([`knowledge:node:${indexed.id}`]);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]!.message).toMatch(/stale/i);
+  });
+});
