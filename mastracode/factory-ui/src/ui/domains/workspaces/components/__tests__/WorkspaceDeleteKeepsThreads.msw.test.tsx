@@ -17,6 +17,7 @@ import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { SessionsSection } from '../SessionsSection';
+import { LIVE_SESSION, testChatSession } from './fixtures/sessionsSection';
 
 const projectRepositoryId = 'ghp-1';
 const sessionId = 'sess-1';
@@ -40,19 +41,7 @@ const workspace: FactoryUserSession = {
 function renderSection() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/factories/fp-1']}>
-      <ChatSessionContext.Provider
-        value={{
-          resourceId: 'resource-1',
-          sessionEnabled: true,
-          resourceReady: true,
-          sandboxReady: true,
-          sandboxPreparing: false,
-          resourceEnabled: true,
-          factorySessionState: { factoryProjectId: 'fp-1', projectRepositoryId },
-          baseUrl: TEST_BASE_URL,
-          kind: 'factory',
-        }}
-      >
+      <ChatSessionContext.Provider value={testChatSession('fp-1', projectRepositoryId, LIVE_SESSION)}>
         <Routes>
           <Route path="/factories/:factoryId" element={<SessionsSection />} />
         </Routes>

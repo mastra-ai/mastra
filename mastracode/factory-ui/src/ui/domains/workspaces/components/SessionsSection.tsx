@@ -19,7 +19,12 @@ import {
   filterSessionRows,
   sessionOwnerOptions,
 } from '../services/sessionFilters';
-import { collapsedRowsKeepingActive, groupSessionRows, sessionGroupOrder } from '../services/sessionGroups';
+import {
+  collapsedRowsKeepingActive,
+  groupSessionRows,
+  orderGroupHeadings,
+  sessionGroupHeadings,
+} from '../services/sessionGroups';
 import type { SessionGroupContext } from '../services/sessionGroups';
 import { pullRequestMergeTargets } from '../services/sessionRows';
 import { SESSION_SORT_OPTIONS, compareSessionRows } from '../services/sessionSort';
@@ -35,32 +40,26 @@ export function SessionsSection() {
   const navigate = useNavigate();
   const { rows, hasRepositories, loaded, loadFailed, retry } = useSessionListRows(factoryId);
   const catalog = useBoardCatalog(factoryId);
-  const { view, changedSettingCount, updateView, resetView } = useSessionListView();
+  const {
+    view,
+    hiddenGroupKeys,
+    groupOrderKeys,
+    changedSettingCount,
+    updateView,
+    changeGroupVisibility,
+    changeGroupOrder,
+    resetView,
+  } = useSessionListView();
   const viewerUserId = useFactoryAuth().data?.user?.userId;
   const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters(viewerUserId);
   const deletion = useSessionDeletion(factoryId, resourceId);
 
-  const hiddenGroupKeys = view.hiddenGroups[view.groupBy] ?? [];
-  const storedGroupOrder = view.groupOrder[view.groupBy];
-
   const sortedRows = rows.toSorted(compareSessionRows(view.sort));
   const filteredRows = filterSessionRows(sortedRows, filters, viewerUserId);
   const groupContext: SessionGroupContext = { boards: catalog.data, viewerUserId };
-  const groups = groupSessionRows(filteredRows, view.groupBy, groupContext, hiddenGroupKeys, storedGroupOrder);
-  const menuGroups = sessionGroupOrder(sortedRows, view.groupBy, groupContext, storedGroupOrder);
-  const changeGroupVisibility = (key: string, visible: boolean) =>
-    updateView({
-      hiddenGroups: {
-        ...view.hiddenGroups,
-        [view.groupBy]: visible ? hiddenGroupKeys.filter(hidden => hidden !== key) : [...hiddenGroupKeys, key],
-      },
-    });
-  const changeGroupOrder = (keys: string[]) => {
-    const defaultKeys = sessionGroupOrder(sortedRows, view.groupBy, groupContext, undefined).map(group => group.key);
-    const isDefaultOrder = keys.every((key, index) => key === defaultKeys[index]);
-    updateView({ groupOrder: { ...view.groupOrder, [view.groupBy]: isDefaultOrder ? [] : keys } });
-  };
-
+  const defaultHeadings = sessionGroupHeadings(sortedRows, view.groupBy, groupContext);
+  const menuGroups = orderGroupHeadings(defaultHeadings, groupOrderKeys);
+  const groups = groupSessionRows(filteredRows, view.groupBy, menuGroups, hiddenGroupKeys);
   const chatSessionOpen = sessionEnabled && Boolean(routeSessionId) && Boolean(resourceId);
   const mergedBySessionId = useWorkspacePullRequestMerges({
     baseUrl,
@@ -69,7 +68,16 @@ export function SessionsSection() {
     enabled: chatSessionOpen,
   });
 
-  if (!factoryId || (!hasRepositories && rows.length === 0 && !loadFailed)) return null;
+  const emptyMessage = emptyListMessage({
+    rowCount: rows.length,
+    filteredCount: filteredRows.length,
+    groupCount: groups.length,
+    activeFilterCount,
+    viewerKnown: Boolean(viewerUserId),
+  });
+
+  const nothingToList = !hasRepositories && rows.length === 0 && !loadFailed;
+  if (!factoryId || nothingToList) return null;
 
   return (
     <section className="flex flex-col gap-2" aria-label="Sessions">
@@ -129,7 +137,7 @@ export function SessionsSection() {
                 groups={menuGroups}
                 hiddenKeys={hiddenGroupKeys}
                 onVisibilityChange={changeGroupVisibility}
-                onOrderChange={changeGroupOrder}
+                onOrderChange={keys => changeGroupOrder(keys, defaultHeadings)}
               />
             </SessionListProperties>
           </div>
@@ -146,11 +154,10 @@ export function SessionsSection() {
             showHeader={view.groupBy !== 'none'}
             renderRow={row => (
               <SessionListItem
-                key={row.session.sessionId}
                 factoryId={factoryId}
                 row={row}
                 disabled={deletion.deleting}
-                merged={row.pullRequest && (mergedBySessionId[row.session.sessionId] ?? row.pullRequest.knownMerged)}
+                merged={mergedBySessionId[row.session.sessionId] ?? row.pullRequest?.knownMerged}
                 onDelete={deletion.requestDeletion}
               />
             )}
@@ -168,14 +175,9 @@ export function SessionsSection() {
           </Button>
         </div>
       )}
-      {loaded && filteredRows.length === 0 && (
+      {loaded && emptyMessage !== undefined && (
         <Txt as="p" variant="meta" tone="muted" role="status" className="m-0 px-2 py-1">
-          {emptyListMessage({ rowCount: rows.length, activeFilterCount, viewerKnown: Boolean(viewerUserId) })}
-        </Txt>
-      )}
-      {loaded && filteredRows.length > 0 && groups.length === 0 && (
-        <Txt as="p" variant="meta" tone="muted" role="status" className="m-0 px-2 py-1">
-          All groups with sessions are hidden
+          {emptyMessage}
         </Txt>
       )}
 
@@ -193,13 +195,18 @@ export function SessionsSection() {
 
 function emptyListMessage({
   rowCount,
+  filteredCount,
+  groupCount,
   activeFilterCount,
   viewerKnown,
 }: {
   rowCount: number;
+  filteredCount: number;
+  groupCount: number;
   activeFilterCount: number;
   viewerKnown: boolean;
-}): string {
+}): string | undefined {
+  if (filteredCount > 0) return groupCount === 0 ? 'All groups with sessions are hidden' : undefined;
   if (rowCount === 0) return 'No sessions yet';
   if (activeFilterCount === 0 && viewerKnown) return 'No sessions of your own.';
   return 'No sessions match these filters';

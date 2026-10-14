@@ -2,15 +2,15 @@ import type { DropdownMenuRadioOption } from '@mastra/playground-ui/components/D
 
 import type { InstalledBoardInfo } from '../../../../api/types';
 import { orderedBoards } from '../../factory/boardCatalog';
-import { SESSION_STATUS_OPTIONS } from './sessionFilters';
-import type { SessionListRow } from './sessionRows';
+import { SESSION_ACTIVITY_STATUSES, SESSION_STATUS_LABELS, sessionOwners } from './sessionRows';
+import type { SessionActivityStatus, SessionListRow } from './sessionRows';
 
 export const SESSION_GROUP_BYS = ['board', 'status', 'owner', 'none'] as const;
 export type SessionGroupBy = (typeof SESSION_GROUP_BYS)[number];
 
 export const DEFAULT_SESSION_GROUP_BY: SessionGroupBy = 'board';
 
-const SESSION_GROUP_BY_LABELS: Record<SessionGroupBy, string> = {
+export const SESSION_GROUP_BY_LABELS: Record<SessionGroupBy, string> = {
   board: 'Board',
   status: 'Status',
   owner: 'Owner',
@@ -47,19 +47,40 @@ export interface SessionGroupContext {
 const USER_GROUP: SessionGroupHeading = { key: 'user', label: 'User', icon: 'user' };
 const ALL_GROUP: SessionGroupHeading = { key: 'all', label: 'All', icon: 'all' };
 
-const STATUS_GROUPS: readonly SessionGroupHeading[] = SESSION_STATUS_OPTIONS.flatMap((option): SessionGroupHeading[] =>
-  option.value === 'all' ? [] : [{ key: `status:${option.value}`, label: option.label, icon: 'status' }],
-);
+function boardGroupKey(boardId: string): string {
+  return `board:${boardId}`;
+}
+
+function statusGroupKey(status: SessionActivityStatus): string {
+  return `status:${status}`;
+}
+
+function ownerGroupKey(userId: string): string {
+  return `owner:${userId}`;
+}
+
+const STATUS_GROUPS: readonly SessionGroupHeading[] = SESSION_ACTIVITY_STATUSES.map(status => ({
+  key: statusGroupKey(status),
+  label: SESSION_STATUS_LABELS[status],
+  icon: 'status',
+}));
 
 const GROUP_KEY_OF_ROW: Record<SessionGroupBy, (row: SessionListRow) => string> = {
-  board: row => (row.board === undefined ? USER_GROUP.key : `board:${row.board}`),
-  status: row => `status:${row.status}`,
-  owner: row => `owner:${row.session.userId}`,
+  board: row => (row.board === undefined ? USER_GROUP.key : boardGroupKey(row.board)),
+  status: row => statusGroupKey(row.status),
+  owner: row => ownerGroupKey(row.session.userId),
   none: () => ALL_GROUP.key,
 };
 
 function boardHeading(boardId: string, label: string): SessionGroupHeading {
-  return { key: `board:${boardId}`, label, icon: boardId === 'review' ? 'review' : 'board' };
+  return { key: boardGroupKey(boardId), label, icon: boardId === 'review' ? 'review' : 'board' };
+}
+
+function uncatalogedBoardIds(rows: readonly SessionListRow[], catalogIds: ReadonlySet<string>): string[] {
+  const boardIds = new Set(
+    rows.flatMap(row => (row.board !== undefined && !catalogIds.has(row.board) ? [row.board] : [])),
+  );
+  return [...boardIds].toSorted((a, b) => a.localeCompare(b));
 }
 
 function boardGroupHeadings(
@@ -68,11 +89,7 @@ function boardGroupHeadings(
 ): SessionGroupHeading[] {
   const catalog = orderedBoards(boards ?? []);
   const catalogIds = new Set(catalog.map(board => board.id));
-  const uncatalogedBoards = orderedBoards(
-    [...new Set(rows.flatMap(row => (row.board !== undefined && !catalogIds.has(row.board) ? [row.board] : [])))]
-      .toSorted((a, b) => a.localeCompare(b))
-      .map(id => ({ id })),
-  );
+  const uncatalogedBoards = orderedBoards(uncatalogedBoardIds(rows, catalogIds).map(id => ({ id })));
   return [
     ...catalog.map(board => boardHeading(board.id, board.title)),
     ...uncatalogedBoards.map(({ id }) => boardHeading(id, id.charAt(0).toUpperCase() + id.slice(1))),
@@ -81,25 +98,12 @@ function boardGroupHeadings(
 }
 
 function ownerGroupHeadings(rows: readonly SessionListRow[], viewerUserId: string | undefined): SessionGroupHeading[] {
-  const ownerNameById = new Map(rows.map(row => [row.session.userId, row.owner.name]));
-  return Array.from(ownerNameById, ([userId, label]) => ({ userId, label }))
-    .toSorted(
-      (a, b) => Number(b.userId === viewerUserId) - Number(a.userId === viewerUserId) || a.label.localeCompare(b.label),
-    )
-    .map(({ userId, label }) => ({ key: `owner:${userId}`, label, icon: 'owner' }));
+  return sessionOwners(rows)
+    .toSorted((a, b) => Number(b.userId === viewerUserId) - Number(a.userId === viewerUserId))
+    .map(({ userId, name }) => ({ key: ownerGroupKey(userId), label: name, icon: 'owner' }));
 }
 
-function applyGroupOrder<T extends { key: string }>(
-  defaults: readonly T[],
-  storedKeys: readonly string[] | undefined,
-): readonly T[] {
-  if (!storedKeys || storedKeys.length === 0) return defaults;
-  const rank = new Map(storedKeys.map((key, index) => [key, index]));
-  return defaults.toSorted((a, b) => (rank.get(a.key) ?? storedKeys.length) - (rank.get(b.key) ?? storedKeys.length));
-}
-
-// Status lists all five even when empty, so a group can be hidden or placed before it has sessions.
-function defaultGroupHeadings(
+export function sessionGroupHeadings(
   rows: readonly SessionListRow[],
   groupBy: SessionGroupBy,
   context: SessionGroupContext,
@@ -116,24 +120,30 @@ function defaultGroupHeadings(
   }
 }
 
-export function sessionGroupOrder(
-  rows: readonly SessionListRow[],
-  groupBy: SessionGroupBy,
-  context: SessionGroupContext,
-  storedOrder: readonly string[] | undefined,
+export function orderGroupHeadings(
+  defaults: readonly SessionGroupHeading[],
+  storedKeys: readonly string[],
 ): readonly SessionGroupHeading[] {
-  return applyGroupOrder(defaultGroupHeadings(rows, groupBy, context), storedOrder);
+  const rankOf = (heading: SessionGroupHeading) => {
+    const index = storedKeys.indexOf(heading.key);
+    return index === -1 ? storedKeys.length : index;
+  };
+  return defaults.toSorted((a, b) => rankOf(a) - rankOf(b));
+}
+
+export function customGroupOrder(keys: readonly string[], defaultHeadings: readonly SessionGroupHeading[]): string[] {
+  const isDefaultOrder = defaultHeadings.every((heading, index) => heading.key === keys[index]);
+  return isDefaultOrder ? [] : [...keys];
 }
 
 export function groupSessionRows(
   rows: readonly SessionListRow[],
   groupBy: SessionGroupBy,
-  context: SessionGroupContext,
+  headings: readonly SessionGroupHeading[],
   hiddenKeys: readonly string[],
-  storedOrder: readonly string[] | undefined,
 ): SessionGroup[] {
   const groupKeyOf = GROUP_KEY_OF_ROW[groupBy];
-  return sessionGroupOrder(rows, groupBy, context, storedOrder).flatMap(heading => {
+  return headings.flatMap(heading => {
     if (hiddenKeys.includes(heading.key)) return [];
     const groupRows = rows.filter(row => groupKeyOf(row) === heading.key);
     return groupRows.length > 0 ? [{ ...heading, rows: groupRows }] : [];

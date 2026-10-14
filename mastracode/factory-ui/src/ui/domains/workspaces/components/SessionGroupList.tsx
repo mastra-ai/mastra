@@ -1,7 +1,7 @@
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { CircleDashed, GitPullRequest, MessageSquare, SquareKanban, UserRound } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 
 import { collapsedRowsKeepingActive } from '../services/sessionGroups';
 import type { SessionGroup, SessionGroupIcon } from '../services/sessionGroups';
@@ -31,7 +31,11 @@ export function SessionGroupList({
   return (
     <section className="flex flex-col gap-1" aria-label={`${group.label} sessions`}>
       {showHeader && <Sidebar.NavHeader icon={GROUP_ICONS[group.icon]}>{group.label}</Sidebar.NavHeader>}
-      <Sidebar.NavList>{(expanded ? group.rows : collapsedRows).map(renderRow)}</Sidebar.NavList>
+      <Sidebar.NavList>
+        {(expanded ? group.rows : collapsedRows).map(row => (
+          <Fragment key={row.session.sessionId}>{renderRow(row)}</Fragment>
+        ))}
+      </Sidebar.NavList>
       <Sidebar.NavShowMore
         foldedCount={group.rows.length - collapsedRows.length}
         expanded={expanded}

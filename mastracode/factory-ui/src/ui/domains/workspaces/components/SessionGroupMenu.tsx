@@ -7,7 +7,7 @@ import { Check, GripVertical, LayoutGrid } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
 import { useRef } from 'react';
 
-import { SESSION_GROUP_BY_OPTIONS } from '../services/sessionGroups';
+import { SESSION_GROUP_BY_LABELS, SESSION_GROUP_BY_OPTIONS } from '../services/sessionGroups';
 import type { SessionGroupBy, SessionGroupHeading } from '../services/sessionGroups';
 
 const MOVE_STEP_BY_KEY: Partial<Record<string, -1 | 1>> = { ArrowUp: -1, ArrowDown: 1 };
@@ -47,7 +47,6 @@ export function SessionGroupMenu({
   onVisibilityChange: (key: string, visible: boolean) => void;
   onOrderChange: (keys: string[]) => void;
 }) {
-  const groupByLabel = SESSION_GROUP_BY_OPTIONS.find(option => option.value === groupBy)?.label;
   const groupItems = useRef(new Map<string, HTMLElement>());
   const keys = groups.map(group => group.key);
 
@@ -62,9 +61,10 @@ export function SessionGroupMenu({
     onOrderChange(keys.toSpliced(from, 1).toSpliced(to, 0, key));
     requestAnimationFrame(() => groupItems.current.get(key)?.focus());
   };
+
   return (
     <DropdownMenu.Sub>
-      <DropdownMenu.SubTrigger hint={groupByLabel}>
+      <DropdownMenu.SubTrigger hint={SESSION_GROUP_BY_LABELS[groupBy]}>
         <LayoutGrid aria-hidden />
         <span>Group</span>
       </DropdownMenu.SubTrigger>

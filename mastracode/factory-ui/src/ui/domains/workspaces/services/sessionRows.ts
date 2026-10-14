@@ -15,6 +15,33 @@ import type { FactoryUserSession } from './user-sessions';
 
 export type SessionActivityStatus = 'waiting' | 'working' | 'initializing' | 'idle' | 'done';
 
+export const SESSION_STATUS_LABELS: Record<SessionActivityStatus, string> = {
+  waiting: 'Waiting on you',
+  working: 'Working',
+  initializing: 'Initializing',
+  idle: 'Idle',
+  done: 'Done',
+};
+
+function isSessionActivityStatus(value: string): value is SessionActivityStatus {
+  return value in SESSION_STATUS_LABELS;
+}
+
+export const SESSION_ACTIVITY_STATUSES: readonly SessionActivityStatus[] =
+  Object.keys(SESSION_STATUS_LABELS).filter(isSessionActivityStatus);
+
+export interface SessionOwner {
+  userId: string;
+  name: string;
+}
+
+export function sessionOwners(rows: readonly SessionListRow[]): SessionOwner[] {
+  const nameByUserId = new Map(rows.map(row => [row.session.userId, row.owner.name]));
+  return Array.from(nameByUserId, ([userId, name]) => ({ userId, name })).toSorted((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+}
+
 export interface SessionPullRequest {
   number?: number;
   provider: ChangeRequestProvider;
@@ -69,18 +96,25 @@ export function sessionBoard(session: FactoryUserSession, item: WorkItem | undef
   return item ? itemBoard(item) : getFactorySessionKind(session, undefined);
 }
 
-function reachedTerminalPhase(item: WorkItem, boardDefinition: InstalledBoardInfo | undefined): boolean {
+function reachedTerminalPhase(item: WorkItem, boards: readonly InstalledBoardInfo[] | undefined): boolean {
+  const board = boards?.find(candidate => candidate.id === itemBoard(item));
   return item.stages.some(
-    stage => isTerminalStage(stage) || boardDefinition?.phases.find(phase => phase.id === stage)?.kind === 'terminal',
+    stage => isTerminalStage(stage) || board?.phases.find(phase => phase.id === stage)?.kind === 'terminal',
   );
+}
+
+function factorySessionName(session: FactoryUserSession, item: WorkItem | undefined): string {
+  if (session.title !== undefined) return session.title;
+  if (session.branch.startsWith('slack/') && item?.title !== undefined) return item.title;
+  return session.branch;
 }
 
 function isSettled(
   item: WorkItem | undefined,
-  boardDefinition: InstalledBoardInfo | undefined,
+  boards: readonly InstalledBoardInfo[] | undefined,
   pullRequest: WorkItem | undefined,
 ): boolean {
-  if (item && reachedTerminalPhase(item, boardDefinition)) return true;
+  if (item && reachedTerminalPhase(item, boards)) return true;
   if (!pullRequest) return false;
   const status = pullRequestStatusForItem(pullRequest);
   return status === 'merged' || status === 'closed';
@@ -98,7 +132,7 @@ function sessionPullRequest(pullRequest: WorkItem | undefined): SessionPullReque
 export interface FactorySessionRowInput {
   session: FactoryUserSession;
   item: WorkItem | undefined;
-  boardDefinition: InstalledBoardInfo | undefined;
+  boards: readonly InstalledBoardInfo[] | undefined;
   threadId: string | undefined;
   pullRequest: WorkItem | undefined;
   factoryId: string;
@@ -112,7 +146,7 @@ export interface FactorySessionRowInput {
 export function buildFactorySessionRow({
   session,
   item,
-  boardDefinition,
+  boards,
   threadId,
   pullRequest,
   factoryId,
@@ -128,7 +162,7 @@ export function buildFactorySessionRow({
     origin: 'factory',
     board: sessionBoard(session, item),
     kind: getFactorySessionKind(session, item) === 'review' ? 'Review session' : 'Work session',
-    name: session.title ?? (session.branch.startsWith('slack/') ? item?.title : undefined) ?? session.branch,
+    name: factorySessionName(session, item),
     url,
     openPath: `${url}/threads/${session.sessionId}`,
     active: session.sessionId === routeSessionId,
@@ -136,7 +170,7 @@ export function buildFactorySessionRow({
       initializing: !session.materializedAt,
       running,
       attention,
-      settled: isSettled(item, boardDefinition, pullRequest),
+      settled: isSettled(item, boards, pullRequest),
     }),
     owner: getSessionOwnerDetails(session, viewer),
     ownedByViewer: isOwnedByViewer(session, viewer),

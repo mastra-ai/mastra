@@ -87,8 +87,8 @@ describe('User sessions across linked repositories', () => {
 
     renderSection();
 
-    expect(await screen.findByText('Fix the app')).toBeTruthy();
-    expect(await screen.findByText('Tune the api')).toBeTruthy();
+    expect(await screen.findByText('Fix the app')).toBeInTheDocument();
+    expect(await screen.findByText('Tune the api')).toBeInTheDocument();
     expect(requested).toEqual(['fp-1']);
   });
 
@@ -97,8 +97,8 @@ describe('User sessions across linked repositories', () => {
 
     renderSection();
 
-    expect(await screen.findByText('Couldn’t load sessions')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+    expect(await screen.findByText('Couldn’t load sessions')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
   });
 
   it('offers a retry when the sessions fail to load and no repository is linked', async () => {
@@ -106,7 +106,7 @@ describe('User sessions across linked repositories', () => {
 
     renderSection();
 
-    expect(await screen.findByText('Couldn’t load sessions')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+    expect(await screen.findByText('Couldn’t load sessions')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
   });
 });

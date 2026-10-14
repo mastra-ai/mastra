@@ -8,7 +8,6 @@ import { useParkedSessions, useWorkItemsQuery } from '../../../../hooks/useWorkI
 import { allSessionRows, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { itemAwaitsPerson } from '../../factory/boardCardState';
-import { itemBoard } from '../../factory/boardStages';
 import { useItemDecisions } from '../../factory/hooks/useBoardDecisions';
 import { buildFactorySessionRow, buildUserSessionRow } from '../services/sessionRows';
 import type { SessionListRow } from '../services/sessionRows';
@@ -31,7 +30,7 @@ export function useSessionListRows(factoryId: string | undefined): {
   const { proposalByItem, effectByItem } = useItemDecisions(factoryId);
   const catalog = useBoardCatalog(factoryId);
   const viewer = useFactoryAuth().data?.user;
-  const { pinnedSessions } = usePinnedSessions();
+  const pinnedSessions = usePinnedSessions();
   const runningById = useActiveRunResources({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceIds: allSessionRows(query.data).map(session => session.sessionId),
@@ -60,7 +59,7 @@ export function useSessionListRows(factoryId: string | undefined): {
       buildFactorySessionRow({
         session,
         item: workItem?.item,
-        boardDefinition: workItem && catalog.data?.find(board => board.id === itemBoard(workItem.item)),
+        boards: catalog.data,
         threadId: workItem?.threadId,
         pullRequest: workItem?.pullRequest,
         factoryId,

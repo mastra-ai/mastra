@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
 import { builtinBoardCatalog, releaseBoard } from '../../../../../../e2e/ui/board-catalog';
-import { collapsedRowsKeepingActive, groupSessionRows } from '../sessionGroups';
-import type { SessionGroup, SessionGroupContext } from '../sessionGroups';
+import {
+  collapsedRowsKeepingActive,
+  customGroupOrder,
+  groupSessionRows,
+  orderGroupHeadings,
+  sessionGroupHeadings,
+} from '../sessionGroups';
+import type { SessionGroup, SessionGroupBy, SessionGroupContext } from '../sessionGroups';
+import type { SessionListRow } from '../sessionRows';
 import { factoryRow, testSession, testWorkItem, userRow } from './fixtures/sessionRows';
 
 const [workBoard, reviewBoard] = builtinBoardCatalog.boards;
@@ -17,18 +24,26 @@ const builtinContext: SessionGroupContext = { boards: builtinBoardCatalog.boards
 const groupSummary = (groups: SessionGroup[]) =>
   groups.map(group => ({ label: group.label, sessionIds: group.rows.map(row => row.session.sessionId) }));
 
+function groupRows(
+  rows: readonly SessionListRow[],
+  groupBy: SessionGroupBy,
+  context: SessionGroupContext,
+  hiddenKeys: readonly string[],
+) {
+  return groupSessionRows(rows, groupBy, sessionGroupHeadings(rows, groupBy, context), hiddenKeys);
+}
+
 function ownedRow(sessionId: string, userId: string, name: string) {
   return userRow(sessionId, { userId, owner: { id: userId, name } });
 }
 
 describe('groupSessionRows by board', () => {
   it('orders Work, Review, custom boards, then User, whatever the catalog order', () => {
-    const groups = groupSessionRows(
+    const groups = groupRows(
       [userRow('user-1'), releaseRow, reviewRow, workRow],
       'board',
       { boards: [reviewBoard, releaseBoard, workBoard], viewerUserId: undefined },
       [],
-      undefined,
     );
 
     expect(groupSummary(groups)).toEqual([
@@ -40,12 +55,11 @@ describe('groupSessionRows by board', () => {
   });
 
   it('names a board missing from the catalog after its id and places it before User', () => {
-    const groups = groupSessionRows(
+    const groups = groupRows(
       [userRow('user-1'), opsRow, releaseRow],
       'board',
       { boards: [workBoard, releaseBoard], viewerUserId: undefined },
       [],
-      undefined,
     );
 
     expect(groupSummary(groups).map(group => group.label)).toEqual(['Release Preview', 'Ops', 'User']);
@@ -54,68 +68,83 @@ describe('groupSessionRows by board', () => {
   it('keeps the incoming row order inside a group and leaves out empty groups', () => {
     const secondWorkRow = factoryRow(testSession('work-2', { branch: 'factory/issue-2' }));
 
-    const groups = groupSessionRows([secondWorkRow, workRow], 'board', builtinContext, [], undefined);
+    const groups = groupRows([secondWorkRow, workRow], 'board', builtinContext, []);
 
     expect(groupSummary(groups)).toEqual([{ label: 'Work', sessionIds: ['work-2', 'work-1'] }]);
   });
 
   it('leaves out hidden groups and ignores hidden keys no group has', () => {
-    const groups = groupSessionRows(
-      [workRow, reviewRow, userRow('user-1')],
-      'board',
-      builtinContext,
-      ['board:review', 'board:gone'],
-      undefined,
-    );
+    const groups = groupRows([workRow, reviewRow, userRow('user-1')], 'board', builtinContext, [
+      'board:review',
+      'board:gone',
+    ]);
 
     expect(groupSummary(groups).map(group => group.label)).toEqual(['Work', 'User']);
   });
 
   it('puts stored groups first in stored order, appends unseen groups in default order, and skips stale keys', () => {
-    const groups = groupSessionRows(
-      [workRow, reviewRow, releaseRow, userRow('user-1')],
-      'board',
-      { boards: [...builtinBoardCatalog.boards, releaseBoard], viewerUserId: undefined },
-      [],
-      ['user', 'board:gone', 'board:review'],
-    );
+    const rows = [workRow, reviewRow, releaseRow, userRow('user-1')];
+    const defaults = sessionGroupHeadings(rows, 'board', {
+      boards: [...builtinBoardCatalog.boards, releaseBoard],
+      viewerUserId: undefined,
+    });
 
-    expect(groupSummary(groups).map(group => group.label)).toEqual(['User', 'Review', 'Work', 'Release Preview']);
+    const ordered = orderGroupHeadings(defaults, ['user', 'board:gone', 'board:review']);
+
+    expect(ordered.map(heading => heading.label)).toEqual(['User', 'Review', 'Work', 'Release Preview']);
+  });
+});
+
+describe('customGroupOrder', () => {
+  const defaults = sessionGroupHeadings([], 'status', builtinContext);
+  const defaultKeys = defaults.map(heading => heading.key);
+
+  it('keeps an order that differs from the default', () => {
+    const moved = [defaultKeys[1] ?? '', defaultKeys[0] ?? '', ...defaultKeys.slice(2)];
+
+    expect(customGroupOrder(moved, defaults)).toEqual(moved);
+  });
+
+  it('forgets an order that matches the default', () => {
+    expect(customGroupOrder(defaultKeys, defaults)).toEqual([]);
   });
 });
 
 describe('groupSessionRows by status', () => {
-  it('files a row under its strongest status, in Waiting, Working, Initializing, Idle, Done order', () => {
+  it('orders groups Waiting, Working, Initializing, Idle, Done and leaves out empty ones', () => {
     const waitingRow = factoryRow(testSession('waiting-1'), { attention: true });
-    const runningAndWaitingRow = factoryRow(testSession('working-1'), { running: true, attention: true });
     const initializingRow = factoryRow(testSession('init-1', { materializedAt: undefined }), { running: true });
     const idleRow = userRow('idle-1');
 
-    const groups = groupSessionRows(
-      [idleRow, initializingRow, runningAndWaitingRow, waitingRow],
-      'status',
-      builtinContext,
-      [],
-      undefined,
-    );
+    const groups = groupRows([idleRow, initializingRow, waitingRow], 'status', builtinContext, []);
 
     expect(groupSummary(groups)).toEqual([
       { label: 'Waiting on you', sessionIds: ['waiting-1'] },
-      { label: 'Working', sessionIds: ['working-1'] },
       { label: 'Initializing', sessionIds: ['init-1'] },
       { label: 'Idle', sessionIds: ['idle-1'] },
     ]);
   });
 });
 
+describe('sessionGroupHeadings', () => {
+  it('lists every status even with no sessions, so a group can be hidden before it has any', () => {
+    expect(sessionGroupHeadings([], 'status', builtinContext).map(heading => heading.label)).toEqual([
+      'Waiting on you',
+      'Working',
+      'Initializing',
+      'Idle',
+      'Done',
+    ]);
+  });
+});
+
 describe('groupSessionRows by owner', () => {
   it('puts the viewer first, then other owners by name', () => {
-    const groups = groupSessionRows(
+    const groups = groupRows(
       [ownedRow('zoe-1', 'zoe', 'Zoe'), ownedRow('mine-1', 'viewer', 'Viewer'), ownedRow('ada-1', 'ada', 'Ada')],
       'owner',
       builtinContext,
       [],
-      undefined,
     );
 
     expect(groupSummary(groups)).toEqual([
@@ -128,7 +157,7 @@ describe('groupSessionRows by owner', () => {
 
 describe('groupSessionRows with no grouping', () => {
   it('puts every row in one group', () => {
-    const groups = groupSessionRows([workRow, userRow('user-1'), reviewRow], 'none', builtinContext, [], undefined);
+    const groups = groupRows([workRow, userRow('user-1'), reviewRow], 'none', builtinContext, []);
 
     expect(groupSummary(groups)).toEqual([{ label: 'All', sessionIds: ['work-1', 'user-1', 'review-1'] }]);
   });

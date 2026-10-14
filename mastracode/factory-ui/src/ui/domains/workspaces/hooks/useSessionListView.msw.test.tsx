@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_SESSION_LIST_VIEW, useSessionListView } from './useSessionListView';
+import type { SessionGroupHeading } from '../services/sessionGroups';
 
 const STORAGE_KEY = 'mastracode.sessionListView';
 
@@ -48,11 +49,23 @@ describe('useSessionListView', () => {
   it('forgets hidden groups once every group is shown again', () => {
     const { result } = renderHook(() => useSessionListView());
 
-    act(() => result.current.updateView({ groupBy: 'status', hiddenGroups: { status: ['status:done'] } }));
+    act(() => result.current.updateView({ groupBy: 'status' }));
+    act(() => result.current.changeGroupVisibility('status:done', false));
     expect(storedView()).toEqual({ groupBy: 'status', hiddenGroups: { status: ['status:done'] } });
+    expect(result.current.hiddenGroupKeys).toEqual(['status:done']);
 
-    act(() => result.current.updateView({ hiddenGroups: { status: [] } }));
+    act(() => result.current.changeGroupVisibility('status:done', true));
     expect(storedView()).toEqual({ groupBy: 'status' });
+    expect(result.current.hiddenGroupKeys).toEqual([]);
+  });
+
+  it('does not count a stored setting that equals the default as a change', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ sort: 'activity', groupBy: 'board', hiddenGroups: { status: [] } }),
+    );
+
+    expect(renderHook(() => useSessionListView()).result.current.changedSettingCount).toBe(0);
   });
 
   it('reads a stored group order and drops malformed entries', () => {
@@ -66,14 +79,21 @@ describe('useSessionListView', () => {
     });
   });
 
-  it('forgets a group order once it is cleared', () => {
+  it('forgets a group order once it is moved back to the default', () => {
+    const defaultHeadings: SessionGroupHeading[] = [
+      { key: 'board:work', label: 'Work', icon: 'board' },
+      { key: 'user', label: 'User', icon: 'user' },
+    ];
     const { result } = renderHook(() => useSessionListView());
 
-    act(() => result.current.updateView({ groupOrder: { board: ['user', 'board:work'] } }));
+    act(() => result.current.changeGroupOrder(['user', 'board:work'], defaultHeadings));
     expect(storedView()).toEqual({ groupOrder: { board: ['user', 'board:work'] } });
+    expect(result.current.groupOrderKeys).toEqual(['user', 'board:work']);
+    expect(result.current.changedSettingCount).toBe(1);
 
-    act(() => result.current.updateView({ groupOrder: { board: [] } }));
+    act(() => result.current.changeGroupOrder(['board:work', 'user'], defaultHeadings));
     expect(storedView()).toEqual({});
+    expect(result.current.groupOrderKeys).toEqual([]);
   });
 
   it('stores only what differs from the default, and forgets a choice set back to it', () => {

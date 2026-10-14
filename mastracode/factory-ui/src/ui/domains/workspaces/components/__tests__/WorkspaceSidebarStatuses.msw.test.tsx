@@ -11,6 +11,7 @@ import type { PullRequestSubscription } from '../../../factory/services/githubSu
 import type { WorkItemSessionRef } from '../../../factory/services/workItems';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { SessionsSection } from '../SessionsSection';
+import { LIVE_SESSION, testChatSession } from './fixtures/sessionsSection';
 
 const factoryProjectId = 'factory-project-1';
 const projectRepositoryId = 'github-project-1';
@@ -217,19 +218,7 @@ function baseItems(knownMerged: boolean) {
 function renderSection() {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${factoryProjectId}/workspaces/${workSession.sessionId}`]}>
-      <ChatSessionContext.Provider
-        value={{
-          resourceId,
-          sessionEnabled: true,
-          resourceReady: true,
-          sandboxReady: true,
-          sandboxPreparing: false,
-          resourceEnabled: true,
-          factorySessionState: { factoryProjectId, projectRepositoryId },
-          baseUrl: TEST_BASE_URL,
-          kind: 'factory',
-        }}
-      >
+      <ChatSessionContext.Provider value={testChatSession(factoryProjectId, projectRepositoryId, LIVE_SESSION)}>
         <Routes>
           <Route path="/factories/:factoryId/workspaces/:sessionId" element={<SessionsSection />} />
         </Routes>
