@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DropdownMenu } from './dropdown-menu';
@@ -198,5 +199,33 @@ describe('DropdownMenu', () => {
 
     fireEvent.click(screen.getByRole('menuitem', { name: 'Run action' }));
     expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows no hint for an unknown RadioSub value and still reports the picked option', async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn<(value: string) => void>();
+    render(
+      <DropdownMenu defaultOpen>
+        <DropdownMenu.Trigger>Open</DropdownMenu.Trigger>
+        <DropdownMenu.Content>
+          <DropdownMenu.RadioSub
+            label="Owner"
+            options={[
+              { value: 'mine', label: 'Mine' },
+              { value: 'all', label: 'Everyone' },
+            ]}
+            value="former-member"
+            onValueChange={onValueChange}
+          />
+        </DropdownMenu.Content>
+      </DropdownMenu>,
+    );
+
+    // jsdom has no geometry: pointer travel into a submenu leaves Base UI's safe polygon and closes it.
+    act(() => screen.getByRole('menuitem', { name: 'Owner' }).focus());
+    await user.keyboard('{ArrowRight}');
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Everyone' }));
+
+    expect(onValueChange).toHaveBeenCalledWith('all');
   });
 });

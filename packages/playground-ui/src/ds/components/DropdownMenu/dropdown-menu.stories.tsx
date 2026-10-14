@@ -232,6 +232,32 @@ export const WithRadioItems: Story = {
   },
 };
 
+/** `RadioSub` is a typed one-of-many submenu; its row shows the selected label as a hint. */
+export const WithRadioSub: Story = {
+  render: function Render() {
+    const [position, setPosition] = useState<'top' | 'bottom' | 'right'>('bottom');
+
+    return (
+      <DropdownMenu>
+        <DropdownMenu.Trigger>Open Menu</DropdownMenu.Trigger>
+        <DropdownMenu.Content className="w-56">
+          <DropdownMenu.RadioSub
+            label="Panel position"
+            icon={<Settings />}
+            options={[
+              { value: 'top', label: 'Top' },
+              { value: 'bottom', label: 'Bottom' },
+              { value: 'right', label: 'Right' },
+            ]}
+            value={position}
+            onValueChange={setPosition}
+          />
+        </DropdownMenu.Content>
+      </DropdownMenu>
+    );
+  },
+};
+
 export const WithSubMenu: Story = {
   render: () => (
     <DropdownMenu>

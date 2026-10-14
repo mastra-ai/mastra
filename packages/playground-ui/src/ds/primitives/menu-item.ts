@@ -42,6 +42,8 @@ export const menuItemTrailingIconClass =
 
 export const menuItemCheckClass = cn(menuItemTrailingIconClass, 'text-foreground');
 
+export const menuItemHintClass = 'ml-auto min-w-0 truncate text-muted-foreground';
+
 // Left padding matching icon width + gap, for items aligned with iconed siblings.
 export const menuItemInsetClass = 'pl-[calc(.9em+1.1em+.75em)]';
 
