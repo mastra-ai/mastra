@@ -842,13 +842,6 @@ const SESSION_FAVICON_PATHS = new Set([
 ]);
 
 /**
- * Build the auth gate as a plain Hono middleware handler `(c, next)`. Protects
- * everything that is not a public `/auth/*` route: authenticated requests stash
- * the user on the context and continue; unauthenticated navigations redirect to
- * login and XHR/API calls get a 401 JSON. Shared by the local Hono server
- * (`mountFactoryAuth`) and the platform Mastra entry (`server.middleware`).
- */
-/**
  * Request-context key marking a turn a signed-in person started over HTTP.
  * Wakes, webhooks, channels and the dispatcher build their own request context
  * and never carry it, so Factory management tools stay off those turns.
@@ -863,6 +856,13 @@ export function createFactoryInteractiveMarker() {
   };
 }
 
+/**
+ * Build the auth gate as a plain Hono middleware handler `(c, next)`. Protects
+ * everything that is not a public `/auth/*` route: authenticated requests stash
+ * the user on the context and continue; unauthenticated navigations redirect to
+ * login and XHR/API calls get a 401 JSON. Shared by the local Hono server
+ * (`mountFactoryAuth`) and the platform Mastra entry (`server.middleware`).
+ */
 export function createFactoryAuthGate(provider: IMastraAuthProvider) {
   return async (c: Context, next: () => Promise<void>): Promise<Response | void> => {
     const path = c.req.path;

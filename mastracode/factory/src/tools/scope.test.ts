@@ -1,9 +1,8 @@
 import { RequestContext } from '@mastra/core/request-context';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { createSourceControlSessionLookup } from '../session/factory-session.js';
 import type { SourceControlSessionVisibility } from '../storage/domains/source-control/base.js';
-import type { FactoryRunBindingRecord } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FACTORY_INTERACTIVE_KEY, resolveFactoryToolScope } from './scope.js';
 import type { FactoryToolScope } from './scope.js';
@@ -44,11 +43,21 @@ async function seedFactory(orgId = 'org-1') {
       visibility,
     });
   const sessions = createSourceControlSessionLookup([sourceControl]);
-  const workItems = {
-    findRunBindingBySession: vi.fn(async (): Promise<FactoryRunBindingRecord | null> => null),
-    findActiveRunBindingForSession: vi.fn(async (): Promise<FactoryRunBindingRecord | null> => null),
-  };
-  return { seed, project, createSession, sessions, workItems };
+  const workItems = seed.workItems;
+  /** Bind `sessionId` to a run on `threadId`, the way a role start does. */
+  const bindRun = (sessionId: string, threadId: string) =>
+    seed.workItems.prepareRunStart({
+      orgId,
+      userId: 'owner',
+      factoryProjectId: project.id,
+      workItem: { input: { title: 'Bound item', stages: ['intake'] } },
+      role: 'work',
+      session: { sessionId, branch: `factory/${sessionId}`, threadId },
+      resourceId: sessionId,
+      kickoffKey: `kickoff-${sessionId}-${threadId}`,
+      kickoffMessage: null,
+    });
+  return { seed, project, createSession, sessions, workItems, bindRun };
 }
 
 function context({
@@ -75,20 +84,6 @@ function context({
   });
   return requestContext;
 }
-
-const binding = {
-  id: 'binding-1',
-  orgId: 'org-1',
-  workItemId: 'item-1',
-  role: 'work',
-  threadId: 'thread-1',
-  resourceId: 'session-1',
-  sessionId: 'session-1',
-  branch: 'factory/item',
-  status: 'revoked',
-  createdAt: new Date(),
-  revokedAt: new Date(),
-} as unknown as FactoryRunBindingRecord;
 
 describe('resolveFactoryToolScope', () => {
   it('accepts the session owner', async () => {
@@ -196,12 +191,20 @@ describe('resolveFactoryToolScope', () => {
     ).resolves.toBeNull();
   });
 
-  it('resolves a session with a run binding, even a revoked one, as a worker', async () => {
-    const { seed, createSession, sessions, workItems } = await seedFactory();
+  it('resolves a session whose run binding was revoked, on another thread, as a worker', async () => {
+    const { seed, project, createSession, sessions, workItems, bindRun } = await seedFactory();
     await createSession('session-1', 'user-1');
-    workItems.findRunBindingBySession.mockResolvedValue(binding);
+    const { binding } = await bindRun('session-1', 'thread-a');
+    await expect(
+      seed.workItems.revokeRunBinding({
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+        bindingId: binding.id,
+        revokedAt: new Date(),
+      }),
+    ).resolves.toMatchObject({ status: 'revoked' });
     const scope = await resolveFactoryToolScope({
-      requestContext: context({ user: { workosId: 'user-1', organizationId: 'org-1' } }),
+      requestContext: context({ user: { workosId: 'user-1', organizationId: 'org-1' }, threadId: 'thread-b' }),
       authEnabled: true,
       sessions,
       projects: seed.projects,
@@ -212,11 +215,11 @@ describe('resolveFactoryToolScope', () => {
   });
 
   it('resolves an active binding on another thread of the session as a worker', async () => {
-    const { seed, createSession, sessions, workItems } = await seedFactory();
+    const { seed, createSession, sessions, workItems, bindRun } = await seedFactory();
     await createSession('session-1', 'user-1');
-    workItems.findActiveRunBindingForSession.mockResolvedValue({ ...binding, status: 'active', revokedAt: null });
+    await bindRun('session-1', 'thread-a');
     const scope = await resolveFactoryToolScope({
-      requestContext: context({ user: { workosId: 'user-1', organizationId: 'org-1' }, threadId: 'thread-2' }),
+      requestContext: context({ user: { workosId: 'user-1', organizationId: 'org-1' }, threadId: 'thread-b' }),
       authEnabled: true,
       sessions,
       projects: seed.projects,

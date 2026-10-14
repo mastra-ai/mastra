@@ -1,7 +1,11 @@
+import { EventEmitterPubSub } from '@mastra/core/events';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../boards/index.js';
+import { feedTopic } from '../feed-events.js';
+import { fakeRouteAuth } from '../routes/test-utils.js';
 import type { FactoryTransitionService } from '../rules/transition-service.js';
+import { CommentsDomain } from '../storage/domains/comments/domain.js';
 import type { FactoryDeferredDecisionRecord } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FACTORY_TOOLS_WITHOUT_APPROVAL } from './permissions.js';
@@ -21,8 +25,23 @@ const scope: FactoryToolScope = {
 
 type Transition = FactoryTransitionService['transition'];
 
-async function setup({ transition }: { transition?: Transition } = {}) {
+const DECISION_ID = '7b1d2c3e-4f50-4a61-8b72-9c83d4e5f601';
+const FOREIGN_DECISION_ID = '0f9e8d7c-6b5a-4493-8271-605f4e3d2c1b';
+
+async function setup({
+  transition,
+  feed,
+}: { transition?: Transition; feed?: Pick<CommentsDomain, 'createComment'> } = {}) {
   const seed = await createFactoryStorageForTests();
+  const pubsub = new EventEmitterPubSub();
+  const publish = vi.spyOn(pubsub, 'publish');
+  const commentsDomain = new CommentsDomain({
+    auth: fakeRouteAuth(),
+    comments: seed.comments,
+    workItems: seed.workItems,
+    projects: seed.projects,
+    pubsub,
+  });
   const boards = createBoardRegistry();
   const transitionService = {
     transition: vi.fn<Transition>(
@@ -43,7 +62,7 @@ async function setup({ transition }: { transition?: Transition } = {}) {
     boards,
     transitionService,
     auditRecorder,
-    comments: seed.comments,
+    feed: feed ?? commentsDomain,
   }) as Record<string, { requireApproval?: boolean; execute: (input: unknown, context: unknown) => Promise<unknown> }>;
   const run = <T>(name: string, input: unknown) => tools[name]!.execute(input, {}) as Promise<T>;
   const fileItem = (factoryProjectId: string, title: string) =>
@@ -53,13 +72,13 @@ async function setup({ transition }: { transition?: Transition } = {}) {
       factoryProjectId,
       input: { title, stages: ['intake'], metadata: {} },
     });
-  return { ...seed, boards, tools, run, transitionService, auditRecorder, fileItem };
+  return { ...seed, boards, tools, run, transitionService, auditRecorder, fileItem, publish };
 }
 
 function failedDecision(overrides: Partial<FactoryDeferredDecisionRecord> = {}): FactoryDeferredDecisionRecord {
   const now = new Date();
   return {
-    id: 'decision-1',
+    id: DECISION_ID,
     orgId: 'org-1',
     factoryProjectId: 'project-1',
     evaluationId: 'evaluation-1',
@@ -80,7 +99,7 @@ function failedDecision(overrides: Partial<FactoryDeferredDecisionRecord> = {}):
 
 describe('factory_create_work_item', () => {
   it("files the item as the caller in the board's first phase, posts the brief and follows it", async () => {
-    const { run, workItems, comments, transitionService, auditRecorder } = await setup();
+    const { run, workItems, comments, transitionService, auditRecorder, publish } = await setup();
 
     const created = await run<{ id: string; stage: string; title: string }>('factory_create_work_item', {
       title: 'Fix the login redirect',
@@ -108,6 +127,11 @@ describe('factory_create_work_item', () => {
     expect(feed.map(comment => [comment.body, comment.author.id])).toEqual([
       ['Users land on /404 after signing in.', 'user-1'],
     ]);
+    // Through the comments domain: open boards get a feed touch for the new card.
+    expect(publish).toHaveBeenCalledWith(
+      feedTopic('org-1', 'project-1'),
+      expect.objectContaining({ type: 'factory.feed.touched', data: { workItemId: created.id } }),
+    );
     expect(await workItems.listWorkItemSubscribers({ orgId: 'org-1', workItemId: created.id })).toEqual([
       expect.objectContaining({ sessionId: 'session-1', threadId: 'thread-1', userId: 'user-1', reason: 'created' }),
     ]);
@@ -121,6 +145,23 @@ describe('factory_create_work_item', () => {
         targets: [{ type: 'work_item', id: created.id, name: 'Fix the login redirect' }],
       }),
     );
+  });
+
+  it('reports the item with a warning instead of failing when the brief cannot be posted', async () => {
+    const { run, workItems } = await setup({
+      feed: { createComment: vi.fn(async () => Promise.reject(new Error('feed is down'))) },
+    });
+
+    const created = await run<{ id: string; warnings?: string[] }>('factory_create_work_item', {
+      title: 'Card that exists anyway',
+      brief: 'Brief that fails to post.',
+    });
+
+    expect(created.warnings).toEqual(['The brief was not posted: feed is down']);
+    await expect(workItems.getForProject('org-1', 'project-1', created.id)).resolves.not.toBeNull();
+    expect(await workItems.listWorkItemSubscribers({ orgId: 'org-1', workItemId: created.id })).toEqual([
+      expect.objectContaining({ sessionId: 'session-1', reason: 'created' }),
+    ]);
   });
 
   it('removes the item again when the first phase refuses it', async () => {
@@ -224,13 +265,18 @@ describe('factory_transition_work_item', () => {
 });
 
 describe('decisions', () => {
+  it('rejects a decision id that is not a UUID before it reaches storage', async () => {
+    const { run, workItems } = await setup();
+    const getDeferredDecision = vi.spyOn(workItems, 'getDeferredDecision');
+    await expect(run('factory_retry_decision', { decisionId: 'decision-1' })).resolves.toMatchObject({ error: true });
+    expect(getDeferredDecision).not.toHaveBeenCalled();
+  });
+
   it('refuses to retry a decision that is not a retryable failure', async () => {
     const { run, workItems } = await setup();
     vi.spyOn(workItems, 'getDeferredDecision').mockResolvedValue(failedDecision({ status: 'succeeded' }));
     const retry = vi.spyOn(workItems, 'retryDeferredDecision');
-    await expect(run('factory_retry_decision', { decisionId: 'decision-1' })).rejects.toThrow(
-      'not a retryable failure',
-    );
+    await expect(run('factory_retry_decision', { decisionId: DECISION_ID })).rejects.toThrow('not a retryable failure');
     expect(retry).not.toHaveBeenCalled();
   });
 
@@ -239,7 +285,7 @@ describe('decisions', () => {
     // The decided-for item no longer exists, which counts as overtaken.
     vi.spyOn(workItems, 'getDeferredDecision').mockResolvedValue(failedDecision());
     const retry = vi.spyOn(workItems, 'retryDeferredDecision');
-    await expect(run('factory_retry_decision', { decisionId: 'decision-1' })).rejects.toThrow('moved on');
+    await expect(run('factory_retry_decision', { decisionId: DECISION_ID })).rejects.toThrow('moved on');
     expect(retry).not.toHaveBeenCalled();
   });
 
@@ -250,8 +296,8 @@ describe('decisions', () => {
     vi.spyOn(workItems, 'retryDeferredDecision').mockResolvedValue(
       failedDecision({ workItemId: item.id, status: 'retry' }),
     );
-    await expect(run('factory_retry_decision', { decisionId: 'decision-1' })).resolves.toEqual({
-      decisionId: 'decision-1',
+    await expect(run('factory_retry_decision', { decisionId: DECISION_ID })).resolves.toEqual({
+      decisionId: DECISION_ID,
       status: 'retry',
       workItemId: item.id,
     });
@@ -266,11 +312,11 @@ describe('decisions', () => {
       .spyOn(workItems, 'dismissDeferredDecision')
       .mockResolvedValue(failedDecision({ status: 'dismissed', workItemId: 'item-1' }));
 
-    await run('factory_resolve_proposal', { decisionId: 'decision-1', action: 'approve' });
-    await run('factory_dismiss_decision', { decisionId: 'decision-1' });
+    await run('factory_resolve_proposal', { decisionId: DECISION_ID, action: 'approve' });
+    await run('factory_dismiss_decision', { decisionId: DECISION_ID });
 
-    expect(approve).toHaveBeenCalledWith('org-1', 'project-1', 'decision-1', expect.any(Date), 'user-1');
-    expect(dismiss).toHaveBeenCalledWith('org-1', 'project-1', 'decision-1', expect.any(Date));
+    expect(approve).toHaveBeenCalledWith('org-1', 'project-1', DECISION_ID, expect.any(Date), 'user-1');
+    expect(dismiss).toHaveBeenCalledWith('org-1', 'project-1', DECISION_ID, expect.any(Date));
     expect(auditRecorder.record.mock.calls.map(([input]) => (input as { action: string }).action)).toEqual([
       'factory.run.approved',
       'factory.run.dismissed',
@@ -329,14 +375,14 @@ describe('another Factory', () => {
     expect(await workItems.listWorkItemSubscribers({ orgId: 'org-1', workItemId: foreign.id })).toEqual([]);
 
     // Decisions are looked up within this Factory only; another Factory's id reads as missing.
-    await expect(run('factory_retry_decision', { decisionId: 'foreign-decision' })).rejects.toThrow(
+    await expect(run('factory_retry_decision', { decisionId: FOREIGN_DECISION_ID })).rejects.toThrow(
       'belongs to another Factory',
     );
-    await expect(run('factory_dismiss_decision', { decisionId: 'foreign-decision' })).rejects.toThrow(
+    await expect(run('factory_dismiss_decision', { decisionId: FOREIGN_DECISION_ID })).rejects.toThrow(
       'belongs to another Factory',
     );
     await expect(
-      run('factory_resolve_proposal', { decisionId: 'foreign-decision', action: 'approve' }),
+      run('factory_resolve_proposal', { decisionId: FOREIGN_DECISION_ID, action: 'approve' }),
     ).rejects.toThrow('belongs to another Factory');
   });
 });

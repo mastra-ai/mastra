@@ -14,7 +14,7 @@ import type { IntegrationTools } from '../integrations/base.js';
 import { transitionBodySchema } from '../routes/contracts.js';
 import type { FactoryTransitionService } from '../rules/transition-service.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
-import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
+import type { CommentsDomain } from '../storage/domains/comments/domain.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryWorkItem } from '../work-items/create-work-item.js';
 import type { FactoryAuditEmit } from '../work-items/create-work-item.js';
@@ -34,11 +34,12 @@ export interface FactoryWorkItemToolDependencies {
   transitionService: Pick<FactoryTransitionService, 'transition'> | undefined;
   /** Writes audit rows with an explicit actor; tool calls have no HTTP request to read one from. */
   auditRecorder: AuditRecorder;
-  comments: Pick<WorkItemCommentsStorage, 'create'>;
+  /** The feed's front door: validates, touches open boards and mirrors to linked channels. */
+  feed: Pick<CommentsDomain, 'createComment'>;
 }
 
 const workItemRef = z.string().trim().min(1).max(64).describe('Work item id, or its number like "#123".');
-const decisionId = z.string().trim().min(1).max(64).describe('Decision id, from factory_list_attention or inspect.');
+const decisionId = z.string().trim().uuid().describe('Decision id, from factory_list_attention or inspect.');
 
 function briefItem(item: WorkItemRow) {
   return {
@@ -109,14 +110,32 @@ export function createFactoryWorkItemTools(
         if (created.status === 'refused') throw new Error(created.message);
         if (created.status === 'rejected') throw new Error(`The board refused the new item: ${created.reason}`);
         const { item } = created;
-        await deps.comments.create({
-          ...project,
-          workItemId: item.id,
-          author: { kind: 'user', id: scope.userId },
-          body: brief,
-        });
-        await follow(item, 'created');
-        return briefItem(item);
+        // The card exists from here on: report follow-up failures alongside it
+        // rather than failing the call, so the agent doesn't file it twice.
+        const warnings: string[] = [];
+        try {
+          const comment = await deps.feed.createComment({
+            orgId: scope.orgId,
+            workItemId: item.id,
+            author: { kind: 'user', id: scope.userId },
+            body: brief,
+          });
+          if (comment.status !== 'created') {
+            warnings.push(
+              `The brief was not posted (${comment.status === 'invalid' ? comment.message : comment.status}).`,
+            );
+          }
+        } catch (error) {
+          warnings.push(`The brief was not posted: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        try {
+          await follow(item, 'created');
+        } catch (error) {
+          warnings.push(
+            `This session does not follow it yet: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+        return warnings.length ? { ...briefItem(item), warnings } : briefItem(item);
       },
     }),
 
