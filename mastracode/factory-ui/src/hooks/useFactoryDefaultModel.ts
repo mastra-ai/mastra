@@ -6,6 +6,7 @@ import {
   applyFactoryDefaultModelToSessions,
   fetchFactoryProject,
   updateFactoryDefaultModel,
+  updateFactoryModelScope,
 } from '../ui/domains/workspaces/services/github';
 
 /**
@@ -31,6 +32,19 @@ export function useSetFactoryDefaultModelMutation(factoryProjectId: string | und
       updateFactoryDefaultModel(baseUrl, factoryProjectId!, defaultModelId),
     onSuccess: project => {
       queryClient.setQueryData(queryKeys.factoryProject(factoryProjectId), project);
+    },
+  });
+}
+
+export function useSetFactoryModelScopeMutation(factoryProjectId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (modelScope: 'factory' | 'user') => updateFactoryModelScope(baseUrl, factoryProjectId!, modelScope),
+    onSuccess: project => {
+      queryClient.setQueryData(queryKeys.factoryProject(factoryProjectId), project);
+      // The scope picks which credentials serve this Factory's models.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.availableModels({ factoryProjectId }) });
     },
   });
 }

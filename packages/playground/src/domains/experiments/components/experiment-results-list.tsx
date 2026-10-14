@@ -7,8 +7,12 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import { GaugeIcon } from 'lucide-react';
 import { getResultErrorMessage, getResultOutputPreview } from '../utils/result-output';
+import { formatCostValue, formatTokenCount, totalTokens } from './comparison/comparison-metric-format';
+import { ScoreReasonHoverCard } from './comparison/score-reason-hover-card';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
 /**
@@ -29,14 +33,31 @@ export type ExperimentResultsListItem = {
   scores?: Record<string, number> | Array<{ score: number | null }> | null;
   /** When the run started; drives the `startedAt` column. */
   startedAt?: string | Date | null;
+  /** When the run finished; with `startedAt`, drives the `duration` column. */
+  completedAt?: string | Date | null;
+  /** Token usage and cost of the run's trace; drives the `cost` and `tokens` columns. */
+  usage?: { inputTokens?: number; outputTokens?: number; estimatedCost?: number; costUnit?: string };
 };
 
-const BUILT_IN_COLUMNS = new Set(['itemId', 'id', 'status', 'input', 'output', 'error', 'tags', 'scores', 'startedAt']);
+const BUILT_IN_COLUMNS = new Set([
+  'itemId',
+  'id',
+  'status',
+  'input',
+  'output',
+  'error',
+  'tags',
+  'scores',
+  'startedAt',
+  'cost',
+  'tokens',
+  'duration',
+]);
 
 export type ExperimentResultsSortKey = 'startedAt';
 
 export type ExperimentResultsListColumn = {
-  /** `itemId` (or `id`) | `status` | `input` | `tags` | `scores` | `startedAt` | a scorer id */
+  /** `itemId` (or `id`) | `status` | `input` | `tags` | `scores` | `startedAt` | `cost` | `tokens` | `duration` | a scorer id */
   name: string;
   label: string;
   size: string;
@@ -48,7 +69,8 @@ export type ExperimentResultsListProps<T extends ExperimentResultsListItem> = {
   featuredResultId: string | null;
   onResultClick: (resultId: string) => void;
   columns: ExperimentResultsListColumn[];
-  scoresByItemId?: Record<string, ClientScoreRowData[]>;
+  /** Structurally narrowed to what the scorer cells read, so `ClientScoreRowData[]` fits. */
+  scoresByItemId?: Record<string, Array<Pick<ClientScoreRowData, 'scorerId' | 'score' | 'reason'>>>;
   scorerIds?: string[];
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   isFetchingNextPage?: boolean;
@@ -99,6 +121,9 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
   const hasTagsColumn = hasColumn('tags');
   const hasScoresColumn = hasColumn('scores');
   const hasStartedAtColumn = hasColumn('startedAt');
+  const hasCostColumn = hasColumn('cost');
+  const hasTokensColumn = hasColumn('tokens');
+  const hasDurationColumn = hasColumn('duration');
   const selectedVisibleCount = selectedIds ? results.filter(r => selectedIds.has(r.id)).length : 0;
   const isAllSelected = results.length > 0 && selectedVisibleCount === results.length;
 
@@ -217,17 +242,51 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
 
                 {hasStartedAtColumn &&
                   (result.startedAt ? (
-                    <DataList.CreatedCell timestamp={result.startedAt} />
+                    <DataList.TextCell data-testid={`result-created-${result.id}`}>
+                      {formatDate(result.startedAt, 'date-time')}
+                    </DataList.TextCell>
                   ) : (
                     <DataList.Cell className="text-placeholder">—</DataList.Cell>
                   ))}
 
+                {hasCostColumn && (
+                  <DataList.Cell
+                    className="text-muted-foreground tabular-nums"
+                    data-testid={`result-cost-${result.id}`}
+                  >
+                    {formatCostValue(result.usage?.estimatedCost, result.usage?.costUnit)}
+                  </DataList.Cell>
+                )}
+
+                {hasTokensColumn && (
+                  <DataList.Cell
+                    className="text-muted-foreground tabular-nums"
+                    data-testid={`result-tokens-${result.id}`}
+                  >
+                    {formatTokenCount(totalTokens(result.usage))}
+                  </DataList.Cell>
+                )}
+
+                {hasDurationColumn && (
+                  <DataList.Cell
+                    className="text-muted-foreground tabular-nums"
+                    data-testid={`result-duration-${result.id}`}
+                  >
+                    {formatDuration(runDurationMs(result)) ?? '-'}
+                  </DataList.Cell>
+                )}
+
                 {scorerIds?.map(scorerId => {
                   const scores = scoresByItemId?.[result.itemId];
                   const score = scores?.find(s => s.scorerId === scorerId);
+                  const reason = score?.reason?.trim();
                   return (
-                    <DataList.Cell key={scorerId} className="text-muted-foreground tabular-nums">
+                    <DataList.Cell
+                      key={scorerId}
+                      className="flex items-center gap-1.5 text-muted-foreground tabular-nums"
+                    >
                       {score != null ? score.score.toFixed(3) : '-'}
+                      {reason && <ScoreReasonHoverCard scorerId={scorerId} reason={reason} nested />}
                     </DataList.Cell>
                   );
                 })}
@@ -303,6 +362,11 @@ function ScoresSummary({ scores }: { scores: ExperimentResultsListItem['scores']
       {values.length > 1 && <Badge>+{values.length - 1}</Badge>}
     </div>
   );
+}
+
+function runDurationMs({ startedAt, completedAt }: ExperimentResultsListItem): number | undefined {
+  if (!startedAt || !completedAt) return undefined;
+  return new Date(completedAt).getTime() - new Date(startedAt).getTime();
 }
 
 /** Format unknown value for display */

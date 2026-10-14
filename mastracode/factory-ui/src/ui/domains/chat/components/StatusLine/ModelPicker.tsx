@@ -16,6 +16,7 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check, ChevronDown, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
+import { Link, useParams } from 'react-router';
 
 import type { AvailableModelOption } from '../../../../../hooks/useAvailableModels';
 import { useAvailableModelsQuery } from '../../../../../hooks/useAvailableModels';
@@ -23,35 +24,10 @@ import { useChatConnection } from '../../context/useChatConnection';
 import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
 import { useChatModels } from '../../context/useChatModels';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
+import { formatModelName } from '../../../settings/components/model-display-name';
+import { settingsSectionPath } from '../../../settings/settingsSections';
+import { ModelScopeFooter, useOrganizationScopedFactory } from './ModelScopeFooter';
 import { SessionThinkingControl } from './SessionThinkingControl';
-
-function titleCase(value: string): string {
-  return value ? `${value[0]?.toUpperCase()}${value.slice(1).toLowerCase()}` : value;
-}
-
-function lastSegment(id: string): string {
-  const parts = id.trim().split('/');
-  return parts[parts.length - 1] || id;
-}
-
-export function formatModelName(id: string): string {
-  const slug = lastSegment(id);
-  const claudeMatch = slug.match(/^claude-(opus|sonnet|haiku)-(\d+)-(\d+)$/i);
-  const claudeFamily = claudeMatch?.[1];
-  const claudeMajor = claudeMatch?.[2];
-  const claudeMinor = claudeMatch?.[3];
-  if (claudeFamily && claudeMajor && claudeMinor) {
-    return `Claude ${titleCase(claudeFamily)} ${claudeMajor}.${claudeMinor}`;
-  }
-
-  const gptDetails = slug.match(/^gpt-(.+)$/i)?.[1];
-  if (gptDetails) {
-    const [version, ...qualifiers] = gptDetails.split('-');
-    return [`GPT-${version}`, ...qualifiers.map(titleCase)].join(' ');
-  }
-
-  return slug.split(/[-_]+/).filter(Boolean).map(titleCase).join(' ');
-}
 
 function groupByProvider(models: AvailableModelOption[]): [string, AvailableModelOption[]][] {
   const groups = new Map<string, AvailableModelOption[]>();
@@ -72,7 +48,9 @@ export function ModelPicker() {
   const { kind, sessionEnabled, draftSessionId } = useChatSessionContext();
   const { status } = useChatConnection();
   const { activeModelId, defaultModelId, setModel, isLoading, error } = useChatModels();
-  const modelsQuery = useAvailableModelsQuery();
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const modelsQuery = useAvailableModelsQuery({ factoryProjectId: factoryId });
+  const organizationScoped = useOrganizationScopedFactory(factoryId);
   const [open, setOpen] = useState(false);
   const [pendingModelId, setPendingModelId] = useState<string>();
 
@@ -103,6 +81,16 @@ export function ModelPicker() {
 
   const noModelsToOffer = !modelsQuery.isPending && !modelsQuery.data?.length;
   if (!switchable || noModelsToOffer) {
+    if (notConfigured && organizationScoped && factoryId) {
+      return (
+        <span className="text-destructive-foreground" title={selectedModelId}>
+          {label} ·{' '}
+          <Link to={settingsSectionPath(factoryId, 'models')} className="underline underline-offset-2">
+            needs an organization credential
+          </Link>
+        </span>
+      );
+    }
     return (
       <span
         className={notConfigured ? 'text-destructive-foreground' : 'text-muted-foreground'}
@@ -198,6 +186,7 @@ export function ModelPicker() {
                 </CommandGroup>
               ) : null}
             </CommandList>
+            {organizationScoped && factoryId ? <ModelScopeFooter factoryId={factoryId} /> : null}
           </Command>
         </PopoverContent>
       </Popover>

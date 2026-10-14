@@ -13,7 +13,7 @@ import type { ToolsInput } from '../types';
 
 import { DurableAgent } from './durable-agent';
 import type { DurableAgentConfig } from './durable-agent';
-import { globalRunRegistry } from './run-registry';
+import { getRunRegistryEntry } from './run-registry';
 import type { DurableAgenticWorkflowInput } from './types';
 import { defaultShouldPersistSnapshot } from './workflows/create-durable-agentic-workflow';
 
@@ -157,7 +157,7 @@ export class EventedAgent<
   protected override async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
     // Captured now: a later resume() replaces the registry's fence before this
     // segment's background promise settles.
-    const entry = globalRunRegistry.get(runId);
+    const entry = getRunRegistryEntry(runId, this.getMastraInstance());
     const executionFence = entry?.executionFence;
     const toError = (error: unknown) => (error instanceof Error ? error : new Error(String(error)));
     try {

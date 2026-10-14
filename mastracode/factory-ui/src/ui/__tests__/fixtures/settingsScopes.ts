@@ -48,8 +48,6 @@ export const settingsMemory: OMConfigInfo = {
 
 export const settingsThinking: ThinkingConfigInfo = {
   globalDefault: 'off',
-  modeDefaults: {},
-  modes: [],
   levels: ['off', 'low', 'medium', 'high'],
   editable: false,
 };

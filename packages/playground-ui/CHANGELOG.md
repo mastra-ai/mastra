@@ -1,5 +1,442 @@
 # @mastra/playground-ui
 
+## 63.1.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`460b600`](https://github.com/mastra-ai/mastra/commit/460b600abe3b7563537cfb8a676d649c638a9190), [`2362057`](https://github.com/mastra-ai/mastra/commit/2362057cedc6b90b9fd71c424df40eedf3a4ecf3), [`9daf547`](https://github.com/mastra-ai/mastra/commit/9daf547f810df721eaca9c9dafc18f8ce1727b77), [`e496762`](https://github.com/mastra-ai/mastra/commit/e49676258181017f50eb5739d4a97c0da7317dd9), [`d4b2682`](https://github.com/mastra-ai/mastra/commit/d4b2682da7c72b6922aea5cf0533e48907d9d0cd)]:
+  - @mastra/core@1.78.0-alpha.2
+  - @mastra/react@1.10.1-alpha.2
+  - @mastra/client-js@1.54.1-alpha.2
+
+## 63.1.0-alpha.1
+
+### Minor Changes
+
+- `DropdownMenu` gains two typed helpers for one-of-many choices. `DropdownMenu.RadioOptions` renders a list of options, and `DropdownMenu.RadioSub` puts them in a submenu whose row shows the selected label, so a menu of several settings reads its current state without opening each submenu. `onValueChange` receives your option type, not `any`. `DropdownMenu.SubTrigger` also takes a `hint` to show a current value next to its chevron. ([#27003](https://github.com/mastra-ai/mastra/pull/27003))
+
+  ```tsx
+  import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+  import type { DropdownMenuRadioOption } from '@mastra/playground-ui/components/DropdownMenu';
+
+  const ownerOptions: DropdownMenuRadioOption<'mine' | 'all'>[] = [
+    { value: 'mine', label: 'Mine' },
+    { value: 'all', label: 'Everyone' },
+  ];
+
+  <DropdownMenu>
+    <DropdownMenu.Trigger>Properties</DropdownMenu.Trigger>
+    <DropdownMenu.Content>
+      <DropdownMenu.RadioSub label="Owner" options={ownerOptions} value={owner} onValueChange={setOwner} />
+    </DropdownMenu.Content>
+  </DropdownMenu>;
+  ```
+
+- Added helpers to filter the metrics dashboard with `FilterBar`, the filter bar Traces uses. ([#27034](https://github.com/mastra-ai/mastra/pull/27034))
+
+  - `MetricsTimeRangeChip` shows the dashboard's date range as the filter bar's Time chip.
+  - `createMetricsFilterBarFields` and `METRICS_FILTER_BAR_OPERATORS` describe the dimensions you can filter on.
+  - `metricsTokensToFilterBarItems` and `filterBarItemsToMetricsTokens` convert between `FilterBar` items and the dashboard's URL-backed filter tokens.
+
+  `DateRangeSelector` and `createMetricsPropertyFilterFields` are deprecated in favor of these.
+
+  ```tsx
+  import { FilterBar } from '@mastra/playground-ui/components/FilterBar';
+  import type { FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
+  import { MetricsTimeRangeChip } from '@mastra/playground-ui/domains/metrics/components/metrics-time-range-chip';
+  import {
+    createMetricsFilterBarFields,
+    filterBarItemsToMetricsTokens,
+    METRICS_FILTER_BAR_OPERATORS,
+    metricsTokensToFilterBarItems,
+  } from '@mastra/playground-ui/domains/metrics/metrics-filters';
+  import {
+    TRACE_TIME_RANGE_FIELD,
+    TRACE_TIME_RANGE_FIELD_ID,
+    TRACE_TIME_RANGE_ITEM,
+  } from '@mastra/playground-ui/domains/traces/components/trace-time-range-chip';
+
+  const isTimeRange = (item: FilterBarItem) => item.fieldId === TRACE_TIME_RANGE_FIELD_ID;
+
+  <FilterBar
+    fields={[TRACE_TIME_RANGE_FIELD, ...createMetricsFilterBarFields(discovered)]}
+    operators={METRICS_FILTER_BAR_OPERATORS}
+    value={[TRACE_TIME_RANGE_ITEM, ...metricsTokensToFilterBarItems(filterTokens)]}
+    onValueChange={items => setFilterTokens(filterBarItemsToMetricsTokens(items.filter(item => !isTimeRange(item))))}
+  >
+    <FilterBar.Chips
+      renderChip={item => (isTimeRange(item) ? <MetricsTimeRangeChip /> : <FilterBar.Chip item={item} />)}
+    />
+    <FilterBar.Input />
+  </FilterBar>;
+  ```
+
+### Patch Changes
+
+- Added an optional `keywords` field to `Combobox` options. Search matches these terms as well as the label, so an option can show a friendly label and still be found by an id or alias. ([#27000](https://github.com/mastra-ai/mastra/pull/27000))
+
+  ```tsx
+  <Combobox
+    options={[
+      { label: 'Claude Haiku 4.5', value: 'anthropic/claude-haiku-4-5', keywords: ['anthropic/claude-haiku-4-5'] },
+    ]}
+  />
+  ```
+
+- Changed `PageLayout` to scroll its body in a `ScrollArea` instead of reserving a stable scrollbar gutter. The body no longer shifts sideways when a scrollbar appears, and pages no longer show an empty strip beside their content. Added `contentClassName` to `ScrollAreaViewport` to style the wrapper around its children. ([#27018](https://github.com/mastra-ai/mastra/pull/27018))
+
+  Added a `mask` prop to `PageLayout` to fade the body's scrolled edges, using the same values as `ScrollArea`. It is off by default. A fade covers whatever sits at that edge, so leave it off for bodies with sticky table headers.
+
+  ```tsx
+  <PageLayout mask={{ y: true }}>{/* ... */}</PageLayout>
+  ```
+
+- Added a `flush` variant to `InputGroupAddon`. Use it to place adjacent number steppers at the field edge without a gap or edge inset. ([#27017](https://github.com/mastra-ai/mastra/pull/27017))
+
+  ```tsx
+  <InputGroupAddon align="inline-end" variant="flush">
+    <InputNumberDecrement />
+    <InputNumberIncrement />
+  </InputGroupAddon>
+  ```
+
+- Updated dependencies [[`bed1ccc`](https://github.com/mastra-ai/mastra/commit/bed1cccea5817d68faa42a15fda3a0b329f70680), [`02e2eae`](https://github.com/mastra-ai/mastra/commit/02e2eae3aee1c5b5b9c807a6a3389b88eca1440c), [`b2dd0c6`](https://github.com/mastra-ai/mastra/commit/b2dd0c6333691467e61406ac920eb6f861db6bc0), [`ad16eae`](https://github.com/mastra-ai/mastra/commit/ad16eae7eec9af386c9eee81f4f30ef65d0df48b)]:
+  - @mastra/core@1.78.0-alpha.1
+  - @mastra/client-js@1.54.1-alpha.1
+  - @mastra/ai-sdk@1.11.1
+  - @mastra/react@1.10.1-alpha.1
+
+## 63.0.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`0b1ea6c`](https://github.com/mastra-ai/mastra/commit/0b1ea6ca6266158316defb522feb3d2f9bf33174), [`33eb344`](https://github.com/mastra-ai/mastra/commit/33eb344ebfe918d032e3ad1e410788d4c8bc6526), [`5d12fbf`](https://github.com/mastra-ai/mastra/commit/5d12fbfcd756e5f5b0cae53e45a486a64ad102f5)]:
+  - @mastra/core@1.78.0-alpha.0
+  - @mastra/client-js@1.54.1-alpha.0
+  - @mastra/react@1.10.1-alpha.0
+
+## 63.0.0
+
+### Minor Changes
+
+- `Dialog` now opens as a bottom drawer on phone-sized screens (below 640px), so every existing dialog adapts to mobile without changes at the call site. People can swipe it down to close, the same as pressing Cancel. Pending dialogs still refuse to close. ([#26765](https://github.com/mastra-ai/mastra/pull/26765))
+
+  **Removed props.** The same dialog can now render either way, so `DialogContent` no longer accepts `render` or a function `style`, and `Dialog` no longer accepts `handle`. Pass a plain style object, and control the dialog with `open` instead of a handle:
+
+  ```tsx
+  // Before
+  const handle = DialogPrimitive.createHandle();
+  <Dialog handle={handle}>
+    <DialogContent style={state => ({ maxWidth: state.open ? 480 : 400 })}>…</DialogContent>
+  </Dialog>;
+
+  // After
+  const [open, setOpen] = useState(false);
+  <Dialog open={open} onOpenChange={setOpen}>
+    <DialogContent style={{ maxWidth: 480 }}>…</DialogContent>
+  </Dialog>;
+  ```
+
+- `AlertDialog` now opens as a bottom drawer on phone-sized screens (below 640px), the same as `Dialog`. Tapping outside still does not close it; swiping it down works like Cancel. Existing alert dialogs need no change. ([#26768](https://github.com/mastra-ai/mastra/pull/26768))
+
+  **Removed props.** `AlertDialog.Content` no longer accepts `render`, a function `style` or `role` (it is always `alertdialog`), and `AlertDialog` no longer accepts `handle`. Pass a plain style object, and control the alert with `open` instead of a handle:
+
+  ```tsx
+  // Before
+  const handle = AlertDialogPrimitive.createHandle();
+  <AlertDialog handle={handle}>
+    <AlertDialog.Content style={state => ({ maxWidth: state.open ? 480 : 400 })}>…</AlertDialog.Content>
+  </AlertDialog>;
+
+  // After
+  const [open, setOpen] = useState(false);
+  <AlertDialog open={open} onOpenChange={setOpen}>
+    <AlertDialog.Content style={{ maxWidth: 480 }}>…</AlertDialog.Content>
+  </AlertDialog>;
+  ```
+
+  `DialogContent` with `showCloseButton={false}` no longer reserves space for the missing close button next to the header.
+
+- Added composable parts to `Avatar`: `Avatar.Image`, `Avatar.Fallback`, `Avatar.Badge`, `Avatar.Group`, and `Avatar.GroupCount`. Added `xs` and `control` sizes. Existing `<Avatar name="…" />` usage is unchanged. ([#26619](https://github.com/mastra-ai/mastra/pull/26619))
+
+  ```tsx
+  import { Avatar } from '@mastra/playground-ui/components/Avatar';
+
+  <Avatar size="md">
+    <Avatar.Image src={user.avatarUrl} alt={user.name} />
+    <Avatar.Fallback>AM</Avatar.Fallback>
+    <Avatar.Badge>
+      <Avatar name={organization.name} src={organization.logo} />
+    </Avatar.Badge>
+  </Avatar>
+
+  <Avatar.Group size="sm">
+    <Avatar name="Jane Smith" src={jane} />
+    <Avatar name="Sam Lee" src={sam} />
+    <Avatar.GroupCount>+3</Avatar.GroupCount>
+  </Avatar.Group>
+  ```
+
+  `Avatar.Badge` takes a `tone` (`neutral`, `success`, `warning`, `destructive`, `info`) for a status dot, or any child such as an icon or a small organization avatar. Avatars inside a group or badge take their size from it.
+
+- Added `variant="inset"` to `Table` from `@mastra/playground-ui/components/Table`. It gives a native table the same raised look as `DataList`, with rows that grow with their content and cells that can hold any component. Existing default and small tables render exactly as before. ([#26625](https://github.com/mastra-ai/mastra/pull/26625))
+
+  The inset variant comes with composable parts:
+
+  - `Table.RowLink` and `Table.RowButton` make a whole row a link or a button, and other controls in the row keep their own clicks.
+  - `Table.SortButton` turns a header into a sort control with a direction arrow.
+  - `Table.Pagination` adds numbered pages below the table; the page and rows stay in your code.
+  - `columnDividers` draws lines between columns.
+
+  ```tsx
+  import { Table } from '@mastra/playground-ui/components/Table';
+
+  <Table variant="inset" aria-label="Credit history">
+    <Table.Header>
+      <Table.Row>
+        <Table.Head>Type</Table.Head>
+        <Table.Head align="end">Balance</Table.Head>
+      </Table.Row>
+    </Table.Header>
+    <Table.Body>
+      <Table.Row>
+        <Table.Cell>
+          <Table.RowLink href="/credits/1">Credit grant</Table.RowLink>
+        </Table.Cell>
+        <Table.Cell align="end">$6.95</Table.Cell>
+      </Table.Row>
+    </Table.Body>
+  </Table>;
+  ```
+
+- Added `Pagination` at `@mastra/playground-ui/components/Pagination`: page navigation built from parts (`Pagination`, `PaginationContent`, `PaginationItem`, `PaginationLink`, `PaginationPrevious`, `PaginationNext`, `PaginationEllipsis`), plus `getPaginationRange` for choosing which page numbers to show. The current page slides between pages, and links can render as anchors or router links. ([#26625](https://github.com/mastra-ai/mastra/pull/26625))
+
+  ```tsx
+  import {
+    Pagination,
+    PaginationContent,
+    PaginationItem,
+    PaginationLink,
+  } from '@mastra/playground-ui/components/Pagination';
+
+  <Pagination>
+    <PaginationContent>
+      <PaginationItem>
+        <PaginationLink isActive>1</PaginationLink>
+      </PaginationItem>
+      <PaginationItem>
+        <PaginationLink onClick={() => setPage(1)}>2</PaginationLink>
+      </PaginationItem>
+    </PaginationContent>
+  </Pagination>;
+  ```
+
+- Added a `size` prop to `ProductAvatar` and made it work inside `Avatar.Group`. In a group it takes the group's size and gets the same overlap ring as other avatars. Standalone `ProductAvatar` keeps its current size. ([#26889](https://github.com/mastra-ai/mastra/pull/26889))
+
+  ```tsx
+  <Avatar.Group size="md">
+    <ProductAvatar product="studio" />
+    <ProductAvatar product="observability" />
+    <Avatar.GroupCount>+3</Avatar.GroupCount>
+  </Avatar.Group>
+  ```
+
+- Added an `inline` variant to `DataPanel` that renders the panel in the normal page flow instead of a modal side drawer. Use it to embed detail views directly in a layout (no backdrop, focus trap, or dismissal). The parent controls mounting and size. ([#26867](https://github.com/mastra-ai/mastra/pull/26867))
+
+  ```tsx
+  <DataPanel variant="inline" title="Span details">
+    <DataPanel.Header>
+      <DataPanel.Heading>Span details</DataPanel.Heading>
+    </DataPanel.Header>
+    <DataPanel.Content>…</DataPanel.Content>
+  </DataPanel>
+  ```
+
+### Patch Changes
+
+- Added a "Go to dataset" button to the toast shown after saving a trace, span or score as a dataset item. It opens the new item in its dataset. ([#26866](https://github.com/mastra-ai/mastra/pull/26866))
+
+- Improved the main content layout on narrow screens. Where the sidebar collapses into the mobile header, the content is now flat and runs edge to edge under the header instead of sitting in an inset, rounded card. Wider screens with the sidebar beside the content are unchanged. ([#26858](https://github.com/mastra-ai/mastra/pull/26858))
+
+- Fixed DataPanel headers on narrow screens. Header actions now wrap onto a second row instead of being pushed out of view, so every action, including the close button, stays reachable. ([#26868](https://github.com/mastra-ai/mastra/pull/26868))
+
+- Fixed the `link` button variant so it is always a link. `Button variant="link"` now renders an `<a>` with an href even when no link element is passed, instead of a button that only looked like one. A disabled link keeps its href and is marked `aria-disabled`. ([#26817](https://github.com/mastra-ai/mastra/pull/26817))
+
+- Fixed `PageHeader` shifting between pages. The title row is now 32px tall with the title in the same position whether or not the header has an icon or `PageHeader.Action`, so moving between pages no longer moves the title. `PageLayout` also reserves the scrollbar gutter in its scroll area, so a narrow, centered column no longer shifts sideways when a page starts to scroll. ([#26915](https://github.com/mastra-ai/mastra/pull/26915))
+
+- Fixed the filter bar adding a second chip for a field that already has one. On pages that keep one filter per field (Logs, Metrics, Traces), picking another value for an already filtered field now updates its chip instead of adding a chip that is silently ignored: values combine into "is any of" when the field supports it, otherwise the new value replaces the old one. ([#26513](https://github.com/mastra-ai/mastra/pull/26513))
+
+  The Traces page also keeps "is any of" filters on Status and Primitive type in the URL. Before, they were dropped and the list stayed unfiltered.
+
+  Operators declare their multi-value form with the new `widensTo` option:
+
+  ```ts
+  const operators = [
+    { id: 'is', label: 'is', widensTo: 'in' },
+    { id: 'in', label: 'is any of', arity: 'many' },
+  ];
+  ```
+
+- The inline `DataPanel` now uses the same rounded corners as the app frame, so it lines up with the main card when it sits next to it. The drawer keeps its current corners. ([#26887](https://github.com/mastra-ai/mastra/pull/26887))
+
+- Trace Intelligence now labels its list by Agent instead of Entity. Agents whose traces are still being analyzed show an "Analyzing" status and can no longer be clicked, since they have no signals to open yet. Hovering or focusing the status shows how many traces have been collected. ([#26812](https://github.com/mastra-ai/mastra/pull/26812))
+
+- security: bump better-auth to ^1.7.7 and @modelcontextprotocol/sdk to ^1.32.1 for Vanta/Aikido findings (AIKIDO-2026-373183, AIKIDO-2026-261025, AIKIDO-2026-365378/156139/344432). ([#26773](https://github.com/mastra-ai/mastra/pull/26773))
+
+- Updated dependencies [[`54e9dc3`](https://github.com/mastra-ai/mastra/commit/54e9dc3ed0615ee84a6526395a9fefe17320fe7e), [`f8c0ce2`](https://github.com/mastra-ai/mastra/commit/f8c0ce2646427327b63c05d2eb09e76a3b04133e), [`59164cb`](https://github.com/mastra-ai/mastra/commit/59164cb7f8b298e28e13305b0273ed2ef7f1d9e1), [`eaa9d12`](https://github.com/mastra-ai/mastra/commit/eaa9d12407f4962e94e0d5cd49a643e6e317d60a), [`5a70664`](https://github.com/mastra-ai/mastra/commit/5a7066478c1924a6e9a94e1ba3210f9b67a35535), [`59164cb`](https://github.com/mastra-ai/mastra/commit/59164cb7f8b298e28e13305b0273ed2ef7f1d9e1), [`2a1bb80`](https://github.com/mastra-ai/mastra/commit/2a1bb80305bca1859504287e1a09f43c8a014330), [`4df792b`](https://github.com/mastra-ai/mastra/commit/4df792b5b9146b5a2d6726193ee82d9db31180a4), [`6a5711c`](https://github.com/mastra-ai/mastra/commit/6a5711cabf8ab5f08296e1cf0e6b4db50fc4b42b), [`0017956`](https://github.com/mastra-ai/mastra/commit/001795671cf329997bee74541f5de9056e6b1cec), [`aa00f41`](https://github.com/mastra-ai/mastra/commit/aa00f41855e8d6802546f613ffec1669e03409fc), [`36fc7ea`](https://github.com/mastra-ai/mastra/commit/36fc7eabf79ca70bd489e4022eb39a3d8382ace5), [`53d95e0`](https://github.com/mastra-ai/mastra/commit/53d95e0d2259a66a7ceaa3cafeb415446507f54c), [`2ec9c07`](https://github.com/mastra-ai/mastra/commit/2ec9c07eddb142c965f1201f5c6e5dbb288405f9), [`e384817`](https://github.com/mastra-ai/mastra/commit/e3848177f2a0051ea1469a06fb6502164bfada7c), [`878e0e2`](https://github.com/mastra-ai/mastra/commit/878e0e2f5adf9669158c7a8a8d67cd8809633c24), [`958bdc9`](https://github.com/mastra-ai/mastra/commit/958bdc942aa78f00c9ec25f8adfb8e14a0dd4fd9), [`519e97f`](https://github.com/mastra-ai/mastra/commit/519e97f624a15362fec7b143dea4eabcff556712), [`e384817`](https://github.com/mastra-ai/mastra/commit/e3848177f2a0051ea1469a06fb6502164bfada7c), [`821b8d4`](https://github.com/mastra-ai/mastra/commit/821b8d4253dcac5d8cf886994884e4645899bedc), [`3b6a49e`](https://github.com/mastra-ai/mastra/commit/3b6a49ea9e8de3b6bec3cf5145892ef7a47395ad), [`878e0e2`](https://github.com/mastra-ai/mastra/commit/878e0e2f5adf9669158c7a8a8d67cd8809633c24), [`aea91e7`](https://github.com/mastra-ai/mastra/commit/aea91e7f3a4fb066bfda96dca670d7d2a766d770), [`380e9f5`](https://github.com/mastra-ai/mastra/commit/380e9f57ea9ba7c37950b989d145b70c03a09a6c), [`5d15f0f`](https://github.com/mastra-ai/mastra/commit/5d15f0ff79448b455bd499798f6c7da52f2e663f), [`43b8e36`](https://github.com/mastra-ai/mastra/commit/43b8e36c6a9a8b1bcdd3d26e3259bb64674bff79), [`fbf3371`](https://github.com/mastra-ai/mastra/commit/fbf337130ba12f7435fc1784038b50d5cfa396b1), [`4029a96`](https://github.com/mastra-ai/mastra/commit/4029a964848512399f27bca283915d49fd106717), [`8dc4d65`](https://github.com/mastra-ai/mastra/commit/8dc4d65b34aad280c4f6ab265162c4846face7e3), [`ca92c02`](https://github.com/mastra-ai/mastra/commit/ca92c02696427baad81dd7a61b049ef37c332452), [`3504acd`](https://github.com/mastra-ai/mastra/commit/3504acdb2833b71db61dc9387c0f25f3cd0a3070), [`5bb6d71`](https://github.com/mastra-ai/mastra/commit/5bb6d711680d17370eacdcdab105e5af69202c5f), [`dab6849`](https://github.com/mastra-ai/mastra/commit/dab6849945ab2a0e4c946f5b31fb6f41b2c1cd7d), [`a14abf8`](https://github.com/mastra-ai/mastra/commit/a14abf8fc97a504f5591ecc6b8c6ab9d899f4d30), [`da87b0a`](https://github.com/mastra-ai/mastra/commit/da87b0a1629d5ffc980b434f70fe60f9445ddb1c), [`cc9b380`](https://github.com/mastra-ai/mastra/commit/cc9b380cba1e0416c6e3ed7647f76e292474e695), [`182f097`](https://github.com/mastra-ai/mastra/commit/182f09745783aa83e42131307085ecf913cfbc38), [`d9da0da`](https://github.com/mastra-ai/mastra/commit/d9da0da5e5d36023469b527f7be55c017634b186), [`097f002`](https://github.com/mastra-ai/mastra/commit/097f00297b0d46aa304eba3a7203248e21d1a70a), [`958bdc9`](https://github.com/mastra-ai/mastra/commit/958bdc942aa78f00c9ec25f8adfb8e14a0dd4fd9), [`4659a11`](https://github.com/mastra-ai/mastra/commit/4659a1130842f07364d4778aa360f3cb7877679d), [`aa00f41`](https://github.com/mastra-ai/mastra/commit/aa00f41855e8d6802546f613ffec1669e03409fc), [`5227c95`](https://github.com/mastra-ai/mastra/commit/5227c95d54d0b4846220530450063f259797b587), [`226823f`](https://github.com/mastra-ai/mastra/commit/226823ffde55e2dcce01f2111a6a35be3f2c9b85), [`7236b47`](https://github.com/mastra-ai/mastra/commit/7236b472bca9bbc9dddba53f683b15c271350183), [`878e0e2`](https://github.com/mastra-ai/mastra/commit/878e0e2f5adf9669158c7a8a8d67cd8809633c24), [`67a6b30`](https://github.com/mastra-ai/mastra/commit/67a6b30769f041244f75f9093a181cdf38e1f2e7), [`4659a11`](https://github.com/mastra-ai/mastra/commit/4659a1130842f07364d4778aa360f3cb7877679d), [`7236b47`](https://github.com/mastra-ai/mastra/commit/7236b472bca9bbc9dddba53f683b15c271350183)]:
+  - @mastra/core@1.77.0
+  - @mastra/client-js@1.54.0
+  - @mastra/ai-sdk@1.11.1
+  - @mastra/memory@1.37.1
+  - @mastra/react@1.10.0
+
+## 63.0.0-alpha.4
+
+### Patch Changes
+
+- Fixed `PageHeader` shifting between pages. The title row is now 32px tall with the title in the same position whether or not the header has an icon or `PageHeader.Action`, so moving between pages no longer moves the title. `PageLayout` also reserves the scrollbar gutter in its scroll area, so a narrow, centered column no longer shifts sideways when a page starts to scroll. ([#26915](https://github.com/mastra-ai/mastra/pull/26915))
+
+- The inline `DataPanel` now uses the same rounded corners as the app frame, so it lines up with the main card when it sits next to it. The drawer keeps its current corners. ([#26887](https://github.com/mastra-ai/mastra/pull/26887))
+
+- Updated dependencies [[`f8c0ce2`](https://github.com/mastra-ai/mastra/commit/f8c0ce2646427327b63c05d2eb09e76a3b04133e), [`4df792b`](https://github.com/mastra-ai/mastra/commit/4df792b5b9146b5a2d6726193ee82d9db31180a4), [`0017956`](https://github.com/mastra-ai/mastra/commit/001795671cf329997bee74541f5de9056e6b1cec), [`36fc7ea`](https://github.com/mastra-ai/mastra/commit/36fc7eabf79ca70bd489e4022eb39a3d8382ace5), [`53d95e0`](https://github.com/mastra-ai/mastra/commit/53d95e0d2259a66a7ceaa3cafeb415446507f54c), [`2ec9c07`](https://github.com/mastra-ai/mastra/commit/2ec9c07eddb142c965f1201f5c6e5dbb288405f9), [`380e9f5`](https://github.com/mastra-ai/mastra/commit/380e9f57ea9ba7c37950b989d145b70c03a09a6c), [`4029a96`](https://github.com/mastra-ai/mastra/commit/4029a964848512399f27bca283915d49fd106717), [`ca92c02`](https://github.com/mastra-ai/mastra/commit/ca92c02696427baad81dd7a61b049ef37c332452), [`d9da0da`](https://github.com/mastra-ai/mastra/commit/d9da0da5e5d36023469b527f7be55c017634b186), [`67a6b30`](https://github.com/mastra-ai/mastra/commit/67a6b30769f041244f75f9093a181cdf38e1f2e7)]:
+  - @mastra/core@1.77.0-alpha.4
+  - @mastra/client-js@1.54.0-alpha.4
+  - @mastra/memory@1.37.1-alpha.3
+  - @mastra/react@1.10.0-alpha.4
+  - @mastra/ai-sdk@1.11.1-alpha.0
+
+## 63.0.0-alpha.3
+
+### Minor Changes
+
+- Added `variant="inset"` to `Table` from `@mastra/playground-ui/components/Table`. It gives a native table the same raised look as `DataList`, with rows that grow with their content and cells that can hold any component. Existing default and small tables render exactly as before. ([#26625](https://github.com/mastra-ai/mastra/pull/26625))
+
+  The inset variant comes with composable parts:
+
+  - `Table.RowLink` and `Table.RowButton` make a whole row a link or a button, and other controls in the row keep their own clicks.
+  - `Table.SortButton` turns a header into a sort control with a direction arrow.
+  - `Table.Pagination` adds numbered pages below the table; the page and rows stay in your code.
+  - `columnDividers` draws lines between columns.
+
+  ```tsx
+  import { Table } from '@mastra/playground-ui/components/Table';
+
+  <Table variant="inset" aria-label="Credit history">
+    <Table.Header>
+      <Table.Row>
+        <Table.Head>Type</Table.Head>
+        <Table.Head align="end">Balance</Table.Head>
+      </Table.Row>
+    </Table.Header>
+    <Table.Body>
+      <Table.Row>
+        <Table.Cell>
+          <Table.RowLink href="/credits/1">Credit grant</Table.RowLink>
+        </Table.Cell>
+        <Table.Cell align="end">$6.95</Table.Cell>
+      </Table.Row>
+    </Table.Body>
+  </Table>;
+  ```
+
+- Added `Pagination` at `@mastra/playground-ui/components/Pagination`: page navigation built from parts (`Pagination`, `PaginationContent`, `PaginationItem`, `PaginationLink`, `PaginationPrevious`, `PaginationNext`, `PaginationEllipsis`), plus `getPaginationRange` for choosing which page numbers to show. The current page slides between pages, and links can render as anchors or router links. ([#26625](https://github.com/mastra-ai/mastra/pull/26625))
+
+  ```tsx
+  import {
+    Pagination,
+    PaginationContent,
+    PaginationItem,
+    PaginationLink,
+  } from '@mastra/playground-ui/components/Pagination';
+
+  <Pagination>
+    <PaginationContent>
+      <PaginationItem>
+        <PaginationLink isActive>1</PaginationLink>
+      </PaginationItem>
+      <PaginationItem>
+        <PaginationLink onClick={() => setPage(1)}>2</PaginationLink>
+      </PaginationItem>
+    </PaginationContent>
+  </Pagination>;
+  ```
+
+- Added a `size` prop to `ProductAvatar` and made it work inside `Avatar.Group`. In a group it takes the group's size and gets the same overlap ring as other avatars. Standalone `ProductAvatar` keeps its current size. ([#26889](https://github.com/mastra-ai/mastra/pull/26889))
+
+  ```tsx
+  <Avatar.Group size="md">
+    <ProductAvatar product="studio" />
+    <ProductAvatar product="observability" />
+    <Avatar.GroupCount>+3</Avatar.GroupCount>
+  </Avatar.Group>
+  ```
+
+- Added an `inline` variant to `DataPanel` that renders the panel in the normal page flow instead of a modal side drawer. Use it to embed detail views directly in a layout (no backdrop, focus trap, or dismissal). The parent controls mounting and size. ([#26867](https://github.com/mastra-ai/mastra/pull/26867))
+
+  ```tsx
+  <DataPanel variant="inline" title="Span details">
+    <DataPanel.Header>
+      <DataPanel.Heading>Span details</DataPanel.Heading>
+    </DataPanel.Header>
+    <DataPanel.Content>…</DataPanel.Content>
+  </DataPanel>
+  ```
+
+### Patch Changes
+
+- Added a "Go to dataset" button to the toast shown after saving a trace, span or score as a dataset item. It opens the new item in its dataset. ([#26866](https://github.com/mastra-ai/mastra/pull/26866))
+
+- Improved the main content layout on narrow screens. Where the sidebar collapses into the mobile header, the content is now flat and runs edge to edge under the header instead of sitting in an inset, rounded card. Wider screens with the sidebar beside the content are unchanged. ([#26858](https://github.com/mastra-ai/mastra/pull/26858))
+
+- Fixed DataPanel headers on narrow screens. Header actions now wrap onto a second row instead of being pushed out of view, so every action, including the close button, stays reachable. ([#26868](https://github.com/mastra-ai/mastra/pull/26868))
+
+- Fixed the `link` button variant so it is always a link. `Button variant="link"` now renders an `<a>` with an href even when no link element is passed, instead of a button that only looked like one. A disabled link keeps its href and is marked `aria-disabled`. ([#26817](https://github.com/mastra-ai/mastra/pull/26817))
+
+- Trace Intelligence now labels its list by Agent instead of Entity. Agents whose traces are still being analyzed show an "Analyzing" status and can no longer be clicked, since they have no signals to open yet. Hovering or focusing the status shows how many traces have been collected. ([#26812](https://github.com/mastra-ai/mastra/pull/26812))
+
+- security: bump better-auth to ^1.7.7 and @modelcontextprotocol/sdk to ^1.32.1 for Vanta/Aikido findings (AIKIDO-2026-373183, AIKIDO-2026-261025, AIKIDO-2026-365378/156139/344432). ([#26773](https://github.com/mastra-ai/mastra/pull/26773))
+
+- Updated dependencies [[`54e9dc3`](https://github.com/mastra-ai/mastra/commit/54e9dc3ed0615ee84a6526395a9fefe17320fe7e), [`59164cb`](https://github.com/mastra-ai/mastra/commit/59164cb7f8b298e28e13305b0273ed2ef7f1d9e1), [`59164cb`](https://github.com/mastra-ai/mastra/commit/59164cb7f8b298e28e13305b0273ed2ef7f1d9e1), [`aa00f41`](https://github.com/mastra-ai/mastra/commit/aa00f41855e8d6802546f613ffec1669e03409fc), [`3b6a49e`](https://github.com/mastra-ai/mastra/commit/3b6a49ea9e8de3b6bec3cf5145892ef7a47395ad), [`8dc4d65`](https://github.com/mastra-ai/mastra/commit/8dc4d65b34aad280c4f6ab265162c4846face7e3), [`aa00f41`](https://github.com/mastra-ai/mastra/commit/aa00f41855e8d6802546f613ffec1669e03409fc), [`226823f`](https://github.com/mastra-ai/mastra/commit/226823ffde55e2dcce01f2111a6a35be3f2c9b85)]:
+  - @mastra/core@1.77.0-alpha.3
+  - @mastra/ai-sdk@1.11.1-alpha.0
+  - @mastra/react@1.10.0-alpha.3
+  - @mastra/client-js@1.54.0-alpha.3
+
+## 63.0.0-alpha.2
+
+### Minor Changes
+
+- Added composable parts to `Avatar`: `Avatar.Image`, `Avatar.Fallback`, `Avatar.Badge`, `Avatar.Group`, and `Avatar.GroupCount`. Added `xs` and `control` sizes. Existing `<Avatar name="…" />` usage is unchanged. ([#26619](https://github.com/mastra-ai/mastra/pull/26619))
+
+  ```tsx
+  import { Avatar } from '@mastra/playground-ui/components/Avatar';
+
+  <Avatar size="md">
+    <Avatar.Image src={user.avatarUrl} alt={user.name} />
+    <Avatar.Fallback>AM</Avatar.Fallback>
+    <Avatar.Badge>
+      <Avatar name={organization.name} src={organization.logo} />
+    </Avatar.Badge>
+  </Avatar>
+
+  <Avatar.Group size="sm">
+    <Avatar name="Jane Smith" src={jane} />
+    <Avatar name="Sam Lee" src={sam} />
+    <Avatar.GroupCount>+3</Avatar.GroupCount>
+  </Avatar.Group>
+  ```
+
+  `Avatar.Badge` takes a `tone` (`neutral`, `success`, `warning`, `destructive`, `info`) for a status dot, or any child such as an icon or a small organization avatar. Avatars inside a group or badge take their size from it.
+
+### Patch Changes
+
+- Updated dependencies [[`2a1bb80`](https://github.com/mastra-ai/mastra/commit/2a1bb80305bca1859504287e1a09f43c8a014330), [`519e97f`](https://github.com/mastra-ai/mastra/commit/519e97f624a15362fec7b143dea4eabcff556712), [`aea91e7`](https://github.com/mastra-ai/mastra/commit/aea91e7f3a4fb066bfda96dca670d7d2a766d770), [`da87b0a`](https://github.com/mastra-ai/mastra/commit/da87b0a1629d5ffc980b434f70fe60f9445ddb1c), [`182f097`](https://github.com/mastra-ai/mastra/commit/182f09745783aa83e42131307085ecf913cfbc38), [`7236b47`](https://github.com/mastra-ai/mastra/commit/7236b472bca9bbc9dddba53f683b15c271350183), [`7236b47`](https://github.com/mastra-ai/mastra/commit/7236b472bca9bbc9dddba53f683b15c271350183)]:
+  - @mastra/core@1.77.0-alpha.2
+  - @mastra/memory@1.37.1-alpha.2
+  - @mastra/client-js@1.54.0-alpha.2
+  - @mastra/ai-sdk@1.11.0
+  - @mastra/react@1.10.0-alpha.2
+
 ## 63.0.0-alpha.1
 
 ### Minor Changes

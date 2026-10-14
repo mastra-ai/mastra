@@ -14,6 +14,10 @@ Open `http://localhost:5173`. To restart one side without losing the other, star
 
 Keep policy, validation, and persistence in [`@mastra/factory`](../factory/README.md), not in React.
 
+## Onboarding
+
+The first-Factory wizard keeps repository and model choices in a session-scoped draft (never credentials) until the final review. Confirming creates the Factory, links the repository, and saves its default model; a failed save keeps the pending Factory so retrying resumes it instead of creating another. Integration and provider connections are authorized as soon as they are connected. Members without shared credentials pick a personal model, which becomes both the Factory default and their own default.
+
 ## Board activity
 
 Cards on the **Work** and **Review** boards show the last person recorded in the work item's audit history. Hover over the person's name or profile image to open the recent event timeline for that card.
@@ -29,6 +33,12 @@ Factory stores actor names and profile images in audit event metadata when event
 Read and archive are per-user. Retry, reconciliation, approval, and dismissal update canonical decision state for every member. A later terminal failure increments the decision's occurrence and reappears unread without allowing a delayed receipt from the previous occurrence to hide it.
 
 Successful run completions continue to use the live Ready indicator and completion sound on sidebar session rows. Failure sounds establish a silent initial baseline and use a cross-tab lock so one occurrence plays once.
+
+## User menu and settings
+
+The sidebar footer shows your profile picture (or an initial), name, and email. It opens a user menu with shortcuts to **My account**, **Preferences**, **Your models**, **Your memory**, and **Connections**. **Settings** opens the shared Factory model settings, the theme control switches between system, light, and dark appearance, and **Log out** ends the current session. Deployments without authentication show a **Settings** menu without account or logout actions.
+
+Settings pages keep their existing URLs and searchable navigation. **Back to app** returns to the page where settings was opened, including its filters, even after switching sections through the user menu.
 
 ## Tests
 

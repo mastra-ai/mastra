@@ -3476,6 +3476,12 @@ type Shared_Type_61 = {
         [key: string]: unknown;
       } | null)
     | undefined;
+  /** Short text preview of the span input */
+  inputPreview?: (string | null) | undefined;
+  /** Short text preview of the span output */
+  outputPreview?: (string | null) | undefined;
+  /** Short text preview of the span error */
+  errorPreview?: (string | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
@@ -3512,6 +3518,8 @@ type Shared_Type_62 = {
       } | null)
     | undefined;
   inputPreview?: (string | null) | undefined;
+  outputPreview?: (string | null) | undefined;
+  errorPreview?: (string | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
@@ -3583,6 +3591,12 @@ type Shared_Type_63 = {
         [key: string]: unknown;
       } | null)
     | undefined;
+  /** Short text preview of the span input */
+  inputPreview?: (string | null) | undefined;
+  /** Short text preview of the span output */
+  outputPreview?: (string | null) | undefined;
+  /** Short text preview of the span error */
+  errorPreview?: (string | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
@@ -3600,6 +3614,8 @@ type Shared_Type_64 = {
     [key: string]: unknown;
   } | null;
   inputPreview: string | null;
+  outputPreview: string | null;
+  errorPreview: string | null;
   threadId: string | null;
   resourceId: string | null;
   startedAt: string;
@@ -10705,6 +10721,8 @@ export type PostObservabilitySpansQuery_Response = {
     inputTruncated: boolean;
     outputPreview: string | null;
     outputTruncated: boolean;
+    errorPreview: string | null;
+    errorTruncated: boolean;
     cost:
       | {
           state: 'available';
@@ -23236,14 +23254,8 @@ export type PostAgentControllerControllerIdSessionsResourceIdSteer_PathParams =
 export type PostAgentControllerControllerIdSessionsResourceIdSteer_QueryParams =
   PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
-export type PostAgentControllerControllerIdSessionsResourceIdSteer_Body = {
-  message: string;
-  requestContext?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-};
+export type PostAgentControllerControllerIdSessionsResourceIdSteer_Body =
+  PostAgentControllerControllerIdSessionsResourceIdMessages_Body;
 
 export type PostAgentControllerControllerIdSessionsResourceIdSteer_Response =
   DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response;
@@ -23283,7 +23295,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_QueryParam
   PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_Body =
-  PostAgentControllerControllerIdSessionsResourceIdSteer_Body;
+  PostAgentControllerControllerIdSessionsResourceIdMessages_Body;
 
 export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_Response =
   DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response;

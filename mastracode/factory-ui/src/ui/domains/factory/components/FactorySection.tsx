@@ -1,6 +1,6 @@
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Brain, GitPullRequest, House, Logs, ShieldCheck, SquareKanban, Timeline } from 'lucide-react';
-import type { ComponentType, ReactNode } from 'react';
+import type { ComponentType } from 'react';
 import { NavLink, useLocation, useParams, useResolvedPath } from 'react-router';
 
 import { useServerFeatures } from '../../../../hooks/useServerFeatures';
@@ -9,7 +9,7 @@ import { orderedBoards } from '../boardCatalog';
 import { rememberedBoardPath } from '../services/boardViews';
 import { useOverlays } from '../../../lib/overlays';
 
-export function FactorySection({ children }: { children?: ReactNode }) {
+export function FactorySection() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const features = useServerFeatures();
   const catalog = useBoardCatalog(factoryId);
@@ -48,7 +48,6 @@ export function FactorySection({ children }: { children?: ReactNode }) {
           )}
         </Sidebar.NavList>
       </section>
-      {children}
     </nav>
   );
 }

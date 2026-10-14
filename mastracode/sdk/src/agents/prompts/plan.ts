@@ -5,12 +5,15 @@ import { getLocalPlansRelativeDir } from '../../utils/plans.js';
 
 interface PlanPromptContext {
   state?: Record<string, unknown>;
+  /** False when the host disabled or denied `submit_plan`; defaults to available. */
+  submitPlanAvailable?: boolean;
 }
 
 export function planModePrompt(ctx: PlanPromptContext): string {
   const factoryProjectId = typeof ctx.state?.factoryProjectId === 'string' ? ctx.state.factoryProjectId : undefined;
   const plansDir = getLocalPlansRelativeDir({ factoryProjectId });
   const examplePath = `${plansDir}/add-dark-mode.md`;
+  const submitPlanAvailable = ctx.submitPlanAvailable !== false;
 
   return `
 # Plan Mode — READ-ONLY (except plan files)
@@ -38,15 +41,7 @@ Before writing any plan, build a mental model of the codebase:
 4. Trace data flow: where does input come from, how is it transformed, where does it go?
 5. Identify existing patterns the codebase uses (naming, structure, error handling, testing).
 
-## Goal-Ready Plans
-
-The submit_plan approval UI can let the user approve the plan normally or start it as a persistent goal. Write plans so they can be carried out as a goal if the user chooses that option:
-- Make the desired outcome explicit and verifiable.
-- Break work into ordered, actionable steps that can be executed autonomously.
-- Include constraints, risks, blockers, and decision points that may require user input.
-- Include concrete verification criteria so the goal judge can tell when the work is done.
-
-## Your Plan Output
+${submitPlanAvailable ? GOAL_READY_SECTION : ''}## Your Plan Output
 
 Produce a clear, step-by-step plan with this structure:
 
@@ -73,13 +68,28 @@ For each step:
 
 Write each plan to its own markdown file under \`${plansDir}/\` (e.g. \`${examplePath}\`). Start the file with a \`# Title\` heading describing the plan.
 
-1. **First submission**: Write your plan to a file under \`${plansDir}/\` using \`write_file\`, then call \`submit_plan\` with the \`path\` to that file.
+1. **${submitPlanAvailable ? 'First submission' : 'Writing'}**: Write your plan to a file under \`${plansDir}/\` using \`write_file\`${submitPlanAvailable ? ', then call \`submit_plan\` with the \`path\` to that file' : ''}.
 2. **Reading**: Use \`view\` to read a plan file.
 3. **Editing**: Use \`string_replace_lsp\` for targeted edits to specific sections.
 
 **Reuse the same file while you keep iterating on the same plan.** Only create a NEW file when you're starting a genuinely different plan — that keeps each plan available to look back at and keeps revision diffs meaningful.
 
-## IMMEDIATE ACTION: Write plan file, then call submit_plan
+${submitPlanAvailable ? submitPlanSection(plansDir, examplePath) : planFileOnlySection(plansDir)}Do NOT start implementing until the plan is approved.
+`;
+}
+
+const GOAL_READY_SECTION = `## Goal-Ready Plans
+
+The submit_plan approval UI can let the user approve the plan normally or start it as a persistent goal. Write plans so they can be carried out as a goal if the user chooses that option:
+- Make the desired outcome explicit and verifiable.
+- Break work into ordered, actionable steps that can be executed autonomously.
+- Include constraints, risks, blockers, and decision points that may require user input.
+- Include concrete verification criteria so the goal judge can tell when the work is done.
+
+`;
+
+function submitPlanSection(plansDir: string, examplePath: string): string {
+  return `## IMMEDIATE ACTION: Write plan file, then call submit_plan
 
 As soon as your plan is complete:
 1. Write it to a file under \`${plansDir}/\` using \`write_file\`
@@ -108,6 +118,19 @@ If the user requests changes, you will be stopped immediately. Wait for their ne
 
 The user will see a diff of what changed between the previous and revised plan. Use \`string_replace_lsp\` for targeted edits so the diff is clear and meaningful — do NOT rewrite the entire plan from scratch for small changes, and do NOT move the plan to a new file for a revision.
 
-Do NOT start implementing until the plan is approved.
+`;
+}
+
+function planFileOnlySection(plansDir: string): string {
+  return `## When the plan is complete
+
+Plan approval is not available in this session — there is no \`submit_plan\` tool. As soon as your plan is complete:
+1. Write it to a file under \`${plansDir}/\` using \`write_file\`
+2. Follow any host or session instructions for handing the plan off; otherwise reply with a brief summary and the plan file path
+
+**CRITICAL:** Do NOT generate a long text response describing your plan. The plan content belongs in the plan file.
+
+When you receive revision feedback, edit the SAME plan file with \`string_replace_lsp\` rather than rewriting it or moving it to a new file.
+
 `;
 }

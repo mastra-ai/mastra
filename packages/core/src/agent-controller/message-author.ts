@@ -1,9 +1,9 @@
 import type { MastraProviderMetadata } from '../agent/message-list/state/types';
+import type { MessageAuthor } from '../agent/signals';
 import { MASTRA_MESSAGE_AUTHOR_KEY } from '../request-context';
 import type { RequestContext } from '../request-context';
 
-/** Who sent a user message, as stamped by the host that authenticated them. */
-export type MessageAuthor = { id: string; name?: string; avatarUrl?: string };
+export type { MessageAuthor } from '../agent/signals';
 
 export function readMessageAuthor(requestContext?: RequestContext): MessageAuthor | undefined {
   const value = requestContext?.get(MASTRA_MESSAGE_AUTHOR_KEY);

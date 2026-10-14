@@ -215,4 +215,20 @@ describe('RerunExperimentButton', () => {
     renderButton({ ...original, targetType: 'processor', targetId: 'proc-1' });
     expect(screen.queryByRole('button', { name: /rerun/i })).toBeNull();
   });
+
+  describe('when the run is still in progress', () => {
+    it('disables Rerun until the run finishes', () => {
+      renderButton({ ...original, status: 'running', completedAt: null });
+
+      expect(screen.getByRole('button', { name: /rerun/i }).hasAttribute('disabled')).toBe(true);
+    });
+  });
+
+  describe('when the run is queued', () => {
+    it('disables Rerun until the run finishes', () => {
+      renderButton({ ...original, status: 'pending', completedAt: null });
+
+      expect(screen.getByRole('button', { name: /rerun/i }).hasAttribute('disabled')).toBe(true);
+    });
+  });
 });
