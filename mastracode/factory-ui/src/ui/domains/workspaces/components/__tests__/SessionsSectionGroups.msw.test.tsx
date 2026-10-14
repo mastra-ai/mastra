@@ -245,12 +245,26 @@ describe('Sessions sidebar groups', () => {
     await user.keyboard('{ArrowDown}');
     expect(screen.getByRole('menuitemcheckbox', { name: 'Work' })).toHaveFocus();
     await user.keyboard('{Alt>}{ArrowDown}{/Alt}');
-    await waitFor(() => expect(screen.getByRole('menuitemcheckbox', { name: 'Work' })).toHaveFocus());
+    expect(screen.getByRole('menuitemcheckbox', { name: 'Work' })).toHaveFocus();
     await user.keyboard('{Alt>}{ArrowDown}{/Alt}');
-    await waitFor(() => expect(screen.getByRole('menuitemcheckbox', { name: 'Work' })).toHaveFocus());
+    expect(screen.getByRole('menuitemcheckbox', { name: 'Work' })).toHaveFocus();
     await closeSessionProperties(user);
 
     expect(groupRegions()).toEqual(['Review sessions', 'Release Preview sessions', 'Work sessions', 'User sessions']);
+  });
+
+  it('forgets the group order once the groups are moved back', async () => {
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByRole('button', { name: 'Release old' });
+
+    await openSessionProperty(user, 'Group');
+    await user.keyboard('{ArrowDown}');
+    await user.keyboard('{Alt>}{ArrowDown}{/Alt}');
+    await user.keyboard('{Alt>}{ArrowUp}{/Alt}');
+    await closeSessionProperties(user);
+
+    expect(sessionPropertiesTrigger(0)).toBeInTheDocument();
   });
 
   it("never lists a custom board's terminal-phase session as Idle while the board catalog loads", async () => {

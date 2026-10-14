@@ -9,7 +9,7 @@ import type { KeyboardEvent } from 'react';
 import { SESSION_GROUP_BY_LABELS, SESSION_GROUP_BY_OPTIONS } from '../services/sessionGroups';
 import type { SessionGroupBy, SessionGroupHeading } from '../services/sessionGroups';
 
-const MOVE_STEP_BY_KEY: Partial<Record<string, -1 | 1>> = { ArrowUp: -1, ArrowDown: 1 };
+const MOVE_STEP_BY_KEY: Record<string, -1 | 1> = { ArrowUp: -1, ArrowDown: 1 };
 
 const DRAG_HANDLE_CLASS = 'text-muted-foreground flex size-5 shrink-0 cursor-grab items-center justify-center';
 
@@ -46,17 +46,18 @@ export function SessionGroupMenu({
   onVisibilityChange: (key: string, visible: boolean) => void;
   onOrderChange: (keys: string[]) => void;
 }) {
-  const keys = groups.map(group => group.key);
+  const groupKeys = groups.map(group => group.key);
+  const isVisible = (key: string) => !hiddenKeys.includes(key);
 
   const moveGroupWithKeyboard = (event: KeyboardEvent, key: string) => {
     const step = MOVE_STEP_BY_KEY[event.key];
     if (!event.altKey || step === undefined) return;
     event.preventDefault();
     event.stopPropagation();
-    const from = keys.indexOf(key);
+    const from = groupKeys.indexOf(key);
     const to = from + step;
-    if (to < 0 || to >= keys.length) return;
-    onOrderChange(keys.toSpliced(from, 1).toSpliced(to, 0, key));
+    if (to < 0 || to >= groupKeys.length) return;
+    onOrderChange(groupKeys.toSpliced(from, 1).toSpliced(to, 0, key));
   };
 
   return (
@@ -77,10 +78,8 @@ export function SessionGroupMenu({
             <DropdownMenu.Separator />
             <ContentBlocks
               items={groups}
-              onChange={next => onOrderChange(next.map(group => group.key))}
-              renderDragPreview={group => (
-                <GroupDragPreview label={group.label} visible={!hiddenKeys.includes(group.key)} />
-              )}
+              onChange={reordered => onOrderChange(reordered.map(group => group.key))}
+              renderDragPreview={group => <GroupDragPreview label={group.label} visible={isVisible(group.key)} />}
             >
               {groups.map((group, index) => (
                 <ContentBlock key={group.key} draggableId={group.key} index={index}>
@@ -88,7 +87,8 @@ export function SessionGroupMenu({
                     <div className="flex items-center">
                       <span
                         {...dragHandleProps}
-                        aria-label={`Drag ${group.label}`}
+                        tabIndex={-1}
+                        aria-hidden
                         className={DRAG_HANDLE_CLASS}
                         onClick={event => event.stopPropagation()}
                         onPointerDown={event => event.stopPropagation()}
@@ -99,7 +99,7 @@ export function SessionGroupMenu({
                         className="flex-1"
                         aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
                         onKeyDown={event => moveGroupWithKeyboard(event, group.key)}
-                        checked={!hiddenKeys.includes(group.key)}
+                        checked={isVisible(group.key)}
                         onCheckedChange={visible => onVisibilityChange(group.key, visible)}
                       >
                         <span>{group.label}</span>
