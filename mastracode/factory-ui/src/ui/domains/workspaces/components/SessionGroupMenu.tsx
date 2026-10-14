@@ -5,7 +5,6 @@ import { overlaySurfaceStyle } from '@mastra/playground-ui/primitives/raised-sur
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check, GripVertical, LayoutGrid } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
-import { useRef } from 'react';
 
 import { SESSION_GROUP_BY_LABELS, SESSION_GROUP_BY_OPTIONS } from '../services/sessionGroups';
 import type { SessionGroupBy, SessionGroupHeading } from '../services/sessionGroups';
@@ -47,7 +46,6 @@ export function SessionGroupMenu({
   onVisibilityChange: (key: string, visible: boolean) => void;
   onOrderChange: (keys: string[]) => void;
 }) {
-  const groupItems = useRef(new Map<string, HTMLElement>());
   const keys = groups.map(group => group.key);
 
   const moveGroupWithKeyboard = (event: KeyboardEvent, key: string) => {
@@ -59,7 +57,6 @@ export function SessionGroupMenu({
     const to = from + step;
     if (to < 0 || to >= keys.length) return;
     onOrderChange(keys.toSpliced(from, 1).toSpliced(to, 0, key));
-    requestAnimationFrame(() => groupItems.current.get(key)?.focus());
   };
 
   return (
@@ -79,7 +76,7 @@ export function SessionGroupMenu({
           <>
             <DropdownMenu.Separator />
             <ContentBlocks
-              items={[...groups]}
+              items={groups}
               onChange={next => onOrderChange(next.map(group => group.key))}
               renderDragPreview={group => (
                 <GroupDragPreview label={group.label} visible={!hiddenKeys.includes(group.key)} />
@@ -99,10 +96,6 @@ export function SessionGroupMenu({
                         <GripVertical size={14} aria-hidden />
                       </span>
                       <DropdownMenu.CheckboxItem
-                        ref={element => {
-                          if (element) groupItems.current.set(group.key, element);
-                          else groupItems.current.delete(group.key);
-                        }}
                         className="flex-1"
                         aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
                         onKeyDown={event => moveGroupWithKeyboard(event, group.key)}
