@@ -41,6 +41,7 @@ import {
 import { coreFeatures } from '@mastra/core/features';
 import {
   createKnowledgeUlid,
+  assertKnowledgeSourceProbeLimit,
   isKnowledgeScopeVisible,
   KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
   KNOWLEDGE_ACTIVITY_SCHEMA,
@@ -90,6 +91,7 @@ import type {
   KnowledgeStructureReconcileResult,
   KnowledgeSemanticOperation,
   KnowledgeSemanticOutboxEntry,
+  ListKnowledgeSourcesWithVisibleRecordsInput,
   QueryKnowledgeRecordsBySourceInput,
   QueryKnowledgeRecordsInput,
   QueryKnowledgeRecordsOutput,
@@ -1025,6 +1027,18 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       records: records.slice(0, limit),
       nextCursor: records.length > limit ? records[limit - 1]?.id : undefined,
     };
+  }
+
+  async listSourcesWithVisibleRecords(input: ListKnowledgeSourcesWithVisibleRecordsInput): Promise<string[]> {
+    assertKnowledgeSourceProbeLimit(input.sources);
+    const sources = [...new Set(input.sources)];
+    if (sources.length === 0) return [];
+    const visibleRecord = visibleRecordSql(canonicalizeKnowledgeScopeIds(input.scopeIds));
+    const result = await this.#client.execute({
+      sql: `SELECT DISTINCT r.source FROM "${TABLE_KNOWLEDGE_RECORDS}" r JOIN "${TABLE_KNOWLEDGE_NODES}" p ON p.id=r.nodeId WHERE r.deletedAt IS NULL AND r.source IN (${sources.map(() => '?').join(',')}) AND ${visibleRecord.sql}`,
+      args: [...sources, ...visibleRecord.args],
+    });
+    return result.rows.map(row => String(row.source));
   }
 
   async deleteRecord(input: { id: string; deletedBy: string; importRunId?: string }): Promise<KnowledgeRecord> {
