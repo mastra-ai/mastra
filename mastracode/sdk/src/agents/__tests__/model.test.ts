@@ -635,6 +635,43 @@ describe('resolveModel', () => {
         authStorage: scopedAuthStorage(),
       });
     });
+
+    it.each([
+      { modeless: false, expected: 'high' },
+      { modeless: true, expected: 'low' },
+    ])(
+      'given a Build session without an override, when modeless is $modeless, then dynamic resolution thinks at $expected',
+      ({ modeless, expected }) => {
+        mockAuthStorageInstance.get.mockReturnValue({
+          type: 'oauth',
+          access: 'openai-oauth-access-token',
+          refresh: 'openai-oauth-refresh-token',
+          expires: Date.now() + 60_000,
+        });
+        mockLoadSettings.mockImplementation(
+          () =>
+            ({
+              customProviders: [],
+              memoryGateway: {},
+              models: { modeThinkingDefaults: { build: 'high' } },
+              preferences: { thinkingLevel: 'low' },
+            }) as any,
+        );
+        const values = new Map<string, unknown>();
+        const requestContext = {
+          get: (key: string) => values.get(key),
+          set: (key: string, value: unknown) => values.set(key, value),
+        } as any;
+        requestContext.set('controller', { session: { modelId: 'openai/gpt-5.2', modeId: 'build' }, state: {} });
+
+        getDynamicModel({ requestContext }, undefined, { modeless });
+
+        expect(openaiCodexProvider).toHaveBeenCalledWith(
+          'gpt-5.2-codex',
+          expect.objectContaining({ thinkingLevel: expected }),
+        );
+      },
+    );
   });
 
   describe('moonshotai/* models', () => {
@@ -1290,6 +1327,14 @@ describe('resolveRequestThinkingLevel', () => {
     const level = resolveRequestThinkingLevel({ state: {}, session: { modeId: 'plan' } } as any);
 
     expect(level).toBe('medium');
+  });
+
+  it('given a context without a session mode, when the settings have mode defaults, then the global default applies', () => {
+    mockLoadSettings.mockImplementation(() =>
+      settingsWithThinking({ modeThinkingDefaults: { build: 'high' }, thinkingLevel: 'low' }),
+    );
+
+    expect(resolveRequestThinkingLevel({ state: {} })).toBe('low');
   });
 
   it('treats a null session value as a cleared override', () => {
