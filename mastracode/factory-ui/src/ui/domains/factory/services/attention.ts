@@ -193,7 +193,11 @@ export function fetchFactoryAttention(
   return requestJson<FactoryAttentionResponse>(
     `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/attention?${query}`,
     { signal: options.signal },
-  );
+  ).then(page => ({
+    ...page,
+    // A server can still report kinds this client no longer renders; drop them so views never see them.
+    items: page.items.filter(item => Object.hasOwn(ATTENTION_GROUP_OF_KIND, item.kind)),
+  }));
 }
 
 export function updateFactoryAttentionReceipt(

@@ -436,4 +436,41 @@ describe('AttentionPage', () => {
     expect(await screen.findByText('Fix login bug')).toBeVisible();
     expect(screen.queryByText('Retired kind row')).not.toBeInTheDocument();
   });
+
+  it('shows the empty state when every open item is of a kind this client does not know', async () => {
+    const retiredKind = {
+      key: `factory:${FACTORY_ID}:attention:retired-kind:finding-1:0`,
+      kind: 'retired-kind',
+      occurrence: 0,
+      workItemId: null,
+      title: 'Retired kind row',
+      detail: 'A server older than this client still reports it.',
+      occurredAt: '2026-08-22T10:00:00.000Z',
+      read: false,
+      archived: false,
+      target: { kind: 'rules' },
+    };
+    const retiredSummary = {
+      open: 1,
+      unread: 1,
+      latest: { key: retiredKind.key, at: retiredKind.occurredAt, unread: true },
+    };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, () =>
+        HttpResponse.json({
+          items: [retiredKind],
+          kinds: { ...attentionKindSummaries([]), 'retired-kind': retiredSummary },
+          hasMore: false,
+        }),
+      ),
+    );
+    renderWithProviders(
+      <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/attention`]}>
+        <AttentionContent factoryId={FACTORY_ID} />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('No open attention items.')).toBeVisible();
+    expect(screen.queryByText('Retired kind row')).not.toBeInTheDocument();
+  });
 });
