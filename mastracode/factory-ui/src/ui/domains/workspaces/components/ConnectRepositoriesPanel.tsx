@@ -59,7 +59,11 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
     : linked;
 
   const error =
-    reposQuery.error ?? refreshRepos.error ?? gitlabProjectsQuery.error ?? linkRepository.error ?? unlinkRepository.error;
+    reposQuery.error ??
+    refreshRepos.error ??
+    gitlabProjectsQuery.error ??
+    linkRepository.error ??
+    unlinkRepository.error;
   const busyRepoId = linkRepository.isPending ? linkRepository.variables?.repo.id : null;
   const unlinkingId = unlinkRepository.isPending ? unlinkRepository.variables?.projectRepositoryId : null;
 
@@ -92,7 +96,13 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
         <>
           <div className="flex items-center gap-2 px-4 py-2">
             <div className="min-w-0 flex-1">
-              <ListSearch label="Search repositories" placeholder="Search…" size="sm" value={query} onSearch={setQuery} />
+              <ListSearch
+                label="Search repositories"
+                placeholder="Search…"
+                size="sm"
+                value={query}
+                onSearch={setQuery}
+              />
             </div>
             {githubConnected && (
               <Button
@@ -102,7 +112,10 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
                 disabled={refreshRepos.isPending}
                 onClick={() => refreshRepos.mutate()}
               >
-                <RefreshCw className={refreshRepos.isPending ? 'size-3.5 animate-spin' : 'size-3.5'} aria-hidden="true" />
+                <RefreshCw
+                  className={refreshRepos.isPending ? 'size-3.5 animate-spin' : 'size-3.5'}
+                  aria-hidden="true"
+                />
                 Refresh
               </Button>
             )}
