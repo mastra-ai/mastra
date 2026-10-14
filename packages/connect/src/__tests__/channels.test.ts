@@ -548,21 +548,19 @@ describe('channels()', () => {
     }
   });
 
-  it('skips the Teams channel with an actionable warning when MASTRA_ENCRYPTION_KEY is unset', async () => {
+  it('rejects at resolution when MASTRA_ENCRYPTION_KEY is unset for the Teams channel', async () => {
     // Defense-in-depth for the Teams install store's at-rest persistence:
     // without an encryption key, delegated provisioning would silently
-    // downgrade to plaintext. The wrapper refuses to construct in that
-    // shape so the miss is loud instead of subtle.
+    // downgrade to plaintext. This is an environment configuration mistake,
+    // so `channels()` fails at startup instead of warn-and-skipping the
+    // channel.
     vi.stubEnv('MASTRA_ENCRYPTION_KEY', '');
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_teams', integrationId: 'microsoft-teams' })],
       credentials: { c_teams: { type: 'oauth2', accessToken: 'graph-token', expiresAt: null } },
     });
     const channelsFn = await importChannels();
-    const resolver = await channelsFn(options(fetchMock));
-    const providers = await resolver();
-    expect(providers['microsoft-teams']).toBeUndefined();
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('MASTRA_ENCRYPTION_KEY is not set'));
+    await expect(channelsFn(options(fetchMock))).rejects.toThrow('MASTRA_ENCRYPTION_KEY is not set');
   });
 
   it('builds a TeamsProvider whose tokenResolver serves Graph tokens from the platform credential', async () => {

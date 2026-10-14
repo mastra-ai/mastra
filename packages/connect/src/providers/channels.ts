@@ -4,7 +4,7 @@
 import type { ChannelProvider } from '@mastra/core/channels';
 
 import type { ConnectionCredential } from '../client.js';
-import { MastraConnectError } from '../errors.js';
+import { MastraConnectConfigError, MastraConnectError } from '../errors.js';
 
 import type { ChannelProviderRegistration } from './channel-provider.js';
 
@@ -319,10 +319,11 @@ const teamsChannel: ChannelProviderRegistration = {
     // `encryptionKey` is stripped from `providerOptions` (reserved) so the
     // key can only come from `MASTRA_ENCRYPTION_KEY`. Fail fast at wrapper
     // time if it is not set — clearer than watching a provisioning call
-    // throw deep inside `@mastra/teams`.
+    // throw deep inside `@mastra/teams`. Thrown as a config error so it
+    // fails `channels()` resolution at startup instead of being downgraded
+    // to the resolver's warn-and-skip path.
     if (!process.env.MASTRA_ENCRYPTION_KEY) {
-      throw new MastraConnectError(
-        'invalid_options',
+      throw new MastraConnectConfigError(
         'Microsoft Teams channel: MASTRA_ENCRYPTION_KEY is not set. ' +
           'The Teams install store persists per-agent bot secrets and requires an at-rest ' +
           'encryption key (a 32-byte value, base64-encoded).',
