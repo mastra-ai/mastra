@@ -1,9 +1,11 @@
-import type { CompareExperimentsResponse, DatasetExperimentResult } from '@mastra/client-js';
+import type { CompareExperimentsResponse, DatasetExperimentResult, MastraClient } from '@mastra/client-js';
+import type { ExperimentUsage } from '@mastra/react/hooks/experiments';
 import type { ScoresByItemId } from '../../build-comparison-rows';
 
 export const DATASET_ID = 'dataset-1';
 export const BASELINE_ID = 'exp-baseline';
 export const CONTENDER_ID = 'exp-contender';
+export const CHALLENGER_ID = 'exp-challenger';
 
 /**
  * Comparison payload covering the three interesting shapes:
@@ -56,7 +58,7 @@ const makeResult = (overrides: Partial<DatasetExperimentResult> & Pick<DatasetEx
     startedAt: '2026-08-01T10:00:00.000Z',
     completedAt: '2026-08-01T10:00:05.000Z',
     retryCount: 0,
-    traceId: null,
+    traceId: `trace-${overrides.id}`,
     status: 'complete',
     tags: null,
     comment: null,
@@ -100,6 +102,57 @@ export const contenderResults: DatasetExperimentResult[] = [
   }),
 ];
 
+/** Per-experiment usage: totals plus per-item usage keyed by trace id. `item-b`'s contender trace has no token metrics (it errored). */
+export const baselineUsage: ExperimentUsage = {
+  summary: { inputTokens: 210, outputTokens: 40, estimatedCost: 0.0025, costUnit: 'usd' },
+  traces: {
+    'trace-res-baseline-a': { inputTokens: 120, outputTokens: 30, estimatedCost: 0.0015, costUnit: 'usd' },
+    'trace-res-baseline-b': { inputTokens: 90, outputTokens: 10, estimatedCost: 0.001, costUnit: 'usd' },
+  },
+};
+
+export const contenderUsage: ExperimentUsage = {
+  summary: { inputTokens: 200, outputTokens: 60, estimatedCost: 0.004, costUnit: 'usd' },
+  traces: {
+    'trace-res-contender-a': { inputTokens: 200, outputTokens: 60, estimatedCost: 0.004, costUnit: 'usd' },
+  },
+};
+
+type MetricBreakdownResponse = Awaited<ReturnType<MastraClient['getMetricBreakdown']>>;
+
+const INPUT = 'mastra_model_total_input_tokens';
+const OUTPUT = 'mastra_model_total_output_tokens';
+
+/** `POST /api/observability/metrics/breakdown` per experiment, grouped by trace id and metric name. */
+export const usageBreakdownByExperimentId: Record<string, MetricBreakdownResponse> = {
+  [BASELINE_ID]: {
+    groups: [
+      {
+        dimensions: { traceId: 'trace-res-baseline-a', name: INPUT },
+        value: 120,
+        estimatedCost: 0.001,
+        costUnit: 'usd',
+      },
+      {
+        dimensions: { traceId: 'trace-res-baseline-a', name: OUTPUT },
+        value: 30,
+        estimatedCost: 0.0005,
+        costUnit: 'usd',
+      },
+    ],
+  },
+  [CONTENDER_ID]: {
+    groups: [
+      {
+        dimensions: { traceId: 'trace-res-contender-a', name: INPUT },
+        value: 200,
+        estimatedCost: 0.003,
+        costUnit: 'usd',
+      },
+    ],
+  },
+};
+
 /** Raw score rows as `GET /api/scores/run/:experimentId` returns them (`entityId` = dataset item id). */
 const makeScoreRow = (runId: string, entityId: string, scorerId: string, score: number, reason: string | null) => ({
   id: `score-${runId}-${entityId}-${scorerId}`,
@@ -142,4 +195,54 @@ export const contenderScores: ScoresByItemId = {
     { scorerId: 'accuracy', reason: 'Complete answer' },
     { scorerId: 'relevancy', reason: null },
   ],
+};
+
+/**
+ * Three-way payload: the two-way one plus a second contender (`CHALLENGER_ID`) that ran
+ * `item-a` and `item-b` but not `item-c`.
+ */
+export const threeWayComparisonResponse: CompareExperimentsResponse = {
+  baselineId: BASELINE_ID,
+  items: comparisonResponse.items.map(item => ({
+    ...item,
+    results: {
+      ...item.results,
+      [CHALLENGER_ID]:
+        item.itemId === 'item-a'
+          ? { output: { answer: 'Paris' }, scores: { accuracy: 0.6, relevancy: 0.8 } }
+          : item.itemId === 'item-b'
+            ? { output: { answer: 'Frank Herbert' }, scores: { accuracy: 1 } }
+            : null,
+    },
+  })),
+};
+
+export const challengerResults: DatasetExperimentResult[] = [
+  makeResult({
+    id: 'res-challenger-a',
+    experimentId: CHALLENGER_ID,
+    itemId: 'item-a',
+    output: { answer: 'Paris' },
+    comment: 'Challenger matches the baseline',
+  }),
+  makeResult({
+    id: 'res-challenger-b',
+    experimentId: CHALLENGER_ID,
+    itemId: 'item-b',
+    output: { answer: 'Frank Herbert' },
+  }),
+];
+
+export const challengerScoreRows = [
+  makeScoreRow(CHALLENGER_ID, 'item-a', 'accuracy', 0.6, 'Close enough'),
+  makeScoreRow(CHALLENGER_ID, 'item-a', 'relevancy', 0.8, null),
+  makeScoreRow(CHALLENGER_ID, 'item-b', 'accuracy', 1, 'Exact match'),
+];
+
+export const challengerScores: ScoresByItemId = {
+  'item-a': [
+    { scorerId: 'accuracy', reason: 'Close enough' },
+    { scorerId: 'relevancy', reason: null },
+  ],
+  'item-b': [{ scorerId: 'accuracy', reason: 'Exact match' }],
 };

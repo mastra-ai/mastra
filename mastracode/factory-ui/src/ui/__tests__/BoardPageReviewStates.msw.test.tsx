@@ -84,7 +84,7 @@ function stubReviewBoard(candidate = false, decision?: FactoryDecisionSummary) {
         runs: data.runningSessionIds.map(resourceId => ({ runId: 'run-42', resourceId, threadId: 'thread-42' })),
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/repo-1/sessions`, () => HttpResponse.json({ sessions: [] })),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
     http.get(`${projectUrl}/work-items`, () =>
       HttpResponse.json({ workItems: data.items, runningSessionIds: data.runningSessionIds }),
     ),

@@ -43,6 +43,10 @@ export function getRouteSpecificSchemaDefaults(route: ServerRoute): {
     return { body: { predicateScope: 'trace', path: 'entityName' } };
   }
 
+  if (route.path === '/datasets/:datasetId/compare') {
+    return { body: { experimentIds: ['test-experiment-a', 'test-experiment-b'], baselineId: 'test-experiment-a' } };
+  }
+
   return {};
 }
 

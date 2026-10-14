@@ -26,11 +26,11 @@ describe('trace import command', () => {
       'traces',
       'import',
       'langfuse',
-      '--project',
+      '--target-project',
       'support',
-      '--from',
+      '--since',
       '2026-09-01',
-      '--to',
+      '--until',
       '2026-09-10',
       '--dry-run',
       '--yes',
@@ -39,14 +39,39 @@ describe('trace import command', () => {
     expect(action).toHaveBeenCalledWith(
       'langfuse',
       expect.objectContaining({
-        project: 'support',
-        from: '2026-09-01',
-        to: '2026-09-10',
+        targetProject: 'support',
+        since: '2026-09-01',
+        until: '2026-09-10',
         dryRun: true,
         yes: true,
       }),
       expect.any(Command),
     );
+  });
+
+  it('still accepts the hidden --from and --to aliases', async () => {
+    const action = vi.fn();
+    const program = createProgram(action);
+    await program.parseAsync([
+      'node',
+      'mastra',
+      'traces',
+      'import',
+      'langfuse',
+      '--from',
+      '2026-09-01',
+      '--to',
+      '2026-09-10',
+    ]);
+
+    expect(action).toHaveBeenCalledWith(
+      'langfuse',
+      expect.objectContaining({ from: '2026-09-01', to: '2026-09-10' }),
+      expect.any(Command),
+    );
+    const help = program.commands[0]!.commands[0]!.helpInformation();
+    expect(help).toContain('--since');
+    expect(help).not.toContain('--from');
   });
 
   it('requires a source provider', async () => {

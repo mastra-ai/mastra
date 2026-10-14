@@ -1,9 +1,25 @@
+import type { Mastra } from '@mastra/core';
 import type { MastraFGAPermissionInput } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
 import { MastraMemory } from '@mastra/core/memory';
+import type { Workflow } from '@mastra/core/workflows';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, isReservedRequestContextKey } from '../constants';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
+
+/**
+ * Resolves a workflow by id or registration key from the set Mastra exposes
+ * publicly. Unlike `mastra.getWorkflowById`, this excludes hidden internal
+ * workflows (e.g. a durable agent's backing loop), which must never be
+ * runnable through HTTP routes.
+ */
+export function getPublicWorkflowById(mastra: Mastra, workflowId: string): Workflow | undefined {
+  const workflows = mastra.listWorkflows();
+  return (
+    Object.values(workflows).find(workflow => workflow.id === workflowId) ??
+    (Object.hasOwn(workflows, workflowId) ? workflows[workflowId] : undefined)
+  );
+}
 
 // Validation helper
 export function validateBody(body: Record<string, unknown>) {

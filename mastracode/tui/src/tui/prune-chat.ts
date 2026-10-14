@@ -53,7 +53,6 @@ function disposeRemovedComponentReferences(state: TUIState, removed: ReadonlySet
   clearRemovedReference(state, 'lastSubmitPlanComponent', removed);
   clearRemovedReference(state, 'omProgressComponent', removed);
   clearRemovedReference(state, 'activeOMMarker', removed);
-  clearRemovedReference(state, 'activeBufferingMarker', removed);
   clearRemovedReference(state, 'activeActivationMarker', removed);
   clearRemovedReference(state, 'activeActivationProviderChangeMarker', removed);
   clearRemovedReference(state, 'taskProgress', removed);
