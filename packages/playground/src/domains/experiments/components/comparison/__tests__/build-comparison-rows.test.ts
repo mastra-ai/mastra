@@ -7,11 +7,13 @@ import {
   CONTENDER_ID,
   baselineResults,
   baselineScores,
+  baselineUsage,
   challengerResults,
   challengerScores,
   comparisonResponse,
   contenderResults,
   contenderScores,
+  contenderUsage,
   threeWayComparisonResponse,
 } from './fixtures/comparison';
 
@@ -157,6 +159,80 @@ describe('buildComparisonRows', () => {
         { scorerId: 'relevancy', value: 0.9, reason: null },
       ]);
       expect(baseline.metadata).toBeNull();
+    });
+  });
+
+  describe('when per-item usage has loaded', () => {
+    const usageRows = () =>
+      buildComparisonRows({
+        comparison: comparisonResponse,
+        experimentIds: [BASELINE_ID, CONTENDER_ID],
+        resultsById: { [BASELINE_ID]: baselineResults, [CONTENDER_ID]: contenderResults },
+        usageById: { [BASELINE_ID]: baselineUsage, [CONTENDER_ID]: contenderUsage },
+      });
+
+    it("attaches the usage of each side's own trace", () => {
+      const [baseline, contender] = usageRows()[0].sides;
+
+      expect(baseline.usage).toEqual({ inputTokens: 120, outputTokens: 30, estimatedCost: 0.0015, costUnit: 'usd' });
+      expect(contender.usage).toEqual({ inputTokens: 200, outputTokens: 60, estimatedCost: 0.004, costUnit: 'usd' });
+    });
+
+    it('computes the cost delta against the baseline on the contender side', () => {
+      const [baseline, contender] = usageRows()[0].sides;
+
+      expect(baseline.costDelta).toBeUndefined();
+      expect(contender.costDelta).toBeCloseTo(0.0025);
+    });
+
+    it('computes the token delta against the baseline on the contender side', () => {
+      const [baseline, contender] = usageRows()[0].sides;
+
+      expect(baseline.tokenDelta).toBeUndefined();
+      expect(contender.tokenDelta).toBe(260 - 150);
+    });
+  });
+
+  describe("when a side's trace is missing from the usage", () => {
+    const missingUsageContender = () =>
+      buildComparisonRows({
+        comparison: comparisonResponse,
+        experimentIds: [BASELINE_ID, CONTENDER_ID],
+        resultsById: { [BASELINE_ID]: baselineResults, [CONTENDER_ID]: contenderResults },
+        usageById: { [BASELINE_ID]: baselineUsage, [CONTENDER_ID]: contenderUsage },
+      })[1].sides[1];
+
+    it('leaves that side without usage', () => {
+      expect(missingUsageContender().usage).toBeUndefined();
+    });
+
+    it('leaves the cost delta undefined', () => {
+      expect(missingUsageContender().costDelta).toBeUndefined();
+    });
+
+    it('leaves the token delta undefined', () => {
+      expect(missingUsageContender().tokenDelta).toBeUndefined();
+    });
+  });
+
+  describe('when the two sides are priced in different units', () => {
+    it('leaves the cost delta undefined', () => {
+      const [, contender] = buildComparisonRows({
+        comparison: comparisonResponse,
+        experimentIds: [BASELINE_ID, CONTENDER_ID],
+        resultsById: { [BASELINE_ID]: baselineResults, [CONTENDER_ID]: contenderResults },
+        usageById: {
+          [BASELINE_ID]: baselineUsage,
+          [CONTENDER_ID]: {
+            ...contenderUsage,
+            traces: {
+              'trace-res-contender-a': { inputTokens: 200, outputTokens: 60, estimatedCost: 0.004, costUnit: 'eur' },
+            },
+          },
+        },
+      })[0].sides;
+
+      expect(contender.costDelta).toBeUndefined();
     });
   });
 

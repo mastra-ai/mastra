@@ -9,15 +9,18 @@ import {
   useDatasetExperimentsQueries,
   useScoresByExperimentIdsQueries,
 } from '@mastra/react/hooks/datasets';
+import { useExperimentsItemUsage } from '@mastra/react/hooks/experiments';
 import { useMemo } from 'react';
 import type { CSSProperties } from 'react';
 import { buildComparisonRows, sideDurationMs } from './build-comparison-rows';
 import type { ComparisonRow } from './build-comparison-rows';
 import { ComparisonItemPayload } from './comparison-item-payload';
+import { totalTokens } from './comparison-metric-format';
 import { sectionStackClass } from './comparison-section';
 import { ComparisonSideCell } from './comparison-side-cell';
 import { ComparisonSideHeader } from './comparison-side-header';
 import type { ComparisonSideMetrics, ScorerSummary } from './comparison-side-header';
+import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 
 interface ExperimentsComparisonProps {
   datasetId: string;
@@ -97,9 +100,16 @@ export function ExperimentsComparison({
   // Scorer reasons live in the scores store, not on the result rows.
   const { data: scoresById } = useScoresByExperimentIdsQueries({ experiments: experimentRefs });
 
+  const { supportsMetrics, isLoading: isCapabilitiesLoading } = useObservabilityStorageCapabilities();
+  // Filtered by experiment id, so it runs alongside the results instead of waiting for their trace ids.
+  const { data: usageById, isLoading: isUsageLoading } = useExperimentsItemUsage({
+    experiments: experimentRefs,
+    supportsMetrics,
+  });
+
   const rows = useMemo(
-    () => buildComparisonRows({ comparison, experimentIds, resultsById, scoresById }),
-    [comparison, experimentIds, resultsById, scoresById],
+    () => buildComparisonRows({ comparison, experimentIds, resultsById, scoresById, usageById }),
+    [comparison, experimentIds, resultsById, scoresById, usageById],
   );
 
   /** Per-scorer averages for each column; contenders also carry their delta against the baseline. */
@@ -117,11 +127,24 @@ export function ExperimentsComparison({
     );
   }, [rows, experimentIds]);
 
-  const metrics = useMemo(() => experimentIds.map((_, index) => columnMetrics(rows, index)), [rows, experimentIds]);
+  const metrics = useMemo(
+    () =>
+      experimentIds.map((experimentId, index): ComparisonSideMetrics => {
+        const summary = usageById[experimentId]?.summary;
+        return {
+          ...columnMetrics(rows, index),
+          cost: summary?.estimatedCost,
+          costUnit: summary?.costUnit,
+          tokens: totalTokens(summary),
+        };
+      }),
+    [rows, experimentIds, usageById],
+  );
 
-  if (isLoading || isExperimentsLoading) {
+  if (isLoading || isExperimentsLoading || isCapabilitiesLoading || isUsageLoading) {
+    // Centred on the viewport, like the app boot spinner, so swapping from one to the other doesn't shift.
     return (
-      <div className="flex h-64 items-center justify-center">
+      <div className="pointer-events-none fixed inset-0 flex items-center justify-center">
         <Spinner />
       </div>
     );
@@ -176,6 +199,7 @@ export function ExperimentsComparison({
                       : undefined
                   }
                   onSetBaseline={index > 0 && onSetBaseline ? () => onSetBaseline(experimentId) : undefined}
+                  showUsage={supportsMetrics}
                 />
               </div>
             );
@@ -191,7 +215,7 @@ export function ExperimentsComparison({
 
             {row.sides.map((side, index) => (
               <div key={side.experimentId} role="cell" aria-label={columnLabel(index)} className={cell}>
-                <ComparisonSideCell column={side} isLoading={isResultsLoading} />
+                <ComparisonSideCell column={side} isLoading={isResultsLoading} showUsage={supportsMetrics} />
               </div>
             ))}
           </div>

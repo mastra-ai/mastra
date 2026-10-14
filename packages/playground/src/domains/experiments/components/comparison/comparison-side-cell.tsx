@@ -1,24 +1,23 @@
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { formatDuration } from '@mastra/playground-ui/utils/duration';
-import { ClockIcon } from 'lucide-react';
 import { getResultErrorMessage, getResultOutputText } from '../../utils/result-output';
 import { sideDurationMs } from './build-comparison-rows';
 import type { ComparisonColumn } from './build-comparison-rows';
-import { formatDurationDelta, formatScore } from './comparison-metric-format';
-import { ComparisonMetricList, ScorerLabel } from './comparison-metric-list';
+import { ComparisonMetricList } from './comparison-metric-list';
 import type { ComparisonMetric } from './comparison-metric-list';
 import { ComparisonPayload } from './comparison-payload';
 import { ComparisonSection, sectionStackClass } from './comparison-section';
+import { itemMetrics } from './item-metrics';
 
 export interface ComparisonSideCellProps {
   /** One experiment's side of the row. Contenders carry their deltas against the baseline. */
   column: ComparisonColumn;
   isLoading?: boolean;
+  /** Shows the cost and tokens lines. False when the observability storage cannot serve metrics. */
+  showUsage?: boolean;
 }
 
 function formatValue(value: unknown): string {
@@ -27,40 +26,27 @@ function formatValue(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-function sideMetrics(side: ComparisonColumn): ComparisonMetric[] {
-  const durationMs = sideDurationMs(side);
-  const duration: ComparisonMetric[] =
-    durationMs == null
-      ? []
-      : [
-          {
-            id: 'duration',
-            icon: <ClockIcon />,
-            label: 'Duration',
-            value: formatDuration(durationMs) ?? '-',
-            delta: side.durationDeltaMs,
-            formatDelta: formatDurationDelta,
-            higherIsBetter: false,
-          },
-        ];
-
-  return [
-    ...duration,
-    ...side.scores.map(score => ({
-      id: `scorer:${score.scorerId}`,
-      icon: <ScorersIcon />,
-      label: <ScorerLabel scorerId={score.scorerId} />,
-      value: formatScore(score.value),
+function sideMetrics(side: ComparisonColumn, showUsage: boolean): ComparisonMetric[] {
+  return itemMetrics({
+    usage: side.usage,
+    showUsage,
+    durationMs: sideDurationMs(side),
+    costDelta: side.costDelta,
+    tokenDelta: side.tokenDelta,
+    durationDeltaMs: side.durationDeltaMs,
+    scores: side.scores.map(score => ({
+      scorerId: score.scorerId,
+      value: score.value,
       delta: side.deltas?.[score.scorerId] ?? null,
     })),
-  ];
+  });
 }
 
 /**
  * One experiment's side of a single item row. Every column renders the exact same
  * sections in the same order so the row can be read as a visual diff.
  */
-export function ComparisonSideCell({ column: data, isLoading }: ComparisonSideCellProps) {
+export function ComparisonSideCell({ column: data, isLoading, showUsage = false }: ComparisonSideCellProps) {
   if (isLoading) {
     return (
       <div className="flex h-32 items-center justify-center">
@@ -80,7 +66,7 @@ export function ComparisonSideCell({ column: data, isLoading }: ComparisonSideCe
   const outputStr = formatValue(data.output);
   const outputText = getResultOutputText(data);
   const errorMessage = getResultErrorMessage(data);
-  const metrics = sideMetrics(data);
+  const metrics = sideMetrics(data, showUsage);
 
   return (
     <div className={sectionStackClass}>
@@ -91,19 +77,19 @@ export function ComparisonSideCell({ column: data, isLoading }: ComparisonSideCe
       )}
 
       {errorMessage ? (
-        <ComparisonSection title="Error" tone="negative" actions={<CopyButton content={errorMessage} />}>
-          <Txt tone="muted" className="rounded-lg border border-destructive-edge bg-destructive-subtle p-3 break-words">
+        <ComparisonSection title="Error" tone="negative" framed actions={<CopyButton content={errorMessage} />}>
+          <Txt tone="muted" className="p-3 break-words">
             {errorMessage}
           </Txt>
         </ComparisonSection>
       ) : (
-        <ComparisonSection title="Output" actions={<CopyButton content={outputStr} />}>
+        <ComparisonSection title="Output" framed actions={<CopyButton content={outputStr} />}>
           <ComparisonPayload value={outputText ?? data.output} />
         </ComparisonSection>
       )}
 
       {data.comment && (
-        <ComparisonSection title="Comment">
+        <ComparisonSection title="Comment" framed>
           <ComparisonPayload value={data.comment} />
         </ComparisonSection>
       )}

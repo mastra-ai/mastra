@@ -17,7 +17,12 @@ import {
   contenderResults,
   contenderScoreRows,
   threeWayComparisonResponse,
+  usageBreakdownByExperimentId,
 } from './fixtures/comparison';
+import {
+  renamedPostgresWithMetrics,
+  storageWithoutMetrics,
+} from '@/domains/configuration/hooks/__tests__/fixtures/observability-storage-capabilities';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '@/test/render';
@@ -65,8 +70,25 @@ beforeEach(() => {
     http.get(`${TEST_BASE_URL}/api/scores/run/${CONTENDER_ID}`, () =>
       HttpResponse.json(scoresResponse(contenderScoreRows)),
     ),
+    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(storageWithoutMetrics)),
   );
 });
+
+/** Turns metrics on and answers each experiment's usage breakdown, optionally holding it until `release` resolves. */
+const useMetricsUsage = (release?: Promise<void>) => {
+  const requestedExperimentIds: string[] = [];
+  server.use(
+    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(renamedPostgresWithMetrics)),
+    http.post(`${TEST_BASE_URL}/api/observability/metrics/breakdown`, async ({ request }) => {
+      const body = (await request.json()) as { filters?: { experimentId?: string } };
+      const experimentId = body.filters?.experimentId ?? '';
+      requestedExperimentIds.push(experimentId);
+      await release;
+      return HttpResponse.json(usageBreakdownByExperimentId[experimentId] ?? { groups: [] });
+    }),
+  );
+  return requestedExperimentIds;
+};
 
 const renderComparison = (contenderIds: string[] = [CONTENDER_ID]) =>
   renderWithProviders(
@@ -227,6 +249,100 @@ describe('experiments comparison table', () => {
       expect(within(sideOf('item-a', 'Contender 2')).getByText('-0.10')).toBeTruthy();
       expect(within(sideOf('item-a', 'Baseline')).queryByText('0.40')).toBeNull();
       expect(within(sideOf('item-a', 'Baseline')).queryByText('0.10', { exact: false })).toBeNull();
+    });
+  });
+
+  describe('when observability storage supports metrics and usage is pending', () => {
+    it('keeps the page spinner up instead of the table', async () => {
+      const requestedExperimentIds = useMetricsUsage(new Promise(() => {}));
+      renderComparison();
+
+      await waitFor(() => expect(requestedExperimentIds).toHaveLength(2));
+      expect(screen.getByRole('status', { name: 'Loading' })).toBeTruthy();
+      expect(screen.queryByRole('columnheader', { name: 'Items' })).toBeNull();
+    });
+  });
+
+  describe('when observability storage supports metrics and usage resolves', () => {
+    it('renders the comparison table', async () => {
+      useMetricsUsage();
+      renderComparison();
+
+      expect(await screen.findByRole('columnheader', { name: 'Items' })).toBeTruthy();
+      expect(await findItemRow('item-a')).toBeTruthy();
+    });
+
+    it('shows each experiment total cost, with the contender difference against the baseline', async () => {
+      useMetricsUsage();
+      renderComparison();
+
+      const baseline = await screen.findByRole('columnheader', { name: 'Baseline' });
+      await waitFor(() => expect(within(baseline).getByText('Total cost')).toBeTruthy());
+      expect(within(baseline).getByText('$0.0015')).toBeTruthy();
+
+      const contender = screen.getByRole('columnheader', { name: 'Contender 1' });
+      expect(within(contender).getByText('$0.003')).toBeTruthy();
+      expect(within(contender).getByText('+$0.0015')).toBeTruthy();
+    });
+
+    it('shows each item cost, with the contender difference against the baseline', async () => {
+      useMetricsUsage();
+      renderComparison();
+
+      await findItemRow('item-a');
+      const contender = sideOf('item-a', 'Contender 1');
+      await waitFor(() => expect(within(contender).getByText('Cost')).toBeTruthy());
+      expect(within(contender).getByText('$0.003')).toBeTruthy();
+      expect(within(contender).getByText('+$0.0015')).toBeTruthy();
+    });
+
+    it('shows each experiment total tokens, with the contender difference against the baseline', async () => {
+      useMetricsUsage();
+      renderComparison();
+
+      const baseline = await screen.findByRole('columnheader', { name: 'Baseline' });
+      await waitFor(() => expect(within(baseline).getByText('Total tokens')).toBeTruthy());
+      expect(within(baseline).getByText('150')).toBeTruthy();
+
+      const contender = screen.getByRole('columnheader', { name: 'Contender 1' });
+      expect(within(contender).getByText('200')).toBeTruthy();
+      expect(within(contender).getByText('+50')).toBeTruthy();
+    });
+
+    it('shows each item tokens, with the contender difference against the baseline', async () => {
+      useMetricsUsage();
+      renderComparison();
+
+      await findItemRow('item-a');
+      const contender = sideOf('item-a', 'Contender 1');
+      await waitFor(() => expect(within(contender).getByText('Tokens')).toBeTruthy());
+      expect(within(contender).getByText('200')).toBeTruthy();
+      expect(within(contender).getByText('+50')).toBeTruthy();
+    });
+  });
+
+  describe('when observability storage does not support metrics', () => {
+    it('leaves the cost and the tokens out of the headers and the items', async () => {
+      renderComparison();
+
+      await waitFor(() => expect(within(sideOf('item-a', 'Baseline')).getByText(/"Paris"/)).toBeTruthy());
+      expect(screen.queryByText('Total cost')).toBeNull();
+      expect(screen.queryByText('Cost')).toBeNull();
+      expect(screen.queryByText('Total tokens')).toBeNull();
+      expect(screen.queryByText('Tokens')).toBeNull();
+    });
+  });
+
+  describe('when observability storage supports metrics and the results are still loading', () => {
+    it('requests the usage of every experiment without waiting for the results', async () => {
+      server.use(
+        http.get(`${experimentsBase}/${BASELINE_ID}/results`, () => new Promise(() => {})),
+        http.get(`${experimentsBase}/${CONTENDER_ID}/results`, () => new Promise(() => {})),
+      );
+      const requestedExperimentIds = useMetricsUsage();
+      renderComparison();
+
+      await waitFor(() => expect(requestedExperimentIds.sort()).toEqual([BASELINE_ID, CONTENDER_ID].sort()));
     });
   });
 

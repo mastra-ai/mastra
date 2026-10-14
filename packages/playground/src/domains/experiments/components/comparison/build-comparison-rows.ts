@@ -1,4 +1,6 @@
 import type { ClientScoreRowData, CompareExperimentsResponse, DatasetExperimentResult } from '@mastra/client-js';
+import type { ExperimentItemUsage, ExperimentUsage } from '@mastra/react/hooks/experiments';
+import { totalTokens } from './comparison-metric-format';
 
 export interface ComparisonScore {
   scorerId: string;
@@ -18,6 +20,8 @@ export interface ComparisonSide {
   startedAt: string | null;
   completedAt: string | null;
   scores: ComparisonScore[];
+  /** Tokens and estimated cost of this side's run. Undefined when unknown (no metrics, or a target without model calls). */
+  usage?: ExperimentItemUsage;
 }
 
 export type ComparisonRole = 'baseline' | 'contender';
@@ -30,6 +34,10 @@ export interface ComparisonColumn extends ComparisonSide {
   deltas: Record<string, number | null> | null;
   /** This side's run duration minus the baseline's, in ms. Null on the baseline or when either is unknown. */
   durationDeltaMs: number | null;
+  /** This side's estimated cost minus the baseline's. Undefined on the baseline, when either is unknown, or when units differ. */
+  costDelta?: number;
+  /** This side's input plus output tokens minus the baseline's. Undefined on the baseline or when either is unknown. */
+  tokenDelta?: number;
 }
 
 export interface ComparisonRow {
@@ -52,6 +60,7 @@ interface BuildComparisonRowsParams {
   experimentIds: string[];
   resultsById?: Record<string, DatasetExperimentResult[] | undefined>;
   scoresById?: Record<string, ScoresByItemId | undefined>;
+  usageById?: Record<string, ExperimentUsage | undefined>;
 }
 
 const absentSide: ComparisonSide = {
@@ -83,6 +92,7 @@ const buildSide = (
   comparisonResult: { output: unknown; scores: Record<string, number | null> } | null | undefined,
   detail: DatasetExperimentResult | undefined,
   itemScores: ScoresByItemId[string] | undefined,
+  usageByTraceId: ExperimentUsage['traces'] | undefined,
 ): ComparisonSide => {
   if (!comparisonResult) return absentSide;
 
@@ -104,6 +114,7 @@ const buildSide = (
     scores: Object.entries(comparisonResult.scores)
       .map(([scorerId, value]) => ({ scorerId, value, reason: reasonByScorerId.get(scorerId) ?? null }))
       .sort((a, b) => a.scorerId.localeCompare(b.scorerId)),
+    usage: detail?.traceId ? usageByTraceId?.[detail.traceId] : undefined,
   };
 };
 
@@ -118,7 +129,10 @@ const deltasAgainst = (baseline: ComparisonSide, side: ComparisonSide): Record<s
 };
 
 /** Run duration of one side in ms, or null when either timestamp is missing. */
-export function sideDurationMs(side: Pick<ComparisonSide, 'startedAt' | 'completedAt'>): number | null {
+export function sideDurationMs(side: {
+  startedAt?: string | Date | null;
+  completedAt?: string | Date | null;
+}): number | null {
   if (!side.startedAt || !side.completedAt) return null;
   return new Date(side.completedAt).getTime() - new Date(side.startedAt).getTime();
 }
@@ -129,17 +143,31 @@ const durationDeltaAgainst = (baseline: ComparisonSide, side: ComparisonSide): n
   return baselineMs != null && sideMs != null ? sideMs - baselineMs : null;
 };
 
+const costDeltaAgainst = (baseline: ComparisonSide, side: ComparisonSide): number | undefined => {
+  const baselineCost = baseline.usage?.estimatedCost;
+  const sideCost = side.usage?.estimatedCost;
+  if (baselineCost === undefined || sideCost === undefined) return undefined;
+  return baseline.usage?.costUnit === side.usage?.costUnit ? sideCost - baselineCost : undefined;
+};
+
+const tokenDeltaAgainst = (baseline: ComparisonSide, side: ComparisonSide): number | undefined => {
+  const baselineTokens = totalTokens(baseline.usage);
+  const sideTokens = totalTokens(side.usage);
+  return baselineTokens !== undefined && sideTokens !== undefined ? sideTokens - baselineTokens : undefined;
+};
+
 /**
- * Joins the comparison payload with the per-experiment result rows and scorer runs so each
- * column can render output, metadata, comment, error, timings and scorer reasons for a single
- * item. The join key is `itemId`. The first of `experimentIds` is the baseline; every other
- * side carries its deltas against it.
+ * Joins the comparison payload with the per-experiment result rows, scorer runs and usage so each
+ * column can render output, metadata, comment, error, timings, scorer reasons and cost for a
+ * single item. Usage is matched through the result's trace id. The join key is `itemId`. The first
+ * of `experimentIds` is the baseline; every other side carries its deltas against it.
  */
 export const buildComparisonRows = ({
   comparison,
   experimentIds,
   resultsById,
   scoresById,
+  usageById,
 }: BuildComparisonRowsParams): ComparisonRow[] => {
   if (!comparison) return [];
 
@@ -151,6 +179,7 @@ export const buildComparisonRows = ({
         item.results[experimentId],
         indexes.get(experimentId)?.get(item.itemId),
         scoresById?.[experimentId]?.[item.itemId],
+        usageById?.[experimentId]?.traces,
       ),
     );
     const [baseline] = sides;
@@ -165,6 +194,8 @@ export const buildComparisonRows = ({
         role: index === 0 ? 'baseline' : 'contender',
         deltas: index === 0 ? null : deltasAgainst(baseline, side),
         durationDeltaMs: index === 0 ? null : durationDeltaAgainst(baseline, side),
+        costDelta: index === 0 ? undefined : costDeltaAgainst(baseline, side),
+        tokenDelta: index === 0 ? undefined : tokenDeltaAgainst(baseline, side),
       })),
     };
   });
