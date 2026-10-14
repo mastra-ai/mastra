@@ -396,6 +396,19 @@ describe('factory_message_origin', () => {
       expect(env.sent).toHaveLength(0);
     });
 
+    it('counts replies toward the per-sender cap on the target thread', async () => {
+      const env = setup();
+      for (let i = 0; i < SIGNAL_RATE_LIMIT; i += 1) {
+        const id = await forged(env, 'session-1');
+        await env.run(WORKER, 'factory_message_origin', { message: `answer ${i}`, inReplyTo: id });
+      }
+      const id = await forged(env, 'session-1');
+      await expect(env.run(WORKER, 'factory_message_origin', { message: 'more', inReplyTo: id })).rejects.toThrow(
+        'Too many messages to that session; wait before answering.',
+      );
+      expect(env.sent).toHaveLength(SIGNAL_RATE_LIMIT);
+    });
+
     it('answers a private session when it belongs to the same person', async () => {
       const env = setup();
       const id = await forged(env, 'session-mine-private');
