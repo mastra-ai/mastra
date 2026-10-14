@@ -16,6 +16,7 @@
 
 import type { Context } from 'hono';
 
+import { factoryUserOrgId } from '../auth.js';
 import type {
   CredentialRecord,
   LoginSessionKind,
@@ -24,13 +25,12 @@ import type {
 import type { RouteAuth } from './route.js';
 
 /**
- * OAuth credentials are stored under the auth provider id, which differs from
- * the catalog provider id for OpenAI (stored as `openai-codex`). Tenant rows
- * use the same keying so one lookup serves both OAuth tokens and API keys.
+ * OAuth credentials are stored under the credential id, which differs from the
+ * catalog provider id for OpenAI (`openai-codex`) and Kimi (`kimi-for-coding`).
+ * Tenant rows use the same keying so one lookup serves both OAuth tokens and
+ * API keys, and match what model resolution reads.
  */
-export function getAuthProviderId(provider: string): string {
-  return provider === 'openai' ? 'openai-codex' : provider;
-}
+export { getCredentialProviderId as getAuthProviderId } from '@mastra/code-sdk/providers/model-ids';
 
 /**
  * Providers that support a browser-driven OAuth sign-in flow, keyed by
@@ -72,7 +72,7 @@ export async function getTenantCredentialsStorage(
  * per-user synthetic org so credentials never become server-global.
  */
 export function tenantOrgId(tenant: { orgId?: string; userId: string }): string {
-  return tenant.orgId ?? `user:${tenant.userId}`;
+  return tenant.orgId ?? factoryUserOrgId({ id: tenant.userId }) ?? `user:${tenant.userId}`;
 }
 
 /**

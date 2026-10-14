@@ -1398,6 +1398,13 @@ export const useChat = ({
       // A failed send (subscription setup, request, or stream) must not leave
       // the chat stranded in a "running" state until reload (issue #18768).
       setIsRunning(false);
+      // Drop the optimistic bubble instead of leaving it pending until reload
+      // (issue #26831). If the server did accept the turn before the response
+      // was lost, the message can still reappear through the live subscription
+      // echo or when the caller reloads thread history.
+      if (signalId) {
+        setMessages(s => s.filter(m => !(m.id === signalId && m.content.metadata?.status === 'pending')));
+      }
       throw error;
     }
   };

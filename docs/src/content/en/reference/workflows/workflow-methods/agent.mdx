@@ -86,7 +86,7 @@ workflow.agent('test-agent', { maxSteps: 3 }).commit()
 
 ## Persisting agent steps
 
-Workflows built with `.agent()` serialize to the same declarative entries that [dynamic workflows](/docs/workflows/dynamic-workflows) use. Only `retries` and `metadata` round-trip through storage. Options that hold functions, such as `onFinish` or a function-valued `toolChoice`, throw an error when the workflow is stored.
+Workflows built with `.agent()` serialize to the same declarative entries that [dynamic workflows](/docs/workflows/dynamic-workflows) use. Only `structuredOutput.schema` (stored as JSON Schema), `retries`, and `metadata` round-trip through storage. Options that hold functions, such as `onFinish` or a function-valued `toolChoice`, throw an error when the workflow is stored.
 
 ## Related
 

@@ -14,8 +14,7 @@ import type { Context } from 'hono';
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { EXTERNAL_SOURCE_MISSING_KEY } from '../integrations/issue-reconciler.js';
-import { overtakenDecisionIds } from '../rules/decision-applicability.js';
-import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
+import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 import type {
   FactoryStartCoordinator,
   FactoryStartPreparedResult,
@@ -148,9 +147,10 @@ function parseStartBody(
   body: unknown,
   tenant: { orgId: string; userId: string },
   factoryProjectId: string,
+  modelScope: 'factory' | 'user',
 ): FactoryStartRequest | null {
   const parsed = FACTORY_ROUTE_CONTRACTS.workItemStart.bodySchema.safeParse(body);
-  return parsed.success ? { ...tenant, factoryProjectId, ...parsed.data } : null;
+  return parsed.success ? { ...tenant, factoryProjectId, modelScope, ...parsed.data } : null;
 }
 
 function encodeDecisionCursor(decision: FactoryDeferredDecisionRecord): string {
@@ -192,7 +192,7 @@ function decisionSummary(boards: BoardRegistry, decision: FactoryDeferredDecisio
     attempts: decision.attempts,
     failureOccurrence: decision.failureOccurrence,
     failureCode: decision.failureCode,
-    canRetry: !overtaken && factoryDispatchFailureMetadata(decision.failureCode).canRetry,
+    canRetry: decisionRetryable(decision, overtaken),
     lastError: decision.lastError?.slice(0, 512) ?? null,
     createdAt: decision.createdAt.toISOString(),
     updatedAt: decision.updatedAt.toISOString(),
@@ -228,10 +228,15 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
    * items hang off a project, so listing/creating requires the project to
    * exist in the caller's org.
    */
-  async #resolveProject(
-    c: Context,
-  ): Promise<
-    { orgId: string; userId: string; factoryProjectId: string; defaultModelId: string | null } | { response: Response }
+  async #resolveProject(c: Context): Promise<
+    | {
+        orgId: string;
+        userId: string;
+        factoryProjectId: string;
+        modelScope: 'factory' | 'user';
+        defaultModelId: string | null;
+      }
+    | { response: Response }
   > {
     const tenant = await this.#resolveTenant(c);
     if ('response' in tenant) return tenant;
@@ -247,7 +252,12 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
     if (!project) {
       return { response: c.json({ error: 'Project not found' }, 404) };
     }
-    return { ...tenant, factoryProjectId: projectId, defaultModelId: project.defaultModelId };
+    return {
+      ...tenant,
+      factoryProjectId: projectId,
+      modelScope: project.modelScope,
+      defaultModelId: project.modelScope === 'factory' ? project.defaultModelId : null,
+    };
   }
 
   async #auditWorkItemPatch({
@@ -483,11 +493,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const { decisionId } = parsedPath.data;
           await workItems.ensureReady();
           const current = await workItems.getDeferredDecision(resolved.orgId, resolved.factoryProjectId, decisionId);
-          if (
-            !current ||
-            current.status !== 'failed' ||
-            !factoryDispatchFailureMetadata(current.failureCode).canRetry
-          ) {
+          if (!current || !decisionRetryable(current, false)) {
             return c.json({ error: 'decision_not_retryable' }, 409);
           }
           // A run decided for a phase the card has left would seat the old role on it.
@@ -639,7 +645,12 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (!startCoordinator) {
             return c.json({ error: 'factory_start_unavailable' }, 503);
           }
-          const input = parseStartBody(await readJson(loose(c)), resolved, resolved.factoryProjectId);
+          const input = parseStartBody(
+            await readJson(loose(c)),
+            resolved,
+            resolved.factoryProjectId,
+            resolved.modelScope,
+          );
           if (!input) return c.json({ error: 'invalid_factory_start' }, 400);
           input.requestContext = loose(c).get('requestContext');
           input.defaultModelId = resolved.defaultModelId ?? undefined;

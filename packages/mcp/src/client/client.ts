@@ -4,6 +4,7 @@ import type { Stream } from 'node:stream';
 import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { AnySpan, TracingContext } from '@mastra/core/observability';
 import { createTool, validateToolOutput } from '@mastra/core/tools';
 import type { NeedsApprovalFn, Tool } from '@mastra/core/tools';
 import { toStandardSchema } from '@mastra/schema-compat';
@@ -34,11 +35,12 @@ import { asyncExitHook, gracefulExit } from 'exit-hook';
 import { JSON_SCHEMA_2020_12, MAX_JSON_SCHEMA_DEPTH, MAX_JSON_SCHEMA_NODES, toJsonSchema2020 } from '../shared/json-schema-dialect';
 import { getMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { UnauthorizedError } from '../shared/oauth-types';
-import { traceContextToMeta } from '../shared/trace-context';
+import { takeServerTraceContext, traceContextFromSpan, traceContextToMeta } from '../shared/trace-context';
 import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
 import { ResourceClientActions } from './actions/resource';
 import { isReconnectableMCPError } from './error-utils';
+import { getInputSchemaError, loadInputSchemaMetaValidator } from './input-schema-meta-schema';
 import { MCP_CLIENT_PROTOCOL_VERSION } from './types';
 import type {
   FetchLike,
@@ -442,8 +444,16 @@ export class InternalMastraMCPClient extends MastraBase {
   /**
    * @internal
    */
-  constructor({ name, version = '1.0.0', server, timeout = DEFAULT_REQUEST_TIMEOUT_MSEC }: InternalMastraMCPClientOptions) {
+  constructor({
+    name,
+    version = '1.0.0',
+    clientInfo,
+    server,
+    timeout = DEFAULT_REQUEST_TIMEOUT_MSEC,
+  }: InternalMastraMCPClientOptions) {
     super({ name: 'MastraMCPClient' });
+    // Started early so the sync toolFromDefinition() normally has the input schema check ready.
+    void loadInputSchemaMetaValidator();
     this.name = name;
     this.timeout = timeout;
     this.logHandler = server.logger;
@@ -471,7 +481,7 @@ export class InternalMastraMCPClient extends MastraBase {
     };
 
     this.client = new Client(
-      { name, version },
+      { name: clientInfo?.name ?? name, version: clientInfo?.version ?? version },
       {
         capabilities: clientCapabilities,
         ...(server.jsonSchemaValidator ? { jsonSchemaValidator: server.jsonSchemaValidator } : {}),
@@ -523,10 +533,13 @@ export class InternalMastraMCPClient extends MastraBase {
   /**
    * Request metadata every outgoing request carries: the per-request log-level
    * opt-in (when enabled) and the W3C trace fields resolved for this request,
-   * merged under caller-supplied keys.
+   * merged under caller-supplied keys. A configured `traceContext` provider owns
+   * the trace fields; without one they name `span`, the span making the request.
    */
-  private requestMeta(meta?: Record<string, unknown>): Record<string, unknown> | undefined {
-    const traceContext = this.serverConfig.traceContext?.();
+  private requestMeta(meta?: Record<string, unknown>, span?: AnySpan): Record<string, unknown> | undefined {
+    const traceContext = this.serverConfig.traceContext
+      ? this.serverConfig.traceContext()
+      : traceContextFromSpan(span);
     const merged = {
       ...(this.serverLogLevel ? { [LOG_LEVEL_META_KEY]: this.serverLogLevel } : {}),
       ...(traceContext ? traceContextToMeta(traceContext) : {}),
@@ -1269,16 +1282,7 @@ export class InternalMastraMCPClient extends MastraBase {
 
   private convertInputSchema(inputSchema: MCPToolListEntry['inputSchema']): StandardSchemaWithJSON {
     const schema = withDefaultDialect(('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7);
-    const standardSchema = toStandardSchema(schema);
-    const complexityError = getJsonSchemaComplexityError(schema);
-    if (!complexityError) return standardSchema;
-
-    return {
-      '~standard': {
-        ...standardSchema['~standard'],
-        validate: () => ({ issues: [{ message: complexityError }] }),
-      },
-    };
+    return toStandardSchema(schema);
   }
 
   /**
@@ -1373,6 +1377,7 @@ export class InternalMastraMCPClient extends MastraBase {
   async tools(): Promise<Record<string, Tool<any, any, any, any>>> {
     this.log('debug', `Requesting tools from MCP server`);
     const { tools } = await this.client.listTools({ _meta: this.requestMeta() }, { timeout: this.timeout });
+    await loadInputSchemaMetaValidator();
     const toolsRes: Record<string, Tool<any, any, any, any>> = {};
     for (const tool of tools) {
       const mastraTool = this.buildToolFromListEntry(tool, {
@@ -1396,6 +1401,35 @@ export class InternalMastraMCPClient extends MastraBase {
     tool: MCPToolListEntry,
     serverMeta: { version?: string; instructions?: string; connectFirst?: boolean },
   ): Tool<any, any, any, any> | undefined {
+    // A malformed input schema makes strict providers reject the whole tools array, so the
+    // tool is dropped here instead of breaking every request that includes its siblings.
+    const rawInputSchema: unknown = tool.inputSchema;
+    const inputSchema =
+      rawInputSchema && typeof rawInputSchema === 'object' && 'jsonSchema' in rawInputSchema
+        ? rawInputSchema.jsonSchema
+        : rawInputSchema;
+    // Oversized schemas are dropped too: every call to them fails anyway, and the meta-schema
+    // validator cannot walk them safely.
+    const inputSchemaError = getJsonSchemaComplexityError(inputSchema) ?? getInputSchemaError(inputSchema);
+    if (inputSchemaError) {
+      const details = { serverName: this.name, toolName: tool.name, reason: inputSchemaError };
+      this.log(
+        'warning',
+        `Skipping MCP tool "${tool.name}" with an invalid input schema: ${inputSchemaError}`,
+        details,
+      );
+      if (serverMeta.connectFirst) {
+        throw new MastraError({
+          id: 'MCP_CLIENT_INVALID_TOOL_INPUT_SCHEMA',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Invalid input schema for MCP tool "${tool.name}": ${inputSchemaError}`,
+          details,
+        });
+      }
+      return undefined;
+    }
+
     try {
       let requireApproval: boolean | undefined;
       let needsApprovalFn: NeedsApprovalFn | undefined;
@@ -1490,6 +1524,7 @@ export class InternalMastraMCPClient extends MastraBase {
             runId?: string;
             abortSignal?: AbortSignal;
             _meta?: Record<string, unknown>;
+            tracingContext?: TracingContext;
           },
         ) => {
           // A hydrated tool was rebuilt from cache without ever opening a connection, so the
@@ -1507,12 +1542,21 @@ export class InternalMastraMCPClient extends MastraBase {
               const progressMeta = this.enableProgressTracking
                 ? { progressToken: context?.runId || crypto.randomUUID() }
                 : undefined;
-              const _meta = this.requestMeta({ ...context?._meta, ...progressMeta });
-
-              const res = await this.client.callTool(
-                { name: tool.name, arguments: input, ...(_meta ? { _meta } : {}) },
-                { timeout: this.timeout, signal: context?.abortSignal },
+              const _meta = this.requestMeta(
+                { ...context?._meta, ...progressMeta },
+                context?.tracingContext?.currentSpan,
               );
+
+              const { result: res, serverSpan } = takeServerTraceContext(
+                await this.client.callTool(
+                  { name: tool.name, arguments: input, ...(_meta ? { _meta } : {}) },
+                  { timeout: this.timeout, signal: context?.abortSignal },
+                ),
+              );
+              // A Mastra server names the span that served the call. The tool call span ends
+              // after this returns, and its end export carries the link.
+              const toolCallSpan = context?.tracingContext?.currentSpan;
+              if (toolCallSpan && serverSpan) toolCallSpan.links = [...(toolCallSpan.links ?? []), serverSpan];
 
               // Per the MCP spec, tool *execution* failures are reported in-band with
               // `isError: true`. Map that onto Mastra's failed-tool-call path unless the

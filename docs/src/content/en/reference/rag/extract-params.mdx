@@ -78,7 +78,7 @@ The `extract` parameter accepts the following fields:
   content={[
   {
     name: 'llm',
-    type: 'MastraLanguageModel',
+    type: 'MastraLanguageModel | MastraLegacyLanguageModel',
     isOptional: true,
     description: 'AI SDK language model to use for title extraction',
   },
@@ -109,16 +109,16 @@ The `extract` parameter accepts the following fields:
   content={[
   {
     name: 'llm',
-    type: 'MastraLanguageModel',
+    type: 'MastraLanguageModel | MastraLegacyLanguageModel',
     isOptional: true,
     description: 'AI SDK language model to use for summary extraction',
   },
   {
     name: 'summaries',
-    type: "('self' | 'prev' | 'next')[]",
+    type: 'string[]',
     isOptional: true,
     description:
-      "List of summary types to generate. Can only include 'self' (current chunk), 'prev' (previous chunk), or 'next' (next chunk)",
+      "List of summary types to generate. Defaults to ['self']. Supported values are 'self' (current chunk), 'prev' (previous chunk), and 'next' (next chunk).",
   },
   {
     name: 'promptTemplate',
@@ -135,7 +135,7 @@ The `extract` parameter accepts the following fields:
   content={[
   {
     name: 'llm',
-    type: 'MastraLanguageModel',
+    type: 'MastraLanguageModel | MastraLegacyLanguageModel',
     isOptional: true,
     description: 'AI SDK language model to use for question generation',
   },
@@ -167,7 +167,7 @@ The `extract` parameter accepts the following fields:
   content={[
   {
     name: 'llm',
-    type: 'MastraLanguageModel',
+    type: 'MastraLanguageModel | MastraLegacyLanguageModel',
     isOptional: true,
     description: 'AI SDK language model to use for keyword extraction',
   },

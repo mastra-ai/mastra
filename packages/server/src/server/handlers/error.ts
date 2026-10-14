@@ -44,10 +44,35 @@ function isWorkflowSchemaValidationError(error: unknown): error is Error {
   return error instanceof Error && (error as { id?: unknown }).id === WORKFLOW_SCHEMA_VALIDATION_FAILED_CODE;
 }
 
-const WORKFLOW_RESUME_ALREADY_CLAIMED_CODE = 'WORKFLOW_RESUME_ALREADY_CLAIMED';
+// A resume the run can't accept: another resume claimed it, or it isn't waiting to be resumed.
+const RESUME_ALREADY_CLAIMED_CODES = new Set([
+  'WORKFLOW_RESUME_ALREADY_CLAIMED',
+  'AGENT_RESUME_ALREADY_CLAIMED',
+  'WORKFLOW_RUN_NOT_SUSPENDED',
+  'AGENT_RESUME_RUN_NOT_SUSPENDED',
+]);
 
-function isWorkflowResumeAlreadyClaimedError(error: unknown): error is Error {
-  return error instanceof Error && (error as { id?: unknown }).id === WORKFLOW_RESUME_ALREADY_CLAIMED_CODE;
+function isResumeAlreadyClaimedError(error: unknown): error is Error {
+  return error instanceof Error && RESUME_ALREADY_CLAIMED_CODES.has((error as { id?: unknown }).id as string);
+}
+
+/**
+ * Durable agent errors for a request that conflicts with the run's state:
+ * another execution owns the run, it is already being recovered, it lost a
+ * concurrent claim, or it is suspended (recover). Matched by id, like the
+ * other checks here, so the server doesn't depend on core exporting them.
+ */
+const DURABLE_RUN_CONFLICT_CODES = new Set([
+  'DURABLE_AGENT_RUN_ACTIVE',
+  'DURABLE_AGENT_RECOVER_RUN_ACTIVE_LOCALLY',
+  'DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS',
+  'DURABLE_AGENT_RECOVER_RUN_SUSPENDED',
+  'DURABLE_AGENT_EXECUTION_CONFLICT',
+]);
+
+function isDurableRunConflictError(error: unknown): error is Error {
+  const id = (error as { id?: unknown } | undefined)?.id;
+  return error instanceof Error && typeof id === 'string' && DURABLE_RUN_CONFLICT_CODES.has(id);
 }
 
 const FEEDBACK_REVIEW_STATUS_CONFLICT_CODE = 'OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_CONFLICT';
@@ -128,9 +153,10 @@ export function handleError(error: unknown, defaultMessage: string): never {
     });
   }
 
-  // A losing concurrent resume is a conflict on run state, not a malformed request, so it maps
-  // to 409 and clients can distinguish it from a 400/500 and re-read the run.
-  if (isWorkflowResumeAlreadyClaimedError(error)) {
+  // A losing concurrent resume, or a recover of a run that is live or suspended, is a conflict on
+  // run state, not a malformed request, so it maps to 409 and clients can distinguish it from a
+  // 400/500 and re-read the run.
+  if (isResumeAlreadyClaimedError(error) || isDurableRunConflictError(error)) {
     throw new HTTPException(409, {
       message: error.message,
       stack: error.stack,

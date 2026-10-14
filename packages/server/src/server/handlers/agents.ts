@@ -144,7 +144,7 @@ function normalizePublicExecutionOptions(
 ): Record<string, unknown> | undefined {
   if (!options || typeof options !== 'object' || Array.isArray(options)) return undefined;
 
-  const { actor: _actor, requestContext, ...normalized } = options;
+  const { actor: _actor, scopes: _scopes, requestContext, ...normalized } = options;
   stripClientCredentialHeaders(normalized);
   mergeBodyRequestContext(serverRequestContext, requestContext);
   return { ...normalized, requestContext: serverRequestContext };
@@ -1478,7 +1478,7 @@ export const GENERATE_AGENT_ROUTE = createRoute({
     try {
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
@@ -1587,7 +1587,7 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
 
       const { messages, resourceId, resourceid, threadId, ...rest } = params;
@@ -1658,7 +1658,7 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
 
       const { messages, resourceId, resourceid, threadId, ...rest } = params;
@@ -1879,7 +1879,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
     try {
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
@@ -2509,7 +2509,7 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
     try {
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, ...rest } = params;
@@ -2611,28 +2611,46 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       // Durable agents have their own CachingPubSub instance separate from mastra.pubsub,
       // so we must subscribe to the agent's pubsub to receive the correct stream events.
       const agent = await getAgentFromSystem({ mastra, agentId });
-      const agentPubsub = isDurableAgentLike(agent) ? (agent as DurableAgentLike).pubsub : undefined;
-      const pubsub = agentPubsub ?? mastra.pubsub;
-
-      // Create a ReadableStream that subscribes to the agent stream topic
-      // The stream adapter handles replay logic via subscribeWithReplay or subscribeFromOffset
+      const durableAgent = isDurableAgentLike(agent) ? (agent as DurableAgentLike) : undefined;
+      const pubsub = durableAgent?.pubsub ?? mastra.pubsub;
       const topic = AGENT_STREAM_TOPIC(runId);
-      let handleEvent: ((event: any) => void) | null = null;
+
+      // A durable agent subscribes for us so the client never sees what an
+      // execution that lost the run still publishes. Agents without it, such as
+      // those from an older @mastra/core, are observed through the topic directly.
+      const subscribe = (onEvent: (event: any) => void): Promise<() => Promise<void>> => {
+        if (typeof durableAgent?.__subscribeToRunStream === 'function') {
+          return durableAgent.__subscribeToRunStream(runId, { offset }, onEvent);
+        }
+        const subscribed =
+          offset !== undefined
+            ? pubsub.subscribeFromOffset(topic, offset, onEvent)
+            : pubsub.subscribeWithReplay(topic, onEvent);
+        return subscribed.then(() => () => pubsub.unsubscribe(topic, onEvent));
+      };
+
+      let closed = false;
+      let unsubscribe: (() => Promise<void>) | undefined;
       let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
       // Idle timeout: close the stream if no events are received within 5 minutes.
       // This prevents subscription leaks when an agent crashes without emitting a terminal event.
       const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 
-      function cleanup(controller: ReadableStreamDefaultController) {
+      function stop() {
+        closed = true;
         if (idleTimer) {
           clearTimeout(idleTimer);
           idleTimer = null;
         }
-        if (handleEvent) {
-          void pubsub.unsubscribe(topic, handleEvent);
-          handleEvent = null;
+        if (unsubscribe) {
+          void unsubscribe();
+          unsubscribe = undefined;
         }
+      }
+
+      function cleanup(controller: ReadableStreamDefaultController) {
+        stop();
         try {
           controller.close();
         } catch {
@@ -2658,7 +2676,8 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
 
           resetIdleTimer(controller);
 
-          handleEvent = (event: any) => {
+          subscribe(event => {
+            if (closed) return;
             const isTerminal = event.type === 'finish' || event.type === 'error';
             try {
               controller.enqueue(event);
@@ -2670,32 +2689,21 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
             } else {
               resetIdleTimer(controller);
             }
-          };
-
-          // Subscribe with replay support
-          const subscribePromise =
-            offset !== undefined
-              ? pubsub.subscribeFromOffset(topic, offset, handleEvent)
-              : pubsub.subscribeWithReplay(topic, handleEvent);
-
-          subscribePromise.catch((error: any) => {
-            console.error(`[ObserveAgentStream] Failed to subscribe to ${topic}:`, error);
-            if (idleTimer) {
-              clearTimeout(idleTimer);
-              idleTimer = null;
-            }
-            controller.error(error);
-          });
+          }).then(
+            unsubscribeFromRun => {
+              // The stream may have ended while subscribing.
+              if (closed) void unsubscribeFromRun();
+              else unsubscribe = unsubscribeFromRun;
+            },
+            (error: any) => {
+              console.error(`[ObserveAgentStream] Failed to subscribe to ${topic}:`, error);
+              stop();
+              controller.error(error);
+            },
+          );
         },
         cancel() {
-          if (idleTimer) {
-            clearTimeout(idleTimer);
-            idleTimer = null;
-          }
-          if (handleEvent) {
-            void pubsub.unsubscribe(topic, handleEvent);
-            handleEvent = null;
-          }
+          stop();
         },
       });
 
@@ -2736,7 +2744,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
 
       await validateDurableToolCallAccess({
@@ -2819,7 +2827,7 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
       }
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
       const normalizedStreamOptions = normalizePublicExecutionOptions(
         params.streamOptions as Record<string, unknown> | undefined,
@@ -2940,7 +2948,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
 
       await validateDurableToolCallAccess({
@@ -2984,7 +2992,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Run id is required' });
       }
 
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
 
       stripClientCredentialHeaders(params);
 
@@ -3183,7 +3191,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Run id is required' });
       }
 
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
 
       stripClientCredentialHeaders(params);
 
@@ -3319,7 +3327,7 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
 
       await validateDurableToolCallAccess({
@@ -3373,7 +3381,7 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
 
       await validateDurableToolCallAccess({
@@ -3420,7 +3428,7 @@ export const STREAM_NETWORK_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
 
       validateBody({ messages });
@@ -3471,7 +3479,7 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
 
       const streamResult = await agent.approveNetworkToolCall({
@@ -3511,7 +3519,7 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
 
       const streamResult = await agent.declineNetworkToolCall({

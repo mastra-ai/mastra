@@ -29,7 +29,7 @@ export const skillTabAutocompleteScenario = {
 
     await runtime.waitForScreenText(/Project: project/i, terminal);
     await terminal.flushInput?.();
-    await runtime.waitForScreenText(/│ ›/i, terminal, 10_000);
+    await runtime.waitForScreenText(/→/, terminal, 10_000);
 
     // Only matches the skill once the inner slash is typed — the exact prefix
     // shape pi-tui's applyCompletion mishandles.
@@ -42,7 +42,7 @@ export const skillTabAutocompleteScenario = {
     terminal.write(TAB);
     await terminal.flushInput?.();
     // The slash-mode prompt only renders while the input still starts with "/".
-    await runtime.waitForScreenText(/│ \/ skill\/tab-complete-e2e/i, terminal, 10_000);
+    await runtime.waitForScreenText(/(?:^|\s)\/ skill\/tab-complete-e2e/im, terminal, 10_000);
     runtime.printScreen('after Tab', terminal);
 
     // No leading space here on purpose: the separator has to come from the Tab

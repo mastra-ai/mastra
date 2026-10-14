@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import { thinkingConfig } from '../../../../__tests__/fixtures/thinkingConfig';
 import { OverlaysProvider } from '../../../../lib/overlays';
 
 if (typeof globalThis.ResizeObserver === 'undefined') {
@@ -82,9 +83,7 @@ export function useOverlayControllerHandlers() {
         },
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/:projectRepositoryId/sessions`, () =>
-      HttpResponse.json({ sessions: [] }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions: [] })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/work-items`, () =>
       HttpResponse.json({ workItems: [] }),
     ),
@@ -92,7 +91,6 @@ export function useOverlayControllerHandlers() {
       const resourceId = resourceIdFromRequestBody(await request.json());
       return HttpResponse.json({ controllerId: 'code', resourceId, threadId: 'thread-test' });
     }),
-    http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
     http.get(`${API}/models`, () =>
       HttpResponse.json({
         models: [
@@ -127,6 +125,8 @@ export function useOverlayControllerHandlers() {
       HttpResponse.json({ root: '/tmp', path: '/tmp', parent: null, entries: [] }),
     ),
     http.put(`${API}/sessions/:resourceId/state`, () => HttpResponse.json({})),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: null })),
+    http.get(`${TEST_BASE_URL}/web/config/thinking`, () => HttpResponse.json(thinkingConfig)),
   );
 }
 

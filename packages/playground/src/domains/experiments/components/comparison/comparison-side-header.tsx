@@ -1,114 +1,273 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { getShortId, TextAndIcon } from '@mastra/playground-ui/components/Text';
+import { getShortId } from '@mastra/playground-ui/components/Text';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
-import { CalendarIcon, HashIcon, LayersIcon, TargetIcon } from 'lucide-react';
-import { ComparisonScoreRow } from './comparison-score-row';
-import { ComparisonSection } from './comparison-section';
+import { formatDuration } from '@mastra/playground-ui/utils/duration';
+import {
+  CalendarIcon,
+  CircleAlertIcon,
+  ClockIcon,
+  CoinsIcon,
+  GaugeIcon,
+  HashIcon,
+  LayersIcon,
+  TargetIcon,
+  StarIcon,
+} from 'lucide-react';
+import type { ComparisonRole } from './build-comparison-rows';
+import {
+  costDeltaFormatter,
+  diff,
+  formatCostValue,
+  formatDurationDelta,
+  formatScore,
+  formatTokenCount,
+} from './comparison-metric-format';
+import { ComparisonMetricList, ScorerLabel } from './comparison-metric-list';
+import type { ComparisonMetric } from './comparison-metric-list';
+import { ComparisonSection, sectionStackClass } from './comparison-section';
 
 export interface ScorerSummary {
   scorerId: string;
   average: number | null;
-  /** Difference against the baseline average. Contender side only. */
+  /** Difference against the baseline average. Null on the baseline. */
   delta: number | null;
 }
 
-export interface ComparisonSideHeaderProps {
-  side: 'baseline' | 'contender';
-  experiment?: DatasetExperiment;
-  /** Per-scorer averages across every item. */
-  summary?: ScorerSummary[];
-  /** Only the contender renders deltas, so a difference is stated once. */
-  showDeltas?: boolean;
-  /** Highlights the dataset version when the two experiments disagree on it. */
-  versionMismatch?: boolean;
+/** Run-level figures of one column, computed from the compared items. */
+export interface ComparisonSideMetrics {
+  /** Items this experiment ran, out of every compared item. */
+  errorCount: number;
+  /** Mean of every score across every scorer. */
+  averageScore: number | null;
+  /** Mean item run duration, in milliseconds. */
+  averageDurationMs: number | null;
+  /** Total estimated cost of the experiment. */
+  cost?: number;
+  costUnit?: string;
+  /** Total input plus output tokens of the experiment. */
+  tokens?: number;
 }
 
-const sideLabel = { baseline: 'Baseline', contender: 'Contender' } as const;
+export interface ComparisonSideHeaderProps {
+  role: ComparisonRole;
+  /** Column badge, e.g. `Baseline` or `Contender 2`. */
+  label: string;
+  experiment?: DatasetExperiment;
+  /** Per-scorer averages across every item. Contenders also render their delta against the baseline. */
+  summary?: ScorerSummary[];
+  metrics?: ComparisonSideMetrics;
+  /** Baseline figures, so a contender can show its trend against them. */
+  baselineMetrics?: ComparisonSideMetrics;
+  /** Highlights the dataset version when this experiment disagrees with the baseline on it. */
+  versionMismatch?: boolean;
+  /** Makes this contender the baseline. Omitted on the baseline itself. */
+  onSetBaseline?: () => void;
+  /** Shows the total cost and tokens lines. False when the observability storage cannot serve metrics. */
+  showUsage?: boolean;
+}
+
 const sideVariant = { baseline: 'purple', contender: 'blue' } as const;
 
-/** Inline link: small leading glyph, truncating name, small trailing external cue. */
-const linkClass = 'flex min-w-0 items-center gap-1.5 hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0';
-
-/** Header cell of one comparison side: which experiment it is, and its averages. */
+/** Header cell of one comparison side: which experiment it is, and its run-level figures. */
 export function ComparisonSideHeader({
-  side,
+  role,
+  label,
   experiment,
   summary,
-  showDeltas,
+  metrics,
+  baselineMetrics,
   versionMismatch,
+  onSetBaseline,
+  showUsage = false,
 }: ComparisonSideHeaderProps) {
   const { Link, paths } = useLinkComponent();
-  const label = sideLabel[side];
 
   const shortId = experiment ? (getShortId(experiment.id) ?? experiment.id) : null;
   const createdAt = experiment?.createdAt ? new Date(experiment.createdAt) : null;
 
-  const scorerSummary = summary ?? [];
+  const isContender = role === 'contender';
+  const trend = (value: number | null | undefined, baseline: number | null | undefined) =>
+    isContender ? diff(value, baseline) : null;
+
+  const details: ComparisonMetric[] = experiment
+    ? [
+        ...(experiment.targetId
+          ? [
+              {
+                id: 'target',
+                icon: experiment.targetType === 'agent' ? <AgentIcon /> : <TargetIcon />,
+                label: experiment.targetType === 'agent' ? 'Agent' : 'Target',
+                value:
+                  experiment.targetType === 'agent' ? (
+                    <Link href={paths.agentLink(experiment.targetId)} className="min-w-0 truncate hover:underline">
+                      {experiment.targetId}
+                    </Link>
+                  ) : (
+                    <span className="min-w-0 truncate">{experiment.targetId}</span>
+                  ),
+                delta: null,
+              },
+            ]
+          : []),
+        ...(versionMismatch
+          ? [
+              {
+                id: 'dataset-version',
+                icon: <LayersIcon />,
+                label: 'Dataset',
+                value: <span className="text-warning-foreground">different dataset version</span>,
+                delta: null,
+              },
+            ]
+          : []),
+        ...(createdAt
+          ? [
+              {
+                id: 'created-at',
+                icon: <CalendarIcon />,
+                label: 'Created',
+                value: formatDate(createdAt, 'date'),
+                delta: null,
+              },
+            ]
+          : []),
+      ]
+    : [];
+
+  const usage = showUsage ? metrics : undefined;
+
+  const summaryMetrics: ComparisonMetric[] = [
+    ...(usage
+      ? [
+          {
+            id: 'total-cost',
+            icon: <CoinsIcon />,
+            label: 'Total cost',
+            value: formatCostValue(usage.cost, usage.costUnit),
+            delta: usage.costUnit === baselineMetrics?.costUnit ? trend(usage.cost, baselineMetrics?.cost) : null,
+            formatDelta: costDeltaFormatter(usage.costUnit),
+            higherIsBetter: false,
+            emphasis: true,
+          },
+        ]
+      : []),
+    ...(metrics
+      ? [
+          {
+            id: 'avg-duration',
+            icon: <ClockIcon />,
+            label: 'Avg duration',
+            value: formatDuration(metrics.averageDurationMs) ?? '-',
+            delta: trend(metrics.averageDurationMs, baselineMetrics?.averageDurationMs),
+            formatDelta: formatDurationDelta,
+            higherIsBetter: false,
+            emphasis: true,
+          },
+        ]
+      : []),
+    ...(usage
+      ? [
+          {
+            id: 'total-tokens',
+            icon: <HashIcon />,
+            label: 'Total tokens',
+            value: formatTokenCount(usage.tokens),
+            delta: trend(usage.tokens, baselineMetrics?.tokens),
+            formatDelta: formatTokenCount,
+            higherIsBetter: false,
+          },
+        ]
+      : []),
+    ...details,
+    ...(metrics
+      ? [
+          {
+            id: 'errors',
+            icon: <CircleAlertIcon />,
+            label: 'Errors',
+            value: String(metrics.errorCount),
+            delta: trend(metrics.errorCount, baselineMetrics?.errorCount),
+            formatDelta: String,
+            higherIsBetter: false,
+          },
+        ]
+      : []),
+    // Every column lists the same scorers, so hiding it when there are none keeps the columns aligned.
+    ...(metrics && summary && summary.length > 0
+      ? [
+          {
+            id: 'avg-score',
+            icon: <GaugeIcon />,
+            label: 'Avg score',
+            value: formatScore(metrics.averageScore),
+            delta: trend(metrics.averageScore, baselineMetrics?.averageScore),
+          },
+        ]
+      : []),
+    ...(summary ?? []).map(({ scorerId, average, delta }) => ({
+      id: `scorer:${scorerId}`,
+      icon: <ScorersIcon />,
+      label: <ScorerLabel scorerId={scorerId} />,
+      value: formatScore(average),
+      delta: isContender ? delta : null,
+    })),
+  ];
 
   return (
-    <div className="grid content-start gap-3">
+    <div className={sectionStackClass}>
       <div className="flex min-w-0 items-center gap-2">
-        <Badge variant={sideVariant[side]} size="xs">
-          {label}
-        </Badge>
         {experiment && (
           <Button
             render={<Link href={`/experiments/${experiment.id}`} />}
             size="sm"
-
+            className="max-w-full min-w-0"
             aria-label={`Open experiment ${experiment.name || shortId}`}
           >
             <span className="min-w-0 truncate">{experiment.name || shortId}</span>
           </Button>
         )}
-      </div>
-
-      {experiment && (
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
-          {experiment.name && (
-            <TextAndIcon>
-              <HashIcon /> {shortId}
-            </TextAndIcon>
-          )}
-          {experiment.targetType === 'agent' && experiment.targetId ? (
-            <Link href={paths.agentLink(experiment.targetId)} className={linkClass}>
-              <AgentIcon />
-              <span className="min-w-0 truncate">{experiment.targetId}</span>
-            </Link>
+        <div className="ml-auto shrink-0">
+          {onSetBaseline ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label="Set as baseline"
+                    onClick={onSetBaseline}
+                    className={cn('cursor-pointer rounded-[7px] hover:brightness-110', focusRing)}
+                  />
+                }
+              >
+                <Badge variant={sideVariant[role]} size="md" icon={<StarIcon />}>
+                  {label}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>Set as baseline</TooltipContent>
+            </Tooltip>
           ) : (
-            <TextAndIcon>
-              <TargetIcon /> {experiment.targetId}
-            </TextAndIcon>
-          )}
-          <TextAndIcon className={cn(versionMismatch && 'text-warning-foreground')}>
-            <LayersIcon /> v{experiment.datasetVersion ?? '—'}
-            {versionMismatch && ' · different dataset version'}
-          </TextAndIcon>
-          {createdAt && (
-            <TextAndIcon>
-              <CalendarIcon /> {formatDate(createdAt, 'date-time')}
-            </TextAndIcon>
+            <Badge
+              variant={sideVariant[role]}
+              size="md"
+              icon={role === 'baseline' ? <StarIcon className="fill-current" /> : <StarIcon />}
+            >
+              {label}
+            </Badge>
           )}
         </div>
-      )}
+      </div>
 
-      {scorerSummary.length > 0 && (
-        <ComparisonSection title="Overall score">
-          <div className="grid gap-2">
-            {scorerSummary.map(({ scorerId, average, delta }) => (
-              <ComparisonScoreRow
-                key={scorerId}
-                scorerId={scorerId}
-                value={average}
-                delta={showDeltas ? delta : null}
-              />
-            ))}
-          </div>
+      {summaryMetrics.length > 0 && (
+        <ComparisonSection title="Summary" collapsible={false}>
+          <ComparisonMetricList metrics={summaryMetrics} />
         </ComparisonSection>
       )}
     </div>

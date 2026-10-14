@@ -1,4 +1,5 @@
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Field, FieldContent, FieldDescription, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
@@ -7,7 +8,6 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
 import { useEmbedders } from '@mastra/react/hooks/embedders';
 import { useVectors } from '@mastra/react/hooks/vectors';
-import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { Controller, useWatch } from 'react-hook-form';
 import type { UseFormSetValue, Control } from 'react-hook-form';
@@ -45,7 +45,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
     <div className="rounded-md border border-border bg-background">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger className="flex w-full items-center gap-1 bg-card p-3">
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          <DisclosureChevron direction="right" className="size-4 text-muted-foreground" />
           <SectionTitle icon={<MemoryIcon className="text-muted-foreground" />}>
             Memory{(isEnabled || memoryRef) && <span className="text-success-indicator">(enabled)</span>}
           </SectionTitle>
@@ -279,9 +279,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
 
                       <Collapsible open={isObserverOpen} onOpenChange={setIsObserverOpen}>
                         <CollapsibleTrigger className="flex w-full items-center gap-1">
-                          <ChevronRight
-                            className={`h-3 w-3 text-muted-foreground transition-transform ${isObserverOpen ? 'rotate-90' : ''}`}
-                          />
+                          <DisclosureChevron direction="right" className="size-3 text-muted-foreground" />
                           <Txt as="span" variant="label" tone="ink" className="cursor-pointer">
                             Observer
                           </Txt>
@@ -472,9 +470,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
 
                       <Collapsible open={isReflectorOpen} onOpenChange={setIsReflectorOpen}>
                         <CollapsibleTrigger className="flex w-full items-center gap-1">
-                          <ChevronRight
-                            className={`h-3 w-3 text-muted-foreground transition-transform ${isReflectorOpen ? 'rotate-90' : ''}`}
-                          />
+                          <DisclosureChevron direction="right" className="size-3 text-muted-foreground" />
                           <Txt as="span" variant="label" tone="ink" className="cursor-pointer">
                             Reflector
                           </Txt>

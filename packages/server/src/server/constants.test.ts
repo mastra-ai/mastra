@@ -1,5 +1,7 @@
+import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it } from 'vitest';
 import { MASTRA_INHERITED_MEMORY_KEY, isReservedRequestContextKey } from './constants';
+import { mergeBodyRequestContext } from './handlers/utils';
 
 describe('isReservedRequestContextKey', () => {
   it('reserves the inherited-memory key so a request body cannot set it', () => {
@@ -9,6 +11,19 @@ describe('isReservedRequestContextKey', () => {
     // body-supplied value would be used as the agent's memory and throw on the
     // first memory call.
     expect(isReservedRequestContextKey(MASTRA_INHERITED_MEMORY_KEY)).toBe(true);
+  });
+
+  it('reserves Factory memory settings so a request body cannot spoof the authoritative row', () => {
+    expect(isReservedRequestContextKey('mastra__factoryMemorySettings')).toBe(true);
+
+    const requestContext = new RequestContext();
+    mergeBodyRequestContext(requestContext, {
+      mastra__factoryMemorySettings: { observerModelId: 'openai/spoofed' },
+      locale: 'en',
+    });
+
+    expect(requestContext.get('mastra__factoryMemorySettings')).toBeUndefined();
+    expect(requestContext.get('locale')).toBe('en');
   });
 
   it('leaves ordinary keys to the caller', () => {

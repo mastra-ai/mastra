@@ -158,6 +158,23 @@ describe('concurrent resume', () => {
     expect(harness.getDownstreamExecutions()).toBe(1);
   });
 
+  it('rejects resuming a finished run with WORKFLOW_RUN_NOT_SUSPENDED', async () => {
+    const harness = createApprovalWorkflow();
+    const { run } = await suspendRun(harness.workflow);
+
+    const first = run.resume({ step: 'approval', resumeData: { approved: true } });
+    await harness.downstreamHasStarted;
+    harness.releaseDownstream();
+    expect((await first).status).toBe('success');
+
+    await expect(run.resume({ step: 'approval', resumeData: { approved: true } })).rejects.toMatchObject({
+      id: 'WORKFLOW_RUN_NOT_SUSPENDED',
+      message: 'This workflow run was not suspended',
+      details: { workflowId: 'concurrent-resume-wf', runId: run.runId, status: 'success' },
+    });
+    expect(harness.getDownstreamExecutions()).toBe(1);
+  });
+
   it('still resumes on stores that cannot claim, without calling updateWorkflowState', async () => {
     const harness = createApprovalWorkflow();
 

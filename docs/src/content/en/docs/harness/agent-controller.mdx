@@ -135,7 +135,25 @@ const session = await controller.createSession({
 })
 ```
 
-Use [`session.thread.create()`](/reference/agent-controller/session#sessionthreadcreate-title-id-) and [`session.thread.switch()`](/reference/agent-controller/session#sessionthreadswitch-threadid-emitevent-) to move one live Session between conversations.
+Use [`session.thread.create()`](/reference/agent-controller/session#sessionthreadcreate-title-id-requestcontext-) and [`session.thread.switch()`](/reference/agent-controller/session#sessionthreadswitch-threadid-emitevent-requestcontext-) to move one live Session between conversations.
+
+### Transfer thread ownership
+
+Each new thread stores its durable owner in `metadata.ownerId` and its original creator in `metadata.createdBy`. Both default to the Session host's `ownerId`. `createdBy` doesn't change when ownership transfers.
+
+Read the active thread's owner and transfer it through `session.thread`:
+
+```typescript
+const currentOwnerId = await session.thread.getOwner()
+
+await session.thread.transferOwnership({
+  toOwnerId: 'user-456',
+})
+```
+
+Transfers are serialized within one process. Hosts that require a durable cross-process compare-and-set should commit it in their own storage first, then call `transferOwnership()` to mirror the owner onto the active thread.
+
+Every run snapshots the thread owner when it starts. Tools and other dynamic runtime code can read that value from `AgentControllerRequestContext.threadOwnerId`. If ownership changes during a run, the active run keeps the old snapshot and the next run receives the new owner. `context.session.ownerId` remains the identity of the process-local Session host.
 
 ### List stored messages from the client
 
@@ -204,6 +222,35 @@ await session.model.switch('__GATEWAY_ANTHROPIC_MODEL_SONNET__')
 
 console.log(session.model.get())
 ```
+
+### Select Observational Memory models
+
+Observer and reflector model choices are independent. Each role can use an explicit model or an automatic selection that the host resolves from the active main model and session state.
+
+Configure automatic selection with a synchronous resolver that returns a concrete model ID:
+
+```typescript
+const controller = new AgentController({
+  // ...
+  omConfig: {
+    observerModel: 'auto',
+    reflectorModel: 'auto',
+    defaultObserverModelId: '__GATEWAY_OPENAI_MODEL_MINI__',
+    defaultReflectorModelId: '__GATEWAY_OPENAI_MODEL_MINI__',
+    resolveAutoModelId: ({ currentModelId }) => currentModelId,
+  },
+})
+```
+
+`session.om.observer.model()` returns `'auto'` or a concrete model ID. `session.om.observer.modelId()` returns the effective concrete model. A host can therefore change the main model without rewriting automatic role settings.
+
+Reset one role to automatic selection without changing the other:
+
+```typescript
+await session.om.observer.switchModel({ modelId: 'auto' })
+```
+
+If the resolver returns `undefined` or throws, the role uses its concrete `defaultObserverModelId` or `defaultReflectorModelId` fallback. See the [`Session` Observational Memory API](/reference/agent-controller/session#observational-memory) for explicit selection.
 
 ## Manage threads and state
 

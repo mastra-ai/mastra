@@ -109,6 +109,28 @@ export const Password: Story = {
   },
 };
 
+// Password managers stay out of DS text fields unless the field asks for them: with no
+// `autoComplete`, a field renders `autocomplete="off"` plus each manager's ignore attribute.
+// A credential form opts in with a real autofill token.
+export const PasswordManagerAutofill: Story = {
+  render: () => (
+    <form className="flex w-72 flex-col gap-4" onSubmit={event => event.preventDefault()}>
+      <Field>
+        <FieldLabel>Name (opted out by default)</FieldLabel>
+        <Input placeholder="Dataset name" />
+      </Field>
+      <Field>
+        <FieldLabel>Email</FieldLabel>
+        <Input type="email" autoComplete="email" placeholder="you@example.com" />
+      </Field>
+      <Field>
+        <FieldLabel>Password</FieldLabel>
+        <Input type="password" autoComplete="current-password" placeholder="Enter password" />
+      </Field>
+    </form>
+  ),
+};
+
 export const Number: Story = {
   args: {
     type: 'number',

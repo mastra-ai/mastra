@@ -1,3 +1,4 @@
+import { RequestContext } from '@mastra/core/request-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const providerRegistryMock: Record<string, unknown> = {};
@@ -72,7 +73,9 @@ const agentConstructorMock = vi.fn();
 function resolveInputProcessors(): Array<{ id?: string }> {
   const config = agentConstructorMock.mock.calls[0]?.[0] as { inputProcessors?: unknown } | undefined;
   expect(typeof config?.inputProcessors).toBe('function');
-  return (config!.inputProcessors as () => Array<{ id?: string }>)();
+  return (config!.inputProcessors as (args: { requestContext: RequestContext }) => Array<{ id?: string }>)({
+    requestContext: new RequestContext(),
+  });
 }
 
 function resolveOutputProcessors(): Array<{ id?: string }> {
@@ -141,7 +144,7 @@ function createMockSettings() {
       yolo: null,
       theme: 'auto',
       thinkingLevel: 'off',
-      quietMode: false,
+      previewLines: 2,
     },
     storage: {
       backend: 'libsql',
@@ -176,8 +179,13 @@ function createMockSettings() {
 }
 
 /** Stand-in for the Mastra the controller builds on init(). */
+let registeredKnowledge: Record<string, unknown> = {};
 const mastraStub = {
   getStorage: vi.fn(() => undefined),
+  listKnowledge: vi.fn(() => ({ ...registeredKnowledge })),
+  addKnowledge: vi.fn((knowledge: unknown, key: string) => {
+    registeredKnowledge[key] = knowledge;
+  }),
   startWorkers: vi.fn(async () => {}),
   stopWorkers: vi.fn(async () => {}),
   addProcessor: vi.fn((processor: { id: string; __registerMastra?: (mastra: unknown) => void }) => {
@@ -495,6 +503,7 @@ vi.mock('../utils/thread-lock.js', () => ({
 describe('createMastraCode', () => {
   beforeEach(() => {
     vi.resetModules();
+    registeredKnowledge = {};
     createMastraCodeGatewayMock.mockClear();
     createMastraCodeModelCatalogProviderMock.mockClear();
     mastraCodeCatalogProviderMock.mockClear();
@@ -582,6 +591,42 @@ describe('createMastraCode', () => {
     expect(controllerConstructorMock.mock.calls[0]![0].agent).toBe(result.codeAgent);
     expect(result).not.toHaveProperty('validateExperimentalAgent');
   }, 15_000);
+
+  it('prepares trusted policy in the production main-model, goal-judge, and memory callbacks', async () => {
+    const { setCredentialStoreProvider, resolveTenantFromRequestContext } =
+      await import('../agents/credential-resolver.js');
+    const { getDynamicModel, getGoalJudgeModel } = await import('../agents/model.js');
+    const { createMastraCodeAgentController } = await import('../index.js');
+    const tenant = { orgId: 'org-1', userId: 'owner', credentialScope: 'user' as const };
+    const lookup = vi.fn(async () => tenant);
+    const memoryResolve = vi.fn(() => undefined);
+    getDynamicMemoryMock.mockReturnValue(memoryResolve);
+    vi.mocked(getDynamicModel).mockClear();
+    vi.mocked(getGoalJudgeModel).mockClear();
+    setCredentialStoreProvider(() => undefined, lookup);
+    try {
+      await createMastraCodeAgentController();
+      const agentConfig = agentConstructorMock.mock.calls[0]![0];
+      const memory = controllerConstructorMock.mock.calls[0]![0].memory;
+      for (const [callback, resolve] of [
+        [agentConfig.model, getDynamicModel],
+        [agentConfig.goal.judge, getGoalJudgeModel],
+        [memory, memoryResolve],
+      ]) {
+        const requestContext = new RequestContext();
+        await callback({ requestContext });
+        expect(resolveTenantFromRequestContext(requestContext)).toEqual(tenant);
+        expect(resolve).toHaveBeenCalledOnce();
+        lookup.mockRejectedValueOnce(new Error('policy unavailable'));
+        await expect(callback({ requestContext })).rejects.toThrow('policy unavailable');
+        expect(resolveTenantFromRequestContext(requestContext)).toBeUndefined();
+        expect(resolve).toHaveBeenCalledOnce();
+      }
+      expect(lookup).toHaveBeenCalledTimes(6);
+    } finally {
+      setCredentialStoreProvider(undefined);
+    }
+  });
 
   it.each([
     ['durable', createDurableAgentMock, durableAgentMock],
@@ -683,7 +728,8 @@ describe('createMastraCode', () => {
         }
       | undefined;
     expect(agentControllerConfig?.gateways?.[0]?.id).toBe('amazon-bedrock');
-    expect(agentControllerConfig?.gateways?.[1]).toBe(mastraCodeGatewayMock);
+    expect(agentControllerConfig?.gateways?.[1]?.id).toBe('github-copilot');
+    expect(agentControllerConfig?.gateways?.[2]).toBe(mastraCodeGatewayMock);
     expect(agentControllerConfig?.subagents).toEqual([subagent]);
   }, 30_000);
 
@@ -763,6 +809,38 @@ describe('createMastraCode', () => {
     expect(definition.allowedControllerTools).toEqual(['task_write', 'task_check']);
   });
 
+  it('forwards disableBuiltinTools to the agent controller', async () => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ disableBuiltinTools: ['submit_plan'] });
+    expect(controllerConstructorMock.mock.calls[0]![0].disableBuiltinTools).toEqual(['submit_plan']);
+  });
+
+  it('removes disabled task tools from the task signal provider', async () => {
+    const { TaskSignalProvider } = await import('@mastra/core/signals');
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ disableBuiltinTools: ['task_write', 'task_check'] });
+    const codeAgentConfig = agentConstructorMock.mock.calls
+      .map(call => call?.[0] as { id?: string; signals?: unknown[] } | undefined)
+      .find(config => config?.id === 'code-agent');
+    const taskProvider = codeAgentConfig?.signals?.find(provider => provider instanceof TaskSignalProvider) as
+      | { getTools: () => Record<string, unknown> }
+      | undefined;
+    expect(Object.keys(taskProvider!.getTools()).sort()).toEqual(['task_complete', 'task_update']);
+  });
+
+  it('registers a plan mode that does not ask for submit_plan when it is disabled', async () => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ disableBuiltinTools: ['submit_plan'] });
+    const modes = controllerConstructorMock.mock.calls[0]![0].modes as { id: string; instructions?: string }[];
+    expect(modes.find(mode => mode.id === 'plan')?.instructions).not.toContain('submit_plan');
+  });
+
+  it('does not set disableBuiltinTools on the agent controller by default', async () => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode();
+    expect(controllerConstructorMock.mock.calls[0]![0]).not.toHaveProperty('disableBuiltinTools');
+  });
+
   it('filters disabled workspace tools from native subagent allowlists', async () => {
     const { createMastraCode } = await import('../index.js');
     const { executeSubagent } = await import('../agents/subagents/execute.js');
@@ -816,6 +894,87 @@ describe('createMastraCode', () => {
     expect(typeof agentControllerConfig?.memory).toBe('function');
   });
 
+  it('uses a host-owned Knowledge instance and preserves its registration key', async () => {
+    const { Knowledge } = await import('@mastra/core/knowledge');
+    const instance = new Knowledge({ id: 'mastra', description: 'Factory knowledge' });
+    const { createMastraCode } = await import('../index.js');
+
+    const code = await createMastraCode({ knowledge: { key: 'mastra', instance } });
+
+    expect(code.knowledge).toBe(instance);
+    expect(code.knowledgeKey).toBe('mastra');
+    // No `settingsPath` configured; Knowledge follows the memory options.
+    expect(getDynamicMemoryMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      { disableSettingsOmSeed: undefined },
+      instance,
+    );
+    expect(createKnowledgeInspectorMock).toHaveBeenCalledWith(expect.objectContaining({ knowledge: instance }));
+  });
+
+  it('registers the selected Knowledge on the Mastra a local boot builds', async () => {
+    const { Knowledge } = await import('@mastra/core/knowledge');
+    const instance = new Knowledge({ id: 'mastra' });
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ knowledge: { key: 'mastra', instance } });
+
+    expect(mastraStub.addKnowledge).toHaveBeenCalledWith(instance, 'mastra');
+    expect(registeredKnowledge.mastra).toBe(instance);
+  });
+
+  it('rejects a local boot whose Mastra registers a different Knowledge under the selected key', async () => {
+    const { Knowledge } = await import('@mastra/core/knowledge');
+    registeredKnowledge = { mastra: new Knowledge({ id: 'other' }) };
+    const { createMastraCode } = await import('../index.js');
+
+    await expect(
+      createMastraCode({ knowledge: { key: 'mastra', instance: new Knowledge({ id: 'mastra' }) } }),
+    ).rejects.toThrow('This Mastra already registers a different Knowledge instance under "mastra".');
+  });
+
+  it('rejects an empty host-owned Knowledge registration key', async () => {
+    const { Knowledge } = await import('@mastra/core/knowledge');
+    const { createMastraCode } = await import('../index.js');
+
+    await expect(
+      createMastraCode({ knowledge: { key: '  ', instance: new Knowledge({ id: 'mastra' }) } }),
+    ).rejects.toThrow('knowledge.key must be a non-empty string.');
+  });
+
+  it('does not touch Knowledge storage at startup when Knowledge is off', async () => {
+    vi.stubEnv('MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS', '');
+    try {
+      const { createMastraCode } = await import('../index.js');
+
+      const code = await createMastraCode();
+
+      expect(code.knowledge).toBeUndefined();
+      expect(createKnowledgeInspectorMock).not.toHaveBeenCalled();
+      expect(code.knowledgeInspector).toBeUndefined();
+      expect(code.knowledgeInspectorUnavailableReason).toContain('MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS=1');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('starts with an unavailable reason when Knowledge storage cannot be opened', async () => {
+    const { Knowledge } = await import('@mastra/core/knowledge');
+    const { createMastraCode } = await import('../index.js');
+    createKnowledgeInspectorMock.mockRejectedValueOnce(
+      new Error('Knowledge schema reset required: Missing Knowledge v2 tables.'),
+    );
+
+    const code = await createMastraCode({ knowledge: { key: 'mastra', instance: new Knowledge({ id: 'mastra' }) } });
+
+    expect(code.knowledgeInspector).toBeUndefined();
+    expect(code.knowledgeInspectorUnavailableReason).toBe(
+      'Knowledge is unavailable: Knowledge schema reset required: Missing Knowledge v2 tables.',
+    );
+  });
+
   it('passes an injected vector to dynamic memory', async () => {
     const vector = { id: 'custom-vector' };
     const { createMastraCode } = await import('../index.js');
@@ -824,9 +983,15 @@ describe('createMastraCode', () => {
 
     // The settings path and model-pack option are threaded through for
     // observational-memory resolution; neither was configured here.
-    expect(getDynamicMemoryMock).toHaveBeenCalledWith(expect.anything(), vector, undefined, {
-      disableSettingsOmSeed: undefined,
-    });
+    expect(getDynamicMemoryMock).toHaveBeenCalledWith(
+      expect.anything(),
+      vector,
+      undefined,
+      { disableSettingsOmSeed: undefined },
+      process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1'
+        ? expect.objectContaining({ id: 'mastracode' })
+        : undefined,
+    );
     expect(createVectorStoreMock).not.toHaveBeenCalled();
   });
 
@@ -1170,6 +1335,48 @@ describe('createMastraCode', () => {
     );
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(updateThreadPeerAdvertisementMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('releases every live session thread claim on releaseThreadClaims without deleting the session', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    const result = await createMastraCode({ crossAgentSignals: true });
+
+    const onSessionCreatedListeners = controllerOnSessionCreatedMock.mock.calls.map(
+      call => call[0] as (session: any) => void | Promise<void>,
+    );
+    const unsubscribeSessionEvents = vi.fn();
+    const unsubscribeClaims = [vi.fn(), vi.fn()];
+    claimThreadOwnershipMock
+      .mockResolvedValueOnce({ claimed: true, unsubscribe: unsubscribeClaims[0] })
+      .mockResolvedValueOnce({ claimed: true, unsubscribe: unsubscribeClaims[1] });
+    let handleSessionEvent: ((event: any) => void) | undefined;
+    const session = {
+      subscribe: (handler: (event: any) => void) => {
+        handleSessionEvent = handler;
+        return unsubscribeSessionEvents;
+      },
+      identity: { getResourceId: () => 'project-resource' },
+      machinery: { buildStreamOptions: vi.fn(async () => ({})) },
+      thread: {
+        getId: () => 'thread-1',
+        getById: vi.fn(async ({ threadId }: { threadId: string }) => ({ id: threadId })),
+      },
+    };
+    for (const listener of onSessionCreatedListeners) await listener(session);
+    // A thread the session moved away from stays claimed until shutdown.
+    handleSessionEvent!({ type: 'thread_changed', threadId: 'thread-2' });
+    await vi.waitFor(() => expect(claimThreadOwnershipMock).toHaveBeenCalledTimes(2));
+
+    expect(unsubscribeClaims[0]).not.toHaveBeenCalled();
+    result.releaseThreadClaims();
+
+    expect(unsubscribeClaims[0]).toHaveBeenCalledOnce();
+    expect(unsubscribeClaims[1]).toHaveBeenCalledOnce();
+    expect(unsubscribeSessionEvents).toHaveBeenCalledOnce();
+    // Idempotent: shutdown paths may call it more than once.
+    result.releaseThreadClaims();
+    expect(unsubscribeClaims[0]).toHaveBeenCalledOnce();
   });
 
   it('omits cross-agent signals unless experimental cross-agent communication is enabled', async () => {
@@ -1590,6 +1797,32 @@ describe('createMastraCode', () => {
       'mastracode-account-start-notice',
     ]);
     expect(resolveOutputProcessors().map(processor => processor.id)).toEqual(['cyber-refusal-handler']);
+  });
+
+  it('resolves request-scoped input processors before mandatory built-ins', async () => {
+    const { createMastraCode } = await import('../index.js');
+    const customProcessor = { id: 'request-scoped-reconciler', processInputStep: vi.fn() };
+    const inputProcessors = vi.fn(async ({ requestContext }: { requestContext: RequestContext }) => {
+      expect(requestContext.get('authoritative-settings')).toBe('loaded');
+      return [customProcessor];
+    });
+
+    await createMastraCode({ inputProcessors, disablePlugins: true });
+
+    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as {
+      inputProcessors?: (args: { requestContext: RequestContext }) => Promise<Array<{ id?: string }>>;
+    };
+    const requestContext = new RequestContext();
+    requestContext.set('authoritative-settings', 'loaded');
+    const processors = await agentConfig.inputProcessors?.({ requestContext });
+
+    expect(inputProcessors).toHaveBeenCalledWith({ requestContext });
+    expect(processors?.map(processor => processor.id)).toEqual([
+      'request-scoped-reconciler',
+      'plan-rejection-abort',
+      'agents-md-injector',
+      'mastracode-account-start-notice',
+    ]);
   });
 
   it('hands Mastra to configured input processors, which the function lane takes out of the Agent path', async () => {

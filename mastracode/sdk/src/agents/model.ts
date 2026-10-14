@@ -1,11 +1,13 @@
 import type { ModelWithRetries } from '@mastra/core/agent';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
-import type { GatewayLanguageModel, MastraModelGatewayInterface } from '@mastra/core/llm';
-import type { RequestContext } from '@mastra/core/request-context';
+import { ModelRouterLanguageModel } from '@mastra/core/llm';
+import type { GatewayLanguageModel, IdentifiedModelConfig, MastraModelGatewayInterface } from '@mastra/core/llm';
+import { RequestContext } from '@mastra/core/request-context';
 import { getRequestAccountSelection, isRequestAccountRoutingExhausted } from '../auth/account-routing-context.js';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import type { CredentialStore, OAuthAccountRecord } from '../auth/types.js';
 import { MODEL_ROUTE_MAX_ENTRIES } from '../constants.js';
+import { toMemoryModelId } from '../onboarding/packs.js';
 import {
   loadSettings,
   resolveDefaultThinkingLevel,
@@ -13,9 +15,10 @@ import {
 } from '../onboarding/settings.js';
 import { AMAZON_BEDROCK_GATEWAY_ID, createAmazonBedrockGateway } from '../providers/amazon-bedrock-gateway.js';
 import type { AnthropicPromptCacheScope } from '../providers/anthropic-prompt-cache.js';
+import { normalizeLegacyModelId } from '../providers/model-ids.js';
 import { isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
-import { resolveCredentialStore } from './credential-resolver.js';
+import { hasCredentialTenantResolver, prepareCredentialTenant, resolveCredentialStore } from './credential-resolver.js';
 import { resolveCustomProviders } from './custom-provider-source.js';
 import {
   MASTRA_GATEWAY_PREFIX,
@@ -49,7 +52,7 @@ export {
 } from './custom-provider-source.js';
 export type { CustomProvidersSource } from './custom-provider-source.js';
 
-type ResolvedModel = GatewayLanguageModel;
+type ResolvedModel = GatewayLanguageModel | ModelRouterLanguageModel;
 type ModelRequestHeaders = Record<string, string>;
 
 function getAgentControllerHeaders(requestContext?: RequestContext): ModelRequestHeaders | undefined {
@@ -161,18 +164,52 @@ export function resolveModel(
     requestContext?: RequestContext;
     anthropicPromptCacheScope?: AnthropicPromptCacheScope;
   },
-): GatewayLanguageModel {
+): ResolvedModel {
+  if (!hasCredentialTenantResolver()) return resolveModelForRequest(modelId, options);
+  const createRequestModel = () => {
+    const requestContext = options?.requestContext ? new RequestContext(options.requestContext.entries()) : undefined;
+    // The router supplies stable SDK metadata and adapts whichever provider the refreshed policy selects.
+    // Each invocation owns its policy context and model cache, including concurrent OM and subagent calls.
+    return new ModelRouterLanguageModel({ id: `${MASTRACODE_GATEWAY_ID}/${modelId}` }, [
+      {
+        id: MASTRACODE_GATEWAY_ID,
+        name: 'Request-scoped MastraCode',
+        fetchProviders: async () => ({}),
+        buildUrl: () => undefined,
+        getApiKey: async () => '',
+        resolveAuth: () => ({ apiKey: 'request-scoped' }),
+        resolveLanguageModel: async () => {
+          await prepareCredentialTenant(requestContext);
+          return resolveModelForRequest(modelId, { ...options, requestContext });
+        },
+      },
+    ]);
+  };
+  let currentModel = createRequestModel();
+  return new Proxy(currentModel, {
+    get(_target, property) {
+      if (property === 'supportedUrls') return createRequestModel().supportedUrls;
+      if (property === 'doStream' || property === 'doGenerate') {
+        return async (...args: unknown[]) => {
+          const refreshed = createRequestModel();
+          currentModel = refreshed;
+          return Reflect.apply(Reflect.get(refreshed, property), refreshed, args);
+        };
+      }
+      const value = Reflect.get(currentModel, property, currentModel);
+      return typeof value === 'function' ? value.bind(currentModel) : value;
+    },
+  });
+}
+
+function resolveModelForRequest(modelId: string, options?: Parameters<typeof resolveModel>[1]): GatewayLanguageModel {
   reloadAuthStorage();
   const headers = getAgentControllerHeaders(options?.requestContext);
   const settings = loadSettings();
-  // Bedrock was previously cataloged under the MastraCode gateway namespace
-  // (`mastracode/amazon-bedrock/<model>`). Normalize any legacy saved ids to the
-  // standalone `amazon-bedrock/<model>` form so they resolve through the
-  // dedicated Bedrock gateway.
-  const bedrockLegacyPrefix = `${MASTRACODE_GATEWAY_ID}/amazon-bedrock/`;
-  const bedrockNormalizedInput = modelId.startsWith(bedrockLegacyPrefix)
-    ? modelId.slice(MASTRACODE_GATEWAY_ID.length + 1)
-    : modelId;
+  // Older versions cataloged Bedrock, Copilot and Kimi under the MastraCode
+  // gateway namespace, and Kimi under its own `kimi-for-coding` provider. Map
+  // already-saved ids (packs, OM settings, thread metadata) to current ids.
+  const legacyNormalizedInput = normalizeLegacyModelId(modelId);
   // Deployed web registers a custom providers source (DB-backed, tenant
   // scoped); when registered it is authoritative and settings.json custom
   // providers are ignored. Undefined = local settings-based behavior.
@@ -183,7 +220,7 @@ export function resolveModel(
   // Normalize at resolution time (in addition to stripping at selection time)
   // so already-saved ids and any surface that persists the raw catalog id
   // still resolve to the custom provider.
-  const normalizedInput = stripMastraCodeCustomProviderPrefix(bedrockNormalizedInput, customProviders);
+  const normalizedInput = stripMastraCodeCustomProviderPrefix(legacyNormalizedInput, customProviders);
   const isMastraGatewayModel = normalizedInput.startsWith(MASTRA_GATEWAY_PREFIX);
   const normalizedModelId = stripMastraGatewayPrefix(normalizedInput);
   const [providerId, ...modelParts] = normalizedModelId.split('/');
@@ -192,9 +229,8 @@ export function resolveModel(
     throw new Error(`Invalid model id: ${modelId}`);
   }
 
-  // Deployed web registers a per-tenant credential store provider; when the
-  // request carries an authenticated tenant, resolve credentials through the
-  // caller's own store (user > org > env). Undefined = global AuthStorage.
+  // Deployed hosts resolve exactly the trusted policy's credential scope.
+  // Only local mode falls back to global AuthStorage.
   const tenantCredentialStore = resolveCredentialStore(options?.requestContext);
   const baseCredentialStore = tenantCredentialStore ?? getGlobalAuthStorage();
 
@@ -273,14 +309,14 @@ export interface ThinkingRequestContext {
  * Precedence:
  *   1. Session override (`state.thinkingLevel`, set via /think or the session
  *      settings panel).
- *   2. Per-mode default from settings (`models.modeThinkingDefaults[mode]`).
+ *   2. Per-mode default from settings (`models.modeThinkingDefaults[mode]`),
+ *      only when the context carries a session mode.
  *   3. Global default (`preferences.thinkingLevel`).
  *
  * Resolved per-request (not seeded at session start) so configuration changes
  * apply to the next request of every session — including automated
  * (rule-driven) Factory runs that nobody ever opens interactively.
  */
-
 export function resolveRequestThinkingLevel(
   agentControllerContext: ThinkingRequestContext | undefined,
   settingsPath?: string,
@@ -300,7 +336,8 @@ export function resolveRequestThinkingLevel(
 export function getDynamicModel(
   { requestContext }: { requestContext: RequestContext },
   settingsPath?: string,
-): ResolvedModel | ModelWithRetries[] {
+  { modeless = false }: { modeless?: boolean } = {},
+): IdentifiedModelConfig | ModelWithRetries[] {
   const controller = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
   const state = controller?.getState?.() as
     | {
@@ -331,9 +368,11 @@ export function getDynamicModel(
     throw new Error('No model selected. Use /models to select a model first.');
   }
 
-  const thinkingLevel = resolveRequestThinkingLevel(controller, settingsPath);
+  const thinkingLevel = resolveRequestThinkingLevel(modeless ? { state: controller?.state } : controller, settingsPath);
   const resolveOptions = { thinkingLevel, remapForCodexOAuth: true, requestContext } as const;
-  const primary = resolveModel(modelId, resolveOptions);
+  // Label each resolved model with its full ID: the resolved gateway model only
+  // knows its bare provider model, and Memory's `'auto'` reads this label.
+  const primary = identifyModel(modelId, resolveModel(modelId, resolveOptions));
   const route = state?.modelRoute?.entries?.slice(0, MODEL_ROUTE_MAX_ENTRIES);
   const pendingEntryId =
     pendingFallback && typeof pendingFallback.toEntryId === 'string' ? pendingFallback.toEntryId : undefined;
@@ -366,11 +405,61 @@ export function getDynamicModel(
     appearances.set(routeEntry.id, occurrence);
     entries.push({
       id: occurrence === 1 ? routeEntry.id : `${routeEntry.id}#${occurrence}`,
-      model: entryModel,
+      model: identifyModel(routeEntry.modelId, entryModel),
     });
   }
 
   return entries.length < 2 ? primary : entries;
+}
+
+function identifyModel(modelId: string, model: ResolvedModel): IdentifiedModelConfig {
+  return { model, id: toMemoryModelId(modelId) };
+}
+
+type MemoryRouteState = {
+  modelRoute?: { entries?: Array<{ id?: unknown; memoryModelId?: unknown }> };
+  mastracodePendingModelFallback?: { toEntryId?: unknown; threadId?: unknown } | null;
+};
+
+/**
+ * The active model route for memory: the session route, starting at a pending
+ * fallback hop captured for this thread.
+ */
+export function getActiveMemoryRoute<TEntry extends { id?: unknown; memoryModelId?: unknown }>(
+  state:
+    | {
+        modelRoute?: { entries?: TEntry[] };
+        mastracodePendingModelFallback?: MemoryRouteState['mastracodePendingModelFallback'];
+      }
+    | undefined,
+  threadId?: string | null,
+): TEntry[] {
+  const pending = state?.mastracodePendingModelFallback;
+  const sameThreadPending =
+    pending && (pending.threadId === undefined || pending.threadId === threadId) ? pending : undefined;
+  const routeEntries = state?.modelRoute?.entries?.slice(0, MODEL_ROUTE_MAX_ENTRIES) ?? [];
+  const pendingIndex = sameThreadPending
+    ? routeEntries.findIndex(entry => entry.id === sameThreadPending.toEntryId)
+    : -1;
+  return pendingIndex >= 0 ? routeEntries.slice(pendingIndex) : routeEntries;
+}
+
+/**
+ * The memory model the active route applies to both OM roles: `'auto'`, the
+ * first concrete memory model, or `undefined` when the route sets none (both
+ * roles then follow their `/om` settings).
+ */
+export function getActiveRouteMemoryModelId(
+  state: Readonly<Record<string, unknown>> | undefined,
+  threadId?: string | null,
+): string | undefined {
+  const route = getActiveMemoryRoute(state as MemoryRouteState | undefined, threadId);
+  if (route[0]?.memoryModelId === 'auto') return 'auto';
+  const entry = route.find(
+    candidate =>
+      typeof candidate.memoryModelId === 'string' && candidate.memoryModelId && candidate.memoryModelId !== 'auto',
+  );
+  return entry?.memoryModelId as string | undefined;
 }
 
 /**
