@@ -7,6 +7,21 @@ import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from './
 
 const SETTLED_TOOL_STATES = new Set(['result', 'output-error']);
 
+const CONTINUATION_METADATA_KEY = 'trailingAssistantGuard';
+
+/**
+ * Whether `message` is the synthetic user turn {@link TrailingAssistantGuard} appends.
+ *
+ * That turn only exists to satisfy the provider, so code that reasons about what the
+ * user actually said (for example the goal judge) should skip it.
+ */
+export function isTrailingAssistantGuardContinuation(message: MastraDBMessage): boolean {
+  const mastra = message.content.metadata?.mastra;
+  return (
+    !!mastra && typeof mastra === 'object' && (mastra as Record<string, unknown>)[CONTINUATION_METADATA_KEY] === true
+  );
+}
+
 /**
  * Whether a step needs `TrailingAssistantGuard` attached.
  *
@@ -117,6 +132,7 @@ export class TrailingAssistantGuard implements Processor<'trailing-assistant-gua
       content: {
         format: 2,
         parts: [{ type: 'text', text: willUseResponseFormat ? 'Generate the structured response.' : 'Continue.' }],
+        metadata: { mastra: { [CONTINUATION_METADATA_KEY]: true } },
       },
       createdAt,
     };

@@ -2,10 +2,13 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { createScorer } from '../../evals/base';
+import type { ProcessInputStepArgs } from '../../processors';
 import { ProviderHistoryCompat } from '../../processors/provider-history-compat';
+import { TrailingAssistantGuard } from '../../processors/trailing-assistant-guard';
 import { createMockModel } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
+import { MessageList } from '../message-list';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../message-list';
 import { DEFAULT_GOAL_JUDGE_PROMPT, GOAL_SCORE_WAITING } from './objective';
 import { createGoalScorer } from './scorer';
@@ -133,6 +136,107 @@ describe('createGoalScorer latest user message text extraction', () => {
     ]);
 
     expect(prompt).toContain('actual human message');
+  });
+
+  describe('trailing assistant guard continuation', () => {
+    // Runs the real guard against a real MessageList, the way the agent loop does, so the
+    // judge sees exactly the transcript a Gemini 3+ / Claude structured-output step produces.
+    function transcriptAfterGuard(
+      userText: string,
+      guardArgs: Pick<ProcessInputStepArgs, 'model' | 'structuredOutput'>,
+    ): MastraDBMessage[] {
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add(createUserMessage({ format: 2, parts: [{ type: 'text', text: userText }] }), 'input');
+      messageList.add(
+        {
+          id: 'msg-assistant',
+          role: 'assistant',
+          createdAt: new Date('2026-01-01T00:00:01.000Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'outline with options' }] },
+        },
+        'response',
+      );
+      new TrailingAssistantGuard().processInputStep({
+        messages: messageList.get.all.db(),
+        messageList,
+        ...guardArgs,
+      } as ProcessInputStepArgs);
+      return messageList.get.all.db();
+    }
+
+    it('does not read the guard\'s "Continue." turn as the latest user message', async () => {
+      const messages = transcriptAfterGuard('Draft the plan, then wait for my approval.', {
+        model: { provider: 'google.generative-ai', modelId: 'gemini-3.5-flash-lite' } as ProcessInputStepArgs['model'],
+        structuredOutput: undefined,
+      });
+      expect(messages.at(-1)?.content.parts).toMatchObject([{ type: 'text', text: 'Continue.' }]);
+
+      const prompt = await captureJudgePromptForMessages(messages);
+
+      expect(prompt).toContain('Latest user message:\\nDraft the plan, then wait for my approval.');
+      expect(prompt).toContain('Assistant steps since that user message: 1');
+      expect(prompt).not.toContain('Continue.');
+    });
+
+    it("does not read the guard's structured-output turn as the latest user message", async () => {
+      const messages = transcriptAfterGuard('Summarize the findings.', {
+        model: { provider: 'anthropic.messages', modelId: 'claude-opus-4-6' } as ProcessInputStepArgs['model'],
+        structuredOutput: { schema: z.object({ answer: z.string() }) },
+      });
+      expect(messages.at(-1)?.content.parts).toMatchObject([
+        { type: 'text', text: 'Generate the structured response.' },
+      ]);
+
+      const prompt = await captureJudgePromptForMessages(messages);
+
+      expect(prompt).toContain('Latest user message:\\nSummarize the findings.');
+      expect(prompt).toContain('Assistant steps since that user message: 1');
+      expect(prompt).not.toContain('Generate the structured response.');
+    });
+
+    it('omits the latest user section when the guard turn is the only user-role message', async () => {
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add(
+        {
+          id: 'msg-assistant',
+          role: 'assistant',
+          createdAt: new Date('2026-01-01T00:00:01.000Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'outline with options' }] },
+        },
+        'response',
+      );
+      new TrailingAssistantGuard().processInputStep({
+        messages: messageList.get.all.db(),
+        messageList,
+        model: { provider: 'google.generative-ai', modelId: 'gemini-3.5-flash-lite' },
+      } as ProcessInputStepArgs);
+
+      const prompt = await captureJudgePromptForMessages(messageList.get.all.db());
+
+      expect(prompt).not.toContain('Latest user message');
+      expect(prompt).not.toContain('Continue.');
+    });
+
+    it('still treats a user who actually typed "Continue." as the latest user message', async () => {
+      const prompt = await captureJudgePromptForMessages([
+        createUserMessage({ format: 2, parts: [{ type: 'text', text: 'Draft the plan.' }] }),
+        {
+          id: 'msg-assistant',
+          role: 'assistant',
+          createdAt: new Date('2026-01-01T00:00:01.000Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'Here is the plan. Shall I proceed?' }] },
+        },
+        {
+          id: 'msg-user-continue',
+          role: 'user',
+          createdAt: new Date('2026-01-01T00:00:02.000Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'Continue.' }] },
+        },
+      ]);
+
+      expect(prompt).toContain('Latest user message:\\nContinue.');
+      expect(prompt).toContain('Assistant steps since that user message: 0');
+    });
   });
 });
 

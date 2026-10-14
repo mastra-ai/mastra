@@ -630,6 +630,57 @@ describe('in-loop goal scoring', () => {
     expect(record?.runsUsed).toBe(1);
   });
 
+  // Gemini 3+ rejects a request ending on a model turn, so the trailing assistant guard appends a
+  // synthetic "Continue." user turn. The judge must still report what the user actually said.
+  it('goal judge ignores the trailing assistant guard continuation when picking the latest user message', async () => {
+    const judgeRequests: string[] = [];
+    const agent = new Agent({
+      id: 'goal-agent',
+      name: 'goal-agent',
+      instructions: 'You work toward goals.',
+      model: new MockLanguageModelV2({
+        provider: 'google.generative-ai',
+        modelId: 'gemini-3.5-flash-lite',
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'The plan is ready for your review.' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+          ]),
+        }),
+      }),
+      memory: new MockMemory(),
+      goal: {
+        judge: goalJudgeModel([{ decision: 'waiting', reason: 'waiting for approval' }], props => {
+          const lastUser = (props.prompt as any[]).findLast(message => message.role === 'user');
+          judgeRequests.push(JSON.stringify(lastUser?.content ?? []));
+        }) as any,
+        maxRuns: 5,
+      },
+    });
+    new Mastra({ agents: { 'goal-agent': agent }, storage: new InMemoryStore(), logger: false });
+    await agent.setObjective('Draft a plan and wait for approval', { threadId: THREAD, resourceId: RESOURCE });
+
+    // The second turn ends on an assistant message, which is when the guard appends its turn.
+    for (const input of [
+      'Draft the plan, then wait for my approval.',
+      [{ role: 'assistant' as const, content: 'Continuing the outline:' }],
+    ]) {
+      const stream = await agent.stream(input, { memory: { resource: RESOURCE, thread: { id: THREAD } }, maxSteps: 1 });
+      for await (const _chunk of stream.fullStream) {
+        // drain
+      }
+    }
+
+    expect(judgeRequests).toHaveLength(2);
+    expect(judgeRequests[1]).toContain('Latest user message:\\nDraft the plan, then wait for my approval.');
+    expect(judgeRequests[1]).not.toContain('Latest user message:\\nContinue.');
+  });
+
   it('goal gate wins over isTaskComplete: an incomplete goal forces continuation past an isTaskComplete pass', async () => {
     // isTaskComplete passes immediately (would normally end the loop), but the
     // goal is never complete, so the goal step (which runs after isTaskComplete)

@@ -3,7 +3,7 @@ import { z } from 'zod/v4';
 
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage } from '../agent/message-list';
-import { TrailingAssistantGuard } from './trailing-assistant-guard';
+import { isTrailingAssistantGuardContinuation, TrailingAssistantGuard } from './trailing-assistant-guard';
 import type { ProcessInputStepArgs } from './index';
 
 const createMessage = (role: 'user' | 'assistant', text: string): MastraDBMessage => ({
@@ -313,6 +313,62 @@ describe('TrailingAssistantGuard', () => {
       [{ type: 'text', text: 'question' }],
       [{ type: 'text', text: 'draft' }],
     ]);
+  });
+
+  it('marks only its own continuation so readers can tell it apart from real user turns', () => {
+    const guard = new TrailingAssistantGuard();
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    messageList.add(createMessage('user', 'Continue.'), 'input');
+    messageList.add(createMessage('assistant', 'draft'), 'input');
+
+    guard.processInputStep(
+      makeArgs({ messages: messageList.get.all.db(), messageList, structuredOutput: undefined, model: gemini3 }),
+    );
+
+    const [realUser, assistant, continuation] = messageList.get.all.db();
+    expect(continuation).toMatchObject({ role: 'user', content: { parts: [{ type: 'text', text: 'Continue.' }] } });
+    expect(isTrailingAssistantGuardContinuation(continuation!)).toBe(true);
+    // A user who typed the same text is still a real user turn.
+    expect(isTrailingAssistantGuardContinuation(realUser!)).toBe(false);
+    expect(isTrailingAssistantGuardContinuation(assistant!)).toBe(false);
+  });
+
+  it('keeps the continuation marked across a MessageList serialize/deserialize round trip', () => {
+    const guard = new TrailingAssistantGuard();
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    messageList.add(createMessage('user', 'question'), 'input');
+    messageList.add(createMessage('assistant', 'draft'), 'input');
+    guard.processInputStep(
+      makeArgs({ messages: messageList.get.all.db(), messageList, structuredOutput: undefined, model: gemini3 }),
+    );
+
+    const restored = new MessageList({ threadId: 'test-thread' }).deserialize(messageList.serialize());
+
+    expect(restored.get.all.db().filter(isTrailingAssistantGuardContinuation)).toHaveLength(1);
+    expect(isTrailingAssistantGuardContinuation(restored.get.all.db().at(-1)!)).toBe(true);
+  });
+
+  it('marks the continuation it returns when no message list is available', () => {
+    const guard = new TrailingAssistantGuard();
+
+    const result = guard.processInputStep(makeArgs({ structuredOutput: undefined, model: gemini3 }));
+
+    expect(result?.messages?.filter(isTrailingAssistantGuardContinuation)).toEqual([result?.messages?.at(-1)]);
+  });
+
+  it('does not change the text sent to the provider', () => {
+    const guard = new TrailingAssistantGuard();
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    messageList.add(createMessage('user', 'question'), 'input');
+    messageList.add(createMessage('assistant', 'draft'), 'input');
+    guard.processInputStep(
+      makeArgs({ messages: messageList.get.all.db(), messageList, structuredOutput: undefined, model: gemini3 }),
+    );
+
+    const prompt = messageList.get.all.aiV5.prompt();
+    expect(prompt.at(-1)).toMatchObject({ role: 'user', content: [{ type: 'text', text: 'Continue.' }] });
+    // The marker is bookkeeping for Mastra only; it must not reach the provider request.
+    expect(JSON.stringify(prompt)).not.toContain('trailingAssistantGuard');
   });
 
   it('does not append a message when the last message is not from the assistant', () => {

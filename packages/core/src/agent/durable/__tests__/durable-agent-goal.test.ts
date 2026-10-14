@@ -428,6 +428,83 @@ describe('DurableAgent goal step', () => {
     result.cleanup();
   });
 
+  // Gemini 3+ rejects a request ending on a model turn, so the trailing assistant guard appends a
+  // synthetic "Continue." user turn. Durable steps rebuild the transcript from serialized state, and
+  // the judge must still report what the user actually said.
+  it.each([
+    ['durable', createDurableAgent],
+    ['evented', createEventedAgent],
+  ] as const)(
+    '%s goal judge ignores the trailing assistant guard continuation when picking the latest user message',
+    async (kind, createAgent) => {
+      const judgeRequests: string[] = [];
+      const judge = new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          const lastUser = prompt.findLast(message => message.role === 'user');
+          judgeRequests.push(JSON.stringify(lastUser?.content ?? []));
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'text-start', id: 'verdict' },
+              {
+                type: 'text-delta',
+                id: 'verdict',
+                delta: JSON.stringify({ decision: 'waiting', reason: 'waiting for approval' }),
+              },
+              { type: 'text-end', id: 'verdict' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        },
+      });
+      const model = new MockLanguageModelV2({
+        provider: 'google.generative-ai',
+        modelId: 'gemini-3.5-flash-lite',
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'The plan is ready for your review.' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+      });
+      const threadId = `${kind}-goal-guard-thread`;
+      const agent = createAgent({
+        agent: new Agent({
+          id: `${kind}-goal-guard-agent`,
+          name: 'Goal Guard Agent',
+          instructions: 'You work toward goals.',
+          model,
+          memory: new MockMemory(),
+          goal: { judge, maxRuns: 5 },
+        }),
+        pubsub,
+      });
+      new Mastra({ agents: { agent }, storage: new InMemoryStore(), pubsub, logger: false });
+      await agent.setObjective('Draft a plan and wait for approval', { threadId, resourceId: 'user-1' });
+
+      // The second turn ends on an assistant message, which is when the guard appends its turn.
+      for (const input of [
+        'Draft the plan, then wait for my approval.',
+        [{ role: 'assistant' as const, content: 'Continuing the outline:' }],
+      ]) {
+        const result = await agent.stream(input, { maxSteps: 1, memory: { thread: threadId, resource: 'user-1' } });
+        await drain(result.output.fullStream);
+        result.cleanup();
+      }
+
+      expect(judgeRequests).toHaveLength(2);
+      expect(judgeRequests[1]).toContain('Latest user message:\\nDraft the plan, then wait for my approval.');
+      expect(judgeRequests[1]).not.toContain('Latest user message:\\nContinue.');
+    },
+  );
+
   it('no-ops when no goal is configured', async () => {
     const THREAD = 'no-goal-thread';
     const RESOURCE = 'user-1';
