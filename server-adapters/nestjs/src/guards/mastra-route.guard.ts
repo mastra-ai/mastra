@@ -1,7 +1,7 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import { getEffectivePermission, MASTRA_AUTH_MODE_KEY } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
-import { HttpException, Inject, Injectable, Scope } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, Scope } from '@nestjs/common';
 import type { CanActivate, ExecutionContext } from '@nestjs/common';
 import type { Request, Response } from 'express';
 
@@ -51,10 +51,7 @@ export class MastraRouteGuard implements CanActivate {
 
       const permissionError = await this.checkRoutePermission(matchResult.route, this.requestContext.requestContext);
       if (permissionError) {
-        throw new HttpException(
-          { error: permissionError.error, message: permissionError.message },
-          permissionError.status,
-        );
+        throw new ForbiddenException(permissionError.message);
       }
     }
 
@@ -71,7 +68,7 @@ export class MastraRouteGuard implements CanActivate {
   private async checkRoutePermission(
     route: ServerRoute,
     requestContext: RequestContext,
-  ): Promise<{ status: number; error: string; message: string } | null> {
+  ): Promise<{ message: string } | null> {
     const server = this.options.mastra.getServer();
     const rbac =
       requestContext.get(MASTRA_AUTH_MODE_KEY) === 'studio'
@@ -90,8 +87,6 @@ export class MastraRouteGuard implements CanActivate {
     if (userPermissions && permissions.some(permission => hasPermission(userPermissions, permission))) return null;
 
     return {
-      status: 403,
-      error: 'Forbidden',
       message: `Missing required permission: ${permissions.join(' or ')}`,
     };
   }

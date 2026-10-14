@@ -62,7 +62,11 @@ describe('NestJS Adapter - route permission and FGA checks', () => {
       await start({ auth, rbac });
       const response = await get('/api/agents', '_default');
       expect(response.status).toBe(403);
-      expect(response.body).toMatchObject({ code: 'FORBIDDEN', error: 'Missing required permission: agents:read' });
+      expect(response.body).toEqual({
+        error: 'Missing required permission: agents:read',
+        code: 'FORBIDDEN',
+        timestamp: expect.any(String),
+      });
     });
 
     it('skips permission checks when no RBAC provider is configured', async () => {
