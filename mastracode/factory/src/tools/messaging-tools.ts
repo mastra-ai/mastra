@@ -11,6 +11,7 @@ import { z } from 'zod';
 import type { IntegrationTools } from '../integrations/base.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
+import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import {
   FACTORY_SESSION_NOTIFICATION_SOURCE,
@@ -21,7 +22,7 @@ import type { FactoryDeliveryController, FactoryDeliveryResult } from './deliver
 import { workItemNumber } from './read-tools.js';
 import type { FactoryToolScope } from './scope.js';
 
-/** Per sender session, per target thread, per window. */
+/** Messages plus replies, per sender session, per target thread, per window. */
 export const SIGNAL_RATE_LIMIT = 10;
 export const SIGNAL_RATE_WINDOW_MS = 10 * 60 * 1000;
 /** How many recent `factory-session` notifications on a thread the rate and duplicate checks read. */
@@ -84,6 +85,24 @@ export function createFactoryMessagingTools(
         delivery: input.delivery,
       },
     });
+  /** Why this session can't reach `row`, or null when it can: the rule for message targets and reply targets alike. */
+  const unreachable = (row: SourceControlSession | null): 'not-found' | 'private' | null => {
+    if (!row || row.orgId !== scope.orgId || row.factoryProjectId !== scope.factoryProjectId) return 'not-found';
+    if (row.visibility === 'private' && row.userId !== scope.userId) return 'private';
+    return null;
+  };
+  /** Messages and replies this session put on a thread inside the rate window. */
+  const overRateLimit = (records: NotificationRecord[]) => {
+    const since = Date.now() - SIGNAL_RATE_WINDOW_MS;
+    return (
+      records.filter(
+        record =>
+          (record.kind === 'message' || record.kind === 'reply') &&
+          record.attributes?.['from-session'] === scope.sessionId &&
+          record.createdAt.getTime() >= since,
+      ).length >= SIGNAL_RATE_LIMIT
+    );
+  };
   const recent = (notifications: FactoryMessaging['notifications'], threadId: string) =>
     notifications.listNotifications({ threadId, source: FACTORY_SESSION_NOTIFICATION_SOURCE, limit: RECENT_SCAN });
 
@@ -131,12 +150,9 @@ export function createFactoryMessagingTools(
     execute: async ({ sessionId, message: text, priority }) => {
       if (sessionId === scope.sessionId) throw new Error("You can't message your own session.");
       const row = await deps.sessions.getBySessionId(sessionId);
-      if (!row || row.orgId !== scope.orgId || row.factoryProjectId !== scope.factoryProjectId) {
-        throw new Error(`No session ${sessionId} was found in this Factory.`);
-      }
-      if (row.visibility === 'private' && row.userId !== scope.userId) {
-        throw new Error(`Session ${sessionId} is private to its owner.`);
-      }
+      const blocked = unreachable(row);
+      if (blocked === 'not-found' || !row) throw new Error(`No session ${sessionId} was found in this Factory.`);
+      if (blocked === 'private') throw new Error(`Session ${sessionId} is private to its owner.`);
       if (!scope.interactive && !(await followedWorkers()).has(sessionId)) {
         throw new Error(
           `On this turn you can only message sessions working on items this session follows; ${sessionId} isn't one.`,
@@ -152,14 +168,9 @@ export function createFactoryMessagingTools(
       });
       if (!threadId) throw new Error('The session is not available (thread-not-found).');
 
-      const since = Date.now() - SIGNAL_RATE_WINDOW_MS;
-      const sent = (await recent(messaging.notifications, threadId)).filter(
-        record =>
-          record.kind === 'message' &&
-          record.attributes?.['from-session'] === scope.sessionId &&
-          record.createdAt.getTime() >= since,
-      );
-      if (sent.length >= SIGNAL_RATE_LIMIT) throw new Error('Too many messages to this session; wait for a reply.');
+      if (overRateLimit(await recent(messaging.notifications, threadId))) {
+        throw new Error('Too many messages to this session; wait for a reply.');
+      }
 
       const result = await deliverFactorySessionNotification({
         controller: messaging.controller,
@@ -223,14 +234,16 @@ export function createFactoryMessagingTools(
       }
       // Notification records can be written outside these tools, so the
       // sender they name gets the same checks a message to it would.
-      const sender = await deps.sessions.getBySessionId(fromSession);
-      if (!sender || sender.orgId !== scope.orgId || sender.factoryProjectId !== scope.factoryProjectId) {
-        throw new Error(`Message ${inReplyTo} didn't come from a session in this Factory.`);
-      }
-      if (sender.visibility === 'private' && sender.userId !== scope.userId) {
+      const blocked = unreachable(await deps.sessions.getBySessionId(fromSession));
+      if (blocked === 'not-found') throw new Error(`Message ${inReplyTo} didn't come from a session in this Factory.`);
+      if (blocked === 'private') {
         throw new Error(`Message ${inReplyTo} came from a private session this session can't answer.`);
       }
-      const answered = (await recent(messaging.notifications, fromThread)).some(
+      const onSenderThread = await recent(messaging.notifications, fromThread);
+      // Replies count toward the same cap as messages, so records written to
+      // this session can't turn it into an unlimited high-priority sender.
+      if (overRateLimit(onSenderThread)) throw new Error('Too many messages to that session; wait before answering.');
+      const answered = onSenderThread.some(
         record =>
           record.kind === 'reply' &&
           record.attributes?.['in-reply-to'] === inReplyTo &&
