@@ -1,15 +1,13 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
-import { registerApiRoute } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
-import type { Context } from 'hono';
 
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
 import type { Intake, IntakeIssue, IntakeIssueDetail, UpdateIntakeIssueInput } from '../../../capabilities/intake.js';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
-import { buildLinearAgentTools } from '../../linear/agent-tools.js';
+import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
 import type { LinearEventRules, LinearRuleOverrides } from '../../linear/default-rules.js';
 import { resolveLinearRules } from '../../linear/default-rules.js';
 import type {
@@ -32,81 +30,45 @@ import {
   PlatformApiError,
   platformApiClientConfigFromEnv,
 } from '../api-client.js';
-import { PlatformLinearEventWorker } from './event-worker.js';
-import type { PlatformLinearEventStorage } from './event-worker.js';
+import { buildPlatformLinearAgentTools } from './agent-tools.js';
+import { LinearProxyApi } from './proxy-api.js';
+import type {
+  IssueWithComments,
+  LinearComment,
+  LinearIssue,
+  LinearProject,
+  LinearTeam,
+  LinearWorkflowState,
+  LinearCreatedIssue,
+  LinearOrganization,
+  PageInfo,
+} from './proxy-api.js';
 
-type PageInfo = { hasNextPage: boolean; endCursor: string | null };
-type LinearUser = {
-  id: string;
-  name: string;
-  displayName: string;
-  email: string | null;
-  avatarUrl: string | null;
-};
-type LinearIssue = {
-  id: string;
-  identifier: string;
-  number: number;
-  title: string;
-  description: string | null;
-  url: string;
-  priority: number;
-  priorityLabel: string;
-  labels: Array<{ id: string; name: string }>;
-  state: { id: string; name: string; type: string };
-  team: { id: string; key: string; name: string };
-  project: { id: string } | null;
-  assignee: LinearUser | null;
-  creator: LinearUser | null;
-  createdAt: string;
-  updatedAt: string;
-  archivedAt: string | null;
-};
-type LinearComment = {
-  id: string;
-  body: string;
-  url: string;
-  issue: { id: string; identifier: string };
-  user: LinearUser | null;
-  parent: { id: string } | null;
-  createdAt: string;
-  updatedAt: string;
-};
 type LinearWorkspace = {
   linearWorkspaceId: string;
   linearWorkspaceName: string;
   urlKey: string | null;
   connected: boolean;
+  connectionId: string;
 };
-type LinearProject = {
-  id: string;
-  name: string;
-  state: string;
-  teams: Array<{ id: string; key: string; name: string }>;
-};
-type LinearTeam = { id: string; key: string; name: string };
 type ProjectSource = { workspace: LinearWorkspace; project: LinearProject };
 type TeamSource = { workspace: LinearWorkspace; team: LinearTeam };
-type LinearWorkflowState = {
-  id: string;
-  name: string;
-  type: string;
-  position: number;
-  teamId: string;
-};
 
-const API_PREFIX = '/v1/server/linear';
+export interface PlatformLinearConnection {
+  id: string;
+  providerKey?: string;
+  status: 'active' | 'needs_reauth';
+  accountLabel: string | null;
+}
+
+const PROVIDER_KEY = 'linear';
+const CONNECTION_TOKEN_PREFIX = 'linear-connection:';
 const PAGE_SIZE = 30;
 const MAX_REFERENCE_PAGES = 20;
 const MAX_COMMENT_PAGES = 20;
-const PLATFORM_MANAGED_CONNECTION_TOKEN = 'platform-managed';
 
-function loose(c: unknown): Context {
-  return c as Context;
-}
-
-function routeBaseUrl(ctx: IntegrationContext, requestUrl: string): string {
-  return (ctx.baseUrl || new URL(requestUrl).origin).replace(/\/+$/, '');
+export function linearConnectionToken(connectionId: string): string {
+  return `${CONNECTION_TOKEN_PREFIX}${connectionId}`;
 }
 
 export class PlatformLinearIntegration implements FactoryIntegration {
@@ -121,6 +83,8 @@ export class PlatformLinearIntegration implements FactoryIntegration {
    * clear on process restart). Populated lazily on first `updateIssue` per team.
    */
   readonly #workflowStatesByTeam = new Map<string, LinearWorkflowState[]>();
+  /** Linear organization behind each Connect connection; stable for a connection's lifetime. */
+  readonly #organizationByConnectionId = new Map<string, LinearOrganization>();
 
   readonly intake: Intake = {
     resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
@@ -198,11 +162,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       const workspaceId = await this.#resolveWorkspaceForIssue(sourceId, issueId);
       if (!workspaceId) return null;
       try {
-        const comment = await this.#client.request<LinearComment>(
-          'POST',
-          `${API_PREFIX}/workspaces/${encodeURIComponent(workspaceId)}/issues/${encodeURIComponent(issueId)}/comments`,
-          { body },
-        );
+        const comment = await (await this.#api(workspaceId)).createComment(issueId, body);
         return { id: comment.id, url: comment.url };
       } catch (error) {
         if (isNotFound(error)) return null;
@@ -224,21 +184,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         return parseIssue(issue, workspaceId);
       }
 
-      let states: LinearWorkflowState[];
-      try {
-        states = await this.#listWorkflowStates(workspaceId, issue.team.id);
-      } catch (error) {
-        if (isNotFound(error)) {
-          // Platform companion endpoint not deployed yet — degrade to policy skip so PR 1
-          // is standalone-mergeable ahead of the platform-side workflow-states route landing.
-          logPlatformWarn('Platform Linear: workflow-states endpoint not available; skipping updateIssue.', {
-            workspaceId,
-            teamId: issue.team.id,
-          });
-          return null;
-        }
-        throw error;
-      }
+      const states = await this.#listWorkflowStates(workspaceId, issue.team.id);
       let matched: LinearWorkflowState | undefined;
       if (target.kind === 'byType') {
         matched = states
@@ -259,11 +205,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       }
 
       try {
-        await this.#client.request<LinearIssue>(
-          'PATCH',
-          `${API_PREFIX}/workspaces/${encodeURIComponent(workspaceId)}/issues/${encodeURIComponent(input.issueId)}`,
-          { stateId: matched.id },
-        );
+        await (await this.#api(workspaceId)).updateIssueState(issue.id, matched.id);
       } catch (error) {
         if (isNotFound(error)) return null;
         throw error;
@@ -288,26 +230,29 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   }
 
   get storage(): LinearStorageHandle {
-    const now = new Date();
     return {
       integrationId: this.id,
       connections: {
-        get: async (orgId: string) => ({
-          id: `platform-linear:${orgId}`,
-          orgId,
-          userId: null,
-          data: {
-            accessToken: PLATFORM_MANAGED_CONNECTION_TOKEN,
-            refreshToken: null,
-            expiresAtMs: null,
-            scope: 'read,comments:create',
-            workspaceName: null,
-            workspaceUrlKey: null,
-          } satisfies LinearConnectionData,
-          metadata: {},
-          createdAt: now,
-          updatedAt: now,
-        }),
+        get: async (orgId: string) => {
+          const row = await this.loadConnection(orgId);
+          if (!row) return null;
+          return {
+            id: row.id,
+            orgId,
+            userId: null,
+            data: {
+              accessToken: row.accessToken,
+              refreshToken: null,
+              expiresAtMs: null,
+              scope: row.scope,
+              workspaceName: row.workspaceName,
+              workspaceUrlKey: row.workspaceUrlKey,
+            } satisfies LinearConnectionData,
+            metadata: {},
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+          };
+        },
       },
     } as unknown as LinearStorageHandle;
   }
@@ -336,16 +281,37 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     }
   }
 
+  async listConnections(): Promise<PlatformLinearConnection[]> {
+    const result = await this.#client.request<{ connections: PlatformLinearConnection[] }>(
+      'GET',
+      `/v2/connections?providerKey=${encodeURIComponent(PROVIDER_KEY)}`,
+    );
+    return result.connections;
+  }
+
+  async hasActiveConnections(): Promise<boolean> {
+    return (await this.listConnections()).some(connection => connection.status === 'active');
+  }
+
+  clearCaches(): void {
+    this.#organizationByConnectionId.clear();
+    this.#workflowStatesByTeam.clear();
+  }
+
+  /**
+   * Compatibility row for the shared Linear routes/rules. The token names the
+   * first active Connect connection; Platform holds the real OAuth credential.
+   */
   async loadConnection(orgId: string): Promise<LinearConnectionRow | null> {
     const workspace = (await this.#listWorkspaces())[0];
     if (!workspace) return null;
     const now = new Date();
     return {
-      id: `platform-linear:${orgId}`,
+      id: `platform-linear:${workspace.connectionId}`,
       orgId,
       userId: null,
-      accessToken: PLATFORM_MANAGED_CONNECTION_TOKEN,
-      scope: 'read,comments:create',
+      accessToken: linearConnectionToken(workspace.connectionId),
+      scope: 'read,write',
       refreshToken: null,
       expiresAt: null,
       workspaceName: workspace.linearWorkspaceName,
@@ -355,14 +321,13 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     };
   }
 
-  async getFreshAccessToken(_connection: LinearConnectionRow): Promise<string> {
-    return PLATFORM_MANAGED_CONNECTION_TOKEN;
+  async getFreshAccessToken(connection: LinearConnectionRow): Promise<string> {
+    return connection.accessToken;
   }
 
   /**
-   * Background-dispatch context: platform-managed connection token when the
-   * org has a connected workspace. Linear work items store the issue UUID
-   * directly as `externalId`.
+   * Background-dispatch context. Linear work items store the issue UUID
+   * directly as `externalId`; the issue's workspace is resolved per call.
    */
   async #resolveIntakeDispatch({
     orgId,
@@ -375,99 +340,105 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     const connection = await this.loadConnection(orgId);
     if (!connection) return null;
     return {
-      connection: { type: 'oauth', accessToken: PLATFORM_MANAGED_CONNECTION_TOKEN },
+      connection: { type: 'oauth', accessToken: connection.accessToken },
       issueId: externalSource.externalId,
     };
   }
 
   canPostComments(connection: LinearConnectionRow): boolean {
-    const scopes = (connection.scope ?? '').split(/[\s,]+/).filter(Boolean);
-    return scopes.some(scope => scope === 'comments:create' || scope === 'write' || scope === 'admin');
+    return connection.accessToken.startsWith(CONNECTION_TOKEN_PREFIX);
   }
 
   async checkConnection(orgId: string): Promise<LinearConnectionCheck> {
     const connection = await this.loadConnection(orgId);
     return {
       connected: connection !== null,
-      canComment: connection !== null && this.canPostComments(connection),
-      // Platform-managed connections don't proxy issue creation yet.
-      canCreateIssues: false,
+      canComment: connection !== null,
+      canCreateIssues: connection !== null,
       checkedAt: Date.now(),
     };
   }
 
   workers(ctx: IntegrationContext): MastraWorker[] {
-    const pollingEnabled = process.env.MASTRACODE_PLATFORM_LINEAR_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
-    const reconcileEnabled = linearIssueReconciliationEnabled();
-    if (!pollingEnabled && !reconcileEnabled) return [];
-
-    const ingest = attachLinearRules(this, ctx);
-    const reconcile = reconcileEnabled ? attachLinearIssueReconciler(this, ctx) : undefined;
-    const workItems = ctx.runtime?.workItems;
-    if (!workItems) return [];
-    if (!ingest && !reconcile) return [];
-
-    const pollIntervalMs = optionalPositiveIntegerEnv('MASTRACODE_PLATFORM_LINEAR_POLLING_INTERVAL_MS');
-    const reconcileIntervalMs = linearIssueReconciliationInterval();
-
+    if (!linearIssueReconciliationEnabled()) return [];
+    const reconcile = attachLinearIssueReconciler(this, ctx);
+    if (!reconcile) return [];
+    const intervalMs = linearIssueReconciliationInterval();
     return [
-      new PlatformLinearEventWorker({
-        client: this.#client,
-        linear: { listWorkspaces: () => this.listWorkspaces() },
-        storage: ctx.storage.generic as unknown as PlatformLinearEventStorage,
-        projects: ctx.storage.projects,
-        workItems,
-        ...(ingest ? { ingestFactoryIssue: ingest } : {}),
-        ...(reconcile ? { reconcileFactoryState: reconcile } : {}),
-        pollEventsEnabled: pollingEnabled,
-        ...(pollIntervalMs !== undefined ? { intervalMs: pollIntervalMs } : {}),
-        ...(reconcileIntervalMs !== undefined ? { reconcileIntervalMs } : {}),
+      new IssueReconcileWorker({
+        integrationId: this.id,
+        reconcile,
+        ...(intervalMs ? { intervalMs } : {}),
       }),
     ];
   }
 
   routes(ctx: IntegrationContext): ApiRoute[] {
-    return [
-      this.#connectRoute(ctx),
-      ...buildLinearRoutes({
-        auth: ctx.auth,
-        linear: this as unknown as LinearIntegration,
-        stateSigner: ctx.stateSigner,
-        baseUrl: ctx.baseUrl,
-        intake: ctx.storage.intake,
-        projects: ctx.storage.projects,
-        ingestFactoryIssues: attachLinearRules(this, ctx),
-        workItems: ctx.runtime?.workItems,
-        boards: ctx.runtime?.boards,
-      }).filter(route => !route.path.startsWith('/auth/linear/')),
-    ];
-  }
-
-  #connectRoute(ctx: IntegrationContext): ApiRoute {
-    return registerApiRoute('/auth/linear/connect', {
-      method: 'GET',
-      requiresAuth: false,
-      handler: async c => {
-        await ctx.auth.ensureUser(loose(c));
-        const tenant = ctx.auth.tenant(loose(c));
-        if (!tenant?.orgId) return c.json({ error: 'unauthorized' }, 401);
-
-        const returnTo = c.req.query('return_to') || '/';
-        const originator = routeBaseUrl(ctx, c.req.url);
-        logPlatformInfo('Starting Platform Linear connect flow', {
-          orgId: tenant.orgId,
-          returnTo,
-          originator,
-        });
-        const query = new URLSearchParams({ return_to: returnTo, originator });
-        const location = await this.#client.requestRedirect('GET', `${API_PREFIX}/authorize?${query}`);
-        return c.redirect(location);
-      },
-    });
+    // Connecting happens through the shared Platform Connect routes
+    // (`/web/integrations/platform/linear/*`), so the OAuth routes are dropped.
+    return buildLinearRoutes({
+      auth: ctx.auth,
+      linear: this as unknown as LinearIntegration,
+      stateSigner: ctx.stateSigner,
+      baseUrl: ctx.baseUrl,
+      intake: ctx.storage.intake,
+      projects: ctx.storage.projects,
+      ingestFactoryIssues: attachLinearRules(this, ctx),
+      workItems: ctx.runtime?.workItems,
+      boards: ctx.runtime?.boards,
+      platformStatus: async () => ({
+        mode: 'platform',
+        connections: (await this.listConnections()).map(({ id, status, accountLabel }) => ({
+          id,
+          status,
+          accountLabel,
+        })),
+      }),
+    }).filter(route => !route.path.startsWith('/auth/linear/'));
   }
 
   async agentTools({ requestContext }: { requestContext: RequestContext }): Promise<IntegrationTools> {
-    return buildLinearAgentTools({ requestContext, linear: this as unknown as LinearIntegration });
+    return buildPlatformLinearAgentTools({ requestContext, linear: this });
+  }
+
+  /** Teams across every active connection, for agent-side team resolution. */
+  async listAllTeams(): Promise<Array<LinearTeam & { workspaceId: string; workspaceName: string }>> {
+    return (await this.#listTeamSources()).map(({ workspace, team }) => ({
+      ...team,
+      workspaceId: workspace.linearWorkspaceId,
+      workspaceName: workspace.linearWorkspaceName,
+    }));
+  }
+
+  async createIssue(
+    workspaceId: string,
+    input: { teamId: string; title: string; description?: string; priority?: number },
+  ): Promise<LinearCreatedIssue> {
+    return (await this.#api(workspaceId)).createIssue(input);
+  }
+
+  /** Locate an issue across connections and return its detail, or null. */
+  async getIssueDetail(idOrIdentifier: string): Promise<LinearRouteIssueDetail | null> {
+    return this.fetchIssueDetail('', idOrIdentifier);
+  }
+
+  /** Comment on an issue in whichever connection owns it. */
+  async commentOnIssue(idOrIdentifier: string, body: string): Promise<{ id: string; url: string } | null> {
+    const workspaceId = await this.#resolveWorkspaceForIssue(undefined, idOrIdentifier);
+    if (!workspaceId) return null;
+    return (await this.#api(workspaceId)).createComment(idOrIdentifier, body);
+  }
+
+  async #api(workspaceId: string): Promise<LinearProxyApi> {
+    const workspace = (await this.#listWorkspaces()).find(candidate => candidate.linearWorkspaceId === workspaceId);
+    if (!workspace) {
+      throw new PlatformApiError('Linear connection is unavailable or requires reauthentication.', 401);
+    }
+    return this.#apiFor(workspace);
+  }
+
+  #apiFor(workspace: LinearWorkspace): LinearProxyApi {
+    return new LinearProxyApi(this.#client, workspace.connectionId);
   }
 
   diagnostics(): Record<string, unknown> {
@@ -545,12 +516,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         const projects: LinearProject[] = [];
         let after: string | undefined;
         for (let page = 0; page < MAX_REFERENCE_PAGES; page += 1) {
-          const query = new URLSearchParams({ first: '200' });
-          if (after) query.set('after', after);
-          const result = await this.#client.request<{ projects: LinearProject[]; pageInfo: PageInfo }>(
-            'GET',
-            `${API_PREFIX}/workspaces/${encodeURIComponent(workspace.linearWorkspaceId)}/projects?${query}`,
-          );
+          const result = await this.#apiFor(workspace).listProjects(after);
           projects.push(...result.projects);
           if (!result.pageInfo.hasNextPage || !result.pageInfo.endCursor) break;
           // A page that hands back the cursor it was asked for would replay forever.
@@ -573,12 +539,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         const teams: LinearTeam[] = [];
         let after: string | undefined;
         for (let page = 0; page < MAX_REFERENCE_PAGES; page += 1) {
-          const query = new URLSearchParams({ first: '200' });
-          if (after) query.set('after', after);
-          const result = await this.#client.request<{ teams: LinearTeam[]; pageInfo: PageInfo }>(
-            'GET',
-            `${API_PREFIX}/workspaces/${encodeURIComponent(workspace.linearWorkspaceId)}/teams?${query}`,
-          );
+          const result = await this.#apiFor(workspace).listTeams(after);
           teams.push(...result.teams);
           if (!result.pageInfo.hasNextPage || !result.pageInfo.endCursor) break;
           // A page that hands back the cursor it was asked for would replay forever.
@@ -596,8 +557,24 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   }
 
   async #listWorkspaces(): Promise<LinearWorkspace[]> {
-    const result = await this.#client.request<{ workspaces: LinearWorkspace[] }>('GET', `${API_PREFIX}/workspaces`);
-    return result.workspaces.filter(workspace => workspace.connected);
+    const connections = (await this.listConnections()).filter(connection => connection.status === 'active');
+    const workspaces = await Promise.all(
+      connections.map(async connection => {
+        let organization = this.#organizationByConnectionId.get(connection.id);
+        if (!organization) {
+          organization = await new LinearProxyApi(this.#client, connection.id).organization();
+          this.#organizationByConnectionId.set(connection.id, organization);
+        }
+        return {
+          linearWorkspaceId: organization.id,
+          linearWorkspaceName: organization.name,
+          urlKey: organization.urlKey,
+          connected: true,
+          connectionId: connection.id,
+        } satisfies LinearWorkspace;
+      }),
+    );
+    return workspaces;
   }
 
   async #listIssues(sourceIds: string[], cursor?: string, labels?: string[], attributionSourceIds = sourceIds) {
@@ -632,7 +609,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       kind: 'project' | 'team';
       sourceId: string;
       workspace: LinearWorkspace;
-      query: URLSearchParams;
+      filter: { projectId?: string; teamId?: string };
     };
     const descriptors: Descriptor[] = [];
     const selectedProjectIdsByWorkspace = new Map<string, Set<string>>();
@@ -646,28 +623,21 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     for (const sourceId of sourceIds) {
       const projectSource = projectMap.get(sourceId);
       if (projectSource) {
-        const query = new URLSearchParams({
-          first: String(PAGE_SIZE),
-          projectIds: projectSource.project.id,
-          stateType: 'triage,backlog,unstarted,started',
-          orderBy: 'updatedAt',
-        });
         const workspaceId = projectSource.workspace.linearWorkspaceId;
         const selectedProjectIds = selectedProjectIdsByWorkspace.get(workspaceId) ?? new Set<string>();
         selectedProjectIds.add(projectSource.project.id);
         selectedProjectIdsByWorkspace.set(workspaceId, selectedProjectIds);
-        descriptors.push({ kind: 'project', sourceId, workspace: projectSource.workspace, query });
+        descriptors.push({
+          kind: 'project',
+          sourceId,
+          workspace: projectSource.workspace,
+          filter: { projectId: projectSource.project.id },
+        });
         continue;
       }
       const teamSource = teamMap.get(sourceId);
       if (teamSource) {
-        const query = new URLSearchParams({
-          first: String(PAGE_SIZE),
-          teamId: teamSource.team.id,
-          stateType: 'triage,backlog,unstarted,started',
-          orderBy: 'updatedAt',
-        });
-        descriptors.push({ kind: 'team', sourceId, workspace: teamSource.workspace, query });
+        descriptors.push({ kind: 'team', sourceId, workspace: teamSource.workspace, filter: { teamId: teamSource.team.id } });
       }
     }
 
@@ -676,17 +646,17 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     const nextState: Record<string, string | null> = {};
     let hasNextPage = false;
     const pages = await Promise.all(
-      descriptors.map(async ({ kind, sourceId, workspace, query }) => {
+      descriptors.map(async ({ kind, sourceId, workspace, filter }) => {
         if (cursors[sourceId] === null) {
           nextState[sourceId] = null;
           return [] as ListedIssue[];
         }
         const after = cursors[sourceId];
-        if (after) query.set('after', after);
-        const result = await this.#client.request<{ issues: LinearIssue[]; pageInfo: PageInfo }>(
-          'GET',
-          `${API_PREFIX}/workspaces/${encodeURIComponent(workspace.linearWorkspaceId)}/issues?${query}`,
-        );
+        const result = await this.#apiFor(workspace).listIssues({
+          first: PAGE_SIZE,
+          ...(after ? { after } : {}),
+          ...filter,
+        });
         const next = result.pageInfo.hasNextPage ? result.pageInfo.endCursor : null;
         // A page that hands back the cursor it was asked for would replay forever.
         if (next !== null && next === after) throw invalidLinearCursor();
@@ -718,7 +688,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     routedSourceIds?: string[],
   ): Promise<{
     workspaceId: string;
-    issue: LinearIssue & { comments?: { nodes: LinearComment[]; pageInfo: PageInfo } };
+    issue: IssueWithComments;
   } | null> {
     const scopedSourceIds = sourceIds ?? (sourceId ? [sourceId] : undefined);
     const scopedSources = scopedSourceIds?.map(sourceKey => ({
@@ -733,12 +703,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         : await this.#candidateWorkspaceIds(undefined);
     for (const workspaceId of workspaceIds) {
       try {
-        const issue = await this.#client.request<
-          LinearIssue & { comments?: { nodes: LinearComment[]; pageInfo: PageInfo } }
-        >(
-          'GET',
-          `${API_PREFIX}/workspaces/${encodeURIComponent(workspaceId)}/issues/${encodeURIComponent(issueId)}?include=comments`,
-        );
+        const issue = await (await this.#api(workspaceId)).getIssue(issueId, { comments: true });
         if (scopedSources) {
           const matching = scopedSources.filter(
             ({ source }) =>
@@ -761,10 +726,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     if (workspaceIds.length === 1) return workspaceIds[0]!;
     for (const workspaceId of workspaceIds) {
       try {
-        await this.#client.request<LinearIssue>(
-          'GET',
-          `${API_PREFIX}/workspaces/${encodeURIComponent(workspaceId)}/issues/${encodeURIComponent(issueId)}`,
-        );
+        await (await this.#api(workspaceId)).getIssue(issueId);
         return workspaceId;
       } catch (error) {
         if (!isNotFound(error)) throw error;
@@ -777,12 +739,9 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     const cacheKey = `${workspaceId}:${teamId}`;
     const cached = this.#workflowStatesByTeam.get(cacheKey);
     if (cached) return cached;
-    const result = await this.#client.request<{ workflowStates: LinearWorkflowState[]; pageInfo: PageInfo }>(
-      'GET',
-      `${API_PREFIX}/workspaces/${encodeURIComponent(workspaceId)}/workflow-states?teamId=${encodeURIComponent(teamId)}&first=100`,
-    );
-    this.#workflowStatesByTeam.set(cacheKey, result.workflowStates);
-    return result.workflowStates;
+    const states = await (await this.#api(workspaceId)).listWorkflowStates(teamId);
+    this.#workflowStatesByTeam.set(cacheKey, states);
+    return states;
   }
 
   async #candidateWorkspaceIds(sourceId: string | undefined): Promise<string[]> {
@@ -799,10 +758,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     let pageInfo = embedded?.pageInfo;
     let page = 0;
     while (pageInfo?.hasNextPage && pageInfo.endCursor && page < MAX_COMMENT_PAGES) {
-      const result = await this.#client.request<{ comments: LinearComment[]; pageInfo: PageInfo }>(
-        'GET',
-        `${API_PREFIX}/workspaces/${encodeURIComponent(workspaceId)}/issues/${encodeURIComponent(issueId)}/comments?first=200&after=${encodeURIComponent(pageInfo.endCursor)}`,
-      );
+      const result = await (await this.#api(workspaceId)).listComments(issueId, pageInfo.endCursor);
       comments.push(...result.comments);
       if (result.pageInfo.hasNextPage && result.pageInfo.endCursor === pageInfo.endCursor) throw invalidLinearCursor();
       pageInfo = result.pageInfo;

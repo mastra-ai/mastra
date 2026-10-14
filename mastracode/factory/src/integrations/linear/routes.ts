@@ -48,6 +48,14 @@ export interface LinearFeatureDiagnostics {
 
 export interface MountLinearRoutesOptions {
   /**
+   * Platform Connect mode: extra status fields (`mode`, `connections`) so the
+   * SPA renders the shared Connect controls instead of the OAuth popup.
+   */
+  platformStatus?: () => Promise<{
+    mode: 'platform';
+    connections: Array<{ id: string; status: 'active' | 'needs_reauth'; accountLabel: string | null }>;
+  }>;
+  /**
    * The integration instance providing OAuth + GraphQL access. Required for
    * everything beyond the disabled `status` route.
    */
@@ -247,8 +255,12 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
           });
         }
 
-        const connection = await linear.loadConnection(tenant.orgId);
+        const [connection, platform] = await Promise.all([
+          linear.loadConnection(tenant.orgId),
+          options.platformStatus?.(),
+        ]);
         return c.json({
+          ...platform,
           enabled: true,
           connected: Boolean(connection),
           workspace: connection ? { name: connection.workspaceName, urlKey: connection.workspaceUrlKey } : null,

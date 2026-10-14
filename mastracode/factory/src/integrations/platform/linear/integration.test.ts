@@ -1,87 +1,175 @@
-import { RequestContext } from '@mastra/core/request-context';
-import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createBoardRegistry } from '../../../boards/index.js';
 
 import type { IntegrationContext } from '../../base.js';
-import { attachLinearIssueReconciler } from '../../linear/issue-reconciler.js';
+import { encodeSourceId, encodeTeamSourceId, linearConnectionToken, PlatformLinearIntegration } from './integration.js';
 
-import { createPlatformStorageForTests } from '../test-utils.js';
+const PLATFORM_BASE = 'https://platform.example.com';
+const connection = { type: 'oauth' as const, accessToken: linearConnectionToken('conn-acme') };
 
-vi.mock('./event-worker.js', () => ({
-  PlatformLinearEventWorker: class {
-    readonly name = 'platform-linear-events';
+const user = { id: 'user-1', name: 'Ada Lovelace', displayName: 'Ada', email: 'ada@example.com', avatarUrl: null };
 
-    constructor(readonly config: unknown) {}
-  },
-}));
-
-import { encodeTeamSourceId, PlatformLinearIntegration } from './integration.js';
-
-const config = {
-  baseUrl: 'https://platform.example.com',
-  accessToken: 'platform-token',
-};
-const workspace = {
-  linearWorkspaceId: 'workspace-1',
-  linearWorkspaceName: 'Acme',
-  urlKey: 'acme',
-  connected: true,
-};
-const sourceId = (workspaceId: string, projectId: string) =>
-  `linear-project:${Buffer.from(JSON.stringify({ workspaceId, projectId })).toString('base64url')}`;
-const project1SourceId = sourceId('workspace-1', 'project-1');
-const project2SourceId = sourceId('workspace-2', 'project-2');
-
-function fakeAuth(tenant: { orgId?: string; userId: string } | undefined = { orgId: 'org-1', userId: 'user-1' }) {
+function rawIssue(overrides: Record<string, unknown> = {}) {
   return {
-    enabled: () => true,
-    ensureUser: vi.fn(async () => ({ workosId: tenant?.userId ?? 'user-1', organizationId: tenant?.orgId })),
-    tenant: () => tenant,
-    isOrganizationAdmin: vi.fn(async () => true),
+    id: 'issue-1',
+    identifier: 'ENG-42',
+    number: 42,
+    title: 'Fix intake',
+    description: 'Issue body',
+    url: 'https://linear.app/acme/issue/ENG-42',
+    priority: 2,
+    priorityLabel: 'High',
+    labels: { nodes: [{ id: 'label-1', name: 'bug' }] },
+    state: { id: 'state-todo', name: 'Todo', type: 'unstarted' },
+    team: { id: 'team-eng', key: 'ENG', name: 'Engineering' },
+    project: { id: 'project-1' },
+    assignee: user,
+    creator: user,
+    createdAt: '2026-07-01T00:00:00Z',
+    updatedAt: '2026-07-02T00:00:00Z',
+    archivedAt: null,
+    ...overrides,
   };
 }
 
-const project = {
-  id: 'project-1',
-  name: 'Platform',
-  state: 'started',
-  teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
+type Workspace = {
+  organization: { id: string; name: string; urlKey: string };
+  projects: Array<{ id: string; name: string; state: string; teams: { nodes: Array<Record<string, string>> } }>;
+  teams: Array<{ id: string; key: string; name: string }>;
+  issues: Array<ReturnType<typeof rawIssue>>;
+  comments?: Array<Record<string, unknown>>;
 };
-const user = {
-  id: 'user-1',
-  name: 'Ada Lovelace',
-  displayName: 'Ada',
-  email: 'ada@example.com',
-  avatarUrl: null,
-};
-const issue = {
-  id: 'issue-1',
-  identifier: 'ENG-42',
-  number: 42,
-  title: 'Fix intake',
-  description: 'Issue body',
-  url: 'https://linear.app/acme/issue/ENG-42',
-  priority: 2,
-  priorityLabel: 'High',
-  labels: [{ id: 'label-1', name: 'bug' }],
-  state: { id: 'state-1', name: 'Todo', type: 'unstarted' },
-  team: { id: 'team-1', key: 'ENG', name: 'Engineering' },
-  project: { id: 'project-1' },
-  assignee: user,
-  creator: user,
-  createdAt: '2026-07-01T00:00:00Z',
-  updatedAt: '2026-07-02T00:00:00Z',
-  archivedAt: null,
-};
+
+const acme = (): Workspace => ({
+  organization: { id: 'org-acme', name: 'Acme', urlKey: 'acme' },
+  projects: [
+    {
+      id: 'project-1',
+      name: 'Platform',
+      state: 'started',
+      teams: { nodes: [{ id: 'team-eng', key: 'ENG', name: 'Engineering' }] },
+    },
+  ],
+  teams: [{ id: 'team-eng', key: 'ENG', name: 'Engineering' }],
+  issues: [rawIssue()],
+  comments: [
+    {
+      id: 'comment-1',
+      body: 'Looks related',
+      url: 'https://linear.app/acme/issue/ENG-42#comment-1',
+      issue: { id: 'issue-1', identifier: 'ENG-42' },
+      user,
+      parent: null,
+      createdAt: '2026-07-02T00:00:00Z',
+      updatedAt: '2026-07-02T00:00:00Z',
+    },
+  ],
+});
+
+const beta = (): Workspace => ({
+  organization: { id: 'org-beta', name: 'Beta', urlKey: 'beta' },
+  projects: [],
+  teams: [{ id: 'team-ops', key: 'OPS', name: 'Operations' }],
+  issues: [
+    rawIssue({
+      id: 'issue-2',
+      identifier: 'OPS-7',
+      title: 'Rotate keys',
+      url: 'https://linear.app/beta/issue/OPS-7',
+      team: { id: 'team-ops', key: 'OPS', name: 'Operations' },
+      project: null,
+    }),
+  ],
+});
+
+type Mutation = { connectionId: string; name: string; variables: Record<string, any> };
+
+function fakePlatform(
+  options: {
+    connections?: Array<{ id: string; status: 'active' | 'needs_reauth'; accountLabel: string | null }>;
+    workspaces?: Record<string, Workspace>;
+  } = {},
+) {
+  const connections = options.connections ?? [
+    { id: 'conn-acme', status: 'active', accountLabel: 'Acme' },
+    { id: 'conn-beta', status: 'active', accountLabel: 'Beta' },
+    { id: 'conn-stale', status: 'needs_reauth', accountLabel: null },
+  ];
+  const workspaces = options.workspaces ?? { 'conn-acme': acme(), 'conn-beta': beta() };
+  const mutations: Mutation[] = [];
+  const proxied: string[] = [];
+
+  const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+    const url = String(input);
+    if (url.endsWith('/v2/connections?providerKey=linear')) return json({ connections });
+    const match = url.match(/\/v2\/connections\/([^/]+)\/proxy\/graphql$/);
+    if (!match || init?.method !== 'POST') return json({ error: `unexpected ${init?.method} ${url}` }, 500);
+
+    const connectionId = decodeURIComponent(match[1]!);
+    proxied.push(connectionId);
+    const workspace = workspaces[connectionId];
+    if (!workspace) return json({ error: 'unknown connection' }, 404);
+    const { query, variables } = JSON.parse(String(init.body)) as { query: string; variables: Record<string, any> };
+
+    for (const name of ['issueUpdate', 'commentCreate', 'issueCreate']) {
+      if (!query.includes(`${name}(`)) continue;
+      mutations.push({ connectionId, name, variables });
+      if (name === 'issueUpdate') {
+        const target = workspace.issues.find(i => i.id === variables.id);
+        if (target) target.state = { id: 'state-progress', name: 'In Progress', type: 'started' };
+        return json({ data: { issueUpdate: { success: true } } });
+      }
+      if (name === 'commentCreate') {
+        return json({ data: { commentCreate: { success: true, comment: { id: 'comment-new', url: 'https://linear.app/c' } } } });
+      }
+      const created = { id: 'issue-new', identifier: 'ENG-99', title: variables.input.title, url: 'https://linear.app/i' };
+      return json({ data: { issueCreate: { success: true, issue: created } } });
+    }
+    if (query.includes('organization {')) return json({ data: { organization: workspace.organization } });
+    if (query.includes('workflowStates(')) {
+      return json({
+        data: {
+          workflowStates: {
+            nodes: [
+              { id: 'state-todo', name: 'Todo', type: 'unstarted', position: 1, team: { id: variables.teamId } },
+              { id: 'state-progress', name: 'In Progress', type: 'started', position: 2, team: { id: variables.teamId } },
+            ],
+          },
+        },
+      });
+    }
+    const page = { hasNextPage: false, endCursor: null };
+    if (query.includes('projects(')) return json({ data: { projects: { nodes: workspace.projects, pageInfo: page } } });
+    if (query.includes('teams(')) return json({ data: { teams: { nodes: workspace.teams, pageInfo: page } } });
+    if (query.includes('issues(')) {
+      const projectId = variables.filter?.project?.id?.eq;
+      const teamId = variables.filter?.team?.id?.eq;
+      const nodes = workspace.issues.filter(
+        i => (!projectId || i.project?.id === projectId) && (!teamId || i.team.id === teamId),
+      );
+      return json({ data: { issues: { nodes, pageInfo: page } } });
+    }
+    if (query.includes('issue(')) {
+      const found = workspace.issues.find(i => i.id === variables.id || i.identifier === variables.id);
+      if (!found) return json({ data: null, errors: [{ message: 'Entity not found: Issue' }] });
+      const comments = query.includes('comments(')
+        ? { comments: { nodes: workspace.comments ?? [], pageInfo: page } }
+        : {};
+      return json({ data: { issue: { ...found, ...comments } } });
+    }
+    return json({ error: 'unhandled query' }, 500);
+  });
+
+  vi.stubGlobal('fetch', fetchMock);
+  return { fetchMock, mutations, proxied };
+}
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
 }
 
 beforeEach(() => {
-  vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', config.baseUrl);
-  vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', config.accessToken);
+  vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', PLATFORM_BASE);
+  vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'platform-token');
 });
 
 afterEach(() => {
@@ -89,1122 +177,154 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function createIntegration(fetchImpl?: typeof fetch): PlatformLinearIntegration {
-  if (fetchImpl) vi.stubGlobal('fetch', fetchImpl);
-  return new PlatformLinearIntegration();
-}
-
 describe('PlatformLinearIntegration', () => {
-  describe('when issues belong to a Linear project', () => {
-    function projectIntegration() {
-      return createIntegration(async input => {
-        const url = new URL(String(input));
-        if (url.pathname.endsWith('/workspaces')) return json({ workspaces: [workspace] });
-        const pageInfo = { hasNextPage: false, endCursor: null };
-        if (url.pathname.endsWith('/projects')) return json({ projects: [project], pageInfo });
-        if (url.pathname.endsWith('/teams')) return json({ teams: [issue.team], pageInfo });
-        if (url.pathname.endsWith('/issues')) return json({ issues: [issue], pageInfo });
-        if (url.pathname.endsWith('/issues/issue-1')) {
-          return json({ ...issue, comments: { nodes: [], pageInfo } });
-        }
-        throw new Error(`Unexpected request: ${url}`);
-      });
-    }
+  it('lists projects and teams from every active Connect connection as Intake sources', async () => {
+    const { proxied } = fakePlatform();
+    const sources = await new PlatformLinearIntegration().intake.listSources({ connection });
 
-    it.each([project1SourceId, encodeTeamSourceId('workspace-1', 'team-1')])(
-      'lists the same project identity as the picker for source %s',
-      async selectedSourceId => {
-        const integration = projectIntegration();
-        const projects = await integration.listProjects();
-        const result = await integration.intake.listIssues({
-          connection: { type: 'oauth', accessToken: 'unused-provider-token' },
-          sourceIds: [selectedSourceId],
-        });
-
-        expect(result.issues).toEqual([
-          expect.objectContaining({ sourceId: selectedSourceId, projectId: projects[0].id }),
-        ]);
-      },
-    );
-
-    it('preserves the project identity during detail reads used to reconcile stored cards', async () => {
-      const integration = projectIntegration();
-      await expect(
-        integration.intake.getIssue({
-          connection: { type: 'oauth', accessToken: 'unused-provider-token' },
-          sourceId: encodeTeamSourceId('workspace-1', 'team-1'),
-          issueId: 'issue-1',
-        }),
-      ).resolves.toMatchObject({ projectId: project1SourceId });
-    });
-
-    it.each(['workspace-1', 'workspace-2'])('scopes detail project identity to %s', async workspaceId => {
-      const integration = projectIntegration();
-      await expect(
-        integration.intake.getIssue({
-          connection: { type: 'oauth', accessToken: 'unused-provider-token' },
-          sourceId: encodeTeamSourceId(workspaceId, 'team-1'),
-          issueId: 'issue-1',
-        }),
-      ).resolves.toMatchObject({ projectId: sourceId(workspaceId, 'project-1') });
-    });
-
-    it('preserves the project identity when a state update is already satisfied', async () => {
-      const integration = projectIntegration();
-      await expect(
-        integration.intake.updateIssue({
-          connection: { type: 'oauth', accessToken: 'unused-provider-token' },
-          sourceId: project1SourceId,
-          issueId: 'issue-1',
-          state: { kind: 'byName', name: 'Todo' },
-        }),
-      ).resolves.toMatchObject({ projectId: project1SourceId });
-    });
-  });
-
-  describe('when an issue has no Linear project', () => {
-    it('represents the missing project explicitly during reconciliation', async () => {
-      const integration = createIntegration(async () =>
-        json({
-          ...issue,
-          project: null,
-          comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } },
-        }),
-      );
-      await expect(
-        integration.intake.getIssue({
-          connection: { type: 'oauth', accessToken: 'unused-provider-token' },
-          sourceId: encodeTeamSourceId('workspace-1', 'team-1'),
-          issueId: 'issue-1',
-        }),
-      ).resolves.toMatchObject({ projectId: null });
-    });
-  });
-
-  describe('when stored Linear cards are reconciled', () => {
-    it.each([
-      { name: 'backfills older cards', metadata: {}, project: issue.project, expected: project1SourceId },
-      {
-        name: 'clears removed membership',
-        metadata: { linearProjectId: project1SourceId },
-        project: null,
-        expected: null,
-      },
-      {
-        name: 'updates moved membership',
-        metadata: { linearProjectId: project1SourceId },
-        project: { id: 'project-2' },
-        expected: sourceId('workspace-1', 'project-2'),
-      },
-    ])(
-      '$name so filtering does not depend on the current intake page',
-      async ({ metadata, project: linearProject, expected }) => {
-        const seed = await createPlatformStorageForTests();
-        const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
-        const { item } = await seed.workItems.upsert({
-          orgId: project.orgId,
-          userId: project.createdBy,
-          factoryProjectId: project.id,
-          input: {
-            externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42', url: issue.url },
-            title: issue.title,
-            stages: ['planning'],
-            sessions: {},
-            metadata: { ...metadata, linearIssueId: issue.id },
-          },
-        });
-        const integration = createIntegration(async input => {
-          if (String(input).endsWith('/workspaces')) return json({ workspaces: [workspace] });
-          return json({
-            ...issue,
-            project: linearProject,
-            comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } },
-          });
-        });
-        const reconcile = attachLinearIssueReconciler(integration, {
-          storage: { projects: seed.projects },
-          runtime: { configVersion: 'v1', workItems: seed.workItems, boards: createBoardRegistry() },
-        });
-        await expect(reconcile?.()).resolves.toMatchObject({ checked: 1, updated: 1, failed: 0 });
-        await expect(seed.workItems.get({ orgId: project.orgId, id: item.id })).resolves.toMatchObject({
-          metadata: { linearProjectId: expected },
-        });
-        await expect(reconcile?.()).resolves.toMatchObject({ checked: 1, updated: 0, failed: 0 });
-      },
-    );
-  });
-
-  it('does not expose the Platform secret through synthetic Linear connections', async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json({ workspaces: [workspace] }));
-    const integration = createIntegration(fetchImpl);
-
-    const storedConnection = await integration.storage.connections.get('org-1');
-    const loadedConnection = await integration.loadConnection('org-1');
-    if (!loadedConnection) throw new Error('Expected a connected Platform Linear workspace.');
-
-    expect(storedConnection?.data.accessToken).not.toBe(config.accessToken);
-    expect(loadedConnection.accessToken).not.toBe(config.accessToken);
-    await expect(integration.getFreshAccessToken(loadedConnection)).resolves.not.toBe(config.accessToken);
-  });
-
-  it('resolves dispatch context with the platform-managed token when a workspace is connected', async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json({ workspaces: [workspace] }));
-    const integration = createIntegration(fetchImpl);
-
-    const resolved = await integration.intake.resolveIntakeDispatch!({
-      orgId: 'org-1',
-      externalSource: { type: 'issue', externalId: 'issue-1' },
-    });
-    expect(resolved).toMatchObject({ connection: { type: 'oauth' }, issueId: 'issue-1' });
-    expect((resolved?.connection as { accessToken?: string }).accessToken).not.toBe(config.accessToken);
-  });
-
-  it('returns null dispatch context without a connected workspace or for non-issue sources', async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json({ workspaces: [] }));
-    const integration = createIntegration(fetchImpl);
-
-    await expect(
-      integration.intake.resolveIntakeDispatch!({
-        orgId: 'org-1',
-        externalSource: { type: 'issue', externalId: 'issue-1' },
-      }),
-    ).resolves.toBeNull();
-    await expect(
-      integration.intake.resolveIntakeDispatch!({
-        orgId: 'org-1',
-        externalSource: { type: 'pull-request', externalId: 'x' },
-      }),
-    ).resolves.toBeNull();
-  });
-
-  it('lists connected workspace projects and teams as Intake sources', async () => {
-    const fetchImpl = vi.fn<typeof fetch>(async input => {
-      const url = String(input);
-      if (url.endsWith('/v1/server/linear/workspaces')) {
-        return json({ workspaces: [workspace, { ...workspace, linearWorkspaceId: 'old', connected: false }] });
-      }
-      if (url.includes('/projects')) {
-        return json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } });
-      }
-      if (url.includes('/teams')) {
-        return json({
-          teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
-          pageInfo: { hasNextPage: false, endCursor: null },
-        });
-      }
-      throw new Error(`unexpected request: ${url}`);
-    });
-    const integration = createIntegration(fetchImpl);
-
-    const teamSourceId = `linear-team:${Buffer.from(
-      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
-    ).toString('base64url')}`;
-
-    await expect(integration.intake.listSources({ orgId: 'org-1', userId: 'user-1' })).resolves.toEqual([
-      {
-        id: project1SourceId,
-        name: 'Platform',
-        type: 'project',
-        metadata: expect.objectContaining({ workspaceId: 'workspace-1', workspaceName: 'Acme', state: 'started' }),
-      },
-      {
-        id: teamSourceId,
-        name: 'Engineering',
-        type: 'team',
-        metadata: expect.objectContaining({ workspaceId: 'workspace-1', workspaceName: 'Acme', teamKey: 'ENG' }),
-      },
+    expect(sources.map(source => [source.type, source.name, source.id])).toEqual([
+      ['project', 'Platform', encodeSourceId('org-acme', 'project-1')],
+      ['team', 'Engineering', encodeTeamSourceId('org-acme', 'team-eng')],
+      ['team', 'Operations', encodeTeamSourceId('org-beta', 'team-ops')],
     ]);
+    expect(proxied).not.toContain('conn-stale');
   });
 
-  it('normalizes active project issues and filters labels client-side', async () => {
-    const fetchImpl = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(json({ workspaces: [workspace] }))
-      .mockResolvedValueOnce(json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } }))
-      .mockResolvedValueOnce(
-        json({
-          issues: [
-            issue,
-            { ...issue, id: 'issue-2', identifier: 'ENG-43', labels: [{ id: 'label-2', name: 'feature' }] },
-          ],
-          pageInfo: { hasNextPage: true, endCursor: 'cursor-2' },
-        }),
-      );
-    const integration = createIntegration(fetchImpl);
+  it('lists issues for a team source through the owning connection proxy', async () => {
+    const { proxied } = fakePlatform();
+    const teamSource = encodeTeamSourceId('org-beta', 'team-ops');
 
-    await expect(
-      integration.intake.listIssues({
-        connection: { type: 'oauth', accessToken: 'unused-provider-token' },
-        sourceIds: [project1SourceId],
-        labels: ['bug'],
-      }),
-    ).resolves.toEqual({
-      issues: [
-        expect.objectContaining({
-          id: 'issue-1',
-          identifier: 'ENG-42',
-          // Must match the intake binding key so board routing can resolve it.
-          sourceId: project1SourceId,
-          source: 'ENG',
-          stateType: 'unstarted',
-          priority: 'High',
-          assignee: 'Ada',
-          labels: ['bug'],
-        }),
-      ],
-      nextCursor: expect.any(String),
-    });
-    const issuesUrl = String(fetchImpl.mock.calls[2]?.[0]);
-    expect(issuesUrl).toContain('/workspaces/workspace-1/issues?');
-    expect(issuesUrl).toContain('projectIds=project-1');
-    expect(issuesUrl).toContain('stateType=triage%2Cbacklog%2Cunstarted%2Cstarted');
-  });
-  it('does not fetch issues from attribution-only workspaces', async () => {
-    const workspace2 = {
-      ...workspace,
-      linearWorkspaceId: 'workspace-2',
-      linearWorkspaceName: 'Other',
-      urlKey: 'other',
-    };
-    const project2 = {
-      ...project,
-      id: 'project-2',
-      name: 'Other project',
-    };
-    const fetchImpl = vi.fn<typeof fetch>(async input => {
-      const url = String(input);
-      if (url.endsWith('/v1/server/linear/workspaces')) {
-        return json({ workspaces: [workspace, workspace2] });
-      }
-      if (url.includes('/workspaces/workspace-1/projects')) {
-        return json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } });
-      }
-      if (url.includes('/workspaces/workspace-2/projects')) {
-        return json({ projects: [project2], pageInfo: { hasNextPage: false, endCursor: null } });
-      }
-      if (url.includes('/workspaces/workspace-1/issues')) {
-        return json({ issues: [issue], pageInfo: { hasNextPage: false, endCursor: null } });
-      }
-      if (url.includes('/workspaces/workspace-2/issues')) {
-        return json({ error: 'unavailable' }, 503);
-      }
-      throw new Error(`unexpected request: ${url}`);
-    });
-    const integration = createIntegration(fetchImpl);
-
-    const result = await integration.intake.listIssues({
-      connection: { type: 'oauth', accessToken: 'unused-provider-token' },
-      sourceIds: [project1SourceId],
-      attributionSourceIds: [project1SourceId, project2SourceId],
-    });
-
-    expect(result.issues).toEqual([expect.objectContaining({ id: 'issue-1', sourceId: project1SourceId })]);
-    const requestedUrls = fetchImpl.mock.calls.map(call => String(call[0]));
-    expect(requestedUrls.some(url => url.includes('/workspaces/workspace-2/issues'))).toBe(false);
-  });
-  it('does not discover sources from attribution-only workspaces during team intake', async () => {
-    const workspace2 = {
-      ...workspace,
-      linearWorkspaceId: 'workspace-2',
-      linearWorkspaceName: 'Other',
-      urlKey: 'other',
-    };
-    const teamSourceId = `linear-team:${Buffer.from(
-      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
-    ).toString('base64url')}`;
-    const projectlessIssue = { ...issue, project: null };
-    const fetchImpl = vi.fn<typeof fetch>(async input => {
-      const url = String(input);
-      if (url.endsWith('/v1/server/linear/workspaces')) {
-        return json({ workspaces: [workspace, workspace2] });
-      }
-      if (url.includes('/workspaces/workspace-1/teams')) {
-        return json({
-          teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
-          pageInfo: { hasNextPage: false, endCursor: null },
-        });
-      }
-      if (url.includes('/workspaces/workspace-2/teams')) {
-        return json({ error: 'unavailable' }, 503);
-      }
-      if (url.includes('/projects')) {
-        throw new Error(`project discovery must not run for team-only intake: ${url}`);
-      }
-      if (url.includes('/workspaces/workspace-1/issues')) {
-        return json({ issues: [projectlessIssue], pageInfo: { hasNextPage: false, endCursor: null } });
-      }
-      throw new Error(`unexpected request: ${url}`);
-    });
-    const integration = createIntegration(fetchImpl);
-
-    const result = await integration.intake.listIssues({
-      connection: { type: 'oauth', accessToken: 'unused-provider-token' },
-      sourceIds: [teamSourceId],
-      attributionSourceIds: [teamSourceId, project2SourceId],
-    });
-
-    expect(result.issues).toEqual([expect.objectContaining({ id: 'issue-1', sourceId: teamSourceId })]);
-    const requestedUrls = fetchImpl.mock.calls.map(call => String(call[0]));
-    expect(requestedUrls.some(url => url.includes('/workspaces/workspace-2/teams'))).toBe(false);
-    expect(requestedUrls.some(url => url.includes('/projects'))).toBe(false);
-  });
-
-  it('lists a team source with teamId (no projectIds) and returns projectless issues', async () => {
-    const teamSourceId = `linear-team:${Buffer.from(
-      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
-    ).toString('base64url')}`;
-    const projectlessIssue = {
-      ...issue,
-      id: 'issue-9',
-      identifier: 'ENG-9',
-      project: null,
-      labels: [] as Array<{ id: string; name: string }>,
-    };
-    const fetchImpl = vi.fn<typeof fetch>(async input => {
-      const url = String(input);
-      if (url.endsWith('/v1/server/linear/workspaces')) return json({ workspaces: [workspace] });
-      if (url.includes('/projects')) {
-        return json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } });
-      }
-      if (url.includes('/teams')) {
-        return json({
-          teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
-          pageInfo: { hasNextPage: false, endCursor: null },
-        });
-      }
-      if (url.includes('/issues')) {
-        return json({ issues: [projectlessIssue], pageInfo: { hasNextPage: false, endCursor: null } });
-      }
-      throw new Error(`unexpected request: ${url}`);
-    });
-    const integration = createIntegration(fetchImpl);
-
-    const result = await integration.intake.listIssues({
-      connection: { type: 'oauth', accessToken: 'unused-provider-token' },
-      sourceIds: [teamSourceId],
-    });
+    const result = await new PlatformLinearIntegration().intake.listIssues({ connection, sourceIds: [teamSource] });
 
     expect(result.issues).toEqual([
-      expect.objectContaining({ id: 'issue-9', identifier: 'ENG-9', sourceId: teamSourceId }),
+      expect.objectContaining({ title: 'Rotate keys', sourceId: teamSource, labels: ['bug'] }),
     ]);
-    const issuesCall = fetchImpl.mock.calls.map(c => String(c[0])).find(u => u.includes('/issues'))!;
-    expect(issuesCall).toContain('teamId=team-1');
-    expect(issuesCall).not.toContain('projectIds=');
-    expect(issuesCall).toContain('stateType=triage%2Cbacklog%2Cunstarted%2Cstarted');
+    expect(proxied).toContain('conn-beta');
   });
 
-  it('dedupes an issue selected via both a team and its project, project wins (most-specific)', async () => {
-    const teamSourceId = `linear-team:${Buffer.from(
-      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
-    ).toString('base64url')}`;
-    const overlapping = { ...issue, id: 'issue-1', project: { id: 'project-1' } };
-    const projectlessTeamIssue = {
-      ...issue,
-      id: 'issue-2',
-      identifier: 'ENG-99',
-      project: null,
-      labels: [] as Array<{ id: string; name: string }>,
-    };
-    const fetchImpl = vi.fn<typeof fetch>(async input => {
-      const url = String(input);
-      if (url.endsWith('/v1/server/linear/workspaces')) return json({ workspaces: [workspace] });
-      if (url.includes('/projects')) {
-        return json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } });
-      }
-      if (url.includes('/teams')) {
-        return json({
-          teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
-          pageInfo: { hasNextPage: false, endCursor: null },
-        });
-      }
-      if (url.includes('projectIds=project-1')) {
-        return json({ issues: [overlapping], pageInfo: { hasNextPage: false, endCursor: null } });
-      }
-      if (url.includes('teamId=team-1')) {
-        return json({ issues: [overlapping, projectlessTeamIssue], pageInfo: { hasNextPage: false, endCursor: null } });
-      }
-      throw new Error(`unexpected request: ${url}`);
-    });
-    const integration = createIntegration(fetchImpl);
+  it('keeps resolving source ids stored by the legacy app-install integration', async () => {
+    fakePlatform();
+    // Legacy ids encode the Linear organization id as `workspaceId` — the same value used today.
+    const legacy = `linear-project:${Buffer.from(JSON.stringify({ workspaceId: 'org-acme', projectId: 'project-1' })).toString('base64url')}`;
+    expect(legacy).toBe(encodeSourceId('org-acme', 'project-1'));
 
-    const result = await integration.intake.listIssues({
-      connection: { type: 'oauth', accessToken: 'unused-provider-token' },
-      sourceIds: [project1SourceId, teamSourceId],
-    });
-
-    expect(result.issues).toHaveLength(2);
-    const overlap = result.issues.find(i => i.id === 'issue-1')!;
-    expect(overlap.sourceId).toBe(project1SourceId);
-    const projectless = result.issues.find(i => i.id === 'issue-2')!;
-    expect(projectless.sourceId).toBe(teamSourceId);
+    const result = await new PlatformLinearIntegration().intake.listIssues({ connection, sourceIds: [legacy] });
+    expect(result.issues.map(i => i.title)).toEqual(['Fix intake']);
   });
 
-  it('keeps a selected-project issue out of an earlier team page', async () => {
-    const teamSourceId = `linear-team:${Buffer.from(
-      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
-    ).toString('base64url')}`;
-    const overlapping = { ...issue, project: { id: 'project-1' } };
-    const fetchImpl = vi.fn<typeof fetch>(async input => {
-      const url = String(input);
-      if (url.endsWith('/v1/server/linear/workspaces')) return json({ workspaces: [workspace] });
-      if (url.includes('/projects')) {
-        return json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } });
-      }
-      if (url.includes('/teams')) {
-        return json({
-          teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
-          pageInfo: { hasNextPage: false, endCursor: null },
-        });
-      }
-      if (url.includes('projectIds=project-1')) {
-        return json({ issues: [], pageInfo: { hasNextPage: true, endCursor: 'project-next' } });
-      }
-      if (url.includes('teamId=team-1')) {
-        return json({ issues: [overlapping], pageInfo: { hasNextPage: false, endCursor: null } });
-      }
-      throw new Error(`unexpected request: ${url}`);
-    });
-    const integration = createIntegration(fetchImpl);
+  it('fetches issue detail with comments across connections', async () => {
+    fakePlatform();
+    const detail = await new PlatformLinearIntegration().intake.getIssue({ connection, issueId: 'ENG-42' });
 
-    const result = await integration.intake.listIssues({
-      connection: { type: 'oauth', accessToken: 'unused-provider-token' },
-      sourceIds: [project1SourceId, teamSourceId],
-    });
-
-    expect(result.issues).toEqual([]);
-    expect(result.nextCursor).not.toBeNull();
+    expect(detail).toMatchObject({ title: 'Fix intake' });
+    expect(JSON.stringify(detail)).toContain('Looks related');
   });
 
-  it('fetches issue details with comments and creates comments through the source workspace', async () => {
-    const comment = {
-      id: 'comment-1',
-      body: 'Looking now',
-      url: 'https://linear.app/acme/issue/ENG-42#comment-comment-1',
-      issue: { id: 'issue-1', identifier: 'ENG-42' },
-      user,
-      parent: null,
-      createdAt: '2026-07-03T00:00:00Z',
-      updatedAt: '2026-07-03T00:00:00Z',
-    };
-    const fetchImpl = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        json({ ...issue, comments: { nodes: [comment], pageInfo: { hasNextPage: false, endCursor: null } } }),
-      )
-      .mockResolvedValueOnce(json(comment));
-    const integration = createIntegration(fetchImpl);
-    const connection = { type: 'oauth' as const, accessToken: 'unused-provider-token' };
-
+  it('returns null for an issue no connection knows about', async () => {
+    fakePlatform();
     await expect(
-      integration.intake.getIssue({ connection, sourceId: project1SourceId, issueId: 'ENG-42' }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        description: 'Issue body',
-        commentCount: 1,
-        comments: [{ author: 'Ada', body: 'Looking now', createdAt: comment.createdAt }],
-      }),
-    );
-    await expect(
-      integration.intake.createComment({ connection, sourceId: project1SourceId, issueId: 'ENG-42', body: 'Done' }),
-    ).resolves.toEqual({ id: 'comment-1', url: comment.url });
-    expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('/issues/ENG-42?include=comments');
-    expect(fetchImpl.mock.calls[1]?.[1]).toEqual(
-      expect.objectContaining({ method: 'POST', body: JSON.stringify({ body: 'Done' }) }),
-    );
+      new PlatformLinearIntegration().intake.getIssue({ connection, issueId: 'NOPE-1' }),
+    ).resolves.toBeNull();
   });
 
-  it('uses an opaque team source for issue reads, comments, and updates', async () => {
-    const teamSourceId = `linear-team:${Buffer.from(
-      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
-    ).toString('base64url')}`;
-    const comment = {
-      id: 'comment-1',
-      body: 'Done',
-      url: 'https://linear.app/acme/issue/ENG-42#comment-comment-1',
-      issue: { id: 'issue-1', identifier: 'ENG-42' },
-      user,
-      parent: null,
-      createdAt: '2026-07-03T00:00:00Z',
-      updatedAt: '2026-07-03T00:00:00Z',
-    };
-    const fetchImpl = vi.fn<typeof fetch>(async (_input, init) => {
-      if (init?.method === 'POST') return json(comment);
-      return json({ ...issue, comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
+  it('comments through the connection that owns the issue', async () => {
+    const { mutations } = fakePlatform();
+    const comment = await new PlatformLinearIntegration().intake.createComment({
+      connection,
+      issueId: 'OPS-7',
+      body: 'On it',
     });
-    const integration = createIntegration(fetchImpl);
-    const connection = { type: 'oauth' as const, accessToken: 'unused-provider-token' };
 
-    await expect(
-      integration.intake.getIssue({ connection, sourceId: teamSourceId, issueId: 'ENG-42' }),
-    ).resolves.toMatchObject({ id: 'issue-1' });
-    await expect(
-      integration.intake.createComment({ connection, sourceId: teamSourceId, issueId: 'ENG-42', body: 'Done' }),
-    ).resolves.toEqual({ id: 'comment-1', url: comment.url });
-    await expect(
-      integration.intake.updateIssue({
-        connection,
-        sourceId: teamSourceId,
-        issueId: 'ENG-42',
-        state: { kind: 'byType', stateType: 'unstarted' },
-      }),
-    ).resolves.toMatchObject({ id: 'issue-1', stateType: 'unstarted' });
-
-    expect(fetchImpl).toHaveBeenCalledTimes(3);
-    expect(fetchImpl.mock.calls.every(call => String(call[0]).includes('/workspaces/workspace-1/issues/ENG-42'))).toBe(
-      true,
-    );
-  });
-  it('resolves a byType target to a workflow state and PATCHes the Linear issue', async () => {
-    const workflowStates = [
-      { id: 'state-todo', name: 'Todo', type: 'unstarted', position: 1, teamId: 'team-1' },
-      { id: 'state-done', name: 'Done', type: 'completed', position: 3, teamId: 'team-1' },
-    ];
-    const updatedIssue = { ...issue, state: { id: 'state-done', name: 'Done', type: 'completed' } };
-    const fetchImpl = vi.fn<typeof fetch>(async input => {
-      const url = String(input);
-      if (url.includes('/workflow-states'))
-        return json({ workflowStates, pageInfo: { hasNextPage: false, endCursor: null } });
-      if (url.includes(`/issues/${encodeURIComponent('issue-1')}?include=comments`)) {
-        // Two calls: initial locate + refreshed fetch after PATCH.
-        return fetchImpl.mock.calls.filter(c => String(c[0]).includes('?include=comments')).length > 1
-          ? json({ ...updatedIssue, comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } })
-          : json({ ...issue, comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
-      }
-      return json({});
-    });
-    const integration = createIntegration(fetchImpl);
-
-    const result = await integration.intake.updateIssue({
-      connection: { type: 'oauth', accessToken: 'unused-provider-token' },
-      sourceId: project1SourceId,
-      issueId: 'issue-1',
-      state: { kind: 'byType', stateType: 'completed' },
-    });
-    expect(result).toMatchObject({ id: 'issue-1', state: 'Done', stateType: 'completed', projectId: project1SourceId });
-
-    const patchCall = fetchImpl.mock.calls.find(call => (call[1] as RequestInit).method === 'PATCH');
-    expect(patchCall).toBeDefined();
-    expect(String(patchCall![0])).toContain(`/workspaces/workspace-1/issues/${encodeURIComponent('issue-1')}`);
-    expect(JSON.parse(String((patchCall![1] as RequestInit).body))).toEqual({ stateId: 'state-done' });
+    expect(comment).toEqual({ id: 'comment-new', url: 'https://linear.app/c' });
+    expect(mutations).toEqual([
+      { connectionId: 'conn-beta', name: 'commentCreate', variables: { input: { issueId: 'OPS-7', body: 'On it' } } },
+    ]);
   });
 
-  it('skips the PATCH when the current byType state already matches', async () => {
-    const fetchImpl = vi.fn<typeof fetch>(async input => {
-      const url = String(input);
-      if (url.includes(`/issues/${encodeURIComponent('issue-1')}?include=comments`)) {
-        return json({ ...issue, comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
-      }
-      return json({});
+  it('moves an issue to the first workflow state of the requested type', async () => {
+    const { mutations } = fakePlatform();
+    const updated = await new PlatformLinearIntegration().intake.updateIssue({
+      connection,
+      issueId: 'ENG-42',
+      state: { kind: 'byType', stateType: 'started' },
     });
-    const integration = createIntegration(fetchImpl);
 
-    const result = await integration.intake.updateIssue({
-      connection: { type: 'oauth', accessToken: 'unused-provider-token' },
-      sourceId: project1SourceId,
-      issueId: 'issue-1',
+    expect(mutations).toEqual([
+      { connectionId: 'conn-acme', name: 'issueUpdate', variables: { id: 'issue-1', input: { stateId: 'state-progress' } } },
+    ]);
+    expect(updated).toMatchObject({ state: 'In Progress', stateType: 'started' });
+  });
+
+  it('skips the write when the issue is already in the target state', async () => {
+    const { mutations } = fakePlatform();
+    await new PlatformLinearIntegration().intake.updateIssue({
+      connection,
+      issueId: 'ENG-42',
       state: { kind: 'byType', stateType: 'unstarted' },
     });
-    expect(result).toMatchObject({ stateType: 'unstarted', projectId: project1SourceId });
-    expect(fetchImpl.mock.calls.some(c => (c[1] as RequestInit).method === 'PATCH')).toBe(false);
+    expect(mutations).toEqual([]);
   });
 
-  it('returns null when no workflow state matches the byType target', async () => {
-    const fetchImpl = vi.fn<typeof fetch>(async input => {
-      const url = String(input);
-      if (url.includes('/workflow-states')) {
-        return json({
-          workflowStates: [{ id: 'state-todo', name: 'Todo', type: 'unstarted', position: 1, teamId: 'team-1' }],
-          pageInfo: { hasNextPage: false, endCursor: null },
-        });
-      }
-      if (url.includes(`/issues/${encodeURIComponent('issue-1')}?include=comments`)) {
-        return json({ ...issue, comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
-      }
-      return json({});
-    });
-    const integration = createIntegration(fetchImpl);
-    await expect(
-      integration.intake.updateIssue({
-        connection: { type: 'oauth', accessToken: 'unused-provider-token' },
-        sourceId: project1SourceId,
-        issueId: 'issue-1',
-        state: { kind: 'byType', stateType: 'completed' },
-      }),
-    ).resolves.toBeNull();
-  });
+  it('creates issues through the connection for the requested workspace', async () => {
+    const { mutations } = fakePlatform();
+    const integration = new PlatformLinearIntegration();
 
-  it('degrades to null when the workflow-states endpoint is not deployed on the platform', async () => {
-    const fetchImpl = vi.fn<typeof fetch>(async input => {
-      const url = String(input);
-      if (url.includes('/workflow-states')) return json({ detail: 'Not found' }, 404);
-      if (url.includes(`/issues/${encodeURIComponent('issue-1')}?include=comments`)) {
-        return json({ ...issue, comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
-      }
-      return json({});
-    });
-    const integration = createIntegration(fetchImpl);
-    await expect(
-      integration.intake.updateIssue({
-        connection: { type: 'oauth', accessToken: 'unused-provider-token' },
-        sourceId: project1SourceId,
-        issueId: 'issue-1',
-        state: { kind: 'byType', stateType: 'completed' },
-      }),
-    ).resolves.toBeNull();
-    expect(fetchImpl.mock.calls.some(c => (c[1] as RequestInit).method === 'PATCH')).toBe(false);
-  });
-
-  it('searches connected workspaces when issue operations have no source id and returns null on 404', async () => {
-    const secondWorkspace = { ...workspace, linearWorkspaceId: 'workspace-2', linearWorkspaceName: 'Second' };
-    const fetchImpl = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(json({ workspaces: [workspace, secondWorkspace] }))
-      .mockResolvedValueOnce(json({ detail: 'Not found' }, 404))
-      .mockResolvedValueOnce(json({ detail: 'Not found' }, 404));
-    const integration = createIntegration(fetchImpl);
-
-    await expect(
-      integration.intake.getIssue({
-        connection: { type: 'oauth', accessToken: 'unused-provider-token' },
-        issueId: 'ENG-404',
-      }),
-    ).resolves.toBeNull();
-    expect(fetchImpl).toHaveBeenCalledTimes(3);
-  });
-
-  it('probes only routed workspaces while retaining complete source precedence', async () => {
-    const workspace1Source = sourceId('workspace-1', 'project-1');
-    const workspace1TeamSource = `linear-team:${Buffer.from(
-      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
-    ).toString('base64url')}`;
-    const workspace2TeamSource = `linear-team:${Buffer.from(
-      JSON.stringify({ workspaceId: 'workspace-2', teamId: 'team-2' }),
-    ).toString('base64url')}`;
-    const expectedIssue = {
-      ...issue,
-      id: 'issue-correct',
-      project: null,
-      team: { id: 'team-2', key: 'ENG', name: 'Engineering' },
-    };
-    const fetchImpl = vi.fn<typeof fetch>(async input => {
-      const url = String(input);
-      if (url.includes('/workspace-1/issues/ENG-42')) {
-        return json({ detail: 'Unrelated workspace unavailable' }, 503);
-      }
-      if (url.includes('/workspace-2/issues/ENG-42')) {
-        return json({ ...expectedIssue, comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
-      }
-      throw new Error(`Unexpected request: ${url}`);
-    });
-    const integration = createIntegration(fetchImpl);
-
-    await expect(
-      integration.fetchIssueDetail(
-        'unused-provider-token',
-        'ENG-42',
-        [workspace1Source, workspace1TeamSource, workspace2TeamSource],
-        [workspace2TeamSource],
-      ),
-    ).resolves.toMatchObject({ id: 'issue-correct', workspaceId: 'workspace-2', teamId: 'team-2' });
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-  });
-
-  it('tracks independent cursors when selected projects span workspaces', async () => {
-    const workspace2 = { ...workspace, linearWorkspaceId: 'workspace-2', linearWorkspaceName: 'Second' };
-    const project2 = { ...project, id: 'project-2', name: 'Product' };
-    const fetchImpl = vi.fn<typeof fetch>(async input => {
-      const url = String(input);
-      if (url.endsWith('/workspaces')) return json({ workspaces: [workspace, workspace2] });
-      if (url.includes('/workspace-1/projects')) {
-        return json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } });
-      }
-      if (url.includes('/workspace-2/projects')) {
-        return json({ projects: [project2], pageInfo: { hasNextPage: false, endCursor: null } });
-      }
-      if (url.includes('/workspace-1/issues')) {
-        return json({ issues: [issue], pageInfo: { hasNextPage: false, endCursor: null } });
-      }
-      if (url.includes('/workspace-2/issues')) {
-        return json({
-          issues: [{ ...issue, id: 'issue-2', identifier: 'ENG-43' }],
-          pageInfo: { hasNextPage: true, endCursor: 'next-2' },
-        });
-      }
-      throw new Error(`Unexpected request: ${url}`);
-    });
-    const integration = createIntegration(fetchImpl);
-
-    const result = await integration.intake.listItems({
-      orgId: 'org-1',
-      userId: 'user-1',
-      sourceIds: [project1SourceId, project2SourceId],
-    });
-    expect(result.items).toHaveLength(2);
-    expect(JSON.parse(Buffer.from(result.nextCursor!, 'base64url').toString('utf8'))).toEqual({
-      v: 1,
-      sourceSet: expect.any(String),
-      cursors: [null, 'next-2'],
-    });
-
-    await expect(
-      integration.intake.listItems({
-        orgId: 'org-1',
-        userId: 'user-1',
-        sourceIds: [project1SourceId],
-        cursor: result.nextCursor!,
-      }),
-    ).rejects.toMatchObject({ code: 'invalid_cursor' });
-  });
-
-  it('rejects a team page that hands back the cursor it was asked for', async () => {
-    const teamSourceId = `linear-team:${Buffer.from(
-      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
-    ).toString('base64url')}`;
-    const fetchImpl = vi.fn<typeof fetch>(async input => {
-      const url = String(input);
-      if (url.endsWith('/workspaces')) return json({ workspaces: [workspace] });
-      if (url.includes('/workspace-1/teams')) {
-        // Every page claims more follows and repeats the same cursor.
-        return json({
-          teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
-          pageInfo: { hasNextPage: true, endCursor: 'stuck' },
-        });
-      }
-      throw new Error(`Unexpected request: ${url}`);
-    });
-    const integration = createIntegration(fetchImpl);
-
-    await expect(
-      integration.intake.listIssues({
-        connection: { type: 'oauth', accessToken: 'unused-provider-token' },
-        sourceIds: [teamSourceId],
-        attributionSourceIds: [teamSourceId],
-      }),
-    ).rejects.toMatchObject({ code: 'invalid_cursor' });
-    // The first page is asked without a cursor and the second with it; nothing beyond that.
-    expect(fetchImpl.mock.calls.filter(call => String(call[0]).includes('/workspace-1/teams'))).toHaveLength(2);
-  });
-
-  it('rejects an issue page that hands back the cursor it was asked for', async () => {
-    const fetchImpl = vi.fn<typeof fetch>(async input => {
-      const url = String(input);
-      if (url.endsWith('/workspaces')) return json({ workspaces: [workspace] });
-      if (url.includes('/workspace-1/projects')) {
-        return json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } });
-      }
-      if (url.includes('/workspace-1/issues')) {
-        return json({ issues: [issue], pageInfo: { hasNextPage: true, endCursor: 'stuck' } });
-      }
-      throw new Error(`Unexpected request: ${url}`);
-    });
-    const integration = createIntegration(fetchImpl);
-    const first = await integration.intake.listItems({
-      orgId: 'org-1',
-      userId: 'user-1',
-      sourceIds: [project1SourceId],
-    });
-    expect(first.nextCursor).not.toBeNull();
-
-    await expect(
-      integration.intake.listItems({
-        orgId: 'org-1',
-        userId: 'user-1',
-        sourceIds: [project1SourceId],
-        cursor: first.nextCursor!,
-      }),
-    ).rejects.toMatchObject({ code: 'invalid_cursor' });
-  });
-
-  it('propagates platform rate limits through Linear capabilities', async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(JSON.stringify({ detail: 'Rate limited' }), {
-        status: 429,
-        headers: { 'content-type': 'application/json', 'retry-after': '11' },
-      }),
-    );
-    const integration = createIntegration(fetchImpl);
-
-    await expect(
-      integration.intake.listIssues({
-        connection: { type: 'oauth', accessToken: 'unused-provider-token' },
-        sourceIds: [project1SourceId],
-      }),
-    ).rejects.toMatchObject({ status: 429, retryAfterSeconds: 11 });
-  });
-
-  it('rejects GitHub-style app-installation connections', async () => {
-    const integration = createIntegration();
-    await expect(
-      integration.intake.listIssues({
-        connection: { type: 'app-installation', installationId: 7 },
-        sourceIds: ['project-1'],
-      }),
-    ).rejects.toThrow('Linear capabilities require an OAuth connection.');
-  });
-
-  it('exposes platform-backed route and agent-tool surfaces with platform connect routing', async () => {
-    const seed = await createPlatformStorageForTests();
-    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async input => {
-      const url = String(input);
-      if (url.includes('/v1/server/linear/authorize')) {
-        return new Response(null, {
-          status: 302,
-          headers: { location: 'https://linear.app/oauth/authorize?state=abc' },
-        });
-      }
-      if (url.includes('/v1/server/linear/workspaces/workspace-1/teams?')) {
-        return json({
-          teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
-          pageInfo: { hasNextPage: false, endCursor: null },
-        });
-      }
-      return json({ workspaces: [workspace] });
-    });
-    const integration = createIntegration(fetchImpl);
-    const projectRecord = await seed.projects.create({
-      orgId: 'org-1',
-      userId: 'user-1',
-      input: { name: 'Acme app' },
-    });
-    const context = {
-      auth: fakeAuth(),
-      storage: {
-        generic: seed.integrations.forIntegration('linear'),
-        sourceControl: seed.sourceControl.forIntegration('linear'),
-        projects: seed.projects,
-        intake: seed.intake,
-      },
-      stateSigner: {},
-      baseUrl: 'https://factory.example',
-    } as unknown as IntegrationContext;
-    integration.initialize?.({
-      storage: context.storage.generic,
-      projects: context.storage.projects,
-      auth: context.auth,
-    });
-    const routes = integration.routes(context);
-    const app = new Hono();
-    for (const route of routes) {
-      if ('handler' in route) app.on(route.method, route.path, route.handler as never);
-    }
-    const requestContext = new RequestContext();
-    requestContext.set('controller', { resourceId: projectRecord.id, getState: () => ({}) });
-
-    expect(integration.id).toBe('linear');
-    expect(integration.intake).toBeDefined();
-    expect('versionControl' in integration).toBe(false);
-    expect(routes.map(route => route.path)).toEqual(
-      expect.arrayContaining([
-        '/auth/linear/connect',
-        '/web/linear/status',
-        '/web/linear/projects',
-        '/web/linear/teams',
-        '/web/linear/issues',
-      ]),
-    );
-    expect(routes.some(route => route.path === '/auth/linear/callback')).toBe(false);
-    const teamSourceId = `linear-team:${Buffer.from(
-      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
-    ).toString('base64url')}`;
-    await expect(app.request('/web/linear/status').then(res => res.json())).resolves.toMatchObject({
-      enabled: true,
-      connected: true,
-      reason: 'ready',
-      workspace: { name: 'Acme', urlKey: 'acme' },
-    });
-    const teams = await app.request('/web/linear/teams');
-    expect(teams.status).toBe(200);
-    await expect(teams.json()).resolves.toEqual({
-      teams: [
-        {
-          id: 'team-1',
-          key: 'ENG',
-          name: 'Engineering',
-          workspaceId: 'workspace-1',
-          sourceId: teamSourceId,
-        },
-      ],
-    });
-    expect(
-      integration.sourceMatchesIssue(teamSourceId, {
-        workspaceId: 'workspace-1',
-        projectId: null,
-        teamId: 'team-1',
-      }),
-    ).toBe(true);
-    const connect = await app.request('/auth/linear/connect');
-    expect(connect.status).toBe(302);
-    expect(connect.headers.get('location')).toBe('https://linear.app/oauth/authorize?state=abc');
-    expect(fetchImpl).toHaveBeenCalledWith(
-      'https://platform.example.com/v1/server/linear/authorize?return_to=%2F&originator=https%3A%2F%2Ffactory.example',
-      expect.objectContaining({ redirect: 'manual' }),
-    );
-    await expect(integration.agentTools({ requestContext })).resolves.toEqual(
-      expect.objectContaining({ linear_get_issue: expect.anything(), linear_create_comment: expect.anything() }),
-    );
-    expect(integration.diagnostics()).toEqual({ mode: 'platform', endpointHost: 'platform.example.com' });
-    expect(JSON.stringify(integration.diagnostics())).not.toContain(config.accessToken);
-  });
-
-  it('attaches Linear rules to fetched Platform issues', async () => {
-    const seed = await createPlatformStorageForTests();
-    const fetchImpl = vi.fn<typeof fetch>(async input => {
-      const url = String(input);
-      if (url.endsWith('/workspaces')) return json({ workspaces: [workspace] });
-      if (url.includes('/workspaces/workspace-1/projects?')) {
-        return json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } });
-      }
-      if (url.includes('/workspaces/workspace-1/issues/ENG-42?include=comments')) {
-        return json({
-          ...issue,
-          project: { id: 'project-1' },
-          comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } },
-        });
-      }
-      if (url.includes('/workspaces/workspace-1/issues?')) {
-        return json({ issues: [issue], pageInfo: { hasNextPage: false, endCursor: null } });
-      }
-      throw new Error(`Unexpected request: ${url}`);
-    });
-    vi.stubGlobal('fetch', fetchImpl);
-    const onEvent = vi.fn();
-    const integration = new PlatformLinearIntegration({ rules: { issueObserved: onEvent } });
-    const projectRecord = await seed.projects.create({
-      orgId: 'org-1',
-      userId: 'user-1',
-      input: { name: 'Acme app' },
-    });
-    await seed.intake.saveConfig({
-      orgId: 'org-1',
-      config: { linear: { enabled: true, sourceIds: [project1SourceId] } },
-    });
-    // Board reads only ingest sources explicitly routed to a board of the project.
-    await seed.intake.setBinding({
-      orgId: 'org-1',
-      userId: 'user-1',
-      integrationId: 'linear',
-      sourceId: project1SourceId,
-      factoryProjectId: projectRecord.id,
-      board: 'work',
-    });
-    const context = {
-      auth: fakeAuth(),
-      storage: {
-        generic: seed.integrations.forIntegration('linear'),
-        sourceControl: seed.sourceControl.forIntegration('linear'),
-        projects: seed.projects,
-        intake: seed.intake,
-      },
-      runtime: {
-        configVersion: 'test-rules',
-        workItems: seed.workItems,
-        boards: createBoardRegistry(),
-      },
-      stateSigner: {},
-      baseUrl: 'https://factory.example',
-    } as unknown as IntegrationContext;
-    integration.initialize?.({
-      storage: context.storage.generic,
-      projects: context.storage.projects,
-      auth: context.auth,
-    });
-    const app = new Hono();
-    for (const route of integration.routes(context)) {
-      if ('handler' in route) app.on(route.method, route.path, route.handler as never);
-    }
-
-    const response = await app.request(`/web/linear/issues?factoryProjectId=${projectRecord.id}`);
-
-    expect(response.status).toBe(200);
-    expect(onEvent).toHaveBeenCalledOnce();
-    expect(onEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        event: 'issueObserved',
-        issue: expect.objectContaining({ id: 'issue-1', identifier: 'ENG-42' }),
-      }),
-    );
-    const detail = await app.request(`/web/linear/issues/ENG-42?factoryProjectId=${projectRecord.id}`);
-    expect(detail.status).toBe(200);
-    await expect(detail.json()).resolves.toMatchObject({
-      identifier: 'ENG-42',
-      title: 'Fix intake',
-      description: 'Issue body',
-    });
-  });
-
-  it('defaults the integrations API URL and requires a platform credential', () => {
-    vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', '');
-    expect(new PlatformLinearIntegration().diagnostics()).toEqual({
-      mode: 'platform',
-      endpointHost: 'integrations.mastra.ai',
-    });
-
-    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
-    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'injected-token');
-    expect(() => new PlatformLinearIntegration()).not.toThrow();
-
-    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
-    expect(() => new PlatformLinearIntegration()).toThrow(/MASTRA_PLATFORM_ACCESS_TOKEN/);
-  });
-
-  const workerContext = {
-    controller: {},
-    storage: {
-      generic: {},
-      sourceControl: {},
-      projects: { listAll: async () => [] },
-      intake: {},
-    },
-    runtime: { configVersion: 'test-v1', workItems: {} },
-  };
-
-  it('registers a single platform-linear-events worker with issue reconciliation folded in', () => {
-    const integration = new PlatformLinearIntegration() as unknown as {
-      workers(
-        ctx: unknown,
-      ): Array<{ name: string; config: { pollEventsEnabled: boolean; reconcileFactoryState?: unknown } }>;
-    };
-
-    expect(integration.workers(workerContext)).toEqual([
-      expect.objectContaining({
-        name: 'platform-linear-events',
-        config: expect.objectContaining({ pollEventsEnabled: true, reconcileFactoryState: expect.any(Function) }),
-      }),
+    const teams = await integration.listAllTeams();
+    expect(teams.map(t => [t.key, t.workspaceId])).toEqual([
+      ['ENG', 'org-acme'],
+      ['OPS', 'org-beta'],
     ]);
+
+    const created = await integration.createIssue('org-beta', { teamId: 'team-ops', title: 'New' });
+    expect(created.identifier).toBe('ENG-99');
+    expect(mutations[0]).toMatchObject({ connectionId: 'conn-beta', name: 'issueCreate' });
   });
 
-  it('keeps event polling active when issue reconciliation is disabled', () => {
-    vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'false');
-    const integration = new PlatformLinearIntegration() as unknown as {
-      workers(ctx: unknown): Array<{ config: { pollEventsEnabled: boolean; reconcileFactoryState?: unknown } }>;
-    };
-
-    const config = integration.workers(workerContext)[0]?.config;
-    expect(config?.pollEventsEnabled).toBe(true);
-    expect(config).not.toHaveProperty('reconcileFactoryState');
+  it('reports a Connect-backed connection only while one is active', async () => {
+    fakePlatform({ connections: [{ id: 'conn-stale', status: 'needs_reauth', accountLabel: null }] });
+    const integration = new PlatformLinearIntegration();
+    await expect(integration.loadConnection('org-1')).resolves.toBeNull();
+    await expect(integration.checkConnection('org-1')).resolves.toMatchObject({ connected: false, canCreateIssues: false });
   });
 
-  it('registers only issue reconciliation when event polling is disabled', () => {
-    vi.stubEnv('MASTRACODE_PLATFORM_LINEAR_POLLING_ENABLED', 'false');
-    vi.stubEnv('MASTRACODE_LINEAR_RECONCILE_ENABLED', 'false');
-    vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'true');
-    const integration = new PlatformLinearIntegration() as unknown as {
-      workers(ctx: unknown): Array<{ config: { pollEventsEnabled: boolean; reconcileFactoryState?: unknown } }>;
-    };
+  it('names the Connect connection in the compatibility row, never the Platform secret', async () => {
+    fakePlatform();
+    const row = await new PlatformLinearIntegration().loadConnection('org-1');
 
-    expect(integration.workers(workerContext)[0]?.config).toMatchObject({
-      pollEventsEnabled: false,
-      reconcileFactoryState: expect.any(Function),
+    expect(row).toMatchObject({ accessToken: 'linear-connection:conn-acme', workspaceName: 'Acme' });
+    expect(JSON.stringify(row)).not.toContain('platform-token');
+  });
+
+  it('drops the legacy OAuth routes and reports Connect status', async () => {
+    fakePlatform();
+    const integration = new PlatformLinearIntegration();
+    const ctx = {
+      auth: { enabled: () => false },
+      storage: { intake: {}, projects: {} },
+      runtime: {},
+      baseUrl: 'https://factory.example.com',
+    } as unknown as IntegrationContext;
+
+    const paths = integration.routes(ctx).map(route => route.path);
+    expect(paths.some(path => path.startsWith('/auth/linear/'))).toBe(false);
+  });
+
+  describe('workers', () => {
+    const workerContext = {
+      controller: {},
+      storage: { generic: {}, sourceControl: {}, projects: { listAll: async () => [] }, intake: {} },
+      runtime: { configVersion: 'test-v1', workItems: {} },
+    } as unknown as IntegrationContext;
+
+    it('registers an issue reconcile worker', () => {
+      expect(new PlatformLinearIntegration().workers(workerContext).map(worker => worker.name)).toEqual([
+        'linear-issue-reconcile',
+      ]);
     });
-  });
 
-  it('does not register when polling and issue reconciliation are disabled', () => {
-    vi.stubEnv('MASTRACODE_PLATFORM_LINEAR_POLLING_ENABLED', 'false');
-    vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'false');
-    const integration = new PlatformLinearIntegration() as unknown as {
-      workers(ctx: unknown): Array<{ name: string }>;
-    };
-
-    expect(integration.workers(workerContext)).toEqual([]);
+    it('registers nothing when issue reconciliation is disabled', () => {
+      vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'false');
+      expect(new PlatformLinearIntegration().workers(workerContext)).toEqual([]);
+    });
   });
 });
