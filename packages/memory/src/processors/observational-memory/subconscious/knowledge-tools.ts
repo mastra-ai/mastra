@@ -1,3 +1,4 @@
+import * as coreKnowledge from '@mastra/core/knowledge';
 import { materializeKnowledgeScopePlan, type Knowledge } from '@mastra/core/knowledge';
 import type {
   KnowledgeNode,
@@ -62,6 +63,12 @@ export async function resolveKnowledgeScopeIds(
   if (!rung) throw new Error('Knowledge tools require an active resourceId.');
   if (!threadId) throw new Error('Knowledge tools require an active threadId.');
   const knowledge = memory.getKnowledgeInstance?.();
+  // Older Cores clone materializeScope's input, so a live request context (which can hold functions)
+  // must only be passed to a Core that advertises the vouch capability.
+  const runContext =
+    (coreKnowledge as Record<string, unknown>).KNOWLEDGE_VOUCH_RUN_SCOPES === true
+      ? { requestContext: context?.requestContext }
+      : {};
 
   const orgAddress = `org:${organizationId}`;
   const resourceAddress = rung.address;
@@ -71,21 +78,21 @@ export async function resolveKnowledgeScopeIds(
       address: orgAddress,
       contextualScopeAddress: orgAddress,
       parameters: { orgId: organizationId },
-      requestContext: context?.requestContext,
+      ...runContext,
     });
     const resource = await knowledge.materializeScope({
       address: resourceAddress,
       parentAddresses: [orgAddress],
       contextualScopeAddress: orgAddress,
       parameters: { orgId: organizationId, ...rung.parameters },
-      requestContext: context?.requestContext,
+      ...runContext,
     });
     const thread = await knowledge.materializeScope({
       address: threadAddress,
       parentAddresses: [resourceAddress],
       contextualScopeAddress: resourceAddress,
       parameters: { orgId: organizationId, ...rung.parameters, threadId },
-      requestContext: context?.requestContext,
+      ...runContext,
     });
     return [org.scopes[orgAddress]!, resource.scopes[resourceAddress]!, thread.scopes[threadAddress]!];
   }

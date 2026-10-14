@@ -48,6 +48,8 @@ function configuredScopeDescription(scope: KnowledgeStructurePlan['scopes'][numb
   return typeof description === 'string' ? description.trim() || undefined : undefined;
 }
 
+const NEEDS_VOUCH = Symbol('knowledge.needsVouch');
+
 export class Knowledge extends MastraBase {
   readonly id: string;
   readonly hasOwnStorage: boolean;
@@ -271,8 +273,10 @@ export class Knowledge extends MastraBase {
   }
 
   /**
-   * The planner is synchronous, so an async vouch hook is resolved in two passes: the first
-   * collects which parameters the plan needs vouched, the second plans with the resolved values.
+   * The planner is synchronous, so an async vouch hook is resolved on demand: plan, and when the
+   * planner asks for a parameter not yet resolved, stop, await the hook, and plan again. Any other
+   * planning error propagates unchanged; a declined parameter fails closed with the planner's own
+   * missing-parameter error.
    */
   async #planScope(
     input: MaterializeKnowledgeScopeInput,
@@ -280,26 +284,23 @@ export class Knowledge extends MastraBase {
   ): Promise<KnowledgeStructurePlan> {
     const hook = this.#vouch;
     if (!hook) return materializeKnowledgeScopePlan(this.#scopeTypes, input);
-    const requested = new Set<string>();
-    try {
-      materializeKnowledgeScopePlan(this.#scopeTypes, {
-        ...input,
-        vouch: ({ parameter }) => {
-          requested.add(parameter);
-          return 'pending';
-        },
-      });
-    } catch {
-      // The second pass reports any real planning error.
-    }
     const resolved = new Map<string, string | undefined>();
-    for (const parameter of requested) {
-      resolved.set(parameter, await hook({ address: input.address, parameter, scopes: runScopes }));
+    for (;;) {
+      let pending: string | undefined;
+      try {
+        return materializeKnowledgeScopePlan(this.#scopeTypes, {
+          ...input,
+          vouch: ({ parameter }) => {
+            if (resolved.has(parameter)) return resolved.get(parameter);
+            pending = parameter;
+            throw NEEDS_VOUCH;
+          },
+        });
+      } catch (error) {
+        if (error !== NEEDS_VOUCH || pending === undefined) throw error;
+        resolved.set(pending, await hook({ address: input.address, parameter: pending, scopes: runScopes }));
+      }
     }
-    return materializeKnowledgeScopePlan(this.#scopeTypes, {
-      ...input,
-      vouch: ({ parameter }) => resolved.get(parameter),
-    });
   }
 
   async materializeScope(input: MaterializeKnowledgeScopeInput): Promise<KnowledgeStructureReconcileResult> {
@@ -576,6 +577,12 @@ export class Knowledge extends MastraBase {
 export * from '../storage/domains/knowledge';
 export * from './imports';
 export { materializeKnowledgeScopePlan } from './reconcile';
+/**
+ * Runtime capability marker: `Knowledge.materializeScope` accepts a run `requestContext` and reads
+ * only its Core-marked scopes for the vouch hook (it is never cloned). Packages with an older Core
+ * peer floor check for this before passing a live request context.
+ */
+export const KNOWLEDGE_VOUCH_RUN_SCOPES = true;
 export type { KnowledgeConfig } from './config';
 export type {
   KnowledgeScopeAccessConfig,

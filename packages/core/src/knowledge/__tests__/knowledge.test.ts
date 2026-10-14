@@ -144,6 +144,23 @@ describe('Knowledge', () => {
       expect(seen).toEqual([['org:acme', 'project:p1']]);
     });
 
+    it('reports a real planning error instead of a missing parameter', async () => {
+      const knowledge = new Knowledge({
+        storage: new InMemoryStore({ id: 'planning-error' }),
+        scopes: {
+          'agent:$agentId:public': {
+            access: [{ principal: 'team:$orgId', role: 'readonly' }],
+            children: [{ address: 'thread:$orgId', name: 'Session' }],
+          },
+        },
+        vouch: async () => 'acme',
+      });
+
+      await expect(knowledge.materializeScope(input)).rejects.toThrow(
+        'Knowledge child scope template cannot create identity scope thread:acme',
+      );
+    });
+
     it('never passes unmarked scopes to the hook', async () => {
       const { knowledge, seen } = vouchingKnowledge('unmarked');
       await knowledge.reconcile();
