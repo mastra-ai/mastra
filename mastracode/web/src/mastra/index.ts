@@ -433,6 +433,7 @@ export const mastra = new Mastra({
   storage: preparedArgs.storage,
   pubsub: preparedArgs.pubsub,
   workers: preparedArgs.workers,
+  workflows: preparedArgs.workflows,
 });
 
 // Post-construct boot: initialize the controller (which now inherits this

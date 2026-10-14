@@ -504,6 +504,32 @@ export function registerApiCommand(program: CommanderCommand): void {
         description: 'Set the command that runs once in the workspace root after every repository is set up',
         command: `mastra api factory project environment update <project-id> '{"workspaceSetupCommand":"pnpm -r build"}'`,
       },
+      {
+        description: 'Build the environment every night at 03:00 UTC and on pushes to the default branch',
+        command: `mastra api factory project environment update <project-id> '{"buildTriggers":{"schedule":{"enabled":true,"cron":"0 3 * * *","timezone":"UTC"},"push":{"enabled":true}}}'`,
+      },
+    ],
+  });
+  addAction(factoryEnvironment, 'build', FACTORY_API_ROUTE_CATALOG.projectEnvironmentBuild, {
+    description: 'Build the sandbox environment template of a Factory project now',
+    routePlacement: 'origin',
+  });
+  const factoryEnvironmentBuilds = factoryEnvironment
+    .command('builds')
+    .description('Inspect the environment template builds of a Factory project');
+  addAction(factoryEnvironmentBuilds, 'list', FACTORY_API_ROUTE_CATALOG.projectEnvironmentBuilds, {
+    description:
+      'List the environment template builds of a Factory project, newest first, when the provider keeps history',
+    routePlacement: 'origin',
+  });
+  addAction(factoryEnvironmentBuilds, 'get', FACTORY_API_ROUTE_CATALOG.projectEnvironmentBuildGet, {
+    description: 'Get the live status of one environment template build of a Factory project',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'A composite build id (E2B uses <templateId>:<buildId>) is passed as is; the CLI encodes it',
+        command: `mastra api factory project environment builds get <project-id> 'tpl_123:bld_456'`,
+      },
     ],
   });
 
