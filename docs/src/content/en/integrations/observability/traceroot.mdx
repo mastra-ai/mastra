@@ -1,0 +1,109 @@
+---
+title: "TraceRoot | Observability"
+description: "Export Mastra agent traces to TraceRoot to inspect model calls, tool execution, and token usage."
+packages:
+  - "@mastra/observability"
+---
+
+# TraceRoot
+
+[TraceRoot](https://traceroot.ai) is an observability platform for AI agents. Its Mastra exporter sends agent traces, including model calls and tool execution, to TraceRoot so you can inspect inputs, outputs, errors, latency, and token usage in one trace tree.
+
+## Installation
+
+In an existing Mastra project, install the exporter and observability package:
+
+```bash npm2yarn
+npm install @traceroot-ai/mastra @mastra/observability
+```
+
+## Setup
+
+Create an API key in your [TraceRoot workspace](https://app.traceroot.ai), then add it to your environment alongside your model provider's key:
+
+```bash title=".env"
+TRACEROOT_API_KEY=your-traceroot-api-key
+OPENAI_API_KEY=your-openai-api-key
+```
+
+The exporter sends traces to TraceRoot Cloud at `https://app.traceroot.ai` by default. For another deployment, set `TRACEROOT_HOST_URL` to that deployment's base URL and use an API key created there. The exporter adds the ingestion path automatically.
+
+### Register the exporter
+
+Add `TraceRootExporter` to your observability configuration. This example registers a small agent to verify the connection:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Agent } from '@mastra/core/agent'
+import { Observability } from '@mastra/observability'
+import { TraceRootExporter } from '@traceroot-ai/mastra'
+
+const assistant = new Agent({
+  id: 'assistant',
+  name: 'Assistant',
+  instructions: 'Answer questions clearly and concisely.',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+})
+
+export const mastra = new Mastra({
+  agents: { assistant },
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'my-mastra-app',
+        exporters: [new TraceRootExporter()],
+      },
+    },
+  }),
+})
+```
+
+If your project already has exporters configured, add `TraceRootExporter` to that list. Keep `MastraStorageExporter` if you also want to view traces in [Studio](/docs/observability/tracing/overview).
+
+### Send a trace
+
+Call the registered agent from a script:
+
+```typescript title="src/verify-traceroot.ts"
+import { mastra } from './mastra'
+
+try {
+  const result = await mastra.getAgent('assistant').generate('What is an agent trace?')
+  console.log(result.text)
+} finally {
+  await mastra.observability.flush()
+}
+```
+
+Run it with your environment variables loaded:
+
+```bash npm2yarn
+npx tsx --env-file=.env src/verify-traceroot.ts
+```
+
+Open the **Traces** page in the TraceRoot workspace where you created the key. The run should appear with an agent span and a model generation span. Open the trace to inspect the prompt, response, and token usage. Calls to tools registered on the agent appear as tool spans.
+
+The exporter batches completed spans. Call `mastra.observability.flush()` before a short-lived script exits or a serverless invocation ends so pending spans can be sent.
+
+## Associate traces with sessions and users
+
+Set `sessionId` and `userId` in `tracingOptions.metadata` to associate runs with a conversation and a user in TraceRoot:
+
+```typescript
+await mastra.getAgent('assistant').generate('How do tool calls appear in a trace?', {
+  tracingOptions: {
+    metadata: {
+      sessionId: 'conversation-123',
+      userId: 'user-456',
+    },
+  },
+})
+```
+
+These metadata fields are separate from Mastra's memory configuration. Reuse the same `sessionId` for calls that belong to the same conversation.
+
+## Related
+
+- [Mastra tracing](/docs/observability/tracing/overview)
+- [TraceRoot trace viewer](https://traceroot.ai/docs/tracing/timeline)
+- [Exporter configuration](https://github.com/traceroot-ai/traceroot-ts/tree/main/packages/mastra)

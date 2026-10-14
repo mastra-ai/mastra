@@ -355,6 +355,12 @@ const sidebars = {
             iconDark: '/img/integrations/sentry-dark.svg',
           },
         },
+        {
+          type: 'doc',
+          id: 'observability/traceroot',
+          label: 'TraceRoot',
+          customProps: { icon: '/img/integrations/traceroot.png' },
+        },
       ],
     },
     {
