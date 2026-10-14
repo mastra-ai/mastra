@@ -1,4 +1,4 @@
-import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
+import { createDurableAgent, createEventedAgent, DurableStepIds } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
 
 import { LibSQLStore } from '../../../storage';
@@ -11,6 +11,7 @@ export interface Cor1411PeerArgs {
   runId: string;
   finalText: string;
   prompt: string;
+  blockRefresh?: boolean;
 }
 
 export interface Cor1411PeerResult {
@@ -23,6 +24,7 @@ export interface Cor1411PeerResult {
   scoringInputIncludesPrompt: boolean;
   scoringOutputIncludesAnswer: boolean;
   messagesIncludeAnswer: boolean;
+  onFinishMessagesIncludeAnswer: boolean;
 }
 
 const uppercaser = (onCall: () => void) => ({
@@ -66,7 +68,28 @@ void runPeer<Cor1411PeerArgs>(async (peer): Promise<Cor1411PeerResult> => {
 
   try {
     await peer.waitFor('run-live', { timeoutMs: 60_000 });
-    const observed = await runner.observe(runId);
+    const workflowsStore = await storage.getStore('workflows');
+    const getWorkflowRunById = workflowsStore?.getWorkflowRunById.bind(workflowsStore);
+    let blockRefresh = false;
+    let refreshBlocked = false;
+    if (workflowsStore && getWorkflowRunById) {
+      workflowsStore.getWorkflowRunById = async args => {
+        if (blockRefresh && !refreshBlocked && args.workflowName === DurableStepIds.AGENTIC_EXECUTION) {
+          refreshBlocked = true;
+          await peer.signal('refresh-started', { runId });
+          await peer.waitFor('release-refresh', { timeoutMs: 60_000 });
+        }
+        return getWorkflowRunById(args);
+      };
+    }
+
+    let onFinishMessagesIncludeAnswer = false;
+    const observed = await runner.observe(runId, {
+      onFinish: data => {
+        onFinishMessagesIncludeAnswer = JSON.stringify(data.messages).includes(finalText.toUpperCase());
+      },
+    });
+    blockRefresh = peer.args.blockRefresh === true;
     const outputPromise = observed.output.getFullOutput();
     await peer.signal('observer-attached', { runId });
     for await (const _chunk of observed.fullStream) {
@@ -84,6 +107,7 @@ void runPeer<Cor1411PeerArgs>(async (peer): Promise<Cor1411PeerResult> => {
       scoringInputIncludesPrompt: JSON.stringify(scoringData?.input)?.includes(prompt) ?? false,
       scoringOutputIncludesAnswer: JSON.stringify(scoringData?.output)?.includes(finalText.toUpperCase()) ?? false,
       messagesIncludeAnswer: JSON.stringify(output.messages).includes(finalText.toUpperCase()),
+      onFinishMessagesIncludeAnswer,
     };
   } finally {
     await mastra.shutdown();

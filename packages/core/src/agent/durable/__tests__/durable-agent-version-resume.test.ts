@@ -243,6 +243,37 @@ describe('durable agent version pinning across suspend/resume', () => {
     expect(result.runId).toBe(runId);
     result.cleanup();
   });
+
+  it('resolves output processors from the version pinned to an observed run', async () => {
+    const { store, baseAgent, durableAgent, resolveSpy } = setup();
+    const currentProcessors = vi.spyOn(baseAgent, 'listOutputProcessors').mockResolvedValue([]);
+    const pinnedProcessors = vi.fn(async () => []);
+    resolveSpy.mockImplementationOnce(async (agent, selector) => {
+      const fork = agent.__fork();
+      if ('versionId' in selector && selector.versionId) {
+        fork.__setRawConfig({ resolvedVersionId: selector.versionId });
+      }
+      fork.__markStoredVersionApplied();
+      vi.spyOn(fork, 'listOutputProcessors').mockImplementation(pinnedProcessors);
+      return fork as typeof agent;
+    });
+    const runId = 'version-pin-observe-run';
+    await seedSuspendedRun(
+      store,
+      runId,
+      durableAgent.id,
+      { threadId: 't-observe', resourceId: 'r-observe' },
+      'v1',
+      'running',
+    );
+
+    const result = await durableAgent.observe(runId);
+
+    expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), { versionId: 'v1' });
+    expect(pinnedProcessors).toHaveBeenCalledTimes(1);
+    expect(currentProcessors).not.toHaveBeenCalled();
+    result.detach();
+  });
 });
 
 describe('durable agent version pinning across crash/recover', () => {

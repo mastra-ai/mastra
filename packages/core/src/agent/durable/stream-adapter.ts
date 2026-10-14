@@ -447,6 +447,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   };
 
   const keepGeneration = createRunGenerationFilter({ minGeneration, rereadMinGeneration });
+  let onChunkDelivery = Promise.resolve();
 
   const handleEvent = async (event: Event) => {
     // After a terminal event the stream is closed and its callbacks have fired.
@@ -486,7 +487,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             lastErrorCause = errPayload?.error ?? errPayload;
           }
           safeEnqueue(controller, chunk as ChunkType<OUTPUT>);
-          await onChunk?.(chunk as ChunkType<OUTPUT>);
+          const delivery = onChunkDelivery.then(() => onChunk?.(chunk as ChunkType<OUTPUT>));
+          onChunkDelivery = delivery.catch(() => {});
+          await delivery;
           break;
         }
 
@@ -506,6 +509,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
         }
 
         case AgentStreamEventTypes.FINISH: {
+          await onChunkDelivery;
+          if (!controller || terminated) return;
           const data = streamEvent.data as AgentFinishEventData;
           const finishReason = data.stepResult?.reason;
 

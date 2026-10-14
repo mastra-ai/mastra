@@ -4816,13 +4816,14 @@ export class DurableAgent<
       messageList = new MessageList({ threadId, resourceId });
       try {
         const snapshot = workflowInputSnapshot ?? loopSnapshot;
-        const initialState = await hydrateMessageListState(
-          { state: undefined, getInitData: () => workflowInput!, mastra: this.#mastra },
-          (workflowInput.messageListState ?? latestMessageListState(workflowInputSnapshot!)) as Parameters<
-            typeof hydrateMessageListState
-          >[1],
-        );
-        messageList.deserialize(initialState);
+        const storedState = workflowInput.messageListState ?? (snapshot ? latestMessageListState(snapshot) : undefined);
+        if (storedState) {
+          const initialState = await hydrateMessageListState(
+            { state: undefined, getInitData: () => workflowInput!, mastra: this.#mastra },
+            storedState,
+          );
+          messageList.deserialize(initialState);
+        }
 
         if (workflowsStore && snapshot) {
           const inputMessages = messageList.get.input.db();
@@ -4840,8 +4841,27 @@ export class DurableAgent<
           ?.warn?.(`[DurableAgent] observe(${runId}) messageList deserialize skipped: ${error}`);
       }
 
+      let processorAgent: Agent<any, any, TOutput> = this.#wrappedAgent as Agent<any, any, TOutput>;
+      const pinnedVersionId = workflowInput.agentVersionId;
+      if (pinnedVersionId && this.#mastra && !this.__isStoredVersionApplied()) {
+        const currentVersionId = this.toRawConfig()?.resolvedVersionId;
+        if (pinnedVersionId !== currentVersionId) {
+          try {
+            processorAgent = (await this.#mastra.resolveVersionedAgent(this as unknown as Agent, {
+              versionId: pinnedVersionId,
+            })) as unknown as Agent<any, any, TOutput>;
+          } catch (error) {
+            this.#mastra
+              .getLogger?.()
+              ?.warn?.(
+                `[DurableAgent] Failed to resolve pinned agent version for durable observe, using current definition: ${error}`,
+              );
+          }
+        }
+      }
+
       try {
-        outputProcessors = (await this.#wrappedAgent.listOutputProcessors(requestContext)) ?? [];
+        outputProcessors = (await processorAgent.listOutputProcessors(requestContext)) ?? [];
       } catch (error) {
         outputProcessors = [];
         this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] observe(${runId}) processor resolution failed: ${error}`);

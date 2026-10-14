@@ -50,7 +50,7 @@ for (const engine of ['durable', 'evented'] as const) {
       }
     });
 
-    const runObserved = async (returnScorerData?: true) => {
+    const runObserved = async (returnScorerData?: true, blockRefresh = false) => {
       const id = randomUUID();
       const agentId = `cor1411-${engine}-${id}`;
       const runId = `cor1411-run-${id}`;
@@ -74,7 +74,7 @@ for (const engine of ['durable', 'evented'] as const) {
 
       const peer = await env.spawnPeer<Cor1411PeerArgs>(
         PEER_FIXTURE,
-        { engine, agentId, runId, finalText: FINAL_TEXT, prompt: PROMPT },
+        { engine, agentId, runId, finalText: FINAL_TEXT, prompt: PROMPT, blockRefresh },
         { role: `observer-${engine}`, workers: false },
       );
       const producer = await runner.stream(PROMPT, {
@@ -91,8 +91,12 @@ for (const engine of ['durable', 'evented'] as const) {
       await Promise.race([peer.waitFor('observer-attached'), peerResult]);
       release.resolve();
 
-      const observed = await peerResult;
       const produced = await producerOutput;
+      if (blockRefresh) {
+        await Promise.race([peer.waitFor('refresh-started'), peerResult]);
+        peer.send('release-refresh', { runId });
+      }
+      const observed = await peerResult;
       expect(await peer.exit()).toEqual({ code: 0, signal: null });
       return { observed, produced, producerProcessorCalls };
     };
@@ -125,6 +129,17 @@ for (const engine of ['durable', 'evented'] as const) {
         expect(produced.scoringData).toBeUndefined();
         expect(observed.scoringDataDefined).toBe(false);
         expect(observed.messagesIncludeAnswer).toBe(true);
+      },
+      CELL_TIMEOUT_MS,
+    );
+
+    it(
+      'waits for the final transcript refresh before resolving terminal output',
+      async () => {
+        const { observed } = await runObserved(undefined, true);
+
+        expect(observed.messagesIncludeAnswer).toBe(true);
+        expect(observed.onFinishMessagesIncludeAnswer).toBe(true);
       },
       CELL_TIMEOUT_MS,
     );
