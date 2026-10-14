@@ -38,7 +38,7 @@ import { StepExecutor } from '../step-executor';
 import { processWorkflowForEach, processWorkflowLoop } from './loop';
 import { processWorkflowConditional, processWorkflowParallel } from './parallel';
 import { processWorkflowSleep, processWorkflowSleepUntil, processWorkflowWaitForEvent } from './sleep';
-import { getNestedWorkflow, getStepId, isExecutableStep } from './utils';
+import { getNestedWorkflow, getStepId, isExecutableStep, toStepExecutionParentWorkflow } from './utils';
 
 export type ProcessorArgs = {
   activeStepsPath: Record<string, number[]>;
@@ -2189,6 +2189,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         runId,
         stepId: leafId,
         executionPath,
+        parentWorkflow: toStepExecutionParentWorkflow(parentWorkflow),
         stepResults,
         state: currentState,
         requestContext: Object.fromEntries(rc.entries()),
@@ -2262,6 +2263,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (stepResult.status === 'bailed') {
       // @ts-expect-error - bailed status not in type
       stepResult.status = 'success';
+      const updatedState = (stepResult as any).__state ?? currentState;
 
       await this.endWorkflow({
         workflow,
@@ -2274,13 +2276,14 @@ export class WorkflowEventProcessor extends EventProcessor {
         stepResults: {
           ...stepResults,
           [leafId]: stepResult,
+          __state: updatedState,
         },
         prevResult: stepResult,
         activeStepsPath,
         requestContext,
         actor,
         perStep,
-        state: currentState,
+        state: updatedState,
         outputOptions,
       });
       return;

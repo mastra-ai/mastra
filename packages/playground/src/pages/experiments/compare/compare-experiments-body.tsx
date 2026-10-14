@@ -1,20 +1,9 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useMemo } from 'react';
-import { useSearchParams } from 'react-router';
 import { CompareExperimentsContent } from './compare-experiments-content';
-import { MAX_COMPARED_EXPERIMENTS } from '@/domains/experiments/components/comparison/constants';
+import { useComparedExperimentIds } from './use-compared-experiment-ids';
 
 export function CompareExperimentsBody() {
-  const [searchParams] = useSearchParams();
-  const datasetId = searchParams.get('dataset') ?? undefined;
-  const baselineId = searchParams.get('baseline') ?? undefined;
-  const contenderIds = useMemo(
-    () =>
-      [...new Set(searchParams.getAll('contender'))]
-        .filter(id => id && id !== baselineId)
-        .slice(0, MAX_COMPARED_EXPERIMENTS - 1),
-    [searchParams, baselineId],
-  );
+  const { datasetId, baselineId, contenderIds } = useComparedExperimentIds();
 
   if (!datasetId || !baselineId || contenderIds.length === 0) {
     return (
