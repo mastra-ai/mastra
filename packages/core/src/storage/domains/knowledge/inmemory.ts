@@ -815,9 +815,9 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     });
     const recordIds = [...new Set(input.recordIds)].filter(id => {
       const record = this.#db.knowledgeRecords.get(id);
-      return Boolean(record && !record.deletedAt && this.#isRecordVisible(record, scopeIds));
+      return Boolean(record && !record.deletedAt && this.#isRecordVisible(record, scopeIds, input.recordScopeIds));
     });
-    return { nodeIds, recordIds };
+    return { nodeIds, recordIds, ...(input.recordScopeIds ? { recordScopeIdsApplied: true as const } : {}) };
   }
 
   async deleteRecord(input: { id: string; deletedBy: string; importRunId?: string }): Promise<KnowledgeRecord> {
@@ -1419,8 +1419,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     return [...(this.#db.knowledgeRecordScopes.get(recordId) ?? [])].sort();
   }
 
-  #isRecordVisible(record: KnowledgeRecord, visibleScopeIds: KnowledgeScopeIds): boolean {
-    if (!isKnowledgeScopeVisible(this.#recordScopeIds(record.id), visibleScopeIds)) return false;
+  #isRecordVisible(
+    record: KnowledgeRecord,
+    visibleScopeIds: KnowledgeScopeIds,
+    recordScopeIds = this.#recordScopeIds(record.id),
+  ): boolean {
+    if (!isKnowledgeScopeVisible(recordScopeIds, visibleScopeIds)) return false;
     const relatedNodeIds = [record.nodeId, ...(this.#db.knowledgeMentions.get(`record:${record.id}`) ?? [])];
     return relatedNodeIds.every(nodeId => {
       const node = this.#db.knowledgeNodes.get(nodeId);
