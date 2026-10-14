@@ -1035,7 +1035,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         // if step result is not success, stop and return
         if (lastOutput.result.status !== 'success') {
           if (lastOutput.result.status === 'bailed') {
-            lastOutput.result.status = 'success';
+            // Replace rather than mutate: the bailed result is also this entry's stepResults
+            // value, and storage v2 only rewrites step results whose reference changed.
+            const bailed = lastOutput.result;
+            const succeeded = { ...bailed, status: 'success' } as typeof bailed;
+            for (const id in stepResults) {
+              if (stepResults[id] === bailed) stepResults[id] = succeeded;
+            }
+            lastOutput.result = succeeded;
           }
 
           const result = (await this.fmtReturnValue(

@@ -1640,6 +1640,7 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
         // Persist a snapshot that indicates the workflow is still running
         await workflowsStore?.persistWorkflowSnapshot({
           workflowName: 'tt-error-running-workflow',
+          storageVersion: workflow.options.storageVersion,
           runId,
           snapshot: {
             runId,

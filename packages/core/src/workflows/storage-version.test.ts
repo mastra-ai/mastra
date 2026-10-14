@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { Mastra } from '../mastra';
+import { cloneRunData } from '../storage/domains/workflows/inmemory';
 import { MockStore } from '../storage/mock';
 import { createWorkflow } from './create';
 import { DefaultExecutionEngine } from './default';
 import { createWorkflow as createEventedWorkflow } from './evented';
 import { createStep } from './workflow';
+import type { AnyWorkflow } from './workflow';
 
 function gateStep() {
   return createStep({
@@ -226,4 +228,265 @@ describe('storageVersion per run', () => {
     const store = (await storage.getStore('workflows'))!;
     expect(await store.loadWorkflowSnapshot({ workflowName: 'gated', runId: run.runId, storageVersion: 1 })).toBeNull();
   });
+});
+
+const num = z.object({ n: z.number() });
+const marks = z.object({ marked: z.number().optional() });
+
+function addOne(id: string, onRun?: (ctx: { setState: (state: z.infer<typeof marks>) => Promise<void> }) => unknown) {
+  return createStep({
+    id,
+    inputSchema: num,
+    outputSchema: num,
+    stateSchema: marks,
+    execute: async ({ inputData, setState }) => {
+      await onRun?.({ setState });
+      return { n: inputData.n + 1 };
+    },
+  });
+}
+
+/** Records each storage v2 write's changes, and returns a run's stored entries. */
+function recordV2Writes(storage: InstanceType<typeof MockStore>) {
+  const store = storage.stores.workflows!;
+  const writes: { status: string; changes?: { stepIds: string[]; state: boolean } }[] = [];
+  const persist = store.persistWorkflowSnapshot.bind(store);
+  store.persistWorkflowSnapshot = async args => {
+    if (args.storageVersion === 2) writes.push({ status: args.snapshot.status, changes: args.changes });
+    return persist(args);
+  };
+  const entries = (workflowName: string, runId: string): { kind: string; stepId?: string }[] =>
+    (store as any).db.workflowRunEntries.get(`${workflowName}-${runId}`);
+  return { writes, entries };
+}
+
+describe('storage v2 write volume', () => {
+  const STEPS = 20;
+
+  it('appends only the changed step per write, and state only after setState', async () => {
+    const storage = new MockStore();
+    const { writes, entries } = recordV2Writes(storage);
+    let workflow: any = createWorkflow({
+      id: 'sequential',
+      inputSchema: num,
+      outputSchema: num,
+      stateSchema: marks,
+      options: { storageVersion: 2 },
+    });
+    for (let i = 0; i < STEPS; i++) {
+      workflow = workflow.then(addOne(`s${i}`, i === 10 ? ({ setState }) => setState({ marked: i }) : undefined));
+    }
+    workflow.commit();
+    new Mastra({ logger: false, storage, workflows: { sequential: workflow } });
+
+    const run = await workflow.createRun();
+    const result = await run.start({ inputData: { n: 0 }, initialState: {} });
+    expect(result.status).toBe('success');
+    expect(result.result).toEqual({ n: STEPS });
+
+    // createRun's pending write and the first running write are checkpoints; every later write is an append.
+    expect(writes.slice(0, 2).map(w => w.changes)).toEqual([undefined, undefined]);
+    const appends = writes.slice(2);
+    expect(appends.every(w => w.changes)).toBe(true);
+    for (const { status, changes } of appends) {
+      expect(changes!.stepIds).toHaveLength(status === 'running' ? 1 : 0);
+    }
+    expect(appends.filter(w => w.changes!.state)).toEqual([
+      { status: 'running', changes: { stepIds: ['s10'], state: true } },
+      { status: 'success', changes: { stepIds: [], state: true } },
+    ]);
+
+    // One entry per step start and finish, plus the input, plus state at the checkpoint, after setState, and at the end.
+    const stored = entries('sequential', run.runId);
+    expect(stored.filter(e => e.kind === 'step')).toHaveLength(2 * STEPS + 1);
+    expect(stored.filter(e => e.kind === 'state')).toHaveLength(3);
+  });
+
+  it('appends one entry per dowhile iteration', async () => {
+    const storage = new MockStore();
+    const { writes, entries } = recordV2Writes(storage);
+    const workflow = createWorkflow({ id: 'loop', inputSchema: num, outputSchema: num, options: { storageVersion: 2 } })
+      .dowhile(addOne('count'), async ({ inputData }) => inputData.n < STEPS)
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { loop: workflow } });
+
+    const run = await workflow.createRun();
+    const result = await run.start({ inputData: { n: 0 } });
+    expect(result.status).toBe('success');
+    expect(result.status === 'success' && result.result).toEqual({ n: STEPS });
+
+    const appends = writes.filter(w => w.changes);
+    expect(appends.filter(w => w.status === 'running').map(w => w.changes)).toEqual(
+      Array.from({ length: STEPS }, () => ({ stepIds: ['count'], state: false })),
+    );
+
+    // The checkpoint holds the input, the first iteration's running result and the state;
+    // then one entry per iteration, and the state at the end.
+    const stored = entries('loop', run.runId);
+    expect(stored.filter(e => e.kind === 'step')).toHaveLength(STEPS + 2);
+    expect(stored.filter(e => e.kind === 'state')).toHaveLength(2);
+  });
+});
+
+const TIMESTAMP_KEYS = new Set(['startedAt', 'endedAt', 'suspendedAt', 'resumedAt', 'timestamp']);
+
+function withoutTimestamps(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withoutTimestamps);
+  if (!value || typeof value !== 'object' || Object.getPrototypeOf(value) !== Object.prototype) return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => !TIMESTAMP_KEYS.has(key))
+      .map(([key, v]) => [key, withoutTimestamps(v)]),
+  );
+}
+
+type Scenario = {
+  build: (storageVersion: 1 | 2) => AnyWorkflow;
+  drive: (workflow: AnyWorkflow, runId: string) => Promise<unknown>;
+};
+
+const startOnly: Scenario['drive'] = async (workflow, runId) =>
+  (await workflow.createRun({ runId })).start({ inputData: { n: 0 }, initialState: {} });
+
+/** Runs a scenario on one storage version and returns its result plus every run it stored. */
+async function runAndReadBack(storageVersion: 1 | 2, { build, drive }: Scenario) {
+  const storage = new MockStore();
+  const store = storage.stores.workflows!;
+  if (storageVersion === 1) {
+    // v1 keeps the snapshot it was given, so clone it: an in-place edit after a write then shows up as a v1/v2 difference.
+    const persist = store.persistWorkflowSnapshot.bind(store);
+    store.persistWorkflowSnapshot = args => persist({ ...args, snapshot: cloneRunData(args.snapshot) });
+  }
+  const workflow = build(storageVersion);
+  new Mastra({ logger: false, storage, workflows: { [workflow.id]: workflow } });
+  const result = await drive(workflow, 'run-1');
+
+  const db = (store as any).db;
+  const rows: { workflow_name: string; run_id: string }[] = [
+    ...(storageVersion === 1 ? db.workflows : db.workflowRunHeaders).values(),
+  ];
+  const runs: Record<string, unknown> = {};
+  for (const { workflow_name, run_id } of rows) {
+    runs[`${workflow_name}/${run_id}`] = withoutTimestamps(
+      await store.loadWorkflowSnapshot({ workflowName: workflow_name, runId: run_id, storageVersion }),
+    );
+  }
+  return { result: withoutTimestamps(result), runs };
+}
+
+const scenarios: Record<string, Scenario> = {
+  'sequential steps with state and a map': {
+    build: storageVersion =>
+      createWorkflow({
+        id: 'sequential',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema: marks,
+        options: { storageVersion },
+      })
+        .then(addOne('a'))
+        .then(addOne('b', ({ setState }) => setState({ marked: 1 })))
+        .map(async ({ inputData }) => ({ n: inputData.n * 10 }))
+        .then(addOne('c'))
+        .commit(),
+    drive: startOnly,
+  },
+  'parallel and branch': {
+    build: storageVersion =>
+      createWorkflow({ id: 'fan', inputSchema: num, outputSchema: z.any(), options: { storageVersion } })
+        .parallel([addOne('left'), addOne('right')])
+        .map(async ({ inputData }) => ({ n: inputData.left.n + inputData.right.n }))
+        .branch([
+          [async ({ inputData }) => inputData.n > 1, addOne('big')],
+          [async ({ inputData }) => inputData.n <= 1, addOne('small')],
+        ])
+        .commit(),
+    drive: startOnly,
+  },
+  'dowhile and foreach': {
+    build: storageVersion =>
+      createWorkflow({ id: 'loops', inputSchema: num, outputSchema: z.any(), options: { storageVersion } })
+        .dowhile(addOne('count'), async ({ inputData }) => inputData.n < 3)
+        .map(async ({ inputData }) => [{ n: inputData.n }, { n: inputData.n * 2 }])
+        .foreach(addOne('each'), { concurrency: 2 })
+        .commit(),
+    drive: startOnly,
+  },
+  'nested workflow': {
+    build: storageVersion => {
+      const nested = createWorkflow({
+        id: 'inner',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema: marks,
+        options: { storageVersion },
+      })
+        .then(addOne('inner-a', ({ setState }) => setState({ marked: 2 })))
+        .then(addOne('inner-b'))
+        .commit();
+      return createWorkflow({
+        id: 'outer',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema: marks,
+        options: { storageVersion },
+      })
+        .then(addOne('before'))
+        .then(nested)
+        .then(addOne('after'))
+        .commit();
+    },
+    drive: startOnly,
+  },
+  'suspend and resume': {
+    build: storageVersion => gateWorkflow(storageVersion),
+    drive: async (workflow, runId) => {
+      await (await workflow.createRun({ runId })).start({ inputData: {} });
+      return (await workflow.createRun({ runId })).resume({ step: 'gate', resumeData: true });
+    },
+  },
+  bail: {
+    build: storageVersion =>
+      createWorkflow({ id: 'bailing', inputSchema: num, outputSchema: num, options: { storageVersion } })
+        .then(addOne('first'))
+        .then(
+          createStep({
+            id: 'stop',
+            inputSchema: num,
+            outputSchema: num,
+            execute: async ({ inputData, bail }) => bail({ n: inputData.n * 100 }),
+          }),
+        )
+        .then(addOne('never'))
+        .commit(),
+    drive: startOnly,
+  },
+  'a failing step': {
+    build: storageVersion =>
+      createWorkflow({ id: 'failing', inputSchema: num, outputSchema: num, options: { storageVersion } })
+        .then(addOne('ok'))
+        .then(
+          createStep({
+            id: 'boom',
+            inputSchema: num,
+            outputSchema: num,
+            execute: async () => {
+              throw new Error('boom');
+            },
+          }),
+        )
+        .commit(),
+    drive: startOnly,
+  },
+};
+
+describe('storage v2 stores the same runs as v1', () => {
+  for (const [name, scenario] of Object.entries(scenarios)) {
+    it(name, async () => {
+      const v1 = await runAndReadBack(1, scenario);
+      const v2 = await runAndReadBack(2, scenario);
+      expect(Object.keys(v1.runs).length).toBeGreaterThan(0);
+      expect(v2).toEqual(v1);
+    });
+  }
 });
