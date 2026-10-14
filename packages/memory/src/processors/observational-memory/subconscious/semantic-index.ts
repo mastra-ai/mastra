@@ -4,11 +4,14 @@ import type {
   KnowledgeSemanticOutboxEntry,
   KnowledgeStorage,
 } from '@mastra/core/storage';
-import { canonicalizeKnowledgeScopeIds, isKnowledgeScopeVisible } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '@mastra/core/vector';
 
 const DEFAULT_BATCH_SIZE = 50;
 const MAX_DRAIN_BATCHES = 100;
+// Matches the storage layer's per-call cap for listVisibleKnowledgeIds.
+const VISIBILITY_BATCH_SIZE = 1000;
+const NODE_PREFIX = 'knowledge:node:';
+const RECORD_PREFIX = 'knowledge:record:';
 
 export class StaleKnowledgeSemanticIndexError extends Error {
   constructor(message: string, options?: ErrorOptions) {
@@ -83,44 +86,32 @@ export class KnowledgeSemanticIndexCoordinator {
       );
     }
 
-    const batches = [await this.#vector.query({ indexName, queryVector: embedding, topK: limit * 4 })];
-    const deduped = new Map<string, (typeof batches)[number][number]>();
-    for (const candidate of batches.flat()) {
-      const candidateScope = candidate.metadata?.scope_ids;
-      if (!Array.isArray(candidateScope)) continue;
-      let visible = false;
-      try {
-        visible = isKnowledgeScopeVisible(canonicalizeKnowledgeScopeIds(candidateScope.map(String)), scopeIds);
-      } catch {
-        continue;
-      }
-      if (!visible) continue;
+    const candidates = await this.#vector.query({ indexName, queryVector: embedding, topK: limit * 4 });
+    const deduped = new Map<string, (typeof candidates)[number]>();
+    for (const candidate of candidates) {
       const existing = deduped.get(candidate.id);
       if (!existing || candidate.score > existing.score) deduped.set(candidate.id, candidate);
     }
-    const ranked = [...deduped.values()].sort(
-      (left, right) => right.score - left.score || left.id.localeCompare(right.id),
-    );
-    // Vector metadata can be stale (written before a rescope, or by a worker whose outbox claim
-    // expired), so it only narrows candidates. Storage decides what the caller may see.
-    const results: typeof ranked = [];
-    for (const candidate of ranked) {
-      if (results.length >= limit) break;
-      if (await this.#visibleInStorage(candidate.id, scopeIds)) results.push(candidate);
-    }
-    return results;
+    // Vector metadata can be stale (written before a rescope, or by a worker whose outbox claim expired),
+    // so visibility comes from storage, which applies the same node and record rules as every other read.
+    const visible = await this.#visibleDocumentIds([...deduped.keys()], scopeIds);
+    return [...deduped.values()]
+      .filter(candidate => visible.has(candidate.id))
+      .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id))
+      .slice(0, limit);
   }
 
-  async #visibleInStorage(documentId: string, scopeIds: KnowledgeScopeIds): Promise<boolean> {
-    if (documentId.startsWith('knowledge:node:')) {
-      const node = await this.#knowledge.getNode(documentId.slice('knowledge:node:'.length));
-      return !!node && isKnowledgeScopeVisible(await this.#knowledge.getNodeScopeIds(node.id), scopeIds);
+  async #visibleDocumentIds(documentIds: string[], scopeIds: KnowledgeScopeIds): Promise<Set<string>> {
+    const visible = new Set<string>();
+    for (let start = 0; start < documentIds.length; start += VISIBILITY_BATCH_SIZE) {
+      const batch = documentIds.slice(start, start + VISIBILITY_BATCH_SIZE);
+      const nodeIds = batch.filter(id => id.startsWith(NODE_PREFIX)).map(id => id.slice(NODE_PREFIX.length));
+      const recordIds = batch.filter(id => id.startsWith(RECORD_PREFIX)).map(id => id.slice(RECORD_PREFIX.length));
+      const found = await this.#knowledge.listVisibleKnowledgeIds({ nodeIds, recordIds, scopeIds });
+      for (const id of found.nodeIds) visible.add(`${NODE_PREFIX}${id}`);
+      for (const id of found.recordIds) visible.add(`${RECORD_PREFIX}${id}`);
     }
-    if (!documentId.startsWith('knowledge:record:')) return false;
-    const record = await this.#knowledge.getRecord({ id: documentId.slice('knowledge:record:'.length) });
-    if (!record || !isKnowledgeScopeVisible(await this.#knowledge.getRecordScopeIds(record.id), scopeIds)) return false;
-    const node = await this.#knowledge.getNode(record.nodeId);
-    return !!node && isKnowledgeScopeVisible(await this.#knowledge.getNodeScopeIds(node.id), scopeIds);
+    return visible;
   }
 
   async #drain(scopeIds?: KnowledgeScopeIds): Promise<number> {
