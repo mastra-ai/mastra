@@ -1,5 +1,5 @@
 import { SpanType } from '@mastra/core/observability';
-import { planSpanQuery } from '@mastra/core/storage';
+import { planSpanQuery, PREVIEW_MAX_LENGTH } from '@mastra/core/storage';
 import type { ObservabilityStorage, SpanQueryRequest, SpanQueryRow } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { makeSpan } from './data';
@@ -51,11 +51,14 @@ export function createSpanQueryTests(
         parentSpanId: 'root',
         durationMs: 1000,
         status: 'success',
+        inputPreview: `${'x'.repeat(PREVIEW_MAX_LENGTH)}…`,
         inputTruncated: true,
+        outputPreview: null,
         outputTruncated: false,
+        errorPreview: null,
+        errorTruncated: false,
         cost: { state: 'missing' },
       });
-      expect([...result.spans[0]!.inputPreview!]).toHaveLength(256);
       expect((await getStorage().getSpan({ traceId: 'trace-root', spanId: 'tool' }))?.span.input).toBe(input);
     });
 
@@ -112,7 +115,7 @@ export function createSpanQueryTests(
       });
       const result = await query({}, scope);
       expect(result.spans).toHaveLength(1);
-      expect(result.spans[0]).toMatchObject({ ...scope, spanId: 'same', inputPreview: '"allowed"' });
+      expect(result.spans[0]).toMatchObject({ ...scope, spanId: 'same', inputPreview: 'allowed' });
       const contradiction = await query(
         {
           where: { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-b' } },

@@ -230,7 +230,7 @@ describe('experiment item sub-route', () => {
       expect((await screen.findByRole('button', { name: '0 selected' })).hasAttribute('disabled')).toBe(true);
       expect(screen.queryByRole('button', { name: 'Request review' })).toBeNull();
 
-      fireEvent.click(screen.getByRole('checkbox', { name: 'Select result item-1' }));
+      fireEvent.click(await screen.findByRole('checkbox', { name: 'Select result item-1' }));
 
       expect(await screen.findByRole('button', { name: '1 selected' })).toBeDefined();
       expect(screen.getByRole('button', { name: 'Request review' })).toBeDefined();

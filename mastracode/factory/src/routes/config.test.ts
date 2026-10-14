@@ -611,6 +611,48 @@ describe('GET /web/config/models', () => {
     });
   });
 
+  it("offers only the models a Factory's model scope can serve", async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic', {
+      type: 'api_key',
+      key: 'sk-personal',
+    });
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'openai-codex', { type: 'api_key', key: 'sk-org' });
+    const orgProject = await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'Org' } });
+    const userProject = await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'Mine' } });
+    await seed.projects.update({ orgId: 'org1', id: userProject.id, input: { modelScope: 'user' } });
+    const controller = {
+      listAvailableModels: async () => [
+        { id: 'anthropic/claude-fable-5', modelName: 'claude-fable-5', provider: 'anthropic', hasApiKey: false },
+        { id: 'openai/gpt-5.6', modelName: 'gpt-5.6', provider: 'openai', hasApiKey: false },
+      ],
+    };
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, { workosId: 'user-a', organizationId: 'org1' } as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({
+        auth: fakeRouteAuth(),
+        controller,
+        modelCredentials: seed.credentials,
+        factoryProjects: seed.projects,
+      }).routes(),
+    );
+    const ids = async (query: string) => {
+      const res = await app.request(`/web/config/models${query}`);
+      expect(res.status).toBe(200);
+      return ((await res.json()) as { models: { id: string }[] }).models.map(model => model.id);
+    };
+
+    expect(await ids('')).toEqual(['anthropic/claude-fable-5', 'openai/gpt-5.6']);
+    expect(await ids(`?factoryId=${orgProject.id}`)).toEqual(['openai/gpt-5.6']);
+    expect(await ids(`?factoryId=${userProject.id}`)).toEqual(['anthropic/claude-fable-5']);
+    expect((await app.request('/web/config/models?factoryId=missing')).status).toBe(404);
+  });
+
   it('includes Bedrock models for a tenant only when the deployment opted in', async () => {
     const seed = await createFactoryStorageForTests();
     const controller = {

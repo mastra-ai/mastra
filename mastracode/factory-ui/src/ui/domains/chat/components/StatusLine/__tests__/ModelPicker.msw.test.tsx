@@ -2,8 +2,8 @@ import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { MemoryRouter } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { MemoryRouter, Route, Routes } from 'react-router';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../../e2e/ui/render';
@@ -63,6 +63,8 @@ function renderPicker({
   catalogLoaded,
   modelSwitched,
   thinkingDefaultsFail = false,
+  modelScope,
+  emptyCatalog = false,
 }: {
   kind?: ChatSessionContextApi['kind'];
   modelId?: string;
@@ -72,14 +74,24 @@ function renderPicker({
   catalogLoaded?: Promise<void>;
   modelSwitched?: Promise<void>;
   thinkingDefaultsFail?: boolean;
+  /** Mount on a Factory route whose project has this model scope. */
+  modelScope?: 'factory' | 'user';
+  /** The Factory's scope has no credentials, so its catalog is empty. */
+  emptyCatalog?: boolean;
 } = {}) {
   const modelSwitches: unknown[] = [];
   const stateUpdates: unknown[] = [];
   server.use(
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: defaultModelId })),
-    http.get(`${TEST_BASE_URL}/web/config/models`, async () => {
+    http.get(`${TEST_BASE_URL}/web/config/models`, async ({ request }) => {
       await catalogLoaded;
-      return HttpResponse.json({ models });
+      if (!modelScope) return HttpResponse.json({ models });
+      if (emptyCatalog) return HttpResponse.json({ models: [] });
+      // The Factory's catalog differs from the caller's full one, so a request missing the Factory is visible.
+      const factoryId = new URL(request.url).searchParams.get('factoryId');
+      return HttpResponse.json({
+        models: models.filter(model => (factoryId === 'fp-1') === (model.provider === 'openai')),
+      });
     }),
     http.get(`${TEST_BASE_URL}/web/config/thinking`, () =>
       thinkingDefaultsFail
@@ -116,30 +128,103 @@ function renderPicker({
       return HttpResponse.json({ ok: true });
     }),
   );
+  if (modelScope) {
+    window.__MASTRACODE_CONFIG__ = { authEnabled: true };
+    server.use(
+      http.get(`${TEST_BASE_URL}/auth/me`, () =>
+        HttpResponse.json({ authenticated: true, user: { id: 'user-1', organizationId: 'org-1' } }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
+        HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', modelScope } }),
+      ),
+    );
+  }
 
+  const picker = (
+    <ChatSessionContext.Provider value={{ ...baseSession, kind }}>
+      <ChatConnectionContext.Provider
+        value={{
+          status: 'ready',
+          state: { controllerId: AGENT_CONTROLLER_ID, resourceId: 'session-1', modeId: 'build', modelId },
+        }}
+      >
+        <ChatModelsProvider>
+          <ChatThinkingProvider>
+            <ModelPicker />
+            <Toaster position="bottom-right" />
+          </ChatThinkingProvider>
+        </ChatModelsProvider>
+      </ChatConnectionContext.Provider>
+    </ChatSessionContext.Provider>
+  );
   const rendered = renderWithProviders(
-    <MemoryRouter>
-      <ChatSessionContext.Provider value={{ ...baseSession, kind }}>
-        <ChatConnectionContext.Provider
-          value={{
-            status: 'ready',
-            state: { controllerId: AGENT_CONTROLLER_ID, resourceId: 'session-1', modeId: 'build', modelId },
-          }}
-        >
-          <ChatModelsProvider>
-            <ChatThinkingProvider>
-              <ModelPicker />
-              <Toaster position="bottom-right" />
-            </ChatThinkingProvider>
-          </ChatModelsProvider>
-        </ChatConnectionContext.Provider>
-      </ChatSessionContext.Provider>
-    </MemoryRouter>,
+    modelScope ? (
+      <MemoryRouter initialEntries={['/factories/fp-1/work']}>
+        <Routes>
+          <Route path="/factories/:factoryId/*" element={picker} />
+        </Routes>
+      </MemoryRouter>
+    ) : (
+      <MemoryRouter>{picker}</MemoryRouter>
+    ),
   );
   return { ...rendered, modelSwitches, stateUpdates };
 }
 
+afterEach(() => {
+  delete window.__MASTRACODE_CONFIG__;
+  server.events.removeAllListeners('response:mocked');
+});
+
 describe('ModelPicker', () => {
+  it('says the list is limited to organization credentials in an organization-scoped Factory', async () => {
+    const user = userEvent.setup();
+    renderPicker({ modelScope: 'factory' });
+
+    await user.click(await screen.findByLabelText('Session model'));
+
+    expect(screen.getByRole('option', { name: /gpt-5/i })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /claude-sonnet-4-6/i })).not.toBeInTheDocument();
+    expect(await screen.findByRole('note')).toHaveTextContent(
+      "Showing models this Factory's organization credentials can run.",
+    );
+    expect(screen.getByRole('link', { name: 'Manage' })).toHaveAttribute('href', '/factories/fp-1/settings/models');
+  });
+
+  it('points an organization-scoped Factory with no usable models at its credential settings', async () => {
+    renderPicker({ modelScope: 'factory', emptyCatalog: true });
+
+    expect(await screen.findByRole('link', { name: 'needs an organization credential' })).toHaveAttribute(
+      'href',
+      '/factories/fp-1/settings/models',
+    );
+    expect(screen.queryByLabelText('Session model')).not.toBeInTheDocument();
+  });
+
+  it('keeps the plain not-configured label for a personal-scoped Factory with no usable models', async () => {
+    renderPicker({ modelScope: 'user', emptyCatalog: true });
+
+    expect(await screen.findByLabelText(/gpt-5 is not configured/i)).toHaveTextContent('· not configured');
+    expect(screen.queryByRole('link', { name: 'needs an organization credential' })).not.toBeInTheDocument();
+  });
+
+  it('leaves the list unexplained when the Factory uses personal credentials', async () => {
+    const user = userEvent.setup();
+    const projectLoaded = new Promise<void>(resolve => {
+      server.events.on('response:mocked', ({ request }) => {
+        if (request.url.endsWith('/web/factory/projects/fp-1')) resolve();
+      });
+    });
+    renderPicker({ modelScope: 'user' });
+
+    await user.click(await screen.findByLabelText('Session model'));
+    await projectLoaded;
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(screen.getByRole('option', { name: /gpt-5/i })).toBeInTheDocument();
+    expect(screen.queryByRole('note')).not.toBeInTheDocument();
+  });
+
   it('shows only provider-grouped models and marks the default', async () => {
     const user = userEvent.setup();
     renderPicker();

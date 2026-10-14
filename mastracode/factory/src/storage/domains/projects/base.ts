@@ -15,8 +15,6 @@ export interface FactoryProject {
   defaultModelId: string | null;
   /** Whether sessions use the Factory's model and credentials or the current user's. */
   modelScope: FactoryModelScope;
-  /** Whether new Slack sessions create Work-board items for this Factory. */
-  slackWorkItemsEnabled: boolean;
   /** Whether rules may start agent runs on their own; off, a run waits for approval on its card. */
   autoRunEnabled: boolean;
   /** Whether the Factory answers a run's plan itself instead of waiting for a person. */
@@ -65,7 +63,6 @@ export interface UpdateFactoryProjectInput {
   description?: string | null;
   defaultModelId?: string | null;
   modelScope?: FactoryModelScope;
-  slackWorkItemsEnabled?: boolean;
   autoRunEnabled?: boolean;
   autoApprovePlans?: boolean;
   sandboxWorkingDirectory?: string | null;
@@ -91,6 +88,9 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     description: { type: 'text', nullable: true },
     default_model_id: { type: 'text', nullable: true },
     model_scope: { type: 'text', default: 'factory' },
+    // Deprecated: no longer read or written. Kept so existing databases need no
+    // migration. Old rows may still hold `true`, so never read it to bring Slack
+    // work items back. Drop it in a later migration.
     slack_work_items_enabled: { type: 'boolean', default: false },
     auto_run_enabled: { type: 'boolean', default: false },
     auto_approve_plans: { type: 'boolean', default: false },
@@ -125,7 +125,6 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   description: string | null;
   default_model_id: string | null;
   model_scope: string;
-  slack_work_items_enabled: boolean;
   auto_run_enabled: boolean;
   auto_approve_plans: boolean;
   sandbox_working_directory: string | null;
@@ -157,7 +156,6 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     description: row.description,
     defaultModelId: row.default_model_id,
     modelScope: row.model_scope === 'user' ? 'user' : 'factory',
-    slackWorkItemsEnabled: row.slack_work_items_enabled,
     autoRunEnabled: row.auto_run_enabled,
     autoApprovePlans: row.auto_approve_plans ?? false,
     sandboxWorkingDirectory: row.sandbox_working_directory ?? null,
@@ -212,7 +210,6 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       description: input.description ?? null,
       default_model_id: input.defaultModelId ?? null,
       model_scope: 'factory',
-      slack_work_items_enabled: false,
       auto_run_enabled: false,
       auto_approve_plans: false,
       created_at: now,
@@ -270,9 +267,6 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
           ...(changes.description !== undefined ? { description: changes.description } : {}),
           ...(changes.defaultModelId !== undefined ? { default_model_id: changes.defaultModelId } : {}),
           ...(changes.modelScope !== undefined ? { model_scope: changes.modelScope } : {}),
-          ...(changes.slackWorkItemsEnabled !== undefined
-            ? { slack_work_items_enabled: changes.slackWorkItemsEnabled }
-            : {}),
           ...(changes.autoRunEnabled !== undefined ? { auto_run_enabled: changes.autoRunEnabled } : {}),
           ...(changes.autoApprovePlans !== undefined ? { auto_approve_plans: changes.autoApprovePlans } : {}),
           ...(changes.sandboxWorkingDirectory !== undefined

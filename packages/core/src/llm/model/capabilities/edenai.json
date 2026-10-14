@@ -303,6 +303,7 @@
     "fireworks_ai/accounts/fireworks/models/inkling",
     "fireworks_ai/gpt-oss-120b",
     "flexai/DeepSeek-V4-Flash-0731",
+    "flexai/DeepSeek-V4-Flash-0731@eu",
     "flexai/DeepSeek-V4.1-Flash",
     "flexai/Muse-Glimmer-30B",
     "flexai/Step-3.7-Flash",
@@ -560,6 +561,7 @@
     "fireworks_ai/accounts/fireworks/models/gpt-oss-120b",
     "fireworks_ai/accounts/fireworks/models/inkling",
     "flexai/DeepSeek-V4-Flash-0731",
+    "flexai/DeepSeek-V4-Flash-0731@eu",
     "flexai/DeepSeek-V4.1-Flash",
     "flexai/Step-3.7-Flash",
     "flexai/gpt-oss-120b",
@@ -1111,6 +1113,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "flexai/DeepSeek-V4-Flash-0731@eu": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "flexai/Step-3.7-Flash": [

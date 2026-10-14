@@ -20,6 +20,7 @@ import { ExperimentItemSidePanel } from '@/domains/experiments/components/experi
 import { ExperimentKpis } from '@/domains/experiments/components/experiment-kpis';
 import { ExperimentResultsBulkActions } from '@/domains/experiments/components/experiment-results-bulk-actions';
 import { ExperimentResultsSection } from '@/domains/experiments/components/experiment-results-section';
+import { ExperimentRunProgress } from '@/domains/experiments/components/experiment-run-progress';
 import { ExperimentItemPanelProvider } from '@/domains/experiments/context/experiment-item-panel-context';
 import {
   ExperimentCrumb,
@@ -83,6 +84,9 @@ function ExperimentPage() {
     queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentId) },
   });
 
+  // Results and metrics stay unfetched until the run settles; meanwhile the page shows its progress only.
+  const isSettled = experiment?.status === 'completed' || experiment?.status === 'failed';
+
   const {
     data: results,
     isLoading: resultsLoading,
@@ -94,7 +98,7 @@ function ExperimentPage() {
     experimentId: experimentId ?? '',
     experimentStatus: experiment?.status,
     orderBy,
-    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentId) },
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentId) && isSettled },
   });
 
   const { supportsMetrics } = useObservabilityStorageCapabilities();
@@ -102,7 +106,7 @@ function ExperimentPage() {
     experimentId,
     experimentStatus: experiment?.status,
     supportsMetrics,
-    queryOptions: { enabled: Boolean(experimentId) && supportsMetrics },
+    queryOptions: { enabled: Boolean(experimentId) && supportsMetrics && isSettled },
   });
 
   const selection = useExperimentResultsSelection({
@@ -184,27 +188,31 @@ function ExperimentPage() {
           }
         >
           <h1 className="sr-only">{experimentId}</h1>
-          <div className="grid content-start gap-4">
-            <ExperimentKpis experiment={experiment} metrics={experimentMetrics} />
-            <div className="grid content-start gap-1">
-              <ExperimentResultsBulkActions selection={selection} />
-              <ExperimentResultsSection
-                experimentId={experimentId}
-                experimentStatus={experiment.status}
-                results={results ?? []}
-                isLoading={resultsLoading}
-                setEndOfListElement={setEndOfListElement}
-                isFetchingNextPage={isFetchingNextPage}
-                hasNextPage={hasNextPage}
-                selectedIds={selection.selectedIds}
-                onToggleSelect={selection.toggleSelect}
-                onToggleSelectAll={selection.toggleSelectAll}
-                sort={sort}
-                onSortChange={onSortChange}
-                supportsMetrics={supportsMetrics}
-              />
+          {isSettled ? (
+            <div className="grid content-start gap-4">
+              <ExperimentKpis experiment={experiment} metrics={experimentMetrics} />
+              <div className="grid content-start gap-1">
+                <ExperimentResultsBulkActions selection={selection} />
+                <ExperimentResultsSection
+                  experimentId={experimentId}
+                  experimentStatus={experiment.status}
+                  results={results ?? []}
+                  isLoading={resultsLoading}
+                  setEndOfListElement={setEndOfListElement}
+                  isFetchingNextPage={isFetchingNextPage}
+                  hasNextPage={hasNextPage}
+                  selectedIds={selection.selectedIds}
+                  onToggleSelect={selection.toggleSelect}
+                  onToggleSelectAll={selection.toggleSelectAll}
+                  sort={sort}
+                  onSortChange={onSortChange}
+                  supportsMetrics={supportsMetrics}
+                />
+              </div>
             </div>
-          </div>
+          ) : (
+            <ExperimentRunProgress experiment={experiment} />
+          )}
         </PageLayout>
 
         {/* Item detail in the route side panel (drawer on mobile); the `items/:itemId` child route only carries the selected item. */}

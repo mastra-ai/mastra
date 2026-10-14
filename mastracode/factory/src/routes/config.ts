@@ -948,11 +948,24 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         requiresAuth: false,
         handler: async c => {
           try {
-            const tenantCredentials = await listTenantCredentialsForRequest({
+            const allTenantCredentials = await listTenantCredentialsForRequest({
               c: loose(c),
               auth,
               credentials: options.modelCredentials,
             });
+            // A Factory's model scope is exclusive at run time, so a picker for
+            // that Factory must only offer models its scope's credentials serve.
+            const factoryProjectId = c.req.query('factoryId') || undefined;
+            const tenant = auth.tenant(c);
+            let tenantCredentials = allTenantCredentials;
+            if (allTenantCredentials && factoryProjectId && tenant) {
+              if (!options.factoryProjects) return c.json({ error: 'factory_unavailable' }, 503);
+              await options.factoryProjects.ensureReady();
+              const project = await options.factoryProjects.get({ orgId: tenantOrgId(tenant), id: factoryProjectId });
+              if (!project) return c.json({ error: 'factory_project_not_found' }, 404);
+              const credentialScope = project.modelScope === 'user' ? 'user' : 'org';
+              tenantCredentials = allTenantCredentials.filter(record => record.scope === credentialScope);
+            }
             const [models, access] = await Promise.all([
               controller.listAvailableModels(),
               buildProviderAccess({

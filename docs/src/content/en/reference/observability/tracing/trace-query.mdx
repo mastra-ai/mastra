@@ -12,7 +12,7 @@ Use `queryTraces()`, `mastra api trace query`, or `POST /api/observability/trace
 
 For example, find traces with a failed tool call or a duration above a threshold. Each result represents a trace. Use its `traceId` to [retrieve the full trace](/reference/client-js/observability#getting-a-specific-trace).
 
-The endpoint uses the same authentication as other observability routes and requires the `observability:read` permission. The configured observability store must support trace queries. Every query requires a time range of at most 31 days.
+The endpoint uses the same authentication as other observability routes and requires the `observability:read` permission. The configured observability store must support trace queries. Every query requires a time range.
 
 For hosted traces, see [Query observability data on Mastra Platform](/docs/mastra-platform/observability#query-observability-data) for project credentials and regional endpoints.
 
@@ -78,14 +78,19 @@ mastra api --url http://localhost:4111 trace query '{
 
 The explicit `--url` targets a local Mastra server. Without it, observability commands default to `https://observability.mastra.ai`, even when a local server is running. See [CLI target resolution](/reference/cli/mastra#target-resolution) for authentication and regional endpoints. The target server and configured store must support the requested query capabilities.
 
-Inspect the command and the target server's request and response schemas with:
+Inspect the command with:
 
 ```bash
 mastra api trace query --help
+```
+
+For a local Mastra server, inspect its request and response schemas with:
+
+```bash
 mastra api --url http://localhost:4111 trace query --schema
 ```
 
-`--schema` describes the request structure. Use [Fields and operators](#fields-and-operators) for the supported predicate paths and operators.
+Mastra Platform doesn't currently expose the schema endpoint used by `--schema`. Use [Request fields](#request-fields) and [Fields and operators](#fields-and-operators) to construct queries for either target. To find fields and values recorded in your project, use [field and value discovery](#discover-fields-and-values).
 
 ## Send an HTTP request
 
@@ -121,7 +126,7 @@ curl --request POST \
 
 | Field | Required | Description |
 | - | - | - |
-| `timeRange` | Yes | Trace start-time boundary. `from` is inclusive and `to` is exclusive. Both values must be ISO timestamps, `from` must be earlier than `to`, and the range can't exceed 31 days. |
+| `timeRange` | Yes | Trace start-time boundary. `from` is inclusive and `to` is exclusive. Both values must be ISO timestamps, and `from` must be earlier than `to`. |
 | `where` | No | Recursive trace predicate. Supports scalar conditions and `spans.some` or `spans.none` clauses. |
 | `orderBy` | No | One item ordering results by `startedAt` or `endedAt`, in `asc` or `desc` order. Defaults to `startedAt desc`. Not accepted in delta mode. |
 | `page` | No | `{ limit, after }`. `limit` defaults to 100 and has a maximum of 1000. Pass the opaque `page.next` value as `after`. |
@@ -138,7 +143,6 @@ The planner rejects a query before storage execution when it exceeds any of thes
 
 | Input | Maximum |
 | - | - |
-| Trace selection `timeRange` | 31 days |
 | Predicate nesting depth | 12 levels |
 | Predicate nodes | 100 |
 | Related `spans` clauses | 8 total |
@@ -598,7 +602,7 @@ Value suggestions are available for these canonical fields:
 
 Each executable top-level string `metadata.<key>` field also supports value suggestions in the `trace` scope. Identifiers, timestamps, durations, errors, and version IDs don't. The fields response still includes canonical fields with `valueSuggestions: false`. The values endpoint rejects those paths with `422 TRACE_QUERY_INVALID`.
 
-Both discovery requests require a half-open time range of at most 31 days. They use the same current-record semantics as `queryTraces()`: qualifying completed roots satisfy `from <= startedAt < to`, and related values come only from current records joined to those roots by `traceId`. Discovery doesn't accept or apply a draft `where` predicate.
+Both discovery requests require a half-open time range. They use the same current-record semantics as `queryTraces()`: qualifying completed roots satisfy `from <= startedAt < to`, and related values come only from current records joined to those roots by `traceId`. Discovery doesn't accept or apply a draft `where` predicate.
 
 `search` defaults to the empty string, is trimmed, and matches case-insensitive literal substrings. Characters such as `%` and `_` have no wildcard meaning. An empty search returns the most frequent results. `limit` defaults to 25 and has a maximum of 100. Both endpoints fetch one extra result to set their truncation flag, but don't provide a cursor. When a flag is `true`, refine `search`. It doesn't imply that a next page is available. No matches return an empty array and `false` truncation.
 

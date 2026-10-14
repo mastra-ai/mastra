@@ -43,6 +43,8 @@ export function useSetFactoryModelScopeMutation(factoryProjectId: string | undef
     mutationFn: (modelScope: 'factory' | 'user') => updateFactoryModelScope(baseUrl, factoryProjectId!, modelScope),
     onSuccess: project => {
       queryClient.setQueryData(queryKeys.factoryProject(factoryProjectId), project);
+      // The scope picks which credentials serve this Factory's models.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.availableModels(factoryProjectId) });
     },
   });
 }
