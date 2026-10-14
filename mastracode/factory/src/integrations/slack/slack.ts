@@ -493,7 +493,7 @@ export function createChannelSessionResolver(deps: SlackChannelDeps): ChannelSes
  * chat-only `channel:...` id names no project, so there is nothing to read.
  *
  * The model this session starts on is picked here, once, from the project's
- * exclusive model scope: the Factory default or the durable session owner's
+ * effective model scope for a session: the Factory default or the durable session owner's
  * default, else the SDK's built-in model. The choice is persisted on the thread
  * as `currentModelId`, so it outlives the process that made it.
  *
@@ -533,6 +533,8 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
       factoryProjectId: owner.factoryProjectId,
       orgId: owner.orgId,
       ownerUserId: owner.userId,
+      // A Slack conversation is an interactive session, so a hybrid Factory uses the owner's scope.
+      context: 'session',
     });
 
     // Repo-backed Slack sessions use the source-control row's durable owner,

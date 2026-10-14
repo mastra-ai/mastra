@@ -146,6 +146,7 @@ export class FactoryStartCoordinator {
             factoryProjectId: request.factoryProjectId,
             orgId: request.orgId,
             ownerUserId: sourceSession.userId,
+            context: 'run',
           })
         : { modelScope: request.modelScope, modelId: request.defaultModelId };
     const storedItem = request.workItem.id

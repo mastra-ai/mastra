@@ -1424,7 +1424,7 @@ describe('session start (onSessionStart)', () => {
     personalMemoryLookupError = null as Error | null,
     userDefaultModel = null as string | null,
     defaultLookupError = null as Error | null,
-    modelScope = 'factory' as 'factory' | 'user',
+    modelScope = 'factory' as 'factory' | 'user' | 'hybrid',
   } = {}) {
     return {
       projects: { getById: vi.fn(async () => ({ id: 'fp-1', orgId: 'org-1', defaultModelId, modelScope })) } as any,
@@ -1494,6 +1494,21 @@ describe('session start (onSessionStart)', () => {
       { modelId: 'openai/gpt-5.6', agentType: 'plan' },
       { modelId: 'openai/gpt-5.6', agentType: 'execute' },
     ]);
+  });
+
+  it("starts a hybrid Factory's Slack session on the owner's default and personal scope", async () => {
+    const deps = makeStartDeps({ modelScope: 'hybrid', userDefaultModel: 'openai/gpt-5.6' });
+    const session = makeSession();
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    expect(deps.modelDefaults.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    expect(session.state.set).toHaveBeenCalledWith({
+      factoryProjectId: 'fp-1',
+      factoryModelScope: 'user',
+      factoryOwnerUserId: 'user-1',
+    });
+    expect(session.restoredModel()).toBe('openai/gpt-5.6');
   });
 
   // Subagent models aren't persisted on the thread, so a restarted process must

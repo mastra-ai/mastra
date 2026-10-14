@@ -8,6 +8,9 @@ import {
   type DefaultModelHydrationSession,
 } from './default-model-hydration.js';
 
+const { primeTenant } = vi.hoisted(() => ({ primeTenant: vi.fn(async (_tenant: unknown) => undefined) }));
+vi.mock('../routes/tenant-credentials.js', () => ({ primeTenantCredentialsForTenant: primeTenant }));
+
 const modelId = 'anthropic/claude-opus-5';
 
 function modelDefault(): ModelDefaultRecord {
@@ -59,7 +62,7 @@ function createSession(state: Record<string, unknown> = {}): DefaultModelHydrati
 
 function createDependencies(
   record: ModelDefaultRecord | null = modelDefault(),
-  modelScope: 'factory' | 'user' = 'user',
+  modelScope: 'factory' | 'user' | 'hybrid' = 'user',
 ): DefaultModelHydrationDependencies {
   const sourceSession = sourceControlRow();
   return {
@@ -241,6 +244,44 @@ describe('hydrateSessionDefaultModel', () => {
       sessionId: 'session-1',
     });
     expect(dependencies.modelDefaults.get).not.toHaveBeenCalled();
+  });
+
+  it("primes the owner's scope and applies the owner default to an unbound session in hybrid scope", async () => {
+    primeTenant.mockClear();
+    const session = createSession();
+    const dependencies = createDependencies(modelDefault(), 'hybrid');
+
+    await hydrateSessionDefaultModel(session, dependencies);
+
+    expect(session.state.set).toHaveBeenCalledWith({
+      factoryOrgId: 'org-1',
+      factoryModelScope: 'user',
+      factoryOwnerUserId: 'user-1',
+    });
+    expect(primeTenant).toHaveBeenCalledExactlyOnceWith({ orgId: 'org-1', userId: 'user-1', credentialScope: 'user' });
+    expect(session.model.switch).toHaveBeenCalledExactlyOnceWith(modelId);
+  });
+
+  it("primes the Factory's scope and keeps the model of a run-bound thread in hybrid scope", async () => {
+    primeTenant.mockClear();
+    const session = createSession();
+    const dependencies = createDependencies(modelDefault(), 'hybrid');
+    vi.mocked(dependencies.workItems.findActiveRunBindingByThread).mockResolvedValue({} as never);
+
+    await hydrateSessionDefaultModel(session, dependencies);
+
+    expect(session.state.set).toHaveBeenCalledWith({
+      factoryOrgId: 'org-1',
+      factoryModelScope: 'factory',
+      factoryOwnerUserId: 'user-1',
+    });
+    expect(primeTenant).toHaveBeenCalledExactlyOnceWith({
+      orgId: 'org-1',
+      userId: 'user-1',
+      credentialScope: 'factory',
+    });
+    expect(dependencies.modelDefaults.get).not.toHaveBeenCalled();
+    expect(session.model.switch).not.toHaveBeenCalled();
   });
 
   it('does nothing when the user has no default model', async () => {

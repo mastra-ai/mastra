@@ -21,8 +21,10 @@ import {
   registerTenantCredentialResolver,
   resetTenantCredentialResolverForTests,
 } from '../routes/tenant-credentials.js';
+import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { resolveFactoryCredentialTenant } from './credential-policy.js';
+import { hydrateSessionDefaultModel } from './default-model-hydration.js';
 import { createSourceControlSessionLookup, ensureFactorySourceSession } from './factory-session.js';
 
 const ORG = 'org-1';
@@ -89,6 +91,69 @@ async function setup() {
     return ctx;
   };
   return { seed, sourceControl, sourceSession, project, deps, context };
+}
+
+async function bindRun(
+  seed: Awaited<ReturnType<typeof setup>>['seed'],
+  sourceSession: Awaited<ReturnType<typeof setup>>['sourceSession'],
+  factoryProjectId: string,
+  externalId = factoryProjectId,
+) {
+  await seed.workItems.prepareRunStart({
+    orgId: ORG,
+    userId: OWNER,
+    factoryProjectId,
+    workItem: {
+      input: {
+        externalSource: { integrationId: 'github', type: 'issue', externalId },
+        title: 'Policy test',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    },
+    role: 'work',
+    session: { sessionId: sourceSession.sessionId, branch: sourceSession.branch, threadId: sourceSession.sessionId },
+    resourceId: sourceSession.sessionId,
+    kickoffKey: externalId,
+    kickoffMessage: null,
+  });
+}
+
+/** A controller session recording the scope a start path stamps alongside the credentials it primes. */
+function recordingSession(sessionId: string, threadId: string | undefined = sessionId) {
+  const state: Record<string, unknown> = {};
+  let currentThreadId = threadId;
+  return {
+    state,
+    session: {
+      identity: { getResourceId: () => sessionId },
+      thread: {
+        getId: () => currentThreadId,
+        list: vi.fn(async () => []),
+        switch: vi.fn(async ({ threadId: id }: { threadId: string }) => void (currentThreadId = id)),
+        create: vi.fn(async () => ({ id: 'unexpected-thread' })),
+        rename: vi.fn(async () => {}),
+        setSetting: vi.fn(async () => {}),
+        requireId: () => currentThreadId!,
+        firstUserMessage: vi.fn(async () => null),
+      },
+      getWorkspace: vi.fn(() => ({ skills: undefined })),
+      state: {
+        get: () => state,
+        set: vi.fn(async (updates: Record<string, unknown>) => void Object.assign(state, updates)),
+      },
+      permissions: { setForTool: vi.fn(async () => {}) },
+      mode: { resolve: () => ({ defaultModelId: 'openai/gpt-5.5' }) },
+      model: { switch: vi.fn(async () => {}) },
+      subagents: { model: { set: vi.fn(async () => {}) } },
+      om: {
+        observer: { modelId: vi.fn(() => undefined), switchModel: vi.fn(async () => {}) },
+        reflector: { modelId: vi.fn(() => undefined), switchModel: vi.fn(async () => {}) },
+      },
+      sendMessage: vi.fn(async () => {}),
+    },
+  };
 }
 
 afterEach(() => {
@@ -230,6 +295,146 @@ describe('trusted Factory credential policy', () => {
     };
     await expect(seed.workItems.findActiveRunBindingByThread(address)).resolves.toBeNull();
     await expect(prepareCredentialTenant(context())).rejects.toThrow('ambiguous');
+  });
+
+  describe('hybrid scope', () => {
+    it("resolves an unbound session thread to the owner's personal credentials", async () => {
+      const { seed, project, context } = await setup();
+      await seed.projects.update({ orgId: ORG, id: project.id, input: { modelScope: 'hybrid' } });
+      const ctx = context();
+
+      await prepareCredentialTenant(ctx);
+
+      expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: ORG, userId: OWNER, credentialScope: 'user' });
+      await expect(resolveCredentialStore(ctx)?.getApiKey('openai-codex')).resolves.toBe('owner-key');
+    });
+
+    it("resolves a thread with an active run binding to the organization's credentials", async () => {
+      const { seed, project, sourceSession, context } = await setup();
+      await seed.projects.update({ orgId: ORG, id: project.id, input: { modelScope: 'hybrid' } });
+      await bindRun(seed, sourceSession, project.id);
+      const ctx = context();
+
+      await prepareCredentialTenant(ctx);
+
+      expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: ORG, userId: OWNER, credentialScope: 'factory' });
+      await expect(resolveCredentialStore(ctx)?.getApiKey('openai-codex')).resolves.toBe('org-key');
+    });
+
+    it('resolves the same session as a session again on a thread the run binding does not cover', async () => {
+      const { seed, project, sourceSession, context } = await setup();
+      await seed.projects.update({ orgId: ORG, id: project.id, input: { modelScope: 'hybrid' } });
+      await bindRun(seed, sourceSession, project.id);
+      const ctx = context();
+      ctx.set('controller', { resourceId: sourceSession.sessionId, threadId: 'chat-thread', state: {} });
+
+      await prepareCredentialTenant(ctx);
+
+      expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: ORG, userId: OWNER, credentialScope: 'user' });
+    });
+
+    it('still rejects ambiguous bindings', async () => {
+      const { seed, project, sourceSession, context } = await setup();
+      await seed.projects.update({ orgId: ORG, id: project.id, input: { modelScope: 'hybrid' } });
+      const other = await seed.projects.create({
+        orgId: ORG,
+        userId: OWNER,
+        input: { name: 'Other', modelScope: 'hybrid' },
+      });
+      await bindRun(seed, sourceSession, project.id);
+      await bindRun(seed, sourceSession, other.id);
+
+      await expect(prepareCredentialTenant(context())).rejects.toThrow('ambiguous');
+    });
+
+    it('bills supervisor turns as Factory runs', async () => {
+      const { seed, project, context } = await setup();
+      await seed.projects.update({ orgId: ORG, id: project.id, input: { modelScope: 'hybrid' } });
+      const ctx = context(`factory-supervisor:${project.id}`);
+
+      await prepareCredentialTenant(ctx);
+
+      expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: ORG, userId: OWNER, credentialScope: 'factory' });
+    });
+
+    it('leaves factory and user Factories on their scope whether or not a run binding exists', async () => {
+      const { seed, project, sourceSession, context } = await setup();
+      for (const bound of [false, true]) {
+        if (bound) await bindRun(seed, sourceSession, project.id);
+        for (const modelScope of ['factory', 'user'] as const) {
+          await seed.projects.update({ orgId: ORG, id: project.id, input: { modelScope } });
+          const ctx = context();
+          await prepareCredentialTenant(ctx);
+          expect(resolveTenantFromRequestContext(ctx)?.credentialScope).toBe(modelScope);
+        }
+      }
+    });
+
+    it('primes the same scope at session start that the policy resolves for the session', async () => {
+      const { seed, project, sourceSession, deps, context } = await setup();
+      await seed.projects.update({ orgId: ORG, id: project.id, input: { modelScope: 'hybrid' } });
+      await seed.modelDefaults.set({ orgId: ORG, userId: OWNER, modelId: 'anthropic/claude-opus-4-6' });
+      const { session, state } = recordingSession(sourceSession.sessionId);
+
+      await hydrateSessionDefaultModel(session as never, { ...deps, modelDefaults: seed.modelDefaults });
+      const ctx = context();
+      await prepareCredentialTenant(ctx);
+
+      expect(state.factoryModelScope).toBe('user');
+      expect(resolveTenantFromRequestContext(ctx)?.credentialScope).toBe(state.factoryModelScope);
+      expect(session.model.switch).toHaveBeenCalledWith('anthropic/claude-opus-4-6');
+    });
+
+    it('primes the same scope at run start that the policy resolves for the run', async () => {
+      const { seed, project, sourceControl, sourceSession, context } = await setup();
+      await seed.projects.update({
+        orgId: ORG,
+        id: project.id,
+        input: { modelScope: 'hybrid', defaultModelId: 'deepseek/deepseek-flash' },
+      });
+      await seed.modelDefaults.set({ orgId: ORG, userId: OWNER, modelId: 'anthropic/claude-opus-4-6' });
+      const { session, state } = recordingSession(sourceSession.sessionId, undefined);
+      const coordinator = new FactoryStartCoordinator(
+        {
+          createSession: vi.fn(async ({ threadId }: { threadId: string }) => {
+            await session.thread.switch({ threadId });
+            return session;
+          }),
+        } as never,
+        seed.workItems,
+        undefined,
+        sourceControl,
+        undefined,
+        { projects: seed.projects, modelDefaults: seed.modelDefaults },
+      );
+
+      const prepared = await coordinator.prepare({
+        orgId: ORG,
+        userId: OWNER,
+        factoryProjectId: project.id,
+        sessionId: sourceSession.sessionId,
+        threadTitle: 'Run',
+        kickoffKey: 'run-1',
+        modelScope: 'factory',
+        workItem: {
+          role: 'work',
+          input: {
+            externalSource: { integrationId: 'github', type: 'issue', externalId: 'run-1' },
+            title: 'Run',
+            stages: ['intake'],
+            sessions: {},
+            metadata: {},
+          },
+        },
+      });
+      const ctx = context();
+      ctx.set('controller', { resourceId: prepared.resourceId, threadId: prepared.threadId, state: {} });
+      await prepareCredentialTenant(ctx);
+
+      expect(state.factoryModelScope).toBe('factory');
+      expect(resolveTenantFromRequestContext(ctx)?.credentialScope).toBe(state.factoryModelScope);
+      expect(session.model.switch).toHaveBeenCalledWith('deepseek/deepseek-flash');
+    });
   });
 
   it('refreshes stripped subagent and delayed memory contexts before provider calls', async () => {

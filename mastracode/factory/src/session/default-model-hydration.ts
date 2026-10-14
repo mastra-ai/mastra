@@ -1,5 +1,6 @@
 import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
+import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { SourceControlSessionLookup } from './factory-session.js';
@@ -67,7 +68,18 @@ export async function hydrateSessionDefaultModel(
       return;
     }
 
-    const modelScope = project.modelScope === 'user' ? 'user' : 'factory';
+    // The run binding decides the context first: a hybrid Factory primes the Factory's scope for a
+    // work-item run and the owner's for an interactive session, matching the credential policy.
+    const threadId = session.thread.getId();
+    const binding = threadId
+      ? await workItems.findActiveRunBindingByThread({
+          orgId: sourceSession.orgId,
+          threadId,
+          resourceId,
+          sessionId: resourceId,
+        })
+      : null;
+    const modelScope = effectiveModelScope(project.modelScope, binding ? 'run' : 'session');
     await session.state.set({
       factoryOrgId: sourceSession.orgId,
       factoryModelScope: modelScope,
@@ -80,18 +92,7 @@ export async function hydrateSessionDefaultModel(
       credentialScope: modelScope,
     });
 
-    const threadId = session.thread.getId();
-    if (
-      threadId &&
-      (await workItems.findActiveRunBindingByThread({
-        orgId: sourceSession.orgId,
-        threadId,
-        resourceId,
-        sessionId: resourceId,
-      }))
-    ) {
-      return;
-    }
+    if (binding) return;
     if (threadId && (await session.thread.firstUserMessage({ threadId }))) return;
 
     const scopedModelId =
