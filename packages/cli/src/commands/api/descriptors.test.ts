@@ -170,6 +170,10 @@ describe('api command descriptors', () => {
     }
 
     expect(new Set([...exposedRouteKeys, ...unexposed])).toEqual(new Set(Object.values(FACTORY_API_ROUTE_CATALOG)));
+    const commandRouteKeys = Object.values(API_COMMANDS).map(descriptor => `${descriptor.method} ${descriptor.path}`);
+    for (const routeKey of unexposed) {
+      expect(commandRouteKeys).not.toContain(routeKey);
+    }
   });
 
   it('keeps targeted regressions for commands with non-obvious input behavior', () => {
