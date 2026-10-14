@@ -251,8 +251,11 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
       const entry = state.entries[entryIndex];
       if (!entry || entry.kind !== 'message') return state;
 
+      const message = event.metadata
+        ? { ...entry.message, content: { ...entry.message.content, metadata: event.metadata } }
+        : entry.message;
       const entries = state.entries.map((candidate, index) =>
-        index === entryIndex ? { ...entry, streaming: false } : candidate,
+        index === entryIndex ? { ...entry, message, streaming: false } : candidate,
       );
       return entry.message.role === 'assistant' ? { ...state, entries, pending: false } : { ...state, entries };
     }

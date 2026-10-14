@@ -149,4 +149,28 @@ describe('message meta', () => {
     expect(screen.getAllByText('Claude Opus 4.6')).toHaveLength(1);
     expect(screen.queryByText('GPT-5')).toBeNull();
   });
+
+  it('names the model a live reply switched to after it started', () => {
+    const events: AgentControllerEvent[] = [
+      {
+        type: 'message_start',
+        message: {
+          id: 'assistant-1',
+          role: 'assistant',
+          createdAt: CREATED_AT,
+          content: { format: 2, parts: [{ type: 'text', text: 'shipped' }], metadata: { modelId: 'gpt-5' } },
+        },
+      },
+      { type: 'message_end', id: 'assistant-1', metadata: { modelId: 'claude-opus-4-6', stopReason: 'complete' } },
+    ];
+    const { entries } = events.reduce(
+      (state, event) => transcriptReducer(state, { type: 'event', event }),
+      initialTranscript,
+    );
+
+    renderEntries(entries);
+
+    expect(screen.getByText('Claude Opus 4.6')).toBeTruthy();
+    expect(screen.queryByText('GPT-5')).toBeNull();
+  });
 });

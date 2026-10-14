@@ -6,16 +6,23 @@
  */
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod/v4';
 
 import { Agent } from '../../agent';
+import type { AgentConfig } from '../../agent';
+import { createDurableAgent } from '../../agent/durable';
+import { InMemoryServerCache } from '../../cache';
+import { EventEmitterPubSub } from '../../events';
 import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage/mock';
+import { createTool } from '../../tools';
 import { AgentController } from '../agent-controller';
 import { createMockWorkspace } from '../test-utils';
 import type { AgentControllerEvent } from '../types';
 
-function createTextStreamModel(responseText: string) {
+function createTextStreamModel(responseText: string, identity: { provider?: string; modelId?: string } = {}) {
   return new MockLanguageModelV2({
+    ...identity,
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -35,7 +42,41 @@ function createTextStreamModel(responseText: string) {
   });
 }
 
-async function sendOneMessage() {
+function createToolCallModel(identity: { provider: string; modelId: string }) {
+  return new MockLanguageModelV2({
+    ...identity,
+    doStream: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        { type: 'text-start', id: 'text-1' },
+        { type: 'text-delta', id: 'text-1', delta: 'Looking it up.' },
+        { type: 'text-end', id: 'text-1' },
+        { type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: '{}' },
+        {
+          type: 'finish',
+          finishReason: 'tool-calls',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        },
+      ]),
+    }),
+  });
+}
+
+function createFailingModel(identity: { provider: string; modelId: string }) {
+  return new MockLanguageModelV2({
+    ...identity,
+    doStream: async () => {
+      throw new Error('rate limited');
+    },
+  });
+}
+
+type AgentOverrides = Partial<Pick<AgentConfig, 'model' | 'tools' | 'inputProcessors' | 'errorProcessorDefaults'>>;
+type Engine = 'default' | 'durable';
+
+async function sendOneMessage(agentOverrides: AgentOverrides = {}, engine: Engine = 'default') {
   const storage = new InMemoryStore();
   const agent = new Agent({
     id: 'test-agent',
@@ -43,14 +84,23 @@ async function sendOneMessage() {
     model: createTextStreamModel('Good to hear.'),
     instructions: 'You are a test agent.',
     memory: new MockMemory({ storage }),
+    ...agentOverrides,
   });
+  const pubsub = new EventEmitterPubSub();
   const controller = new AgentController({
     workspace: createMockWorkspace(),
     id: 'test-controller',
     storage,
+    pubsub,
     resourceId: 'test-resource',
-    modes: [{ id: 'build', agent }],
+    modes: [
+      {
+        id: 'build',
+        agent: engine === 'durable' ? createDurableAgent({ agent, cache: new InMemoryServerCache(), pubsub }) : agent,
+      },
+    ],
     defaultModeId: 'build',
+    initialState: { yolo: true },
   });
 
   await controller.init();
@@ -72,6 +122,18 @@ async function sendOneMessage() {
   );
   const persisted = await session.thread.listMessages({ threadId });
   return { events, streamedStart, persistedAssistant: persisted.filter(message => message.role === 'assistant') };
+}
+
+function liveAssistantMetadata(events: AgentControllerEvent[], messageId: string) {
+  const start = events.find(
+    (event): event is Extract<AgentControllerEvent, { type: 'message_start' }> =>
+      event.type === 'message_start' && event.message.id === messageId,
+  );
+  const end = events.find(
+    (event): event is Extract<AgentControllerEvent, { type: 'message_end' }> =>
+      event.type === 'message_end' && event.id === messageId,
+  );
+  return end?.metadata ?? start?.message.content.metadata;
 }
 
 describe('stream ↔ persisted message identity', () => {
@@ -98,4 +160,68 @@ describe('stream ↔ persisted message identity', () => {
       provider: persistedMetadata?.provider,
     });
   }, 30000);
+
+  it.each<Engine>(['default', 'durable'])(
+    'names the model that closed the reply when a later step runs on another model (%s engine)',
+    async engine => {
+      const second = createTextStreamModel('Found it.', { provider: 'second-provider', modelId: 'second-model' });
+      const { events, persistedAssistant } = await sendOneMessage(
+        {
+          model: createToolCallModel({ provider: 'first-provider', modelId: 'first-model' }),
+          tools: {
+            lookup: createTool({
+              id: 'lookup',
+              description: 'Looks something up',
+              inputSchema: z.object({}),
+              execute: async () => ({ found: true }),
+            }),
+          },
+          inputProcessors: [
+            { id: 'swap-model', processInputStep: ({ stepNumber }) => (stepNumber >= 1 ? { model: second } : {}) },
+          ],
+        },
+        engine,
+      );
+
+      expect(persistedAssistant).toHaveLength(1);
+      const reply = persistedAssistant[0]!;
+      expect(reply.content.metadata).toMatchObject({ modelId: 'second-model', provider: 'second-provider' });
+      expect(liveAssistantMetadata(events, reply.id)).toMatchObject({
+        modelId: 'second-model',
+        provider: 'second-provider',
+      });
+    },
+    30000,
+  );
+
+  it.each<Engine>(['default', 'durable'])(
+    'names the fallback model when the primary fails before answering (%s engine)',
+    async engine => {
+      const { events, persistedAssistant } = await sendOneMessage(
+        {
+          errorProcessorDefaults: false,
+          model: [
+            { model: createFailingModel({ provider: 'primary-provider', modelId: 'primary-model' }), maxRetries: 0 },
+            {
+              model: createTextStreamModel('Good to hear.', {
+                provider: 'fallback-provider',
+                modelId: 'fallback-model',
+              }),
+              maxRetries: 0,
+            },
+          ],
+        },
+        engine,
+      );
+
+      expect(persistedAssistant).toHaveLength(1);
+      const reply = persistedAssistant[0]!;
+      expect(reply.content.metadata).toMatchObject({ modelId: 'fallback-model', provider: 'fallback-provider' });
+      expect(liveAssistantMetadata(events, reply.id)).toMatchObject({
+        modelId: 'fallback-model',
+        provider: 'fallback-provider',
+      });
+    },
+    30000,
+  );
 });
