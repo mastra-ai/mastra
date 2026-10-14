@@ -105,6 +105,7 @@ import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
 import { LiveSessions } from './session/live-sessions.js';
 import { hydrateSessionMemorySettings, layerPersonalMemorySettings } from './session/memory-settings-hydration.js';
+import { PLAN_COMMAND_INSTRUCTIONS } from './session/plan-command-instructions.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
 import { createSourceControlTools } from './session/source-control-tools.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
@@ -724,8 +725,7 @@ export class MastraFactory {
       this.#config.knowledge !== undefined || process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
     const deploymentOrganizationId = process.env.MASTRACODE_DEPLOYMENT_ORGANIZATION_ID?.trim() || undefined;
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
-      | GithubIntegration
-      | undefined;
+      GithubIntegration | undefined;
     const gitlabIntegration = integrations.find(
       integration => integration.id === 'gitlab' && integration.intake && integration.versionControl,
     );
@@ -1094,8 +1094,7 @@ export class MastraFactory {
         disableSettingsOmSeed: true,
         hostInstructions: async ({ requestContext }) => {
           const context = requestContext.get('controller') as
-            | AgentControllerRequestContext<MastraCodeState>
-            | undefined;
+            AgentControllerRequestContext<MastraCodeState> | undefined;
           if (parseSupervisorResourceId(context?.resourceId)) return SUPERVISOR_INSTRUCTIONS;
           // The SDK resolves this callback before it loads repository
           // AGENTS.md/CLAUDE.md. A controller recreated after restart has
@@ -1105,33 +1104,30 @@ export class MastraFactory {
           // trust field the recovery writes is missing, now, not later when
           // the agent's tools are assembled. Unbound sessions never gain these
           // fields and pay one binding lookup per prompt.
-          if (context?.threadId && context.resourceId) {
-            const current = context.getState();
-            const trustStateComplete =
-              Boolean(current.factoryProjectId) &&
-              Boolean(current.factoryOrgId) &&
-              typeof current.untrustedCheckout === 'boolean';
-            if (!trustStateComplete) {
-              const recovered = await resolveFactorySessionAddress({
-                requestContext,
-                storage: workItemsStorage,
-                forceBindingLookup: true,
-                ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
-              });
-              if (recovered?.binding) {
-                const state = context.getState();
-                if (
-                  state.factoryProjectId !== recovered.binding.factoryProjectId ||
-                  (recovered.binding.role === 'review' && state.untrustedCheckout !== true)
-                ) {
-                  throw new Error(
-                    'Factory review session security state could not be restored before prompt creation.',
-                  );
-                }
-              }
+          if (!context?.threadId || !context.resourceId) return undefined;
+          const current = context.getState();
+          const trustStateComplete =
+            Boolean(current.factoryProjectId) &&
+            Boolean(current.factoryOrgId) &&
+            typeof current.untrustedCheckout === 'boolean';
+          if (trustStateComplete) return undefined;
+          const recovered = await resolveFactorySessionAddress({
+            requestContext,
+            storage: workItemsStorage,
+            forceBindingLookup: true,
+            ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
+          });
+          if (recovered?.binding) {
+            const state = context.getState();
+            if (
+              state.factoryProjectId !== recovered.binding.factoryProjectId ||
+              (recovered.binding.role === 'review' && state.untrustedCheckout !== true)
+            ) {
+              throw new Error('Factory review session security state could not be restored before prompt creation.');
             }
+            return undefined;
           }
-          return undefined;
+          return requestContext.get('channel') ? undefined : PLAN_COMMAND_INSTRUCTIONS;
         },
         // A factory reads the repository it works on and its skill, never the
         // ~/.claude instructions of whoever hosts the process. On the controller

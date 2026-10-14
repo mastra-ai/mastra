@@ -1,12 +1,15 @@
 /**
  * Processor that aborts the agentic loop immediately after a `submit_plan` tool
- * returns a rejection result. This prevents the model from generating any text
- * after the user clicks "Request Changes" — the tool result is persisted in
- * thread history (for context on the next run) but no follow-up LLM call is made.
+ * returns a rejection the user will follow up on in their next message. This
+ * prevents the model from generating any text after the user clicks "Request
+ * Changes" — the tool result is persisted in thread history (for context on the
+ * next run) but no follow-up LLM call is made. A rejection that already carries
+ * the user's feedback keeps the loop running so the model revises right away.
  */
 import type { Processor, ProcessInputStepArgs } from '@mastra/core/processors';
 
 const PLAN_REJECTED_PREFIX = 'Plan was not approved';
+const PLAN_REVISION_REQUESTED_PREFIX = 'Plan was not approved. The user wants revisions.';
 
 type ToolInvocation = {
   state?: string;
@@ -29,20 +32,17 @@ function resultText(result: unknown): string {
   return '';
 }
 
-/**
- * Returns true when the invocation is a completed `submit_plan` rejection.
- */
+function stopsForUserFeedback(text: string): boolean {
+  return text.startsWith(PLAN_REJECTED_PREFIX) && !text.startsWith(PLAN_REVISION_REQUESTED_PREFIX);
+}
+
 function isPlanRejection(inv: ToolInvocation | undefined): boolean {
   if (!inv || inv.state !== 'result' || inv.toolName !== 'submit_plan') return false;
-  return resultText(inv.result).startsWith(PLAN_REJECTED_PREFIX);
+  return stopsForUserFeedback(resultText(inv.result));
 }
 
 function isPlanRejectionResultPart(part: ToolResultPart): boolean {
-  return (
-    part.type === 'tool_result' &&
-    part.name === 'submit_plan' &&
-    resultText(part.result).startsWith(PLAN_REJECTED_PREFIX)
-  );
+  return part.type === 'tool_result' && part.name === 'submit_plan' && stopsForUserFeedback(resultText(part.result));
 }
 
 export class PlanRejectionAbortProcessor implements Processor<'plan-rejection-abort'> {

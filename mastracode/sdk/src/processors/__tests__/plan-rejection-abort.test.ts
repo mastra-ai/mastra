@@ -80,7 +80,7 @@ describe('PlanRejectionAbortProcessor', () => {
     expect(abort).toHaveBeenCalledOnce();
   });
 
-  it('aborts when the rejection includes inline feedback', async () => {
+  it('does NOT abort when the rejection carries inline feedback', async () => {
     const messages = [
       assistantWithToolResult({
         toolName: 'submit_plan',
@@ -88,7 +88,7 @@ describe('PlanRejectionAbortProcessor', () => {
       }),
     ];
     const abort = await run(messages, 1);
-    expect(abort).toHaveBeenCalledOnce();
+    expect(abort).not.toHaveBeenCalled();
   });
 
   it('aborts when the result is a bare string', async () => {

@@ -29,6 +29,7 @@ import type * as transitionServiceModule from './rules/transition-service.js';
 import { DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
 import { createFactorySecretEncryption } from './secret-encryption.js';
 import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.js';
+import { PLAN_COMMAND_INSTRUCTIONS } from './session/plan-command-instructions.js';
 import type { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SourceControlStorage } from './storage/domains/source-control/base.js';
@@ -830,9 +831,11 @@ describe('MastraFactory.prepare', () => {
       },
     });
 
-    await (config.hostInstructions as (input: { requestContext: RequestContext }) => Promise<unknown>)({
-      requestContext: context,
-    });
+    await expect(
+      (config.hostInstructions as (input: { requestContext: RequestContext }) => Promise<unknown>)({
+        requestContext: context,
+      }),
+    ).resolves.toBeUndefined();
 
     expect(state).toMatchObject({
       factoryProjectId: '11111111-2222-4333-8444-555555555555',
@@ -850,6 +853,25 @@ describe('MastraFactory.prepare', () => {
         requestContext: context,
       }),
     ).rejects.toThrow('security state could not be restored before prompt creation');
+  });
+
+  it('teaches /plan to unbound user sessions but not to channel runs', async () => {
+    const config = await prepareFactory({ storage: fakeStorage() });
+    (config.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
+    const context = new RequestContext();
+    context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    context.set('controller', {
+      resourceId: 'user-session-1',
+      threadId: 'user-session-1',
+      getState: () => ({}),
+      setState: async () => {},
+    });
+    const hostInstructions = config.hostInstructions as (input: { requestContext: RequestContext }) => Promise<unknown>;
+
+    await expect(hostInstructions({ requestContext: context })).resolves.toBe(PLAN_COMMAND_INSTRUCTIONS);
+
+    context.set('channel', { platform: 'slack' });
+    await expect(hostInstructions({ requestContext: context })).resolves.toBeUndefined();
   });
 
   it('heals a review binding that kept factoryProjectId but lost untrustedCheckout', async () => {

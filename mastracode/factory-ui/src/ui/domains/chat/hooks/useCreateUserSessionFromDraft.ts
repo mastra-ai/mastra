@@ -20,7 +20,7 @@ export function useCreateUserSessionFromDraft() {
   const navigate = useNavigate();
 
   return useMutation({
-    mutationFn: async (prompt: string) => {
+    mutationFn: async ({ prompt, title }: { prompt: string; title: string }) => {
       const projectRepositoryId = factorySessionState?.projectRepositoryId;
       if (!draftSessionId || !factoryId || !projectRepositoryId) {
         throw new Error('Could not create the session. Reload the page and try again.');
@@ -35,7 +35,7 @@ export function useCreateUserSessionFromDraft() {
       try {
         const session = await createUserSession(baseUrl, projectRepositoryId, {
           sessionId: draftSessionId,
-          title: prompt,
+          title,
         });
         return { session, prompt, factoryId, handoffModelId, thinkingLevelOverride };
       } catch (error) {

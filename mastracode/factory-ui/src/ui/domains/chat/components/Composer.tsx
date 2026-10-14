@@ -32,7 +32,7 @@ import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
 import { useCreateUserSessionFromDraft } from '../hooks/useCreateUserSessionFromDraft';
 import { clearPendingHandoff } from '../hooks/useHandoffPrompt';
 import { usePendingPlanFeedback } from '../hooks/usePendingPlanFeedback';
-import { commandRequiresReadySession } from '../services/commands';
+import { commandRequiresReadySession, findCommand, isSentToAgent, parseSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { StatusLine } from './StatusLine';
 import { ComposerImageAttachments } from './ComposerImageAttachments';
@@ -190,6 +190,15 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
   };
 
+  const createDraftSession = async (prompt: string, title: string) => {
+    try {
+      await createDraftSessionMutation.mutateAsync({ prompt, title });
+    } catch (error) {
+      updateDraft(prompt);
+      throw error;
+    }
+  };
+
   async function handleInput(text: string) {
     if (planFeedback.pending) {
       await planFeedback.submitFeedback(text);
@@ -197,6 +206,17 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       return;
     }
     if (onUserDraft && text.startsWith('/')) {
+      const command = findCommand(commands, text);
+      if (command && isSentToAgent(command)) {
+        const { rawArguments } = parseSlashCommand(text);
+        if (!rawArguments) {
+          updateDraft(text);
+          pushNotice(`Describe the task after /${command.name}.`);
+          return;
+        }
+        await createDraftSession(text, rawArguments);
+        return;
+      }
       if (commandRequiresReadySession(commands, text)) {
         updateDraft(text);
         pushNotice('This command needs a session. Send a prompt to create one first.');
@@ -206,12 +226,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       return;
     }
     if (onUserDraft) {
-      try {
-        await createDraftSessionMutation.mutateAsync(text);
-      } catch (error) {
-        updateDraft(text);
-        throw error;
-      }
+      await createDraftSession(text, text);
       return;
     }
     if (preparingThreadId && text.startsWith('/') && commandRequiresReadySession(commands, text)) {
