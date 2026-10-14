@@ -10,10 +10,6 @@ export type SortMenuProps<V extends string> = {
   baselineValue?: V;
 };
 
-/**
- * Icon menu that picks one sort preset. The trigger turns primary when the value
- * moves off `baselineValue`; its accessible name reads `label: selected option`.
- */
 export function SortMenu<V extends string>({ label, options, value, onValueChange, baselineValue }: SortMenuProps<V>) {
   const selected = options.find(option => option.value === value);
   const triggerLabel = selected ? `${label}: ${selected.label}` : label;

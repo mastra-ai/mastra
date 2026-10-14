@@ -348,12 +348,6 @@ function DropdownMenuRadioSub<V extends string>({
   );
 }
 
-/**
- *
- * Right now, these are the props mostly used for the menu
- * if we find out, consumers need more props, we can just extend it
- * with componentProps
- */
 function DropdownMenu({
   open,
   defaultOpen,
