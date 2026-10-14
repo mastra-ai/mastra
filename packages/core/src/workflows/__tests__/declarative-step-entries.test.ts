@@ -28,8 +28,9 @@ const ENGINES: Engine[] = [
   { name: 'evented', evented: true },
 ];
 
-function textAgent(id: string, response: string) {
+function textAgent(id: string, response: string, durable: boolean = false) {
   return new Agent({
+    durable,
     id,
     name: id,
     instructions: 'You echo a fixed response.',
@@ -334,6 +335,51 @@ describe.each(ENGINES)('declarative step runtime ($name engine)', ({ evented }) 
     }
   });
 
+  it('createStep() uses the registered wrapper for a durable: true agent', async () => {
+    const agent = textAgent('rt-flag-agent', 'durable response', true);
+    const wf = createWorkflow({
+      id: 'rt-flag-agent-wf',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.any(),
+    })
+      .then(createStep(agent))
+      .commit();
+    const mastra = bind(wf, { agents: { customRegistrationKey: agent } });
+    const wrapper = mastra.getAgentById(agent.id);
+    expect(wrapper).not.toBe(agent);
+    const stream = vi.spyOn(wrapper, 'stream');
+
+    const run = await wf.createRun();
+    const result = await run.start({ inputData: { prompt: 'say hi' } });
+    expect(result.status).toBe('success');
+    expect(stream).toHaveBeenCalledOnce();
+    if (result.status === 'success') {
+      expect(result.result).toEqual({ text: 'durable response' });
+    }
+  });
+
+  it('createStep() keeps an unrelated agent that shares an id with a registered durable agent', async () => {
+    const registered = textAgent('shared-id-agent', 'registered response', true);
+    const unrelated = textAgent('shared-id-agent', 'unrelated response');
+    const wf = createWorkflow({
+      id: 'shared-id-agent-wf',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.any(),
+    })
+      .then(createStep(unrelated))
+      .commit();
+    const mastra = bind(wf, { agents: { registered } });
+    const wrapperStream = vi.spyOn(mastra.getAgentById(registered.id), 'stream');
+
+    const run = await wf.createRun();
+    const result = await run.start({ inputData: { prompt: 'say hi' } });
+    expect(result.status).toBe('success');
+    expect(wrapperStream).not.toHaveBeenCalled();
+    if (result.status === 'success') {
+      expect(result.result).toEqual({ text: 'unrelated response' });
+    }
+  });
+
   it('createStep() executes a durable agent and returns { text }', async () => {
     const durableAgent = createDurableAgent({
       agent: textAgent('rt-durable-agent', 'durable response'),
@@ -574,6 +620,31 @@ describe('evented engine - declarative entries', () => {
     expect(seen).toContain('workflow.step.run');
     expect(seen).toContain('workflow.end');
     expect(endResult?.output?.text).toBe('hi');
+  });
+
+  it.each([
+    { factory: 'default', createAgentStep: createStep },
+    { factory: 'evented', createAgentStep: createEventedStep },
+  ])('uses the registered durable: true wrapper with the $factory factory', async ({ createAgentStep }) => {
+    const agent = textAgent('ev-flag-agent', 'durable response', true);
+    const wf = createWorkflow({
+      id: 'ev-flag-agent-wf',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.any(),
+    })
+      .then(createAgentStep(agent))
+      .commit();
+    const mastra = bindEvented(wf, { agents: { customRegistrationKey: agent } });
+    const wrapper = mastra.getAgentById(agent.id);
+    expect(wrapper).not.toBe(agent);
+    const stream = vi.spyOn(wrapper, 'stream');
+
+    const { seen, endResult } = await driveEvented(mastra, wf.id, 'run-flag-agent', { prompt: 'say hi' });
+
+    expect(seen).toContain('workflow.step.run');
+    expect(endResult?.status).toBe('success');
+    expect(stream).toHaveBeenCalledOnce();
+    expect(endResult?.output).toEqual({ text: 'durable response' });
   });
 
   it('executes and cleans up a durable agent evented createStep', async () => {

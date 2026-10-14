@@ -1,5 +1,6 @@
 import type { ReadableStream } from 'node:stream/web';
 import { TripWire } from '../../agent/trip-wire';
+import { isDurableAgentLike } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { PubSub } from '../../events';
 import type { Mastra } from '../../mastra';
@@ -10,6 +11,23 @@ import { forwardAgentStreamChunk } from '../stream-utils';
 import type { AgentStepEntry } from '../types';
 import { resolveEntryActor } from './actor';
 import type { EntryExecuteContext } from './types';
+
+/**
+ * Returns the runtime registered for `agent` on `mastra`. Registering a
+ * `durable: true` agent stores a durable wrapper instead of the original, so a
+ * step holding the original must run through that wrapper. Matching is by
+ * identity of the wrapped agent, so unrelated agents sharing an id are ignored.
+ */
+export function resolveRegisteredAgent<T>(agent: T, mastra?: Mastra): T {
+  const agents = mastra?.listAgents?.();
+  if (!agents) return agent;
+  for (const registered of Object.values(agents)) {
+    if (registered !== agent && isDurableAgentLike(registered) && registered.agent === agent) {
+      return registered as T;
+    }
+  }
+  return agent;
+}
 
 /**
  * Runs a declarative `agent` entry: resolves the agent (inline handle, else the
@@ -25,7 +43,7 @@ export async function runAgentEntry(
   mastra?: Mastra,
 ): Promise<unknown> {
   const registry = mastra ?? (ctx?.mastra as Mastra | undefined);
-  const agent = entry.agent ?? registry?.getAgentById(entry.agentId);
+  const agent = entry.agent ? resolveRegisteredAgent(entry.agent, registry) : registry?.getAgentById(entry.agentId);
   if (!agent) {
     throw new Error(
       `Agent '${entry.agentId}' not found for workflow step '${entry.id}'. Register the agent on the Mastra instance or pass the agent instance directly.`,
