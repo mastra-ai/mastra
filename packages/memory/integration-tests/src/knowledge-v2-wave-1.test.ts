@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { Knowledge } from '@mastra/core/knowledge';
 import { Mastra } from '@mastra/core/mastra';
