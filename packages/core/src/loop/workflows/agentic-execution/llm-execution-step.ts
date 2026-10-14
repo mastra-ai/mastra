@@ -1808,6 +1808,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                         : undefined,
                       memory: readScoped(scopeCtx, MEMORY_KEY, 'memory'),
                       agentName: agentId,
+                      agentId,
                       requestContext: requestContext || new RequestContext(),
                       outputWriter,
                       workspace: currentStep.workspace,

@@ -65,7 +65,7 @@ import {
   eagerToolCallSuspensionIntent,
 } from './eager-tool-execution';
 import type { EagerSuspensionIntent, EagerToolBailout } from './eager-tool-execution';
-import { buildToolApprovalContext, resolveToolApprovalVerdict } from './tool-approval-verdict';
+import { buildToolApprovalContext, resolveToolApprovalVerdict, runBeforeApprovalHook } from './tool-approval-verdict';
 
 type AddToolMetadataOptions = {
   toolCallId: string;
@@ -100,6 +100,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   logger,
   agentId,
   agentVersionId,
+  resolvedScopes,
   mastra,
   requireToolApproval: requireToolApprovalFromFactory,
   actor,
@@ -489,6 +490,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const approvalVerdicts = readScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts');
         const cachedApprovalVerdict = approvalVerdicts?.get(inputData.toolCallId);
         approvalVerdicts?.delete(inputData.toolCallId);
+        const approvalWorkspace = readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace');
         const toolRequiresApproval =
           cachedApprovalVerdict ??
           (await resolveToolApprovalVerdict({
@@ -498,7 +500,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               toolName: inputData.toolName,
               args,
               requestContext,
-              workspace: readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace'),
+              workspace: approvalWorkspace,
             }),
             logger,
           }));
@@ -534,8 +536,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // suspends during execution for its own resume data, do not require approval again.
         // Approval decisions must come from the workflow resume boundary; model-authored
         // resumeData is untrusted and cannot grant or decline consent.
-        const approvalGated =
-          !isDelegatedApproval && (suspendedForApproval || (toolRequiresApproval && suspendData === undefined));
+        const isFreshCall = suspendData === undefined;
+        const approvalGated = !isDelegatedApproval && (suspendedForApproval || (toolRequiresApproval && isFreshCall));
 
         // The real suspension sequence, extracted so it has exactly one implementation with
         // two entry points: the tool's own `suspend()` closure below, and the hand-back of an
@@ -605,6 +607,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 __streamState: await serializeStreamStateForSuspend(),
                 __agentId: agentId,
                 ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
+                // Persisted unconditionally — [] included — so absence marks a pre-upgrade snapshot,
+                // whose resume adopts the supplied scopes instead of rejecting them.
+                __resolvedScopes: resolvedScopes ?? [],
                 // Persist the inner suspended run id in the workflow snapshot, partitioned per
                 // tool call (resumeLabel = toolCallId). Persisted message metadata exposes the
                 // same id as delegatedRunId for cold reloads, while the snapshot remains the
@@ -651,6 +656,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 __streamState: await serializeStreamStateForSuspend(),
                 __agentId: agentId,
                 ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
+                // Persisted unconditionally — [] included — so absence marks a pre-upgrade snapshot,
+                // whose resume adopts the supplied scopes instead of rejecting them.
+                __resolvedScopes: resolvedScopes ?? [],
                 toolCallId: inputData.toolCallId,
                 toolName: inputData.toolName,
                 resumeLabel: options?.resumeLabel,
@@ -676,6 +684,23 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         }
 
         if (approvalGated) {
+          if (!approvalDecision && isFreshCall) {
+            const rejection = await runBeforeApprovalHook({
+              tool,
+              input: args,
+              context: {
+                toolCallId: inputData.toolCallId,
+                toolName: inputData.toolName,
+                requestContext,
+                workspace: approvalWorkspace,
+                actor,
+              },
+              logger,
+            });
+            if (rejection) {
+              return { result: rejection.output, ...inputData };
+            }
+          }
           if (!approvalDecision) {
             await stopGoalActivity({
               agentId,
@@ -723,6 +748,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 __streamState: await serializeStreamStateForSuspend(),
                 __agentId: agentId,
                 ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
+                // Persisted unconditionally — [] included — so absence marks a pre-upgrade snapshot,
+                // whose resume adopts the supplied scopes instead of rejecting them.
+                __resolvedScopes: resolvedScopes ?? [],
               },
               {
                 resumeLabel: inputData.toolCallId,

@@ -1761,6 +1761,37 @@ describe('InngestAgent parity surface', () => {
       }
     });
 
+    it('rejects a resume that adds scopes without closing the parked run stream', async () => {
+      const durableAgent = makeAgentWithSnapshot('resume-scope-conflict', {
+        value: {},
+        context: { 'agentic-loop': nestedSuspension },
+        status: 'suspended',
+        suspendedPaths: { 'agentic-loop': [0] },
+        resumeLabels: {},
+        requestContext: { mastra__scopes: ['org:a'] },
+      });
+      const sendSpy = stubInngestSend();
+      const publishSpy = vi.spyOn(durableAgent.pubsub, 'publish');
+      const runId = 'resume-scope-conflict-run';
+
+      try {
+        await expect(
+          durableAgent.resume(
+            runId,
+            { approved: true },
+            { requestContext: new RequestContext([['mastra__scopes', ['org:b']]]) },
+          ),
+        ).rejects.toMatchObject({ id: 'AGENT_SCOPES_CONFLICT' });
+        expect(sendSpy).not.toHaveBeenCalled();
+        const errorEvents = publishSpy.mock.calls.filter(([, event]: any[]) => event?.type === 'error');
+        expect(errorEvents).toEqual([]);
+        expect(globalRunRegistry.get(runId)).toBeUndefined();
+      } finally {
+        publishSpy.mockRestore();
+        sendSpy.mockRestore();
+      }
+    });
+
     it('rejects resume() when dispatching the resume event fails', async () => {
       // Dispatch used to be fire-and-forget: resume() resolved while the run
       // stayed parked, and the failure only ever showed up as a stream error.
@@ -2916,6 +2947,21 @@ describe('thread and run abort (#25156)', () => {
     } finally {
       result.cleanup();
       sendSpy.mockRestore();
+    }
+  });
+
+  it("abortRunStream never aborts another Mastra instance's run with the same runId", async () => {
+    const durableAgent = makeDurable('abort-run-other-app');
+    new Mastra({ agents: { mine: durableAgent as any }, storage: new InMemoryStore(), logger: false });
+    const runId = 'abort-run-other-app-run';
+    const otherController = new AbortController();
+    globalRunRegistry.set(runId, { mastra: new Mastra({ logger: false }), abortController: otherController } as any);
+
+    try {
+      expect(durableAgent.abortRunStream(runId)).toBe(false);
+      expect(otherController.signal.aborted).toBe(false);
+    } finally {
+      globalRunRegistry.delete(runId);
     }
   });
 

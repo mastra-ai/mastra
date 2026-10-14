@@ -45,7 +45,7 @@ function renderBoard(board = 'boards/release', workItems: unknown[] = []) {
       }),
     ),
     http.get('*/web/linear/status', () => HttpResponse.json({ enabled: false, connected: false, workspace: null })),
-    http.get('*/web/source-control/projects/:id/sessions', () => HttpResponse.json({ sessions: [] })),
+    http.get('*/web/factory/projects/:factoryId/sessions', () => HttpResponse.json({ sessions: [] })),
     http.get('*/web/github/projects/:id/issues', intakeRequest),
     http.get('*/web/github/projects/:id/prs', intakeRequest),
     http.get('*/web/factory/projects/:id/work-items', () =>

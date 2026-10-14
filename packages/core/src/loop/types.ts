@@ -46,7 +46,7 @@ import type {
 } from '../stream/types';
 import type { MCPToolExecutionContext, RequireToolApproval, ToolPayloadTransformPolicy } from '../tools';
 import type { MastraIdGenerator } from '../types';
-import type { OutputWriter } from '../workflows/types';
+import type { OutputWriter, WorkflowRunState } from '../workflows/types';
 import type { Workspace } from '../workspace/workspace';
 
 type StopCondition = StopConditionV5<any> | StopConditionV6<any>;
@@ -207,11 +207,32 @@ export type LoopConfig<OUTPUT = undefined> = {
   prepareStep?: PrepareStepFunction;
 };
 
+/**
+ * A suspended `agentic-loop` run that the agent already claimed in storage
+ * (`suspended -> running`) before resuming it, so concurrent resumes of the
+ * same run cannot both execute the suspended tool.
+ * @internal
+ */
+export type AgentLoopResumeClaim = {
+  /** The suspended snapshot the claim was taken on. Absent when the store cannot claim atomically. */
+  snapshot?: WorkflowRunState;
+  /**
+   * Marks the claim started right before the resumed run executes. Throws when the claim was
+   * taken over in the meantime, in which case the run must not execute.
+   */
+  start?: () => Promise<void>;
+  /** Called right before the resumed run starts executing steps. */
+  onExecutionStarted?: () => void;
+  /** Ends the claim. Idempotent; hands the suspension back only if the run never started. */
+  release: () => Promise<void>;
+};
+
 export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   mastra?: Mastra;
   resumeContext?: {
     resumeData: any;
     snapshot: any;
+    claim?: AgentLoopResumeClaim;
   };
   toolCallId?: string;
   models: ModelManagerModelConfig[];
@@ -259,6 +280,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
    * version instead of whatever a status selector points at later.
    */
   agentVersionId?: string;
+  resolvedScopes?: string[];
   toolCallConcurrency?: ToolCallConcurrency;
   eagerToolExecution?: boolean;
   /**

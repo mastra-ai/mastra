@@ -592,6 +592,42 @@ describe('createMastraCode', () => {
     expect(result).not.toHaveProperty('validateExperimentalAgent');
   }, 15_000);
 
+  it('prepares trusted policy in the production main-model, goal-judge, and memory callbacks', async () => {
+    const { setCredentialStoreProvider, resolveTenantFromRequestContext } =
+      await import('../agents/credential-resolver.js');
+    const { getDynamicModel, getGoalJudgeModel } = await import('../agents/model.js');
+    const { createMastraCodeAgentController } = await import('../index.js');
+    const tenant = { orgId: 'org-1', userId: 'owner', credentialScope: 'user' as const };
+    const lookup = vi.fn(async () => tenant);
+    const memoryResolve = vi.fn(() => undefined);
+    getDynamicMemoryMock.mockReturnValue(memoryResolve);
+    vi.mocked(getDynamicModel).mockClear();
+    vi.mocked(getGoalJudgeModel).mockClear();
+    setCredentialStoreProvider(() => undefined, lookup);
+    try {
+      await createMastraCodeAgentController();
+      const agentConfig = agentConstructorMock.mock.calls[0]![0];
+      const memory = controllerConstructorMock.mock.calls[0]![0].memory;
+      for (const [callback, resolve] of [
+        [agentConfig.model, getDynamicModel],
+        [agentConfig.goal.judge, getGoalJudgeModel],
+        [memory, memoryResolve],
+      ]) {
+        const requestContext = new RequestContext();
+        await callback({ requestContext });
+        expect(resolveTenantFromRequestContext(requestContext)).toEqual(tenant);
+        expect(resolve).toHaveBeenCalledOnce();
+        lookup.mockRejectedValueOnce(new Error('policy unavailable'));
+        await expect(callback({ requestContext })).rejects.toThrow('policy unavailable');
+        expect(resolveTenantFromRequestContext(requestContext)).toBeUndefined();
+        expect(resolve).toHaveBeenCalledOnce();
+      }
+      expect(lookup).toHaveBeenCalledTimes(6);
+    } finally {
+      setCredentialStoreProvider(undefined);
+    }
+  });
+
   it.each([
     ['durable', createDurableAgentMock, durableAgentMock],
     ['evented', createEventedAgentMock, eventedAgentMock],
@@ -692,7 +728,8 @@ describe('createMastraCode', () => {
         }
       | undefined;
     expect(agentControllerConfig?.gateways?.[0]?.id).toBe('amazon-bedrock');
-    expect(agentControllerConfig?.gateways?.[1]).toBe(mastraCodeGatewayMock);
+    expect(agentControllerConfig?.gateways?.[1]?.id).toBe('github-copilot');
+    expect(agentControllerConfig?.gateways?.[2]).toBe(mastraCodeGatewayMock);
     expect(agentControllerConfig?.subagents).toEqual([subagent]);
   }, 30_000);
 
