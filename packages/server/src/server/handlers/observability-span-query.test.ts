@@ -140,6 +140,20 @@ describe('QUERY_SPANS', () => {
     );
   });
 
+  it('accepts time ranges wider than 31 days', async () => {
+    const { mastra, observabilityStore } = createHarness();
+
+    await QUERY_SPANS.handler(
+      params(mastra, { timeRange: { from: '2026-01-01T00:00:00Z', to: '2026-09-01T00:00:00Z' } }),
+    );
+
+    expect(observabilityStore.querySpans).toHaveBeenCalledWith(
+      expect.objectContaining({
+        timeRange: { from: '2026-01-01T00:00:00.000Z', to: '2026-09-01T00:00:00.000Z' },
+      }),
+    );
+  });
+
   it('rejects malformed and mismatched cursors without touching storage', async () => {
     const { mastra, getStore } = createHarness();
 
@@ -208,10 +222,10 @@ describe('QUERY_SPANS', () => {
       issues: [{ code: 'invalid_request', path: ['orderBy', 0, 'field'] }],
     });
 
-    const tooWide = strictValidationError({
-      timeRange: { from: '2026-01-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+    const emptyRange = strictValidationError({
+      timeRange: { from: '2026-09-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
     });
-    expect(getDeclaredErrorSchema(422).parse(tooWide?.body)).toMatchObject({
+    expect(getDeclaredErrorSchema(422).parse(emptyRange?.body)).toMatchObject({
       issues: [{ code: 'invalid_request', path: ['timeRange'] }],
     });
   });

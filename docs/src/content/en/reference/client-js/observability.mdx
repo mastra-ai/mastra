@@ -70,7 +70,7 @@ It accepts the same filtering, ordering and delta-polling arguments as `listTrac
 
 ## Querying traces
 
-`queryTraces()` finds completed logical traces using trace fields and conditions over related spans. Every query requires an ISO timestamp range of at most 31 days.
+`queryTraces()` finds completed logical traces using trace fields and conditions over related spans. Every query requires an ISO timestamp range.
 
 ```typescript
 const result = await mastraClient.queryTraces({
