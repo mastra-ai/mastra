@@ -7,8 +7,8 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
 import { FactoryModelScopeNotice } from '../FactoryModelScopeNotice';
 
-const NOTICE =
-  "This Factory uses organization models and credentials only, so sessions here don't use your personal provider sign-ins or default model.";
+const NOTICE_TITLE = 'This Factory uses organization credentials only';
+const NOTICE = "Sessions in this Factory don't use your personal provider sign-ins or default model.";
 
 function renderNotice(modelScope: 'factory' | 'user') {
   server.use(
@@ -39,6 +39,7 @@ describe('FactoryModelScopeNotice', () => {
     renderNotice('factory');
 
     const notice = await screen.findByRole('note');
+    expect(notice).toHaveTextContent(NOTICE_TITLE);
     expect(notice).toHaveTextContent(NOTICE);
     expect(screen.getByRole('link', { name: 'Factory models settings' })).toHaveAttribute(
       'href',

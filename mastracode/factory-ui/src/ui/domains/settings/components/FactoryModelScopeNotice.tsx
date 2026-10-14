@@ -1,4 +1,4 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Link, useParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
@@ -19,13 +19,15 @@ export function FactoryModelScopeNotice() {
   if ((projectQuery.data?.modelScope ?? 'user') !== 'factory') return null;
 
   return (
-    <Txt as="p" variant="caption" tone="muted" className="m-0" role="note">
-      This Factory uses organization models and credentials only, so sessions here don&apos;t use your personal
-      provider sign-ins or default model. Organization credentials and the model scope are managed in{' '}
-      <Link to={settingsSectionPath(factoryId, 'models')} className="underline">
-        Factory models settings
-      </Link>
-      .
-    </Txt>
+    <div role="note">
+      <Notice variant="info" title="This Factory uses organization credentials only">
+        Sessions in this Factory don&apos;t use your personal provider sign-ins or default model. Manage organization
+        credentials and the model scope in{' '}
+        <Link to={settingsSectionPath(factoryId, 'models')} className="underline">
+          Factory models settings
+        </Link>
+        .
+      </Notice>
+    </div>
   );
 }

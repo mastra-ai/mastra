@@ -295,8 +295,8 @@ function resolveModelForRequest(modelId: string, options?: Parameters<typeof res
     // personal sign-in can't tell why an organization-scoped Factory fails.
     throw new ProviderAuthRequiredError(
       resolveCredentialScope(options?.requestContext) === 'factory'
-        ? `No usable ${providerId} organization credential is configured for this Factory. It uses organization credentials only, so personal provider sign-ins are not used.`
-        : `No usable ${providerId} personal credential is connected for this session's account. It uses personal credentials only, so organization credentials are not used.`,
+        ? `No usable ${providerId} credential is available. This Factory uses organization credentials only, so personal provider sign-ins don't apply. Add an organization credential, then try again.`
+        : `No usable ${providerId} credential is available. This Factory uses personal credentials only, so organization credentials don't apply. Connect the provider, then try again.`,
     );
   }
 
