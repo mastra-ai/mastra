@@ -181,7 +181,7 @@ describe('feature usage telemetry', () => {
       event: FEATURE_USAGE_EVENT,
       properties: {
         feature_name: 'file_based_agents',
-        project_id: hashTelemetryValue('/tmp/feature-telemetry-project').slice(0, 16),
+        project_id: hashTelemetryValue(projectRoot).slice(0, 16),
         command: 'dev',
         node_env: 'test',
         fs_agent_count: 1,
