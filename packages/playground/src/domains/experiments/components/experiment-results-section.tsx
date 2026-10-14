@@ -4,6 +4,7 @@ import type { DatasetExperimentResult } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { useScoresByExperimentId } from '@mastra/react/hooks/datasets';
+import { useExperimentsItemUsage } from '@mastra/react/hooks/experiments';
 import { useMemo, useCallback } from 'react';
 
 import { useExperimentItemPanel } from '../context/experiment-item-panel-context';
@@ -30,6 +31,8 @@ export type ExperimentResultsSectionProps = {
   onToggleSelectAll: () => void;
   sort?: ListSort<ExperimentResultsSortKey>;
   onSortChange?: (direction: 'asc' | 'desc', key: ExperimentResultsSortKey) => void;
+  /** Fetches per-item usage and shows the Cost and Tokens columns. */
+  supportsMetrics?: boolean;
 };
 
 /**
@@ -51,6 +54,7 @@ export function ExperimentResultsSection({
   onToggleSelectAll,
   sort,
   onSortChange,
+  supportsMetrics = false,
 }: ExperimentResultsSectionProps) {
   const { currentItemId, openItem, close } = useExperimentItemPanel();
 
@@ -65,6 +69,24 @@ export function ExperimentResultsSection({
     experimentStatus: experimentStatus,
     queryOptions: { enabled: Boolean(experimentId) },
   });
+
+  const experimentRefs = useMemo(
+    () => [{ id: experimentId, status: experimentStatus }],
+    [experimentId, experimentStatus],
+  );
+  const { data: usageById } = useExperimentsItemUsage({ experiments: experimentRefs, supportsMetrics });
+  const usageByTraceId = usageById[experimentId]?.traces;
+
+  const rows = useMemo(
+    () =>
+      usageByTraceId
+        ? results.map(result => ({
+            ...result,
+            usage: result.traceId ? usageByTraceId[result.traceId] : undefined,
+          }))
+        : results,
+    [results, usageByTraceId],
+  );
 
   const scorerIds = useMemo(() => {
     if (!scoresByExperimentId) return [];
@@ -97,15 +119,22 @@ export function ExperimentResultsSection({
       ...getOptionalResultColumns(results),
       { name: 'tags', label: 'Tags', size: 'auto' },
       { name: 'startedAt', label: 'Created', size: 'auto' },
+      ...(supportsMetrics
+        ? [
+            { name: 'cost', label: 'Cost', size: 'auto' },
+            { name: 'tokens', label: 'Tokens', size: 'auto' },
+          ]
+        : []),
+      { name: 'duration', label: 'Duration', size: 'auto' },
       ...scorerIds.map(id => ({ name: id, label: id, size: 'auto' })),
     ],
-    [results, scorerIds],
+    [results, scorerIds, supportsMetrics],
   );
 
   return (
     <div className="h-full min-h-0 min-w-0 overflow-y-auto">
       <ExperimentResultsList
-        results={results}
+        results={rows}
         isLoading={isLoading}
         featuredResultId={featuredResultId}
         onResultClick={handleResultClick}

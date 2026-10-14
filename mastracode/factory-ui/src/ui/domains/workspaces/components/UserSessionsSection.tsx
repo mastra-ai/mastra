@@ -23,7 +23,7 @@ import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { removeCachedSession, useFactoryWorkspacesQueries } from '../../../../hooks/useWorkspaces';
+import { removeCachedSession, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import { deleteUserSession, regenerateSessionTitle } from '../services/user-sessions';
 import type { FactoryUserSession } from '../services/user-sessions';
@@ -49,24 +49,20 @@ export function UserSessionsSection() {
   const [filterChanges, setFilterChanges] = useState<Partial<UserSessionFiltersState>>({});
   const { pinnedSessions, setPinned } = usePinnedSessions();
 
-  const projectRepositoryIds = factoryQuery.data?.repositories.map(repository => repository.projectRepositoryId) ?? [];
-  const sessionsEnabled = projectRepositoryIds.length > 0;
-  // Sessions live per linked repository; the sidebar lists every repository's sessions together.
-  const sessionQueries = useFactoryWorkspacesQueries(projectRepositoryIds);
-  const sessionsFailed = sessionQueries.some(query => query.isError);
-  const sessionsLoaded = sessionsEnabled && sessionQueries.every(query => query.isSuccess);
+  const sessionsEnabled = (factoryQuery.data?.repositories.length ?? 0) > 0;
+  const sessionsQuery = useWorkspacesQuery(sessionsEnabled ? factoryId : undefined);
+  const sessionsFailed = sessionsQuery.isError;
+  const sessionsLoaded = sessionsEnabled && sessionsQuery.isSuccess;
   const auth = useFactoryAuth();
   const viewerUserId = auth.data?.user?.userId;
   const defaultFilters = defaultUserSessionFilters(viewerUserId);
   const filters: UserSessionFiltersState = { ...defaultFilters, ...filterChanges };
   const isOwn = (session: FactoryUserSession) => Boolean(viewerUserId) && session.userId === viewerUserId;
-  const allSessions = sessionQueries
-    .flatMap(query => query.data?.userSessions ?? [])
-    .sort(
-      (a, b) =>
-        Number(pinnedSessions.has(b.sessionId)) - Number(pinnedSessions.has(a.sessionId)) ||
-        Number(isOwn(b)) - Number(isOwn(a)),
-    );
+  const allSessions = [...(sessionsQuery.data?.userSessions ?? [])].sort(
+    (a, b) =>
+      Number(pinnedSessions.has(b.sessionId)) - Number(pinnedSessions.has(a.sessionId)) ||
+      Number(isOwn(b)) - Number(isOwn(a)),
+  );
   const runningBySessionId = useActiveRunResources({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceIds: allSessions.map(session => session.sessionId),
@@ -86,8 +82,8 @@ export function UserSessionsSection() {
   const owners = [...ownersById]
     .map(([userId, name]) => ({ userId, name }))
     .sort((a, b) => a.name.localeCompare(b.name));
-  const invalidate = (projectRepositoryId: string) => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(projectRepositoryId) });
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(factoryId) });
   };
 
   const deleteSession = useMutation({
@@ -97,9 +93,9 @@ export function UserSessionsSection() {
     },
     onSuccess: session => {
       setConfirmDelete(null);
-      removeCachedSession(queryClient, session.projectRepositoryId, session.sessionId);
+      removeCachedSession(queryClient, factoryId, session.sessionId);
       queryClient.removeQueries({ queryKey: queryKeys.userSession(session.sessionId) });
-      invalidate(session.projectRepositoryId);
+      invalidate();
       toast('Session deleted');
       if (location.pathname === `/factories/${factoryId}/user/threads/${session.sessionId}`) {
         void navigate(`/factories/${factoryId}`, { replace: true });
@@ -115,8 +111,8 @@ export function UserSessionsSection() {
   const regenerateTitle = useMutation({
     mutationFn: (session: FactoryUserSession) => regenerateSessionTitle(baseUrl, session.sessionId),
     onMutate: session => setRegenerating(current => new Set(current).add(session.sessionId)),
-    onSuccess: (title, session) => {
-      invalidate(session.projectRepositoryId);
+    onSuccess: title => {
+      invalidate();
       toast(`Renamed to “${title}”`);
     },
     onError: error => toast.error(error instanceof Error ? error.message : 'Failed to regenerate title'),
@@ -200,11 +196,7 @@ export function UserSessionsSection() {
             <Txt as="p" variant="meta" className="text-destructive-foreground m-0">
               Couldn’t load sessions
             </Txt>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => sessionQueries.filter(query => query.isError).forEach(query => void query.refetch())}
-            >
+            <Button variant="ghost" size="sm" onClick={() => void sessionsQuery.refetch()}>
               Retry
             </Button>
           </div>

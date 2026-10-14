@@ -62,13 +62,12 @@ const bySessionPriority = (a: FactoryWorkspaceRow, b: FactoryWorkspaceRow) =>
 
 export function WorkspacesSection() {
   const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
-  const { baseUrl, resourceId, sessionEnabled, factorySessionState } = useChatSessionContext();
-  const projectRepositoryId = factorySessionState?.projectRepositoryId;
-  const workspaces = useWorkspacesQuery(projectRepositoryId);
+  const { baseUrl, resourceId, sessionEnabled } = useChatSessionContext();
+  const workspaces = useWorkspacesQuery(factoryId);
   const navigate = useNavigate();
   const location = useLocation();
   const scope = { agentControllerId: AGENT_CONTROLLER_ID, resourceId };
-  const deleteWorkspace = useDeleteWorkspaceMutation(factoryId, projectRepositoryId, scope);
+  const deleteWorkspace = useDeleteWorkspaceMutation(factoryId, scope);
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
   const [ownerScope, setOwnerScope] = useState({ work: true, review: true });
   const auth = useFactoryAuth();

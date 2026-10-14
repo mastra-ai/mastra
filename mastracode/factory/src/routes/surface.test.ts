@@ -124,6 +124,61 @@ describe('prepareFactoryRuleBinding', () => {
     );
   });
 
+  it("files the session under the card's repository, not the environment's first link", async () => {
+    const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository();
+    const installation = await sourceControl.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: '123',
+    });
+    const otherRepository = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: '789', slug: 'mastra-ai/other', defaultBranch: 'dev' },
+    });
+    const otherLink = await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: projectRepository.connectionId,
+      repositoryId: otherRepository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/other',
+    });
+    const prepare = vi.fn(async () => ({}) as never);
+    const input = bindingInput(project.id);
+    input.item.metadata = { githubIssueNumber: 49, repository: 'mastra-ai/other' };
+
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      boards,
+      input,
+    );
+
+    const { sessionId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string };
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(
+      expect.objectContaining({ projectRepositoryId: otherLink.id, baseBranch: 'dev' }),
+    );
+  });
+
+  it('stamps the factory on the session it creates', async () => {
+    const { seeded, sourceControl, project, github } = await seedFactoryWithRepository();
+    const prepare = vi.fn(async () => ({}) as never);
+
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      boards,
+      bindingInput(project.id),
+    );
+
+    const { sessionId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string };
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(
+      expect.objectContaining({ factoryProjectId: project.id }),
+    );
+  });
+
   it("keeps a run an agent pre-approved on the repo connector, never on the agent's id", async () => {
     const { seeded, sourceControl, project, github } = await seedFactoryWithRepository();
     const prepare = vi.fn(async () => ({}) as never);
@@ -576,6 +631,31 @@ describe('prepareFactoryRuleBinding', () => {
     await expect(
       sourceControl.sessions.listByProjectRepository({ projectRepositoryId: projectRepository.id }),
     ).resolves.toHaveLength(0);
+  });
+
+  it("names the card's repository when it is linked but turned out of the environment", async () => {
+    const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository();
+    await sourceControl.projectRepositories.update({
+      orgId: 'org-1',
+      id: projectRepository.id,
+      input: { inEnvironment: false },
+    });
+    const prepare = vi.fn<FactoryStartCoordinator['prepare']>();
+
+    const error = await prepareFactoryRuleBinding(
+      github,
+      { prepare },
+      seeded.projects,
+      boards,
+      bindingInput(project.id),
+    ).catch(failure => failure);
+
+    expect(error).toBeInstanceOf(FactoryDispatchError);
+    expect(error).toMatchObject({ code: 'source_repository_missing' });
+    expect(error.message).toBe(
+      "Repository mastra-ai/mastra is linked but not in this Factory's environment. Turn it on under Settings → Environment, then retry.",
+    );
+    expect(prepare).not.toHaveBeenCalled();
   });
 
   it('classifies a missing source-control connection', async () => {
