@@ -145,7 +145,7 @@ function recordingSession(sessionId: string, threadId: string | undefined = sess
       },
       permissions: { setForTool: vi.fn(async () => {}) },
       mode: { resolve: () => ({ defaultModelId: 'openai/gpt-5.5' }) },
-      model: { switch: vi.fn(async () => {}) },
+      model: { setDefault: vi.fn(), switch: vi.fn(async () => {}) },
       subagents: { model: { set: vi.fn(async () => {}) } },
       om: {
         observer: { modelId: vi.fn(() => undefined), switchModel: vi.fn(async () => {}) },
