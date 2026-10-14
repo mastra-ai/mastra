@@ -32,8 +32,11 @@ import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/bas
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { deliverFactorySessionNotification } from './deliver.js';
 import type { FactoryMessaging } from './messaging-tools.js';
 import { findWorkItem, workItemNotFound, workItemNumber, workItemRefSchema } from './read-tools.js';
+import { createWorkItemRunEndReporter, sendRunEndReport } from './reports.js';
+import type { FactoryReporting, FactoryRunOutcome } from './reports.js';
 import type { FactoryToolScope } from './scope.js';
 
 const TITLE_LENGTH = 120;
@@ -56,6 +59,7 @@ export interface FactorySessionToolDependencies {
     | 'subscribeToWorkItem'
     | 'unsubscribeFromWorkItem'
     | 'listSessionSubscriptions'
+    | 'listWorkItemSubscribers'
   >;
   boards: BoardRegistry;
   auditRecorder: AuditRecorder;
@@ -68,23 +72,49 @@ export interface FactorySessionToolDependencies {
  * Renew this process's open-run entry while the run is live, and remember how
  * it ended. Stops at `agent_end` or `close()`, like the dispatcher's heartbeat.
  */
-function watchStartedRun(session: RunEndCaptureSession, kickoffId: string) {
+function watchStartedRun(
+  session: RunEndCaptureSession,
+  { kickoffId, onEnd }: { kickoffId?: string; onEnd: (outcome: FactoryRunOutcome) => Promise<void> },
+) {
   let endReason: RunEndReason | undefined;
-  const timer = setInterval(
-    () => void heartbeatSessionOpenRun(session, kickoffId),
-    Math.floor(FACTORY_OPEN_RUN_STALE_MS / 3),
-  );
-  timer.unref?.();
+  let parked: { toolName: string; toolCallId: string } | undefined;
+  const timer =
+    kickoffId === undefined
+      ? undefined
+      : setInterval(() => void heartbeatSessionOpenRun(session, kickoffId), Math.floor(FACTORY_OPEN_RUN_STALE_MS / 3));
+  timer?.unref?.();
   const close = () => {
     clearInterval(timer);
     unsubscribe();
   };
   const unsubscribe = session.subscribe(event => {
+    if (event.type === 'tool_suspended') {
+      parked = { toolName: event.toolName, toolCallId: event.toolCallId };
+      return;
+    }
+    if (event.type === 'tool_suspension_cancelled' && parked?.toolCallId === event.toolCallId) {
+      parked = undefined;
+      return;
+    }
     if (event.type !== 'agent_end') return;
     endReason = event.reason;
     close();
+    void onEnd(runOutcome(event.reason, parked?.toolName));
   });
   return { endReason: () => endReason, close };
+}
+
+function runOutcome(reason: RunEndReason, parkedTool: string | undefined): FactoryRunOutcome {
+  switch (reason) {
+    case 'error':
+      return { status: 'failed', reason: 'the run ended in error.' };
+    case 'aborted':
+      return { status: 'failed', reason: 'the run was aborted before it finished.' };
+    case 'suspended':
+      return { status: 'blocked', ...(parkedTool ? { toolName: parkedTool } : {}) };
+    default:
+      return { status: 'done' };
+  }
 }
 
 function startErrorMessage(error: unknown): string | null {
@@ -192,15 +222,56 @@ export function createFactorySessionTools(
         userId: scope.userId,
         credentialScope: sessionModel.modelScope,
       });
+      // The backstop: if the run ends without the agent's own final report, its origin still hears.
+      const since = new Date();
+      const sender = { sessionId: ensured.sessionId, threadId, userId: scope.userId };
+      const watcher = watchStartedRun(session, {
+        onEnd: async outcome => {
+          try {
+            const resolved = await reporting();
+            if (!resolved) return;
+            await sendRunEndReport(resolved, {
+              sender,
+              recipients: [{ sessionId: scope.sessionId, threadId: scope.threadId }],
+              since,
+              outcome,
+              subject: `The side session "${threadTitle}"`,
+            });
+          } catch (error) {
+            console.warn('[Factory reports] Unable to send the side session run-end report.', error);
+          }
+        },
+      });
       // `requireDelivery` makes `accepted` reject when the wake fails; the run itself is not awaited.
-      await session.sendSignal(
-        { id: globalThis.crypto.randomUUID(), type: 'user', tagName: 'user', contents: prompt },
-        { requestContext: kickoffContext, requireDelivery: true },
-      ).accepted;
+      try {
+        await session.sendSignal(
+          { id: globalThis.crypto.randomUUID(), type: 'user', tagName: 'user', contents: prompt },
+          { requestContext: kickoffContext, requireDelivery: true },
+        ).accepted;
+      } catch (error) {
+        watcher.close();
+        throw error;
+      }
 
       return { mode: 'side' as const, sessionId: ensured.sessionId, threadId, title: threadTitle };
     },
   });
+
+  async function reporting(): Promise<FactoryReporting | null> {
+    const messaging = await deps.messaging();
+    if (!messaging) return null;
+    return {
+      notifications: messaging.notifications,
+      deliver: (target, notification) =>
+        deliverFactorySessionNotification({
+          controller: messaging.controller,
+          sessions: deps.sessions,
+          target,
+          notification,
+        }),
+    };
+  }
+  const workItemRunEnd = createWorkItemRunEndReporter({ workItems: deps.workItems, reporting });
 
   async function startWorkItemRole({
     prompt,
@@ -316,7 +387,20 @@ export function createFactorySessionTools(
     const kickoffId = globalThis.crypto.randomUUID();
     // Watch before the kickoff so a fast run's end is not missed; the open-run
     // entry and audit follow the accepted kickoff, as the dispatcher records them.
-    const watcher = watchStartedRun(session, kickoffId);
+    const since = new Date();
+    const watcher = watchStartedRun(session, {
+      kickoffId,
+      onEnd: outcome =>
+        workItemRunEnd({
+          orgId: scope.orgId,
+          factoryProjectId: scope.factoryProjectId,
+          workItemId: item.id,
+          role,
+          sender: { sessionId: prepared.sessionId, threadId: prepared.threadId, userId: scope.userId },
+          since,
+          outcome,
+        }),
+    });
     const kickoffContext = new RequestContext();
     kickoffContext.set('user', { workosId: scope.userId, organizationId: scope.orgId });
     try {

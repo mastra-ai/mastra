@@ -138,7 +138,10 @@ import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type { FactoryRunBindingRecord, WorkItemRow } from './storage/domains/work-items/base.js';
 import { timedPhase } from './timing.js';
+import { deliverFactorySessionNotification } from './tools/deliver.js';
 import { applyFactoryToolPermissions, createFactoryTools, resolveFactoryToolScope } from './tools/index.js';
+import { createStageChangeNotifier, createWorkItemRunEndReporter } from './tools/reports.js';
+import type { FactoryReporting } from './tools/reports.js';
 import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
 import type { FactorySandboxStart } from './workspace.js';
 
@@ -794,6 +797,27 @@ export class MastraFactory {
           ...(retireTerminalSessions ? { releaseSandboxes: retireTerminalSessions } : {}),
         })
       : undefined;
+    // Factory messaging needs the controller and its notifications store, which exist once the mount is up.
+    const factoryMessaging = async () => {
+      const controller = this.#prepared?.base.controller;
+      const notifications = await controller?.getMastra()?.getStorage()?.getStore('notifications');
+      return controller && notifications ? { controller, notifications } : null;
+    };
+    const factoryReporting = async (): Promise<FactoryReporting | null> => {
+      const messaging = await factoryMessaging();
+      if (!messaging) return null;
+      return {
+        notifications: messaging.notifications,
+        deliver: (target, notification, options) =>
+          deliverFactorySessionNotification({
+            controller: messaging.controller,
+            sessions: sourceControlSessions,
+            target,
+            notification,
+            ...options,
+          }),
+      };
+    };
     const onTerminalStage = terminalCleanup
       ? (args: {
           orgId: string;
@@ -824,6 +848,10 @@ export class MastraFactory {
             return project?.autoApprovePlans ?? false;
           },
           ...(onTerminalStage ? { onTerminalStage } : {}),
+          onTransitionCommitted: createStageChangeNotifier({
+            workItems: workItemsStorage,
+            reporting: factoryReporting,
+          }),
           ...(githubIntegration
             ? {
                 onAccepted: (args: { orgId: string; factoryProjectId: string; item: WorkItemRow }) =>
@@ -1283,14 +1311,7 @@ export class MastraFactory {
                             sessionModel: { projects: factoryProjectsStorage, modelDefaults: modelDefaultsStorage },
                             intake: intakeStorage,
                             startCoordinator: () => this.#startCoordinator,
-                            messaging: async () => {
-                              const controller = this.#prepared?.base.controller;
-                              const notifications = await controller
-                                ?.getMastra()
-                                ?.getStorage()
-                                ?.getStore('notifications');
-                              return controller && notifications ? { controller, notifications } : null;
-                            },
+                            messaging: factoryMessaging,
                           },
                         }),
                       );
@@ -1423,6 +1444,10 @@ export class MastraFactory {
                     }
                   : {}),
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
+                reportRunEnd: createWorkItemRunEndReporter({
+                  workItems: storage.getDomain<WorkItemsStorage>('work-items'),
+                  reporting: factoryReporting,
+                }),
                 resolveLinkedWorkItemParentId: async ({ orgId, factoryProjectId, decision }) => {
                   if (decision.source !== 'github-pr') return null;
                   const repositoryId = decision.metadata?.githubRepositoryId;

@@ -1,4 +1,6 @@
 import type { AgentControllerEvent, PermissionRules } from '@mastra/core/agent-controller';
+import { InMemoryNotificationsStorage } from '@mastra/core/notifications';
+import type { SendNotificationSignalInput } from '@mastra/core/notifications';
 import { RequestContext } from '@mastra/core/request-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -159,10 +161,37 @@ async function setup(
   const realPrepare: Prepare = request => realCoordinator.prepare(request);
   const prepare = vi.fn<Prepare>(wrapPrepare ? wrapPrepare(realPrepare) : realPrepare);
   const audit = new AuditDomain({ auth: fakeRouteAuth(), audit: seeded.seed.audit, projects: seeded.seed.projects });
+  // Reports land through the real delivery helper into a real notifications store; every session is live.
+  const notifications = new InMemoryNotificationsStorage();
+  const reports: Array<{ input: SendNotificationSignalInput; target: { resourceId: string; threadId: string } }> = [];
+  const threadOwner = (threadId: string) => (threadId === seeded.scope.threadId ? seeded.scope.sessionId : threadId);
+  const deliveryController = {
+    ...controller,
+    queryThreadById: async ({ threadId }: { threadId: string }) => ({
+      id: threadId,
+      resourceId: threadOwner(threadId),
+    }),
+    queryThreads: async () => [],
+    // Sessions this test created are themselves; anything else (the parent) is a live stub.
+    getSessionByResource: async (resourceId: string) =>
+      (await controller.getSessionByResource(resourceId)) ?? {
+        thread: { getId: () => (resourceId === seeded.scope.sessionId ? seeded.scope.threadId : resourceId) },
+      },
+    getCurrentAgent: () => ({
+      sendNotificationSignal: async (
+        input: SendNotificationSignalInput,
+        target: { resourceId: string; threadId: string },
+      ) => {
+        reports.push({ input, target });
+        const record = await notifications.createNotification({ ...input, ...target });
+        return { record, decision: { action: 'deliver' }, persisted: Promise.resolve() };
+      },
+    }),
+  };
   const deps = {
     sessions: seeded.sessions,
     sessionModel: { projects: seeded.seed.projects, modelDefaults: seeded.seed.modelDefaults },
-    messaging: async () => ({ controller, notifications: {} }) as never,
+    messaging: async () => ({ controller: deliveryController, notifications }) as never,
     workItems: seeded.seed.workItems,
     boards: createBoardRegistry(),
     auditRecorder: audit,
@@ -171,7 +200,7 @@ async function setup(
   const tool = createFactorySessionTools(seeded.scope, deps).factory_start_session!;
   const start = (input: Record<string, unknown>) =>
     (tool as unknown as { execute: (input: unknown, context: unknown) => Promise<unknown> }).execute(input, {});
-  return { ...seeded, calls, controller, created, start, tool, prepare, transition };
+  return { ...seeded, calls, controller, created, start, tool, prepare, transition, notifications, reports };
 }
 
 beforeEach(() => {
@@ -286,6 +315,87 @@ describe('factory_start_session in side mode', () => {
     const { tool } = await setup();
     expect((tool as { requireApproval?: boolean }).requireApproval).toBeFalsy();
     expect(FACTORY_TOOLS_WITHOUT_APPROVAL).toContain('factory_start_session');
+  });
+});
+
+describe('the side session run-end backstop', () => {
+  async function started() {
+    const env = await setup();
+    const result = (await env.start({ prompt: 'Find why the nightly build is slow.' })) as { sessionId: string };
+    const session = env.created[0]!.session;
+    return { ...env, result, session };
+  }
+
+  it('tells the session that started it when the run finishes without a report', async () => {
+    const { session, reports, result, scope } = await started();
+
+    session.emit({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
+
+    await vi.waitFor(() => expect(reports).toHaveLength(1));
+    expect(reports[0]!.target).toEqual({ resourceId: scope.sessionId, threadId: scope.threadId });
+    expect(reports[0]!.input).toMatchObject({
+      source: 'factory-session',
+      kind: 'done',
+      priority: 'high',
+      summary: 'The side session "Find why the nightly build is slow." finished.',
+      attributes: { backstop: 'true', 'from-session': result.sessionId, 'from-user': 'user-1' },
+    });
+    expect(session.listenerCount()).toBe(0);
+  });
+
+  it('stays quiet when the agent already sent its own final report', async () => {
+    const { session, reports, notifications, result, scope } = await started();
+    await notifications.createNotification({
+      source: 'factory-session',
+      kind: 'done',
+      priority: 'high',
+      summary: 'done by the agent',
+      threadId: scope.threadId,
+      resourceId: scope.sessionId,
+      attributes: { 'from-session': result.sessionId },
+    });
+
+    session.emit({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(reports).toHaveLength(0);
+  });
+
+  it.each([
+    ['error', 'failed', 'urgent'],
+    ['aborted', 'failed', 'urgent'],
+  ] as const)('reports a run that ends in %s as %s', async (reason, kind, priority) => {
+    const { session, reports } = await started();
+    session.emit({ type: 'agent_end', reason } as AgentControllerEvent);
+    await vi.waitFor(() => expect(reports).toHaveLength(1));
+    expect(reports[0]!.input).toMatchObject({ kind, priority });
+  });
+
+  it('reports blocked, naming the tool, when the run ends parked', async () => {
+    const { session, reports } = await started();
+    session.emit({ type: 'tool_suspended', toolName: 'ask_user', toolCallId: 'call-1' } as AgentControllerEvent);
+    session.emit({ type: 'agent_end', reason: 'suspended' } as AgentControllerEvent);
+    await vi.waitFor(() => expect(reports).toHaveLength(1));
+    expect(reports[0]!.input).toMatchObject({
+      kind: 'blocked',
+      priority: 'urgent',
+      attributes: { 'parked-tool': 'ask_user' },
+    });
+  });
+
+  it('stops watching when the kickoff fails', async () => {
+    const env = await setup();
+    const original = env.controller.createSession.getMockImplementation()!;
+    env.controller.createSession.mockImplementationOnce(async (options: Record<string, unknown>) => {
+      const session = await original(options);
+      session.sendSignal.mockImplementationOnce(
+        () => ({ accepted: Promise.reject(new Error('wake failed')) }) as never,
+      );
+      return session;
+    });
+
+    await expect(env.start({ prompt: 'Go.' })).rejects.toThrow('wake failed');
+    expect(env.created[0]!.session.listenerCount()).toBe(0);
   });
 });
 
@@ -637,6 +747,22 @@ describe('factory_start_session in work-item mode', () => {
     expect(await following.subscriptions()).toEqual([
       expect.objectContaining({ workItemId: following.item.id, reason: 'subscribed' }),
     ]);
+  });
+
+  it('tells everyone following the item when the run finishes without a report', async () => {
+    const { start, item, created, reports, scope } = await withItem();
+    const result = (await start({ prompt: 'Go.', workItem: item.id, role: 'work' })) as Started;
+    const session = created.find(entry => entry.options.resourceId === result.sessionId)!.session;
+
+    session.emit({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
+
+    await vi.waitFor(() => expect(reports).toHaveLength(1));
+    expect(reports[0]!.target).toEqual({ resourceId: scope.sessionId, threadId: scope.threadId });
+    expect(reports[0]!.input).toMatchObject({
+      kind: 'done',
+      summary: 'The work session for "Speed up the nightly build" finished.',
+      attributes: { backstop: 'true', role: 'work', 'work-item': item.id, 'from-session': result.sessionId },
+    });
   });
 
   it('lets the spawned session report with factory_message_origin without approval', async () => {
