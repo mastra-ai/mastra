@@ -415,10 +415,14 @@ function importBinding(binding: string): { source?: string; scope?: string } {
   return {};
 }
 
+/**
+ * A binding belongs to the project when it lands on `project:<pid>` or any scope below it: sessions
+ * (`project:<pid>:thread:<t>`) and per-connection import sub-scopes (`project:<pid>:<provider>:<conn>`).
+ * The `:` after the id keeps `project:<pid>0` (another project) out.
+ */
 function importScopeBelongsToProject(scope: string | undefined, projectId: string): boolean {
-  const resourceAddress = `project:${projectId}`;
-  const threadPrefix = `${resourceAddress}:thread:`;
-  return scope === resourceAddress || (scope?.startsWith(threadPrefix) === true && scope.length > threadPrefix.length);
+  const projectAddress = `project:${projectId}`;
+  return scope === projectAddress || (scope?.startsWith(`${projectAddress}:`) === true && !scope.endsWith(':'));
 }
 
 function importRunBelongsToProject(run: KnowledgeImportRun, projectId: string): boolean {
