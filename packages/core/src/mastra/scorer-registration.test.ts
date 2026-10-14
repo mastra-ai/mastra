@@ -466,6 +466,8 @@ describe('Scorer Registration', () => {
 
       expect(result.status).toBe('success');
       await vi.waitFor(() => expect(saveScore).toHaveBeenCalled());
+      for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve));
+      expect(saveScore).toHaveBeenCalledTimes(1);
       expect(saveScore).toHaveBeenCalledWith(expect.objectContaining({ scorerId: 'quality', score: 0.9 }));
     });
   });

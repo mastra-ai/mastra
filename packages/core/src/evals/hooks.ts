@@ -145,6 +145,8 @@ export function runScorer({
   };
 
   setScorerHookOwner(payload, mastra);
-  setScorerHookEntry(payload, scorerObject);
+  if (mastra) {
+    setScorerHookEntry(payload, scorerObject);
+  }
   executeHook(AvailableHooks.ON_SCORER_RUN, payload);
 }

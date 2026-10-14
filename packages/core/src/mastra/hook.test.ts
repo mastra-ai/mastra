@@ -741,4 +741,18 @@ describe('createOnScorerHook owner-scoped dispatch', () => {
     expect(mockScorer.run).not.toHaveBeenCalled();
     expect(mockScoresStore.saveScore).not.toHaveBeenCalled();
   });
+
+  it('does not let an ownerless payload carry its scorer to an instance that does not know it', async () => {
+    // Swap the registered hook for one whose Mastra has no matching scorer.
+    deregisterHook(AvailableHooks.ON_SCORER_RUN, onScorerHook);
+    onScorerHook = createOnScorerHook(makeMastra(undefined) as any);
+    registerHook(AvailableHooks.ON_SCORER_RUN, onScorerHook);
+
+    runScorer(scorerArgs(undefined));
+
+    for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve));
+
+    expect(mockScorer.run).not.toHaveBeenCalled();
+    expect(mockScoresStore.saveScore).not.toHaveBeenCalled();
+  });
 });
