@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { coreFeatures } from '../../../features';
 import { ModelRouterLanguageModel } from '../../../llm/model/router';
-import { execute, resolveJsonPromptInjection, usesOpenAIStrictJsonSchema } from './execute';
+import { execute, hasFreeFormObject, resolveJsonPromptInjection, usesOpenAIStrictJsonSchema } from './execute';
 import { testUsage } from './test-utils';
 
 const inputMessages = [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Summarize the plan.' }] }];
@@ -628,6 +628,41 @@ describe('execute OpenAI strict-mode schema preparation (issue #23795)', () => {
       providerOptions: { openai: { strictJsonSchema: true } },
     });
     expect(captured.options.providerOptions?.openai?.strictJsonSchema).toBe(true);
+  });
+
+  describe('hasFreeFormObject', () => {
+    it('ignores a property that is named like a schema keyword', () => {
+      const schema = {
+        type: 'object',
+        additionalProperties: false,
+        properties: { additionalProperties: { type: 'boolean' }, propertyNames: { type: 'string' } },
+      };
+      expect(hasFreeFormObject(schema)).toBe(false);
+    });
+
+    it('ignores data keywords that contain schema-like values', () => {
+      const schema = {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          config: {
+            type: 'string',
+            default: { propertyNames: {} },
+            examples: [{ additionalProperties: true }],
+            enum: [{ patternProperties: {} }],
+          },
+        },
+      };
+      expect(hasFreeFormObject(schema)).toBe(false);
+    });
+
+    it('finds free-form objects nested in subschemas', () => {
+      const record = { type: 'object', additionalProperties: { type: 'string' } };
+      expect(hasFreeFormObject({ type: 'object', properties: { labels: record } })).toBe(true);
+      expect(hasFreeFormObject({ type: 'array', items: record })).toBe(true);
+      expect(hasFreeFormObject({ anyOf: [{ type: 'null' }, record] })).toBe(true);
+      expect(hasFreeFormObject({ $defs: { Labels: record } })).toBe(true);
+    });
   });
 
   it('prepares the schema for OpenAI-compatible models that send strict json_schema by default', async () => {
