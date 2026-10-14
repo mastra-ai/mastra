@@ -1227,7 +1227,8 @@ export type MastraStreamTransform<OUTPUT = undefined> = () => TransformStream<Ch
 
 /** @experimental This API may change in a future release. */
 export type MastraStreamTransformOptions<OUTPUT = undefined> =
-  MastraStreamTransform<OUTPUT> | readonly MastraStreamTransform<OUTPUT>[];
+  | MastraStreamTransform<OUTPUT>
+  | readonly MastraStreamTransform<OUTPUT>[];
 
 export type MastraModelOutputOptions<OUTPUT = undefined> = {
   runId: string;

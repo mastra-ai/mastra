@@ -2235,7 +2235,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                         // `prepareStep` that reshapes the tool set for this step is
                         // the version the predicate sees.
                         activeTools: readScoped(scopeCtx, STEP_ACTIVE_TOOLS_KEY, 'stepActiveTools') as
-                          string[] | undefined,
+                          | string[]
+                          | undefined,
                         requireToolApproval: requireToolApproval ?? requestContext?.get('__mastra_requireToolApproval'),
                         autoResumeSuspendedTools,
                         // Output processors reach the loop wrapped in a workflow, so the
