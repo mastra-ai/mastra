@@ -37,6 +37,8 @@ export interface SessionGroup extends SessionGroupHeading {
   rows: SessionListRow[];
 }
 
+export const COLLAPSED_GROUP_ROW_COUNT = 5;
+
 export interface SessionGroupContext {
   boards: readonly InstalledBoardInfo[] | undefined;
   viewerUserId: string | undefined;
@@ -79,7 +81,7 @@ function boardGroupHeadings(
 }
 
 function ownerGroupHeadings(rows: readonly SessionListRow[], viewerUserId: string | undefined): SessionGroupHeading[] {
-  const ownerNameById = new Map(rows.map(row => [row.session.userId, row.ownerName]));
+  const ownerNameById = new Map(rows.map(row => [row.session.userId, row.owner.name]));
   return Array.from(ownerNameById, ([userId, label]) => ({ userId, label }))
     .toSorted(
       (a, b) => Number(b.userId === viewerUserId) - Number(a.userId === viewerUserId) || a.label.localeCompare(b.label),
@@ -117,4 +119,11 @@ export function groupSessionRows(
     const groupRows = rows.filter(row => groupKeyOf(row) === heading.key);
     return groupRows.length > 0 ? [{ ...heading, rows: groupRows }] : [];
   });
+}
+
+export function collapsedRowsKeepingActive(rows: readonly SessionListRow[]): SessionListRow[] {
+  const visible = rows.slice(0, COLLAPSED_GROUP_ROW_COUNT);
+  const open = rows.find(row => row.active);
+  if (open && !visible.includes(open)) visible.push(open);
+  return visible;
 }

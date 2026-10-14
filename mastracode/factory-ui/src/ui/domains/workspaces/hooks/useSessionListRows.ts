@@ -8,11 +8,9 @@ import { allSessionRows, useWorkspacesQuery } from '../../../../hooks/useWorkspa
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { itemAwaitsPerson } from '../../factory/boardCardState';
 import { useItemDecisions } from '../../factory/hooks/useBoardDecisions';
-import { relatedWorkItemIndex } from '../../factory/services/relationships';
-import type { WorkItem } from '../../factory/services/workItems';
-import { isPullRequestSource } from '../../factory/services/workItems';
 import { buildFactorySessionRow, buildUserSessionRow } from '../services/sessionRows';
 import type { SessionListRow } from '../services/sessionRows';
+import { sessionWorkItemIndex } from '../services/sessionWorkItems';
 import { usePinnedSessions } from './usePinnedSessions';
 
 export function useSessionListRows(factoryId: string | undefined): {
@@ -36,63 +34,50 @@ export function useSessionListRows(factoryId: string | undefined): {
     resourceIds: allSessionRows(query.data).map(session => session.sessionId),
   });
 
-  const allWorkItems = workItems.data ?? [];
-  const workItemBySessionId = new Map(
-    allWorkItems.flatMap(item =>
-      Object.values(item.sessions ?? {}).map(
-        sessionRef => [sessionRef.sessionId, { item, threadId: sessionRef.threadId }] as const,
-      ),
-    ),
-  );
-  const relatedItemsFor = relatedWorkItemIndex(allWorkItems);
-  const latestPullRequestFor = (item: WorkItem) => {
-    if (isPullRequestSource(item.source)) return item;
-    return relatedItemsFor(item)
-      .filter(related => isPullRequestSource(related.source))
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
-  };
-
-  const factoryRows = (factoryId: string) =>
-    (query.data?.workspaces ?? []).flatMap(session => {
-      const workItemSession = workItemBySessionId.get(session.sessionId);
-      const item = workItemSession?.item;
-      const running = runningById[session.sessionId] === true;
-      const active = session.sessionId === routeSessionId;
-      if (!item && !active && !running && !workItems.isFetched) return [];
-      return [
-        buildFactorySessionRow({
-          session,
-          item,
-          threadId: workItemSession?.threadId,
-          pullRequest: item && latestPullRequestFor(item),
-          factoryId,
-          routeSessionId,
-          running,
-          attention:
-            parkedSessions.has(session.sessionId) ||
-            (item !== undefined && itemAwaitsPerson(proposalByItem.get(item.id), effectByItem.get(item.id))),
-          pinned: pinnedSessions.has(session.sessionId),
-          viewer,
-        }),
-      ];
-    });
-  const userRows = (factoryId: string) =>
-    (query.data?.userSessions ?? []).map(session =>
-      buildUserSessionRow({
-        session,
-        factoryId,
-        pathname,
-        running: runningById[session.sessionId] === true,
-        pinned: pinnedSessions.has(session.sessionId),
-        viewer,
-      }),
-    );
-
-  return {
-    rows: factoryId ? [...factoryRows(factoryId), ...userRows(factoryId)] : [],
+  const loadState = {
     hasRepositories: (factory.data?.repositories.length ?? 0) > 0,
     loaded: query.isSuccess,
     loadFailed: query.isError,
     retry: () => void query.refetch(),
   };
+  if (!factoryId) return { rows: [], ...loadState };
+
+  const workItemBySessionId = sessionWorkItemIndex(workItems.data ?? []);
+  const factoryRows = (query.data?.workspaces ?? []).flatMap(session => {
+    const workItem = workItemBySessionId.get(session.sessionId);
+    const running = runningById[session.sessionId] === true;
+    const active = session.sessionId === routeSessionId;
+    const boardStillUnknown = !workItem && !workItems.isFetched;
+    if (boardStillUnknown && !active && !running) return [];
+    const attention =
+      parkedSessions.has(session.sessionId) ||
+      (workItem !== undefined &&
+        itemAwaitsPerson(proposalByItem.get(workItem.item.id), effectByItem.get(workItem.item.id)));
+    return [
+      buildFactorySessionRow({
+        session,
+        item: workItem?.item,
+        threadId: workItem?.threadId,
+        pullRequest: workItem?.pullRequest,
+        factoryId,
+        routeSessionId,
+        running,
+        attention,
+        pinned: pinnedSessions.has(session.sessionId),
+        viewer,
+      }),
+    ];
+  });
+  const userRows = (query.data?.userSessions ?? []).map(session =>
+    buildUserSessionRow({
+      session,
+      factoryId,
+      pathname,
+      running: runningById[session.sessionId] === true,
+      pinned: pinnedSessions.has(session.sessionId),
+      viewer,
+    }),
+  );
+
+  return { rows: [...factoryRows, ...userRows], ...loadState };
 }
