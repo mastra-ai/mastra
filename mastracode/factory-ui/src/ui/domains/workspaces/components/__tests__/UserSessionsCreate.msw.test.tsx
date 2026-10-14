@@ -9,7 +9,9 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { queryKeys } from '../../../../../api/keys';
 import type { FactoryUserSession } from '../../services/user-sessions';
-import { UserSessionsSection } from '../UserSessionsSection';
+import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
+import { SessionsSection } from '../SessionsSection';
+import { testChatSession } from './fixtures/sessionsSection';
 
 const projectRepositoryId = 'ghp-1';
 const sessionId = '00000000-0000-4000-8000-000000000001';
@@ -88,12 +90,14 @@ function LocationProbe() {
 function renderSection() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/factories/fp-1']}>
-      <Routes>
-        <Route path="/factories/:factoryId" element={<UserSessionsSection />} />
-        <Route path="/factories/:factoryId/user/new/:draftSessionId" element={<UserSessionsSection />} />
-        <Route path="/factories/:factoryId/user/threads/:threadId" element={<UserSessionsSection />} />
-        <Route path="*" element={<UserSessionsSection />} />
-      </Routes>
+      <ChatSessionContext.Provider value={testChatSession('fp-1', projectRepositoryId)}>
+        <Routes>
+          <Route path="/factories/:factoryId" element={<SessionsSection />} />
+          <Route path="/factories/:factoryId/user/new/:draftSessionId" element={<SessionsSection />} />
+          <Route path="/factories/:factoryId/user/threads/:threadId" element={<SessionsSection />} />
+          <Route path="*" element={<SessionsSection />} />
+        </Routes>
+      </ChatSessionContext.Provider>
       <LocationProbe />
       <Toaster position="bottom-right" />
     </MemoryRouter>,

@@ -7,7 +7,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { useNavigate, useParams } from 'react-router';
+import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -222,5 +222,29 @@ export function useDeleteWorkspaceMutation(factoryId: string | undefined, scope?
       toast('Workspace deleted');
     },
     onError: error => toast.error(error instanceof Error ? error.message : 'Failed to delete workspace'),
+  });
+}
+
+export function useDeleteUserSessionMutation(factoryId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  return useMutation({
+    mutationFn: async (session: FactoryUserSession) => {
+      await deleteUserSession(baseUrl, session.sessionId);
+      return session;
+    },
+    onSuccess: session => {
+      removeCachedSession(queryClient, factoryId, session.sessionId);
+      queryClient.removeQueries({ queryKey: queryKeys.userSession(session.sessionId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(factoryId) });
+      toast('Session deleted');
+      if (location.pathname === `/factories/${factoryId}/user/threads/${session.sessionId}`) {
+        void navigate(`/factories/${factoryId}`, { replace: true });
+      }
+    },
+    onError: error => toast.error(error instanceof Error ? error.message : 'Failed to delete session'),
   });
 }

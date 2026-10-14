@@ -2,30 +2,28 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { RotateCcw, Settings2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+const MENU_LABEL = 'Sessions properties';
+
 export function SessionListProperties({
-  label,
   changedCount,
   onReset,
   children,
 }: {
-  label: 'Work sessions' | 'Review sessions' | 'User sessions';
   changedCount: number;
   onReset: () => void;
   children: ReactNode;
 }) {
-  const menuLabel = `${label} properties`;
-
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger
-        variant={changedCount > 0 ? 'default' : 'ghost'}
+        variant="ghost"
         size="icon-sm"
-        aria-label={changedCount === 0 ? menuLabel : `${menuLabel}, ${changedCount} changed`}
-        tooltip={menuLabel}
+        aria-label={changedCount === 0 ? MENU_LABEL : `${MENU_LABEL}, ${changedCount} changed`}
+        tooltip={MENU_LABEL}
       >
         <Settings2 size={15} aria-hidden />
       </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="end">
+      <DropdownMenu.Content align="start">
         {children}
         <DropdownMenu.Separator />
         <DropdownMenu.Item disabled={changedCount === 0} onClick={onReset}>

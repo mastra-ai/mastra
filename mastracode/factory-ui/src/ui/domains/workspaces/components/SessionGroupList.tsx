@@ -1,0 +1,43 @@
+import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
+import { GitPullRequest, MessageSquare, SquareKanban } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { Fragment, useState } from 'react';
+
+import { collapsedRowsKeepingActive } from '../services/sessionGroups';
+import type { SessionGroup, SessionGroupIcon } from '../services/sessionGroups';
+import type { SessionListRow } from '../services/sessionRows';
+
+const GROUP_ICONS: Record<SessionGroupIcon, ReactNode> = {
+  board: <SquareKanban />,
+  review: <GitPullRequest />,
+  user: <MessageSquare />,
+};
+
+export function SessionGroupList({
+  group,
+  showHeader,
+  renderRow,
+}: {
+  group: SessionGroup;
+  showHeader: boolean;
+  renderRow: (row: SessionListRow) => ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const collapsedRows = collapsedRowsKeepingActive(group.rows);
+
+  return (
+    <section className="flex flex-col gap-1" aria-label={`${group.label} sessions`}>
+      {showHeader && <Sidebar.NavHeader icon={GROUP_ICONS[group.icon]}>{group.label}</Sidebar.NavHeader>}
+      <Sidebar.NavList>
+        {(expanded ? group.rows : collapsedRows).map(row => (
+          <Fragment key={row.session.sessionId}>{renderRow(row)}</Fragment>
+        ))}
+      </Sidebar.NavList>
+      <Sidebar.NavShowMore
+        foldedCount={group.rows.length - collapsedRows.length}
+        expanded={expanded}
+        onExpandedChange={setExpanded}
+      />
+    </section>
+  );
+}
