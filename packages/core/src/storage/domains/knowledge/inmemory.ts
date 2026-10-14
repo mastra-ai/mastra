@@ -224,6 +224,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   #createNode(input: CreateKnowledgeNodeInput): KnowledgeNode {
+    if (!input.name.trim()) throw new Error('Knowledge node names must not be blank.');
     this.#assertImportRunExists(input.importRunId);
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
     this.#assertScopeNodes(scopeIds);
@@ -479,6 +480,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   #updateNode(input: UpdateKnowledgeNodeInput): KnowledgeNode {
+    if (input.name !== undefined && !input.name.trim()) throw new Error('Knowledge node names must not be blank.');
     const existing = this.#db.knowledgeNodes.get(input.id);
     if (!existing) throw new KnowledgeNotFoundError('node', input.id);
     if (existing.version !== input.version) throw new KnowledgeConflictError(input.id);

@@ -1014,6 +1014,7 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   async #updateNode(tx: Executor, input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
+    if (input.name !== undefined && !input.name.trim()) throw new Error('Knowledge node names must not be blank.');
     const existing = await this.#getNode(tx, input.id);
     if (!existing) throw new KnowledgeNotFoundError('node', input.id);
     const existingScopeIds = await this.#getNodeScopeIds(tx, input.id);
@@ -1866,6 +1867,7 @@ export class KnowledgePG extends KnowledgeStorage {
     return this.#client.tx(tx => operation(createExecutor(tx, this.#schemaName)));
   }
   async #createNode(executor: Executor, input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {
+    if (!input.name.trim()) throw new Error('Knowledge node names must not be blank.');
     const scopeIds = await this.#assertScopeNodes(executor, input.scopeIds);
     await this.#lockSiblingName(executor, input.name, scopeIds);
     const existing = await this.#getNodeByName(executor, input.name, scopeIds);
