@@ -467,4 +467,25 @@ describe('AttentionPage', () => {
     expect(await screen.findByText('No open attention items.')).toBeVisible();
     expect(screen.queryByText('Retired kind row')).not.toBeInTheDocument();
   });
+
+  it('asks the server only for the kinds this client renders', async () => {
+    const requestedKinds: string[][] = [];
+    const known = [mentionItem('comment-1', 'Fix login bug')];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, ({ request }) => {
+        requestedKinds.push(new URL(request.url).searchParams.getAll('kind'));
+        return HttpResponse.json({ items: known, kinds: attentionKindSummaries(known), hasMore: false });
+      }),
+    );
+    renderWithProviders(
+      <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/attention`]}>
+        <AttentionContent factoryId={FACTORY_ID} />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Fix login bug')).toBeVisible();
+    const knownKinds = Object.keys(attentionKindSummaries([])).sort();
+    expect(requestedKinds.length).toBeGreaterThan(0);
+    for (const kinds of requestedKinds) expect([...kinds].sort()).toEqual(knownKinds);
+  });
 });

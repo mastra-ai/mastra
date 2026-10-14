@@ -186,7 +186,8 @@ export function fetchFactoryAttention(
   },
 ): Promise<FactoryAttentionResponse> {
   const query = new URLSearchParams({ view: options.view });
-  for (const kind of options.kinds ?? []) query.append('kind', kind);
+  // Ask only for kinds this client renders, so pages and cursors never carry a kind it would drop.
+  for (const kind of options.kinds ?? ATTENTION_KINDS) query.append('kind', kind);
   if (options.before) query.set('before', options.before);
   if (options.limit) query.set('limit', String(options.limit));
   if (options.search) query.set('search', options.search);
