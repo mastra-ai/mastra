@@ -48,14 +48,14 @@ describe('GitHubAppCallbackHandler', () => {
     await waitFor(() => expect(router.state.location.search).toBe('?keep=1'));
   });
 
-  it('given Platform refused an install the GitHub account already had, when the settings page renders, then it says to link it from Platform Accounts', async () => {
+  it('given Platform refused an install the GitHub account already had, when the settings page renders, then it says to reinstall the app', async () => {
     const router = renderCallback(
       '/factories/fp-1/settings/repositories?github_app_error=github_app_installation_preexisting&keep=1',
     );
 
     expect(
       await screen.findByText(
-        'Your GitHub account already has the Mastra GitHub App installed, so this link didn’t connect it. In Mastra Platform, go to Accounts and choose Refresh accounts to link it to your organization, then come back here.',
+        'Your GitHub account already had the Mastra GitHub App installed before you clicked Connect GitHub, so this link didn’t connect it. Uninstall the Mastra GitHub App from that GitHub account or organization, then choose Connect GitHub again.',
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText('GitHub connection failed')).not.toBeInTheDocument();
@@ -84,6 +84,14 @@ describe('GitHubAppCallbackHandler', () => {
     [
       'github_app_installation_not_owned',
       'Only the owner of this GitHub account, or an owner of the GitHub organization, can link this installation.',
+    ],
+    [
+      'github_app_link_not_started_here',
+      'This GitHub link was opened in a different browser, or opened directly instead of from Factory. Go back to Factory and choose Connect GitHub to start it again.',
+    ],
+    [
+      'github_app_connection_mismatch',
+      'Your Mastra account is already connected to a different GitHub account. Disconnect that GitHub account in Mastra Platform first, then connect GitHub here again.',
     ],
   ])(
     'given Platform refused the link with %s, when the settings page renders, then it shows that reason',
@@ -120,7 +128,7 @@ describe('OnboardingPage GitHub callback', () => {
     renderWithProviders(<RouterProvider router={router} />);
 
     expect(
-      await screen.findByText(/In Mastra Platform, go to Accounts and choose Refresh accounts/),
+      await screen.findByText(/Uninstall the Mastra GitHub App from that GitHub account or organization/),
     ).toBeInTheDocument();
     await waitFor(() => expect(router.state.location.search).toBe(''));
   });
