@@ -2,10 +2,10 @@
 '@mastra/factory': patch
 ---
 
-Added per-repository groups to the chat sidebar for sessions with several repositories.
+Sessions with several repositories now report changes and touched files per repository.
 
-- The Changes view groups changes by repository slug and shows the provider icon.
-- The Files view groups files by checkout directory. It also lists files written at the workspace root during the session. Dotfiles such as `.env` are never listed.
+- Each repository's changes carry its slug and provider.
+- Touched files are grouped by checkout directory, and files written at the workspace root during the session are listed too. Dotfiles such as `.env` are never listed.
 - The agent's file tools and project path start at the workspace root, and each repository's `AGENTS.md` and project skills load.
 
 Sessions with one repository work as before.
