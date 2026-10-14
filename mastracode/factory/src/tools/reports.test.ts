@@ -262,7 +262,7 @@ describe('createWorkItemRunEndReporter', () => {
         since: new Date(),
         outcome: { status: 'done' },
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({ waiting: false });
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });

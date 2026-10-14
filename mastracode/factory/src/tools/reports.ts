@@ -77,7 +77,10 @@ export async function hasFinalReport(
     if (
       record.attributes?.['from-session'] === senderSessionId &&
       // A reply carrying a final status counts like the report itself.
-      (kinds.includes(record.kind) || (record.kind === 'reply' && kinds.includes(String(record.attributes?.status)))) &&
+      (kinds.includes(record.kind) ||
+        (record.kind === 'reply' &&
+          typeof record.attributes?.status === 'string' &&
+          kinds.includes(record.attributes.status))) &&
       record.createdAt >= since
     ) {
       return true;
@@ -157,11 +160,19 @@ export type FactoryRunOutcome =
   | { status: 'failed'; reason: string; failureCode?: string }
   | { status: 'blocked'; toolName?: string };
 
+/** `waiting`: the session is waiting for an answer, so a later run owes the final report. */
+export interface FactoryRunEndResult {
+  waiting: boolean;
+  deliveries?: FactoryDeliveryResult[];
+}
+
 /**
  * The run-end backstop: send `outcome` to each recipient that hasn't had a
  * final report from this sender since the run started. An agent's own `done`
- * or `failed` report wins; its own `blocked` only suppresses a `blocked`
- * backstop, because it may have kept going and finished.
+ * or `failed` report wins. A run that completes after the agent's own
+ * `blocked` sends nothing: the agent ended its turn to wait for an answer, and
+ * its `done` comes from a later run. A `failed` backstop still goes out after an
+ * earlier `blocked`.
  */
 export async function sendRunEndReport(
   reporting: FactoryReporting,
@@ -181,15 +192,8 @@ export async function sendRunEndReport(
     subject: string;
     attributes?: Record<string, string>;
   },
-): Promise<FactoryDeliveryResult[]> {
-  // An agent that reported `blocked` and ended its turn is waiting for an answer, not finished;
-  // its own `done` comes from a later run.
-  const kinds =
-    outcome.status === 'blocked'
-      ? ['blocked']
-      : outcome.status === 'done'
-        ? ['done', 'failed', 'blocked']
-        : ['done', 'failed'];
+): Promise<FactoryRunEndResult> {
+  const kinds = outcome.status === 'blocked' ? ['blocked'] : ['done', 'failed'];
   const message =
     outcome.status === 'done'
       ? `${subject} finished.`
@@ -207,21 +211,24 @@ export async function sendRunEndReport(
       ...(outcome.status === 'blocked' && outcome.toolName ? { 'parked-tool': outcome.toolName } : {}),
     },
   });
-  const results: FactoryDeliveryResult[] = [];
+  const report = (recipient: FactoryDeliveryTarget, reportKinds: string[]) =>
+    hasFinalReport(reporting.notifications, {
+      senderSessionId: sender.sessionId,
+      recipientThreadId: recipient.threadId,
+      since,
+      kinds: reportKinds,
+    });
+  let waiting = outcome.status === 'blocked';
+  const deliveries: FactoryDeliveryResult[] = [];
   for (const recipient of recipients) {
-    if (
-      await hasFinalReport(reporting.notifications, {
-        senderSessionId: sender.sessionId,
-        recipientThreadId: recipient.threadId,
-        since,
-        kinds,
-      })
-    ) {
+    if (await report(recipient, kinds)) continue;
+    if (outcome.status === 'done' && (await report(recipient, ['blocked']))) {
+      waiting = true;
       continue;
     }
-    results.push(await reporting.deliver(recipient, notification));
+    deliveries.push(await reporting.deliver(recipient, notification));
   }
-  return results;
+  return { waiting, deliveries };
 }
 
 export interface FactoryRunEndInput {
@@ -234,7 +241,7 @@ export interface FactoryRunEndInput {
   outcome: FactoryRunOutcome;
 }
 
-export type FactoryRunEndReporter = (input: FactoryRunEndInput) => Promise<void>;
+export type FactoryRunEndReporter = (input: FactoryRunEndInput) => Promise<FactoryRunEndResult>;
 
 /** The backstop for a work-item run: reports to the item's subscribers. Failures are logged, never thrown. */
 export function createWorkItemRunEndReporter({
@@ -248,15 +255,15 @@ export function createWorkItemRunEndReporter({
   return async input => {
     try {
       const resolved = await reporting();
-      if (!resolved) return;
+      if (!resolved) return { waiting: false };
       const recipients = await workItemReportRecipients(workItems, {
         orgId: input.orgId,
         workItemId: input.workItemId,
         senderSessionId: input.sender.sessionId,
       });
-      if (recipients.length === 0) return;
+      if (recipients.length === 0) return { waiting: false };
       const { label, attributes } = await workItemReportAttributes(workItems, input);
-      await sendRunEndReport(resolved, {
+      return await sendRunEndReport(resolved, {
         sender: input.sender,
         recipients,
         since: input.since,
@@ -266,6 +273,7 @@ export function createWorkItemRunEndReporter({
       });
     } catch (error) {
       console.warn('[Factory reports] Unable to send the run-end report.', error);
+      return { waiting: false };
     }
   };
 }

@@ -98,7 +98,7 @@ export function createFactoryMessagingTools(
     if (row.visibility === 'private' && row.userId !== scope.userId) return 'private';
     return null;
   };
-  /** Messages and replies this session put on a thread inside the rate window. */
+  /** Messages, replies and reports (not progress) this session put on a thread inside the rate window. */
   const overRateLimit = (records: NotificationRecord[]) => {
     const since = Date.now() - SIGNAL_RATE_WINDOW_MS;
     return (

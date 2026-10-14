@@ -315,4 +315,25 @@ describe('FactorySessionsStateProcessor', () => {
     const signal = await env.step({ sessionId: 'worker-7', threadId: 'worker-7-thread' });
     expect(signal!.contents).toBe('Working on #7 as work. Reports go to 2 following sessions.');
   });
+
+  it('clears the worker line once when its last follower leaves', async () => {
+    const env = await setup();
+    await env.createSession('worker-7');
+    const item = await env.fileItem(7);
+    await env.bind(item.id, 'worker-7');
+    await env.follow(item.id);
+    const worker = { sessionId: 'worker-7', threadId: 'worker-7-thread' };
+    expect((await env.step(worker))!.contents).toContain('Reports go to 1 following session.');
+    await env.seed.workItems.unsubscribeFromWorkItem({
+      orgId: 'org-1',
+      factoryProjectId: env.project.id,
+      workItemId: item.id,
+      sessionId: 'parent',
+    });
+    await expect(env.step(worker)).resolves.toMatchObject({
+      cacheKey: 'empty',
+      contents: 'Nobody follows this work now.',
+    });
+    await expect(env.step(worker)).resolves.toBeUndefined();
+  });
 });

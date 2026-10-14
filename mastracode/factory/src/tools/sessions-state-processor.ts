@@ -124,10 +124,16 @@ export class FactorySessionsStateProcessor implements Processor<'factory-session
       ? (args.tracking?.currentCacheKey ?? (args.lastSnapshot?.metadata?.state as { cacheKey?: string })?.cacheKey)
       : undefined;
     const unchanged = (cacheKey: string) => previousKey === cacheKey;
+    // Silence rule: one final empty snapshot replaces a non-empty one, then nothing.
+    const cleared = () => hasBase && previousKey !== undefined && previousKey !== EMPTY_CACHE_KEY;
 
     if (scope.kind === 'worker') {
       const contents = await this.#workerLine(scope);
-      if (!contents) return;
+      if (!contents) {
+        return cleared()
+          ? this.#signal(EMPTY_CACHE_KEY, 'Nobody follows this work now.', {}, { entries: 0 })
+          : undefined;
+      }
       const cacheKey = cacheKeyFor(contents);
       if (unchanged(cacheKey)) return;
       return this.#signal(cacheKey, escapeText(contents), { worker: contents }, { entries: 1 });
@@ -135,8 +141,7 @@ export class FactorySessionsStateProcessor implements Processor<'factory-session
 
     const state = await this.#userState(scope);
     if (state.sideSessions.length === 0 && state.following.length === 0) {
-      // Silence rule: one final empty snapshot replaces a non-empty one, then nothing.
-      if (!hasBase || previousKey === undefined || previousKey === EMPTY_CACHE_KEY) return;
+      if (!cleared()) return;
       return this.#signal(EMPTY_CACHE_KEY, 'No sub-sessions or followed work items.', state, { entries: 0 });
     }
     const cacheKey = cacheKeyFor(state);
