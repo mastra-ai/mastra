@@ -1,3 +1,7 @@
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync } from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
@@ -519,7 +523,7 @@ describe('createSourceControlTools', () => {
       );
     });
 
-    it('creates the session branch at HEAD in another repository that never had it, then pushes that branch', async () => {
+    it('creates and switches to the session branch in another repository that never had it, then pushes it', async () => {
       const setup = await fixture();
       const built = await tools(setup);
       const { sandbox, pushes, executions } = fakeSandbox({ missingBranch: ['/home/user/other'] });
@@ -533,7 +537,8 @@ describe('createSourceControlTools', () => {
       expect(executions.map(entry => entry.args)).toContainEqual([
         '-C',
         '/home/user/other',
-        'branch',
+        'switch',
+        '-c',
         'factory/issue-1',
       ]);
       expect(pushes()[0]!.args).toEqual(['-C', '/home/user/other', 'push', '-u', 'origin', 'factory/issue-1']);
@@ -542,6 +547,58 @@ describe('createSourceControlTools', () => {
       await expect(setup.storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).resolves.toMatchObject([
         { projectRepositoryId: 'repo-link-2', branch: 'factory/issue-1' },
       ]);
+    });
+
+    it('pushes a commit made after the first push in a sibling that never had the session branch', async () => {
+      const root = mkdtempSync(path.join(os.tmpdir(), 'factory-push-'));
+      const git = (cwd: string, ...args: string[]) =>
+        execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', ...args], {
+          cwd,
+          encoding: 'utf8',
+        }).trim();
+      const remote = path.join(root, 'remote.git');
+      const checkout = path.join(root, 'other');
+      git(root, 'init', '--bare', remote);
+      git(root, 'clone', remote, checkout);
+      git(checkout, 'commit', '--allow-empty', '-m', 'base');
+      git(checkout, 'push', 'origin', 'main');
+
+      const setup = await fixture();
+      const built = await tools(setup);
+      // Real git against a local bare remote; only `origin` is redirected, since
+      // the fixture's clone URL is not reachable.
+      const sandbox = {
+        id: 'sandbox-1',
+        provider: 'custom',
+        workingDirectory: root,
+        executeCommand: vi.fn(async (command: string, args: string[]) => {
+          if (args.includes('get-url'))
+            return { exitCode: 0, stdout: 'https://gitlab.com/acme/other.git\n', stderr: '' };
+          const real = args.map(arg => (args.includes('push') && arg === 'origin' ? remote : arg));
+          try {
+            return {
+              exitCode: 0,
+              stdout: execFileSync(command, real, { encoding: 'utf8', stdio: 'pipe' }),
+              stderr: '',
+            };
+          } catch (error: any) {
+            return {
+              exitCode: error.status ?? 1,
+              stdout: String(error.stdout ?? ''),
+              stderr: String(error.stderr ?? ''),
+            };
+          }
+        }),
+      };
+      const push = () =>
+        (built.source_control_push_branch!.execute as any)({ repository: 'acme/other' }, { workspace: { sandbox } });
+
+      await push();
+      git(checkout, 'commit', '--allow-empty', '-m', 'second');
+      await push();
+
+      expect(git(checkout, 'rev-parse', '--abbrev-ref', 'HEAD')).toBe('factory/issue-1');
+      expect(git(remote, 'rev-parse', 'refs/heads/factory/issue-1')).toBe(git(checkout, 'rev-parse', 'HEAD'));
     });
 
     it('pushes the local session branch whatever is checked out, in its own or another repository', async () => {
