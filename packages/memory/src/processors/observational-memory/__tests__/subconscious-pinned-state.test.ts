@@ -1,7 +1,7 @@
 import { Knowledge } from '@mastra/core/knowledge';
 import type { ComputeStateSignalArgs } from '@mastra/core/processors';
 import { InMemoryStore } from '@mastra/core/storage';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { applyPinOps, createPinnedTools, PinnedStateProcessor, stablePinsCacheKey } from '../subconscious';
 import type { PinDeltaOp, PinEntry } from '../subconscious';
@@ -104,6 +104,21 @@ describe('PinnedStateProcessor', () => {
     const otherScope = await processor.computeStateSignal(otherContext);
     expect(otherScope).toMatchObject({ mode: 'snapshot' });
     expect(otherScope!.contents).toContain('mid-turn pin');
+  });
+
+  it('skips quietly without reading or writing Knowledge when the run has no org', async () => {
+    const storage = new InMemoryStore();
+    const knowledge = new Knowledge({ id: 'default', storage });
+    const materialize = vi.spyOn(knowledge, 'materializeScope');
+    const getStore = vi.fn(async () => (await storage.getStore('knowledge'))!);
+    const processor = new PinnedStateProcessor({ getKnowledgeInstance: () => knowledge, getKnowledgeStore: getStore });
+    const empty = new Map<string, unknown>();
+
+    await expect(
+      processor.computeStateSignal(makeArgs({ requestContext: { get: (key: string) => empty.get(key) } } as any)),
+    ).resolves.toBeUndefined();
+    expect(materialize).not.toHaveBeenCalled();
+    expect(getStore).not.toHaveBeenCalled();
   });
 
   it('emits a snapshot on first emission when no snapshot is in the window', async () => {

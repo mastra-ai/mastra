@@ -111,6 +111,8 @@ async function curateCommittedObservations(
   let store: KnowledgeStorage | undefined;
   let scopeIds: KnowledgeScopeIds | undefined;
   try {
+    // Org-less runs are legitimate: without an org, Knowledge has nowhere to write, so skip quietly.
+    if (!resolveKnowledgeOrgId(context.requestContext)) return;
     scopeIds = await resolveCuratorScope(memory, context);
     store = await memory.getKnowledgeStore();
 
