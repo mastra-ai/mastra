@@ -84,8 +84,8 @@ function ExperimentPage() {
     queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentId) },
   });
 
-  // A queued or running experiment shows its progress only; results and metrics load once it settles.
-  const isActive = experiment?.status === 'running' || experiment?.status === 'pending';
+  // Results and metrics stay unfetched until the run settles; meanwhile the page shows its progress only.
+  const isSettled = experiment?.status === 'completed' || experiment?.status === 'failed';
 
   const {
     data: results,
@@ -98,7 +98,7 @@ function ExperimentPage() {
     experimentId: experimentId ?? '',
     experimentStatus: experiment?.status,
     orderBy,
-    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentId) && !isActive },
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentId) && isSettled },
   });
 
   const { supportsMetrics } = useObservabilityStorageCapabilities();
@@ -106,7 +106,7 @@ function ExperimentPage() {
     experimentId,
     experimentStatus: experiment?.status,
     supportsMetrics,
-    queryOptions: { enabled: Boolean(experimentId) && supportsMetrics && !isActive },
+    queryOptions: { enabled: Boolean(experimentId) && supportsMetrics && isSettled },
   });
 
   const selection = useExperimentResultsSelection({
@@ -188,9 +188,7 @@ function ExperimentPage() {
           }
         >
           <h1 className="sr-only">{experimentId}</h1>
-          {isActive ? (
-            <ExperimentRunProgress experiment={experiment} />
-          ) : (
+          {isSettled ? (
             <div className="grid content-start gap-4">
               <ExperimentKpis experiment={experiment} metrics={experimentMetrics} />
               <div className="grid content-start gap-1">
@@ -212,6 +210,8 @@ function ExperimentPage() {
                 />
               </div>
             </div>
+          ) : (
+            <ExperimentRunProgress experiment={experiment} />
           )}
         </PageLayout>
 
