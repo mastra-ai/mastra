@@ -560,11 +560,25 @@ describe('factory_message_origin reports', () => {
     ['blocked', 'blocked', 'urgent'],
     ['done', 'done', 'high'],
     ['progress', 'progress', 'low'],
-    [undefined, 'message', 'high'],
+    [undefined, 'report', 'high'],
   ] as const)('maps status %s to kind %s at %s priority', async (status, kind, priority) => {
     const env = setup();
     await env.run(SIDE, 'factory_message_origin', { message: 'update', ...(status ? { status } : {}) });
     expect(env.sent[0]!.input).toMatchObject({ kind, priority });
+  });
+
+  it('does not let a follower answer a report, so reports cannot start a reply loop', async () => {
+    const env = setup();
+    await env.run(SIDE, 'factory_message_origin', { message: 'Found it: the cache key changed.' });
+    const [record] = await env.notifications.listNotifications({
+      threadId: 'thread-session-1',
+      source: 'factory-session',
+    });
+    await expect(
+      env.run(USER, 'factory_message_origin', { message: 'thanks', inReplyTo: record!.id }),
+    ).rejects.toThrow();
+    expect(env.sent).toHaveLength(1);
+    expect(record!.kind).toBe('report');
   });
 
   it('coalesces progress reports per sender, and final reports carry no keys', async () => {

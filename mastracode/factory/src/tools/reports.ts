@@ -20,14 +20,15 @@ export type FactoryReportStatus = 'progress' | 'blocked' | 'done' | 'failed';
 
 /** How each report status travels. Final reports never coalesce, so a later report can't overwrite them. */
 export const FACTORY_REPORT_FORMS: Record<
-  FactoryReportStatus | 'message',
+  FactoryReportStatus | 'report',
   { kind: string; priority: NotificationPriority; coalesce: boolean }
 > = {
   failed: { kind: 'failed', priority: 'urgent', coalesce: false },
   blocked: { kind: 'blocked', priority: 'urgent', coalesce: false },
   done: { kind: 'done', priority: 'high', coalesce: false },
   progress: { kind: 'progress', priority: 'low', coalesce: true },
-  message: { kind: 'message', priority: 'high', coalesce: false },
+  // Not `message`: only messages can be answered, so a report can't start a reply loop.
+  report: { kind: 'report', priority: 'high', coalesce: false },
 };
 
 const SUMMARY_LENGTH = 200;
@@ -109,7 +110,7 @@ export function reportNotification({
   message: string;
   attributes?: Record<string, string>;
 }): Omit<SendNotificationSignalInput, 'source'> {
-  const form = FACTORY_REPORT_FORMS[status ?? 'message'];
+  const form = FACTORY_REPORT_FORMS[status ?? 'report'];
   return {
     kind: form.kind,
     priority: form.priority,
