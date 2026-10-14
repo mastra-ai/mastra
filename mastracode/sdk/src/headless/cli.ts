@@ -10,8 +10,9 @@ import { existsSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 
 import { createMastraCode } from '../index.js';
+import { activateModePackInSettings, resolveModePackArg, resolvePackSelection } from '../onboarding/pack-activation.js';
 import { listBuiltinModePacks } from '../onboarding/packs.js';
-import { loadSettings, resolveModelDefaults } from '../onboarding/settings.js';
+import { loadSettings, resolveModelDefaults, saveSettings } from '../onboarding/settings.js';
 import {
   createProcessMemoryDiagnosticsFromEnvironment,
   startConfiguredProcessMemoryDiagnostics,
@@ -36,6 +37,7 @@ export interface HeadlessArgs {
   output: OutputMode;
   continue_: boolean;
   model?: string;
+  pack?: string;
   mode?: RunMode;
   thinkingLevel?: ThinkingLevel;
   settings?: string;
@@ -195,6 +197,25 @@ export async function runMCCli(
     process.exit(1);
   }
 
+  // Resolve --pack up front: an unknown pack fails fast with the valid list,
+  // before MastraCode boots. The selection itself is resolved inside runMC
+  // after thread selection, because a resumed thread restores its persisted
+  // mode — the mode that decides whether the pack has a model for this run.
+  // Activation (which mirrors /models → Activate and becomes the global
+  // default pack in settings) is saved via onApplied only once the pack has
+  // actually been applied to the session — a rejected pack must not change
+  // the persisted default on its way out.
+  const settings = loadSettings(args.settings);
+  let packId: string | undefined;
+  if (args.pack !== undefined) {
+    const resolved = resolveModePackArg(settings, args.pack);
+    if ('error' in resolved) {
+      process.stderr.write(`Error: ${resolved.error}\n`);
+      process.exit(1);
+    }
+    packId = resolved.packId;
+  }
+
   const diagnosticsSetup = createProcessMemoryDiagnosticsFromEnvironment(process.env);
   const processMemoryDiagnostics = await startConfiguredProcessMemoryDiagnostics(diagnosticsSetup, warning => {
     process.stderr.write(`Warning: ${warning}\n`);
@@ -207,7 +228,8 @@ export async function runMCCli(
   try {
     boot = await createMastraCode({ settingsPath: args.settings, coAuthor: options?.coAuthor });
     const { controller, session, mcpManager } = boot;
-    const effectiveDefaults = resolveModelDefaults(loadSettings(args.settings), listBuiltinModePacks());
+
+    const effectiveDefaults = resolveModelDefaults(settings, listBuiltinModePacks());
 
     if (mcpManager?.hasServers()) {
       try {
@@ -227,6 +249,18 @@ export async function runMCCli(
       model: args.model,
       mode: args.mode,
       modeDefaults: effectiveDefaults,
+      ...(packId
+        ? {
+            pack: {
+              id: packId,
+              resolve: (modeId: string) => resolvePackSelection(settings, packId, modeId),
+              onApplied: () => {
+                activateModePackInSettings(settings, packId);
+                saveSettings(settings, args.settings);
+              },
+            },
+          }
+        : {}),
       thinkingLevel: args.thinkingLevel,
       thread: { id: args.thread, continueLatest: args.continue_, clone: args.cloneThread },
       resourceId: args.resourceId,

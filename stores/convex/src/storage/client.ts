@@ -1,4 +1,4 @@
-import type { StorageRequest, StorageResponse } from './types';
+import type { RunClaimRequest, StorageRequest, StorageResponse } from './types';
 
 export type ConvexAdminClientConfig = {
   deploymentUrl: string;
@@ -59,7 +59,7 @@ export class ConvexAdminClient {
    * Call storage and return the full response including hasMore flag.
    * Use this for operations that may need multiple calls (e.g., clearTable).
    */
-  async callStorageRaw<T = any>(request: StorageRequest): Promise<RawStorageResult<T>> {
+  async callStorageRaw<T = any>(request: StorageRequest | RunClaimRequest): Promise<RawStorageResult<T>> {
     const result = await this.callConvexFunction<StorageResponse>('mutation', this.storageFunction, request);
 
     const storageResponse = result.value;
@@ -78,7 +78,7 @@ export class ConvexAdminClient {
     };
   }
 
-  async callStorage<T = any>(request: StorageRequest): Promise<T> {
+  async callStorage<T = any>(request: StorageRequest | RunClaimRequest): Promise<T> {
     const { result } = await this.callStorageRaw<T>(request);
     return result;
   }

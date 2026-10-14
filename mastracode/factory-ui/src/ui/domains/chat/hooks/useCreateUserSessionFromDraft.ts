@@ -39,23 +39,15 @@ export function useCreateUserSessionFromDraft() {
           sessionId: draftSessionId,
           title: prompt,
         });
-        return { session, prompt, factoryId, projectRepositoryId, activeModeId, handoffModelId, thinkingLevelOverride };
+        return { session, prompt, factoryId, activeModeId, handoffModelId, thinkingLevelOverride };
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Session creation failed';
         throw new Error(`Could not create the session: ${message}. Try again.`, { cause: error });
       }
     },
-    onSuccess: ({
-      session,
-      prompt,
-      factoryId,
-      projectRepositoryId,
-      activeModeId,
-      handoffModelId,
-      thinkingLevelOverride,
-    }) => {
+    onSuccess: ({ session, prompt, factoryId, activeModeId, handoffModelId, thinkingLevelOverride }) => {
       queryClient.setQueryData(queryKeys.userSession(session.sessionId), session);
-      addCachedSession(queryClient, projectRepositoryId, session);
+      addCachedSession(queryClient, factoryId, session);
       queryClient.setQueryData<MastraDBMessage[]>(
         queryKeys.agentControllerThreadMessages(
           AGENT_CONTROLLER_ID,

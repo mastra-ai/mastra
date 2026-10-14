@@ -68,7 +68,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'One shell for every dialog: `DialogContent` (pick a `size`), `DialogHeader` with `DialogTitle` and a visible `DialogDescription`, `DialogBody`, and `DialogFooter` with `DialogCancel` and `DialogAction`. Padding, spacing, the Close button, scroll fades, and motion are built in, so call sites pass layout only. The body is a padded ScrollArea by default; `layout="fill"` hands scrolling to its children and `flush` drops the inset. A `<Form>` placed directly in `DialogContent` joins the layout with no extra classes.',
+          'One shell for every dialog: `DialogContent` (pick a `size`), `DialogHeader` with `DialogTitle` and a visible `DialogDescription`, `DialogBody`, and `DialogFooter` with `DialogCancel` and `DialogAction`. Padding, spacing, the Close button, scroll fades, and motion are built in, so call sites pass layout only. The body is a padded ScrollArea by default; `layout="fill"` hands scrolling to its children and `flush` drops the inset. A `<Form>` placed directly in `DialogContent` joins the layout with no extra classes. Below 640px every dialog opens as a bottom drawer you can swipe down to close; switch the viewport toolbar to a phone to see it.',
       },
     },
   },

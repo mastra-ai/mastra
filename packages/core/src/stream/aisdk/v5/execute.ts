@@ -94,7 +94,10 @@ export function usesOpenAIStrictJsonSchema(
   if (model instanceof ModelRouterLanguageModel || model.supportsStructuredOutputs !== true) return false;
 
   const providerKey = model.provider.split('.')[0]!;
-  const camelCaseProviderKey = providerKey.replace(/[-_]+([a-z0-9])/gi, (_, char: string) => char.toUpperCase());
+  const camelCaseProviderKey = providerKey
+    .split(/[-_]/)
+    .map((part, i) => (i === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)))
+    .join('');
   const options = providerOptions as Record<string, unknown> | undefined;
   // Highest precedence first, matching @ai-sdk/openai-compatible (the only version that sends `strict`).
   for (const key of new Set([camelCaseProviderKey, providerKey, 'openaiCompatible', 'openai-compatible'])) {

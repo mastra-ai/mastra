@@ -1,6 +1,7 @@
 import type { BackgroundTaskManager, TaskContext } from '@mastra/core/background-tasks';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
+import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { MockStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
@@ -15,6 +16,12 @@ function ctx(executeFn: (args: any, opts?: any) => Promise<any>): TaskContext {
 }
 
 const tick = (ms = 50) => new Promise(resolve => setTimeout(resolve, ms));
+
+function scopedContext(resourceId: string) {
+  const requestContext = new RequestContext();
+  requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+  return requestContext;
+}
 
 describe('Background Tasks handlers', () => {
   let mastra: Mastra;
@@ -55,7 +62,7 @@ describe('Background Tasks handlers', () => {
     it('returns empty list when no tasks exist', async () => {
       const result = await LIST_BACKGROUND_TASKS_ROUTE.handler({
         mastra,
-        requestContext: {} as any,
+        requestContext: new RequestContext(),
         abortSignal: new AbortController().signal,
       } as any);
 
@@ -71,7 +78,7 @@ describe('Background Tasks handlers', () => {
 
       const result = await LIST_BACKGROUND_TASKS_ROUTE.handler({
         mastra,
-        requestContext: {} as any,
+        requestContext: new RequestContext(),
         abortSignal: new AbortController().signal,
       } as any);
 
@@ -95,7 +102,7 @@ describe('Background Tasks handlers', () => {
       const result = await LIST_BACKGROUND_TASKS_ROUTE.handler({
         mastra,
         agentId: 'a1',
-        requestContext: {} as any,
+        requestContext: new RequestContext(),
         abortSignal: new AbortController().signal,
       } as any);
 
@@ -117,7 +124,7 @@ describe('Background Tasks handlers', () => {
       const result = await LIST_BACKGROUND_TASKS_ROUTE.handler({
         mastra,
         status: 'failed',
-        requestContext: {} as any,
+        requestContext: new RequestContext(),
         abortSignal: new AbortController().signal,
       } as any);
 
@@ -138,7 +145,7 @@ describe('Background Tasks handlers', () => {
         mastra,
         page: 0,
         perPage: 2,
-        requestContext: {} as any,
+        requestContext: new RequestContext(),
         abortSignal: new AbortController().signal,
       } as any);
 
@@ -151,7 +158,7 @@ describe('Background Tasks handlers', () => {
 
       const result = await LIST_BACKGROUND_TASKS_ROUTE.handler({
         mastra: noTasksMastra,
-        requestContext: {} as any,
+        requestContext: new RequestContext(),
         abortSignal: new AbortController().signal,
       } as any);
 
@@ -170,7 +177,7 @@ describe('Background Tasks handlers', () => {
       const result = await GET_BACKGROUND_TASK_ROUTE.handler({
         mastra,
         backgroundTaskId: task.id,
-        requestContext: {} as any,
+        requestContext: new RequestContext(),
         abortSignal: new AbortController().signal,
       } as any);
 
@@ -184,7 +191,7 @@ describe('Background Tasks handlers', () => {
         GET_BACKGROUND_TASK_ROUTE.handler({
           mastra,
           backgroundTaskId: 'nonexistent',
-          requestContext: {} as any,
+          requestContext: new RequestContext(),
           abortSignal: new AbortController().signal,
         } as any),
       ).rejects.toThrow(HTTPException);
@@ -197,7 +204,7 @@ describe('Background Tasks handlers', () => {
         GET_BACKGROUND_TASK_ROUTE.handler({
           mastra: noTasksMastra,
           backgroundTaskId: 'any',
-          requestContext: {} as any,
+          requestContext: new RequestContext(),
           abortSignal: new AbortController().signal,
         } as any),
       ).rejects.toThrow(HTTPException);
@@ -211,7 +218,7 @@ describe('Background Tasks handlers', () => {
       const result = await BACKGROUND_TASK_STREAM_ROUTE.handler({
         mastra,
         abortSignal: abortController.signal,
-        requestContext: {} as any,
+        requestContext: new RequestContext(),
       } as any);
 
       expect(result).toBeInstanceOf(ReadableStream);
@@ -224,7 +231,7 @@ describe('Background Tasks handlers', () => {
       const stream = (await BACKGROUND_TASK_STREAM_ROUTE.handler({
         mastra,
         abortSignal: abortController.signal,
-        requestContext: {} as any,
+        requestContext: new RequestContext(),
       } as any)) as ReadableStream;
 
       const reader = stream.getReader();
@@ -255,7 +262,7 @@ describe('Background Tasks handlers', () => {
       const stream = (await BACKGROUND_TASK_STREAM_ROUTE.handler({
         mastra,
         abortSignal: abortController.signal,
-        requestContext: {} as any,
+        requestContext: new RequestContext(),
       } as any)) as ReadableStream;
 
       const reader = stream.getReader();
@@ -285,7 +292,7 @@ describe('Background Tasks handlers', () => {
         mastra,
         agentId: 'target-agent',
         abortSignal: abortController.signal,
-        requestContext: {} as any,
+        requestContext: new RequestContext(),
       } as any)) as ReadableStream;
 
       const reader = stream.getReader();
@@ -322,7 +329,7 @@ describe('Background Tasks handlers', () => {
       const result = await BACKGROUND_TASK_STREAM_ROUTE.handler({
         mastra: noTasksMastra,
         abortSignal: abortController.signal,
-        requestContext: {} as any,
+        requestContext: new RequestContext(),
       } as any);
 
       expect(result).toBeInstanceOf(ReadableStream);
@@ -331,6 +338,144 @@ describe('Background Tasks handlers', () => {
       abortController.abort();
       const { done } = await reader.read();
       expect(done).toBe(true);
+    });
+  });
+
+  describe('resource scoping', () => {
+    const enqueueFor = (resourceId: string, toolCallId: string, result: string) =>
+      bgManager.enqueue(
+        { toolName: 'tool', toolCallId, args: {}, agentId: 'a1', runId: `run-${toolCallId}`, resourceId },
+        ctx(vi.fn().mockResolvedValue(result)),
+      );
+
+    const drain = async (stream: ReadableStream, abortController: AbortController) => {
+      await tick();
+      abortController.abort();
+      const events: any[] = [];
+      const reader = stream.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        events.push(value);
+      }
+      return events;
+    };
+
+    it('pins the stream to the request-context resource', async () => {
+      const abortController = new AbortController();
+      const stream = (await BACKGROUND_TASK_STREAM_ROUTE.handler({
+        mastra,
+        abortSignal: abortController.signal,
+        requestContext: scopedContext('user-1'),
+      } as any)) as ReadableStream;
+
+      await enqueueFor('user-1', 'own', 'mine');
+      await enqueueFor('user-2', 'other', 'SECRET');
+
+      const events = await drain(stream, abortController);
+      expect(new Set(events.map(e => e.payload.toolCallId))).toEqual(new Set(['own']));
+      expect(JSON.stringify(events)).not.toContain('SECRET');
+    });
+
+    it('rejects a stream for a different resource than the request context', async () => {
+      await expect(
+        BACKGROUND_TASK_STREAM_ROUTE.handler({
+          mastra,
+          resourceId: 'user-2',
+          abortSignal: new AbortController().signal,
+          requestContext: scopedContext('user-1'),
+        } as any),
+      ).rejects.toMatchObject({ status: 403 });
+    });
+
+    it('keeps cross-resource access for privileged callers', async () => {
+      const abortController = new AbortController();
+      const stream = (await BACKGROUND_TASK_STREAM_ROUTE.handler({
+        mastra,
+        abortSignal: abortController.signal,
+        requestContext: new RequestContext(),
+      } as any)) as ReadableStream;
+
+      await enqueueFor('user-1', 'one', 'r1');
+      await enqueueFor('user-2', 'two', 'r2');
+
+      const events = await drain(stream, abortController);
+      expect(new Set(events.map(e => e.payload.toolCallId))).toEqual(new Set(['one', 'two']));
+    });
+
+    it('lists only the request-context resource and rejects a different resourceId', async () => {
+      await enqueueFor('user-1', 'own', 'mine');
+      await enqueueFor('user-2', 'other', 'theirs');
+      await tick();
+
+      const result = await LIST_BACKGROUND_TASKS_ROUTE.handler({
+        mastra,
+        requestContext: scopedContext('user-1'),
+        abortSignal: new AbortController().signal,
+      } as any);
+      expect(result.tasks.map(t => t.toolCallId)).toEqual(['own']);
+
+      await expect(
+        LIST_BACKGROUND_TASKS_ROUTE.handler({
+          mastra,
+          resourceId: 'user-2',
+          requestContext: scopedContext('user-1'),
+          abortSignal: new AbortController().signal,
+        } as any),
+      ).rejects.toMatchObject({ status: 403 });
+    });
+
+    it('returns 404 for a task owned by another resource', async () => {
+      const { task: own } = await enqueueFor('user-1', 'own', 'mine');
+      const { task: other } = await enqueueFor('user-2', 'other', 'theirs');
+      await tick();
+
+      const found = await GET_BACKGROUND_TASK_ROUTE.handler({
+        mastra,
+        backgroundTaskId: own.id,
+        requestContext: scopedContext('user-1'),
+        abortSignal: new AbortController().signal,
+      } as any);
+      expect(found.id).toBe(own.id);
+
+      await expect(
+        GET_BACKGROUND_TASK_ROUTE.handler({
+          mastra,
+          backgroundTaskId: other.id,
+          requestContext: scopedContext('user-1'),
+          abortSignal: new AbortController().signal,
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('rejects an empty context resource id instead of granting privileged access', async () => {
+      const { task: other } = await enqueueFor('user-2', 'other', 'SECRET');
+      await tick();
+
+      await expect(
+        BACKGROUND_TASK_STREAM_ROUTE.handler({
+          mastra,
+          abortSignal: new AbortController().signal,
+          requestContext: scopedContext(''),
+        } as any),
+      ).rejects.toMatchObject({ status: 403 });
+
+      await expect(
+        LIST_BACKGROUND_TASKS_ROUTE.handler({
+          mastra,
+          requestContext: scopedContext(''),
+          abortSignal: new AbortController().signal,
+        } as any),
+      ).rejects.toMatchObject({ status: 403 });
+
+      await expect(
+        GET_BACKGROUND_TASK_ROUTE.handler({
+          mastra,
+          backgroundTaskId: other.id,
+          requestContext: scopedContext(''),
+          abortSignal: new AbortController().signal,
+        } as any),
+      ).rejects.toMatchObject({ status: 403 });
     });
   });
 });

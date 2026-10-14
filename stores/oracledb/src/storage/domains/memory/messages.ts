@@ -11,6 +11,7 @@ import {
   validateStorageMetadataFilter,
 } from '@mastra/core/storage';
 import type {
+  RunFence,
   StorageListMessagesByResourceIdInput,
   StorageListMessagesInput,
   StorageListMessagesOutput,
@@ -25,6 +26,7 @@ import type { OracleTxClient } from '../../db';
 import { toDate } from '../../domain-utils';
 import { MESSAGE_CREATED_AT, MESSAGE_RESOURCE_ID, THREAD_UPDATED_AT } from './schema';
 import {
+  assertMemoryFence,
   chunkValues,
   deleteSemanticRecallVectorsByMessageIds,
   inClause,
@@ -147,7 +149,7 @@ export async function listMessagesByResourceId(
 
 export async function saveMessages(
   ctx: MemoryContext,
-  { messages }: { messages: MastraDBMessage[] },
+  { messages, fence }: { messages: MastraDBMessage[]; fence?: RunFence },
 ): Promise<{ messages: MastraDBMessage[] }> {
   if (messages.length === 0) return { messages: [] };
 
@@ -181,6 +183,7 @@ export async function saveMessages(
     }
 
     await ctx.db.tx(async client => {
+      await assertMemoryFence(ctx, client, fence, 'saveMessages');
       await insertMessageBatch(ctx, client, messages);
     });
 
@@ -270,11 +273,13 @@ export async function updateMessages(
   ctx: MemoryContext,
   {
     messages,
+    fence,
   }: {
     messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
       content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
     })[];
+    fence?: RunFence;
   },
 ): Promise<MastraDBMessage[]> {
   if (messages.length === 0) return [];
@@ -288,6 +293,7 @@ export async function updateMessages(
 
   try {
     await ctx.db.tx(async client => {
+      await assertMemoryFence(ctx, client, fence, 'updateMessages');
       // Message ids whose content/threadId/resourceId actually changed. Those
       // fields feed semantic-recall embeddings/metadata, so the vectors for
       // these ids are stale once the update below commits.
@@ -360,15 +366,17 @@ export async function updateMessages(
 
     return (await ctx.listMessagesById({ messageIds })).messages;
   } catch (error) {
+    if (error instanceof MastraError) throw error;
     throw storageError('UPDATE_MESSAGES', 'FAILED', { messageIds: messageIds.join(',') }, error);
   }
 }
 
-export async function deleteMessages(ctx: MemoryContext, messageIds: string[]): Promise<void> {
+export async function deleteMessages(ctx: MemoryContext, messageIds: string[], fence?: RunFence): Promise<void> {
   if (!messageIds.length) return;
 
   try {
     await ctx.db.tx(async client => {
+      await assertMemoryFence(ctx, client, fence, 'deleteMessages');
       const threadIds = new Set<string>();
 
       for (const [chunkIndex, chunk] of chunkValues(messageIds).entries()) {
@@ -392,6 +400,7 @@ export async function deleteMessages(ctx: MemoryContext, messageIds: string[]): 
       );
     });
   } catch (error) {
+    if (error instanceof MastraError) throw error;
     throw storageError('DELETE_MESSAGES', 'FAILED', { messageIds: messageIds.join(',') }, error);
   }
 }
