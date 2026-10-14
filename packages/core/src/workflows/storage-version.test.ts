@@ -165,6 +165,52 @@ describe('storageVersion per run', () => {
     expect(resumed.status).toBe('success');
   });
 
+  it('runs, suspends and resumes a v2 run from journal entries', async () => {
+    const storage = new MockStore();
+    const workflow = gateWorkflow(2);
+    host(storage, workflow);
+    const run = await workflow.createRun();
+    expect((await run.start({ inputData: {} })).status).toBe('suspended');
+
+    const store = (await storage.getStore('workflows'))!;
+    const db = (store as any).db;
+    const key = `gated-${run.runId}`;
+    expect(db.workflows.has(key)).toBe(false);
+    expect(db.workflowRunEntries.get(key).length).toBeGreaterThan(0);
+
+    const resumed = await (await workflow.createRun({ runId: run.runId })).resume({ step: 'gate', resumeData: true });
+    expect(resumed.status).toBe('success');
+    expect(resumed.status === 'success' && resumed.result).toEqual({ approved: true });
+
+    const stored = await store.loadWorkflowSnapshot({ workflowName: 'gated', runId: run.runId });
+    expect(stored?.status).toBe('success');
+    expect((stored?.context as any).gate).toMatchObject({ status: 'success', output: { approved: true } });
+  });
+
+  it('makes sync getStepResult throw inside v2 steps', async () => {
+    const workflow = createWorkflow({
+      id: 'sync-read',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      options: { storageVersion: 2 },
+    })
+      .then(createStep({ id: 'a', inputSchema: z.object({}), outputSchema: z.object({}), execute: async () => ({}) }))
+      .then(
+        createStep({
+          id: 'b',
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          execute: async ({ getStepResult }) => getStepResult('a'),
+        }),
+      )
+      .commit();
+    new Mastra({ logger: false, storage: new MockStore(), workflows: { workflow } });
+
+    const result = await (await workflow.createRun()).start({ inputData: {} });
+    expect(result.status).toBe('failed');
+    expect((result as any).error.message).toMatch(/Use `await getStepResultAsync\("a"\)` instead/);
+  });
+
   it('refuses to continue a v2 run through a v1 definition', async () => {
     const storage = new MockStore();
     const v2 = gateWorkflow(2);

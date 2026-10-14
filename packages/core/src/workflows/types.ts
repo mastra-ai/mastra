@@ -1416,6 +1416,8 @@ export type MutableContext = {
       foreachIndex?: number;
     }
   >;
+  /** Set when a step called `setState`, so storage v2 knows to write the state. */
+  stateUpdated?: boolean;
 };
 
 /**

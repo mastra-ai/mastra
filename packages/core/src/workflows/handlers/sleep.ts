@@ -5,8 +5,8 @@ import type { ObservabilityContext } from '../../observability';
 import { ToolStream } from '../../tools/stream';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
+import { buildStepResultAccessors } from '../run-journal';
 import type { ExecuteFunction, InnerOutput } from '../step';
-import { getStepResult, getStepResultAsync } from '../step';
 import type {
   DefaultEngineType,
   ExecutionContext,
@@ -94,12 +94,12 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
             state: executionContext.state,
             setState: async (state: any) => {
               executionContext.state = state;
+              engine.getRunJournal(runId)?.markStateChanged();
             },
             retryCount: -1,
             ...createObservabilityContext({ currentSpan: sleepSpan }),
             getInitData: () => stepResults?.input as any,
-            getStepResult: getStepResult.bind(null, stepResults),
-            getStepResultAsync: getStepResultAsync.bind(null, stepResults),
+            ...buildStepResultAccessors(engine, runId, stepResults),
             // TODO: this function shouldn't have suspend probably?
             suspend: async (_suspendPayload: any): Promise<any> => {},
             bail: (() => {}) as () => InnerOutput,
@@ -234,12 +234,12 @@ export async function executeSleepUntil(
             state: executionContext.state,
             setState: async (state: any) => {
               executionContext.state = state;
+              engine.getRunJournal(runId)?.markStateChanged();
             },
             retryCount: -1,
             ...createObservabilityContext({ currentSpan: sleepUntilSpan }),
             getInitData: () => stepResults?.input as any,
-            getStepResult: getStepResult.bind(null, stepResults),
-            getStepResultAsync: getStepResultAsync.bind(null, stepResults),
+            ...buildStepResultAccessors(engine, runId, stepResults),
             // TODO: this function shouldn't have suspend probably?
             suspend: async (_suspendPayload: any): Promise<any> => {},
             bail: (() => {}) as () => InnerOutput,
