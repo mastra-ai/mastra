@@ -1151,6 +1151,8 @@ describe('MastraFactory.prepare', () => {
       'factory_resolve_proposal',
       'factory_subscribe_work_item',
       'factory_unsubscribe_work_item',
+      'factory_signal_session',
+      'factory_message_origin',
     ];
 
     it('gives a user session read tools on every turn, management tools only on person-started turns, and other sessions none', async () => {

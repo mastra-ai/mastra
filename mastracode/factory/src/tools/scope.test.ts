@@ -226,7 +226,7 @@ describe('resolveFactoryToolScope', () => {
       workItems,
     });
     expect(scope?.kind).toBe('worker');
-    expect(createFactoryTools({ scope: scope!, deps: {} as never })).toEqual({});
+    expect(Object.keys(createFactoryTools({ scope: scope!, deps: {} as never }))).toEqual(['factory_message_origin']);
   });
 
   it('resolves an active binding on another thread of the session as a worker', async () => {
@@ -350,7 +350,9 @@ describe('createFactoryTools', () => {
     interactive: true,
   };
 
-  it('gives worker sessions nothing', () => {
-    expect(createFactoryTools({ scope: { ...scope, kind: 'worker' }, deps: {} as never })).toEqual({});
+  it('gives worker sessions only the reply tool', () => {
+    expect(Object.keys(createFactoryTools({ scope: { ...scope, kind: 'worker' }, deps: {} as never }))).toEqual([
+      'factory_message_origin',
+    ]);
   });
 });
