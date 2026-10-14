@@ -209,3 +209,73 @@ describe('buildFullPrompt operator-machine instructions', () => {
     expect(prompt).toContain('PROJECT: run the unit tests before pushing');
   });
 });
+
+describe('buildFullPrompt instruction roots', () => {
+  // A host that boots several checkouts under one working directory names
+  // them, so each repository's own AGENTS.md reaches the prompt.
+  const workspace = mkdtempSync(join(tmpdir(), 'prompt-roots-'));
+  const git = (dir: string, ...args: string[]) => execFileSync('git', ['-C', dir, ...args], { stdio: 'ignore' });
+  for (const [name, text] of [
+    ['api', 'API: run pnpm test in api'],
+    ['web', 'WEB: never edit generated files'],
+  ] as const) {
+    const dir = join(workspace, name);
+    mkdirSync(dir);
+    git(dir, 'init', '-b', 'main');
+    git(dir, 'config', 'user.email', 'test@example.com');
+    git(dir, 'config', 'user.name', 'Test');
+    writeFileSync(join(dir, 'AGENTS.md'), `${text} (trusted)`);
+    git(dir, 'add', 'AGENTS.md');
+    git(dir, 'commit', '-m', 'instructions');
+    writeFileSync(join(dir, 'AGENTS.md'), `${text} (working tree)`);
+  }
+
+  afterAll(() => {
+    rmSync(workspace, { recursive: true, force: true });
+  });
+
+  const baseCtx = {
+    projectPath: workspace,
+    projectName: 'acme/api',
+    gitBranch: 'main',
+    platform: 'darwin' as const,
+    date: '2026-03-23',
+    mode: 'build',
+    activePlan: null,
+    modeId: 'build',
+    currentDate: '2026-03-23',
+    workingDir: workspace,
+  };
+
+  it('finds no project instructions at a workspace root that holds the checkouts', () => {
+    const prompt = buildFullPrompt({ ...baseCtx, state: { permissionRules: { tools: {} } } });
+    expect(prompt).not.toContain('API: run pnpm test');
+  });
+
+  it('loads every root, the session checkout first, with operator files skipped once', () => {
+    const prompt = buildFullPrompt({
+      ...baseCtx,
+      state: { permissionRules: { tools: {} }, skipGlobalInstructions: true, instructionRoots: ['api', 'web'] },
+    });
+    expect(prompt).toContain('API: run pnpm test in api (working tree)');
+    expect(prompt).toContain('WEB: never edit generated files (working tree)');
+    expect(prompt.indexOf('API:')).toBeLessThan(prompt.indexOf('WEB:'));
+    expect(prompt).toContain(join(workspace, 'web', 'AGENTS.md'));
+    expect(prompt).not.toContain('OPERATOR: answer in prose');
+  });
+
+  it('serves only the session checkout from its base ref on an untrusted checkout', () => {
+    const prompt = buildFullPrompt({
+      ...baseCtx,
+      state: {
+        permissionRules: { tools: {} },
+        untrustedCheckout: true,
+        baseRef: 'main',
+        instructionRoots: ['api', 'web'],
+      },
+    });
+    expect(prompt).toContain('API: run pnpm test in api (trusted)');
+    expect(prompt).not.toContain('(working tree)');
+    expect(prompt).not.toContain('WEB:');
+  });
+});

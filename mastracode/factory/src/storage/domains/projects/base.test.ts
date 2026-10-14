@@ -17,6 +17,7 @@ describe('FactoryProjectsStorage', () => {
       createdBy: 'user-1',
       name: 'Platform',
       description: 'Internal platform work',
+      modelScope: 'factory',
       slackWorkItemsEnabled: false,
     });
     expect(await seed.projects.get({ orgId: 'org-1', id: project.id })).toEqual(project);
@@ -43,8 +44,127 @@ describe('FactoryProjectsStorage', () => {
     });
     expect(await seed.projects.update({ orgId: 'org-2', id: first.id, input: { name: 'Nope' } })).toBeNull();
 
+    const scoped = await seed.projects.update({
+      orgId: 'org-1',
+      id: first.id,
+      input: { modelScope: 'user' },
+    });
+    expect(scoped?.modelScope).toBe('user');
+
+    const renamedAgain = await seed.projects.update({ orgId: 'org-1', id: first.id, input: { name: 'Final name' } });
+    expect(renamedAgain?.modelScope).toBe('user');
+    expect((await seed.projects.get({ orgId: 'org-1', id: first.id }))?.modelScope).toBe('user');
+
     expect(await seed.projects.delete({ orgId: 'org-2', id: first.id })).toBeNull();
     expect(await seed.projects.delete({ orgId: 'org-1', id: first.id })).toMatchObject({ id: first.id });
     expect(await seed.projects.get({ orgId: 'org-1', id: first.id })).toBeNull();
+  });
+
+  it('round-trips every environment field and clears them with null', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Env' } });
+    expect(project).toMatchObject({
+      sandboxWorkingDirectory: null,
+      sandboxSettings: null,
+      workspaceSetupCommand: null,
+      activeTemplateId: null,
+      activeTemplateHeads: null,
+    });
+
+    const environment = {
+      sandboxWorkingDirectory: '/home/user/workspace',
+      sandboxSettings: { cpuCount: 8, memoryMb: 16384 },
+      workspaceSetupCommand: 'touch .ready',
+      activeTemplateId: 'tpl-1',
+      activeTemplateHeads: { 'mastra-ai/mastra': 'abc123' },
+    };
+    expect(await seed.projects.update({ orgId: 'org-1', id: project.id, input: environment })).toMatchObject(
+      environment,
+    );
+    expect(await seed.projects.get({ orgId: 'org-1', id: project.id })).toMatchObject(environment);
+
+    const cleared = {
+      sandboxWorkingDirectory: null,
+      sandboxSettings: null,
+      workspaceSetupCommand: null,
+      activeTemplateId: null,
+      activeTemplateHeads: null,
+    };
+    expect(await seed.projects.update({ orgId: 'org-1', id: project.id, input: cleared })).toMatchObject(cleared);
+  });
+});
+
+describe('FactoryProjectsStorage builds', () => {
+  it('defaults the build columns and round-trips them', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'P' } });
+    expect(project).toMatchObject({
+      lastBuildId: null,
+      lastBuildAttemptedAt: null,
+      buildOnPushEnabled: false,
+      buildPushDebounceMinutes: 10,
+    });
+
+    const at = new Date('2026-10-08T10:00:00.000Z');
+    const updated = await seed.projects.update({
+      orgId: 'org-1',
+      id: project.id,
+      input: { lastBuildId: 'tpl_1', lastBuildAttemptedAt: at, buildOnPushEnabled: true, buildPushDebounceMinutes: 3 },
+    });
+    expect(updated).toMatchObject({
+      lastBuildId: 'tpl_1',
+      lastBuildAttemptedAt: at,
+      buildOnPushEnabled: true,
+      buildPushDebounceMinutes: 3,
+    });
+  });
+
+  it('claimBuildAttempt wins once per debounce window', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'P' } });
+    const t0 = new Date('2026-10-08T10:00:00.000Z');
+
+    expect(await seed.projects.claimBuildAttempt({ id: project.id, debounceMinutes: 10, now: t0 })).toBe(true);
+    const afterFirst = await seed.projects.getById({ id: project.id });
+    expect(afterFirst?.lastPushBuildAt).toEqual(t0);
+
+    const t1 = new Date(t0.getTime() + 9 * 60_000);
+    expect(await seed.projects.claimBuildAttempt({ id: project.id, debounceMinutes: 10, now: t1 })).toBe(false);
+    expect((await seed.projects.getById({ id: project.id }))?.lastPushBuildAt).toEqual(t0);
+
+    const t2 = new Date(t0.getTime() + 10 * 60_000);
+    expect(await seed.projects.claimBuildAttempt({ id: project.id, debounceMinutes: 10, now: t2 })).toBe(true);
+    expect((await seed.projects.getById({ id: project.id }))?.lastPushBuildAt).toEqual(t2);
+
+    // Two concurrent claims on a fresh window: exactly one wins.
+    const t3 = new Date(t2.getTime() + 60 * 60_000);
+    const results = await Promise.all([
+      seed.projects.claimBuildAttempt({ id: project.id, debounceMinutes: 10, now: t3 }),
+      seed.projects.claimBuildAttempt({ id: project.id, debounceMinutes: 10, now: t3 }),
+    ]);
+    expect(results.filter(Boolean)).toHaveLength(1);
+  });
+
+  it('pinActiveTemplate writes only while the build is still the last one', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'P' } });
+    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { lastBuildId: 'build-2' } });
+
+    expect(
+      await seed.projects.pinActiveTemplate({ id: project.id, buildId: 'build-1', templateId: 'tpl-1', heads: {} }),
+    ).toBe(false);
+    expect((await seed.projects.getById({ id: project.id }))?.activeTemplateId).toBeNull();
+
+    expect(
+      await seed.projects.pinActiveTemplate({
+        id: project.id,
+        buildId: 'build-2',
+        templateId: 'tpl-2',
+        heads: { 'acme/api': 'abc' },
+      }),
+    ).toBe(true);
+    const stored = await seed.projects.getById({ id: project.id });
+    expect(stored?.activeTemplateId).toBe('tpl-2');
+    expect(stored?.activeTemplateHeads).toEqual({ 'acme/api': 'abc' });
   });
 });

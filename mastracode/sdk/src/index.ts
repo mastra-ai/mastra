@@ -35,7 +35,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
 import type { ApiRoute } from '@mastra/core/server';
 import { TaskSignalProvider } from '@mastra/core/signals';
-import { InMemoryHarness, MastraCompositeStore } from '@mastra/core/storage';
+import { MastraCompositeStore } from '@mastra/core/storage';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '@mastra/core/tools';
 import type { MastraVector } from '@mastra/core/vector';
 import { DuckDBStore } from '@mastra/duckdb';
@@ -63,9 +63,10 @@ import { buildMode } from './agents/modes/build.js';
 import { fastMode } from './agents/modes/explore.js';
 import { planMode } from './agents/modes/plan.js';
 import {
-  createGitRefInstructionReader,
   createGitRefReminderReader,
-  getStaticallyLoadedInstructionPaths,
+  instructionSourcePaths,
+  loadSessionInstructions,
+  sessionInstructionRoots,
 } from './agents/prompts/agent-instructions.js';
 import { executeSubagent } from './agents/subagents/execute.js';
 import { exploreSubagent } from './agents/subagents/explore.js';
@@ -177,9 +178,14 @@ const TRANSIENT_SERVER_ERROR_MESSAGE_PATTERN = /internal server|server error|api
  */
 function getInjectorSessionState(
   requestContext: { get: (key: string) => unknown } | undefined,
-): { untrustedCheckout?: boolean; baseRef?: string; projectPath?: string } | undefined {
+): { untrustedCheckout?: boolean; baseRef?: string; projectPath?: string; instructionRoots?: string[] } | undefined {
   const agentControllerContext = requestContext?.get('controller') as
-    | AgentControllerRequestContext<{ untrustedCheckout?: boolean; baseRef?: string; projectPath?: string }>
+    | AgentControllerRequestContext<{
+        untrustedCheckout?: boolean;
+        baseRef?: string;
+        projectPath?: string;
+        instructionRoots?: string[];
+      }>
     | undefined;
   return agentControllerContext?.getState();
 }
@@ -307,8 +313,8 @@ export interface MastraCodeConfig {
   storageBackend?: 'libsql' | 'pg';
   /** Pre-built vector store instance for recall search. Skips the default vector store creation. */
   vector?: MastraVector;
-  /** Host-owned Knowledge instance registered on the mounted Mastra under its own id. */
-  knowledge?: Knowledge;
+  /** Host-owned Knowledge instance and the key used to register it on the mounted Mastra runtime. */
+  knowledge?: { key: string; instance: Knowledge };
   /** Observational memory scope. Default: auto-detected from env/config files, falls back to 'thread' */
   omScope?: 'thread' | 'resource';
   /** Path to a custom settings.json file. Default: global settings */
@@ -601,9 +607,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   const cloudObservabilityConfig = resolveCloudObservabilityConfig(globalSettings, authStorage, project.resourceId);
 
-  // Stable session id unique to this project/resource, and a machine-bound owner
-  // id. resourceId encodes root path + git identity and honors overrides, so it
-  // is the right input for scoping the session to the cwd/project.
+  // Stable session id unique to this project/resource. Mastra Code has no
+  // authenticated user identity in settings, so local sessions use a stable
+  // machine-and-project host identity. Core stamps it onto new threads as the
+  // ownerId/createdBy fallback; it is not a user id.
   const sessionId = `mastracode-session-${shortHash(project.resourceId)}`;
   const ownerId = `mastracode-${shortHash(`${hostname()}\0${project.rootPath}`)}`;
 
@@ -688,7 +695,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     }
   }
 
-  const harnessStorage = new InMemoryHarness();
   // mastracode's scorers persist every result through the scores domain, but
   // nothing reads scores back. Accept the writes and keep nothing, so they
   // neither grow mastra.db nor the process heap.
@@ -701,7 +707,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // When local tracing is off, disable the observability domain entirely so
       // trace/score/feedback writes never fall through to the default libsql store.
       observability: observabilityDomain ?? false,
-      harness: harnessStorage,
       scores: scoresStorage,
     },
   });
@@ -785,11 +790,16 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     closeVector: vector instanceof LibSQLVector ? () => vector.close() : undefined,
   });
 
+  const configuredKnowledgeKey = config?.knowledge?.key.trim();
+  if (config?.knowledge && !configuredKnowledgeKey) {
+    throw new Error('knowledge.key must be a non-empty string.');
+  }
   const knowledge =
-    config?.knowledge ??
+    config?.knowledge?.instance ??
     (process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1'
       ? new Knowledge({ id: 'mastracode', name: 'MastraCode Knowledge', storage })
       : undefined);
+  const knowledgeKey = configuredKnowledgeKey ?? 'default';
   const memory =
     config?.memory === false
       ? undefined
@@ -1090,19 +1100,38 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       getReader: ({ requestContext }) => {
         const state = getInjectorSessionState(requestContext);
         if (state?.untrustedCheckout !== true || typeof state?.baseRef !== 'string') return undefined;
-        return createGitRefReminderReader(state?.projectPath ?? project.rootPath, state.baseRef);
+        const projectPath = state?.projectPath ?? project.rootPath;
+        const [primary] = sessionInstructionRoots(projectPath, state.instructionRoots);
+        const reader = createGitRefReminderReader(primary!, state.baseRef);
+        if (primary === projectPath) return reader;
+        // The base ref covers the session's own checkout only; the other
+        // checkouts under the working directory are never read off disk.
+        const outsidePrimary = (filePath: string) => {
+          const inProject = path.relative(projectPath, filePath);
+          const inPrimary = path.relative(primary!, filePath);
+          const under = (rel: string) => rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
+          return under(inProject) && !under(inPrimary);
+        };
+        return {
+          ...reader,
+          pathExists: filePath => !outsidePrimary(filePath) && reader.pathExists(filePath),
+          isDirectory: filePath => !outsidePrimary(filePath) && reader.isDirectory(filePath),
+        };
       },
       getIgnoredInstructionPaths: ({ requestContext }) => {
         const state = getInjectorSessionState(requestContext);
         const projectPath = state?.projectPath ?? project.rootPath;
-        // On untrusted checkouts the static prompt loads from the base ref,
-        // so compute the statically-loaded paths through the same reader to
-        // keep the dedup consistent.
-        const projectReader =
-          state?.untrustedCheckout === true && typeof state?.baseRef === 'string'
-            ? createGitRefInstructionReader(projectPath, state.baseRef)
-            : undefined;
-        return getStaticallyLoadedInstructionPaths(projectPath, undefined, projectReader);
+        // Same sources, through the same readers, as the static prompt, so the
+        // dedup stays consistent on untrusted checkouts and across roots.
+        const untrusted = state?.untrustedCheckout === true && typeof state?.baseRef === 'string';
+        const roots = sessionInstructionRoots(projectPath, state?.instructionRoots);
+        const sources = loadSessionInstructions({
+          workingDir: projectPath,
+          instructionRoots: state?.instructionRoots,
+          untrustedCheckout: untrusted,
+          baseRef: untrusted ? state?.baseRef : undefined,
+        });
+        return instructionSourcePaths(sources, roots);
       },
     }),
   ];
@@ -1685,6 +1714,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     observability,
     memory,
     knowledge,
+    knowledgeKey,
     mcpManager,
     hookManager,
     pluginManager,
@@ -1882,7 +1912,7 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
   // Mastra so the dynamic-workflow loading in startWorkers() can rehydrate
   // saved workflows against the right tool/agent registry.
   const mastra = controller.getMastra();
-  registerSelectedKnowledge(mastra, base.knowledge);
+  registerSelectedKnowledge(mastra, base.knowledgeKey, base.knowledge);
   if (mastra) await registerWorkflowBuilderPrimitives(mastra, { projectPath, codeAgent, mcpManager });
   await mastra?.startWorkers();
   base.registerConfiguredProcessorsWithMastra();
@@ -1925,9 +1955,8 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
  * controller's internal Mastra, or a caller-owned one) so keyed lookups resolve
  * it and an instance without its own storage inherits the Mastra's.
  */
-function registerSelectedKnowledge(mastra: Mastra | undefined, knowledge: Knowledge | undefined) {
+function registerSelectedKnowledge(mastra: Mastra | undefined, key: string, knowledge: Knowledge | undefined) {
   if (!mastra || !knowledge) return;
-  const key = knowledge.id;
   const existing = (mastra.listKnowledge() as Record<string, Knowledge | undefined>)[key];
   if (existing === knowledge) return;
   if (existing) {
@@ -1976,7 +2005,7 @@ export async function mountAgentControllerOnMastra(
     // Mounting onto a Mastra the caller already built. Ensure the controller's
     // back-reference points at it (idempotent — only sets #externalMastra).
     prepared.base.controller.__registerMastra(config.mastra);
-    registerSelectedKnowledge(config.mastra, prepared.base.knowledge);
+    registerSelectedKnowledge(config.mastra, prepared.base.knowledgeKey, prepared.base.knowledge);
     await prepared.finalize();
     return { ...prepared.base, mastra: config.mastra };
   }
@@ -2046,7 +2075,7 @@ export async function prepareAgentControllerMount(
           },
         }
       : {}),
-    ...(base.knowledge ? { knowledge: { [base.knowledge.id]: base.knowledge } } : {}),
+    ...(base.knowledge ? { knowledge: { [base.knowledgeKey]: base.knowledge } } : {}),
     // Mirror the controller's internal-Mastra construction (which passes
     // `config.pubsub` through): the server-owned Mastra must run its event
     // bus on the same transport so streams/workflows/signals stay

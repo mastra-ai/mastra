@@ -360,6 +360,12 @@ export interface SerializedMessageListState {
   newUserMessagesPersisted: string[];
   newResponseMessagesPersisted: string[];
   userContextMessagesPersisted: string[];
+  /**
+   * Ids of the run's response messages that were pruned from `messages` (e.g. after observational
+   * memory observed and saved them). Only ids, so suspend state does not grow with pruning; the
+   * messages are loaded from memory when the whole run is needed (see getRunResponseMessages).
+   */
+  prunedResponseMessageIds?: string[];
   /** Where the latest loop-iteration boundary sits, so a restored list scopes final-step text the same way. */
   lastStepBoundary?: { messageId: string; partIndex: number };
 }

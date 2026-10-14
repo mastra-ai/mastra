@@ -84,7 +84,7 @@ function applyBreakdown(
 
 /**
  * Sends aggregated model token usage (input/output tokens per provider+model) to
- * Mastra's anonymous telemetry when the project has observability metrics enabled.
+ * Mastra's project-linked telemetry when the project has observability metrics enabled.
  *
  * Sync strategy: deltas since the last successful sync, tracked per project via a
  * cursor file in `~/.mastra/usage-telemetry.json`. Each event also carries lifetime
@@ -102,7 +102,7 @@ export async function syncUsageTelemetry(mastra: Mastra, options: SyncUsageTelem
       return;
     }
 
-    const { projectId, distinctId, command, nodeEnv } = getServerTelemetryContext();
+    const { projectId, projectId2, distinctId, command, nodeEnv } = await getServerTelemetryContext();
     const cursorPath = options.cursorPath ?? getDefaultCursorPath();
     const lastSyncedAt = readCursor(cursorPath, projectId);
     const now = options.now ?? new Date();
@@ -149,6 +149,7 @@ export async function syncUsageTelemetry(mastra: Mastra, options: SyncUsageTelem
         command,
         node_env: nodeEnv,
         project_id: projectId,
+        ...(projectId2 ? { project_id2: projectId2 } : {}),
         is_first_sync: isFirstSync,
         window_start: lastSyncedAt?.toISOString() ?? null,
         window_end: now.toISOString(),

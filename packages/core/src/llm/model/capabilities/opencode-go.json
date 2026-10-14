@@ -28,6 +28,7 @@
     "step-5-preview-free"
   ],
   "temperature": [
+    "cat-jam-free",
     "deepseek-v4-flash",
     "deepseek-v4-flash-vision-exp",
     "deepseek-v4-pro",
@@ -58,6 +59,7 @@
     "qwen3.8-max"
   ],
   "structuredOutput": [
+    "cat-jam-free",
     "claude-haiku-5-5",
     "deepseek-v4-flash",
     "deepseek-v4-flash-vision-exp",
@@ -143,6 +145,12 @@
     "longcat-2.0": [
       {
         "type": "toggle"
+      }
+    ],
+    "cat-jam-free": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "grok-4.5": [

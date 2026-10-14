@@ -20,9 +20,8 @@ import {
   FactorySourceControlConflictError,
   hydrateFactorySession,
   resolveFactoryDefaultModelId,
-  resolveFactoryProjectForSession,
   resolveFactorySourceControl,
-  resolveFactorySourceRepository,
+  resolvePrimaryEnvironmentRepository,
 } from '../../session/factory-session.js';
 import { readRequestContextOrgId, seedSessionOrg } from '../../session/org-seed.js';
 import type {
@@ -421,12 +420,9 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
             : 'Could not start a session: connect source control to this Factory project.',
         );
       }
-      const repo = await resolveFactorySourceRepository({
-        sourceControl,
-        orgId,
-        factoryProjectId,
-        firstLinkedRepository: true,
-      });
+      // The session's link is the factory's position-1 environment
+      // repository (D1); the sandbox boots every environment repository.
+      const repo = await resolvePrimaryEnvironmentRepository({ sourceControl, orgId, factoryProjectId });
       if (!repo.found) {
         throw new SlackSessionStartError(
           repo.reason === 'connection'
@@ -438,8 +434,10 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
       const branch = threadBranch(thread.id);
       // Attributed to the Slack sender, not to whoever connected the repository:
       // unlike an autonomous rule run, a Slack thread has a real interactive user.
+      // Keyed by factory, not by link: the thread's session stays found when the
+      // position-1 repository changes between two messages.
       const existing = await sourceControl.sessions.getForBranch({
-        projectRepositoryId: repo.projectRepositoryId,
+        factoryProjectId,
         userId: link.userId,
         branch,
       });
@@ -447,6 +445,7 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
       const session = await sourceControl.sessions.create({
         sessionId: globalThis.crypto.randomUUID(),
         projectRepositoryId: repo.projectRepositoryId,
+        factoryProjectId,
         orgId,
         userId: link.userId,
         branch,
@@ -490,15 +489,13 @@ export function createChannelSessionResolver(deps: SlackChannelDeps): ChannelSes
     const sourceControl = thread.resourceId.startsWith('channel:')
       ? null
       : await sourceControlSessions.getSourceControlBySessionId(thread.resourceId);
-    const owner = sourceControl
-      ? await resolveFactoryProjectForSession({ sourceControl, sessionId: thread.resourceId })
-      : null;
+    const session = sourceControl ? await sourceControl.sessions.getBySessionId(thread.resourceId) : null;
     return controller.createSession({
       id: thread.resourceId,
       ownerId: controller.id,
       resourceId: thread.resourceId,
       requestContext,
-      ...(owner ? { tags: { factoryProjectId: owner.factoryProjectId } } : {}),
+      ...(session?.factoryProjectId ? { tags: { factoryProjectId: session.factoryProjectId } } : {}),
     });
   };
 }
@@ -543,8 +540,13 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
 
     const sourceControl = await sourceControlSessions.getSourceControlBySessionId(thread.resourceId);
     if (!sourceControl) return;
-    const owner = await resolveFactoryProjectForSession({ sourceControl, sessionId: thread.resourceId });
-    if (!owner) return;
+    const sourceSession = await sourceControl.sessions.getBySessionId(thread.resourceId);
+    if (!sourceSession?.factoryProjectId) return;
+    const owner = {
+      factoryProjectId: sourceSession.factoryProjectId,
+      orgId: sourceSession.orgId,
+      userId: sourceSession.userId,
+    };
 
     // Repo-backed Slack sessions are factory sessions: stamp the owning
     // project onto controller state so downstream reads (org-first credential

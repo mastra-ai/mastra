@@ -9,6 +9,7 @@ import type { Intake, IntakeItem } from '../capabilities/intake.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import { normalizeIntakeLabel, resolveIntakeLabelRoute } from '../storage/domains/intake/base.js';
 import type { IntakeConfig, IntakeLabelRoute, IntakeStorage } from '../storage/domains/intake/base.js';
+import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
@@ -39,6 +40,8 @@ export interface IntakeRoutesDeps extends RouteDependencies {
   boardRegistry?: BoardRegistry;
   /** Work items domain handle; when present, rebinding a source to another board moves its resting cards. */
   workItems?: Pick<WorkItemsStorage, 'list' | 'update' | 'supersedeDecisionsForWorkItem'>;
+  /** GitHub repositories, used to match a card to the repository binding its source id names. */
+  githubRepositories?: Pick<SourceControlStorageHandle['repositories'], 'get'>;
 }
 
 /** Upper bound on source pages read while relocating cards, so a huge source cannot stall the request. */
@@ -130,8 +133,8 @@ async function relocateSourceCards({
 
 /**
  * After a label route changes, every issue card in the project that carries `label` is re-routed
- * under the project's current routes: to the board its labels now select, or back to Work when none
- * of them is routed any more.
+ * under the project's current routes: to the board its labels now select, or — when none of them is
+ * routed any more — to its GitHub repository binding's board, falling back to Work.
  */
 async function relocateLabeledCards({
   workItems,
@@ -142,6 +145,8 @@ async function relocateLabeledCards({
   integrationId,
   label,
   routes,
+  intake,
+  githubRepositories,
 }: {
   workItems: Pick<WorkItemsStorage, 'list' | 'update' | 'supersedeDecisionsForWorkItem'>;
   boardRegistry: BoardRegistry;
@@ -151,8 +156,14 @@ async function relocateLabeledCards({
   integrationId: string;
   label: string;
   routes: readonly IntakeLabelRoute[];
+  intake: Pick<IntakeStorage, 'listBindings'>;
+  githubRepositories?: Pick<SourceControlStorageHandle['repositories'], 'get'>;
 }): Promise<{ moved: number; skipped: number }> {
   const changed = normalizeIntakeLabel(label);
+  const repositoryBoards =
+    integrationId === 'github'
+      ? await githubRepositoryBoards({ intake, githubRepositories, boardRegistry, orgId, factoryProjectId })
+      : [];
   let moved = 0;
   let skipped = 0;
   for (const item of await workItems.list({ orgId, factoryProjectId })) {
@@ -160,12 +171,67 @@ async function relocateLabeledCards({
     if (!source || source.integrationId !== integrationId || source.type !== 'issue') continue;
     const labels = cardLabels(item);
     if (!labels.some(candidate => normalizeIntakeLabel(candidate) === changed)) continue;
-    const targetBoard = resolveIntakeLabelRoute(routes, labels)?.board ?? 'work';
+    const targetBoard =
+      resolveIntakeLabelRoute(routes, labels)?.board ??
+      repositoryBoards.find(candidate => cardInRepository(item, candidate))?.board ??
+      'work';
     const outcome = await moveCardToBoard({ workItems, boardRegistry, userId, item, targetBoard });
     if (outcome === 'moved') moved += 1;
     else if (outcome === 'skipped') skipped += 1;
   }
   return { moved, skipped };
+}
+
+interface GithubRepositoryBoard {
+  board: string;
+  slug: string;
+  externalId?: string;
+}
+
+/**
+ * The project's GitHub repository bindings that name an installed board. A binding's source id is
+ * the internal repository id or the repository slug, so ids are resolved to the slug and external id
+ * a card carries.
+ */
+async function githubRepositoryBoards({
+  intake,
+  githubRepositories,
+  boardRegistry,
+  orgId,
+  factoryProjectId,
+}: {
+  intake: Pick<IntakeStorage, 'listBindings'>;
+  githubRepositories?: Pick<SourceControlStorageHandle['repositories'], 'get'>;
+  boardRegistry: BoardRegistry;
+  orgId: string;
+  factoryProjectId: string;
+}): Promise<GithubRepositoryBoard[]> {
+  const boards: GithubRepositoryBoard[] = [];
+  for (const binding of await intake.listBindings({ orgId, integrationId: 'github' })) {
+    if (binding.factoryProjectId !== factoryProjectId || !binding.board || !boardRegistry.has(binding.board)) continue;
+    const repository = await githubRepositories?.get({ orgId, id: binding.sourceId });
+    boards.push(
+      repository
+        ? { board: binding.board, slug: repository.slug.toLowerCase(), externalId: repository.externalId }
+        : { board: binding.board, slug: binding.sourceId.toLowerCase() },
+    );
+  }
+  return boards;
+}
+
+function cardInRepository(
+  item: { metadata?: Record<string, unknown> | null; externalSource?: { url?: string } | null },
+  repository: GithubRepositoryBoard,
+): boolean {
+  const repositoryId = item.metadata?.githubRepositoryId;
+  if (
+    repository.externalId !== undefined &&
+    repositoryId !== undefined &&
+    String(repositoryId) === repository.externalId
+  )
+    return true;
+  const match = /^https?:\/\/[^/]+\/(.+)\/(?:issues|pull)\/\d+(?:[/?#]|$)/.exec(item.externalSource?.url ?? '');
+  return match?.[1]?.toLowerCase() === repository.slug;
 }
 
 /** One integration that failed while the rest of the aggregation succeeded. */
@@ -377,7 +443,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
   }
 
   routes(): ApiRoute[] {
-    const { audit, intake, projects, integrations = [], boardRegistry, workItems } = this.deps;
+    const { audit, intake, projects, integrations = [], boardRegistry, workItems, githubRepositories } = this.deps;
     const integrationIds = integrations.map(integration => integration.id);
 
     return [
@@ -611,8 +677,8 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
             await intake.setLabelRoute({ ...scope, label: route.label, board: route.board, userId: tenant.userId });
           }
 
-          // Cards already carrying the label follow the route: onto the new board, or back to
-          // Work when the label is no longer routed anywhere.
+          // Cards already carrying the label follow the route: onto the new board, or — when the
+          // label is no longer routed anywhere — to the repository binding's board or Work.
           let relocated: { moved: number; skipped: number } | null = null;
           if (workItems && boardRegistry && (previous?.board ?? null) !== route.board) {
             try {
@@ -625,6 +691,8 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
                 integrationId: route.integrationId,
                 label: route.label,
                 routes: await intake.listLabelRoutes(scope),
+                intake,
+                githubRepositories,
               });
             } catch (error) {
               // The route is saved; the cards can be moved by hand.

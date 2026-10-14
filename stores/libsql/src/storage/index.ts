@@ -2,8 +2,9 @@ import { createClient } from '@libsql/client';
 import type { RetentionConfig, StorageDomains } from '@mastra/core/storage';
 import { MastraCompositeStore } from '@mastra/core/storage';
 
+import { gateIfLocalFile } from '../shared/file-transaction-gate';
+import { resetConnectionsAfterBusy } from '../shared/reset-after-busy-client';
 import { gateSingleConnectionClient, isSingleConnectionDatabase } from '../shared/single-connection-client';
-import { gateFileTransactionClient, getLocalFileDatabaseKey } from '../vector/write-lock';
 import { DEFAULT_CONNECTION_TIMEOUT_MS } from './db';
 import type { SqliteClient as Client } from './db/client';
 import { AgentsLibSQL } from './domains/agents';
@@ -235,17 +236,18 @@ export class LibSQLStore extends MastraCompositeStore {
         // contention is handled server-side. See libsql-client-ts#288/#345.
         ...(this.isLocalDb ? { timeout: this.connectionTimeoutMs } : {}),
       });
-      this.client = isSingleConnectionDatabase(config) ? gateSingleConnectionClient(client) : client;
-      if (this.isLocalDb && !config.url.includes(':memory:') && !config.syncUrl) {
-        // Coordinate interactive transactions with LibSQLVector clients on the
-        // same database file: vector mutations serialize behind a path-keyed
-        // write lock, and an uncoordinated store transaction can wedge a pooled
-        // connection when its BEGIN IMMEDIATE is interrupted by that lock.
-        this.client = gateFileTransactionClient(
-          this.client,
-          getLocalFileDatabaseKey({ url: config.url, syncUrl: config.syncUrl, cwd: process.cwd() }),
-        );
-      }
+      this.client = isSingleConnectionDatabase(config)
+        ? gateSingleConnectionClient(client)
+        : this.isLocalDb
+          ? gateIfLocalFile(
+              resetConnectionsAfterBusy(client, {
+                afterReset: () => this.applyLocalPragmas(client),
+                maxWaitMs: this.connectionTimeoutMs,
+              }),
+              config.url,
+              { maxWaitMs: this.connectionTimeoutMs },
+            )
+          : client;
       this.pragmasReady = this.isLocalDb ? this.applyLocalPragmas() : Promise.resolve();
     } else {
       this.client = config.client;
@@ -255,6 +257,7 @@ export class LibSQLStore extends MastraCompositeStore {
 
     const domainConfig = {
       client: this.client,
+      embeddedReplica: 'url' in config && !!config.syncUrl,
       maxRetries: this.maxRetries,
       initialBackoffMs: this.initialBackoffMs,
     };
@@ -315,7 +318,7 @@ export class LibSQLStore extends MastraCompositeStore {
     };
   }
 
-  private async applyLocalPragmas(): Promise<void> {
+  private async applyLocalPragmas(client: Client = this.client): Promise<void> {
     const pragmas = [
       ['journal_mode=WAL', 'PRAGMA journal_mode=WAL;'],
       // Keep in sync with the connection-level `timeout` passed to createClient
@@ -329,7 +332,7 @@ export class LibSQLStore extends MastraCompositeStore {
 
     for (const [label, sql] of pragmas) {
       try {
-        await this.client.execute(sql);
+        await client.execute(sql);
         this.logger.debug(`LibSQLStore: PRAGMA ${label} set.`);
       } catch (err) {
         this.logger.warn(`LibSQLStore: Failed to set PRAGMA ${label}.`, err);

@@ -523,7 +523,7 @@ describe('DurableAgent streaming execution', () => {
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { runId, cleanup } = await durableAgent.stream('Test');
+      const { runId, cleanup, output } = await durableAgent.stream('Test');
 
       expect(runId).toBeDefined();
       expect(typeof runId).toBe('string');
@@ -532,7 +532,8 @@ describe('DurableAgent streaming execution', () => {
       // Registry should have the run
       expect(durableAgent.runRegistry.has(runId)).toBe(true);
 
-      // Cleanup should remove from registry
+      // Cleanup of a finished run removes it from the registry right away
+      await output.consumeStream();
       cleanup();
       expect(durableAgent.runRegistry.has(runId)).toBe(false);
     });

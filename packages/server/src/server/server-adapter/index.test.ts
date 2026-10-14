@@ -11,7 +11,13 @@ import { z } from 'zod/v4';
 import { GENERATE_AGENT_ROUTE, STREAM_GENERATE_ROUTE } from '../handlers/agents';
 import { HTTPException } from '../http-exception';
 import { createRoute } from './routes/route-builder';
-import { MastraServer, getCustomHTTPExceptionResponse, getFGAProvider, MASTRA_AUTH_MODE_KEY } from './index';
+import {
+  MastraServer,
+  getCustomHTTPExceptionResponse,
+  getFGAProvider,
+  MASTRA_AUTH_MODE_KEY,
+  normalizeQueryParams,
+} from './index';
 
 class TestMastraServer extends MastraServer<any, any, any> {
   stream = vi.fn();
@@ -1381,5 +1387,91 @@ describe('getCustomHTTPExceptionResponse', () => {
     { status: 409, getResponse: () => Response.json({ code: 'NOT_TRUSTED' }) },
   ])('ignores non-HTTPException values', error => {
     expect(getCustomHTTPExceptionResponse(error)).toBeUndefined();
+  });
+});
+
+describe('normalizeQueryParams', () => {
+  it('passes through plain string and repeated-key params unchanged', () => {
+    const result = normalizeQueryParams({ page: '2', tag: ['a', 'b'], single: ['only'] });
+    expect(result).toEqual({ page: '2', tag: ['a', 'b'], single: 'only' });
+  });
+
+  it('reconstructs bracket-notation keys into JSON strings', () => {
+    const result = normalizeQueryParams({
+      'orderBy[field]': 'createdAt',
+      'orderBy[direction]': 'DESC',
+      'filter[status]': 'active',
+    });
+    expect(result).toEqual({
+      orderBy: JSON.stringify({ field: 'createdAt', direction: 'DESC' }),
+      filter: JSON.stringify({ status: 'active' }),
+    });
+  });
+
+  it('does not overwrite a directly-set parent key with a bracket group', () => {
+    const result = normalizeQueryParams({
+      orderBy: JSON.stringify({ field: 'name' }),
+      'orderBy[field]': 'createdAt',
+    });
+    expect(result).toEqual({ orderBy: JSON.stringify({ field: 'name' }) });
+  });
+
+  it('ignores special object keys in bracket-notation parents and children', () => {
+    const result = normalizeQueryParams(
+      Object.fromEntries([
+        ['__proto__[polluted]', 'yes'],
+        ['constructor[prototype]', 'yes'],
+        ['prototype[x]', 'yes'],
+        ['filter[__proto__]', 'yes'],
+        ['filter[constructor]', 'yes'],
+        ['filter[status]', 'active'],
+      ]),
+    );
+
+    // Only the legitimate bracket child survives
+    expect(result).toEqual({ filter: JSON.stringify({ status: 'active' }) });
+    // Nothing was written onto Object.prototype
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+  });
+
+  it('ignores flat special object keys', () => {
+    const result = normalizeQueryParams(
+      Object.fromEntries([
+        ['__proto__', 'yes'],
+        ['constructor', 'yes'],
+        ['prototype', 'yes'],
+        ['page', '1'],
+      ]),
+    );
+
+    expect(result).toEqual({ page: '1' });
+    expect(Object.keys(result)).toEqual(['page']);
+  });
+
+  it('does not treat inherited Object.prototype members as existing bracket groups', () => {
+    // `toString` is inherited, not own: bracket-group creation must not read or
+    // write the shared builtin function.
+    const result = normalizeQueryParams({
+      'toString[length]': 'x',
+      'valueOf[tagged]': 'x',
+    });
+
+    expect(result).toEqual({
+      toString: JSON.stringify({ length: 'x' }),
+      valueOf: JSON.stringify({ tagged: 'x' }),
+    });
+    // The shared builtins were not mutated
+    expect(Object.prototype.toString.length).toBe(0);
+    expect((Object.prototype.valueOf as unknown as Record<string, unknown>).tagged).toBeUndefined();
+  });
+
+  it('returns a plain object that supports spreads, `in` checks, and JSON serialization', () => {
+    const result = normalizeQueryParams({ 'filter[status]': 'x', page: '1' });
+
+    expect({ ...result }).toEqual(result);
+    expect('page' in result).toBe(true);
+    expect(JSON.parse(JSON.stringify(result))).toEqual({ filter: '{"status":"x"}', page: '1' });
+    expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
   });
 });
