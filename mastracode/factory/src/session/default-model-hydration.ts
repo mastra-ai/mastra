@@ -32,10 +32,15 @@ export interface DefaultModelHydrationDependencies {
   modelDefaults: Pick<ModelDefaultsStorage, 'get'>;
 }
 
-/** Seed the user's default model unless the interactive thread already selected its own model. */
+/**
+ * Seed the user's default model on interactive sessions. A thread the session
+ * just created only carries the controller's defaults, so it always gets the
+ * user's default; a resumed thread keeps any model already stored on it.
+ */
 export async function hydrateSessionDefaultModel(
   session: DefaultModelHydrationSession,
   { sourceControl, workItems, modelDefaults }: DefaultModelHydrationDependencies,
+  { threadCreated = false }: { threadCreated?: boolean } = {},
 ): Promise<void> {
   const resourceId = session.identity.getResourceId();
   if (session.state.get()?.factoryProjectId || typeof session.thread.getSetting !== 'function') return;
@@ -54,13 +59,15 @@ export async function hydrateSessionDefaultModel(
     ) {
       return;
     }
-    const existingThreadSettings = await Promise.all([
-      session.thread.getSetting({ key: 'currentModelId' }),
-      session.thread.getSetting({ key: 'modeModelId_build' }),
-      session.thread.getSetting({ key: 'modeModelId_plan' }),
-      session.thread.getSetting({ key: 'modeModelId_fast' }),
-    ]);
-    if (existingThreadSettings.some(setting => typeof setting === 'string')) return;
+    if (!threadCreated) {
+      const existingThreadSettings = await Promise.all([
+        session.thread.getSetting({ key: 'currentModelId' }),
+        session.thread.getSetting({ key: 'modeModelId_build' }),
+        session.thread.getSetting({ key: 'modeModelId_plan' }),
+        session.thread.getSetting({ key: 'modeModelId_fast' }),
+      ]);
+      if (existingThreadSettings.some(setting => typeof setting === 'string')) return;
+    }
 
     const modelDefault = await modelDefaults.get({ orgId: sourceSession.orgId, userId: sourceSession.userId });
     if (modelDefault) await applyDefaultModel(session, modelDefault.modelId);

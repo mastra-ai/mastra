@@ -253,4 +253,53 @@ describe('AgentController.onSessionCreated', () => {
     await completion;
     expect(events).toEqual(['complete']);
   });
+
+  describe('threadCreated context', () => {
+    async function observe(storage: InMemoryStore, args: Parameters<AgentController['createSession']>[0]) {
+      const { controller } = createController(storage);
+      await controller.init();
+      const contexts: { threadCreated: boolean }[] = [];
+      controller.onSessionCreated((_session, context) => {
+        contexts.push(context);
+      });
+      const session = await controller.createSession(args);
+      return { session, contexts };
+    }
+
+    it('is true when createSession creates the initial thread', async () => {
+      const { contexts } = await observe(new InMemoryStore(), { resourceId: 'resource-1' });
+      expect(contexts).toEqual([{ threadCreated: true }]);
+    });
+
+    it('is true when a requested thread id does not exist yet', async () => {
+      const { session, contexts } = await observe(new InMemoryStore(), {
+        resourceId: 'resource-1',
+        threadId: 'thread-new',
+      });
+      expect(session.thread.requireId()).toBe('thread-new');
+      expect(contexts).toEqual([{ threadCreated: true }]);
+    });
+
+    it('is false when a stored thread is resumed', async () => {
+      const storage = new InMemoryStore();
+      const first = await observe(storage, { resourceId: 'resource-1' });
+      const threadId = first.session.thread.requireId();
+
+      const autoResumed = await observe(storage, { resourceId: 'resource-1' });
+      expect(autoResumed.session.thread.requireId()).toBe(threadId);
+      expect(autoResumed.contexts).toEqual([{ threadCreated: false }]);
+
+      const explicit = await observe(storage, { resourceId: 'resource-1', threadId });
+      expect(explicit.contexts).toEqual([{ threadCreated: false }]);
+    });
+
+    it('is false when no initial thread is created', async () => {
+      const { session, contexts } = await observe(new InMemoryStore(), {
+        resourceId: 'resource-1',
+        createInitialThread: false,
+      });
+      expect(session.thread.getId()).toBeNull();
+      expect(contexts).toEqual([{ threadCreated: false }]);
+    });
+  });
 });

@@ -162,4 +162,27 @@ describe('hydrateSessionDefaultModel', () => {
     expect(session.model.switch).not.toHaveBeenCalled();
     warn.mockRestore();
   });
+
+  it('applies the user default model to a thread the session just created, despite Core seeding its model (#25503)', async () => {
+    const session = createSession();
+    vi.mocked(session.thread.getSetting).mockImplementation(async ({ key }) =>
+      key === 'currentModelId' ? 'openai/gpt-5.5' : undefined,
+    );
+    const dependencies = createDependencies();
+
+    await hydrateSessionDefaultModel(session, dependencies, { threadCreated: true });
+
+    expect(session.model.switch).toHaveBeenCalledExactlyOnceWith(modelId);
+  });
+
+  it('keeps the project default for a Factory run even on a just-created thread', async () => {
+    const session = createSession();
+    const dependencies = createDependencies();
+    vi.mocked(dependencies.workItems.findActiveRunBindingByThread).mockResolvedValue({} as never);
+
+    await hydrateSessionDefaultModel(session, dependencies, { threadCreated: true });
+
+    expect(dependencies.modelDefaults.get).not.toHaveBeenCalled();
+    expect(session.model.switch).not.toHaveBeenCalled();
+  });
 });

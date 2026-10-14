@@ -37,6 +37,7 @@ export type {
   AgentControllerDisplayState,
   AgentControllerEvent,
   AgentControllerEventListener,
+  AgentControllerSessionCreatedContext,
   AgentControllerMode,
   AgentControllerOMConfig,
   AgentControllerRequestContext,
