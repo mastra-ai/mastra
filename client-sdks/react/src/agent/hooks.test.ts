@@ -1249,8 +1249,6 @@ describe('useChat forwards clientTools', () => {
   });
 
   it('keeps earlier messages and allows a clean retry after a failed signal send', async () => {
-    sendMessageMock.mockRejectedValueOnce(new Error('network down'));
-
     const { result } = renderHook(
       () =>
         useChat({ agentId: 'test-agent', resourceId: 'resource-1', threadId: 'thread-1', enableThreadSignals: true }),
@@ -1258,6 +1256,12 @@ describe('useChat forwards clientTools', () => {
     );
     await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalledTimes(1));
 
+    // An earlier send succeeds and its pending bubble stays in place.
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'stream', message: 'first message', threadId: 'thread-1' });
+    });
+
+    sendMessageMock.mockRejectedValueOnce(new Error('network down'));
     await act(async () => {
       await result.current.sendMessage({ mode: 'stream', message: 'retry me', threadId: 'thread-1' }).catch(() => {});
     });
@@ -1266,8 +1270,10 @@ describe('useChat forwards clientTools', () => {
     });
 
     const users = result.current.messages.filter(m => m.role === 'user');
-    expect(users).toHaveLength(1);
-    expect(users[0]!.content.metadata?.status).toBe('pending');
+    expect(users).toHaveLength(2);
+    expect(JSON.stringify(users[0]!.content)).toContain('first message');
+    expect(JSON.stringify(users[1]!.content)).toContain('retry me');
+    expect(users.every(m => m.content.metadata?.status === 'pending')).toBe(true);
   });
 
   it('uses the legacy stream path when thread signals are explicitly disabled', async () => {
