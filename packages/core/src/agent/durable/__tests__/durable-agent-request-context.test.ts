@@ -299,7 +299,7 @@ describe('DurableAgent RequestContext reserved keys', () => {
       // entries.
       const entries = (result.workflowInput as { requestContextEntries?: Record<string, unknown> })
         .requestContextEntries;
-      expect(entries).toEqual({ userId: 'user-123' });
+      expect(entries).toEqual({ userId: 'user-123', mastra__scopes: [] });
     });
 
     it('should not persist a delegating agent memory instance from the reserved key', async () => {
@@ -326,7 +326,7 @@ describe('DurableAgent RequestContext reserved keys', () => {
 
       const entries = (result.workflowInput as { requestContextEntries?: Record<string, unknown> })
         .requestContextEntries;
-      expect(entries).toEqual({ userId: 'user-123' });
+      expect(entries).toEqual({ userId: 'user-123', mastra__scopes: [] });
     });
 
     it('should not persist the framework-managed auth token into workflow input', async () => {
@@ -352,7 +352,7 @@ describe('DurableAgent RequestContext reserved keys', () => {
 
       const entries = (result.workflowInput as { requestContextEntries?: Record<string, unknown> })
         .requestContextEntries;
-      expect(entries).toEqual({ userId: 'user-123' });
+      expect(entries).toEqual({ userId: 'user-123', mastra__scopes: [] });
     });
   });
 });

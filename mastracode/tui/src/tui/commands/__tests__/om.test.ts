@@ -13,7 +13,6 @@ function createSettings(overrides?: Partial<GlobalSettings['models']>): GlobalSe
       version: 0,
       modePackId: null,
       omPackId: null,
-      quietModePreferenceSelected: true,
     },
     models: {
       activeModelPackId: null,
@@ -34,13 +33,7 @@ function createSettings(overrides?: Partial<GlobalSettings['models']>): GlobalSe
       goalMaxTurns: null,
       ...overrides,
     },
-    preferences: {
-      yolo: null,
-      theme: 'auto',
-      thinkingLevel: 'off',
-      quietMode: false,
-      quietModeMaxToolPreviewLines: 2,
-    },
+    preferences: { yolo: null, theme: 'auto', thinkingLevel: 'off', previewLines: 2 },
     storage,
     customModelPacks: [],
     customProviders: [],

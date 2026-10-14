@@ -98,6 +98,16 @@
         "default": "./dist/knowledge-compat/index.cjs"
       }
     },
+    "./memory": {
+      "import": {
+        "types": "./dist/memory/index.d.ts",
+        "default": "./dist/memory/index.js"
+      },
+      "require": {
+        "types": "./dist/memory/index.d.cts",
+        "default": "./dist/memory/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "sideEffects": false,

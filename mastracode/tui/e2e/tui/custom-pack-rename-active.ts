@@ -18,7 +18,6 @@ export const customPackRenameActiveScenario = {
       skippedAt: null,
       version: 1,
       modePackId: originalPackId,
-      quietModePreferenceSelected: true,
     };
     settings.customModelPacks = [
       {
