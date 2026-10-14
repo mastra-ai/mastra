@@ -77,6 +77,21 @@ describe('static Knowledge importer operations', () => {
     expect(await (await knowledge.getStorage()).getNodeScopeIds(first.id)).toEqual([projectScopeId]);
   });
 
+  it('keeps distinct addresses that share a title as distinct nodes', async () => {
+    const { operations } = await createFixture();
+    const first = await operations.upsertNode('event:100', { name: 'Dynamic Workflows' });
+    const second = await operations.upsertNode('event:200', { name: 'Dynamic Workflows' });
+
+    expect(second.id).not.toBe(first.id);
+    expect(first.node.name).toBe('Dynamic Workflows');
+    expect(second.node.name).toBe('Dynamic Workflows (ent200)');
+    expect((await operations.upsertNode('event:100', { name: 'Dynamic Workflows' })).node).toEqual(first.node);
+    expect((await operations.upsertNode('event:200', { name: 'Dynamic Workflows' })).node).toEqual(second.node);
+
+    const updated = await operations.upsertNode('event:200', { name: 'Dynamic Workflows', metadata: { v: 2 } });
+    expect(updated.node).toMatchObject({ id: second.id, name: 'Dynamic Workflows (ent200)', metadata: { v: 2 } });
+  });
+
   it('uses ordinary records with source provenance and binding-bounded removal', async () => {
     const { knowledge, operations, run, orgScopeId, projectScopeId } = await createFixture('owner');
     const node = await operations.upsertNode('event:42', { name: 'Planning' });
