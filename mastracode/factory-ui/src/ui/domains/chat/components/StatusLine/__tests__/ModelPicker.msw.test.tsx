@@ -12,7 +12,6 @@ import type { AvailableModelOption } from '../../../../../../hooks/useAvailableM
 import { thinkingConfig } from '../../../../../__tests__/fixtures/thinkingConfig';
 import { ChatConnectionContext } from '../../../context/ChatConnectionContext';
 import { ChatModelsProvider } from '../../../context/ChatModelsProvider';
-import { ChatModesContext } from '../../../context/ChatModesContext';
 import { ChatSessionContext } from '../../../context/ChatSessionContext';
 import type { ChatSessionContextApi } from '../../../context/ChatSessionContext';
 import { ChatThinkingProvider } from '../../../context/ChatThinkingProvider';
@@ -87,8 +86,7 @@ function renderPicker({
         ? HttpResponse.json({ error: 'unavailable' }, { status: 500 })
         : HttpResponse.json<ThinkingConfigInfo>({
             ...thinkingConfig,
-            globalDefault: 'low',
-            modeDefaults: { build: 'medium' },
+            globalDefault: 'medium',
           }),
     ),
     http.get(`${API}/sessions/:resourceId`, async ({ params }) => {
@@ -128,23 +126,12 @@ function renderPicker({
             state: { controllerId: AGENT_CONTROLLER_ID, resourceId: 'session-1', modeId: 'build', modelId },
           }}
         >
-          <ChatModesContext.Provider
-            value={{
-              modes: [{ id: 'build', name: 'Build' }],
-              activeMode: { id: 'build', name: 'Build' },
-              activeModeId: 'build',
-              isLoading: false,
-              error: undefined,
-              setMode: async () => {},
-            }}
-          >
-            <ChatModelsProvider>
-              <ChatThinkingProvider>
-                <ModelPicker />
-                <Toaster position="bottom-right" />
-              </ChatThinkingProvider>
-            </ChatModelsProvider>
-          </ChatModesContext.Provider>
+          <ChatModelsProvider>
+            <ChatThinkingProvider>
+              <ModelPicker />
+              <Toaster position="bottom-right" />
+            </ChatThinkingProvider>
+          </ChatModelsProvider>
         </ChatConnectionContext.Provider>
       </ChatSessionContext.Provider>
     </MemoryRouter>,
@@ -226,12 +213,12 @@ describe('ModelPicker', () => {
     expect(await screen.findByRole('button', { name: 'Thinking: High · this session' })).toBeEnabled();
   });
 
-  it('shows the mode default until the session picks its own level, then saves it', async () => {
+  it('given no session level, when the session picks one, then it leaves the global default and saves it', async () => {
     const user = userEvent.setup();
     const { client, stateUpdates } = renderPicker();
 
-    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · build mode default' }));
-    expect(screen.getByText('Follows the build mode default.')).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · global default' }));
+    expect(screen.getByText('Follows the global default.')).toBeInTheDocument();
     const ramp = screen.getByRole('slider', { name: 'Thinking' });
     expect(screen.queryByText('Max')).not.toBeInTheDocument();
     fireEvent.change(ramp, { target: { value: '3' } });
@@ -243,7 +230,7 @@ describe('ModelPicker', () => {
     expect(screen.getByText('Set for this session.')).toBeInTheDocument();
   });
 
-  it('returns the session to the mode default with Use default', async () => {
+  it('given a session level, when Use default is chosen, then the session follows the global default', async () => {
     const user = userEvent.setup();
     const { client, stateUpdates } = renderPicker({ thinkingLevel: 'high' });
 
@@ -252,7 +239,7 @@ describe('ModelPicker', () => {
     await waitForMutationsIdle(client);
 
     expect(stateUpdates).toEqual([{ thinkingLevel: null }]);
-    expect(screen.getByRole('button', { name: 'Thinking: Medium · build mode default' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Thinking: Medium · global default' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Use default' })).not.toBeInTheDocument();
   });
 
@@ -274,7 +261,7 @@ describe('ModelPicker', () => {
     expect(await screen.findByRole('button', { name: 'Thinking: High · this session' })).toBeEnabled();
   });
 
-  it('holds the thinking control disabled, not the mode default, until the session level loads', async () => {
+  it('holds the thinking control disabled, not the global default, until the session level loads', async () => {
     let loadSettings = () => {};
     const settingsLoaded = new Promise<void>(resolve => {
       loadSettings = resolve;
@@ -284,7 +271,7 @@ describe('ModelPicker', () => {
     expect(
       await screen.findByRole('button', { name: "Thinking: unavailable. The thinking level isn't loaded yet." }),
     ).toHaveAttribute('aria-disabled', 'true');
-    expect(screen.queryByRole('button', { name: 'Thinking: Medium · build mode default' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Thinking: Medium · global default' })).not.toBeInTheDocument();
 
     loadSettings();
     expect(await screen.findByRole('button', { name: 'Thinking: High · this session' })).toBeEnabled();

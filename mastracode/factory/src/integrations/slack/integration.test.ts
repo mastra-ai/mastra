@@ -135,7 +135,14 @@ describe('SlackIntegration.channels', () => {
       ctxWith({
         modelDefaults,
         memorySettings: { get: vi.fn(async () => null) },
-        projects: { getById: vi.fn(async () => ({ id: 'fp-1', defaultModelId: 'anthropic/claude-opus-5' })) },
+        projects: {
+          getById: vi.fn(async () => ({
+            id: 'fp-1',
+            orgId: 'org-1',
+            modelScope: 'user',
+            defaultModelId: 'anthropic/claude-opus-5',
+          })),
+        },
         sourceControlOwner: {
           sessions: {
             getBySessionId: vi.fn(async () => ({

@@ -103,7 +103,7 @@ function reviewRuntimeFromRequestContext(requestContext: ComputeStateSignalArgs[
   if (!modelId) {
     throw new Error('Factory review phase requires a selected session model.');
   }
-  return { modelId, thinkingLevel: resolveRequestThinkingLevel(context) };
+  return { modelId, thinkingLevel: resolveRequestThinkingLevel({ state: context?.state }) };
 }
 
 function workItemSourceKey(item: WorkItemRow): string | null {

@@ -979,7 +979,7 @@ describe('GithubRules', () => {
           return () => agentEndListeners.delete(listener);
         }),
         state: { get: vi.fn(() => ({ factoryProjectId: project.id })), set: vi.fn(async () => {}) },
-        mode: { get: vi.fn(() => 'build') },
+        mode: { get: vi.fn(() => 'build'), resolve: vi.fn(() => ({})) },
         model: { get: vi.fn(() => 'openai/gpt-5.6-sol') },
         identity: { getId: vi.fn(() => key), getOwnerId: vi.fn(() => 'user-1') },
         permissions: { setForTool: vi.fn(async () => {}) },
@@ -2323,7 +2323,7 @@ describe('GithubRules', () => {
       getWorkspace: () => ({ skills: { maybeRefresh: vi.fn(async () => {}), get: vi.fn(async () => undefined) } }),
       subscribe: vi.fn(() => () => {}),
       state: { get: vi.fn(() => ({ factoryProjectId: project.id })), set: vi.fn(async () => {}) },
-      mode: { get: vi.fn(() => 'build') },
+      mode: { get: vi.fn(() => 'build'), resolve: vi.fn(() => ({})) },
       model: { get: vi.fn(() => 'openai/gpt-5.6-sol') },
       identity: { getId: vi.fn(() => 'session-work-42'), getOwnerId: vi.fn(() => 'user-1') },
       permissions: { setForTool: vi.fn(async () => {}) },

@@ -107,6 +107,39 @@ describe('ProjectRoutes', () => {
     ).toBe(404);
   });
 
+  it('requires an organization admin to change the model scope', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Shared' } });
+    const isOrganizationAdmin = vi.fn(async () => false);
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'member', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as never,
+      projectRoutes(seed, undefined, undefined, undefined, { auth: fakeRouteAuth({ isOrganizationAdmin }) }),
+    );
+    const patch = (body: Record<string, unknown>) =>
+      app.request(`/web/factory/projects/${project.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    const denied = await patch({ modelScope: 'user' });
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({ error: 'forbidden' });
+    expect(isOrganizationAdmin).toHaveBeenCalledWith('org-1', 'member');
+    expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('factory');
+
+    expect((await patch({ name: 'Renamed' })).status).toBe(200);
+
+    isOrganizationAdmin.mockResolvedValue(true);
+    expect((await patch({ modelScope: 'user' })).status).toBe(200);
+    expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('user');
+  });
+
   describe('apply default model', () => {
     const mount = (
       seed: FactoryStorageTestSeed,

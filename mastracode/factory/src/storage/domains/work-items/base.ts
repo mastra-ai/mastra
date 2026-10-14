@@ -2878,6 +2878,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     threadId: string;
     resourceId: string;
     sessionId: string;
+    rejectAmbiguous?: boolean;
   }): Promise<FactoryRunBindingRecord | null> {
     const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
       org_id: input.orgId,
@@ -2886,7 +2887,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       session_id: input.sessionId,
       status: 'active',
     });
-    if (new Set(rows.map(row => row.factory_project_id)).size !== 1) return null;
+    const projectCount = new Set(rows.map(row => row.factory_project_id)).size;
+    if (projectCount > 1 && input.rejectAmbiguous)
+      throw new Error('Factory session has ambiguous active run bindings.');
+    if (projectCount !== 1) return null;
     const row = rows.sort((left, right) => right.created_at.getTime() - left.created_at.getTime())[0];
     return row ? toBinding(row) : null;
   }

@@ -297,8 +297,8 @@
     "thinkingmachines/Inkling-Small:thinking",
     "thinkingmachines/inkling",
     "thinkingmachines/inkling:thinking",
-    "unbiased/pareto",
     "unbiased/pareto-26.10-preview",
+    "unbiased/pareto-26.9",
     "undi95/remm-slerp-l2-13b",
     "unsloth/gemma-3-12b-it",
     "unsloth/gemma-3-27b-it",
@@ -557,7 +557,6 @@
     "thinkingmachines/Inkling-Small:thinking",
     "thinkingmachines/inkling",
     "thinkingmachines/inkling:thinking",
-    "unbiased/pareto",
     "undi95/remm-slerp-l2-13b",
     "upstage/solar-pro4",
     "upstage/solar-pro4:thinking",
@@ -1488,6 +1487,18 @@
         "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ],
+    "nimbz/gemma-4-giftige-blume-31b-v2": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "nimbz/schattenblume-31b": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
     "x-ai/grok-4.20-multi-agent": [
       {
         "type": "effort",
@@ -1901,6 +1912,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "ateron/gemma-4-dark-thoughts-v2-31b": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "minimax/minimax-latest": [
