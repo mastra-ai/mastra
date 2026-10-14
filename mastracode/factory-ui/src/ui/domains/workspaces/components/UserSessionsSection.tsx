@@ -1,5 +1,6 @@
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import {
   Dialog,
   DialogAction,
@@ -13,7 +14,7 @@ import {
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { MessageSquare, Plus } from 'lucide-react';
+import { ArrowUpDown, CircleDashed, Clock, MessageSquare, Plus, UserRound } from 'lucide-react';
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
@@ -23,20 +24,25 @@ import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { removeCachedSession, useFactoryWorkspacesQueries } from '../../../../hooks/useWorkspaces';
+import { removeCachedSession, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
+import { useSessionSort } from '../hooks/useSessionSort';
 import { deleteUserSession, regenerateSessionTitle } from '../services/user-sessions';
 import type { FactoryUserSession } from '../services/user-sessions';
 import {
+  USER_SESSION_STATUS_OPTIONS,
+  USER_SESSION_UPDATED_OPTIONS,
   activeUserSessionFilterCount,
   defaultUserSessionFilters,
   filterUserSessions,
+  userSessionOwnerOptions,
 } from '../services/sessionFilters';
 import type { UserSessionFiltersState } from '../services/sessionFilters';
+import { DEFAULT_USER_SESSION_SORT, USER_SESSION_SORT_OPTIONS, compareUserSessions } from '../services/sessionSort';
 import { getSessionOwnerDetails, getUserSessionLabel } from '../services/sessionPresentation';
+import { SessionListProperties } from './SessionListProperties';
 import { SessionNavRow } from './SessionNavRow';
 import { sessionRowStatus } from '../services/sessionStatus';
-import { UserSessionFilters } from './UserSessionFilters';
 
 export function UserSessionsSection() {
   const { baseUrl } = useApiConfig();
@@ -48,25 +54,18 @@ export function UserSessionsSection() {
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
   const [filterChanges, setFilterChanges] = useState<Partial<UserSessionFiltersState>>({});
   const { pinnedSessions, setPinned } = usePinnedSessions();
+  const [sort, setSort] = useSessionSort('user');
 
-  const projectRepositoryIds = factoryQuery.data?.repositories.map(repository => repository.projectRepositoryId) ?? [];
-  const sessionsEnabled = projectRepositoryIds.length > 0;
-  // Sessions live per linked repository; the sidebar lists every repository's sessions together.
-  const sessionQueries = useFactoryWorkspacesQueries(projectRepositoryIds);
-  const sessionsFailed = sessionQueries.some(query => query.isError);
-  const sessionsLoaded = sessionsEnabled && sessionQueries.every(query => query.isSuccess);
+  const sessionsEnabled = (factoryQuery.data?.repositories.length ?? 0) > 0;
+  const sessionsQuery = useWorkspacesQuery(sessionsEnabled ? factoryId : undefined);
+  const sessionsFailed = sessionsQuery.isError;
+  const sessionsLoaded = sessionsEnabled && sessionsQuery.isSuccess;
   const auth = useFactoryAuth();
   const viewerUserId = auth.data?.user?.userId;
   const defaultFilters = defaultUserSessionFilters(viewerUserId);
   const filters: UserSessionFiltersState = { ...defaultFilters, ...filterChanges };
   const isOwn = (session: FactoryUserSession) => Boolean(viewerUserId) && session.userId === viewerUserId;
-  const allSessions = sessionQueries
-    .flatMap(query => query.data?.userSessions ?? [])
-    .sort(
-      (a, b) =>
-        Number(pinnedSessions.has(b.sessionId)) - Number(pinnedSessions.has(a.sessionId)) ||
-        Number(isOwn(b)) - Number(isOwn(a)),
-    );
+  const allSessions = (sessionsQuery.data?.userSessions ?? []).toSorted(compareUserSessions(sort, pinnedSessions));
   const runningBySessionId = useActiveRunResources({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceIds: allSessions.map(session => session.sessionId),
@@ -81,13 +80,13 @@ export function UserSessionsSection() {
         : ('idle' as const),
   }));
   const sessions = filterUserSessions(candidates, filters, viewerUserId).map(candidate => candidate.session);
-  const ownersById = new Map<string, string>();
-  for (const candidate of candidates) ownersById.set(candidate.session.userId, candidate.ownerName);
-  const owners = [...ownersById]
-    .map(([userId, name]) => ({ userId, name }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-  const invalidate = (projectRepositoryId: string) => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(projectRepositoryId) });
+  const ownerOptions = userSessionOwnerOptions(candidates, viewerUserId);
+  const changeFilters = (changes: Partial<UserSessionFiltersState>) =>
+    setFilterChanges(current => ({ ...current, ...changes }));
+  const activeFilterCount = activeUserSessionFilterCount(filters, defaultFilters);
+  const changedCount = activeFilterCount + Number(sort !== DEFAULT_USER_SESSION_SORT);
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(factoryId) });
   };
 
   const deleteSession = useMutation({
@@ -97,9 +96,9 @@ export function UserSessionsSection() {
     },
     onSuccess: session => {
       setConfirmDelete(null);
-      removeCachedSession(queryClient, session.projectRepositoryId, session.sessionId);
+      removeCachedSession(queryClient, factoryId, session.sessionId);
       queryClient.removeQueries({ queryKey: queryKeys.userSession(session.sessionId) });
-      invalidate(session.projectRepositoryId);
+      invalidate();
       toast('Session deleted');
       if (location.pathname === `/factories/${factoryId}/user/threads/${session.sessionId}`) {
         void navigate(`/factories/${factoryId}`, { replace: true });
@@ -115,8 +114,8 @@ export function UserSessionsSection() {
   const regenerateTitle = useMutation({
     mutationFn: (session: FactoryUserSession) => regenerateSessionTitle(baseUrl, session.sessionId),
     onMutate: session => setRegenerating(current => new Set(current).add(session.sessionId)),
-    onSuccess: (title, session) => {
-      invalidate(session.projectRepositoryId);
+    onSuccess: title => {
+      invalidate();
       toast(`Renamed to “${title}”`);
     },
     onError: error => toast.error(error instanceof Error ? error.message : 'Failed to regenerate title'),
@@ -137,13 +136,43 @@ export function UserSessionsSection() {
         icon={<MessageSquare />}
         action={
           <div className="flex items-center gap-0.5">
-            <UserSessionFilters
-              filters={filters}
-              owners={owners}
-              viewerUserId={viewerUserId}
-              onChange={changes => setFilterChanges(current => ({ ...current, ...changes }))}
-              onReset={() => setFilterChanges({})}
-            />
+            <SessionListProperties
+              label="User sessions"
+              changedCount={changedCount}
+              onReset={() => {
+                setFilterChanges({});
+                setSort(DEFAULT_USER_SESSION_SORT);
+              }}
+            >
+              <DropdownMenu.RadioSub
+                label="Sort"
+                icon={<ArrowUpDown aria-hidden />}
+                options={USER_SESSION_SORT_OPTIONS}
+                value={sort}
+                onValueChange={setSort}
+              />
+              <DropdownMenu.RadioSub
+                label="Owner"
+                icon={<UserRound aria-hidden />}
+                options={ownerOptions}
+                value={filters.owner}
+                onValueChange={owner => changeFilters({ owner })}
+              />
+              <DropdownMenu.RadioSub
+                label="Status"
+                icon={<CircleDashed aria-hidden />}
+                options={USER_SESSION_STATUS_OPTIONS}
+                value={filters.status}
+                onValueChange={status => changeFilters({ status })}
+              />
+              <DropdownMenu.RadioSub
+                label="Updated"
+                icon={<Clock aria-hidden />}
+                options={USER_SESSION_UPDATED_OPTIONS}
+                value={filters.updated}
+                onValueChange={updated => changeFilters({ updated })}
+              />
+            </SessionListProperties>
             <Button
               variant="ghost"
               size="icon-sm"
@@ -200,11 +229,7 @@ export function UserSessionsSection() {
             <Txt as="p" variant="meta" className="text-destructive-foreground m-0">
               Couldn’t load sessions
             </Txt>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => sessionQueries.filter(query => query.isError).forEach(query => void query.refetch())}
-            >
+            <Button variant="ghost" size="sm" onClick={() => void sessionsQuery.refetch()}>
               Retry
             </Button>
           </div>
@@ -213,7 +238,7 @@ export function UserSessionsSection() {
           <Txt as="p" variant="meta" tone="muted" role="status" className="m-0 px-2 py-1">
             {allSessions.length === 0
               ? 'No sessions yet'
-              : activeUserSessionFilterCount(filters, defaultFilters) === 0 && viewerUserId
+              : activeFilterCount === 0 && viewerUserId
                 ? 'No sessions of your own.'
                 : 'No sessions match these filters'}
           </Txt>

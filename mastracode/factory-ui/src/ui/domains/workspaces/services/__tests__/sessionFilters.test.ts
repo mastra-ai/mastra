@@ -48,13 +48,6 @@ function filters(overrides: Partial<UserSessionFiltersState>): UserSessionFilter
 }
 
 describe('session filters', () => {
-  it.each(['authentication', 'FIX-AUTH', 'romain', 'USER-1', 'SESSION-ABC'])(
-    'matches search text across session presentation fields: %s',
-    search => {
-      expect(filterUserSessions([candidate()], filters({ search }), 'viewer', now)).toHaveLength(1);
-    },
-  );
-
   it('filters mine and specific owners by stable user id', () => {
     const sessions = [
       candidate(),
@@ -90,9 +83,7 @@ describe('session filters', () => {
 
   it('counts each active control once', () => {
     expect(activeUserSessionFilterCount(EMPTY_USER_SESSION_FILTERS)).toBe(0);
-    expect(
-      activeUserSessionFilterCount(filters({ search: 'auth', owner: MY_SESSIONS, status: 'working', updated: '7d' })),
-    ).toBe(4);
+    expect(activeUserSessionFilterCount(filters({ owner: MY_SESSIONS, status: 'working', updated: '7d' }))).toBe(3);
   });
 
   it("defaults a known viewer to their own sessions and an unknown viewer to everyone's", () => {

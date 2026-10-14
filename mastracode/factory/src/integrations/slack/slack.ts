@@ -14,15 +14,17 @@ import { createSlackAdapter } from '@mastra/slack';
 import type { SlackAdapterChannelConfig } from '@mastra/slack';
 import { Card, CardText, Actions, LinkButton } from 'chat';
 
-import { primeTenantCredentialsForRequestContext } from '../../routes/tenant-credentials.js';
+import {
+  primeTenantCredentialsForRequestContext,
+  primeTenantCredentialsForTenant,
+} from '../../routes/tenant-credentials.js';
 import {
   createSourceControlSessionLookup,
   FactorySourceControlConflictError,
   hydrateFactorySession,
-  resolveFactoryDefaultModelId,
-  resolveFactoryProjectForSession,
+  resolveFactorySessionModel,
   resolveFactorySourceControl,
-  resolveFactorySourceRepository,
+  resolvePrimaryEnvironmentRepository,
 } from '../../session/factory-session.js';
 import { readRequestContextOrgId, seedSessionOrg } from '../../session/org-seed.js';
 import type {
@@ -421,12 +423,9 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
             : 'Could not start a session: connect source control to this Factory project.',
         );
       }
-      const repo = await resolveFactorySourceRepository({
-        sourceControl,
-        orgId,
-        factoryProjectId,
-        firstLinkedRepository: true,
-      });
+      // The session's link is the factory's position-1 environment
+      // repository (D1); the sandbox boots every environment repository.
+      const repo = await resolvePrimaryEnvironmentRepository({ sourceControl, orgId, factoryProjectId });
       if (!repo.found) {
         throw new SlackSessionStartError(
           repo.reason === 'connection'
@@ -438,8 +437,10 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
       const branch = threadBranch(thread.id);
       // Attributed to the Slack sender, not to whoever connected the repository:
       // unlike an autonomous rule run, a Slack thread has a real interactive user.
+      // Keyed by factory, not by link: the thread's session stays found when the
+      // position-1 repository changes between two messages.
       const existing = await sourceControl.sessions.getForBranch({
-        projectRepositoryId: repo.projectRepositoryId,
+        factoryProjectId,
         userId: link.userId,
         branch,
       });
@@ -447,6 +448,7 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
       const session = await sourceControl.sessions.create({
         sessionId: globalThis.crypto.randomUUID(),
         projectRepositoryId: repo.projectRepositoryId,
+        factoryProjectId,
         orgId,
         userId: link.userId,
         branch,
@@ -490,15 +492,13 @@ export function createChannelSessionResolver(deps: SlackChannelDeps): ChannelSes
     const sourceControl = thread.resourceId.startsWith('channel:')
       ? null
       : await sourceControlSessions.getSourceControlBySessionId(thread.resourceId);
-    const owner = sourceControl
-      ? await resolveFactoryProjectForSession({ sourceControl, sessionId: thread.resourceId })
-      : null;
+    const session = sourceControl ? await sourceControl.sessions.getBySessionId(thread.resourceId) : null;
     return controller.createSession({
       id: thread.resourceId,
       ownerId: controller.id,
       resourceId: thread.resourceId,
       requestContext,
-      ...(owner ? { tags: { factoryProjectId: owner.factoryProjectId } } : {}),
+      ...(session?.factoryProjectId ? { tags: { factoryProjectId: session.factoryProjectId } } : {}),
     });
   };
 }
@@ -516,8 +516,8 @@ export function createChannelSessionResolver(deps: SlackChannelDeps): ChannelSes
  * session id, which the source-control rows turn back into a project — a
  * chat-only `channel:...` id names no project, so there is nothing to read.
  *
- * The model this session starts on is picked here, once, in the order of who
- * chose it: the linked sender's default model, else the factory project's
+ * The model this session starts on is picked here, once, from the project's
+ * exclusive model scope: the Factory default or the durable session owner's
  * default, else the SDK's built-in model. The choice is persisted on the thread
  * as `currentModelId`, so it outlives the process that made it.
  *
@@ -543,17 +543,38 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
 
     const sourceControl = await sourceControlSessions.getSourceControlBySessionId(thread.resourceId);
     if (!sourceControl) return;
-    const owner = await resolveFactoryProjectForSession({ sourceControl, sessionId: thread.resourceId });
-    if (!owner) return;
+    const sourceSession = await sourceControl.sessions.getBySessionId(thread.resourceId);
+    if (!sourceSession?.factoryProjectId) return;
+    const owner = {
+      factoryProjectId: sourceSession.factoryProjectId,
+      orgId: sourceSession.orgId,
+      userId: sourceSession.userId,
+    };
 
-    // Repo-backed Slack sessions are factory sessions: stamp the owning
-    // project onto controller state so downstream reads (org-first credential
-    // resolution, authority gates) recognize them, same as board runs.
-    await session.state.set({ factoryProjectId: owner.factoryProjectId });
+    const sessionModel = await resolveFactorySessionModel({
+      projects,
+      modelDefaults,
+      factoryProjectId: owner.factoryProjectId,
+      orgId: owner.orgId,
+      ownerUserId: owner.userId,
+    });
+
+    // Repo-backed Slack sessions use the source-control row's durable owner,
+    // never the sender, for both model and credential scope.
+    await session.state.set({
+      factoryProjectId: owner.factoryProjectId,
+      factoryModelScope: sessionModel.modelScope,
+      factoryOwnerUserId: owner.userId,
+    });
     // Route the org through the seed helper rather than stamping it directly:
     // an ungated dispatch marked this session unresolved above, and owner
     // recovery is the resolution that has to clear that marker with it.
     await seedSessionOrg(session, owner.orgId);
+    await primeTenantCredentialsForTenant({
+      orgId: owner.orgId,
+      userId: owner.userId,
+      credentialScope: sessionModel.modelScope,
+    });
 
     const modeId = session.mode.get();
     const activeThreadId = session.thread.getId();
@@ -577,56 +598,23 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
         if (typeof modelId === 'string') await applySubagentModel(session, agentType, modelId);
       }
     } else {
-      const factoryModelId = await resolveFactoryDefaultModelId(projects, owner.factoryProjectId);
-      const userModelId = await resolveUserDefaultModel(modelDefaults, owner);
-      const selectedModelId = userModelId ?? factoryModelId;
-
       await hydrateFactorySession(session, {
         orgId: owner.orgId,
-        defaultModelId: factoryModelId,
+        modelScope: sessionModel.modelScope,
+        ownerUserId: owner.userId,
+        defaultModelId: sessionModel.modelId,
       });
 
-      if (selectedModelId && selectedModelId !== factoryModelId) {
-        // The sender's own choice beats the factory's. `switch` applies the model
-        // and persists it as the thread's current model in one step — which is
-        // what makes the choice outlive this process.
-        try {
-          await session.model.switch(selectedModelId);
-        } catch (error) {
-          console.warn("[slack] Failed to apply the sender's default model", {
-            modelId: selectedModelId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-          const currentModelId = session.model.get();
-          if (currentModelId && !factoryModelId) {
-            try {
-              await session.model.switch(currentModelId);
-            } catch (saveError) {
-              console.warn("[slack] Failed to persist the sender's default model", {
-                modelId: currentModelId,
-                error: saveError instanceof Error ? saveError.message : String(saveError),
-              });
-            }
-          }
-        }
-      } else if (!selectedModelId) {
-        // Neither preference exists, so the SDK's built-in mode default is this
-        // thread's model of record. Pin it too: a later SDK upgrade that moves
-        // that default must not silently retarget a thread that already started.
-        const currentModelId = session.model.get();
-        if (currentModelId) {
-          await session.model.switch(currentModelId);
-        }
-      }
+      // `hydrateFactorySession` has already persisted either the scoped model
+      // or the SDK mode default as this thread's model of record.
+      const selectedModelId = sessionModel.modelId ?? session.mode.resolve().defaultModelId ?? session.model.get();
 
-      // Subagents follow the sender's default model. When none is set, they use
-      // the factory default. Pin the choice on the thread like the main model so
-      // a restart restores it rather than whatever default exists by then.
+      // Pin subagent models on the thread like the main model so a restart
+      // restores the selected scope's choice rather than re-resolving it.
       for (const agentType of SUBAGENT_TYPES) {
-        const modelId = userModelId ?? factoryModelId;
-        if (!modelId) continue;
-        if (await applySubagentModel(session, agentType, modelId)) {
-          await session.thread.setSetting({ key: pinnedSubagentModelKey(agentType), value: modelId });
+        if (!selectedModelId) continue;
+        if (await applySubagentModel(session, agentType, selectedModelId)) {
+          await session.thread.setSetting({ key: pinnedSubagentModelKey(agentType), value: selectedModelId });
         }
       }
     }
@@ -652,31 +640,6 @@ async function applySubagentModel(
       error: error instanceof Error ? error.message : String(error),
     });
     return false;
-  }
-}
-
-/**
- * The sender's personal default model, or `undefined` when they have none.
- *
- * Best-effort by design: an uninitialized model-defaults domain or a read
- * failure means "no personal preference", which falls through to the factory
- * default rather than failing the dispatch.
- */
-async function resolveUserDefaultModel(
-  modelDefaults: ModelDefaultsStorage | undefined,
-  owner: { orgId: string; userId: string },
-): Promise<string | undefined> {
-  if (!modelDefaults) return undefined;
-  try {
-    const record = await modelDefaults.get({ orgId: owner.orgId, userId: owner.userId });
-    return record?.modelId;
-  } catch (error) {
-    console.warn('[slack] default model lookup failed for a new session', {
-      orgId: owner.orgId,
-      userId: owner.userId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return undefined;
   }
 }
 

@@ -1,12 +1,6 @@
-/**
- * BDD coverage for the sidebar's session order: a session whose pull request is
- * merged sinks below the ones still open, and the rest hold their place by
- * creation. Before this, rows were ordered by card activity — merging a pull
- * request bumped `updatedAt`, so the finished session jumped to the top and
- * every poll could reshuffle the list under the reader.
- */
 import type { QueryClient } from '@tanstack/react-query';
 import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -16,6 +10,7 @@ import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { WorkspacesSection } from '../WorkspacesSection';
+import { pickSessionProperty } from './fixtures/sessionProperties';
 
 const factoryProjectId = 'fp-1';
 const projectRepositoryId = 'ghp-1';
@@ -38,7 +33,6 @@ function reviewSession(pullRequestNumber: number, createdAt: string): FactoryUse
   };
 }
 
-/** A review card for a session; `mergedAt` both merges it and stamps the write that merged it. */
 function reviewCard(session: FactoryUserSession, pullRequestNumber: number, mergedAt?: string) {
   const merged = mergedAt !== undefined;
   return {
@@ -77,9 +71,7 @@ function stubSidebar(
   parkedSessionIds: string[] = [],
 ) {
   server.use(
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
-      HttpResponse.json({ sessions }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryProjectId}/work-items`, () =>
       HttpResponse.json({ workItems, parkedSessionIds }),
     ),
@@ -124,7 +116,6 @@ function renderSection(openSessionId?: string) {
   );
 }
 
-/** Rows only hold their final order once the sessions and work-items queries have both landed. */
 async function reviewRowLabels(client: QueryClient): Promise<(string | null)[]> {
   await waitForMutationsIdle(client);
   const group = await screen.findByRole('region', { name: 'Review Sessions' });
@@ -208,7 +199,6 @@ describe('Workspaces sidebar order', () => {
     );
     const { client } = renderSection(oldest.sessionId);
 
-    // Five newest, then the open one; the row it displaced stays behind "Show more".
     expect(await reviewRowLabels(client)).toEqual([
       'factory/pr-507',
       'factory/pr-506',
@@ -229,11 +219,44 @@ describe('Workspaces sidebar order', () => {
     const forward = await reviewRowLabels(rendered.client);
     rendered.unmount();
 
-    // The sessions endpoint sorts nothing, so the same rows can come back either way round.
     stubSidebar([second, first], cards);
     const reversed = renderSection();
 
     expect(await reviewRowLabels(reversed.client)).toEqual(forward);
     expect(forward).toHaveLength(2);
+  });
+
+  it('reorders by last update once the reader picks it, keeps pinned first, and remembers it', async () => {
+    const pinned = reviewSession(601, '2026-07-23T08:00:00.000Z');
+    const oldestOpen = reviewSession(602, '2026-07-23T09:00:00.000Z');
+    const merged = reviewSession(603, '2026-07-23T10:00:00.000Z');
+    const newestOpen = reviewSession(604, '2026-07-23T11:00:00.000Z');
+    const sessions = [pinned, oldestOpen, merged, newestOpen];
+    localStorage.setItem('mastracode.pinnedSessions', JSON.stringify([pinned.sessionId]));
+    stubSidebar(sessions, [
+      reviewCard(pinned, 601),
+      reviewCard(oldestOpen, 602),
+      reviewCard(merged, 603, '2026-07-23T23:00:00.000Z'),
+      reviewCard(newestOpen, 604),
+    ]);
+    const user = userEvent.setup();
+
+    const rendered = renderSection();
+    expect(await reviewRowLabels(rendered.client)).toEqual([
+      'factory/pr-601',
+      'factory/pr-604',
+      'factory/pr-602',
+      'factory/pr-603',
+    ]);
+
+    await pickSessionProperty(user, 'Review sessions', 'Sort', 'Last updated');
+
+    const byLastUpdate = ['factory/pr-601', 'factory/pr-603', 'factory/pr-604', 'factory/pr-602'];
+    expect(await reviewRowLabels(rendered.client)).toEqual(byLastUpdate);
+    rendered.unmount();
+
+    const remounted = renderSection();
+    expect(await reviewRowLabels(remounted.client)).toEqual(byLastUpdate);
+    expect(JSON.parse(localStorage.getItem('mastracode.sessionSort') ?? '{}')).toEqual({ review: 'updated' });
   });
 });
