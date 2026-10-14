@@ -108,6 +108,9 @@ function setup({
       listRunBindings: vi.fn(async (_org: string, _project: string, workItemId?: string) =>
         bindings.filter(binding => binding.workItemId === workItemId),
       ),
+      listWorkItemSubscribers: vi.fn(async ({ workItemId }: { workItemId: string }) =>
+        subscriptions.filter(subscription => subscription.workItemId === workItemId),
+      ),
     } as unknown as FactoryMessagingToolDependencies['workItems'],
     auditRecorder: auditRecorder as unknown as FactoryMessagingToolDependencies['auditRecorder'],
     messaging: async () => ({ controller: controller as unknown as FactoryDeliveryController, notifications }),
@@ -477,11 +480,91 @@ describe('factory_message_origin', () => {
     });
   });
 
-  it('asks for inReplyTo when it is missing', async () => {
+  it('without inReplyTo, tells a session nothing started it to pass inReplyTo', async () => {
     const env = setup();
     await expect(env.run(WORKER, 'factory_message_origin', { message: 'hi' })).rejects.toThrow(
-      'Pass inReplyTo with the id of the message you are answering.',
+      'Nothing started this session; pass inReplyTo to answer a message.',
     );
+    expect(env.sent).toHaveLength(0);
+  });
+});
+
+describe('factory_message_origin reports', () => {
+  const SIDE: FactoryToolScope = {
+    ...USER,
+    sessionId: 'session-side',
+    resourceId: 'session-side',
+    threadId: 'thread-session-side',
+    kind: 'worker',
+    interactive: false,
+    origin: { sessionId: 'session-1', threadId: 'thread-session-1' },
+  };
+
+  it('sends a side session’s report to the session that started it', async () => {
+    const env = setup();
+    const result = await env.run(SIDE, 'factory_message_origin', { message: 'all done', status: 'done' });
+
+    expect(result).toEqual({ delivered: 1, recipients: [{ sessionId: 'session-1', delivered: 'woken' }] });
+    expect(env.sent.map(entry => entry.target)).toEqual([{ resourceId: 'session-1', threadId: 'thread-session-1' }]);
+    expect(env.sent[0]!.input).toMatchObject({
+      source: 'factory-session',
+      kind: 'done',
+      priority: 'high',
+      sourceId: 'session-side',
+      attributes: { status: 'done', 'from-session': 'session-side', 'from-thread': 'thread-session-side' },
+    });
+    expect(env.auditRecorder.record).toHaveBeenCalledTimes(1);
+  });
+
+  it('fans an item worker’s report out to every subscriber but itself', async () => {
+    const env = setup({
+      bindings: [binding('item-7', 'session-b')],
+      subscriptions: [follow('item-7', 'session-1'), follow('item-7', 'session-worker'), follow('item-7', 'session-b')],
+    });
+    const result = await env.run(WORKER, 'factory_message_origin', { message: 'stuck on X', status: 'blocked' });
+
+    expect(result).toMatchObject({ delivered: 2 });
+    expect(env.sent.map(entry => entry.target.resourceId).sort()).toEqual(['session-1', 'session-worker']);
+    expect(env.sent[0]!.input).toMatchObject({
+      kind: 'blocked',
+      priority: 'urgent',
+      attributes: { 'work-item': '#7', role: 'work', status: 'blocked' },
+    });
+  });
+
+  it('reports delivered: 0 when the worker’s item has no subscribers', async () => {
+    const env = setup({ bindings: [binding('item-7', 'session-b')] });
+    await expect(env.run(WORKER, 'factory_message_origin', { message: 'done', status: 'done' })).resolves.toEqual({
+      delivered: 0,
+      recipients: [],
+    });
+    expect(env.sent).toHaveLength(0);
+  });
+
+  it.each([
+    ['failed', 'failed', 'urgent'],
+    ['blocked', 'blocked', 'urgent'],
+    ['done', 'done', 'high'],
+    ['progress', 'progress', 'low'],
+    [undefined, 'message', 'high'],
+  ] as const)('maps status %s to kind %s at %s priority', async (status, kind, priority) => {
+    const env = setup();
+    await env.run(SIDE, 'factory_message_origin', { message: 'update', ...(status ? { status } : {}) });
+    expect(env.sent[0]!.input).toMatchObject({ kind, priority });
+  });
+
+  it('coalesces progress reports per sender, and final reports carry no keys', async () => {
+    const env = setup();
+    await env.run(SIDE, 'factory_message_origin', { message: 'step 1', status: 'progress' });
+    await env.run(SIDE, 'factory_message_origin', { message: 'finished', status: 'done' });
+    await env.run(SIDE, 'factory_message_origin', { message: 'step 2', status: 'progress' });
+
+    expect(env.sent[0]!.input.coalesceKey).toBe('factory-session:session-side:progress');
+    expect(env.sent[1]!.input).not.toHaveProperty('coalesceKey');
+    expect(env.sent[1]!.input).not.toHaveProperty('dedupeKey');
+    const records = await env.notifications.listNotifications({ threadId: 'thread-session-1' });
+    const done = records.find(record => record.kind === 'done');
+    expect(done?.payload).toEqual({ message: 'finished' });
   });
 });
 

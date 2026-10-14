@@ -35,6 +35,7 @@ import type {
   WorkItemsStorage,
   UpsertWorkItemResult,
 } from '../storage/domains/work-items/base.js';
+import type { FactoryRunEndReporter, FactoryRunOutcome } from '../tools/reports.js';
 import { decisionOvertaken } from './decision-applicability.js';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
@@ -192,6 +193,8 @@ function watchRun(
     wait,
     supersededAtEnd: () => supersededAtEnd,
     endReason: () => endReason,
+    /** The tool the run is parked on, when it ended suspended. */
+    parked: () => parked,
     close: unsubscribe,
     /** The run's own verdict, thrown as what the dispatcher should record. */
     async settle(): Promise<void> {
@@ -336,6 +339,12 @@ export interface FactoryDecisionDispatcherOptions {
   reconcileToolResults?: () => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
+  /**
+   * The run-end backstop: told how each watched run ended (done, a terminal
+   * failure, or parked), so whoever follows the item hears even when the agent
+   * never reported. Never throws.
+   */
+  reportRunEnd?: FactoryRunEndReporter;
   /** Injects the work item's recent comments into skill-invocation kickoffs. */
   feedReader?: FactoryFeedReader;
   /** Dismisses superseded Factory change requests on a GitHub pull request. */
@@ -496,6 +505,7 @@ export class FactoryDecisionDispatcher {
   readonly #reconcileToolResults?: () => Promise<void>;
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
+  readonly #reportRunEnd?: FactoryRunEndReporter;
   readonly #feedReader?: FactoryFeedReader;
   readonly #dismissStaleReviews?: FactoryDecisionDispatcherOptions['dismissStaleReviews'];
   readonly #resolveLinkedWorkItemParentId?: FactoryDecisionDispatcherOptions['resolveLinkedWorkItemParentId'];
@@ -529,6 +539,7 @@ export class FactoryDecisionDispatcher {
     this.#reconcileToolResults = options.reconcileToolResults;
     this.#prepareBinding = options.prepareBinding;
     this.#primeCredentials = options.primeCredentials;
+    this.#reportRunEnd = options.reportRunEnd;
     this.#feedReader = options.feedReader;
     this.#dismissStaleReviews = options.dismissStaleReviews;
     this.#resolveLinkedWorkItemParentId = options.resolveLinkedWorkItemParentId;
@@ -1005,6 +1016,7 @@ export class FactoryDecisionDispatcher {
           // agent perfectly and the run still die on a provider error or be
           // cancelled mid-flight; without this the decision reports success and
           // the break is invisible on the card.
+          const since = new Date();
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
             approvePlans: await this.#plansAreAutoApproved(record),
@@ -1083,7 +1095,19 @@ export class FactoryDecisionDispatcher {
             // terminal outcome matters as much as a fresh wake's: a run that ends
             // in error after accepting the prompt has still failed this decision.
             try {
-              await this.#withOpenRunHeartbeat(session, deliveryId, () => run.settle());
+              await this.#reportingRunEnd(
+                {
+                  binding,
+                  startedBy,
+                  since,
+                  attempts: record.attempts,
+                  run,
+                  // A role that handed the card on mid-turn: the failure is its successor's, not ours.
+                  superseded: async () =>
+                    (await run.supersededAtEnd()) ?? (await this.#roleSuperseded(record, decision.role)),
+                },
+                () => this.#withOpenRunHeartbeat(session, deliveryId, () => run.settle()),
+              );
             } catch (error) {
               // Roles share one session. When this role handed the card on
               // mid-turn, the next role's kickoff was delivered onto the same
@@ -1537,6 +1561,66 @@ export class FactoryDecisionDispatcher {
     }
   }
 
+  /**
+   * Settle a watched run, then tell the item's followers how it ended: `done`
+   * when it completed, `blocked` when it ended parked, `failed` when the
+   * failure is terminal. A retryable failure says nothing; the retry reports.
+   * The reporter skips recipients that already have the agent's own final
+   * report from this run, and never throws, so reporting can't change the
+   * decision's outcome.
+   */
+  async #reportingRunEnd(
+    {
+      binding,
+      startedBy,
+      since,
+      attempts,
+      run,
+      superseded,
+    }: {
+      binding: FactoryRunBindingRecord;
+      startedBy: string;
+      since: Date;
+      attempts: number;
+      run: ReturnType<typeof watchRun>;
+      superseded?: () => Promise<boolean>;
+    },
+    settle: () => Promise<void>,
+  ): Promise<void> {
+    const report = (outcome: FactoryRunOutcome) => {
+      const reportRunEnd = this.#reportRunEnd;
+      if (!reportRunEnd) return;
+      void reportRunEnd({
+        orgId: binding.orgId,
+        factoryProjectId: binding.factoryProjectId,
+        workItemId: binding.workItemId,
+        role: binding.role,
+        sender: { sessionId: binding.sessionId, threadId: binding.threadId, userId: startedBy },
+        since,
+        outcome,
+      }).catch(error => {
+        console.warn(`[factory] run-end report failed for binding ${binding.id}:`, error);
+      });
+    };
+    try {
+      await settle();
+    } catch (error) {
+      if (!(error instanceof FactoryDecisionSuperseded) && !(await superseded?.())) {
+        const failureCode = factoryDispatchFailureCode(error);
+        if (isTerminalFailure(attempts, failureCode)) {
+          report({ status: 'failed', failureCode, reason: sanitizeDispatchError(error) });
+        }
+      }
+      throw error;
+    }
+    const endReason = run.endReason();
+    if (endReason === 'complete') report({ status: 'done' });
+    if (endReason === 'suspended') {
+      const parked = run.parked();
+      report({ status: 'blocked', ...(parked ? { toolName: parked.toolName } : {}) });
+    }
+  }
+
   async #recordRunStart(
     session: BoundDispatcherSession,
     binding: FactoryRunBindingRecord,
@@ -1603,6 +1687,7 @@ export class FactoryDecisionDispatcher {
           // into a run that is already terminating is consumed without
           // execution, and completing the pending start on the delivery ack
           // alone strands the card with a success ledger entry.
+          const since = new Date();
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
             approvePlans: await this.#plansAreAutoApproved(record),
@@ -1655,7 +1740,9 @@ export class FactoryDecisionDispatcher {
               run.endReason,
               item?.title,
             );
-            await run.settle();
+            await this.#reportingRunEnd({ binding, startedBy, since, attempts: record.attempts, run }, () =>
+              run.settle(),
+            );
           } finally {
             run.close();
           }
