@@ -11,7 +11,7 @@ import { Link, useLocation, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import { PERSONAL_SETTINGS_ITEMS } from '../../settings/components/SettingsNavigation';
+import { PERSONAL_SETTINGS_GROUP } from '../../settings/components/SettingsNavigation';
 import { useSettingsOpen } from '../../settings/hooks/useSettingsOpen';
 import { settingsSectionPath } from '../../settings/settingsSections';
 import { clearMastraCodeStorage, logoutUrl } from '../services/auth';
@@ -41,7 +41,7 @@ export function SidebarUserMenu() {
   const triggerLabel = signedIn ? account.user?.name?.trim() || account.user?.email || 'User' : 'Settings';
   const email = signedIn ? account.user?.email : undefined;
   const menuLabel = signedIn ? 'User menu' : 'Settings menu';
-  const personalSettings = PERSONAL_SETTINGS_ITEMS.filter(item => signedIn || item.id !== 'account');
+  const personalSettings = PERSONAL_SETTINGS_GROUP.items.filter(item => signedIn || item.id !== 'account');
   const backToAppState = settingsOpen ? location.state : { from: location };
 
   return (
@@ -84,7 +84,7 @@ export function SidebarUserMenu() {
             <DropdownMenu.Separator />
           </>
         )}
-        <DropdownMenu.Label>Your settings</DropdownMenu.Label>
+        <DropdownMenu.Label>{PERSONAL_SETTINGS_GROUP.label}</DropdownMenu.Label>
         {personalSettings.map(({ id, label, icon: Icon }) => (
           <DropdownMenu.Item
             key={id}

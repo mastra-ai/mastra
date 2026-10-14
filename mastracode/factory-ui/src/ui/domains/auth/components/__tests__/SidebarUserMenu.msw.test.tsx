@@ -9,12 +9,9 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { SettingsNavigation } from '../../../settings/components/SettingsNavigation';
 import { SidebarUserMenu } from '../SidebarUserMenu';
+import { signedIn } from './fixtures/auth';
 
-const signedInAccount = {
-  authenticated: true,
-  user: { userId: 'user-1', email: 'dev@mastra.ai', name: 'Dev', avatarUrl: 'https://avatars.example/dev.png' },
-  provider: 'workos',
-};
+const avatarUrl = 'https://avatars.example/dev.png';
 
 function CurrentPath() {
   const { pathname, search, hash } = useLocation();
@@ -52,7 +49,11 @@ function renderUserMenu(initialEntry = '/factories/fp-1/work?status=active#sessi
 }
 
 function stubSignedIn() {
-  server.use(http.get(`${TEST_BASE_URL}/auth/me`, () => HttpResponse.json(signedInAccount)));
+  server.use(
+    http.get(`${TEST_BASE_URL}/auth/me`, () =>
+      HttpResponse.json({ ...signedIn, user: { ...signedIn.user, avatarUrl } }),
+    ),
+  );
 }
 
 describe('SidebarUserMenu', () => {
@@ -64,7 +65,7 @@ describe('SidebarUserMenu', () => {
     const trigger = await screen.findByRole('button', { name: 'User menu' });
     expect(trigger).toHaveTextContent('Dev');
     expect(trigger).toHaveTextContent('dev@mastra.ai');
-    expect(within(trigger).getByRole('img', { name: 'Dev' })).toHaveAttribute('src', signedInAccount.user.avatarUrl);
+    expect(within(trigger).getByRole('img', { name: 'Dev' })).toHaveAttribute('src', avatarUrl);
     await user.click(trigger);
 
     const menu = await screen.findByRole('menu', { name: 'User menu' });
@@ -95,7 +96,7 @@ describe('SidebarUserMenu', () => {
   it('uses the email and an initial when the profile has no name or image', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
-        HttpResponse.json({ ...signedInAccount, user: { ...signedInAccount.user, name: '', avatarUrl: undefined } }),
+        HttpResponse.json({ ...signedIn, user: { ...signedIn.user, name: '' } }),
       ),
     );
     renderUserMenu();
