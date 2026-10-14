@@ -5,7 +5,8 @@
 Sessions in a multi-repository environment can push and open change requests in any environment repository.
 
 - Every `source_control_*` tool except `source_control_refresh_change_request_checkout` (the GitLab checkout refresh) takes an optional `repository` slug; the default is the repository the session is filed under, and each tool description lists the valid slugs.
-- A push always sends the local session branch; a repository where it was never created gets it at the checked-out `HEAD`, and the checkout switches to it so later commits land there. Pushing a repository with no checkout of its own in the session fails with a clear error.
+- The first push to another repository sends the commits checked out there as the session branch, and the agent's later commits in that repository go to the same branch and are sent by its next push.
+- Pushing a repository that has no checkout in the session fails with a clear error.
 - Every push and change request is recorded per repository, and a push after a change request keeps the change request fields.
 - The `gh pr create` observer and auto-subscribe attribute a pull request to its repository and accept any environment repository. Only a pull request from the session branch is recorded on the session; subscribing to someone else's leaves the record alone.
 - `github_subscribe_pr` / `github_unsubscribe_pr` and pull request subscriptions are gated on the Factory, so web user sessions get them too.
