@@ -2,6 +2,7 @@ import type { PlanResume } from '@mastra/client-js';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-reveal';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
@@ -131,7 +132,14 @@ export function MessageBubble({
         footer={
           messageActions && (
             <div className="flex flex-wrap items-center gap-2">
-              {replyModelId && <MessageMetadata title={replyModelId}>{formatModelName(replyModelId)}</MessageMetadata>}
+              {replyModelId && (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={<MessageMetadata tabIndex={0}>{formatModelName(replyModelId)}</MessageMetadata>}
+                  />
+                  <TooltipContent>{replyModelId}</TooltipContent>
+                </Tooltip>
+              )}
               {messageActions}
             </div>
           )
