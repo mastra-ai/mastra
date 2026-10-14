@@ -104,6 +104,7 @@ export {
 } from './processors/observational-memory/subconscious';
 export type {
   KnowledgeSemanticIndexCoordinatorConfig,
+  KnowledgeSemanticSearchResult,
   ResolvedSubconsciousAgent,
   ResolvedSubconsciousConfig,
   SubconsciousBuiltInObservationAgent,

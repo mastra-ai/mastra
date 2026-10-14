@@ -219,3 +219,34 @@ describe('knowledge semantic index lost claims', () => {
     expect(indexed.get(`knowledge:node:${node.id}`)).toBe('Version two');
   });
 });
+
+describe('knowledge semantic search result shape', () => {
+  it('returns hits that join lexical results on type and id with the same recordId', async () => {
+    const { store, scopeIds } = await fixture();
+    const { embedder, vector } = createFakes();
+    const coordinator = new KnowledgeSemanticIndexCoordinator({ knowledge: store, vector, embedder });
+    const node = await store.createNode({ name: 'Atlas joinable', kind: 'project', scopeIds });
+    const record = await store.createRecord({ node: { id: node.id }, text: 'Atlas joinable launch note', scopeIds });
+    await coordinator.drain(scopeIds);
+    vector.query = async () => [
+      { id: `knowledge:node:${node.id}`, score: 0.9, metadata: { document_type: 'node' } },
+      { id: `knowledge:record:${record.id}`, score: 0.8, metadata: { document_type: 'record' } },
+    ];
+
+    const semantic = await coordinator.search('atlas joinable', scopeIds);
+    const lexical = await store.search({ query: 'atlas joinable', scopeIds });
+    const key = (hit: { type: string; id: string }) => `${hit.type}:${hit.id}`;
+    const lexicalByKey = new Map(lexical.map(hit => [key(hit), hit]));
+
+    expect(semantic.map(key).sort()).toEqual([`node:${node.id}`, `record:${record.id}`].sort());
+    for (const hit of semantic) {
+      const match = lexicalByKey.get(key(hit));
+      expect(match).toBeDefined();
+      expect(hit.recordId).toBe(match!.recordId);
+      expect(hit.name).toBe(match!.name);
+      expect(hit.scopeIds).toEqual(match!.scopeIds);
+      expect(typeof hit.score).toBe('number');
+    }
+    expect(semantic.find(hit => hit.type === 'record')!.recordId).toBe(node.id);
+  });
+});

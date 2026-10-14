@@ -244,7 +244,7 @@ export type { PinDeltaOp, PinEntry, PinnedStateProcessorDeps } from './pinned-st
 export { createKnowledgeWriteTools } from './knowledge-write-tools';
 export type { KnowledgeWriteToolsOptions } from './knowledge-write-tools';
 export { KnowledgeSemanticIndexCoordinator, StaleKnowledgeSemanticIndexError } from './semantic-index';
-export type { KnowledgeSemanticIndexCoordinatorConfig } from './semantic-index';
+export type { KnowledgeSemanticIndexCoordinatorConfig, KnowledgeSemanticSearchResult } from './semantic-index';
 export type {
   ResolvedSubconsciousAgent,
   ResolvedSubconsciousConfig,

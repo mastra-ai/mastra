@@ -3,6 +3,7 @@ import type {
   KnowledgeSemanticDocumentType,
   KnowledgeSemanticOutboxEntry,
   KnowledgeStorage,
+  SearchKnowledgeResult,
 } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '@mastra/core/vector';
 
@@ -18,6 +19,11 @@ export class StaleKnowledgeSemanticIndexError extends Error {
     super(message, options);
     this.name = 'StaleKnowledgeSemanticIndexError';
   }
+}
+
+/** A semantic hit in the lexical `search()` shape, so both kinds join on `type` + `id`. */
+export interface KnowledgeSemanticSearchResult extends SearchKnowledgeResult {
+  score: number;
 }
 
 export interface KnowledgeSemanticIndexCoordinatorConfig {
@@ -70,7 +76,7 @@ export class KnowledgeSemanticIndexCoordinator {
     return draining;
   }
 
-  async search(query: string, scopeIds: KnowledgeScopeIds, limit = 10) {
+  async search(query: string, scopeIds: KnowledgeScopeIds, limit = 10): Promise<KnowledgeSemanticSearchResult[]> {
     await this.drain(scopeIds);
     const result = await this.#embedder.doEmbed({
       values: [query],
@@ -95,10 +101,47 @@ export class KnowledgeSemanticIndexCoordinator {
     // Vector metadata can be stale (written before a rescope, or by a worker whose outbox claim expired),
     // so visibility comes from storage, which applies the same node and record rules as every other read.
     const visible = await this.#visibleDocumentIds([...deduped.keys()], scopeIds);
-    return [...deduped.values()]
+    const ranked = [...deduped.values()]
       .filter(candidate => visible.has(candidate.id))
       .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id))
       .slice(0, limit);
+    const results = await Promise.all(ranked.map(candidate => this.#toSearchResult(candidate.id, candidate.score)));
+    return results.filter((result): result is KnowledgeSemanticSearchResult => result !== null);
+  }
+
+  // Storage has already admitted these ids, and a visible record implies its node is visible, so
+  // recordId is the record's node, exactly as lexical search reports it. A row deleted since is dropped.
+  async #toSearchResult(documentId: string, score: number): Promise<KnowledgeSemanticSearchResult | null> {
+    if (documentId.startsWith(NODE_PREFIX)) {
+      const node = await this.#knowledge.getNode(documentId.slice(NODE_PREFIX.length));
+      if (!node) return null;
+      const description = typeof node.metadata?.description === 'string' ? node.metadata.description : undefined;
+      return {
+        type: 'node',
+        id: node.id,
+        recordId: node.id,
+        name: node.name,
+        text: description ? `${node.name}\n${description}` : node.name,
+        scopeIds: await this.#knowledge.getNodeScopeIds(node.id),
+        score,
+      };
+    }
+    if (documentId.startsWith(RECORD_PREFIX)) {
+      const record = await this.#knowledge.getRecord({ id: documentId.slice(RECORD_PREFIX.length) });
+      if (!record) return null;
+      const node = await this.#knowledge.getNode(record.nodeId);
+      if (!node) return null;
+      return {
+        type: 'record',
+        id: record.id,
+        recordId: node.id,
+        name: node.name,
+        text: record.text,
+        scopeIds: await this.#knowledge.getRecordScopeIds(record.id),
+        score,
+      };
+    }
+    return null;
   }
 
   async #visibleDocumentIds(documentIds: string[], scopeIds: KnowledgeScopeIds): Promise<Set<string>> {

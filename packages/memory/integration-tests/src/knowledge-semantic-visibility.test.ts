@@ -120,10 +120,14 @@ describe.each(adapters)('Knowledge semantic search visibility (%s)', adapter => 
     const coordinator = new KnowledgeSemanticIndexCoordinator({ knowledge: store, vector, embedder });
     await coordinator.drain();
 
-    expect((await coordinator.search('secret', [bob])).map((hit: { id: string }) => hit.id)).toEqual([]);
-    expect((await coordinator.search('secret', [alice])).map((hit: { id: string }) => hit.id).sort()).toEqual(
-      [`knowledge:node:${node.id}`, `knowledge:record:${record.id}`].sort(),
-    );
+    expect(
+      (await coordinator.search('secret', [bob])).map((hit: { type: string; id: string }) => `${hit.type}:${hit.id}`),
+    ).toEqual([]);
+    expect(
+      (await coordinator.search('secret', [alice]))
+        .map((hit: { type: string; id: string }) => `${hit.type}:${hit.id}`)
+        .sort(),
+    ).toEqual([`node:${node.id}`, `record:${record.id}`].sort());
   });
 
   it('hides a record whose node is visible but which mentions a node the caller cannot see', async () => {
@@ -140,10 +144,12 @@ describe.each(adapters)('Knowledge semantic search visibility (%s)', adapter => 
     const coordinator = coordinatorReturning(store, () => [hit('record', record.id, [alice, bob])]);
     await coordinator.drain();
 
-    expect((await coordinator.search('topic', [bob])).map((h: { id: string }) => h.id)).toEqual([]);
-    expect((await coordinator.search('topic', [alice])).map((h: { id: string }) => h.id)).toEqual([
-      `knowledge:record:${record.id}`,
-    ]);
+    expect(
+      (await coordinator.search('topic', [bob])).map((h: { type: string; id: string }) => `${h.type}:${h.id}`),
+    ).toEqual([]);
+    expect(
+      (await coordinator.search('topic', [alice])).map((h: { type: string; id: string }) => `${h.type}:${h.id}`),
+    ).toEqual([`record:${record.id}`]);
   });
 
   it('returns a scope node to a caller who holds that scope id', async () => {
@@ -152,9 +158,11 @@ describe.each(adapters)('Knowledge semantic search visibility (%s)', adapter => 
     const coordinator = coordinatorReturning(store, () => [hit('node', alice, scopeNodeScopes)]);
     await coordinator.drain();
 
-    expect((await coordinator.search('alice', [alice])).map((h: { id: string }) => h.id)).toEqual([
-      `knowledge:node:${alice}`,
-    ]);
-    expect((await coordinator.search('alice', [bob])).map((h: { id: string }) => h.id)).toEqual([]);
+    expect(
+      (await coordinator.search('alice', [alice])).map((h: { type: string; id: string }) => `${h.type}:${h.id}`),
+    ).toEqual([`node:${alice}`]);
+    expect(
+      (await coordinator.search('alice', [bob])).map((h: { type: string; id: string }) => `${h.type}:${h.id}`),
+    ).toEqual([]);
   });
 });
