@@ -21,6 +21,7 @@ export const MALFORMED_INPUT_SCHEMAS: [string, unknown][] = [
   ['non-string pattern', { type: 'object', properties: { a: { type: 'string', pattern: 5 } } }],
   ['non-boolean uniqueItems', { type: 'object', properties: { a: { type: 'array', uniqueItems: 'yes' } } }],
   ['non-array dependentRequired entry', { type: 'object', dependentRequired: { a: 'b' } }],
+  ['empty tuple items', { type: 'object', properties: { a: { type: 'array', items: [] } } }],
 ];
 
 /** Input schemas both the cf-worker validator and the structural fallback must accept. */

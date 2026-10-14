@@ -294,8 +294,9 @@ function getStructuralInputSchemaError(schema: object): string | undefined {
       if (!Array.isArray(schemas) || schemas.length === 0) return `${path}/${keyword}: must be a non-empty array`;
       schemas.forEach((child, index) => stack.push({ value: child, path: `${path}/${keyword}/${index}` }));
     }
-    // `items` is a schema, or a tuple of schemas in draft-07.
+    // `items` is a schema, or a non-empty tuple of schemas in draft-07.
     if (Array.isArray(record.items)) {
+      if (record.items.length === 0) return `${path}/items: must be a schema or a non-empty array`;
       record.items.forEach((child, index) => stack.push({ value: child, path: `${path}/items/${index}` }));
     } else if (record.items !== undefined) {
       stack.push({ value: record.items, path: `${path}/items` });
