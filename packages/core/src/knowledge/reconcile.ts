@@ -45,7 +45,9 @@ const BUILT_IN_SCOPE_TYPES: KnowledgeScopeTypesConfig = {
   'org:$orgId': { access: [{ principal: 'self', role: 'owner' }] },
   'resource:$resourceId': { access: [{ principal: 'self', role: 'owner' }] },
   'resource:$resourceId:thread:$threadId': { access: [{ principal: 'self', role: 'owner' }] },
-  custom: { access: [{ principal: 'self', role: 'owner' }] },
+  // Materializing an unmatched (custom) address creates the scope; it confers no
+  // ownership. Hosts that want owners on custom scopes configure a `custom` scope type.
+  custom: {},
 };
 
 export function validateKnowledgeScopeTypes(
