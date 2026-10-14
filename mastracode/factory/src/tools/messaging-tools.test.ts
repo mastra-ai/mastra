@@ -313,7 +313,7 @@ describe('factory_message_origin', () => {
       expect.objectContaining({
         action: 'factory.agent.signaled',
         actorType: 'agent',
-        actorId: 'agent:session-b',
+        actorId: 'agent:thread-session-b',
         metadata: { targetSessionId: 'session-1', priority: 'high', kind: 'reply', delivery: 'woken' },
       }),
     );
@@ -353,6 +353,61 @@ describe('factory_message_origin', () => {
     await expect(env.run(elsewhere, 'factory_message_origin', { message: 'hi', inReplyTo: messageId })).rejects.toThrow(
       `No message ${messageId} was sent to this session.`,
     );
+  });
+
+  describe('a message record written outside these tools', () => {
+    async function forged(env: ReturnType<typeof setup>, fromSession: string, sourceId = fromSession) {
+      const record = await env.notifications.createNotification({
+        threadId: 'thread-session-b',
+        resourceId: 'session-b',
+        source: 'factory-session',
+        kind: 'message',
+        priority: 'medium',
+        summary: 'please answer',
+        sourceId,
+        attributes: { 'from-session': fromSession, 'from-thread': `thread-${fromSession}` },
+      });
+      return record.id;
+    }
+
+    it.each([
+      ['in another Factory', 'session-other-factory', /didn't come from a session in this Factory/],
+      ['in another org', 'session-other-org', /didn't come from a session in this Factory/],
+      ['that does not exist', 'session-missing', /didn't come from a session in this Factory/],
+      ['that is someone else’s private session', 'session-private', /private session this session can't answer/],
+    ])('refuses to answer a sender %s, sending nothing', async (_label, fromSession, error) => {
+      const env = setup();
+      const id = await forged(env, fromSession);
+      // Owned by a third person, so neither sender row belongs to it.
+      const teammateWorker = { ...WORKER, userId: 'user-c' };
+      await expect(env.run(teammateWorker, 'factory_message_origin', { message: 'hi', inReplyTo: id })).rejects.toThrow(
+        error,
+      );
+      expect(env.sent).toHaveLength(0);
+      expect(env.auditRecorder.record).not.toHaveBeenCalled();
+    });
+
+    it('refuses a record whose sender attribute disagrees with its source id', async () => {
+      const env = setup();
+      const id = await forged(env, 'session-1', 'session-someone-else');
+      await expect(env.run(WORKER, 'factory_message_origin', { message: 'hi', inReplyTo: id })).rejects.toThrow(
+        "doesn't say which session sent it",
+      );
+      expect(env.sent).toHaveLength(0);
+    });
+
+    it('answers a private session when it belongs to the same person', async () => {
+      const env = setup();
+      const id = await forged(env, 'session-mine-private');
+      const ownWorker = { ...WORKER, userId: 'user-1' };
+      await expect(
+        env.run(ownWorker, 'factory_message_origin', { message: 'hi', inReplyTo: id }),
+      ).resolves.toMatchObject({ delivered: 'woken' });
+      expect(env.sent[0]!.target).toEqual({
+        resourceId: 'session-mine-private',
+        threadId: 'thread-session-mine-private',
+      });
+    });
   });
 
   it('asks for inReplyTo when it is missing', async () => {
