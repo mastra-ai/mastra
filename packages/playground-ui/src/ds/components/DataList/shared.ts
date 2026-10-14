@@ -34,10 +34,9 @@ export const dataListRowStateStyles = [
   'focus-visible:bg-surface-panel has-focus-visible:bg-surface-panel',
   'data-featured:before:bg-surface-panel has-data-featured:before:bg-surface-panel has-data-selected:before:bg-surface-panel',
   'data-[variant=error]:bg-destructive-subtle has-data-[variant=error]:bg-destructive-subtle data-[variant=error]:active:bg-destructive-subtle-active has-data-[variant=error]:active:bg-destructive-subtle-active',
-  // Info tints the row surface rather than the row element, so the fluid hover still glides over it. The stacked
-  // forms outrank the featured and selected surfaces, so an info row keeps its tint once it is selected.
-  'data-[variant=info]:before:bg-info-subtle has-data-[variant=info]:before:bg-info-subtle',
-  'data-featured:data-[variant=info]:before:bg-info-subtle has-data-featured:has-data-[variant=info]:before:bg-info-subtle has-data-selected:has-data-[variant=info]:before:bg-info-subtle',
+  // Info is a faint translucent tint on the row element, so the surface below it (resting or selected) and the
+  // fluid hover still read through.
+  'data-[variant=info]:bg-info-subtle/50 has-data-[variant=info]:bg-info-subtle/50',
 ] as const;
 
 /**

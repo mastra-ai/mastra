@@ -9,7 +9,7 @@ export interface ExperimentsComparableLegendProps {
 export function ExperimentsComparableLegend({ datasetName }: ExperimentsComparableLegendProps) {
   return (
     <div role="note" aria-label="Comparable experiments" className="flex min-w-0 items-start gap-2">
-      <span aria-hidden="true" className="mt-1 size-3 shrink-0 rounded-sm border border-info-edge bg-info-subtle" />
+      <span aria-hidden="true" className="mt-1 size-3 shrink-0 rounded-sm border border-info-edge bg-info-subtle/50" />
       <Txt as="p" variant="body-sm" tone="muted" className="min-w-0">
         {datasetName ? (
           <>
