@@ -278,6 +278,8 @@ async function seedPublishedKnowledgeV1(
         'INSERT INTO mastra_knowledge_cursors (sourceThreadId, agent, lastKnowledgeId, updatedAt) VALUES (?, ?, ?, ?)',
       )
       .run(...cursor);
+    expect(seed.prepare('SELECT count(*) AS count FROM mastra_knowledge_nodes').get()).toEqual({ count: 1 });
+    expect(seed.prepare('SELECT count(*) AS count FROM mastra_knowledge_cursors').get()).toEqual({ count: 1 });
     seed.close();
   };
   const { storage, location } = await createStorage(id, adapter, seedFile);
