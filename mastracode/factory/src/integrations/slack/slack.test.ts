@@ -1330,6 +1330,7 @@ describe('Slack threads create no work items', () => {
     await createHandlers(deps as any).onDirectMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(deps.mastra));
 
     expect(defaultHandler).toHaveBeenCalledTimes(1);
+    expect(thread.post).toHaveBeenCalledTimes(1);
     expect(deps.upsert).not.toHaveBeenCalled();
   });
 });
