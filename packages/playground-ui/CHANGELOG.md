@@ -1,5 +1,111 @@
 # @mastra/playground-ui
 
+## 63.1.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`460b600`](https://github.com/mastra-ai/mastra/commit/460b600abe3b7563537cfb8a676d649c638a9190), [`2362057`](https://github.com/mastra-ai/mastra/commit/2362057cedc6b90b9fd71c424df40eedf3a4ecf3), [`9daf547`](https://github.com/mastra-ai/mastra/commit/9daf547f810df721eaca9c9dafc18f8ce1727b77), [`e496762`](https://github.com/mastra-ai/mastra/commit/e49676258181017f50eb5739d4a97c0da7317dd9), [`d4b2682`](https://github.com/mastra-ai/mastra/commit/d4b2682da7c72b6922aea5cf0533e48907d9d0cd)]:
+  - @mastra/core@1.78.0-alpha.2
+  - @mastra/react@1.10.1-alpha.2
+  - @mastra/client-js@1.54.1-alpha.2
+
+## 63.1.0-alpha.1
+
+### Minor Changes
+
+- `DropdownMenu` gains two typed helpers for one-of-many choices. `DropdownMenu.RadioOptions` renders a list of options, and `DropdownMenu.RadioSub` puts them in a submenu whose row shows the selected label, so a menu of several settings reads its current state without opening each submenu. `onValueChange` receives your option type, not `any`. `DropdownMenu.SubTrigger` also takes a `hint` to show a current value next to its chevron. ([#27003](https://github.com/mastra-ai/mastra/pull/27003))
+
+  ```tsx
+  import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+  import type { DropdownMenuRadioOption } from '@mastra/playground-ui/components/DropdownMenu';
+
+  const ownerOptions: DropdownMenuRadioOption<'mine' | 'all'>[] = [
+    { value: 'mine', label: 'Mine' },
+    { value: 'all', label: 'Everyone' },
+  ];
+
+  <DropdownMenu>
+    <DropdownMenu.Trigger>Properties</DropdownMenu.Trigger>
+    <DropdownMenu.Content>
+      <DropdownMenu.RadioSub label="Owner" options={ownerOptions} value={owner} onValueChange={setOwner} />
+    </DropdownMenu.Content>
+  </DropdownMenu>;
+  ```
+
+- Added helpers to filter the metrics dashboard with `FilterBar`, the filter bar Traces uses. ([#27034](https://github.com/mastra-ai/mastra/pull/27034))
+
+  - `MetricsTimeRangeChip` shows the dashboard's date range as the filter bar's Time chip.
+  - `createMetricsFilterBarFields` and `METRICS_FILTER_BAR_OPERATORS` describe the dimensions you can filter on.
+  - `metricsTokensToFilterBarItems` and `filterBarItemsToMetricsTokens` convert between `FilterBar` items and the dashboard's URL-backed filter tokens.
+
+  `DateRangeSelector` and `createMetricsPropertyFilterFields` are deprecated in favor of these.
+
+  ```tsx
+  import { FilterBar } from '@mastra/playground-ui/components/FilterBar';
+  import type { FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
+  import { MetricsTimeRangeChip } from '@mastra/playground-ui/domains/metrics/components/metrics-time-range-chip';
+  import {
+    createMetricsFilterBarFields,
+    filterBarItemsToMetricsTokens,
+    METRICS_FILTER_BAR_OPERATORS,
+    metricsTokensToFilterBarItems,
+  } from '@mastra/playground-ui/domains/metrics/metrics-filters';
+  import {
+    TRACE_TIME_RANGE_FIELD,
+    TRACE_TIME_RANGE_FIELD_ID,
+    TRACE_TIME_RANGE_ITEM,
+  } from '@mastra/playground-ui/domains/traces/components/trace-time-range-chip';
+
+  const isTimeRange = (item: FilterBarItem) => item.fieldId === TRACE_TIME_RANGE_FIELD_ID;
+
+  <FilterBar
+    fields={[TRACE_TIME_RANGE_FIELD, ...createMetricsFilterBarFields(discovered)]}
+    operators={METRICS_FILTER_BAR_OPERATORS}
+    value={[TRACE_TIME_RANGE_ITEM, ...metricsTokensToFilterBarItems(filterTokens)]}
+    onValueChange={items => setFilterTokens(filterBarItemsToMetricsTokens(items.filter(item => !isTimeRange(item))))}
+  >
+    <FilterBar.Chips
+      renderChip={item => (isTimeRange(item) ? <MetricsTimeRangeChip /> : <FilterBar.Chip item={item} />)}
+    />
+    <FilterBar.Input />
+  </FilterBar>;
+  ```
+
+### Patch Changes
+
+- Added an optional `keywords` field to `Combobox` options. Search matches these terms as well as the label, so an option can show a friendly label and still be found by an id or alias. ([#27000](https://github.com/mastra-ai/mastra/pull/27000))
+
+  ```tsx
+  <Combobox
+    options={[
+      { label: 'Claude Haiku 4.5', value: 'anthropic/claude-haiku-4-5', keywords: ['anthropic/claude-haiku-4-5'] },
+    ]}
+  />
+  ```
+
+- Changed `PageLayout` to scroll its body in a `ScrollArea` instead of reserving a stable scrollbar gutter. The body no longer shifts sideways when a scrollbar appears, and pages no longer show an empty strip beside their content. Added `contentClassName` to `ScrollAreaViewport` to style the wrapper around its children. ([#27018](https://github.com/mastra-ai/mastra/pull/27018))
+
+  Added a `mask` prop to `PageLayout` to fade the body's scrolled edges, using the same values as `ScrollArea`. It is off by default. A fade covers whatever sits at that edge, so leave it off for bodies with sticky table headers.
+
+  ```tsx
+  <PageLayout mask={{ y: true }}>{/* ... */}</PageLayout>
+  ```
+
+- Added a `flush` variant to `InputGroupAddon`. Use it to place adjacent number steppers at the field edge without a gap or edge inset. ([#27017](https://github.com/mastra-ai/mastra/pull/27017))
+
+  ```tsx
+  <InputGroupAddon align="inline-end" variant="flush">
+    <InputNumberDecrement />
+    <InputNumberIncrement />
+  </InputGroupAddon>
+  ```
+
+- Updated dependencies [[`bed1ccc`](https://github.com/mastra-ai/mastra/commit/bed1cccea5817d68faa42a15fda3a0b329f70680), [`02e2eae`](https://github.com/mastra-ai/mastra/commit/02e2eae3aee1c5b5b9c807a6a3389b88eca1440c), [`b2dd0c6`](https://github.com/mastra-ai/mastra/commit/b2dd0c6333691467e61406ac920eb6f861db6bc0), [`ad16eae`](https://github.com/mastra-ai/mastra/commit/ad16eae7eec9af386c9eee81f4f30ef65d0df48b)]:
+  - @mastra/core@1.78.0-alpha.1
+  - @mastra/client-js@1.54.1-alpha.1
+  - @mastra/ai-sdk@1.11.1
+  - @mastra/react@1.10.1-alpha.1
+
 ## 63.0.1-alpha.0
 
 ### Patch Changes

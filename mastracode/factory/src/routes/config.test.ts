@@ -400,7 +400,7 @@ describe('provider key routes with a tenant', () => {
     });
     expect(res.status).toBe(400);
     expect((await res.json()).error).toBe('provider_configured_by_deployment');
-    expect(await seed.credentials.resolveCredential('org1', 'user-a', 'amazon-bedrock')).toBeUndefined();
+    expect(await seed.credentials.resolveCredential('org1', 'user-a', 'amazon-bedrock', 'org')).toBeUndefined();
   });
 
   it('stores a user-scoped key by default, invisible to other members', async () => {
@@ -412,7 +412,7 @@ describe('provider key routes with a tenant', () => {
       type: 'api_key',
       key: 'sk-mine',
     });
-    expect(await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic')).toBeUndefined();
+    expect(await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic', 'user')).toBeUndefined();
   });
 
   it('stores a Kimi key under the credential id model resolution reads', async () => {
@@ -459,7 +459,7 @@ describe('provider key routes with a tenant', () => {
     expect((await res.json()).provider?.source).toBe('stored-org');
     expect(isOrganizationAdmin).toHaveBeenCalledWith('org1', 'user-a');
 
-    const resolvedForB = await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic');
+    const resolvedForB = await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic', 'org');
     expect(resolvedForB).toMatchObject({ scope: 'org', credential: { key: 'sk-shared' } });
   });
 
@@ -488,11 +488,11 @@ describe('provider key routes with a tenant', () => {
     expect(isOrganizationAdmin).not.toHaveBeenCalled();
   });
 
-  it('user key wins over org key for the caller', async () => {
+  it("lists the caller's user key when both scopes exist", async () => {
     await putKey(buildApp(userA), { key: 'sk-shared', scope: 'org' });
     await putKey(buildApp(userA), { key: 'sk-mine' });
 
-    const resolved = await seed.credentials.resolveCredential('org1', 'user-a', 'anthropic');
+    const resolved = await seed.credentials.resolveCredential('org1', 'user-a', 'anthropic', 'user');
     expect(resolved).toMatchObject({ scope: 'user', credential: { key: 'sk-mine' } });
 
     const listed = await buildApp(userA).request('/web/config/providers');

@@ -20,7 +20,6 @@ import {
   createSourceControlSessionLookup,
   ensureFactorySourceSession,
   FactorySourceSessionResolutionError,
-  resolveFactoryDefaultModelId,
   resolveFactorySourceControl,
 } from '../session/factory-session.js';
 import type { EnsuredFactorySourceSession } from '../session/factory-session.js';
@@ -304,6 +303,13 @@ export async function prepareFactoryRuleBinding(
     if (!connections.some(connection => connection.integrationId === sourceControl.integrationId)) {
       throw new FactoryDispatchError('source_control_missing', 'Factory source-control connection not found.');
     }
+    const project = await projects.getById({ id: input.record.factoryProjectId });
+    if (!project || project.orgId !== input.record.orgId) {
+      throw new FactoryDispatchError(
+        'session_unavailable',
+        `Factory model policy is unavailable for project ${input.record.factoryProjectId}.`,
+      );
+    }
     // A retry may already own a role session. Check it before treating a
     // repository-less card as ambiguous, but never override an explicit signal.
     const boundSession = await reuseBoundSession(sourceControl, input);
@@ -376,12 +382,14 @@ export async function prepareFactoryRuleBinding(
         );
       }));
 
+    const modelScope = project.modelScope;
     await coordinator.prepare({
       orgId: input.record.orgId,
       userId: preparedSession.userId,
       factoryProjectId: input.record.factoryProjectId,
       sessionId: preparedSession.sessionId,
-      defaultModelId: await resolveFactoryDefaultModelId(projects, input.record.factoryProjectId),
+      modelScope,
+      defaultModelId: modelScope === 'factory' ? (project.defaultModelId ?? undefined) : undefined,
       threadTitle: workItemThreadTitle({ source, title: input.item.title, metadata: input.item.metadata }),
       kickoffKey: input.record.id,
       destinationStage,
@@ -682,6 +690,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
             sessionId: request.sessionId,
           }),
         deps.domains.intake,
+        { projects: deps.domains.projects, modelDefaults: deps.domains.modelDefaults },
       )
     : undefined;
   if (transitionService && startCoordinator) {

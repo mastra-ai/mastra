@@ -1,5 +1,25 @@
 # @mastra/observability
 
+## 1.20.1-alpha.1
+
+### Patch Changes
+
+- Fixed cost estimates for Amazon Bedrock India inference profiles (`in.` prefix), which previously reported `no_matching_model`. Fixes #26387. ([#26982](https://github.com/mastra-ai/mastra/pull/26982))
+
+- Updated dependencies [[`460b600`](https://github.com/mastra-ai/mastra/commit/460b600abe3b7563537cfb8a676d649c638a9190), [`2362057`](https://github.com/mastra-ai/mastra/commit/2362057cedc6b90b9fd71c424df40eedf3a4ecf3), [`9daf547`](https://github.com/mastra-ai/mastra/commit/9daf547f810df721eaca9c9dafc18f8ce1727b77), [`e496762`](https://github.com/mastra-ai/mastra/commit/e49676258181017f50eb5739d4a97c0da7317dd9)]:
+  - @mastra/core@1.78.0-alpha.2
+
+## 1.20.1-alpha.0
+
+### Patch Changes
+
+- Update bundled model pricing with the latest prices from models.dev ([`bed1ccc`](https://github.com/mastra-ai/mastra/commit/bed1cccea5817d68faa42a15fda3a0b329f70680))
+
+- Tracking exporters now wait for in-progress trace-cap evictions in `flush()` and `shutdown()`, so the aborted spans are sent instead of being queued after the flush or aborted twice. ([#26916](https://github.com/mastra-ai/mastra/pull/26916))
+
+- Updated dependencies [[`bed1ccc`](https://github.com/mastra-ai/mastra/commit/bed1cccea5817d68faa42a15fda3a0b329f70680), [`02e2eae`](https://github.com/mastra-ai/mastra/commit/02e2eae3aee1c5b5b9c807a6a3389b88eca1440c), [`b2dd0c6`](https://github.com/mastra-ai/mastra/commit/b2dd0c6333691467e61406ac920eb6f861db6bc0), [`ad16eae`](https://github.com/mastra-ai/mastra/commit/ad16eae7eec9af386c9eee81f4f30ef65d0df48b)]:
+  - @mastra/core@1.78.0-alpha.1
+
 ## 1.20.0
 
 ### Minor Changes

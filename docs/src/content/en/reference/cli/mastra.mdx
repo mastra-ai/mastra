@@ -1648,7 +1648,7 @@ mastra api trace list '{"page":0,"perPage":20}' --verbose
 
 #### `mastra api trace query`
 
-Queries completed observability traces with recursive predicates over trace and related span or score fields. The inline JSON input is required. Like other observability commands, it targets `https://observability.mastra.ai` by default.
+Queries completed observability traces with recursive predicates over trace fields and related spans. The inline JSON input is required and uses the same query structure as the SDK and HTTP API. Like other observability commands, it targets `https://observability.mastra.ai` by default. Pass `--url http://localhost:4111` to query a local server.
 
 ```bash
 mastra api trace query <input>
@@ -1672,7 +1672,7 @@ The response remains nested under `data` to preserve cursor pagination:
 }
 ```
 
-Pass a non-null `page.next` value back as `page.after` in the next query. See [Advanced trace queries](/reference/observability/tracing/trace-query) for supported fields and operators, recursive predicates, limits, pagination, and errors.
+Each invocation makes one query. Pass a non-null `data.page.next` value back as `page.after` in the next query. See [Trace queries](/reference/observability/tracing/trace-query) for supported fields and operators, recursive predicates, limits, pagination, and errors. `--schema` describes the request structure, while the reference lists supported predicate paths and operators.
 
 To load a numbered page and then poll, keep the same time range and predicate in both requests:
 
