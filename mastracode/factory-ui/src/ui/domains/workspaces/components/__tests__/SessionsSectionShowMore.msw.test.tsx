@@ -1,9 +1,3 @@
-/**
- * BDD coverage for the sidebar session groups: each group shows the latest 5
- * sessions with a "Show N more" toggle that expands to the full list. Before
- * this, sessions past the cap were silently hidden — users with many review
- * sessions couldn't reach them from the sidebar at all.
- */
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -13,8 +7,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
+import { stubSessionsFactory, testChatSession } from './fixtures/sessionsSection';
 import type { FactoryUserSession } from '../../services/user-sessions';
-import { WorkspacesSection } from '../WorkspacesSection';
+import { SessionsSection } from '../SessionsSection';
 
 const projectRepositoryId = 'ghp-1';
 
@@ -45,30 +40,19 @@ function stubSessions(sessions: FactoryUserSession[]) {
 }
 
 function renderSection() {
+  stubSessionsFactory('fp-1', [projectRepositoryId]);
   return renderWithProviders(
     <MemoryRouter initialEntries={['/factories/fp-1']}>
-      <ChatSessionContext.Provider
-        value={{
-          resourceId: 'resource-1',
-          sessionEnabled: false,
-          resourceReady: false,
-          sandboxReady: false,
-          sandboxPreparing: false,
-          resourceEnabled: false,
-          factorySessionState: { factoryProjectId: 'fp-1', projectRepositoryId },
-          baseUrl: TEST_BASE_URL,
-          kind: 'factory',
-        }}
-      >
+      <ChatSessionContext.Provider value={testChatSession('fp-1', projectRepositoryId)}>
         <Routes>
-          <Route path="/factories/:factoryId" element={<WorkspacesSection />} />
+          <Route path="/factories/:factoryId" element={<SessionsSection />} />
         </Routes>
       </ChatSessionContext.Provider>
     </MemoryRouter>,
   );
 }
 
-describe('Workspaces sidebar show more', () => {
+describe('Sessions sidebar show more', () => {
   beforeEach(() => {
     localStorage.removeItem('mastracode.pinnedSessions');
   });
@@ -79,7 +63,7 @@ describe('Workspaces sidebar show more', () => {
 
     renderSection();
 
-    const group = await screen.findByRole('region', { name: 'Review Sessions' });
+    const group = await screen.findByRole('region', { name: 'Review sessions' });
     expect(await within(group).findAllByRole('button', { name: /^factory\/pr-200\d+$/ })).toHaveLength(5);
     expect(within(group).queryByRole('button', { name: 'factory/pr-20001' })).not.toBeInTheDocument();
 
@@ -97,7 +81,7 @@ describe('Workspaces sidebar show more', () => {
 
     const rendered = renderSection();
     await waitForMutationsIdle(rendered.client);
-    const group = screen.getByRole('region', { name: 'Review Sessions' });
+    const group = screen.getByRole('region', { name: 'Review sessions' });
     await user.click(within(group).getByRole('button', { name: 'Show 3 more' }));
     await user.click(within(group).getByRole('button', { name: 'Session actions for factory/pr-20001' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Pin session' }));
@@ -110,7 +94,7 @@ describe('Workspaces sidebar show more', () => {
 
     rendered.unmount();
     renderSection();
-    const remountedGroup = await screen.findByRole('region', { name: 'Review Sessions' });
+    const remountedGroup = await screen.findByRole('region', { name: 'Review sessions' });
     expect(within(remountedGroup).getByRole('button', { name: 'factory/pr-20001' })).toBeInTheDocument();
     expect(within(remountedGroup).getByLabelText('factory/pr-20001 pinned')).toBeInTheDocument();
 
@@ -124,7 +108,7 @@ describe('Workspaces sidebar show more', () => {
 
     renderSection();
 
-    const group = await screen.findByRole('region', { name: 'Review Sessions' });
+    const group = await screen.findByRole('region', { name: 'Review sessions' });
     expect(await within(group).findAllByRole('button', { name: /^factory\/pr-200\d+$/ })).toHaveLength(3);
     expect(screen.queryByRole('button', { name: /Show \d+ more/ })).not.toBeInTheDocument();
   });
