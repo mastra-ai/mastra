@@ -32,6 +32,25 @@ describe('OpenAISchemaCompatLayer', () => {
   // nested subtrees copied across the containing property and anyOf branches, which
   // caused exponential schema growth with nesting depth.
   describe('optional properties from external JSON Schema', () => {
+    it('adds a null alternative to an optional typeless anyOf property (#26703)', () => {
+      const result = compat.processToJSONSchema({
+        type: 'object',
+        properties: {
+          value: { anyOf: [{ type: 'string' }, { type: 'number' }] },
+          already: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+          needed: { anyOf: [{ type: 'string' }, { type: 'number' }] },
+        },
+        required: ['needed'],
+        additionalProperties: false,
+      } as any) as Record<string, any>;
+
+      expect(result.required).toEqual(expect.arrayContaining(['value', 'already', 'needed']));
+      expect(result.properties.value.anyOf).toEqual([{ type: 'string' }, { type: 'number' }, { type: 'null' }]);
+      expect(result.properties.already.anyOf).toEqual([{ type: 'string' }, { type: 'null' }]);
+      // A required union stays non-nullable.
+      expect(result.properties.needed.anyOf).toEqual([{ type: 'string' }, { type: 'number' }]);
+    });
+
     const searchToolSchema = {
       type: 'object',
       properties: {

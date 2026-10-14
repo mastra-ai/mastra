@@ -458,6 +458,13 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
                 delete prop.type;
                 prop.anyOf = [propSchema, { type: 'null' }];
               }
+            } else if (prop.type === undefined && Array.isArray(prop.anyOf)) {
+              // A typeless union (e.g. JSON Schema `anyOf: [string, number]`) still needs a null
+              // alternative, or making it required turns an optional field into a mandatory one.
+              const hasNull = prop.anyOf.some(branch => typeof branch !== 'boolean' && branch.type === 'null');
+              if (!hasNull) {
+                prop.anyOf = [...prop.anyOf, { type: 'null' }];
+              }
             }
           }
         }
