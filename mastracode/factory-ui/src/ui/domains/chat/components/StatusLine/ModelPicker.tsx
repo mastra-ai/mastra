@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/c
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { formatModelName } from '@mastra/playground-ui/utils/model';
 import { Check, ChevronDown, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 
@@ -23,7 +24,6 @@ import { useChatConnection } from '../../context/useChatConnection';
 import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
 import { useChatModels } from '../../context/useChatModels';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
-import { formatModelName } from '../../services/model-name';
 import { SessionThinkingControl } from './SessionThinkingControl';
 
 function groupByProvider(models: AvailableModelOption[]): [string, AvailableModelOption[]][] {
