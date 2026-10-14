@@ -9,7 +9,8 @@ function lastSegment(id: string): string {
 
 /** Human-readable name for a `provider/model` id, e.g. `anthropic/claude-haiku-4-5` → `Claude Haiku 4.5`. */
 export function formatModelName(id: string): string {
-  const slug = lastSegment(id);
+  // Bedrock-style ids put the vendor in front of the model: `anthropic.claude-sonnet-4-5`.
+  const slug = lastSegment(id).replace(/^[a-z]+\./i, '');
   const claudeMatch = slug.match(/^claude-(opus|sonnet|haiku)-(\d+)-(\d+)$/i);
   const claudeFamily = claudeMatch?.[1];
   const claudeMajor = claudeMatch?.[2];
