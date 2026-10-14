@@ -27,6 +27,7 @@ import type { LiveSessions } from '../session/live-sessions.js';
 import { auditRequestOrigin } from '../storage/domains/audit/domain.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
+import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
 import { thresholdsOrDefault } from '../storage/domains/queue-health/base.js';
@@ -252,11 +253,13 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
     if (!project) {
       return { response: c.json({ error: 'Project not found' }, 404) };
     }
+    // Work-item starts are runs, so a hybrid Factory resolves the Factory's scope here.
+    const modelScope = effectiveModelScope(project.modelScope, 'run');
     return {
       ...tenant,
       factoryProjectId: projectId,
-      modelScope: project.modelScope,
-      defaultModelId: project.modelScope === 'factory' ? project.defaultModelId : null,
+      modelScope,
+      defaultModelId: modelScope === 'factory' ? project.defaultModelId : null,
     };
   }
 

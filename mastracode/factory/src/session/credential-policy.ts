@@ -5,6 +5,7 @@ import {
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 
+import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { parseSupervisorResourceId } from '../supervisor/session.js';
@@ -28,7 +29,12 @@ export async function resolveFactoryCredentialTenant(
   if (supervisorProjectId) {
     const project = await deps.projects.getById({ id: supervisorProjectId });
     if (!project || project.orgId !== principal.orgId) throw new Error('Factory model policy is unavailable.');
-    return { orgId: project.orgId, userId: project.createdBy, credentialScope: project.modelScope };
+    // Supervisor turns are Factory-owned automation, so a hybrid Factory bills them as runs.
+    return {
+      orgId: project.orgId,
+      userId: project.createdBy,
+      credentialScope: effectiveModelScope(project.modelScope, 'run'),
+    };
   }
 
   const sourceSession = await deps.sourceControl.getBySessionId(controller.resourceId);
@@ -57,5 +63,10 @@ export async function resolveFactoryCredentialTenant(
   const projectId = binding?.factoryProjectId ?? sourceSession.factoryProjectId;
   const project = await deps.projects.getById({ id: projectId });
   if (!project || project.orgId !== sourceSession.orgId) throw new Error('Factory model policy is unavailable.');
-  return { orgId: project.orgId, userId: sourceSession.userId, credentialScope: project.modelScope };
+  // An active run binding marks a work-item run; any other thread is an interactive session.
+  return {
+    orgId: project.orgId,
+    userId: sourceSession.userId,
+    credentialScope: effectiveModelScope(project.modelScope, binding ? 'run' : 'session'),
+  };
 }

@@ -320,6 +320,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "queryParams": [],
     "bodyParams": [
       "description",
+      "modelScope",
       "name"
     ],
     "hasQuery": false,
@@ -1656,7 +1657,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "type": "string",
           "enum": [
             "factory",
-            "user"
+            "user",
+            "hybrid"
           ]
         },
         "__schema4": {
@@ -2295,6 +2297,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             {
               "type": "null"
             }
+          ]
+        },
+        "modelScope": {
+          "type": "string",
+          "enum": [
+            "factory",
+            "user",
+            "hybrid"
           ]
         }
       },

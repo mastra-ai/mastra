@@ -31,7 +31,11 @@ const OWNER = 'owner';
 async function setup() {
   const seed = await createFactoryStorageForTests();
   const sourceControl = seed.sourceControl.forIntegration('github');
-  const project = await seed.projects.create({ orgId: ORG, userId: OWNER, input: { name: 'Policy' } });
+  const project = await seed.projects.create({
+    orgId: ORG,
+    userId: OWNER,
+    input: { name: 'Policy', modelScope: 'factory' },
+  });
   const installation = await sourceControl.installations.upsert({
     orgId: ORG,
     connectedByUserId: OWNER,
@@ -187,7 +191,11 @@ describe('trusted Factory credential policy', () => {
 
   it('rejects ambiguous bindings instead of selecting the repository project policy', async () => {
     const { seed, project, sourceSession, context } = await setup();
-    const other = await seed.projects.create({ orgId: ORG, userId: OWNER, input: { name: 'Other' } });
+    const other = await seed.projects.create({
+      orgId: ORG,
+      userId: OWNER,
+      input: { name: 'Other', modelScope: 'factory' },
+    });
     await seed.projects.update({ orgId: ORG, id: other.id, input: { modelScope: 'user' } });
     for (const factoryProjectId of [project.id, other.id]) {
       await seed.workItems.prepareRunStart({
