@@ -2,6 +2,7 @@ import { useLocation, useNavigate } from 'react-router';
 
 import { setSessionPinned } from '../hooks/usePinnedSessions';
 import { useRegenerateSessionTitle } from '../hooks/useRegenerateSessionTitle';
+import { useSessionVisibility } from '../hooks/useSessionVisibility';
 import { STATUS_MARKER_BY_ACTIVITY } from '../services/sessionRows';
 import type { SessionListRow } from '../services/sessionRows';
 import { SessionNavRow } from './SessionNavRow';
@@ -22,6 +23,8 @@ export function SessionListItem({
   const navigate = useNavigate();
   const location = useLocation();
   const { regenerate, regenerating } = useRegenerateSessionTitle(factoryId, row.session.sessionId);
+  const { changeVisibility } = useSessionVisibility(factoryId, row.session.sessionId);
+  const ownUserSession = row.origin === 'user' && row.ownedByViewer;
 
   return (
     <SessionNavRow
@@ -48,6 +51,8 @@ export function SessionListItem({
       onDelete={row.ownedByViewer ? () => onDelete(row) : undefined}
       onRegenerateTitle={row.canRegenerateTitle ? regenerate : undefined}
       regeneratingTitle={regenerating}
+      visibility={row.origin === 'user' ? row.session.visibility : undefined}
+      onVisibilityChange={ownUserSession ? changeVisibility : undefined}
     />
   );
 }
