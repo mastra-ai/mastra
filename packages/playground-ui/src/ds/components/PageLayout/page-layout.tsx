@@ -19,6 +19,11 @@ export interface PageLayoutProps {
    * `fit` lets the body fill the page edge to edge.
    */
   variant?: 'container' | 'fit' | 'narrow';
+  /**
+   * Fade the body's scrolled edges, using the same values as `ScrollArea`'s `mask`. Off by default.
+   * `{ y: true }` fades the top and bottom; `{ bottom: '3rem' }` sets one side's depth.
+   * A fade covers whatever sits at that edge, so leave it off for `fit` bodies that hold tables with sticky headers.
+   */
   mask?: ScrollAreaMask;
 }
 
