@@ -2,7 +2,6 @@ import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { SortMenu } from '@mastra/playground-ui/components/SortMenu';
 import {
   Dialog,
   DialogAction,
@@ -14,7 +13,7 @@ import {
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { GitPullRequest, SquareKanban, UserRound } from 'lucide-react';
+import { ArrowUpDown, GitPullRequest, SquareKanban, UserRound } from 'lucide-react';
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
@@ -145,7 +144,7 @@ export function WorkspacesSection() {
     const all = rows
       .filter(row => row.review === review)
       .filter(row => !mineOnly || !viewerUserId || row.workspace.userId === viewerUserId)
-      .sort(compareWorkspaceRows(review ? reviewSort : workSort));
+      .toSorted(compareWorkspaceRows(review ? reviewSort : workSort));
     const visible = all.slice(0, COLLAPSED_ROW_COUNT);
     const open = all.find(row => row.active);
     if (open && !visible.includes(open)) visible.push(open);
@@ -333,7 +332,13 @@ function WorkspaceGroup({
               onOwnerScopeChange('mine');
             }}
           >
-            <SortMenu.Sub options={WORKSPACE_SESSION_SORT_OPTIONS} value={sort} onValueChange={onSortChange} />
+            <DropdownMenu.RadioSub
+              label="Sort"
+              icon={<ArrowUpDown aria-hidden />}
+              options={WORKSPACE_SESSION_SORT_OPTIONS}
+              value={sort}
+              onValueChange={onSortChange}
+            />
             {viewerUserId ? (
               <DropdownMenu.RadioSub
                 label="Owner"

@@ -12,11 +12,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
-import { SortMenu } from '@mastra/playground-ui/components/SortMenu';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { CircleDashed, Clock, MessageSquare, Plus, UserRound } from 'lucide-react';
+import { ArrowUpDown, CircleDashed, Clock, MessageSquare, Plus, UserRound } from 'lucide-react';
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
@@ -69,7 +68,7 @@ export function UserSessionsSection() {
   const defaultFilters = defaultUserSessionFilters(viewerUserId);
   const filters: UserSessionFiltersState = { ...defaultFilters, ...filterChanges };
   const isOwn = (session: FactoryUserSession) => Boolean(viewerUserId) && session.userId === viewerUserId;
-  const allSessions = [...(sessionsQuery.data?.userSessions ?? [])].sort(compareUserSessions(sort, pinnedSessions));
+  const allSessions = (sessionsQuery.data?.userSessions ?? []).toSorted(compareUserSessions(sort, pinnedSessions));
   const runningBySessionId = useActiveRunResources({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceIds: allSessions.map(session => session.sessionId),
@@ -86,12 +85,15 @@ export function UserSessionsSection() {
   const sessions = filterUserSessions(candidates, filters, viewerUserId).map(candidate => candidate.session);
   const ownersById = new Map<string, string>();
   for (const candidate of candidates) ownersById.set(candidate.session.userId, candidate.ownerName);
+  const viewerOwnerOptions = viewerUserId ? [{ value: MY_SESSIONS, label: 'Mine' }] : [];
+  const namedOwnerOptions = Array.from(ownersById, ([userId, name]) => ({
+    value: sessionOwnerFilterValue(userId),
+    label: name,
+  })).toSorted((a, b) => a.label.localeCompare(b.label));
   const ownerOptions: DropdownMenuRadioOption<string>[] = [
     { value: ALL_SESSION_OWNERS, label: 'All owners' },
-    ...(viewerUserId ? [{ value: MY_SESSIONS, label: 'Mine' }] : []),
-    ...[...ownersById]
-      .map(([userId, name]) => ({ value: sessionOwnerFilterValue(userId), label: name }))
-      .sort((a, b) => a.label.localeCompare(b.label)),
+    ...viewerOwnerOptions,
+    ...namedOwnerOptions,
   ];
   const activeFilterCount = activeUserSessionFilterCount(filters, defaultFilters);
   const changedCount = activeFilterCount + Number(sort !== DEFAULT_USER_SESSION_SORT);
@@ -154,7 +156,13 @@ export function UserSessionsSection() {
                 setSort(DEFAULT_USER_SESSION_SORT);
               }}
             >
-              <SortMenu.Sub options={USER_SESSION_SORT_OPTIONS} value={sort} onValueChange={setSort} />
+              <DropdownMenu.RadioSub
+                label="Sort"
+                icon={<ArrowUpDown aria-hidden />}
+                options={USER_SESSION_SORT_OPTIONS}
+                value={sort}
+                onValueChange={setSort}
+              />
               <DropdownMenu.RadioSub
                 label="Owner"
                 icon={<UserRound aria-hidden />}

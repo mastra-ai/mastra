@@ -1,4 +1,5 @@
-import { SortMenu } from '@mastra/playground-ui/components/SortMenu';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { ArrowUpDown } from 'lucide-react';
 
 import { BOARD_SORTS } from '../boardOrder';
 import type { BoardSort } from '../boardOrder';
@@ -20,18 +21,26 @@ export function BoardSortControl({
   currentUserId?: string;
   onChange: (sort: BoardSort) => void;
 }) {
+  const triggerLabel = `Sort filed cards: ${BOARD_SORT_LABELS[value]}`;
   const options = BOARD_SORTS.filter(sort => sort !== 'recent-mine' || currentUserId).map(sort => ({
     value: sort,
     label: BOARD_SORT_LABELS[sort],
   }));
 
   return (
-    <SortMenu
-      label="Sort filed cards"
-      options={options}
-      value={value}
-      baselineValue={DEFAULT_BOARD_SORT}
-      onValueChange={onChange}
-    />
+    <DropdownMenu>
+      <DropdownMenu.Trigger
+        size="icon-sm"
+        variant={value === DEFAULT_BOARD_SORT ? 'default' : 'primary'}
+        aria-label={triggerLabel}
+        tooltip={triggerLabel}
+      >
+        <ArrowUpDown aria-hidden />
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="start">
+        <DropdownMenu.Label>Sort filed cards</DropdownMenu.Label>
+        <DropdownMenu.RadioOptions options={options} value={value} onValueChange={onChange} />
+      </DropdownMenu.Content>
+    </DropdownMenu>
   );
 }
