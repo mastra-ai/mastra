@@ -35,11 +35,23 @@ export const listSitesOutputSchema = z.object({
   nextCursor: z.string().optional(),
 });
 
+/** Values the tool follows as a raw endpoint are pinned to the endpoint it lists. */
+export const listSitesInputSchemaChecked = listSitesInputSchema.extend({
+  cursor: listSitesInputSchema.shape['cursor']
+    .unwrap()
+    .regex(
+      /^https:\/\/graph\.microsoft\.com\/v1\.0\/sites\?/,
+      'cursor must be the nextCursor returned by a previous list_sites call',
+    )
+    .optional()
+    .describe(listSitesInputSchema.shape['cursor'].description ?? ''),
+});
+
 export function listSitesTool(proxy: PlatformProxy) {
   return createTool({
     id: 'microsoft_excel_list_sites',
     description: 'Search and list SharePoint sites accessible to the app.',
-    inputSchema: listSitesInputSchema,
+    inputSchema: listSitesInputSchemaChecked,
     outputSchema: listSitesOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof listSitesOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);

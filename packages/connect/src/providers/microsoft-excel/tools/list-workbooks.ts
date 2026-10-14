@@ -47,11 +47,23 @@ export const listWorkbooksOutputSchema = z.object({
   nextCursor: z.string().optional(),
 });
 
+/** Values the tool follows as a raw endpoint are pinned to the endpoint it lists. */
+export const listWorkbooksInputSchemaChecked = listWorkbooksInputSchema.extend({
+  cursor: listWorkbooksInputSchema.shape['cursor']
+    .unwrap()
+    .regex(
+      /^https:\/\/graph\.microsoft\.com\/v1\.0\/drives\/[^/?#]+\/root\/search\(q=[^/?#]*\)\?/,
+      'cursor must be the nextCursor returned by a previous list_workbooks call',
+    )
+    .optional()
+    .describe(listWorkbooksInputSchema.shape['cursor'].description ?? ''),
+});
+
 export function listWorkbooksTool(proxy: PlatformProxy) {
   return createTool({
     id: 'microsoft_excel_list_workbooks',
     description: 'List and search .xlsx files within a drive.',
-    inputSchema: listWorkbooksInputSchema,
+    inputSchema: listWorkbooksInputSchemaChecked,
     outputSchema: listWorkbooksOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof listWorkbooksOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);

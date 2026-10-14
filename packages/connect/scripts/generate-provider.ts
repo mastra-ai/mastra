@@ -48,7 +48,7 @@ import { templatePinFor, type TemplatePin } from './templates-config.js';
 
 /** Module specifier the upstream templates import their SDK from. */
 const TEMPLATE_SDK_MODULE = 'nango';
-const PROXY_REQUEST_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete']);
+const PROXY_REQUEST_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'paginate']);
 const PROXY_CONTEXT_METHODS = new Set([
   ...PROXY_REQUEST_METHODS,
   'getConnection',
@@ -512,7 +512,8 @@ function extractAction(
   // `credentials` input field) don't trigger the rewrite.
   const readsCredentials = execReadsConnectionCredentials(execInitializer);
   const usesProviderProxy = [...PROXY_REQUEST_METHODS].some(method =>
-    new RegExp(`\\bnango\\.${method}\\s*\\(`).test(source.getFullText()),
+    // Allow an explicit type argument, e.g. `nango.paginate<Item>(config)`.
+    new RegExp(`\\bnango\\.${method}\\s*(?:<[^()]*>\\s*)?\\(`).test(source.getFullText()),
   );
   if (!usesProviderProxy) {
     return { kind: 'skip', reason: 'exec does not call the provider proxy' };
@@ -661,6 +662,45 @@ function outputSecretFields(action: ExtractedAction): readonly string[] | undefi
   return fields && fields.length > 0 ? fields : undefined;
 }
 
+/**
+ * Input fields whose values a template uses as a raw proxy endpoint, mapped to
+ * the pattern a legitimate value must match. Graph list templates follow the
+ * `@odata.nextLink` cursor verbatim; without a check an agent could pass any
+ * Graph path the connection's token can reach. Each pattern pins the cursor to
+ * the endpoint the tool itself lists, and requires the `?` right after it so
+ * the path portion can't be extended. Keyed by `<providerId>/<actionSlug>`.
+ */
+const INPUT_FIELD_PATTERNS = new Map<string, Readonly<Record<string, { pattern: RegExp; message: string }>>>([
+  [
+    'microsoft-excel-oauth2-cc/list-users',
+    {
+      cursor: {
+        pattern: /^https:\/\/graph\.microsoft\.com\/v1\.0\/users\?/,
+        message: 'cursor must be the nextCursor returned by a previous list_users call',
+      },
+    },
+  ],
+  [
+    'microsoft-excel-oauth2-cc/list-sites',
+    {
+      cursor: {
+        pattern: /^https:\/\/graph\.microsoft\.com\/v1\.0\/sites\?/,
+        message: 'cursor must be the nextCursor returned by a previous list_sites call',
+      },
+    },
+  ],
+  [
+    'microsoft-excel-oauth2-cc/list-workbooks',
+    {
+      cursor: {
+        // Graph may percent-encode the quotes around the search term.
+        pattern: /^https:\/\/graph\.microsoft\.com\/v1\.0\/drives\/[^/?#]+\/root\/search\(q=[^/?#]*\)\?/,
+        message: 'cursor must be the nextCursor returned by a previous list_workbooks call',
+      },
+    },
+  ],
+]);
+
 function emitActionFile(action: ExtractedAction, pin: TemplatePin): string {
   const proxyTypeImports = [action.usesProxyRequestType ? 'PlatformProxyRequest' : undefined].filter(
     (name): name is string => Boolean(name),
@@ -675,6 +715,22 @@ function emitActionFile(action: ExtractedAction, pin: TemplatePin): string {
     ? `\n/** Provider secrets removed before the result leaves the tool. */\nexport const ${redactedSchemaName} = ${action.outputSchemaName}.omit({ ${omitKeys} });\n`
     : '';
   const outputSchemaName = secretFields ? redactedSchemaName : action.outputSchemaName;
+  const fieldPatterns = Object.entries(
+    INPUT_FIELD_PATTERNS.get(`${action.candidate.providerId}/${action.candidate.actionSlug}`) ?? {},
+  );
+  const checkedInputSchemaName = `${action.inputSchemaName}Checked`;
+  // Each pinned field is re-declared as `string().regex(...)` (not an object
+  // `.refine`) so the pattern lands in the JSON schema the model sees.
+  const checkedInputSchema =
+    fieldPatterns.length > 0
+      ? `\n/** Values the tool follows as a raw endpoint are pinned to the endpoint it lists. */\nexport const ${checkedInputSchemaName} = ${action.inputSchemaName}.extend({\n${fieldPatterns
+          .map(([field, { pattern, message }]) => {
+            const original = `${action.inputSchemaName}.shape[${JSON.stringify(field)}]`;
+            return `  ${JSON.stringify(field)}: ${original}.unwrap().regex(${pattern.toString()}, ${JSON.stringify(message)}).optional().describe(${original}.description ?? ''),\n`;
+          })
+          .join('')}});\n`
+      : '';
+  const inputSchemaName = fieldPatterns.length > 0 ? checkedInputSchemaName : action.inputSchemaName;
   const execute = secretFields
     ? `    execute: async (input, { requestContext }): Promise<z.infer<typeof ${redactedSchemaName}>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
@@ -694,12 +750,12 @@ import { z } from 'zod';
 
 ${modelOutput ? `${modelOutput.importStatement}\n` : ''}${proxyImport}${redactImport}
 ${action.moduleStatements.join('\n\n')}
-${redactedSchema}
+${redactedSchema}${checkedInputSchema}
 export function ${action.toolFactoryName}(proxy: PlatformProxy) {
   return createTool({
     id: '${action.candidate.toolKey}',
     description: ${JSON.stringify(action.description)},
-    inputSchema: ${action.inputSchemaName},
+    inputSchema: ${inputSchemaName},
     outputSchema: ${outputSchemaName},
 ${modelOutput ? `${modelOutput.toolProperty}\n` : ''}${execute}
   });

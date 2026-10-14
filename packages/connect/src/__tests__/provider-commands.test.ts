@@ -103,6 +103,57 @@ const action = createAction({
 export default action;
 `;
 
+const paginateOnlyTemplate = `import { z } from 'zod';
+import { createAction, type ProxyConfiguration } from 'nango';
+
+const InputSchema = z.object({ listId: z.string() });
+const OutputSchema = z.object({ ids: z.array(z.string()) });
+
+const action = createAction({
+  description: 'List every item, following provider next-links.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const config: ProxyConfiguration = {
+      endpoint: '/lists/' + encodeURIComponent(input.listId) + '/items',
+      paginate: { type: 'link', link_path_in_response_body: '@odata.nextLink', response_path: 'value' },
+    };
+    const ids: string[] = [];
+    for await (const page of nango.paginate<{ id: string }>(config)) {
+      ids.push(...page.map(item => item.id));
+    }
+    return { ids };
+  },
+});
+
+export default action;
+`;
+
+const graphCursorTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ cursor: z.string().optional() });
+const OutputSchema = z.object({ nextCursor: z.string().optional() });
+
+const action = createAction({
+  description: 'List users.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const baseUrl = 'https://graph.microsoft.com';
+    const endpoint = input.cursor ? input.cursor.slice(baseUrl.length) : '/v1.0/users';
+    await nango.get({ endpoint });
+    return {};
+  },
+});
+
+export default action;
+`;
+
 const connectionContextTemplate = `import { z } from 'zod';
 import { createAction } from 'nango';
 
@@ -301,8 +352,12 @@ describe('maintainer provider commands', () => {
         writeFileSync(resolve(actionDir, 'parenthesized-credentials.ts'), parenthesizedCredentialsTemplate);
         writeFileSync(resolve(actionDir, 'unsupported-no-proxy.ts'), noProxyCallTemplate);
         writeFileSync(resolve(actionDir, 'arraybuffer-response-type.ts'), arrayBufferResponseTypeTemplate);
+        writeFileSync(resolve(actionDir, 'paginate-only.ts'), paginateOnlyTemplate);
       }
     }
+    const excelActionDir = resolve(packageRoot, '.templates', 'integrations', 'microsoft-excel-oauth2-cc', 'actions');
+    mkdirSync(excelActionDir, { recursive: true });
+    writeFileSync(resolve(excelActionDir, 'list-users.ts'), graphCursorTemplate);
     const openaiActionDir = resolve(packageRoot, '.templates', 'integrations', 'openai', 'actions');
     mkdirSync(openaiActionDir, { recursive: true });
     writeFileSync(resolve(openaiActionDir, 'create-image.ts'), imageActionTemplate);
@@ -526,6 +581,21 @@ export default action;
     expect(labelDeclarations).toHaveLength(1);
   });
 
+  it('pins Graph next-page cursors to the endpoint the tool lists', async () => {
+    await addProvider({
+      providerId: 'microsoft-excel-oauth2-cc',
+      localId: 'microsoft-excel',
+      yes: true,
+      expectedTemplateSha: templateSha,
+    });
+
+    const generated = readFileSync(resolve(packageRoot, 'src/providers/microsoft-excel/tools/list-users.ts'), 'utf8');
+    expect(generated).toContain('inputSchema: listUsersInputSchemaChecked,');
+    expect(generated).toContain('export const listUsersInputSchemaChecked = listUsersInputSchema.extend({');
+    expect(generated).toMatch(/cursor: listUsersInputSchema\.shape\["cursor"\]\s*\.unwrap\(\)\s*\.regex\(/);
+    expect(generated).not.toContain('.refine(');
+  });
+
   it('adds model-native image output to the OpenAI image generation tool', async () => {
     await addProvider({ providerId: 'openai', localId: 'openai', yes: true, expectedTemplateSha: templateSha });
 
@@ -543,7 +613,7 @@ export default action;
       'first-provider (1 action templates) [installed as custom]',
     ]);
     expect(listProviders({ installedOnly: false, search: 'second' })).toEqual([
-      'second-provider (10 action templates)',
+      'second-provider (11 action templates)',
     ]);
   });
 
@@ -616,11 +686,18 @@ export default action;
       'utf8',
     );
     expect(arrayBufferTool).toMatch(/responseType:\s*['"]arraybuffer['"]/);
+    // A template that only pages through `nango.paginate` counts as calling
+    // the provider proxy and generates against the runtime paginate helper.
+    const paginateTool = readFileSync(
+      resolve(packageRoot, 'src/providers/second-provider/tools/paginate-only.ts'),
+      'utf8',
+    );
+    expect(paginateTool).toContain('platformProxy.paginate<{ id: string }>(config)');
 
     const manifest = JSON.parse(
       readFileSync(resolve(packageRoot, 'src/providers/second-provider/.manifest.json'), 'utf8'),
     ) as { toolCount: number; skippedActions: { action: string; reason: string }[] };
-    expect(manifest.toolCount).toBe(9);
+    expect(manifest.toolCount).toBe(10);
     expect(manifest.skippedActions).toEqual([
       {
         action: 'unsupported-no-proxy',
@@ -679,7 +756,7 @@ export default action;
     expect(providerIndex).not.toContain('.stale.generate-123');
     expect(listProviders({ installedOnly: true })).toEqual([
       'local <- first-provider (1 tools, 0 skipped)',
-      'other <- second-provider (9 tools, 1 skipped)',
+      'other <- second-provider (10 tools, 1 skipped)',
     ]);
   });
 

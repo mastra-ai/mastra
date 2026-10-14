@@ -42,11 +42,23 @@ export const listUsersOutputSchema = z.object({
   nextCursor: z.string().optional(),
 });
 
+/** Values the tool follows as a raw endpoint are pinned to the endpoint it lists. */
+export const listUsersInputSchemaChecked = listUsersInputSchema.extend({
+  cursor: listUsersInputSchema.shape['cursor']
+    .unwrap()
+    .regex(
+      /^https:\/\/graph\.microsoft\.com\/v1\.0\/users\?/,
+      'cursor must be the nextCursor returned by a previous list_users call',
+    )
+    .optional()
+    .describe(listUsersInputSchema.shape['cursor'].description ?? ''),
+});
+
 export function listUsersTool(proxy: PlatformProxy) {
   return createTool({
     id: 'microsoft_excel_list_users',
     description: 'List/search tenant users, to resolve a user id for personal OneDrive access.',
-    inputSchema: listUsersInputSchema,
+    inputSchema: listUsersInputSchemaChecked,
     outputSchema: listUsersOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof listUsersOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
