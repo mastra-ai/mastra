@@ -2,4 +2,4 @@
 '@mastra/server': patch
 ---
 
-Request bodies can no longer set the `mastra__knowledgeResourceId` request-context key; only server middleware can, like the other reserved keys.
+Fixed request-context handling so request bodies cannot set `mastra__knowledgeResourceId`. Server middleware can still set this key.
