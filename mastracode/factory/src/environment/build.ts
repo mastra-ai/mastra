@@ -47,7 +47,7 @@ export interface EnvironmentBuildOutcome {
   outcome: 'started' | 'skipped' | 'unavailable' | 'failed';
   buildId?: string;
   templateId?: string;
-  /** Why nothing started: `debounced`, `starting` (another run is starting a build), `in_progress`, `unchanged`, `no_environment`, `no_builds`, `no_source_control`; why a run failed: `not_recorded`, `superseded`, or an error. */
+  /** Why nothing started: `debounced`, `starting` (another run is starting a build), `in_progress`, `unchanged`, `unresolved` (a lapsed run may have started a build the provider cannot list; Build now starts one anyway), `no_environment`, `no_builds`, `no_source_control`; why a run failed: `not_recorded`, `superseded`, or an error. */
   reason?: string;
   /** The heads the started build pins; the workflow stores them once the build is ready. */
   heads?: EnvironmentHeads;
@@ -145,17 +145,23 @@ export const BUILD_START_LEASE_MS = 10 * 60_000;
 const RECORD_ATTEMPTS = 5;
 
 /**
- * Start a build for `projectId` when `trigger` calls for one. `push` first
- * wins the leading-edge debounce claim. Every trigger then takes the project's
- * build-start lease before reading build state and renews it until the started
- * build is recorded, so overlapping manual, scheduled and push runs never both
- * start a build, however long the provider takes; a run that finds the lease
- * held skips as `starting`. A run that takes over a lapsed lease first asks the
- * provider (when it lists builds) for a build the lapsed run left running, and
- * skips as `in_progress` on one. Every trigger skips while the last build is
- * still running; `schedule` and `push` also skip when the last build is ready
- * and neither a head nor any other template input changed; `manual` otherwise
- * always builds. Saving settings never builds.
+ * Start a build for `projectId` when `trigger` calls for one. Every trigger
+ * takes the project's build-start lease before reading build state and renews
+ * it until the started build is recorded, so overlapping manual, scheduled and
+ * push runs never both start a build, however long the provider takes; a run
+ * that finds the lease held skips as `starting`. Every trigger skips while the
+ * last build is still running; `schedule` and `push` also skip when the last
+ * build is ready and neither a head nor any other template input changed;
+ * `manual` otherwise always builds. A `push` that would build then takes the
+ * leading-edge debounce claim, so only a push that starts a build opens the
+ * window. Saving settings never builds.
+ *
+ * Taking over a lapsed lease leaves the start uncertain: the lapsed run may
+ * have started a build it never recorded. The mark persists until resolved.
+ * While it stands, a provider that lists builds is asked for a running one
+ * (and every trigger skips as `in_progress` on it); a provider that cannot
+ * list leaves `schedule` and `push` skipping as `unresolved` and `manual`
+ * building anyway, which resolves it.
  *
  * The result is written as the lease is released, and only while this run
  * still holds it. A failed `builds.start` clears the last build id, so a later
@@ -178,14 +184,10 @@ export async function runEnvironmentBuild(
   const now = deps.now ?? (() => new Date());
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)));
 
-  if (input.trigger === 'push') {
-    const claimed = await deps.projects.claimBuildAttempt({
-      id: initial.id,
-      debounceMinutes: initial.buildPushDebounceMinutes,
-      now: now(),
-    });
-    if (!claimed) return { outcome: 'skipped', reason: 'debounced' };
-  }
+  const pushDebounced = (project: FactoryProject, at: Date) =>
+    project.lastPushBuildAt !== null &&
+    at.getTime() - project.lastPushBuildAt.getTime() < project.buildPushDebounceMinutes * 60_000;
+  if (input.trigger === 'push' && pushDebounced(initial, now())) return { outcome: 'skipped', reason: 'debounced' };
 
   const token = randomUUID();
   const lease = { id: initial.id, token, leaseMs: BUILD_START_LEASE_MS };
@@ -206,9 +208,11 @@ export async function runEnvironmentBuild(
   );
   renewal.unref?.();
 
-  const attempted = input.trigger === 'push' ? {} : { lastBuildAttemptedAt: now() };
+  const attempted = { lastBuildAttemptedAt: now() };
+  // Set once this run has reconciled an uncertain start, or builds past it.
+  let resolved = false;
   const release = (changes: Parameters<EnvironmentBuildDeps['projects']['releaseBuildStart']>[0]['changes'] = {}) =>
-    deps.projects.releaseBuildStart({ id: initial.id, token, changes, now: now() });
+    deps.projects.releaseBuildStart({ id: initial.id, token, changes, resolved, now: now() });
   const failed = async (error: unknown, changes: Parameters<typeof release>[0]) => {
     const reason = errorReason(error);
     await release(changes);
@@ -235,14 +239,23 @@ export async function runEnvironmentBuild(
       ctx = environmentBuildContext(project, environment, heads, sourceControl.versionControl);
       buildInputs = environmentBuildInputs(environment);
 
-      if (claim.recovered && builds.list) {
-        // The run whose lease lapsed may have reached the provider before it
-        // died; a build it left running is never raced by a second one.
-        const listed = await builds.list(ctx, environment.settings);
-        const running = listed.find(build => build.status === 'pending' || build.status === 'building');
-        if (running) {
+      if (claim.uncertain) {
+        // A run whose lease lapsed may have reached the provider before it
+        // died; a build it left running is never raced by a second one. The
+        // mark stays until that build is gone, since its inputs are unknown.
+        if (builds.list) {
+          const listed = await builds.list(ctx, environment.settings);
+          const running = listed.find(build => build.status === 'pending' || build.status === 'building');
+          if (running) {
+            await release();
+            return { outcome: 'skipped', reason: 'in_progress', buildId: running.buildId };
+          }
+          resolved = true;
+        } else if (input.trigger === 'manual') {
+          resolved = true;
+        } else {
           await release();
-          return { outcome: 'skipped', reason: 'in_progress', buildId: running.buildId };
+          return { outcome: 'skipped', reason: 'unresolved' };
         }
       }
 
@@ -284,6 +297,24 @@ export async function runEnvironmentBuild(
 
     // A run that lost its lease while reading must not start beside its successor.
     if (!held) return { outcome: 'skipped', reason: 'starting' };
+
+    if (input.trigger === 'push') {
+      // Claimed only now, so a push that skipped above never closes the window.
+      let claimed: boolean;
+      try {
+        claimed = await deps.projects.claimBuildAttempt({
+          id: project.id,
+          debounceMinutes: project.buildPushDebounceMinutes,
+          now: now(),
+        });
+      } catch (error) {
+        return await failed(error, {});
+      }
+      if (!claimed) {
+        await release();
+        return { outcome: 'skipped', reason: 'debounced' };
+      }
+    }
 
     let started: Awaited<ReturnType<typeof builds.start>>;
     try {

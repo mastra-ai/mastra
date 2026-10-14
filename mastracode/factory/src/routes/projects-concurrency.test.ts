@@ -425,12 +425,25 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         expect(await clients[1]!.getById({ id: projectId })).toMatchObject({ lastBuildId: 'build-x' });
         expect(await clients[1]!.claimBuildStart({ ...lease, token: 'run-3' })).toEqual({
           claimed: true,
-          recovered: false,
+          uncertain: false,
         });
+        // Taking over a lapsed lease marks the start uncertain until a release resolves it.
         const expired = new Date(now.getTime() + 61_000);
         expect(await clients[0]!.claimBuildStart({ ...lease, token: 'run-4', now: expired })).toEqual({
           claimed: true,
-          recovered: true,
+          uncertain: true,
+        });
+        expect(await clients[1]!.releaseBuildStart({ id: projectId, token: 'run-4', now: expired })).toBe(true);
+        expect(await clients[1]!.claimBuildStart({ ...lease, token: 'run-5', now: expired })).toEqual({
+          claimed: true,
+          uncertain: true,
+        });
+        expect(
+          await clients[0]!.releaseBuildStart({ id: projectId, token: 'run-5', resolved: true, now: expired }),
+        ).toBe(true);
+        expect(await clients[0]!.claimBuildStart({ ...lease, token: 'run-6', now: expired })).toEqual({
+          claimed: true,
+          uncertain: false,
         });
       });
     });
