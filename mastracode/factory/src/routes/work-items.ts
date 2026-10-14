@@ -28,7 +28,7 @@ import { auditRequestOrigin } from '../storage/domains/audit/domain.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
-import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
 import { thresholdsOrDefault } from '../storage/domains/queue-health/base.js';
 import type {
@@ -148,7 +148,7 @@ function parseStartBody(
   body: unknown,
   tenant: { orgId: string; userId: string },
   factoryProjectId: string,
-  modelScope: 'factory' | 'user',
+  modelScope: EffectiveModelScope,
 ): FactoryStartRequest | null {
   const parsed = FACTORY_ROUTE_CONTRACTS.workItemStart.bodySchema.safeParse(body);
   return parsed.success ? { ...tenant, factoryProjectId, modelScope, ...parsed.data } : null;
@@ -234,7 +234,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         orgId: string;
         userId: string;
         factoryProjectId: string;
-        modelScope: 'factory' | 'user';
+        modelScope: EffectiveModelScope;
         defaultModelId: string | null;
       }
     | { response: Response }

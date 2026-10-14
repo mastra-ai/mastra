@@ -242,6 +242,7 @@ describe('hydrateSessionDefaultModel', () => {
       threadId: 'session-1',
       resourceId: 'session-1',
       sessionId: 'session-1',
+      rejectAmbiguous: true,
     });
     expect(dependencies.modelDefaults.get).not.toHaveBeenCalled();
   });

@@ -347,6 +347,26 @@ describe('trusted Factory credential policy', () => {
       await expect(prepareCredentialTenant(context())).rejects.toThrow('ambiguous');
     });
 
+    it('does not seed the owner default on a thread with ambiguous bindings', async () => {
+      const { seed, project, sourceSession, deps } = await setup();
+      await seed.projects.update({ orgId: ORG, id: project.id, input: { modelScope: 'hybrid' } });
+      const other = await seed.projects.create({
+        orgId: ORG,
+        userId: OWNER,
+        input: { name: 'Other', modelScope: 'hybrid' },
+      });
+      await bindRun(seed, sourceSession, project.id);
+      await bindRun(seed, sourceSession, other.id);
+      await seed.modelDefaults.set({ orgId: ORG, userId: OWNER, modelId: 'anthropic/claude-opus-4-6' });
+      const { session, state } = recordingSession(sourceSession.sessionId);
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await hydrateSessionDefaultModel(session as never, { ...deps, modelDefaults: seed.modelDefaults });
+
+      expect(session.model.switch).not.toHaveBeenCalled();
+      expect(state).toMatchObject({ factoryModelScope: 'user', factoryOwnerUserId: undefined });
+    });
+
     it('bills supervisor turns as Factory runs', async () => {
       const { seed, project, context } = await setup();
       await seed.projects.update({ orgId: ORG, id: project.id, input: { modelScope: 'hybrid' } });

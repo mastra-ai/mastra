@@ -77,6 +77,7 @@ export async function hydrateSessionDefaultModel(
           threadId,
           resourceId,
           sessionId: resourceId,
+          rejectAmbiguous: true,
         })
       : null;
     const modelScope = effectiveModelScope(project.modelScope, binding ? 'run' : 'session');
