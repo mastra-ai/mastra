@@ -1,5 +1,6 @@
 -- Knowledge tables created by the interim canonical-model release (main 38643beb41a, @mastra/core 1.76.0-alpha.3),
 -- captured from sqlite_master after KnowledgeLibSQL.init().
+-- The released @mastra/core 1.76.0 with @mastra/libsql 1.26.0 creates exactly this layout (re-captured and diffed: identical).
 CREATE TABLE mastra_knowledge_access_state (
   "id" TEXT NOT NULL PRIMARY KEY,
   "epoch" INTEGER NOT NULL,

@@ -601,7 +601,7 @@ describe('KnowledgePG timestamps', () => {
   });
 });
 
-describe('KnowledgePG interim canonical-model layout', () => {
+describe('KnowledgePG interim and released 1.76.0 canonical-model layout', () => {
   const INTERIM_FIXTURE = 'interim-1.76.0-alpha.3.sql';
 
   it('replaces the layout the interim release created, discarding its rows and keeping other storage', async () => {
