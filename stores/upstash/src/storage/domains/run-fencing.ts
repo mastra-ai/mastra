@@ -37,6 +37,11 @@ export function runClaimKey(claims: RunClaimTable, runId: string): string {
 // deserialization.
 const RUN_FENCE_CONFLICT = 'MASTRA_RUN_FENCE_CONFLICT';
 
+// Released claims and retired fences expire after this long. Active claims and
+// raised fences never expire; a new claim seeds its generation from the clock,
+// so it still outranks any fence that outlived its claim.
+export const RUN_CLAIM_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
 // Prepended to a script to reject it unless the run's claim matches the fence.
 // The claim key is the last KEYS entry and the fence the last two ARGV
 // entries, so the script's own KEYS and ARGV indices are unchanged.
@@ -73,6 +78,7 @@ if not generation then
   -- The first generation comes from the clock, so a claim after this hash is
   -- removed still outranks a surviving fence.
   redis.call('HSET', KEYS[1], 'generation', string.format('%d', math.max(1, tonumber(ARGV[4]))), 'ownerId', ARGV[1], 'leaseExpiresAt', ARGV[5], 'updatedAt', ARGV[4])
+  redis.call('PERSIST', KEYS[1])
   return owner(1)
 end
 if expected ~= '' and generation ~= tonumber(expected) then return owner(0) end
@@ -81,6 +87,7 @@ if ARGV[2] ~= '1' then
   if expires and expires > tonumber(ARGV[4]) then return owner(0) end
 end
 redis.call('HSET', KEYS[1], 'generation', string.format('%d', generation + 1), 'ownerId', ARGV[1], 'leaseExpiresAt', ARGV[5], 'updatedAt', ARGV[4])
+redis.call('PERSIST', KEYS[1])
 return owner(1)
 `;
 
@@ -89,15 +96,17 @@ const RENEW = `${OWNER}
 local r = redis.call('HMGET', KEYS[1], 'generation', 'ownerId', 'leaseExpiresAt')
 if tonumber(r[1]) ~= tonumber(ARGV[1]) or r[2] ~= ARGV[2] or not r[3] then return owner(0) end
 redis.call('HSET', KEYS[1], 'leaseExpiresAt', ARGV[3], 'updatedAt', ARGV[4])
+redis.call('PERSIST', KEYS[1])
 return owner(1)
 `;
 
-// ARGV: generation, ownerId, now
+// ARGV: generation, ownerId, now, retentionMs
 const RELEASE = `
 local r = redis.call('HMGET', KEYS[1], 'generation', 'ownerId')
 if tonumber(r[1]) ~= tonumber(ARGV[1]) or r[2] ~= ARGV[2] then return 0 end
 redis.call('HDEL', KEYS[1], 'leaseExpiresAt')
 redis.call('HSET', KEYS[1], 'updatedAt', ARGV[3])
+redis.call('PEXPIRE', KEYS[1], ARGV[4])
 return 1
 `;
 
@@ -116,14 +125,16 @@ elseif current ~= tonumber(ARGV[1]) or r[2] ~= ARGV[2] then
 end
 -- Every write un-retires the fence.
 redis.call('HDEL', KEYS[1], 'retiredAt')
+redis.call('PERSIST', KEYS[1])
 return 1
 `;
 
-// ARGV: generation, ownerId, now
+// ARGV: generation, ownerId, now, retentionMs
 const RETIRE = `
 local r = redis.call('HMGET', KEYS[1], 'generation', 'ownerId')
 if tonumber(r[1]) ~= tonumber(ARGV[1]) or r[2] ~= ARGV[2] then return 0 end
 redis.call('HSET', KEYS[1], 'retiredAt', ARGV[3])
+redis.call('PEXPIRE', KEYS[1], ARGV[4])
 return 1
 `;
 
@@ -229,7 +240,7 @@ export async function releaseRunOwnership(client: Redis, fence: RunFence): Promi
   const released = await client.eval(
     RELEASE,
     [runClaimKey(TABLE_WORKFLOW_RUN_OWNERS, fence.runId)],
-    [String(fence.generation), fence.ownerId, String(Date.now())],
+    [String(fence.generation), fence.ownerId, String(Date.now()), String(RUN_CLAIM_RETENTION_MS)],
   );
   return Number(released) === 1;
 }
@@ -251,7 +262,7 @@ export async function retireRunFence(client: Redis, fence: RunFence): Promise<bo
   const retired = await client.eval(
     RETIRE,
     [runClaimKey(TABLE_MEMORY_RUN_FENCES, fence.runId)],
-    [String(fence.generation), fence.ownerId, String(Date.now())],
+    [String(fence.generation), fence.ownerId, String(Date.now()), String(RUN_CLAIM_RETENTION_MS)],
   );
   return Number(retired) === 1;
 }

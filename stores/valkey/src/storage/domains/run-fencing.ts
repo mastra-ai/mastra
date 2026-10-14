@@ -29,6 +29,14 @@ export interface WriteBatch {
   exec(): Promise<unknown>;
 }
 
+/**
+ * How long a released claim or retired fence is kept before the store expires
+ * it. Expiring is safe: a later claim's generation comes from the clock, so it
+ * still outranks every fence the expired record issued, and a write checked
+ * against a missing record is rejected. Claim and raise clear the expiry.
+ */
+export const RUN_CLAIM_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
 export function runClaimKey(claims: RunClaimTable, runId: string): string {
   return `${claims}:run_id:${runId}`;
 }
@@ -68,6 +76,7 @@ if ARGV[3] ~= '1' then
   if expires and expires > t then return owner(0, t) end
 end
 redis.call('HSET', KEYS[1], 'generation', string.format('%d', generation + 1), 'ownerId', ARGV[1], 'leaseExpiresAt', lease, 'updatedAt', stamp)
+redis.call('PERSIST', KEYS[1])
 return owner(1, t)
 `;
 
@@ -80,13 +89,14 @@ redis.call('HSET', KEYS[1], 'leaseExpiresAt', string.format('%d', t + tonumber(A
 return owner(1, t)
 `;
 
-// ARGV: generation, ownerId
+// ARGV: generation, ownerId, retentionMs
 const RELEASE = `${LIB}
 local t = now()
 local r = redis.call('HMGET', KEYS[1], 'generation', 'ownerId')
 if tonumber(r[1]) ~= tonumber(ARGV[1]) or r[2] ~= ARGV[2] then return 0 end
 redis.call('HDEL', KEYS[1], 'leaseExpiresAt')
 redis.call('HSET', KEYS[1], 'updatedAt', string.format('%d', t))
+redis.call('PEXPIRE', KEYS[1], ARGV[3])
 return 1
 `;
 
@@ -105,15 +115,17 @@ elseif current ~= tonumber(ARGV[1]) or r[2] ~= ARGV[2] then
 end
 -- Every write un-retires the fence.
 redis.call('HDEL', KEYS[1], 'retiredAt')
+redis.call('PERSIST', KEYS[1])
 return 1
 `;
 
-// ARGV: generation, ownerId
+// ARGV: generation, ownerId, retentionMs
 const RETIRE = `${LIB}
 local t = now()
 local r = redis.call('HMGET', KEYS[1], 'generation', 'ownerId')
 if tonumber(r[1]) ~= tonumber(ARGV[1]) or r[2] ~= ARGV[2] then return 0 end
 redis.call('HSET', KEYS[1], 'retiredAt', string.format('%d', t))
+redis.call('PEXPIRE', KEYS[1], ARGV[3])
 return 1
 `;
 
@@ -189,7 +201,7 @@ export async function releaseRunOwnership(client: ValkeyClient, fence: RunFence)
     client,
     RELEASE,
     [runClaimKey(TABLE_WORKFLOW_RUN_OWNERS, fence.runId)],
-    [String(fence.generation), fence.ownerId],
+    [String(fence.generation), fence.ownerId, String(RUN_CLAIM_RETENTION_MS)],
   );
   return Number(released) === 1;
 }
@@ -213,7 +225,7 @@ export async function retireRunFence(client: ValkeyClient, fence: RunFence): Pro
     client,
     RETIRE,
     [runClaimKey(TABLE_MEMORY_RUN_FENCES, fence.runId)],
-    [String(fence.generation), fence.ownerId],
+    [String(fence.generation), fence.ownerId, String(RUN_CLAIM_RETENTION_MS)],
   );
   return Number(retired) === 1;
 }
