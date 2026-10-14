@@ -23,7 +23,7 @@ export function ChatPageLayout({ crumbs, headerActions, children }: ChatPageLayo
   });
 
   return (
-    <PageLayout variant="fit" {...slots}>
+    <PageLayout variant="fit" stableGutter={false} {...slots}>
       {children}
     </PageLayout>
   );

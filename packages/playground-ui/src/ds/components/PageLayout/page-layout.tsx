@@ -17,6 +17,7 @@ export interface PageLayoutProps {
    * `fit` lets the body fill the page edge to edge.
    */
   variant?: 'container' | 'fit' | 'narrow';
+  stableGutter?: boolean;
 }
 
 export function PageLayout({
@@ -26,6 +27,7 @@ export function PageLayout({
   actionRow,
   header,
   variant = 'container',
+  stableGutter = true,
 }: PageLayoutProps) {
   const headerSlot = header ? (
     <div data-slot="page-layout-header" className={cn(variant === 'fit' && 'p-4')}>
@@ -50,7 +52,8 @@ export function PageLayout({
       )}
       <main
         className={cn(
-          'min-h-0 flex-1 [scrollbar-gutter:stable] overflow-y-auto',
+          'min-h-0 flex-1 overflow-y-auto',
+          stableGutter && '[scrollbar-gutter:stable]',
           variant === 'container' && 'p-4',
           // `fit` hands the remaining body height to its child (panels, graphs, tables that own their scroll).
           variant === 'fit' &&

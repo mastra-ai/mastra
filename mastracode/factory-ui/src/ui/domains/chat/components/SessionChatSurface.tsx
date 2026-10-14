@@ -51,7 +51,7 @@ export function SessionChatSurface({
       {header && <ChatShell.Bar>{header}</ChatShell.Bar>}
       {secondaryBar && <ChatShell.Bar>{secondaryBar}</ChatShell.Bar>}
       <ChatShell.Stage>
-        <ChatShell.Viewport>
+        <ChatShell.Viewport stableGutter={false}>
           <SessionPreparationOverlay historyInitializing={historyInitializing} preparing={preparing} />
           <div ref={contentRef} className="relative flex min-h-full min-w-0 flex-1 flex-col">
             {contentOverlay}

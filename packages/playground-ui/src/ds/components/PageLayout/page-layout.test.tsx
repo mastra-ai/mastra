@@ -49,6 +49,18 @@ describe('PageLayout', () => {
 
       expect(screen.getByRole('main').className).toContain('[scrollbar-gutter:stable]');
     });
+
+    it('drops the reserved gutter when stableGutter is off', () => {
+      render(
+        <PageLayout variant="fit" stableGutter={false}>
+          <p>Body</p>
+        </PageLayout>,
+      );
+
+      const main = screen.getByRole('main');
+      expect(main.className).not.toContain('scrollbar-gutter');
+      expect(main.className).toContain('overflow-y-auto');
+    });
   });
 
   describe('variant', () => {
