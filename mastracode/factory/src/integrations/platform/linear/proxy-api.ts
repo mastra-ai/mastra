@@ -121,8 +121,8 @@ export class LinearProxyApi {
         pageInfo: PageInfo;
       };
     }>(
-      `query($after: String) { projects(first: 200, after: $after) {
-        nodes { id name state teams(first: 50) { nodes { id key name } } }
+      `query($after: String) { projects(first: 100, after: $after) {
+        nodes { id name state teams(first: 10) { nodes { id key name } } }
         pageInfo { hasNextPage endCursor }
       } }`,
       { after: after ?? null },
