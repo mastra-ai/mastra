@@ -1059,14 +1059,15 @@ export class MastraFactory {
         : [],
     );
 
-    // Build the real production controller (agents, modes, tools, memory, OM,
-    // MCP, providers) — identical to the terminal app. Agent state lives in
+    // Build the real production controller (agents, tools, memory, OM, MCP,
+    // providers) — the terminal app's, minus modes. Agent state lives in
     // the storage backend's Mastra store alongside the Factory app tables —
     // one shared database for all users, separated by `resourceId` scoping.
     const prepared = await timedPhase('prepare.controllerMount', () =>
       prepareAgentControllerMount({
         controllerId: CONTROLLER_ID,
         coAuthor: { name: 'mastra-platform[bot]' },
+        modes: false,
         workspace: createWorkspaceFactory({
           ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
           ...(this.#config.sandboxStart ? { sandboxStart: this.#config.sandboxStart } : {}),

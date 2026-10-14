@@ -14,7 +14,6 @@ import {
 import { useOptionalMessageScroller } from '@mastra/playground-ui/components/MessageScroller';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, ImagePlus, Square } from 'lucide-react';
-import { useRef } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useMatch, useNavigate, useParams } from 'react-router';
 
@@ -22,7 +21,6 @@ import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
 import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatConnection } from '../context/useChatConnection';
 import { useChatModels } from '../context/useChatModels';
-import { useChatModes } from '../context/useChatModes';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
 import {
@@ -36,7 +34,6 @@ import { clearPendingHandoff } from '../hooks/useHandoffPrompt';
 import { usePendingPlanFeedback } from '../hooks/usePendingPlanFeedback';
 import { commandRequiresReadySession } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { getComposerTone } from './composer-tone';
 import { StatusLine } from './StatusLine';
 import { ComposerImageAttachments } from './ComposerImageAttachments';
 import { useComposerImages } from './useComposerImages';
@@ -46,7 +43,7 @@ import { useInitializingPlaceholder } from './useInitializingPlaceholder';
 type ComposerProps = Pick<ComposerInputProps, 'variant'>;
 
 export function Composer({ variant = 'inline' }: ComposerProps) {
-  const { kind, resourceId, sessionEnabled, projectPath, baseUrl, factorySessionState } = useChatSessionContext();
+  const { resourceId, sessionEnabled, projectPath, baseUrl, factorySessionState } = useChatSessionContext();
   const { factoryId } = useParams<{ factoryId: string }>();
   const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
   const onUserDraft = useMatch('/factories/:factoryId/user/new/:draftSessionId') !== null;
@@ -56,7 +53,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const { busy, phase, localUser, failLocalUser, reset, clearPending, pushNotice } = useChatTranscript();
   const chatPreparing = phase === 'initializing';
   const scroller = useOptionalMessageScroller();
-  const { modes, activeModeId, isLoading: modesLoading, error: modesError, setMode } = useChatModes();
   const { activeModelId, isLoading: modelLoading, error: modelError } = useChatModels();
   const {
     commands,
@@ -82,14 +78,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const liveRun = phase === 'working' && !preparingThreadId;
   const createDraftSessionMutation = useCreateUserSessionFromDraft();
   const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
-  const draftConfigNotReady =
-    onUserDraft && (modesLoading || modesError !== undefined || modelLoading || modelError !== undefined);
+  const draftConfigNotReady = onUserDraft && (modelLoading || modelError !== undefined);
   const attachDisabled = onUserDraft || blocked || chatPreparing || planFeedback.pending;
   const { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange } = useComposerImages({
     onUserDraft,
     disabled: chatPreparing || planFeedback.pending,
   });
-  const modeSwitchPendingRef = useRef(false);
   const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;
   const sendDisabled = composerDisabled || draftConfigNotReady || chatPreparing || planFeedback.loading;
   const textareaDisabled = composerDisabled && !chatPreparing;
@@ -190,26 +184,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const onComposerKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.defaultPrevented) return;
     if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-    if (e.key === 'Tab' && e.shiftKey && kind !== 'factory' && modes.length > 1) {
-      e.preventDefault();
-      if (modeSwitchPendingRef.current) return;
-
-      const selectedModeId = activeModeId ?? modes[0]?.id;
-      const currentModeIndex = modes.findIndex(mode => mode.id === selectedModeId);
-      const nextMode = modes[(currentModeIndex + 1) % modes.length];
-      if (!nextMode) return;
-
-      modeSwitchPendingRef.current = true;
-      void setMode(nextMode.id).then(
-        () => {
-          modeSwitchPendingRef.current = false;
-        },
-        () => {
-          modeSwitchPendingRef.current = false;
-        },
-      );
-      return;
-    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       onSubmit(e);
@@ -262,7 +236,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
-      <ComposerRing busy={busy || chatPreparing} tone={getComposerTone(activeModeId ?? modes[0]?.id)}>
+      <ComposerRing busy={busy || chatPreparing}>
         <ComposerBox>
           <ComposerSuggestions {...commandMenu.suggestionsProps} />
           <ComposerImageAttachments images={images} onRemove={removeImage} />
@@ -275,7 +249,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
             disabled={textareaDisabled}
             variant={variant}
             aria-label="Message"
-            aria-keyshortcuts="Shift+Tab"
           />
           <input
             ref={fileInputRef}

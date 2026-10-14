@@ -153,6 +153,7 @@
     "qwen/qwen3.8-omni-flash",
     "scaleway/deepseek-v4.1-flash",
     "scaleway/gemma-3-27b-it",
+    "tencent/deepseek-v4.1-flash",
     "tensorx/deepseek/deepseek-v4.1-flash",
     "tensorx/moonshotai/kimi-k2.5",
     "together_ai/deepseek-ai/DeepSeek-V4.1-Flash",
@@ -412,6 +413,7 @@
     "scaleway/qwen3-235b-a22b-instruct-2507",
     "scaleway/qwen3-coder-30b-a3b-instruct",
     "tencent/deepseek-v4-pro-0813",
+    "tencent/deepseek-v4.1-flash",
     "tencent/hy3",
     "tencent/hy4-preview",
     "tensorx/deepseek/deepseek-r1-0528",
@@ -677,6 +679,8 @@
     "qwen/qwen3.8-max",
     "qwen/qwen3.8-max-0902",
     "qwen/qwen3.8-omni-flash",
+    "tencent/deepseek-v4-pro-0813",
+    "tencent/deepseek-v4.1-flash",
     "tensorx/deepseek/deepseek-r1-0528",
     "tensorx/moonshotai/kimi-k2.5",
     "together_ai/deepseek-ai/DeepSeek-V4-Flash-0731",
@@ -1023,6 +1027,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "tencent/deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "tencent/deepseek-v4-pro-0813": [

@@ -722,6 +722,7 @@
     "inference-net/schematron-v2-small",
     "inference-net/schematron-v2-turbo",
     "liquid/lfm-2.5-2.6b",
+    "liquid/lfm-2.5-24b-a2b",
     "mercury-2",
     "meta-llama/llama-3.3-70b-instruct",
     "meta-llama/llama-4-maverick",
@@ -1662,7 +1663,7 @@
     "google/gemini-4-argon": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "google/gemini-3.1-flash-lite": [

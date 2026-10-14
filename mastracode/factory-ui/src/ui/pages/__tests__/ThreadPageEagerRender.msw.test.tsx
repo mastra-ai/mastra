@@ -110,7 +110,6 @@ function stubThreadRoute(): ThreadRouteController {
       await messagesReady;
       return HttpResponse.json({ messages: [] });
     }),
-    http.get(`${AC}/modes`, () => HttpResponse.json({ modes: [] })),
     http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>
       HttpResponse.json({ workspacePath: `/ws/${SESSION_ID}`, root: '.artifacts', rootPath: '', entries: [] }),
     ),
