@@ -538,7 +538,6 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
   return [
     registerApiRoute('/web/factory/projects/:id/sessions', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), options.auth);
         if ('response' in resolved) return resolved.response;
