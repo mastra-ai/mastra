@@ -520,6 +520,21 @@ export function assertKnowledgeSourceProbeLimit(sources: unknown[]): void {
   if (sources.length > KNOWLEDGE_SOURCE_PROBE_LIMIT)
     throw new Error(`listSourcesWithVisibleRecords accepts at most ${KNOWLEDGE_SOURCE_PROBE_LIMIT} sources`);
 }
+/** Most node plus record ids one {@link KnowledgeStorage.listVisibleKnowledgeIds} call may ask about. */
+export const KNOWLEDGE_VISIBILITY_PROBE_LIMIT = 1000;
+export interface ListVisibleKnowledgeIdsInput {
+  nodeIds: string[];
+  recordIds: string[];
+  scopeIds: KnowledgeScopeIds;
+}
+export interface ListVisibleKnowledgeIdsOutput {
+  nodeIds: string[];
+  recordIds: string[];
+}
+export function assertKnowledgeVisibilityProbeLimit(input: Pick<ListVisibleKnowledgeIdsInput, 'nodeIds' | 'recordIds'>): void {
+  if (input.nodeIds.length + input.recordIds.length > KNOWLEDGE_VISIBILITY_PROBE_LIMIT)
+    throw new Error(`listVisibleKnowledgeIds accepts at most ${KNOWLEDGE_VISIBILITY_PROBE_LIMIT} ids`);
+}
 export interface SearchKnowledgeInput {
   query: string;
   scopeIds: KnowledgeScopeIds;
@@ -877,6 +892,13 @@ export abstract class KnowledgeStorage extends StorageDomain {
    * using the same record visibility rule as every other record read. One bounded query regardless of how many records each source holds.
    */
   async listSourcesWithVisibleRecords(_input: ListKnowledgeSourcesWithVisibleRecordsInput): Promise<string[]> {
+    throw new KnowledgeUnsupportedError();
+  }
+  /**
+   * Returns which of the given live nodes and records are visible in `scopeIds`, using the same node and record
+   * visibility rules as every other read. One bounded query; ids that are missing, deleted or invisible are omitted.
+   */
+  async listVisibleKnowledgeIds(_input: ListVisibleKnowledgeIdsInput): Promise<ListVisibleKnowledgeIdsOutput> {
     throw new KnowledgeUnsupportedError();
   }
   async deleteRecord(_input: { id: string; deletedBy: string; importRunId?: string }): Promise<KnowledgeRecord> {

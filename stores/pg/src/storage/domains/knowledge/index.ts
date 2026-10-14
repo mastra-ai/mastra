@@ -40,6 +40,7 @@ import { coreFeatures } from '@mastra/core/features';
 import {
   createKnowledgeUlid,
   assertKnowledgeSourceProbeLimit,
+  assertKnowledgeVisibilityProbeLimit,
   isKnowledgeScopeVisible,
   KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
   KNOWLEDGE_ACTIVITY_SCHEMA,
@@ -90,6 +91,8 @@ import type {
   KnowledgeSemanticOperation,
   KnowledgeSemanticOutboxEntry,
   ListKnowledgeSourcesWithVisibleRecordsInput,
+  ListVisibleKnowledgeIdsInput,
+  ListVisibleKnowledgeIdsOutput,
   QueryKnowledgeRecordsBySourceInput,
   QueryKnowledgeRecordsInput,
   QueryKnowledgeRecordsOutput,
@@ -1297,6 +1300,32 @@ export class KnowledgePG extends KnowledgeStorage {
       args: [...input.sources.flatMap(probe => [probe.source, probe.scopeId ?? null]), ...visibleRecord.args],
     });
     return result.rows.map(row => String(row.source));
+  }
+
+  async listVisibleKnowledgeIds(input: ListVisibleKnowledgeIdsInput): Promise<ListVisibleKnowledgeIdsOutput> {
+    assertKnowledgeVisibilityProbeLimit(input);
+    const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    const nodeIds = [...new Set(input.nodeIds)];
+    const recordIds = [...new Set(input.recordIds)];
+    if (scopeIds.length === 0) return { nodeIds: [], recordIds: [] };
+    const marks = (ids: string[]) => ids.map(() => '?').join(',');
+    const visibleNodes = nodeIds.length
+      ? await this.#readExecutor.execute({
+          sql: `SELECT n.id FROM "${TABLE_KNOWLEDGE_NODES}" n WHERE n.id IN (${marks(nodeIds)}) AND n.deletedAt IS NULL AND ${visibleNodeSql(scopeIds)}`,
+          args: [...nodeIds, ...scopeIds, ...scopeIds],
+        })
+      : { rows: [] };
+    const visibleRecord = visibleRecordSql(scopeIds);
+    const visibleRecords = recordIds.length
+      ? await this.#readExecutor.execute({
+          sql: `SELECT r.id FROM "${TABLE_KNOWLEDGE_RECORDS}" r JOIN "${TABLE_KNOWLEDGE_NODES}" p ON p.id=r.nodeId WHERE r.id IN (${marks(recordIds)}) AND r.deletedAt IS NULL AND ${visibleRecord.sql}`,
+          args: [...recordIds, ...visibleRecord.args],
+        })
+      : { rows: [] };
+    return {
+      nodeIds: visibleNodes.rows.map(row => String(row.id)),
+      recordIds: visibleRecords.rows.map(row => String(row.id)),
+    };
   }
 
 
