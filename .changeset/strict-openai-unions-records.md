@@ -3,7 +3,7 @@
 '@mastra/core': patch
 ---
 
-Fixed two OpenAI structured-output and tool schema failures:
+Fixed two OpenAI errors with tool inputs and structured output:
 
-- Optional `anyOf` properties in plain JSON Schema tools (for example from MCP servers) now accept `null`, so models leave them unset instead of inventing a value.
-- Structured output with a `z.record()` field now works on OpenAI. Strict mode cannot express free-form keys, so these schemas are sent non-strict instead of failing with a 400. Pass `providerOptions.openai.strictJsonSchema: true` to keep strict mode.
+- Optional tool inputs that accept more than one type can now be left empty. Before, OpenAI models filled them with made-up values.
+- Structured output with a field that has free-form keys, such as `z.record(z.string(), z.string())`, now works on OpenAI instead of failing with a 400 error. These schemas are sent without strict mode. To keep strict mode anyway, set `providerOptions.openai.strictJsonSchema: true`.
