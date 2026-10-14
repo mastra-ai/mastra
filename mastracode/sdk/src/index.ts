@@ -36,6 +36,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
 import type { ApiRoute } from '@mastra/core/server';
 import { TaskSignalProvider } from '@mastra/core/signals';
+import type { SignalProvider } from '@mastra/core/signals';
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '@mastra/core/tools';
 import type { MastraVector } from '@mastra/core/vector';
@@ -62,7 +63,7 @@ import { getDynamicMemory, hasSubconsciousTools } from './agents/memory.js';
 import { createMastraCodeGateway, getDynamicModel, getGoalJudgeModel, resolveModel } from './agents/model.js';
 import { buildMode } from './agents/modes/build.js';
 import { fastMode } from './agents/modes/explore.js';
-import { planMode } from './agents/modes/plan.js';
+import { createPlanMode } from './agents/modes/plan.js';
 import {
   createGitRefReminderReader,
   instructionSourcePaths,
@@ -1145,7 +1146,15 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   ];
 
   // Built-in providers are named so the plugin lane can reserve their ids.
-  const taskSignalProvider = new TaskSignalProvider();
+  const disabledBuiltinTools = new Set<string>(config?.disableBuiltinTools ?? []);
+  const taskSignalProvider: SignalProvider<'task-signals'> = new TaskSignalProvider();
+  // The task tools reach the agent through the signal provider rather than the
+  // controller built-ins, so disabled ones must be filtered here as well.
+  if (disabledBuiltinTools.size > 0) {
+    const taskTools = Object.entries(taskSignalProvider.getTools?.() ?? {});
+    const enabledTaskTools = Object.fromEntries(taskTools.filter(([id]) => !disabledBuiltinTools.has(id)));
+    taskSignalProvider.getTools = () => enabledTaskTools;
+  }
   const agentConnectionsSignalProvider = useCrossAgentSignals
     ? new AgentConnectionsSignalProvider(config?.agentConnections)
     : undefined;
@@ -1376,6 +1385,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // const defaultSubAgents: Array<AgentControllerSubagent> = [];
   // const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent];
 
+  const planMode = createPlanMode(!disabledBuiltinTools.has('submit_plan'));
   const defaultModes: AgentControllerMode[] = [
     {
       ...buildMode,

@@ -778,6 +778,26 @@ describe('createMastraCode', () => {
     expect(controllerConstructorMock.mock.calls[0]![0].disableBuiltinTools).toEqual(['submit_plan']);
   });
 
+  it('removes disabled task tools from the task signal provider', async () => {
+    const { TaskSignalProvider } = await import('@mastra/core/signals');
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ disableBuiltinTools: ['task_write', 'task_check'] });
+    const codeAgentConfig = agentConstructorMock.mock.calls
+      .map(call => call?.[0] as { id?: string; signals?: unknown[] } | undefined)
+      .find(config => config?.id === 'code-agent');
+    const taskProvider = codeAgentConfig?.signals?.find(provider => provider instanceof TaskSignalProvider) as
+      | { getTools: () => Record<string, unknown> }
+      | undefined;
+    expect(Object.keys(taskProvider!.getTools()).sort()).toEqual(['task_complete', 'task_update']);
+  });
+
+  it('registers a plan mode that does not ask for submit_plan when it is disabled', async () => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ disableBuiltinTools: ['submit_plan'] });
+    const modes = controllerConstructorMock.mock.calls[0]![0].modes as { id: string; instructions?: string }[];
+    expect(modes.find(mode => mode.id === 'plan')?.instructions).not.toContain('submit_plan');
+  });
+
   it('does not set disableBuiltinTools on the agent controller by default', async () => {
     const { createMastraCode } = await import('../index.js');
     await createMastraCode();

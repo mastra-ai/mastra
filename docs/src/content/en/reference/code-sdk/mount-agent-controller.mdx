@@ -130,7 +130,7 @@ const { controller } = await mountAgentControllerOnMastra({ mastra })
     name: 'disableBuiltinTools',
     type: 'BuiltinToolId[]',
     description:
-      "Agent controller built-in tools (for example, 'submit_plan') removed from every session. The prompt doesn't mention a disabled tool.",
+      "Agent controller built-in tools (for example, 'submit_plan') removed from every session. Tool guidance skips disabled tools, and plan mode writes the plan file instead of calling 'submit_plan' when it's disabled.",
     isOptional: true,
   },
   {
