@@ -12,7 +12,7 @@ import { createTimeoutAbortSignal } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, Span } from '../../observability';
-import { RequestContext } from '../../request-context';
+import { MASTRA_SCOPES_KEY, RequestContext } from '../../request-context';
 import type { DeclaredAgentSchedule } from '../../schedules/define';
 import { toStandardSchema } from '../../schema';
 import type { MemoryStorage, WorkflowsStorage } from '../../storage';
@@ -35,6 +35,8 @@ import { beginGoalActivity, stopGoalActivity } from '../goal';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
+import type { AgentScopesSnapshot } from '../scopes';
+import { applyResolvedAgentScopes, resolveAgentScopes, restoreRunAgentScopes } from '../scopes';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
 import type { AgentAbortThreadOptions, AgentModelManagerConfig, ToolsInput } from '../types';
@@ -92,6 +94,8 @@ import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
 import { hydrateMessageListState, loadMessageListStateForResume } from './workflows/shared/message-list-state';
 
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
+/** Marks `prepare()` options whose scopes the caller applies itself (a resume rebuilt from storage). */
+const SCOPES_ALREADY_APPLIED = Symbol('mastra.durable.scopesAlreadyApplied');
 /** Recoveries in progress in this process, keyed by agent and run. */
 const localRecoveryClaims = new Map<string, string>();
 const RECOVER_ALREADY_IN_PROGRESS_ERROR_ID = 'DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS';
@@ -237,6 +241,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   context?: AgentExecutionOptions<OUTPUT>['context'];
   /** Memory configuration for conversation persistence and retrieval */
   memory?: AgentExecutionOptions<OUTPUT>['memory'];
+  /** Scopes this run acts with. See `AgentExecutionOptions.scopes`. */
+  scopes?: string[];
   /** Unique identifier for this execution run */
   runId?: string;
   /** Request Context containing dynamic configuration and state */
@@ -1304,6 +1310,7 @@ export class DurableAgent<
     const requestContext: RequestContext = workflowInput.requestContextEntries
       ? new RequestContext(Object.entries(workflowInput.requestContextEntries) as Iterable<readonly [string, unknown]>)
       : new RequestContext();
+    restoreRunAgentScopes(requestContext);
 
     const messageListMemoryInfo = (
       workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
@@ -1731,6 +1738,7 @@ export class DurableAgent<
 
   async #resolveExecutionOptions(
     options?: DurableAgentStreamOptions<TOutput>,
+    snapshot?: AgentScopesSnapshot,
   ): Promise<DurableAgentStreamOptions<TOutput>> {
     if ((options as any)?.[RESOLVED_EXECUTION_OPTIONS]) {
       return options!;
@@ -1746,9 +1754,45 @@ export class DurableAgent<
     if (options?.actor !== undefined) {
       resolvedOptions.actor = options.actor;
     }
+    const scopedOptions = await this.#applyScopes(resolvedOptions, {
+      callScopes: options?.scopes,
+      defaultScopes: defaultOptions?.scopes,
+      snapshot,
+    });
     // Preserve the marker when the until-idle wrapper spreads these options.
-    Object.defineProperty(resolvedOptions, RESOLVED_EXECUTION_OPTIONS, { value: true, enumerable: true });
-    return resolvedOptions;
+    Object.defineProperty(scopedOptions, RESOLVED_EXECUTION_OPTIONS, { value: true, enumerable: true });
+    return scopedOptions;
+  }
+
+  /**
+   * Applies agent scopes to durable execution options. Durable runs resolve their thread and
+   * resource from `memory` only, so options are returned unchanged unless the run has scopes.
+   */
+  async #applyScopes<T extends DurableAgentStreamOptions<TOutput>>(
+    options: T,
+    {
+      callScopes,
+      defaultScopes,
+      snapshot,
+    }: { callScopes?: string[]; defaultScopes?: string[]; snapshot?: AgentScopesSnapshot },
+  ): Promise<T> {
+    const requestContext = options.requestContext ?? new RequestContext();
+    // A resumed run keeps its suspended scopes, so the Agent's configuration is not consulted.
+    const agentScopes = snapshot?.scopes
+      ? []
+      : [...((await this.getScopes({ requestContext })) ?? []), ...(defaultScopes ?? [])];
+    if (!agentScopes.length && !callScopes?.length && !requestContext.has(MASTRA_SCOPES_KEY) && !snapshot?.scopes) {
+      return options;
+    }
+    const resolved = resolveAgentScopes({
+      requestContext,
+      agentScopes,
+      callScopes,
+      memory: options.memory,
+      snapshot,
+      mastra: this.#mastra,
+    });
+    return applyResolvedAgentScopes(options, resolved, requestContext);
   }
 
   override getDefaultGenerateOptionsLegacy(options?: any) {
@@ -1766,6 +1810,10 @@ export class DurableAgent<
   // --- Memory ---
   override getMemory(options?: any) {
     return this.#wrappedAgent.getMemory(options);
+  }
+
+  override getScopes(options?: any) {
+    return this.#wrappedAgent.getScopes(options);
   }
 
   override hasOwnMemory(): boolean {
@@ -2695,6 +2743,7 @@ export class DurableAgent<
         runId,
         requestContext,
         optionsAreResolved: true,
+        scopesResolved: true,
         mastra: this.#mastra,
         durableAgentId: this.id,
         durableAgentName: this.name,
@@ -2956,6 +3005,9 @@ export class DurableAgent<
     options?: DurableAgentResumeOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
     let entry = this.#runRegistry.get(runId);
+    // Scopes persisted with a run rebuilt from storage. They are the suspended run's set even when
+    // the caller passes its own request context.
+    let rehydratedScopes: unknown;
     let coldSnapshot: WorkflowRunState | undefined;
     if (!entry) {
       // A persisted durable run can outlive this process (or the registry TTL).
@@ -3052,6 +3104,27 @@ export class DurableAgent<
       const snapshotRequestContext = workflowInput.requestContextEntries
         ? new RequestContext<unknown>(Object.entries(workflowInput.requestContextEntries))
         : undefined;
+      if (snapshotRequestContext) restoreRunAgentScopes(snapshotRequestContext);
+      const persistedScopes = workflowInput.requestContextEntries?.[MASTRA_SCOPES_KEY];
+      if (
+        persistedScopes !== undefined &&
+        (!Array.isArray(persistedScopes) || persistedScopes.some(scope => typeof scope !== 'string'))
+      ) {
+        // A malformed persisted set must not be coerced to "no scopes": that would both
+        // drop the run's scopes and falsely reject re-supplied ones as additions.
+        throw new MastraError({
+          id: 'AGENT_SCOPES_INVALID',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.SYSTEM,
+          // Corrupted persisted state is a system fault, not a caller error: no
+          // `details.status`, so server handlers surface it as HTTP 500.
+          text: `DurableAgent "${this.name}" resume(${runId}): persisted run scopes are malformed; expected an array of strings.`,
+          details: { agentName: this.name, runId },
+        });
+      }
+      // Absent (vs recorded []) marks a run suspended before the scopes upgrade; the resume
+      // adopts the supplied scopes with the same trust posture as a fresh run.
+      rehydratedScopes = persistedScopes;
       const memory = threadId
         ? {
             ...options?.memory,
@@ -3060,7 +3133,9 @@ export class DurableAgent<
           }
         : options?.memory;
 
+      // The resume below applies the suspended run's scopes, so preparation does not resolve them again.
       await this.prepare([], {
+        [SCOPES_ALREADY_APPLIED]: true,
         ...(options as AgentExecutionOptions<TOutput>),
         runId,
         requestContext: options?.requestContext ?? snapshotRequestContext,
@@ -3072,7 +3147,7 @@ export class DurableAgent<
         // entry re-arms the run-level timeout budget (#21724); caller
         // override wins.
         modelSettings: options?.modelSettings ?? (workflowInput.options?.modelSettings as any),
-      });
+      } as AgentExecutionOptions<TOutput>);
       entry = this.#runRegistry.get(runId);
     }
     if (!entry) {
@@ -3088,12 +3163,29 @@ export class DurableAgent<
         } as DurableAgentStreamOptions<TOutput>['memory'])
       : options?.memory;
 
+    // The suspended run's non-identity scopes live on its persisted request context;
+    // its identity is the registered memory. A resume keeps that set (rule: re-supplied
+    // scopes may only be a subset of it).
+    // A recorded set — [] included — is authoritative: a resume may not add scopes.
+    // Cold resumes read the persisted entries, which preparation stamps unconditionally,
+    // so an absent value there marks a pre-upgrade snapshot whose resume adopts the
+    // supplied scopes. Warm registry entries only exist for runs this (post-upgrade)
+    // process started, so an absent live value simply means the run held no scopes.
+    const snapshotScopes = coldSnapshot ? rehydratedScopes : (entry.requestContext?.get(MASTRA_SCOPES_KEY) ?? []);
+    const resumeScopesSnapshot: AgentScopesSnapshot = {
+      resourceId: memoryInfo?.resourceId,
+      threadId: memoryInfo?.threadId,
+      scopes: Array.isArray(snapshotScopes) ? snapshotScopes : undefined,
+    };
+
     let resumeRequestContext = entry.requestContext;
     if (options?.requestContext) {
       // Keep the caller's instance so schema-transformed contexts retain their
       // input source. Caller values win except for framework-managed memory.
       resumeRequestContext = options.requestContext;
       for (const [key, value] of entry.requestContext?.entries() ?? []) {
+        // The suspended run's scopes are applied on the run's own context below, never the caller's.
+        if (key === MASTRA_SCOPES_KEY) continue;
         if (!resumeRequestContext.has(key)) resumeRequestContext.set(key, value);
       }
       if (entry.requestContext?.has('MastraMemory')) {
@@ -3106,17 +3198,22 @@ export class DurableAgent<
     // The resumed segment always carries its own claim: without a context the
     // engine would restore the previous segment's claim from the snapshot.
     resumeRequestContext ??= new RequestContext();
+    const resolvedOptions = (await this.#resolveExecutionOptions(
+      {
+        ...(options as DurableAgentStreamOptions<TOutput>),
+        requestContext: resumeRequestContext as DurableAgentStreamOptions<TOutput>['requestContext'],
+        memory: registeredMemory ?? options?.memory,
+      },
+      resumeScopesSnapshot,
+    )) as DurableAgentResumeOptions<TOutput>;
+    // Scoped runs execute on a run-scoped copy of the request context.
+    resumeRequestContext = (resolvedOptions.requestContext as typeof resumeRequestContext) ?? resumeRequestContext;
+
     entry.requestContext = resumeRequestContext;
     const globalEntryForContext = getRunRegistryEntry(runId, this.#mastra);
     if (globalEntryForContext) {
       globalEntryForContext.requestContext = resumeRequestContext;
     }
-
-    const resolvedOptions = (await this.#resolveExecutionOptions({
-      ...(options as DurableAgentStreamOptions<TOutput>),
-      requestContext: resumeRequestContext as DurableAgentStreamOptions<TOutput>['requestContext'],
-      memory: registeredMemory ?? options?.memory,
-    })) as DurableAgentResumeOptions<TOutput>;
 
     // Delegate to the idle-loop wrapper when `untilIdle` is set. Strip
     // `untilIdle` before passing to the wrapper so the inner agent.resume()
@@ -4088,6 +4185,7 @@ export class DurableAgent<
         runId,
         requestContext,
         optionsAreResolved: true,
+        scopesResolved: true,
         mastra: this.#mastra,
         methodType: 'generate',
         durableAgentId: this.id,
@@ -5111,6 +5209,7 @@ export class DurableAgent<
       // its registry entry.
       runId: options?.runId,
       requestContext: options?.requestContext,
+      scopesResolved: !!(options as { [SCOPES_ALREADY_APPLIED]?: boolean } | undefined)?.[SCOPES_ALREADY_APPLIED],
       mastra: this.#mastra,
     });
 

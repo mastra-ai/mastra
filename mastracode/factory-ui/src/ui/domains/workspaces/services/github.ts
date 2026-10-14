@@ -206,9 +206,20 @@ export async function deleteGithubPat(baseUrl: string, kind: GithubPatKind = 'de
   if (!res.ok) throw new Error(`Failed to remove GitHub token (${res.status})`);
 }
 
-/** List repos across the user's installations, optionally filtered by query. */
-export async function listGithubRepos(baseUrl: string, query?: string): Promise<GithubRepo[]> {
-  const url = query ? `${baseUrl}/web/github/repos?q=${encodeURIComponent(query)}` : `${baseUrl}/web/github/repos`;
+/**
+ * List repos across the user's installations, optionally filtered by query.
+ * `refresh` bypasses the server's short-lived repository cache.
+ */
+export async function listGithubRepos(
+  baseUrl: string,
+  query?: string,
+  options?: { refresh?: boolean },
+): Promise<GithubRepo[]> {
+  const params = new URLSearchParams();
+  if (query) params.set('q', query);
+  if (options?.refresh) params.set('refresh', '1');
+  const search = params.toString();
+  const url = `${baseUrl}/web/github/repos${search ? `?${search}` : ''}`;
   const res = await fetch(url, { headers: { Accept: 'application/json' }, credentials: 'include' });
   if (!res.ok) throw new Error(`Failed to list repos (${res.status})`);
   const body = (await res.json()) as { repos: GithubRepo[] };

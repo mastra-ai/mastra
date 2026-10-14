@@ -1,5 +1,84 @@
 # @mastra/core
 
+## 1.78.0-alpha.1
+
+### Minor Changes
+
+- Added a `beforeApproval` hook to tools that require approval. It runs before the agent pauses for approval and can reject the call by returning `{ proceed: false, output }`. The agent then skips the approval pause and does not execute the tool, and `output` goes back to the model as the tool result. Invalid calls are returned to the model to fix, and people are only asked to approve valid ones. ([#26927](https://github.com/mastra-ai/mastra/pull/26927))
+
+  ```ts
+  const issueRefund = createTool({
+    id: 'issue-refund',
+    inputSchema: z.object({ orderId: z.string(), amount: z.number() }),
+    requireApproval: true,
+    beforeApproval: async ({ orderId, amount }) => {
+      const order = await orders.find(orderId);
+      if (!order) return { proceed: false, output: { error: `Order ${orderId} not found` } };
+      if (amount > order.paid) return { proceed: false, output: { error: `Amount exceeds ${order.paid}` } };
+    },
+    execute: async ({ orderId, amount }) => refunds.issue(orderId, amount),
+  });
+  ```
+
+  The hook does not run again when the call resumes after an approval decision. If the hook throws, the error is logged and the call proceeds to the approval gate. Keep validating inside `execute` too, because state can change while the call is waiting for approval.
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`bed1ccc`](https://github.com/mastra-ai/mastra/commit/bed1cccea5817d68faa42a15fda3a0b329f70680))
+
+- Durable agent turns no longer create an unused tool stream writer on every LLM step. A writer is now created only when a step actually uses it. ([#26987](https://github.com/mastra-ai/mastra/pull/26987))
+
+- Fixed tool `transform` replacing stored tool-call arguments with a `Tool input-available payload unavailable` placeholder when only another phase (such as `transcript.output`) was configured. A tool-level transform now only changes the phases it defines, so stored `args` round-trip unchanged and replaying the thread with Anthropic preserved thinking no longer fails. Transformers that throw or return `undefined` still fall back to the placeholder, and raw input deltas stay suppressed. Fixes #26597. ([#26965](https://github.com/mastra-ai/mastra/pull/26965))
+
+## 1.78.0-alpha.0
+
+### Minor Changes
+
+- Added `scopes` to agents: the addresses a run acts as, written as `<type>:<value>` (for example `org:acme`, `resource:user-123`, `thread:conversation-123`). ([#26593](https://github.com/mastra-ai/mastra/pull/26593))
+
+  **Setting scopes.** Pass them per call on `stream`, `generate`, `network`, `sendMessage`, `queueMessage` and `sendSignal`, set them on the agent, or set them from trusted middleware with the new `MASTRA_SCOPES_KEY` request context key. Mastra combines all three. Read an agent's configured scopes with `agent.getScopes()`.
+
+  **Memory.** Memory reads its resource and thread from `resource:` and `thread:` scopes, in addition to `memory.resource`, `memory.thread` and the existing request context keys. If they name different values, the call throws a 400 error instead of silently picking one. Runs with no scopes from any source behave as before.
+
+  ```ts
+  const agent = new Agent({
+    id: 'support',
+    model: 'openai/gpt-5-mini',
+    memory: new Memory(),
+    scopes: ({ requestContext }) => {
+      // Set by your auth middleware. Request bodies can fill unreserved keys, so only read trusted ones.
+      const orgId = requestContext.get('org-id');
+      return orgId ? [`org:${orgId}`] : [];
+    },
+  });
+
+  // Before
+  await agent.generate('Hi', { memory: { resource: 'user-123', thread: 'conversation-123' } });
+
+  // After
+  await agent.generate('Hi', { scopes: ['resource:user-123', 'thread:conversation-123'] });
+  ```
+
+  **Nested calls.** Tools, processors and subagents see the run's other scopes (for example `org:acme`) under `MASTRA_SCOPES_KEY`, but not its `resource:` and `thread:` scopes, so nested agent calls can choose their own thread.
+
+  **Suspended runs.** Suspended runs keep their scopes when resumed: a resume may repeat some or all of them but cannot add new ones.
+
+  **Upgrading.** Upgrade `@mastra/server` together with this release. While an older server is registered, agents refuse scopes from the call and the request context with an `AGENT_SCOPES_SERVER_OUTDATED` error (HTTP 400); the agent's own `scopes` option still applies. This detection relies on the server registering itself with Mastra, which `@mastra/server` has done since `1.0.0-beta.5`. Servers older than that — and custom server adapters that never call `mastra.setMastraServer()` — are indistinguishable from no server at all, so they are not detected: upgrade them rather than relying on the guard.
+
+  Runs suspended before this release have no recorded scope set; resuming one adopts the scopes supplied at resume time (the same trust checks as a fresh run apply) instead of rejecting them. Runs suspended after the upgrade record their set — including the empty set — and a resume may not add to it.
+
+### Patch Changes
+
+- Fixed durable recovery observers hanging when recovery fails before the stream starts. ([#26918](https://github.com/mastra-ai/mastra/pull/26918))
+
+- Fixed background task events leaking across resources. Previously, calling `BackgroundTaskManager.stream()` without a `resourceId` delivered every resource's task events, including tool arguments and results. Without a `resourceId`, `stream()` now only delivers tasks that have no resource. To subscribe to every resource, pass `allResources: true`: ([#26895](https://github.com/mastra-ai/mastra/pull/26895))
+
+  ```ts
+  const events = mastra.backgroundTaskManager.stream({ agentId: 'my-agent', allResources: true });
+  ```
+
+  The `/background-tasks`, `/background-tasks/stream` and `/background-tasks/:backgroundTaskId` routes now use the resource from the request context. A resource-scoped caller only sees its own tasks: requesting a different `resourceId` returns 403, and fetching another resource's task returns 404. An empty resource id in the request context is rejected with 403. Requests without a resource in the request context keep access to all resources.
+
 ## 1.77.0
 
 ### Minor Changes

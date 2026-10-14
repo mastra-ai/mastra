@@ -1,5 +1,16 @@
 # @mastra/observability
 
+## 1.20.1-alpha.0
+
+### Patch Changes
+
+- Update bundled model pricing with the latest prices from models.dev ([`bed1ccc`](https://github.com/mastra-ai/mastra/commit/bed1cccea5817d68faa42a15fda3a0b329f70680))
+
+- Tracking exporters now wait for in-progress trace-cap evictions in `flush()` and `shutdown()`, so the aborted spans are sent instead of being queued after the flush or aborted twice. ([#26916](https://github.com/mastra-ai/mastra/pull/26916))
+
+- Updated dependencies [[`bed1ccc`](https://github.com/mastra-ai/mastra/commit/bed1cccea5817d68faa42a15fda3a0b329f70680), [`02e2eae`](https://github.com/mastra-ai/mastra/commit/02e2eae3aee1c5b5b9c807a6a3389b88eca1440c), [`b2dd0c6`](https://github.com/mastra-ai/mastra/commit/b2dd0c6333691467e61406ac920eb6f861db6bc0), [`ad16eae`](https://github.com/mastra-ai/mastra/commit/ad16eae7eec9af386c9eee81f4f30ef65d0df48b)]:
+  - @mastra/core@1.78.0-alpha.1
+
 ## 1.20.0
 
 ### Minor Changes

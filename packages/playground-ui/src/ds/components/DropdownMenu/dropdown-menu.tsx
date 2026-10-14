@@ -9,6 +9,7 @@ import {
   menuItemCheckClass,
   menuItemClass,
   menuItemDestructiveClass,
+  menuItemHintClass,
   menuItemInsetClass,
   menuItemTrailingIconClass,
   menuLabelClass,
@@ -54,17 +55,23 @@ DropdownMenuTrigger.displayName = 'DropdownMenuTrigger';
 
 type DropdownMenuSubTriggerProps = MenuPrimitive.SubmenuTrigger.Props & {
   inset?: boolean;
+  hint?: React.ReactNode;
 };
 
 const DropdownMenuSubTrigger = React.forwardRef<HTMLDivElement, DropdownMenuSubTriggerProps>(
-  ({ className, inset, children, ...props }, ref) => (
+  ({ className, inset, hint, children, ...props }, ref) => (
     <MenuPrimitive.SubmenuTrigger
       ref={useFluidMenuItemRef(ref)}
       className={cn(menuItemClass, 'data-[popup-open]:text-foreground', inset && menuItemInsetClass, className)}
       {...props}
     >
       {children}
-      <span className={cn(menuItemTrailingIconClass, 'opacity-50')}>
+      {hint != null && (
+        <span data-slot="dropdown-menu-sub-trigger-hint" className={menuItemHintClass}>
+          {hint}
+        </span>
+      )}
+      <span className={cn(menuItemTrailingIconClass, 'opacity-50', hint != null && 'ml-0')}>
         <ChevronDown className="-rotate-90" />
       </span>
     </MenuPrimitive.SubmenuTrigger>
@@ -284,12 +291,63 @@ const DropdownMenuShortcut = ({ className, ...props }: React.HTMLAttributes<HTML
 };
 DropdownMenuShortcut.displayName = 'DropdownMenuShortcut';
 
-/**
- *
- * Right now, these are the props mostly used for the menu
- * if we find out, consumers need more props, we can just extend it
- * with componentProps
- */
+export type DropdownMenuRadioOption<V extends string> = { value: V; label: string; icon?: React.ReactNode };
+
+type DropdownMenuRadioOptionsProps<V extends string> = {
+  options: readonly DropdownMenuRadioOption<V>[];
+  value: V;
+  onValueChange: (value: V) => void;
+};
+
+function DropdownMenuRadioOptions<V extends string>({
+  options,
+  value,
+  onValueChange,
+}: DropdownMenuRadioOptionsProps<V>) {
+  return (
+    <DropdownMenuRadioGroup
+      value={value}
+      onValueChange={(next: unknown) => {
+        const picked = options.find(option => option.value === next);
+        if (picked) onValueChange(picked.value);
+      }}
+    >
+      {options.map(option => (
+        <DropdownMenuRadioItem key={option.value} value={option.value}>
+          {option.icon}
+          <span>{option.label}</span>
+        </DropdownMenuRadioItem>
+      ))}
+    </DropdownMenuRadioGroup>
+  );
+}
+
+export type DropdownMenuRadioSubProps<V extends string> = DropdownMenuRadioOptionsProps<V> & {
+  label: string;
+  icon?: React.ReactNode;
+};
+
+function DropdownMenuRadioSub<V extends string>({
+  label,
+  icon,
+  options,
+  value,
+  onValueChange,
+}: DropdownMenuRadioSubProps<V>) {
+  const selected = options.find(option => option.value === value);
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger hint={selected?.label}>
+        {icon}
+        <span>{label}</span>
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        <DropdownMenuRadioOptions options={options} value={value} onValueChange={onValueChange} />
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}
+
 function DropdownMenu({
   open,
   defaultOpen,
@@ -324,5 +382,7 @@ DropdownMenu.Sub = DropdownMenuSub;
 DropdownMenu.SubContent = DropdownMenuSubContent;
 DropdownMenu.SubTrigger = DropdownMenuSubTrigger;
 DropdownMenu.RadioGroup = DropdownMenuRadioGroup;
+DropdownMenu.RadioOptions = DropdownMenuRadioOptions;
+DropdownMenu.RadioSub = DropdownMenuRadioSub;
 
 export { DropdownMenu };
