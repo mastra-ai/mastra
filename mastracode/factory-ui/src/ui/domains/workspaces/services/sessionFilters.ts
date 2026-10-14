@@ -1,14 +1,35 @@
+import type { DropdownMenuRadioOption } from '@mastra/playground-ui/components/DropdownMenu';
+
 import type { FactoryUserSession } from './user-sessions';
 
 export type UserSessionFilterStatus = 'all' | 'working' | 'initializing' | 'idle';
 export type UserSessionUpdatedFilter = 'all' | '24h' | '7d' | '30d';
+export type SessionOwnerScope = 'mine' | 'all';
 
 export const ALL_SESSION_OWNERS = 'all';
 export const MY_SESSIONS = 'mine';
 export const SESSION_OWNER_PREFIX = 'owner:';
 
+export const SESSION_OWNER_SCOPE_OPTIONS: readonly DropdownMenuRadioOption<SessionOwnerScope>[] = [
+  { value: 'mine', label: 'Mine' },
+  { value: 'all', label: 'Everyone' },
+];
+
+export const USER_SESSION_STATUS_OPTIONS: readonly DropdownMenuRadioOption<UserSessionFilterStatus>[] = [
+  { value: 'all', label: 'All statuses' },
+  { value: 'working', label: 'Working' },
+  { value: 'initializing', label: 'Initializing' },
+  { value: 'idle', label: 'Idle' },
+];
+
+export const USER_SESSION_UPDATED_OPTIONS: readonly DropdownMenuRadioOption<UserSessionUpdatedFilter>[] = [
+  { value: 'all', label: 'Any time' },
+  { value: '24h', label: 'Last 24 hours' },
+  { value: '7d', label: 'Last 7 days' },
+  { value: '30d', label: 'Last 30 days' },
+];
+
 export interface UserSessionFiltersState {
-  search: string;
   owner: string;
   status: UserSessionFilterStatus;
   updated: UserSessionUpdatedFilter;
@@ -21,7 +42,6 @@ export interface UserSessionFilterCandidate {
 }
 
 export const EMPTY_USER_SESSION_FILTERS: UserSessionFiltersState = {
-  search: '',
   owner: ALL_SESSION_OWNERS,
   status: 'all',
   updated: 'all',
@@ -45,20 +65,9 @@ export function activeUserSessionFilterCount(
   defaults: UserSessionFiltersState = EMPTY_USER_SESSION_FILTERS,
 ): number {
   return (
-    Number(filters.search.trim() !== defaults.search.trim()) +
     Number(filters.owner !== defaults.owner) +
     Number(filters.status !== defaults.status) +
     Number(filters.updated !== defaults.updated)
-  );
-}
-
-function matchesSearch(candidate: UserSessionFilterCandidate, search: string): boolean {
-  const normalizedSearch = search.trim().toLocaleLowerCase();
-  if (!normalizedSearch) return true;
-
-  const { session, ownerName } = candidate;
-  return [session.title, session.branch, ownerName, session.userId, session.sessionId].some(value =>
-    value?.toLocaleLowerCase().includes(normalizedSearch),
   );
 }
 
@@ -84,7 +93,6 @@ export function filterUserSessions(
   const cutoff = updatedCutoff(filters.updated, now);
 
   return candidates.filter(candidate => {
-    if (!matchesSearch(candidate, filters.search)) return false;
     if (!matchesOwner(candidate.session, filters.owner, viewerUserId)) return false;
     if (filters.status !== 'all' && candidate.status !== filters.status) return false;
     if (cutoff !== undefined && new Date(candidate.session.updatedAt).getTime() < cutoff) return false;

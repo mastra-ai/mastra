@@ -7,6 +7,7 @@
  */
 import type { QueryClient } from '@tanstack/react-query';
 import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -16,6 +17,7 @@ import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { WorkspacesSection } from '../WorkspacesSection';
+import { pickSessionProperty } from './fixtures/sessionProperties';
 
 const factoryProjectId = 'fp-1';
 const projectRepositoryId = 'ghp-1';
@@ -233,5 +235,39 @@ describe('Workspaces sidebar order', () => {
 
     expect(await reviewRowLabels(reversed.client)).toEqual(forward);
     expect(forward).toHaveLength(2);
+  });
+
+  it('reorders by last update once the reader picks it, keeps pinned first, and remembers it', async () => {
+    const pinned = reviewSession(601, '2026-07-23T08:00:00.000Z');
+    const oldestOpen = reviewSession(602, '2026-07-23T09:00:00.000Z');
+    const merged = reviewSession(603, '2026-07-23T10:00:00.000Z');
+    const newestOpen = reviewSession(604, '2026-07-23T11:00:00.000Z');
+    const sessions = [pinned, oldestOpen, merged, newestOpen];
+    localStorage.setItem('mastracode.pinnedSessions', JSON.stringify([pinned.sessionId]));
+    stubSidebar(sessions, [
+      reviewCard(pinned, 601),
+      reviewCard(oldestOpen, 602),
+      reviewCard(merged, 603, '2026-07-23T23:00:00.000Z'),
+      reviewCard(newestOpen, 604),
+    ]);
+    const user = userEvent.setup();
+
+    const rendered = renderSection();
+    expect(await reviewRowLabels(rendered.client)).toEqual([
+      'factory/pr-601',
+      'factory/pr-604',
+      'factory/pr-602',
+      'factory/pr-603',
+    ]);
+
+    await pickSessionProperty(user, 'Review sessions', 'Sort', 'Last updated');
+
+    const byLastUpdate = ['factory/pr-601', 'factory/pr-603', 'factory/pr-604', 'factory/pr-602'];
+    expect(await reviewRowLabels(rendered.client)).toEqual(byLastUpdate);
+    rendered.unmount();
+
+    const remounted = renderSection();
+    expect(await reviewRowLabels(remounted.client)).toEqual(byLastUpdate);
+    expect(JSON.parse(localStorage.getItem('mastracode.sessionSort') ?? '{}')).toMatchObject({ review: 'updated' });
   });
 });

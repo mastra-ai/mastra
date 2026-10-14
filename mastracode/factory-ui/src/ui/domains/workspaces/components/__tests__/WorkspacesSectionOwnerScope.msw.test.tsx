@@ -1,6 +1,6 @@
 /**
  * BDD coverage for the sidebar's owner scope: the work and review session lists open on the
- * viewer's own sessions, and each heading carries one icon that widens its list to every session
+ * viewer's own sessions, and each heading's Properties menu widens its list to every session
  * in the org and back again. Before this, a busy factory rendered everyone's sessions as one
  * undifferentiated list, and the reader had no way to cut it down to their own work.
  */
@@ -16,6 +16,7 @@ import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { WorkspacesSection } from '../WorkspacesSection';
+import { pickSessionProperty, sessionPropertiesTrigger } from './fixtures/sessionProperties';
 
 const projectRepositoryId = 'ghp-1';
 const viewerUserId = 'user-me';
@@ -97,7 +98,7 @@ describe('Workspaces sidebar owner scope', () => {
   });
 
   describe('when the sidebar is collapsed', () => {
-    it('keeps both owner toggles accessible and scopes their lists independently', async () => {
+    it('keeps both Properties menus accessible and scopes their lists independently', async () => {
       stubSessions([
         reviewSession(1, viewerUserId),
         reviewSession(2, 'user-grace'),
@@ -108,22 +109,20 @@ describe('Workspaces sidebar owner scope', () => {
       const rendered = renderSection('collapsed');
       await waitForMutationsIdle(rendered.client);
 
-      const workToggle = screen.getByRole('button', { name: 'Show only my work sessions' });
-      const reviewToggle = screen.getByRole('button', { name: 'Show only my review sessions' });
-      expect(workToggle).toHaveAttribute('aria-pressed', 'true');
-      expect(reviewToggle).toHaveAttribute('aria-pressed', 'true');
+      expect(sessionPropertiesTrigger('Work sessions')).toBeInTheDocument();
+      expect(sessionPropertiesTrigger('Review sessions')).toBeInTheDocument();
 
-      await user.click(workToggle);
+      await pickSessionProperty(user, 'Work sessions', 'Owner', 'Everyone');
 
       expect(await screen.findByRole('button', { name: 'factory/issue-20004' })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'factory/pr-20002' })).not.toBeInTheDocument();
-      expect(workToggle).toHaveAttribute('aria-pressed', 'false');
-      expect(reviewToggle).toHaveAttribute('aria-pressed', 'true');
+      expect(sessionPropertiesTrigger('Work sessions', 1)).toBeInTheDocument();
+      expect(sessionPropertiesTrigger('Review sessions')).toBeInTheDocument();
 
-      await user.click(reviewToggle);
+      await pickSessionProperty(user, 'Review sessions', 'Owner', 'Everyone');
 
       expect(await screen.findByRole('button', { name: 'factory/pr-20002' })).toBeInTheDocument();
-      expect(reviewToggle).toHaveAttribute('aria-pressed', 'false');
+      expect(sessionPropertiesTrigger('Review sessions', 1)).toBeInTheDocument();
     });
   });
 
@@ -137,29 +136,24 @@ describe('Workspaces sidebar owner scope', () => {
     const group = await screen.findByRole('region', { name: 'Review Sessions' });
     expect(await within(group).findByRole('button', { name: 'factory/pr-20001' })).toBeInTheDocument();
     expect(within(group).queryByRole('button', { name: 'factory/pr-20002' })).not.toBeInTheDocument();
-    expect(within(group).getByRole('button', { name: 'Show only my review sessions' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    expect(sessionPropertiesTrigger('Review sessions')).toBeInTheDocument();
 
-    await user.click(within(group).getByRole('button', { name: 'Show only my review sessions' }));
+    await pickSessionProperty(user, 'Review sessions', 'Owner', 'Everyone');
 
     expect(await within(group).findByRole('button', { name: 'factory/pr-20002' })).toBeInTheDocument();
     expect(within(group).getByRole('button', { name: 'factory/pr-20001' })).toBeInTheDocument();
-    expect(within(group).getByRole('button', { name: 'Show only my review sessions' })).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    );
+    expect(sessionPropertiesTrigger('Review sessions', 1)).toBeInTheDocument();
 
-    await user.click(within(group).getByRole('button', { name: 'Show only my review sessions' }));
+    await pickSessionProperty(user, 'Review sessions', 'Owner', 'Mine');
 
     await waitFor(() => {
       expect(within(group).queryByRole('button', { name: 'factory/pr-20002' })).not.toBeInTheDocument();
     });
     expect(within(group).getByRole('button', { name: 'factory/pr-20001' })).toBeInTheDocument();
+    expect(sessionPropertiesTrigger('Review sessions')).toBeInTheDocument();
   });
 
-  it('keeps the heading and its toggle when the viewer owns nothing in the group', async () => {
+  it('keeps the heading and its Properties menu when the viewer owns nothing in the group', async () => {
     stubSessions([reviewSession(1, 'user-grace')]);
     const user = userEvent.setup();
 
@@ -170,7 +164,7 @@ describe('Workspaces sidebar owner scope', () => {
     expect(await within(group).findByRole('status')).toHaveTextContent('No sessions of your own.');
     expect(within(group).queryByRole('button', { name: 'factory/pr-20001' })).not.toBeInTheDocument();
 
-    await user.click(within(group).getByRole('button', { name: 'Show only my review sessions' }));
+    await pickSessionProperty(user, 'Review sessions', 'Owner', 'Everyone');
 
     expect(await within(group).findByRole('button', { name: 'factory/pr-20001' })).toBeInTheDocument();
     expect(within(group).queryByText('No sessions of your own.')).not.toBeInTheDocument();
@@ -193,13 +187,10 @@ describe('Workspaces sidebar owner scope', () => {
     expect(await within(work).findByRole('button', { name: 'factory/issue-20003' })).toBeInTheDocument();
     expect(within(work).queryByRole('button', { name: 'factory/issue-20004' })).not.toBeInTheDocument();
 
-    await user.click(within(work).getByRole('button', { name: 'Show only my work sessions' }));
+    await pickSessionProperty(user, 'Work sessions', 'Owner', 'Everyone');
 
     expect(await within(work).findByRole('button', { name: 'factory/issue-20004' })).toBeInTheDocument();
     expect(within(review).queryByRole('button', { name: 'factory/pr-20002' })).not.toBeInTheDocument();
-    expect(within(review).getByRole('button', { name: 'Show only my review sessions' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    expect(sessionPropertiesTrigger('Review sessions')).toBeInTheDocument();
   });
 });

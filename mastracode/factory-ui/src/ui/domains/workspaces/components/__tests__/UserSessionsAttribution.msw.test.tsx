@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -8,6 +8,7 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { UserSessionsSection } from '../UserSessionsSection';
+import { pickSessionProperty, sessionPropertiesTrigger } from './fixtures/sessionProperties';
 
 const projectRepositoryId = 'ghp-1';
 
@@ -76,20 +77,12 @@ function renderSection() {
 
 /** The list opens on the viewer's own sessions; attribution is about everyone else's. */
 async function showAllOwners() {
-  const user = userEvent.setup();
-  await user.click(await screen.findByRole('button', { name: 'Filter sessions' }));
-  fireEvent.click(await screen.findByRole('combobox', { name: 'Owner' }));
-  const item = await screen.findByRole('option', { name: 'All owners' });
-  fireEvent.pointerDown(item, { pointerType: 'mouse' });
-  fireEvent.click(item, { detail: 1 });
-  await user.keyboard('{Escape}');
-  await screen.findByRole('button', { name: 'Filter sessions, 1 active' });
+  await pickSessionProperty(userEvent.setup(), 'User sessions', 'Owner', 'All owners');
+  expect(sessionPropertiesTrigger('User sessions', 1)).toBeInTheDocument();
 }
 
 describe('user session attribution', () => {
-  it("sorts the viewer's own sessions first and marks sessions owned by others", async () => {
-    // The server lists the other user's org-visible session before the
-    // viewer's own; the sidebar must re-order and attribute it.
+  it('marks sessions owned by others', async () => {
     stubSessions(
       [
         userSession({
@@ -117,11 +110,6 @@ describe('user session attribution', () => {
 
     const mine = await screen.findByRole('button', { name: 'mine' });
     const other = screen.getByRole('button', { name: 'alpha' });
-    const labels = screen
-      .getAllByRole('button')
-      .map(button => button.getAttribute('aria-label'))
-      .filter(label => label === 'mine' || label === 'alpha');
-    expect(labels).toEqual(['mine', 'alpha']);
     expect(screen.queryByText('Ada Lovelace')).not.toBeInTheDocument();
     expect(screen.queryByText('Grace Hopper')).not.toBeInTheDocument();
 

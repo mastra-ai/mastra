@@ -1,6 +1,8 @@
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { SortMenu } from '@mastra/playground-ui/components/SortMenu';
 import {
   Dialog,
   DialogAction,
@@ -12,7 +14,7 @@ import {
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { GitPullRequest, SquareKanban } from 'lucide-react';
+import { GitPullRequest, SquareKanban, UserRound } from 'lucide-react';
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
@@ -32,11 +34,20 @@ import type { WorkItem } from '../../factory/services/workItems';
 import { isPullRequestSource } from '../../factory/services/workItems';
 import { isTerminalStage } from '../../factory/stages';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
+import { useSessionSort } from '../hooks/useSessionSort';
+import { SESSION_OWNER_SCOPE_OPTIONS } from '../services/sessionFilters';
+import type { SessionOwnerScope } from '../services/sessionFilters';
+import {
+  DEFAULT_WORKSPACE_SESSION_SORT,
+  WORKSPACE_SESSION_SORT_OPTIONS,
+  compareWorkspaceRows,
+} from '../services/sessionSort';
+import type { WorkspaceSessionSort } from '../services/sessionSort';
 import type { FactoryUserSession } from '../services/user-sessions';
 import { getFactorySessionKind, getSessionOwnerDetails } from '../services/sessionPresentation';
 import type { SessionViewerProfile } from '../services/sessionPresentation';
+import { SessionListProperties } from './SessionListProperties';
 import { SessionNavRow } from './SessionNavRow';
-import { SessionOwnerToggle } from './SessionOwnerToggle';
 import { sessionRowStatus } from '../services/sessionStatus';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 
@@ -49,17 +60,6 @@ function isSettled(item: WorkItem | undefined, pullRequest: WorkItem | undefined
   return status === 'merged' || status === 'closed';
 }
 
-function watchRank(row: FactoryWorkspaceRow): number {
-  if (row.initializing || row.running || row.attention) return 0;
-  return row.settled ? 2 : 1;
-}
-
-const bySessionPriority = (a: FactoryWorkspaceRow, b: FactoryWorkspaceRow) =>
-  Number(b.pinned) - Number(a.pinned) ||
-  watchRank(a) - watchRank(b) ||
-  b.createdAt.localeCompare(a.createdAt) ||
-  b.workspace.sessionId.localeCompare(a.workspace.sessionId);
-
 export function WorkspacesSection() {
   const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
   const { baseUrl, resourceId, sessionEnabled } = useChatSessionContext();
@@ -69,7 +69,12 @@ export function WorkspacesSection() {
   const scope = { agentControllerId: AGENT_CONTROLLER_ID, resourceId };
   const deleteWorkspace = useDeleteWorkspaceMutation(factoryId, scope);
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
-  const [ownerScope, setOwnerScope] = useState({ work: true, review: true });
+  const [ownerScope, setOwnerScope] = useState<Record<'work' | 'review', SessionOwnerScope>>({
+    work: 'mine',
+    review: 'mine',
+  });
+  const [workSort, setWorkSort] = useSessionSort('work');
+  const [reviewSort, setReviewSort] = useSessionSort('review');
   const auth = useFactoryAuth();
   const viewerUserId = auth.data?.user?.userId;
   const { pinnedSessions, setPinned } = usePinnedSessions();
@@ -136,11 +141,11 @@ export function WorkspacesSection() {
     ];
   });
   const latestRows = (review: boolean) => {
-    const mineOnly = ownerScope[review ? 'review' : 'work'];
+    const mineOnly = ownerScope[review ? 'review' : 'work'] === 'mine';
     const all = rows
       .filter(row => row.review === review)
       .filter(row => !mineOnly || !viewerUserId || row.workspace.userId === viewerUserId)
-      .sort(bySessionPriority);
+      .sort(compareWorkspaceRows(review ? reviewSort : workSort));
     const visible = all.slice(0, COLLAPSED_ROW_COUNT);
     const open = all.find(row => row.active);
     if (open && !visible.includes(open)) visible.push(open);
@@ -193,8 +198,10 @@ export function WorkspacesSection() {
           title="Work Sessions"
           rows={workRows.visible}
           allRows={workRows.all}
-          mineOnly={ownerScope.work}
-          onMineOnlyChange={mineOnly => setOwnerScope(current => ({ ...current, work: mineOnly }))}
+          sort={workSort}
+          onSortChange={setWorkSort}
+          ownerScope={ownerScope.work}
+          onOwnerScopeChange={work => setOwnerScope(current => ({ ...current, work }))}
           kind="Work session"
           pending={pending}
           mergedByPath={mergedByPath}
@@ -211,8 +218,10 @@ export function WorkspacesSection() {
           title="Review Sessions"
           rows={reviewRows.visible}
           allRows={reviewRows.all}
-          mineOnly={ownerScope.review}
-          onMineOnlyChange={mineOnly => setOwnerScope(current => ({ ...current, review: mineOnly }))}
+          sort={reviewSort}
+          onSortChange={setReviewSort}
+          ownerScope={ownerScope.review}
+          onOwnerScopeChange={review => setOwnerScope(current => ({ ...current, review }))}
           kind="Review session"
           pending={pending}
           mergedByPath={mergedByPath}
@@ -277,8 +286,10 @@ function WorkspaceGroup({
   title,
   rows,
   allRows,
-  mineOnly,
-  onMineOnlyChange,
+  sort,
+  onSortChange,
+  ownerScope,
+  onOwnerScopeChange,
   kind,
   pending,
   mergedByPath,
@@ -291,8 +302,10 @@ function WorkspaceGroup({
   title: 'Work Sessions' | 'Review Sessions';
   rows: FactoryWorkspaceRow[];
   allRows: FactoryWorkspaceRow[];
-  mineOnly: boolean;
-  onMineOnlyChange: (mineOnly: boolean) => void;
+  sort: WorkspaceSessionSort;
+  onSortChange: (sort: WorkspaceSessionSort) => void;
+  ownerScope: SessionOwnerScope;
+  onOwnerScopeChange: (scope: SessionOwnerScope) => void;
   kind: SessionPreviewDetails['kind'];
   pending: boolean;
   mergedByPath: Record<string, boolean>;
@@ -305,14 +318,32 @@ function WorkspaceGroup({
   const [expanded, setExpanded] = useState(false);
   const visibleRows = expanded ? allRows : rows;
   const hiddenCount = allRows.length - rows.length;
+  const ownerScopeChanged = Boolean(viewerUserId) && ownerScope !== 'mine';
+  const changedCount = Number(sort !== DEFAULT_WORKSPACE_SESSION_SORT) + Number(ownerScopeChanged);
   return (
     <section className="flex flex-col gap-1" aria-label={title}>
       <Sidebar.NavHeader
         icon={kind === 'Review session' ? <GitPullRequest /> : <SquareKanban />}
         action={
-          viewerUserId ? (
-            <SessionOwnerToggle label={`${kind.toLowerCase()}s`} mineOnly={mineOnly} onChange={onMineOnlyChange} />
-          ) : undefined
+          <SessionListProperties
+            label={title === 'Work Sessions' ? 'Work sessions' : 'Review sessions'}
+            changedCount={changedCount}
+            onReset={() => {
+              onSortChange(DEFAULT_WORKSPACE_SESSION_SORT);
+              onOwnerScopeChange('mine');
+            }}
+          >
+            <SortMenu.Sub options={WORKSPACE_SESSION_SORT_OPTIONS} value={sort} onValueChange={onSortChange} />
+            {viewerUserId ? (
+              <DropdownMenu.RadioSub
+                label="Owner"
+                icon={<UserRound aria-hidden />}
+                options={SESSION_OWNER_SCOPE_OPTIONS}
+                value={ownerScope}
+                onValueChange={onOwnerScopeChange}
+              />
+            ) : null}
+          </SessionListProperties>
         }
       >
         {title}
