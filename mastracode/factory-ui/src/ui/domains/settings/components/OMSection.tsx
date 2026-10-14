@@ -77,7 +77,7 @@ function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (va
       className="sm:w-64 sm:shrink-0"
     >
       <InputNumberGroup size="sm">
-        <InputNumberInput className="tabular-nums" onBlur={() => commit(draft)} />
+        <InputNumberInput onBlur={() => commit(draft)} />
         <InputGroupAddon align="inline-end">
           <InputGroupText>tokens</InputGroupText>
           <InputNumberDecrement />
