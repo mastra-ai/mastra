@@ -8,7 +8,7 @@ import { Memory } from '../../../index';
 import { Subconscious } from '../subconscious';
 import { resolveKnowledgeScopeIds } from '../subconscious/knowledge-tools';
 
-function createSemanticDependencies(ignoreFilters = false) {
+function createSemanticDependencies() {
   const indexes = new Set<string>();
   const documents = new Map<string, { vector: number[]; metadata: Record<string, unknown> }>();
   const vector = {
@@ -26,9 +26,10 @@ function createSemanticDependencies(ignoreFilters = false) {
     deleteVectors: vi.fn(async ({ ids }: { ids?: string[] }) => {
       ids?.forEach(id => documents.delete(id));
     }),
-    query: vi.fn(async ({ topK, filter }: any) =>
+    // The semantic index queries unfiltered and post-filters candidates by
+    // their scope_ids metadata, so the store mock returns every document.
+    query: vi.fn(async ({ topK }: any) =>
       [...documents.entries()]
-        .filter(([, document]) => ignoreFilters || filter.scope_key.$in.includes(document.metadata.scope_key))
         .map(([id, document], index) => ({ id, score: 1 - index / 100, metadata: document.metadata }))
         .slice(0, topK),
     ),
@@ -45,8 +46,8 @@ function toolContext(threadId = 'alpha') {
   return { agent: { threadId, resourceId: 'user-42' }, requestContext } as any;
 }
 
-async function createMemory(tools = true, ignoreFilters = false) {
-  const { vector, embedder } = createSemanticDependencies(ignoreFilters);
+async function createMemory(tools = true) {
+  const { vector, embedder } = createSemanticDependencies();
   const storage = new InMemoryStore();
   const memory = new Memory({
     storage,
@@ -138,7 +139,7 @@ describe('Subconscious knowledge read tools', () => {
   });
 
   it('combines lexical and semantic results while filtering sibling-private vectors even when the adapter ignores filters', async () => {
-    const memory = await createMemory(true, true);
+    const memory = await createMemory();
     const store = (await memory.storage.getStore('knowledge'))!;
     const alphaScopeIds = await scopeIdsFor(memory);
     const betaScopeIds = await scopeIdsFor(memory, 'beta');
@@ -195,9 +196,10 @@ describe('Subconscious knowledge read tools', () => {
     const result = await memory.listTools().knowledge_search!.execute?.({ query: 'cobalt rollout' }, toolContext());
 
     expect(vector.query).toHaveBeenCalledTimes(1);
-    expect(vector.query).toHaveBeenCalledWith(
-      expect.objectContaining({ filter: { scope_key: { $in: expect.any(Array) } } }),
-    );
+    // Visibility is enforced by post-filtering scope_ids metadata, not by a
+    // vector-store filter, because subset-containment visibility over scope-id
+    // sets cannot be expressed as an enumerable key filter.
+    expect(vector.query).toHaveBeenCalledWith(expect.not.objectContaining({ filter: expect.anything() }));
     const semanticNames = (result as any).results
       .filter((result: any) => result.sources.includes('semantic'))
       .map((result: any) => result.name);

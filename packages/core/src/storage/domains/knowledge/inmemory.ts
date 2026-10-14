@@ -229,13 +229,14 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     });
   }
 
-  #createNode(input: CreateKnowledgeNodeInput): KnowledgeNode {
+  #createNode(input: CreateKnowledgeNodeInput, { coalesceByName = true } = {}): KnowledgeNode {
     this.#assertImportRunExists(input.importRunId);
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
     this.#assertScopeNodes(scopeIds);
     const key = recordKey(input.name, scopeIds);
     const existingId = this.#db.knowledgeNodeKeys.get(key);
     if (existingId) {
+      if (!coalesceByName) throw new KnowledgeConflictError(existingId);
       const existing = this.#db.knowledgeNodes.get(existingId);
       if (!existing) throw new KnowledgeNotFoundError('node', existingId);
       return cloneNode(existing);
@@ -318,7 +319,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         if (!node || node.deletedAt) throw new KnowledgeNotFoundError('node', existing.nodeId);
         return cloneNode(node);
       }
-      const node = this.#createNode(input.node);
+      const node = this.#createNode(input.node, { coalesceByName: false });
       this.#db.knowledgeNodeAddresses.set(key, { source: input.source, address: input.address, nodeId: node.id });
       return node;
     });
