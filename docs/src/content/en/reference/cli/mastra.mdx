@@ -1648,7 +1648,7 @@ mastra api trace list '{"page":0,"perPage":20}' --verbose
 
 #### `mastra api trace query`
 
-Queries completed observability traces with recursive predicates over trace fields and related spans, scores, or feedback. The inline JSON input is required and uses the same query structure as the SDK and HTTP API. Like other observability commands, it targets `https://observability.mastra.ai` by default. Pass `--url http://localhost:4111` to query a local server.
+Queries completed observability traces with recursive predicates over trace fields and related spans. The inline JSON input is required and uses the same query structure as the SDK and HTTP API. Like other observability commands, it targets `https://observability.mastra.ai` by default. Pass `--url http://localhost:4111` to query a local server.
 
 ```bash
 mastra api trace query <input>

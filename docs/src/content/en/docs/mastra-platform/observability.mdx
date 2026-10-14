@@ -115,7 +115,7 @@ npx mastra api trace list
 
 The CLI reads `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` from your project environment and targets the US observability endpoint by default. See [CLI target resolution](/reference/cli/mastra#target-resolution) for other authentication options and regional endpoints.
 
-Use `mastra api trace query` to find completed traces by their fields or related spans, scores, and feedback. For example, find traces whose root span took more than five seconds:
+Use `mastra api trace query` to find completed traces by their fields or related spans. For example, find traces whose root span took more than five seconds:
 
 ```bash
 npx mastra api trace query '{
