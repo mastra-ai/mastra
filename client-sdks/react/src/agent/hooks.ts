@@ -1400,7 +1400,7 @@ export const useChat = ({
       setIsRunning(false);
       // Drop the optimistic bubble instead of leaving it pending until reload
       // (issue #26831). If the server did accept the turn before the response
-      // was lost, the message comes back from thread history on the next load.
+      // was lost, the message reappears only if the caller reloads thread history.
       if (signalId) {
         setMessages(s => s.filter(m => !(m.id === signalId && m.content.metadata?.status === 'pending')));
       }
