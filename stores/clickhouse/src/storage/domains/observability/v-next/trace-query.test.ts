@@ -906,7 +906,7 @@ describe('ClickHouse advanced trace query', () => {
       traces: [{ traceId: 'trace-a', rootSpanId: 'root-trace-a', status: 'success' }],
       page: { next: expect.any(String) },
     });
-    expect(Object.keys(response.traces[0]!)).toHaveLength(16);
+    expect(Object.keys(response.traces[0]!)).toHaveLength(18);
     expect(response.traces[0]).toMatchObject({
       name: 'Agent run',
       entityId: 'agent-1',
@@ -921,7 +921,17 @@ describe('ClickHouse advanced trace query', () => {
   it('returns null for absent optional root span details', async () => {
     const query = mockTraceStatements({
       traces: 1,
-      rows: [{ ...traceRow('trace-a', '2026-01-01T12:00:00.000Z'), entityId: null, metadata: null, input: null }],
+      rows: [
+        {
+          ...traceRow('trace-a', '2026-01-01T12:00:00.000Z'),
+          entityId: null,
+          metadata: null,
+          input: null,
+          inputPreview: '',
+          outputPreview: '',
+          errorPreview: '',
+        },
+      ],
     });
     const response = await queryTraces({ query } as unknown as ClickHouseClient, plan(), 15_000);
 
@@ -933,6 +943,47 @@ describe('ClickHouse advanced trace query', () => {
       inputPreview: null,
     });
     expect(response.page.next).toBeNull();
+  });
+
+  it('builds previews from the payloads only for rows stored without them', async () => {
+    const query = mockTraceStatements({
+      traces: 2,
+      rows: [
+        {
+          ...traceRow('trace-a', '2026-01-01T12:00:00.000Z'),
+          inputPreview: 'Stored preview',
+          outputPreview: 'Stored output',
+        },
+        {
+          ...traceRow('trace-b', '2026-01-01T11:00:00.000Z'),
+          inputPreview: null,
+          outputPreview: null,
+          errorPreview: null,
+          output: JSON.stringify({ text: 'Your order shipped' }),
+          error: JSON.stringify({ message: 'Late delivery' }),
+        },
+      ],
+    });
+    const response = await queryTraces({ query } as unknown as ClickHouseClient, plan(), 15_000);
+
+    // Keys, rows by key, then the payloads of the row without stored previews.
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(query.mock.calls[1]![0].query).toContain('r.inputPreview AS inputPreview');
+    expect(query.mock.calls[1]![0].query).toContain('r.errorPreview AS errorPreview');
+    expect(query.mock.calls[1]![0].query).not.toMatch(/\b(input|output)\b/);
+    expect(query.mock.calls[2]![0].query).toMatch(/^SELECT traceId, spanId AS rootSpanId, input, output, error\n/);
+    expect(Object.values(query.mock.calls[2]![0].query_params)).toContain('trace-b');
+    expect(Object.values(query.mock.calls[2]![0].query_params)).not.toContain('trace-a');
+    expect(
+      response.traces.map(({ inputPreview, outputPreview, errorPreview }) => [
+        inputPreview,
+        outputPreview,
+        errorPreview,
+      ]),
+    ).toEqual([
+      ['Stored preview', 'Stored output', null],
+      ['Help with my order', 'Your order shipped', 'Late delivery'],
+    ]);
   });
 
   it('returns exact list-compatible pagination metadata and fetches payloads for the page only', async () => {
@@ -1049,12 +1100,40 @@ function mockTraceStatements({
       }
       if (query.includes('uniqExact(traceId) AS traces')) return [{ traces: String(traces) }];
       const requested = new Set(Object.values(query_params));
-      if (query.includes('r.metadataRaw AS metadata')) return rows.filter(row => requested.has(row.traceId));
+      // Rows written before the stored preview existed: `input` for those rows only.
+      if (query.includes('spanId AS rootSpanId, input, output, error\n')) {
+        return rows
+          .filter(row => requested.has(row.traceId))
+          .map(({ traceId, rootSpanId, input, output, error }) => ({ traceId, rootSpanId, input, output, error }));
+      }
+      if (query.includes('r.metadataRaw AS metadata')) {
+        return rows
+          .filter(row => requested.has(row.traceId))
+          .map(({ input: _input, output: _output, error: _error, ...row }) => row);
+      }
       // Delta: the narrow list, then the payloads of its visible rows.
       if (query.includes('metadataRaw AS metadata')) {
-        return rows.map(({ traceId, rootSpanId, metadata, input }) => ({ traceId, rootSpanId, metadata, input }));
+        return rows.map(({ traceId, rootSpanId, metadata, inputPreview, outputPreview, errorPreview }) => ({
+          traceId,
+          rootSpanId,
+          metadata,
+          inputPreview,
+          outputPreview,
+          errorPreview,
+        }));
       }
-      return rows.map(({ metadata: _metadata, input: _input, ...row }) => row);
+      return rows.map(
+        ({
+          metadata: _metadata,
+          input: _input,
+          output: _output,
+          error: _error,
+          inputPreview: _inputPreview,
+          outputPreview: _outputPreview,
+          errorPreview: _errorPreview,
+          ...row
+        }) => row,
+      );
     },
   }));
 }
@@ -1068,6 +1147,11 @@ function traceRow(traceId: string, startedAt: string) {
     parentSpanId: null,
     metadata: JSON.stringify({ customer: { id: 'customer-1' }, count: 2 }),
     input: JSON.stringify({ messages: [{ role: 'user', content: 'Help with my order' }] }),
+    inputPreview: 'Help with my order' as string | null,
+    outputPreview: '' as string | null,
+    output: null as string | null,
+    error: null as string | null,
+    errorPreview: '' as string | null,
     threadId: null,
     resourceId: null,
     startedAt,

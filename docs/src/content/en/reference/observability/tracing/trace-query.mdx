@@ -115,7 +115,7 @@ Span queries use the scalar fields and operators available inside `queryTraces()
 
 The `timeRange` applies to each span's `startedAt`, includes `from`, excludes `to`, and can cover at most 31 days. Sort by `startedAt` or `endedAt`, in either direction. The default is `startedAt` descending. A page contains up to 1,000 rows, with a default of 100. Pass `page.next` back as `page.after` with the same filters, time range, scope, and ordering. Cursors use scope and span identifiers to break timestamp ties. They aren't a snapshot across requests. New completions can appear when the view is refreshed.
 
-Each row contains span and trace identifiers, display fields, duration, status, and input/output previews of at most 256 Unicode characters. Truncation flags indicate when a preview is incomplete. Stores select the page before loading previews and cost. Full payloads remain available through the existing span detail method.
+Each row contains span and trace identifiers, display fields, duration, status, and short text previews of the span's input, output, and error (`inputPreview`, `outputPreview`, `errorPreview`). A preview holds at most 100 characters and ends with `…` when it was cut, and the `inputTruncated`, `outputTruncated`, and `errorTruncated` flags say when that happened. For a message list, the preview shows the last user message. Stores select the page before loading previews and cost. Full payloads remain available through the existing span detail method.
 
 The `cost` field describes only that span's model-token cost:
 
