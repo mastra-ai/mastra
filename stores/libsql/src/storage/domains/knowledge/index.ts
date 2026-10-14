@@ -22,6 +22,7 @@ import {
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
   KNOWLEDGE_RESET_GUIDANCE,
   KNOWLEDGE_TABLE_NAMES,
+  discardedKnowledgeRowsWarning,
   knowledgeScopeIdsKey,
   REPLACEABLE_KNOWLEDGE_TABLE_NAMES,
   replaceableKnowledgeLayoutIndexNames,
@@ -511,7 +512,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
    * unfamiliar tables, views, triggers, and extra indexes all leave the database untouched.
    */
   async #replacePublishedV1(): Promise<boolean> {
-    return this.#transaction(async tx => {
+    const warning = await this.#transaction(async tx => {
       const objects = await tx.execute(
         "SELECT type, name FROM sqlite_master WHERE name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR tbl_name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR sql LIKE '%mastra\\_knowledge\\_%' ESCAPE '\\'",
       );
@@ -535,12 +536,19 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       const knownIndexes = replaceableKnowledgeLayoutIndexNames(columnsByTable);
       if (!knownIndexes) return false;
       if (!indexes.every(name => knownIndexes.has(name) || name.startsWith('sqlite_autoindex_'))) return false;
+      const rowCounts = new Map<string, number>();
+      for (const table of tables) {
+        const count = await tx.execute(`SELECT COUNT(*) AS count FROM "${table}"`);
+        rowCounts.set(table, Number(count.rows[0]?.count ?? 0));
+      }
       // Children before the tables they reference.
       const dropOrder: string[] = [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()];
       tables.sort((a, b) => dropOrder.indexOf(a) - dropOrder.indexOf(b));
       for (const table of tables) await tx.execute(`DROP TABLE "${table}"`);
-      return true;
+      return discardedKnowledgeRowsWarning(columnsByTable, rowCounts) ?? true;
     });
+    if (typeof warning === 'object') this.logger?.warn?.(warning.message, warning.details);
+    return warning !== false;
   }
 
   override async dangerouslyReset(): Promise<void> {
@@ -757,6 +765,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async #updateNode(tx: Transaction, input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
+    if (input.name !== undefined && !input.name.trim()) throw new Error('Knowledge node names must not be blank.');
     const existing = await this.#getNode(tx, input.id);
     if (!existing) throw new KnowledgeNotFoundError('node', input.id);
     const existingScopeIds = await this.#getNodeScopeIds(tx, input.id);
@@ -1627,6 +1636,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     );
   }
   async #createNode(executor: Transaction, input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {
+    if (!input.name.trim()) throw new Error('Knowledge node names must not be blank.');
     const scopeIds = await this.#assertScopeNodes(executor, input.scopeIds);
     const existing = await this.#getNodeByName(executor, input.name, scopeIds);
     if (existing) return existing;
