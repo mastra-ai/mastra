@@ -53,6 +53,11 @@ describe('InputNumber', () => {
     const control = screen.getByRole('textbox', { name: 'Observation threshold' });
     const increase = screen.getByRole('button', { name: 'Increase' });
     const decrease = screen.getByRole('button', { name: 'Decrease' });
+    const addon = screen.getByText('tokens').closest('[data-slot="input-group-addon"]');
+    expect(addon?.getAttribute('data-variant')).toBe('flush');
+    expect(addon?.className.split(/\s+/)).toEqual(
+      expect.arrayContaining(['gap-0', 'pr-0', 'has-[>button]:pr-0', '[&>button]:mx-0']),
+    );
     expect(control).toHaveProperty('value', '30,000');
     expect(decrease.getAttribute('aria-disabled')).toBe('true');
 
