@@ -611,6 +611,13 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
   const studioProtocol = serverOptions?.studioProtocol ?? protocol;
   const studioPort = serverOptions?.studioPort ?? port;
 
+  // Start counting model tokens before the first request or recovered workflow run;
+  // usage is reported periodically and on shutdown (respects MASTRA_TELEMETRY_DISABLED).
+  // Older @mastra/core versions don't export it, hence the optional call.
+  await import('@mastra/core/telemetry')
+    .then(({ startModelUsageTelemetry }) => startModelUsageTelemetry?.(mastra))
+    .catch(() => {});
+
   const server = serve(
     {
       fetch: app.fetch,

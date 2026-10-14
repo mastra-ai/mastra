@@ -4,6 +4,7 @@ import { join, relative } from 'path';
 import { setupMonorepo } from './prepare';
 import { mkdtemp, mkdir, readdir, readFile, readlink, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
+import { pathToFileURL } from 'url';
 import getPort from 'get-port';
 import { execa, execaNode } from 'execa';
 import { glob } from 'tinyglobby';
@@ -1004,6 +1005,100 @@ export const mastra = new Mastra({
         } finally {
           server.kill('SIGKILL');
           await Promise.race([server.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
+        }
+      },
+      timeout,
+    );
+
+    it(
+      'reports the model tokens the generated server used when it exits on SIGTERM',
+      async () => {
+        // A preload replaces fetch for PostHog hosts only, recording each batch the
+        // server sends instead of reaching the network. Everything else is the real
+        // generated server: observability metrics, the usage meter, and shutdown.
+        const telemetryDir = await mkdtemp(join(tmpdir(), 'mastra-usage-telemetry-'));
+        const capturePath = join(telemetryDir, 'posthog-batches.jsonl');
+        const preloadPath = join(telemetryDir, 'capture-posthog.mjs');
+        await writeFile(
+          preloadPath,
+          [
+            "import { appendFileSync } from 'node:fs';",
+            "import { gunzipSync } from 'node:zlib';",
+            'const realFetch = globalThis.fetch;',
+            'globalThis.fetch = async (input, init = {}) => {',
+            "  const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url);",
+            "  if (!url.hostname.endsWith('posthog.com')) return realFetch(input, init);",
+            "  if (url.pathname.startsWith('/batch')) {",
+            '    let body = Buffer.from(await new Response(init.body).arrayBuffer());',
+            "    if (new Headers(init.headers).get('content-encoding') === 'gzip') body = gunzipSync(body);",
+            "    appendFileSync(process.env.POSTHOG_CAPTURE_PATH, body.toString('utf8') + '\\n');",
+            '  }',
+            "  return new Response('{\"status\":1}', { status: 200, headers: { 'content-type': 'application/json' } });",
+            '};',
+          ].join('\n'),
+        );
+
+        const usagePort = await getPort();
+        const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+        const usageController = new AbortController();
+        const server = execaNode('index.mjs', {
+          cwd: outputDir,
+          cancelSignal: usageController.signal,
+          nodeOptions: ['--import', pathToFileURL(preloadPath).href],
+          env: {
+            MASTRA_PORT: usagePort.toString(),
+            MASTRA_TELEMETRY_DISABLED: '',
+            POSTHOG_CAPTURE_PATH: capturePath,
+            // Keep the legacy usage sync's cursor file out of the real home directory.
+            HOME: telemetryDir,
+          },
+        });
+        activeProcesses.push({ controller: usageController, proc: server });
+
+        try {
+          const maxAttempts = 60;
+          for (let i = 0; i < maxAttempts; i++) {
+            try {
+              const res = await fetch(`http://localhost:${usagePort}/api/tools`);
+              if (res.ok) break;
+            } catch {
+              // Server not ready yet
+            }
+            if (i === maxAttempts - 1) {
+              throw new Error('Usage telemetry test server failed to start within timeout');
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+
+          // The usage agent's model reports 123 input and 45 output tokens per call.
+          for (let call = 0; call < 2; call++) {
+            const response = await fetch(`http://localhost:${usagePort}/model-usage`, { method: 'POST' });
+            expect(response.status).toBe(200);
+          }
+
+          server.kill('SIGTERM');
+          await expect(server).resolves.toMatchObject({ exitCode: 0 });
+
+          const sentEvents = (await readFile(capturePath, 'utf-8'))
+            .trim()
+            .split('\n')
+            .flatMap(line => JSON.parse(line).batch as Array<{ event: string; properties: Record<string, unknown> }>);
+          const usageEvents = sentEvents.filter(event => event.event === 'mastra_model_token_usage_v2');
+
+          expect(usageEvents).toEqual([
+            expect.objectContaining({
+              properties: expect.objectContaining({
+                model: 'e2e-usage-model',
+                input_tokens: 246,
+                output_tokens: 90,
+                report_reason: 'shutdown',
+              }),
+            }),
+          ]);
+        } finally {
+          server.kill('SIGKILL');
+          await Promise.race([server.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
+          await rm(telemetryDir, { recursive: true, force: true });
         }
       },
       timeout,
