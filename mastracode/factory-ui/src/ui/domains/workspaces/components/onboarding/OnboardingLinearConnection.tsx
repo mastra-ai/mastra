@@ -44,7 +44,7 @@ export function OnboardingLinearConnection({ onConnect }: { onConnect: () => voi
         name="Linear"
         description="Authorization expired. Reconnect Linear to continue."
         action={
-          <Button size="sm" aria-label="Reconnect Linear" onClick={onConnect}>
+          <Button variant="ghost" size="sm" aria-label="Reconnect Linear" onClick={onConnect}>
             Reconnect
           </Button>
         }
@@ -58,7 +58,7 @@ export function OnboardingLinearConnection({ onConnect }: { onConnect: () => voi
         name="Linear"
         description="Issues and priorities for your work board."
         action={
-          <Button size="sm" aria-label="Connect Linear" onClick={onConnect}>
+          <Button variant="ghost" size="sm" aria-label="Connect Linear" onClick={onConnect}>
             Connect
           </Button>
         }

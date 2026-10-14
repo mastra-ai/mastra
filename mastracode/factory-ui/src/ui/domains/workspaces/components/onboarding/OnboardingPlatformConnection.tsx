@@ -60,6 +60,7 @@ export function OnboardingPlatformConnection({ provider }: { provider: 'jira' | 
           label={`${action} ${name}`}
           buttonLabel={action}
           reconnectConnectionId={reconnect?.id}
+          variant="ghost"
           size="sm"
         />
       }
