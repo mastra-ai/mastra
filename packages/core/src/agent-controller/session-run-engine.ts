@@ -380,12 +380,7 @@ export class SessionRunEngine {
 
   private finishCurrentMessage(state: StreamState): void {
     if (!state.messageStarted) return;
-    const { id, content } = state.currentMessage;
-    this.#session.emit({
-      type: 'message_end',
-      id,
-      ...(content.metadata ? { metadata: structuredClone(content.metadata) } : {}),
-    });
+    this.#session.emit({ type: 'message_end', id: state.currentMessage.id });
     state.messageStarted = false;
   }
 

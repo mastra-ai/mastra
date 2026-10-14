@@ -162,7 +162,7 @@ describe('SessionRunEngine compact message lifecycle', () => {
     await engine.processStreamChunk(state, chunk({ type: 'data-user-message', data: { id: 'user-1' } }), context);
 
     expect(events.filter(event => event.type === 'message_end')).toEqual([
-      { type: 'message_end', id: 'msg-1', metadata: { stopReason: 'complete' } },
+      { type: 'message_end', id: 'msg-1' },
       { type: 'message_end', id: 'user-1' },
     ]);
   });
@@ -193,11 +193,7 @@ describe('SessionRunEngine compact message lifecycle', () => {
       { type: 'message_update', id: 'msg-1', event: { type: 'part', index: 1, part: { type: 'text', text: '' } } },
       { type: 'message_update', id: 'msg-1', event: { type: 'text-delta', delta: ' second' } },
     ]);
-    expect(events.filter(event => event.type === 'message_end')).toContainEqual({
-      type: 'message_end',
-      id: 'msg-1',
-      metadata: { stopReason: 'complete' },
-    });
+    expect(events.filter(event => event.type === 'message_end')).toContainEqual({ type: 'message_end', id: 'msg-1' });
   });
 
   it('sends compact part snapshots and reasoning deltas after the initial message start', async () => {
@@ -279,9 +275,7 @@ describe('SessionRunEngine compact message lifecycle', () => {
       'response-1',
       'response-2',
     ]);
-    expect(events.filter(event => event.type === 'message_end')).toEqual([
-      { type: 'message_end', id: 'response-1', metadata: { stopReason: 'complete' } },
-    ]);
+    expect(events.filter(event => event.type === 'message_end')).toEqual([{ type: 'message_end', id: 'response-1' }]);
   });
 
   it('emits immediate compact start/end pairs for signal messages', async () => {
@@ -392,10 +386,6 @@ describe('SessionRunEngine compact message lifecycle', () => {
         },
       },
     ]);
-    expect(events.filter(event => event.type === 'message_end')).toContainEqual({
-      type: 'message_end',
-      id: 'msg-1',
-      metadata: { stopReason: 'complete' },
-    });
+    expect(events.filter(event => event.type === 'message_end')).toContainEqual({ type: 'message_end', id: 'msg-1' });
   });
 });

@@ -5,7 +5,7 @@
  * render the turn twice (doubled assistant bubble after an SSE reconnect).
  */
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
 import { Agent } from '../../agent';
@@ -73,12 +73,34 @@ function createFailingModel(identity: { provider: string; modelId: string }) {
   });
 }
 
+function createModelStoppedMidReply(identity: { provider: string; modelId: string }) {
+  return new MockLanguageModelV2({
+    ...identity,
+    doStream: async ({ abortSignal }) => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+      stream: new ReadableStream({
+        start(controller) {
+          controller.enqueue({ type: 'stream-start', warnings: [] });
+          controller.enqueue({ type: 'text-start', id: 'text-1' });
+          controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'Half a sent' });
+          abortSignal?.addEventListener('abort', () => controller.error(new DOMException('aborted', 'AbortError')));
+        },
+      }),
+    }),
+  });
+}
+
 type AgentOverrides = Partial<
   Pick<AgentConfig, 'model' | 'tools' | 'inputProcessors' | 'errorProcessors' | 'errorProcessorDefaults'>
 >;
 type Engine = 'default' | 'durable';
 
-async function sendOneMessage(agentOverrides: AgentOverrides = {}, engine: Engine = 'default') {
+async function sendOneMessage(
+  agentOverrides: AgentOverrides = {},
+  engine: Engine = 'default',
+  { stopOnFirstUpdate = false }: { stopOnFirstUpdate?: boolean } = {},
+) {
   const storage = new InMemoryStore();
   const agent = new Agent({
     id: 'test-agent',
@@ -114,9 +136,13 @@ async function sendOneMessage(agentOverrides: AgentOverrides = {}, engine: Engin
   const events: AgentControllerEvent[] = [];
   session.subscribe(event => {
     events.push(event);
+    if (stopOnFirstUpdate && event.type === 'message_update') session.abort();
   });
 
-  await session.sendMessage({ content: 'It seems to work well actually' });
+  await session.sendMessage({ content: 'It seems to work well actually' }).catch(error => {
+    if (!stopOnFirstUpdate) throw error;
+  });
+  if (stopOnFirstUpdate) await vi.waitFor(() => expect(events.some(event => event.type === 'agent_end')).toBe(true));
 
   const streamedStart = events.find(
     (event): event is Extract<AgentControllerEvent, { type: 'message_start' }> =>
@@ -131,11 +157,7 @@ function liveAssistantMetadata(events: AgentControllerEvent[], messageId: string
     (event): event is Extract<AgentControllerEvent, { type: 'message_start' }> =>
       event.type === 'message_start' && event.message.id === messageId,
   );
-  const end = events.find(
-    (event): event is Extract<AgentControllerEvent, { type: 'message_end' }> =>
-      event.type === 'message_end' && event.id === messageId,
-  );
-  return end?.metadata ?? start?.message.content.metadata;
+  return start?.message.content.metadata;
 }
 
 describe('stream ↔ persisted message identity', () => {
@@ -152,45 +174,33 @@ describe('stream ↔ persisted message identity', () => {
     expect(streamedStart!.message.id).toBe(persistedAssistant[0]!.id);
   }, 30000);
 
-  it('names the model on the live assistant message the way its persisted copy does', async () => {
-    const { streamedStart, persistedAssistant } = await sendOneMessage();
+  it.each<Engine>(['default', 'durable'])(
+    'names the model on the live assistant message the way its persisted copy does (%s engine)',
+    async engine => {
+      const { streamedStart, persistedAssistant } = await sendOneMessage({}, engine);
 
-    const persistedMetadata = persistedAssistant[0]?.content.metadata;
-    expect(persistedMetadata).toMatchObject({ modelId: 'mock-model-id', provider: 'mock-provider' });
-    expect(streamedStart?.message.content.metadata).toMatchObject({
-      modelId: persistedMetadata?.modelId,
-      provider: persistedMetadata?.provider,
-    });
-  }, 30000);
+      const persistedMetadata = persistedAssistant[0]?.content.metadata;
+      expect(persistedMetadata).toMatchObject({ modelId: 'mock-model-id', provider: 'mock-provider' });
+      expect(streamedStart?.message.content.metadata).toMatchObject({
+        modelId: persistedMetadata?.modelId,
+        provider: persistedMetadata?.provider,
+      });
+    },
+    30000,
+  );
 
   it.each<Engine>(['default', 'durable'])(
-    'names the model that closed the reply when a later step runs on another model (%s engine)',
+    'names the model on a reply stopped before its step finishes (%s engine)',
     async engine => {
-      const second = createTextStreamModel('Found it.', { provider: 'second-provider', modelId: 'second-model' });
-      const { events, persistedAssistant } = await sendOneMessage(
-        {
-          model: createToolCallModel({ provider: 'first-provider', modelId: 'first-model' }),
-          tools: {
-            lookup: createTool({
-              id: 'lookup',
-              description: 'Looks something up',
-              inputSchema: z.object({}),
-              execute: async () => ({ found: true }),
-            }),
-          },
-          inputProcessors: [
-            { id: 'swap-model', processInputStep: ({ stepNumber }) => (stepNumber >= 1 ? { model: second } : {}) },
-          ],
-        },
+      const { events, streamedStart } = await sendOneMessage(
+        { model: createModelStoppedMidReply({ provider: 'stopped-provider', modelId: 'stopped-model' }) },
         engine,
+        { stopOnFirstUpdate: true },
       );
 
-      expect(persistedAssistant).toHaveLength(1);
-      const reply = persistedAssistant[0]!;
-      expect(reply.content.metadata).toMatchObject({ modelId: 'second-model', provider: 'second-provider' });
-      expect(liveAssistantMetadata(events, reply.id)).toMatchObject({
-        modelId: 'second-model',
-        provider: 'second-provider',
+      expect(liveAssistantMetadata(events, streamedStart!.message.id)).toMatchObject({
+        modelId: 'stopped-model',
+        provider: 'stopped-provider',
       });
     },
     30000,
