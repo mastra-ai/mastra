@@ -35,6 +35,10 @@ function loadHasPermission(): Promise<HasPermissionFn | undefined> {
   return _hasPermissionPromise;
 }
 
+// When RBAC is configured but the checker can't be loaded, deny instead of skipping the check,
+// as MastraServer refuses EE features whose module can't be loaded.
+const denyAllPermissions: HasPermissionFn = () => false;
+
 /**
  * Convert Fastify request to Web API Request for cookie-based auth providers.
  */
@@ -670,16 +674,19 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
       if (hasAuth) {
         const hasPermission = await loadHasPermission();
-        if (hasPermission) {
-          const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
-          const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, requestContext);
+        const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
+        const permissionError = this.checkRoutePermission(
+          route,
+          userPermissions,
+          hasPermission ?? denyAllPermissions,
+          requestContext,
+        );
 
-          if (permissionError) {
-            return reply.status(permissionError.status).send({
-              error: permissionError.error,
-              message: permissionError.message,
-            });
-          }
+        if (permissionError) {
+          return reply.status(permissionError.status).send({
+            error: permissionError.error,
+            message: permissionError.message,
+          });
         }
       }
 
@@ -841,20 +848,18 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             );
           }
 
-          if (hasPermission) {
-            const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
-            const permissionError = this.checkRoutePermission(
-              serverRoute,
-              userPermissions,
-              hasPermission,
-              requestContext,
-            );
-            if (permissionError) {
-              return reply.status(permissionError.status).send({
-                error: permissionError.error,
-                message: permissionError.message,
-              });
-            }
+          const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
+          const permissionError = this.checkRoutePermission(
+            serverRoute,
+            userPermissions,
+            hasPermission ?? denyAllPermissions,
+            requestContext,
+          );
+          if (permissionError) {
+            return reply.status(permissionError.status).send({
+              error: permissionError.error,
+              message: permissionError.message,
+            });
           }
         }
 

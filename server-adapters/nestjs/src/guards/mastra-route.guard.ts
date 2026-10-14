@@ -79,8 +79,9 @@ export class MastraRouteGuard implements CanActivate {
     const required = getEffectivePermission(route);
     if (!required) return null;
 
-    const hasPermission = await loadHasPermission();
-    if (!hasPermission) return null;
+    // RBAC is configured and this route needs a permission: if the checker can't be loaded, deny rather than skip,
+    // as MastraServer refuses EE features whose module can't be loaded.
+    const hasPermission = (await loadHasPermission()) ?? (() => false);
 
     const permissions = Array.isArray(required) ? required : [required];
     const userPermissions = requestContext.get('userPermissions') as string[] | undefined;

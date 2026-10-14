@@ -133,6 +133,10 @@ function loadHasPermission(): Promise<HasPermissionFn | undefined> {
   return _hasPermissionPromise;
 }
 
+// When RBAC is configured but the checker can't be loaded, deny instead of skipping the check,
+// as MastraServer refuses EE features whose module can't be loaded.
+const denyAllPermissions: HasPermissionFn = () => false;
+
 // Export type definitions for Elysia app configuration
 export interface ElysiaContext {
   mastra: Mastra;
@@ -535,15 +539,13 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       const authConfig = this.mastra.getServer()?.auth;
       if (authConfig) {
         const hasPermission = await loadHasPermission();
-        if (hasPermission) {
-          const userPermissions = ctx.requestContext.get('userPermissions') as string[] | undefined;
-          const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
-          if (permissionError) {
-            return new Response(JSON.stringify({ error: permissionError.error, message: permissionError.message }), {
-              status: permissionError.status,
-              headers: { 'Content-Type': 'application/json' },
-            });
-          }
+        const userPermissions = ctx.requestContext.get('userPermissions') as string[] | undefined;
+        const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission ?? denyAllPermissions);
+        if (permissionError) {
+          return new Response(JSON.stringify({ error: permissionError.error, message: permissionError.message }), {
+            status: permissionError.status,
+            headers: { 'Content-Type': 'application/json' },
+          });
         }
       }
 
@@ -843,18 +845,20 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
             const authConfig = this.mastra.getServer()?.auth;
             if (authConfig) {
               const hasPermission = await loadHasPermission();
-              if (hasPermission) {
-                const userPermissions = ctx.requestContext.get('userPermissions') as string[] | undefined;
-                const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
-                if (permissionError) {
-                  return new Response(
-                    JSON.stringify({ error: permissionError.error, message: permissionError.message }),
-                    {
-                      status: permissionError.status,
-                      headers: { 'Content-Type': 'application/json' },
-                    },
-                  );
-                }
+              const userPermissions = ctx.requestContext.get('userPermissions') as string[] | undefined;
+              const permissionError = this.checkRoutePermission(
+                serverRoute,
+                userPermissions,
+                hasPermission ?? denyAllPermissions,
+              );
+              if (permissionError) {
+                return new Response(
+                  JSON.stringify({ error: permissionError.error, message: permissionError.message }),
+                  {
+                    status: permissionError.status,
+                    headers: { 'Content-Type': 'application/json' },
+                  },
+                );
               }
             }
           }
