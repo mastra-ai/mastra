@@ -8,7 +8,7 @@ import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserI
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import {
-  hasLocalBranch,
+  ensureLocalBranch,
   isCheckoutOf,
   pushRepositoryBranch,
   refreshMergeRequestCheckout,
@@ -316,10 +316,11 @@ export async function createSourceControlTools({
           throw new Error(`There is no checkout of ${target.repository.slug} in this session.`);
         }
         const branch = target.session.branch;
-        // Push the local session branch whenever it exists, whatever is checked
-        // out; HEAD stands in only for a repository where it was never created.
-        const fromHead = !(await hasLocalBranch(sandbox, workdir, branch));
-        await pushRepositoryBranch(sandbox, workdir, branch, access, target.repository.slug, { fromHead });
+        // Push the local session branch, whatever is checked out. A repository
+        // where it was never created gets it at HEAD first, so a later push
+        // never sends some other branch's commits.
+        await ensureLocalBranch(sandbox, workdir, branch);
+        await pushRepositoryBranch(sandbox, workdir, branch, access, target.repository.slug);
         await target.provider.storage.sessionRepositories.upsert({
           sessionId: target.session.sessionId,
           projectRepositoryId: target.projectRepository.id,
