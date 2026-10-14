@@ -272,7 +272,9 @@ jobs:
           install-dependencies: true
 
       - name: bump versions
-        run: npx changeset pre exit && npx changeset version
+        run: |
+          if [ -f .changeset/pre.json ]; then npx changeset pre exit; fi
+          npx changeset version
 
       - name: Configure git
         run: |
