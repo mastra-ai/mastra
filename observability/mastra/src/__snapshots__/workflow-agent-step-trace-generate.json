@@ -78,7 +78,7 @@
                 "entityId": "test-agent",
                 "attributes": {
                   "instructions": "You are a test agent",
-                  "timeToFirstChunkMs": "<duration>"
+                  "completionStartTime": "<date>"
                 },
                 "metadata": {
                   "runId": "<runId-2>",
@@ -108,11 +108,10 @@
                       "provider": "mock-provider",
                       "streaming": true,
                       "parameters": {},
+                      "completionStartTime": "<date>",
                       "finishReason": "stop",
                       "responseId": "<responseId-1>",
                       "responseModel": "mock-model-id",
-                      "completionStartTime": "<date>",
-                      "timeToFirstChunkMs": "<duration>",
                       "usage": {
                         "inputTokens": 15,
                         "outputTokens": 25,
@@ -169,6 +168,7 @@
                         "attributes": {
                           "stepIndex": 0,
                           "messageId": "<messageId-1>",
+                          "completionStartTime": "<date>",
                           "usage": {
                             "inputTokens": 15,
                             "outputTokens": 25,
@@ -333,7 +333,6 @@
                               "finishReason": "stop",
                               "warnings": [],
                               "completionStartTime": "<date>",
-                              "timeToFirstChunkMs": "<duration>",
                               "responseModel": "mock-model-id"
                             },
                             "metadata": {

@@ -2,4 +2,4 @@
 '@mastra/observability': patch
 ---
 
-Added `timeToFirstChunkMs` (time to first chunk, in milliseconds) to model inference and model generation spans, and copied it onto the parent agent run span.
+Model tracing now records `completionStartTime` on the first chunk of any provider type, including a non-streamed tool call, and copies it onto the model step, model generation and the agent's own run span. Time to first chunk can be derived on every level as `completionStartTime - startTime`.

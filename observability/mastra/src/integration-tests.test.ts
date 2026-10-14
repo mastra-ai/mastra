@@ -1109,6 +1109,112 @@ describe('Tracing Integration Tests', () => {
     });
   });
 
+  describe('time to first chunk isolation', () => {
+    /** Streams one word after `delayMs`, so each agent gets a distinct first-chunk clock. */
+    function delayedTextModel(delayMs: number, text: string) {
+      return new MockLanguageModelV2({
+        doStream: async () => {
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: text },
+              { type: 'text-end', id: '1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ]),
+          };
+        },
+      });
+    }
+    const clockOf = (span: any) => span?.attributes?.completionStartTime?.getTime();
+
+    it('keeps the outer agent run on its own first chunk when a processor and a tool run nested agents', async () => {
+      const innerModel = delayedTextModel(5, 'inner');
+      class ReviewerProcessor implements Processor {
+        readonly id = 'reviewer';
+        readonly name = 'Reviewer';
+        readonly agent = new Agent({
+          id: 'reviewer-agent',
+          name: 'reviewer-agent',
+          instructions: 'x',
+          model: innerModel,
+        });
+
+        async processInput(args: { messages: MastraDBMessage[]; tracingContext?: TracingContext }) {
+          const result = await this.agent.stream('review', { tracingContext: args.tracingContext });
+          await result.consumeStream();
+          return args.messages;
+        }
+      }
+      const helper = new Agent({ id: 'helper-agent', name: 'helper-agent', instructions: 'x', model: innerModel });
+      const askHelper = createTool({
+        id: 'ask-helper',
+        description: 'ask the helper',
+        inputSchema: z.object({}),
+        execute: async (_input, context) => {
+          const result = await helper.stream('help', { tracingContext: context?.tracingContext });
+          return { text: await result.text };
+        },
+      });
+      let call = 0;
+      const outerModel = new MockLanguageModelV2({
+        doStream: async () => {
+          await new Promise(resolve => setTimeout(resolve, 40));
+          return {
+            stream: convertArrayToReadableStream(
+              call++ === 0
+                ? [
+                    { type: 'tool-call', toolCallId: 'c1', toolName: 'askHelper', input: '{}' },
+                    {
+                      type: 'finish',
+                      finishReason: 'tool-calls',
+                      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                    },
+                  ]
+                : [
+                    { type: 'text-start', id: '1' },
+                    { type: 'text-delta', id: '1', delta: 'outer' },
+                    { type: 'text-end', id: '1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                    },
+                  ],
+            ),
+          };
+        },
+      });
+      const outer = new Agent({
+        id: 'outer-agent',
+        name: 'outer-agent',
+        instructions: 'x',
+        model: outerModel,
+        tools: { askHelper },
+        inputProcessors: [new ReviewerProcessor()],
+      });
+      const mastra = new Mastra({ ...getBaseMastraConfig(testExporter), agents: { outer } });
+
+      const result = await mastra.getAgent('outer').stream('go');
+      await result.consumeStream();
+
+      const runs = testExporter.getSpansByType(SpanType.AGENT_RUN);
+      const generations = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+      const runOf = (entityId: string) => runs.find(span => span.entityId === entityId)!;
+      const generationUnder = (run: { id: string }) => generations.find(span => span.parentSpanId === run.id)!;
+
+      for (const entityId of ['outer-agent', 'reviewer-agent', 'helper-agent']) {
+        const run = runOf(entityId);
+        expect(clockOf(run)).toBeTypeOf('number');
+        expect(clockOf(run)).toBe(clockOf(generationUnder(run)));
+      }
+      // The reviewer streams before the outer model, the helper after its first step;
+      // neither clock leaks onto the outer run.
+      expect(clockOf(runOf('reviewer-agent'))).toBeLessThan(clockOf(runOf('outer-agent'))!);
+      expect(clockOf(runOf('helper-agent'))).toBeGreaterThan(clockOf(runOf('outer-agent'))!);
+    });
+  });
+
   describe.each(agentMethods)('agent launched inside workflow step using $name', ({ name, method, model }) => {
     it(`should trace spans correctly`, async () => {
       const testAgent = new Agent({

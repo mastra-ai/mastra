@@ -31,7 +31,7 @@ import { endPendingProviderToolSpan } from '../../../../loop/workflows/agentic-e
 import type { PendingProviderToolCall } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
 import type { Mastra } from '../../../../mastra';
 import { createRunScope } from '../../../../mastra/run-scope';
-import type { AIModelGenerationSpan, ExportedSpan, IModelSpanTracker, AnySpan } from '../../../../observability';
+import type { AIModelGenerationSpan, ExportedSpan, IModelSpanTracker, AnySpan, Span } from '../../../../observability';
 import { EntityType, SpanType, createObservabilityContext } from '../../../../observability';
 import { executeWithContextSync, getRootExportSpan } from '../../../../observability/utils';
 import type { CachedLLMStepResponse } from '../../../../processors';
@@ -199,8 +199,8 @@ const durableLLMOutputSchema = z.object({
   // Deferred step-finish chunk carried until the loop predicate has resolved
   // the actual continuation decision.
   deferredStepFinishChunk: z.any().optional(),
-  // TTFT of this step's inference; the loop keeps the first one for the generation
-  timeToFirstChunkMs: z.number().optional(),
+  // When this step's inference streamed its first chunk; the loop keeps the first one
+  completionStartTime: z.coerce.date().optional(),
 });
 
 /**
@@ -691,14 +691,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               ? (observability?.rebuildSpan(inputModelSpanData) as AIModelGenerationSpan | undefined)
               : undefined;
 
-            // Create model span tracker for MODEL_STEP and MODEL_CHUNK spans
-            const modelSpanTracker: IModelSpanTracker | undefined = modelSpan?.createTracker();
-            endAttemptSpans = () => {
-              modelSpanTracker?.interruptInference?.();
-              const stepSpan = modelSpanTracker?.exportCurrentStep();
-              if (stepSpan) observability?.rebuildSpan(stepSpan)?.end({ attributes: { finishReason: 'interrupted' } });
-            };
-
             // On remote engines (Inngest) the step's tracingContext span is not part of the
             // exported trace, so parent client-tool spans on the rebuilt AGENT_RUN span instead.
             const inputAgentSpanData = (getRunRegistryEntry(runId, mastra as Mastra | undefined)?.resumeAgentSpanData ??
@@ -706,6 +698,16 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const agentRunSpan = inputAgentSpanData
               ? (observability?.rebuildSpan(inputAgentSpanData) as AnySpan | undefined)
               : undefined;
+
+            // Create model span tracker for MODEL_STEP and MODEL_CHUNK spans
+            const modelSpanTracker: IModelSpanTracker | undefined = modelSpan?.createTracker({
+              agentRunSpan: agentRunSpan as Span<SpanType.AGENT_RUN> | undefined,
+            });
+            endAttemptSpans = () => {
+              modelSpanTracker?.interruptInference?.();
+              const stepSpan = modelSpanTracker?.exportCurrentStep();
+              if (stepSpan) observability?.rebuildSpan(stepSpan)?.end({ attributes: { finishReason: 'interrupted' } });
+            };
 
             // Set the step index for continuation (step: 0, 1, 2, ...)
             // This ensures step numbering continues across agentic loop iterations
@@ -2565,7 +2567,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               // Carry step-finish through the iteration so the loop predicate can
               // stamp and emit the actual post-policy continuation decision.
               deferredStepFinishChunk: deferredStepFinishChunk ?? undefined,
-              timeToFirstChunkMs: modelSpanTracker?.getTimeToFirstChunkMs?.(),
+              completionStartTime: modelSpanTracker?.getCompletionStartTime?.(),
             };
 
             // 16. End step span only if there are NO tool calls

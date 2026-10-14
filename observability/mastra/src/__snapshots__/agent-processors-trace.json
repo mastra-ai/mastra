@@ -38,7 +38,7 @@
         "entityId": "test-agent",
         "attributes": {
           "instructions": "You are a helpful assistant",
-          "timeToFirstChunkMs": "<duration>"
+          "completionStartTime": "<date>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -116,7 +116,7 @@
                 "entityId": "validator-agent",
                 "attributes": {
                   "instructions": "You validate input messages",
-                  "timeToFirstChunkMs": "<duration>"
+                  "completionStartTime": "<date>"
                 },
                 "metadata": {
                   "runId": "<runId-2>",
@@ -146,11 +146,10 @@
                       "provider": "mock-provider",
                       "streaming": true,
                       "parameters": {},
+                      "completionStartTime": "<date>",
                       "finishReason": "stop",
                       "responseId": "<responseId-1>",
                       "responseModel": "mock-model-id",
-                      "completionStartTime": "<date>",
-                      "timeToFirstChunkMs": "<duration>",
                       "usage": {
                         "inputTokens": 15,
                         "outputTokens": 25,
@@ -207,6 +206,7 @@
                         "attributes": {
                           "stepIndex": 0,
                           "messageId": "<messageId-1>",
+                          "completionStartTime": "<date>",
                           "usage": {
                             "inputTokens": 15,
                             "outputTokens": 25,
@@ -371,7 +371,6 @@
                               "finishReason": "stop",
                               "warnings": [],
                               "completionStartTime": "<date>",
-                              "timeToFirstChunkMs": "<duration>",
                               "responseModel": "mock-model-id"
                             },
                             "metadata": {
@@ -446,11 +445,10 @@
               "provider": "mock-provider",
               "streaming": true,
               "parameters": {},
+              "completionStartTime": "<date>",
               "finishReason": "stop",
               "responseId": "<responseId-2>",
               "responseModel": "mock-model-id",
-              "completionStartTime": "<date>",
-              "timeToFirstChunkMs": "<duration>",
               "usage": {
                 "inputTokens": 15,
                 "outputTokens": 25,
@@ -507,6 +505,7 @@
                 "attributes": {
                   "stepIndex": 0,
                   "messageId": "<messageId-2>",
+                  "completionStartTime": "<date>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 25,
@@ -669,7 +668,6 @@
                       },
                       "finishReason": "stop",
                       "completionStartTime": "<date>",
-                      "timeToFirstChunkMs": "<duration>",
                       "responseModel": "mock-model-id"
                     },
                     "metadata": {
@@ -792,7 +790,7 @@
                 "entityId": "summarizer-agent",
                 "attributes": {
                   "instructions": "You summarize text concisely",
-                  "timeToFirstChunkMs": "<duration>"
+                  "completionStartTime": "<date>"
                 },
                 "metadata": {
                   "runId": "<runId-3>",
@@ -822,11 +820,10 @@
                       "provider": "mock-provider",
                       "streaming": true,
                       "parameters": {},
+                      "completionStartTime": "<date>",
                       "finishReason": "stop",
                       "responseId": "<responseId-3>",
                       "responseModel": "mock-model-id",
-                      "completionStartTime": "<date>",
-                      "timeToFirstChunkMs": "<duration>",
                       "usage": {
                         "inputTokens": 15,
                         "outputTokens": 25,
@@ -883,6 +880,7 @@
                         "attributes": {
                           "stepIndex": 0,
                           "messageId": "<messageId-3>",
+                          "completionStartTime": "<date>",
                           "usage": {
                             "inputTokens": 15,
                             "outputTokens": 25,
@@ -1047,7 +1045,6 @@
                               "finishReason": "stop",
                               "warnings": [],
                               "completionStartTime": "<date>",
-                              "timeToFirstChunkMs": "<duration>",
                               "responseModel": "mock-model-id"
                             },
                             "metadata": {

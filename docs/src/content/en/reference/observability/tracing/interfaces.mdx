@@ -690,8 +690,8 @@ interface AgentRunAttributes {
   /** Maximum steps allowed */
   maxSteps?: number
 
-  /** Time to first chunk in ms, copied from the first MODEL_GENERATION of this run */
-  timeToFirstChunkMs?: number
+  /** When the run's model streamed its first chunk, copied from the agent's own first generation */
+  completionStartTime?: Date
 }
 ```
 
@@ -745,9 +745,6 @@ interface ModelGenerationAttributes {
 
   /** Reason the generation finished */
   finishReason?: string
-
-  /** Time to first chunk in ms, equal to the first MODEL_INFERENCE span's value */
-  timeToFirstChunkMs?: number
 }
 ```
 
@@ -792,6 +789,9 @@ interface ModelStepAttributes {
 
   /** Result warnings */
   warnings?: Record<string, any>
+
+  /** When the step's first inference streamed its first chunk */
+  completionStartTime?: Date
 }
 ```
 
@@ -821,9 +821,6 @@ interface ModelInferenceAttributes {
 
   /** When the first token/chunk of the completion was received */
   completionStartTime?: Date
-
-  /** Time to first chunk in ms: `completionStartTime` minus the span start */
-  timeToFirstChunkMs?: number
 
   /** Result warnings */
   warnings?: Record<string, any>

@@ -32,7 +32,7 @@
         "attributes": {
           "instructions": "You can execute workflows that exist in your config",
           "availableTools": ["workflow-simpleWorkflow"],
-          "timeToFirstChunkMs": "<duration>"
+          "completionStartTime": "<date>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -100,11 +100,10 @@
                   }
                 }
               ],
+              "completionStartTime": "<date>",
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
-              "completionStartTime": "<date>",
-              "timeToFirstChunkMs": "<duration>",
               "usage": {
                 "inputTokens": 30,
                 "outputTokens": 35,
@@ -172,6 +171,7 @@
                 "attributes": {
                   "stepIndex": 0,
                   "messageId": "<messageId-1>",
+                  "completionStartTime": "<date>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 10,
@@ -382,7 +382,6 @@
                       },
                       "finishReason": "tool-calls",
                       "completionStartTime": "<date>",
-                      "timeToFirstChunkMs": "<duration>",
                       "responseModel": "mock-model-id"
                     },
                     "metadata": {
@@ -582,6 +581,7 @@
                 "attributes": {
                   "stepIndex": 1,
                   "messageId": "<messageId-1>",
+                  "completionStartTime": "<date>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 25,
@@ -868,7 +868,6 @@
                       },
                       "finishReason": "stop",
                       "completionStartTime": "<date>",
-                      "timeToFirstChunkMs": "<duration>",
                       "responseModel": "mock-model-id"
                     },
                     "metadata": {

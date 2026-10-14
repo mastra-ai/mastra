@@ -2425,29 +2425,35 @@ describe('ModelSpanTracker', () => {
       type: 'step-finish',
       payload: { output: { usage: {} }, stepResult: { reason, warnings: [] }, metadata: {} },
     });
+    const clockOf = (span: { attributes?: { completionStartTime?: Date } } | undefined) =>
+      span?.attributes?.completionStartTime?.getTime();
 
-    it('stamps each inference with its own TTFT and copies the first one to the generation and AGENT_RUN', async () => {
+    function startRun() {
       const agentSpan = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent run' });
       const modelSpan = agentSpan.createChildSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'generation',
         attributes: { model: 'gpt-test', provider: 'test', streaming: true },
       });
-      const tracker = new ModelSpanTracker(modelSpan);
+      return { agentSpan, modelSpan };
+    }
 
-      // Inference 0: starts at step-start, first chunk one tick later, then two more ticks of text.
-      // Inference 1: starts three ticks after inference 0's first chunk; its first chunk one tick later.
+    it('copies the first chunk clock to the step, generation and agent run; later steps keep their own', async () => {
+      const t0 = now;
+      const { agentSpan, modelSpan } = startRun();
+      const tracker = new ModelSpanTracker(modelSpan, { agentRunSpan: agentSpan });
+
       await consumeStream(
         tracker.wrapStream(
           tickingStream(
             [
-              { type: 'step-start', payload: {} },
-              { type: 'text-delta', payload: { text: 'a' } },
-              { type: 'text-delta', payload: { text: 'b' } },
-              stepFinish('tool-calls'),
-              { type: 'step-start', payload: {} },
-              { type: 'text-delta', payload: { text: 'c' } },
-              stepFinish('stop'),
+              { type: 'step-start', payload: {} }, // +100
+              { type: 'text-delta', payload: { text: 'a' } }, // +200 first chunk of step 0
+              { type: 'text-delta', payload: { text: 'b' } }, // +300
+              stepFinish('tool-calls'), // +400
+              { type: 'step-start', payload: {} }, // +500
+              { type: 'text-delta', payload: { text: 'c' } }, // +600 first chunk of step 1
+              stepFinish('stop'), // +700
             ],
             100,
           ),
@@ -2456,57 +2462,71 @@ describe('ModelSpanTracker', () => {
       tracker.endGeneration();
       agentSpan.end();
 
-      const inferences = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
-      expect(inferences.map(s => s.attributes?.timeToFirstChunkMs)).toEqual([100, 100]);
-      const [generation] = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
-      expect(generation!.attributes?.timeToFirstChunkMs).toBe(100);
-      const [agentRun] = testExporter.getSpansByType(SpanType.AGENT_RUN);
-      expect(agentRun!.attributes?.timeToFirstChunkMs).toBe(100);
+      expect(testExporter.getSpansByType(SpanType.MODEL_INFERENCE).map(clockOf)).toEqual([t0 + 200, t0 + 600]);
+      expect(testExporter.getSpansByType(SpanType.MODEL_STEP).map(clockOf)).toEqual([t0 + 200, t0 + 600]);
+      expect(clockOf(testExporter.getSpansByType(SpanType.MODEL_GENERATION)[0])).toBe(t0 + 200);
+      expect(clockOf(testExporter.getSpansByType(SpanType.AGENT_RUN)[0])).toBe(t0 + 200);
     });
 
-    it('keeps the first generation value on AGENT_RUN when a later generation ends', async () => {
-      const agentSpan = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent run' });
-      const chunks = [
-        { type: 'step-start', payload: {} },
-        { type: 'text-delta', payload: { text: 'a' } },
-        stepFinish('stop'),
-      ];
+    it('counts a whole tool-call chunk as the first chunk', async () => {
+      const t0 = now;
+      const { agentSpan, modelSpan } = startRun();
+      const tracker = new ModelSpanTracker(modelSpan, { agentRunSpan: agentSpan });
 
-      for (const gapMs of [100, 300]) {
-        const modelSpan = agentSpan.createChildSpan({
-          type: SpanType.MODEL_GENERATION,
-          name: `generation ${gapMs}`,
-          attributes: { model: 'gpt-test', provider: 'test', streaming: true },
-        });
-        const tracker = new ModelSpanTracker(modelSpan);
-        await consumeStream(tracker.wrapStream(tickingStream(chunks, gapMs)));
-        tracker.endGeneration();
-      }
+      await consumeStream(
+        tracker.wrapStream(
+          tickingStream(
+            [
+              { type: 'step-start', payload: {} },
+              { type: 'tool-call', payload: { toolCallId: 'c1', toolName: 'weather', args: {} } },
+              stepFinish('tool-calls'),
+            ],
+            100,
+          ),
+        ),
+      );
+      tracker.endGeneration();
       agentSpan.end();
 
-      const generations = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
-      expect(generations.map(s => s.attributes?.timeToFirstChunkMs)).toEqual([100, 300]);
-      const [agentRun] = testExporter.getSpansByType(SpanType.AGENT_RUN);
-      expect(agentRun!.attributes?.timeToFirstChunkMs).toBe(100);
+      expect(clockOf(testExporter.getSpansByType(SpanType.MODEL_INFERENCE)[0])).toBe(t0 + 200);
+      expect(clockOf(testExporter.getSpansByType(SpanType.AGENT_RUN)[0])).toBe(t0 + 200);
     });
 
-    it('leaves TTFT unset everywhere when no chunk was streamed', async () => {
-      const agentSpan = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent run' });
-      const modelSpan = agentSpan.createChildSpan({
-        type: SpanType.MODEL_GENERATION,
-        name: 'generation',
-        attributes: { model: 'gpt-test', provider: 'test', streaming: true },
-      });
+    it('never writes to an agent run it was not given', async () => {
+      const { agentSpan, modelSpan } = startRun();
       const tracker = new ModelSpanTracker(modelSpan);
+
+      await consumeStream(
+        tracker.wrapStream(
+          tickingStream(
+            [{ type: 'step-start', payload: {} }, { type: 'text-delta', payload: { text: 'a' } }, stepFinish('stop')],
+            100,
+          ),
+        ),
+      );
+      tracker.endGeneration();
+      agentSpan.end();
+
+      expect(clockOf(testExporter.getSpansByType(SpanType.MODEL_GENERATION)[0])).toBeDefined();
+      expect(testExporter.getSpansByType(SpanType.AGENT_RUN)[0]!.attributes).not.toHaveProperty('completionStartTime');
+    });
+
+    it('sets nothing when no provider chunk arrived', async () => {
+      const { agentSpan, modelSpan } = startRun();
+      const tracker = new ModelSpanTracker(modelSpan, { agentRunSpan: agentSpan });
       await consumeStream(
         tracker.wrapStream(tickingStream([{ type: 'step-start', payload: {} }, stepFinish('stop')], 100)),
       );
       tracker.endGeneration();
       agentSpan.end();
 
-      for (const type of [SpanType.MODEL_INFERENCE, SpanType.MODEL_GENERATION, SpanType.AGENT_RUN]) {
-        const [span] = testExporter.getSpansByType(type);
-        expect(span!.attributes).not.toHaveProperty('timeToFirstChunkMs');
+      for (const type of [
+        SpanType.MODEL_INFERENCE,
+        SpanType.MODEL_STEP,
+        SpanType.MODEL_GENERATION,
+        SpanType.AGENT_RUN,
+      ]) {
+        expect(clockOf(testExporter.getSpansByType(type)[0])).toBeUndefined();
       }
     });
   });

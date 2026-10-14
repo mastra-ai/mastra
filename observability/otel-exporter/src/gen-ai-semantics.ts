@@ -9,7 +9,7 @@
  * @see https://opentelemetry.io/docs/specs/semconv/registry/attributes/gen-ai/
  */
 
-import { SpanType } from '@mastra/core/observability';
+import { SpanType, getTimeToFirstChunkMs } from '@mastra/core/observability';
 import type {
   AgentRunAttributes,
   AnyExportedSpan,
@@ -37,6 +37,7 @@ import {
   ATTR_GEN_AI_PROVIDER_NAME,
   ATTR_GEN_AI_REQUEST_MODEL,
   ATTR_GEN_AI_RESPONSE_MODEL,
+  ATTR_GEN_AI_RESPONSE_TIME_TO_FIRST_CHUNK,
   ATTR_GEN_AI_REQUEST_MAX_TOKENS,
   ATTR_GEN_AI_REQUEST_TEMPERATURE,
   ATTR_GEN_AI_REQUEST_TOP_P,
@@ -450,6 +451,17 @@ export function getAttributes(span: AnyExportedSpan, options?: GenAISemanticsOpt
           attributes[`mastra.${spanType}.server_version`] = mcpAttrs.serverVersion;
         }
       }
+    }
+  }
+
+  // Time to first chunk, derived from the span's own start. OTel defines it for the
+  // provider call only; the higher levels are Mastra-specific.
+  const timeToFirstChunkMs = getTimeToFirstChunkMs(span);
+  if (timeToFirstChunkMs !== undefined) {
+    if (span.type === SpanType.MODEL_INFERENCE) {
+      attributes[ATTR_GEN_AI_RESPONSE_TIME_TO_FIRST_CHUNK] = timeToFirstChunkMs / 1000;
+    } else {
+      attributes['mastra.time_to_first_chunk_ms'] = timeToFirstChunkMs;
     }
   }
 

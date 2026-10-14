@@ -1005,10 +1005,6 @@ export class TestExporter extends BaseExporter {
       if (key === 'createdAt' && typeof value === 'number') {
         return '<date>';
       }
-      // Wall-clock durations differ per run; only their presence is stable.
-      if (key === 'timeToFirstChunkMs' && typeof value === 'number') {
-        return '<duration>';
-      }
       if (typeof value === 'string') {
         // Special handling for traceId - use the shared traceIdMap (handles both UUID and 32-char hex formats)
         if (key === 'traceId' && (uuidRegex.test(value) || hexId32Regex.test(value))) {

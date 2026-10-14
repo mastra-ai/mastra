@@ -120,6 +120,29 @@ describe('getAttributes - tool attributes', () => {
   });
 });
 
+describe('getAttributes - time to first chunk', () => {
+  const startTime = new Date('2026-01-01T00:00:00.000Z');
+  const completionStartTime = new Date('2026-01-01T00:00:00.250Z');
+
+  it('exports the OTel attribute in seconds on the provider call', () => {
+    const span = { ...createModelInferenceSpan({ completionStartTime }), startTime };
+    expect(getAttributes(span)['gen_ai.response.time_to_first_chunk']).toBe(0.25);
+  });
+
+  it('exports a mastra attribute in milliseconds on higher-level spans', () => {
+    for (const type of [SpanType.MODEL_STEP, SpanType.MODEL_GENERATION, SpanType.AGENT_RUN]) {
+      const span = { ...createSpan(type), startTime, attributes: { completionStartTime } } as AnyExportedSpan;
+      const attrs = getAttributes(span);
+      expect(attrs['mastra.time_to_first_chunk_ms']).toBe(250);
+      expect(attrs).not.toHaveProperty('gen_ai.response.time_to_first_chunk');
+    }
+  });
+
+  it('exports nothing when no chunk was streamed', () => {
+    expect(getAttributes(createModelInferenceSpan({}))).not.toHaveProperty('gen_ai.response.time_to_first_chunk');
+  });
+});
+
 describe('getAttributes - token usage', () => {
   it('should extract basic tokens', () => {
     const span = createModelInferenceSpan({

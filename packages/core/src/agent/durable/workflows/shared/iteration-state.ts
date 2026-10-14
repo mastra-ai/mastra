@@ -160,6 +160,6 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     agentSpanData: currentState.agentSpanData,
     modelSpanData: currentState.modelSpanData,
     // First inference wins; later iterations never overwrite it.
-    timeToFirstChunkMs: currentState.timeToFirstChunkMs ?? executionOutput.timeToFirstChunkMs,
+    completionStartTime: currentState.completionStartTime ?? executionOutput.completionStartTime,
   };
 }

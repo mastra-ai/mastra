@@ -185,10 +185,10 @@ export interface AgentRunAttributes extends AIBaseAttributes {
     metadata?: unknown;
   };
   /**
-   * Time to first chunk in milliseconds, copied from the first
-   * MODEL_GENERATION span of this run. Absent when no model streamed a chunk.
+   * When the run's model streamed its first chunk; copied from the first
+   * MODEL_GENERATION of the agent's own loop. Absent when no chunk was streamed.
    */
-  timeToFirstChunkMs?: number;
+  completionStartTime?: Date;
 }
 
 /**
@@ -341,11 +341,6 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
    * Only applicable for streaming responses.
    */
   completionStartTime?: Date;
-  /**
-   * Time to first chunk in milliseconds. Equals the first MODEL_INFERENCE
-   * span's `timeToFirstChunkMs`. Absent when no chunk was streamed.
-   */
-  timeToFirstChunkMs?: number;
   /** Actual model used in the response (may differ from request model) */
   responseModel?: string;
   /** Unique identifier for the response */
@@ -370,6 +365,8 @@ export interface ModelStepAttributes extends AIBaseAttributes {
   isContinued?: boolean;
   /** Result warnings */
   warnings?: Record<string, any>;
+  /** When the step's first inference streamed its first chunk. Absent when no chunk was streamed. */
+  completionStartTime?: Date;
 }
 
 /**
@@ -402,11 +399,6 @@ export interface ModelInferenceAttributes extends AIBaseAttributes {
    * Only applicable for streaming responses.
    */
   completionStartTime?: Date;
-  /**
-   * Time to first chunk in milliseconds: `completionStartTime` minus the span
-   * start. Absent when no chunk was streamed.
-   */
-  timeToFirstChunkMs?: number;
   /** Result warnings */
   warnings?: Record<string, any>;
   /** Actual model used in the response (may differ from request model) */
@@ -1583,7 +1575,16 @@ export interface BridgeSpanContext {
  */
 export interface AIModelGenerationSpan extends Span<SpanType.MODEL_GENERATION> {
   /** Create a ModelSpanTracker for tracking model execution steps and chunks */
-  createTracker(): IModelSpanTracker | undefined;
+  createTracker(options?: ModelSpanTrackerOptions): IModelSpanTracker | undefined;
+}
+
+export interface ModelSpanTrackerOptions {
+  /**
+   * The AGENT_RUN span that owns this generation. Only the agent's main loop
+   * passes it, so the first chunk's `completionStartTime` lands on that span
+   * and never on an outer agent's run (nested agents, title generation).
+   */
+  agentRunSpan?: Span<SpanType.AGENT_RUN>;
 }
 
 /**
@@ -1656,11 +1657,11 @@ export interface IModelSpanTracker {
   endGeneration(options?: EndGenerationOptions): void;
   updateGeneration(options: UpdateSpanOptions<SpanType.MODEL_GENERATION>): void;
   /**
-   * Time to first chunk of the first inference seen by this tracker, in ms.
+   * When the first inference seen by this tracker streamed its first chunk.
    * Durable execution reads it per step and carries it to the final
    * `endGeneration`, since that step uses a fresh tracker.
    */
-  getTimeToFirstChunkMs?(): number | undefined;
+  getCompletionStartTime?(): Date | undefined;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
   startStep(payload?: StepStartPayload): void;
   updateStep?(payload?: StepStartPayload): void;

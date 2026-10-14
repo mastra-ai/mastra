@@ -1066,6 +1066,9 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               const reg = getRunRegistryEntry(initData.runId, mastra as Mastra | undefined);
               const modelSpanData = reg?.resumeModelSpanData ?? initData.modelSpanData;
               const agentSpanData = reg?.resumeAgentSpanData ?? initData.agentSpanData;
+              // Rebuilt spans end from snapshots taken at run start, so the clock the
+              // steps carried through the loop state is applied here.
+              const completionStartTime = state.completionStartTime ? new Date(state.completionStartTime) : undefined;
               if (observability) {
                 if (modelSpanData) {
                   const modelSpan = observability.rebuildSpan(
@@ -1086,9 +1089,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                     attributes: {
                       finishReason: finalOutput.stepResult?.reason,
                       ...(usageIncomplete ? { usageIncomplete: true } : {}),
-                      ...(state.timeToFirstChunkMs !== undefined
-                        ? { timeToFirstChunkMs: state.timeToFirstChunkMs }
-                        : {}),
+                      ...(completionStartTime ? { completionStartTime } : {}),
                     },
                     usage: usageIncomplete ? calculateObservedUsage(state.accumulatedSteps) : state.accumulatedUsage,
                   });
@@ -1097,10 +1098,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                   const agentSpan = observability.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
                   agentSpan?.end({
                     output: { text: finalText },
-                    // Rebuilt spans have no parent chain, so the tracker cannot stamp the root; do it here.
-                    ...(state.timeToFirstChunkMs !== undefined
-                      ? { attributes: { timeToFirstChunkMs: state.timeToFirstChunkMs } }
-                      : {}),
+                    ...(completionStartTime ? { attributes: { completionStartTime } } : {}),
                   });
                 }
               }

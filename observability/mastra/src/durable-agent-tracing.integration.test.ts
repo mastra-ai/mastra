@@ -171,6 +171,9 @@ async function runToCompletion(wrapped: any, prompt: string, testExporter: TestE
 
 const idOf = (s: any) => s.id ?? s.spanId;
 const parentOf = (s: any) => s.parentSpanId;
+const clockOf = (s: any) =>
+  s?.attributes?.completionStartTime ? +new Date(s.attributes.completionStartTime) : undefined;
+const byStart = (spans: any[]) => [...spans].sort((a, b) => +new Date(a.startTime) - +new Date(b.startTime));
 
 describe('durable-agent observability — full span tree (real exporter)', () => {
   let testExporter: TestExporter;
@@ -224,68 +227,41 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
     expect(testExporter.getIncompleteSpans()).toHaveLength(0);
   });
 
-  it('DurableAgent tool call: generation and AGENT_RUN carry the first inference TTFT', async () => {
-    // TTFT is captured on streamed content deltas, so the tool-calling first
-    // step says a few words before it calls the tool.
-    let call = 0;
-    const model = new MockLanguageModelV2({
-      doStream: async () => ({
-        stream: convertArrayToReadableStream(
-          call++ === 0
-            ? [
-                { type: 'stream-start', warnings: [] },
-                { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-                { type: 'text-start', id: 'text-0' },
-                { type: 'text-delta', id: 'text-0', delta: 'Checking.' },
-                { type: 'text-end', id: 'text-0' },
-                {
-                  type: 'tool-call',
-                  toolCallType: 'function',
-                  toolCallId: 'call-1',
-                  toolName: 'get_weather',
-                  input: JSON.stringify({ city: 'Paris' }),
-                  providerExecuted: false,
-                },
-                {
-                  type: 'finish',
-                  finishReason: 'tool-calls',
-                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-                },
-              ]
-            : [
-                { type: 'stream-start', warnings: [] },
-                { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
-                { type: 'text-start', id: 'text-1' },
-                { type: 'text-delta', id: 'text-1', delta: 'It is 21C in Paris.' },
-                { type: 'text-end', id: 'text-1' },
-                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 15, outputTokens: 5, totalTokens: 20 } },
-              ],
-        ),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-      }),
-    });
+  it('DurableAgent tool call: step, generation and AGENT_RUN carry the first inference clock', async () => {
     const agent = new Agent({
       id: 'a',
       name: 'a',
       instructions: 'use the tool',
-      model: model as any,
+      model: toolThenTextModel('get_weather', { city: 'Paris' }, 'It is 21C in Paris.') as any,
       tools: { get_weather: weatherTool },
     });
     const { wrapped } = buildMastra(testExporter, agent, 'durable');
     await runToCompletion(wrapped, 'weather in paris?', testExporter);
 
-    // The final step ends the generation from a fresh tracker, so the value must
-    // survive the loop state; the rebuilt AGENT_RUN has no parent chain either.
-    const inferences = testExporter
-      .getSpansByType('model_inference' as any)
-      .sort((a: any, b: any) => +new Date(a.startTime) - +new Date(b.startTime));
-    const first = (inferences[0] as any).attributes?.timeToFirstChunkMs;
+    // The final step ends the generation and AGENT_RUN from snapshots taken at
+    // run start, so the clock must survive the loop state. The first step's only
+    // provider chunk is a whole tool-call, which counts as the first chunk.
+    const inferences = byStart(testExporter.getSpansByType('model_inference' as any));
+    const steps = byStart(testExporter.getSpansByType('model_step' as any));
+    expect(inferences).toHaveLength(2);
+    const first = clockOf(inferences[0]);
     expect(first).toBeTypeOf('number');
-    const [generation] = testExporter.getSpansByType('model_generation' as any);
-    expect((generation as any).attributes?.timeToFirstChunkMs).toBe(first);
-    const [agentRun] = testExporter.getSpansByType('agent_run' as any);
-    expect((agentRun as any).attributes?.timeToFirstChunkMs).toBe(first);
+    expect(clockOf(inferences[1])).toBeGreaterThan(first!);
+    expect(steps.map(clockOf)).toEqual(inferences.map(clockOf));
+    expect(clockOf(testExporter.getSpansByType('model_generation' as any)[0])).toBe(first);
+    expect(clockOf(testExporter.getSpansByType('agent_run' as any)[0])).toBe(first);
+  });
+
+  it('DurableAgent simple run: generation and AGENT_RUN carry the inference clock', async () => {
+    const agent = new Agent({ id: 'a', name: 'a', instructions: 'x', model: textModel('Hello') as any });
+    const { wrapped } = buildMastra(testExporter, agent, 'durable');
+    await runToCompletion(wrapped, 'hi', testExporter);
+
+    const first = clockOf(testExporter.getSpansByType('model_inference' as any)[0]);
+    expect(first).toBeTypeOf('number');
+    expect(clockOf(testExporter.getSpansByType('model_step' as any)[0])).toBe(first);
+    expect(clockOf(testExporter.getSpansByType('model_generation' as any)[0])).toBe(first);
+    expect(clockOf(testExporter.getSpansByType('agent_run' as any)[0])).toBe(first);
   });
 
   it('DurableAgent fatal model error: root, generation, step AND inference all closed (no dangling)', async () => {
