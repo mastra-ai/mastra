@@ -30,10 +30,11 @@ export interface WriteBatch {
 }
 
 /**
- * How long a released claim or retired fence is kept before the store expires
- * it. Expiring is safe: a later claim's generation comes from the clock, so it
- * still outranks every fence the expired record issued, and a write checked
- * against a missing record is rejected. Claim and raise clear the expiry.
+ * A claim expires after this long without a claim, renewal or release, and a
+ * fence this long after it was retired. A running execution renews every few
+ * seconds, and a raised fence never expires. Expiring is safe: a later claim's
+ * generation comes from the clock, so it still outranks every fence the expired
+ * record issued, and a write checked against a missing record is rejected.
  */
 export const RUN_CLAIM_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -56,7 +57,7 @@ local function owner(flag, t)
 end
 `;
 
-// ARGV: ownerId, leaseMs, force ('1' or '0'), expectedGeneration ('' when unset)
+// ARGV: ownerId, leaseMs, force ('1' or '0'), expectedGeneration ('' when unset), retentionMs
 const CLAIM = `${LIB}
 local t = now()
 local stamp = string.format('%d', t)
@@ -68,6 +69,7 @@ if not generation then
   -- The first generation comes from the store's clock, so a claim after this
   -- hash is removed still outranks a surviving fence.
   redis.call('HSET', KEYS[1], 'generation', string.format('%d', math.max(1, t)), 'ownerId', ARGV[1], 'leaseExpiresAt', lease, 'updatedAt', stamp)
+  redis.call('PEXPIRE', KEYS[1], ARGV[5])
   return owner(1, t)
 end
 if expected ~= '' and generation ~= tonumber(expected) then return owner(0, t) end
@@ -76,16 +78,17 @@ if ARGV[3] ~= '1' then
   if expires and expires > t then return owner(0, t) end
 end
 redis.call('HSET', KEYS[1], 'generation', string.format('%d', generation + 1), 'ownerId', ARGV[1], 'leaseExpiresAt', lease, 'updatedAt', stamp)
-redis.call('PERSIST', KEYS[1])
+redis.call('PEXPIRE', KEYS[1], ARGV[5])
 return owner(1, t)
 `;
 
-// ARGV: generation, ownerId, leaseMs
+// ARGV: generation, ownerId, leaseMs, retentionMs
 const RENEW = `${LIB}
 local t = now()
 local r = redis.call('HMGET', KEYS[1], 'generation', 'ownerId', 'leaseExpiresAt')
 if tonumber(r[1]) ~= tonumber(ARGV[1]) or r[2] ~= ARGV[2] or not r[3] then return owner(0, t) end
 redis.call('HSET', KEYS[1], 'leaseExpiresAt', string.format('%d', t + tonumber(ARGV[3])), 'updatedAt', string.format('%d', t))
+redis.call('PEXPIRE', KEYS[1], ARGV[4])
 return owner(1, t)
 `;
 
@@ -180,6 +183,7 @@ export async function claimRunOwnership(
     String(leaseMs),
     force ? '1' : '0',
     expectedGeneration === undefined ? '' : String(expectedGeneration),
+    String(RUN_CLAIM_RETENTION_MS),
   ]);
   return applied ? { acquired: true, record: record! } : { acquired: false, record };
 }
@@ -192,6 +196,7 @@ export async function renewRunOwnership(
     String(fence.generation),
     fence.ownerId,
     String(leaseMs),
+    String(RUN_CLAIM_RETENTION_MS),
   ]);
   return applied ? { renewed: true, record: record! } : { renewed: false, record };
 }

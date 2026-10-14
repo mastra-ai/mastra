@@ -23,7 +23,7 @@ describe('Valkey run fencing', () => {
     expect((await store.getStore('memory'))?.supportsRunFencing()).toBe(true);
   });
 
-  it('expires released claims and retired fences, but not active ones', async () => {
+  it('expires idle claims and retired fences, but not raised fences', async () => {
     const client = await GlideClient.createClient({
       addresses: [{ host: 'localhost', port: 6382 }],
       credentials: { password: 'valkey_password' },
@@ -35,18 +35,24 @@ describe('Valkey run fencing', () => {
       const claimKey = runClaimKey(TABLE_WORKFLOW_RUN_OWNERS, runId);
       const fenceKey = runClaimKey(TABLE_MEMORY_RUN_FENCES, runId);
 
+      const retained = async (key: string) =>
+        expect(await client.pttl(key)).toBeGreaterThan(RUN_CLAIM_RETENTION_MS - 60_000);
+
+      // A claim that is never released (its execution crashed) still expires.
       const first = await workflows.claimRunOwnership({ runId, ownerId: 'a', leaseMs: 30_000 });
-      expect(await client.pttl(claimKey)).toBe(-1);
+      await retained(claimKey);
+      await workflows.renewRunOwnership({ runId, generation: first.record!.generation, ownerId: 'a', leaseMs: 30_000 });
+      await retained(claimKey);
       await workflows.releaseRunOwnership({ runId, generation: first.record!.generation, ownerId: 'a' });
-      expect(await client.pttl(claimKey)).toBeGreaterThan(RUN_CLAIM_RETENTION_MS - 60_000);
+      await retained(claimKey);
       const second = await workflows.claimRunOwnership({ runId, ownerId: 'b', leaseMs: 30_000 });
-      expect(await client.pttl(claimKey)).toBe(-1);
+      await retained(claimKey);
 
       const fence = { runId, generation: second.record!.generation, ownerId: 'b' };
       await memory.raiseRunFence(fence);
       expect(await client.pttl(fenceKey)).toBe(-1);
       await memory.retireRunFence(fence);
-      expect(await client.pttl(fenceKey)).toBeGreaterThan(RUN_CLAIM_RETENTION_MS - 60_000);
+      await retained(fenceKey);
       await memory.raiseRunFence(fence);
       expect(await client.pttl(fenceKey)).toBe(-1);
     } finally {
