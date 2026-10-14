@@ -97,6 +97,7 @@ const localRecoveryClaims = new Map<string, string>();
 const RECOVER_ALREADY_IN_PROGRESS_ERROR_ID = 'DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS';
 const RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID = 'DURABLE_AGENT_RECOVER_SNAPSHOT_NOT_FOUND';
 const RECOVER_RUN_SUSPENDED_ERROR_ID = 'DURABLE_AGENT_RECOVER_RUN_SUSPENDED';
+const RECOVER_RUN_NOT_ACTIVE_ERROR_ID = 'DURABLE_AGENT_RECOVER_RUN_NOT_ACTIVE';
 /** Stores already reported as unable to fence run writes, so each is warned about once per process. */
 const unfencedStoresWarned = new WeakSet<WorkflowsStorage | MemoryStorage>();
 
@@ -115,6 +116,16 @@ function recoverySkip(error: unknown): Pick<DurableAgentRecoveredRun, 'reason' |
     default:
       return undefined;
   }
+}
+
+/** Whether a failed owned recovery should terminate observers of the run. */
+function shouldReportRecoveryFailure(error: unknown): boolean {
+  const errorId = (error as { id?: unknown })?.id;
+  return (
+    errorId !== RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID &&
+    errorId !== RECOVER_RUN_SUSPENDED_ERROR_ID &&
+    errorId !== RECOVER_RUN_NOT_ACTIVE_ERROR_ID
+  );
 }
 
 interface RehydratedRecoveryState {
@@ -1022,7 +1033,7 @@ export class DurableAgent<
     if (!restartable) {
       throw new MastraError({
         // A suspended run is not orphaned: it waits for resume().
-        id: snapshot.status === 'suspended' ? RECOVER_RUN_SUSPENDED_ERROR_ID : 'DURABLE_AGENT_RECOVER_RUN_NOT_ACTIVE',
+        id: snapshot.status === 'suspended' ? RECOVER_RUN_SUSPENDED_ERROR_ID : RECOVER_RUN_NOT_ACTIVE_ERROR_ID,
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
         text:
@@ -3748,7 +3759,10 @@ export class DurableAgent<
       // Memory is resolved from the rehydrated context; rehydration does not write to it.
       await this.#coverMemory(executionFence, recoveryState.requestContext, true);
     } catch (error) {
-      await executionFence?.settle(async () => {});
+      const settlement = await executionFence?.settle(async () => {});
+      if (executionFence && settlement !== 'superseded' && shouldReportRecoveryFailure(error)) {
+        await this.#reportRecoveryFailure(runId, error, executionFence.generation);
+      }
       releaseLocalRecovery();
       throw error;
     }
@@ -3810,7 +3824,10 @@ export class DurableAgent<
     try {
       workflow = this.getWorkflow();
     } catch (error) {
-      await executionFence.settle(async () => {});
+      const settlement = await executionFence.settle(async () => {});
+      if (settlement !== 'superseded' && shouldReportRecoveryFailure(error)) {
+        await this.#reportRecoveryFailure(runId, error, executionFence.generation);
+      }
       releaseLocalRecovery();
       throw error;
     }
