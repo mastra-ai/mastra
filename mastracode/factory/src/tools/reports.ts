@@ -65,7 +65,15 @@ export async function hasFinalReport(
     recipientThreadId,
     since,
     kinds,
-  }: { senderSessionId: string; recipientThreadId: string; since: Date; kinds: readonly string[] },
+    agentOnly = false,
+  }: {
+    senderSessionId: string;
+    recipientThreadId: string;
+    since: Date;
+    kinds: readonly string[];
+    /** Ignore reports Factory sent on the session's behalf (the backstop). */
+    agentOnly?: boolean;
+  },
 ): Promise<boolean> {
   const records = await notifications.listNotifications({
     threadId: recipientThreadId,
@@ -76,6 +84,7 @@ export async function hasFinalReport(
     if (record.updatedAt < since) break;
     if (
       record.attributes?.['from-session'] === senderSessionId &&
+      !(agentOnly && record.attributes?.backstop === 'true') &&
       // A reply carrying a final status counts like the report itself.
       (kinds.includes(record.kind) ||
         (record.kind === 'reply' &&
@@ -211,18 +220,20 @@ export async function sendRunEndReport(
       ...(outcome.status === 'blocked' && outcome.toolName ? { 'parked-tool': outcome.toolName } : {}),
     },
   });
-  const report = (recipient: FactoryDeliveryTarget, reportKinds: string[]) =>
+  const report = (recipient: FactoryDeliveryTarget, reportKinds: string[], agentOnly = false) =>
     hasFinalReport(reporting.notifications, {
       senderSessionId: sender.sessionId,
       recipientThreadId: recipient.threadId,
       since,
       kinds: reportKinds,
+      agentOnly,
     });
   let waiting = outcome.status === 'blocked';
   const deliveries: FactoryDeliveryResult[] = [];
   for (const recipient of recipients) {
     if (await report(recipient, kinds)) continue;
-    if (outcome.status === 'done' && (await report(recipient, ['blocked']))) {
+    // Only the agent's own `blocked` means it ended its turn to wait; a backstop `blocked` from a parked run doesn't.
+    if (outcome.status === 'done' && (await report(recipient, ['blocked'], true))) {
       waiting = true;
       continue;
     }

@@ -425,6 +425,28 @@ describe('the side session run-end backstop', () => {
     expect(reports).toHaveLength(0);
   });
 
+  it('reports done once when a parked run is answered and the resumed run completes', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-10-14T12:00:00Z'));
+      const { session, reports } = await started();
+      session.emit({ type: 'tool_suspended', toolName: 'ask_user', toolCallId: 'call-1' } as AgentControllerEvent);
+      session.emit({ type: 'agent_end', reason: 'suspended' } as AgentControllerEvent);
+      // The backstop's own `blocked` lands after the run ended, inside the next run's window.
+      vi.setSystemTime(new Date('2026-10-14T12:00:05Z'));
+      await vi.waitFor(() => expect(reports).toHaveLength(1));
+      expect(reports[0]!.input).toMatchObject({ kind: 'blocked' });
+
+      vi.setSystemTime(new Date('2026-10-14T12:01:00Z'));
+      session.emit({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
+      await vi.waitFor(() => expect(reports).toHaveLength(2));
+      expect(reports[1]!.input).toMatchObject({ kind: 'done', attributes: { backstop: 'true' } });
+      await vi.waitFor(() => expect(session.listenerCount()).toBe(0));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('starts the side session on the parent session’s repository', async () => {
     const env = await setup();
     const result = (await env.start({ prompt: 'Go.' })) as { sessionId: string };
