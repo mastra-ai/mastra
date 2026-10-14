@@ -312,6 +312,8 @@ export interface StepStartPayload {
   messageId?: string;
   /** Epoch milliseconds sampled immediately before the model provider call. Absent when no provider call occurred. */
   startedAt?: number;
+  modelId?: string;
+  provider?: string;
   request: {
     body?: string;
     [key: string]: unknown;
@@ -1225,8 +1227,7 @@ export type MastraStreamTransform<OUTPUT = undefined> = () => TransformStream<Ch
 
 /** @experimental This API may change in a future release. */
 export type MastraStreamTransformOptions<OUTPUT = undefined> =
-  | MastraStreamTransform<OUTPUT>
-  | readonly MastraStreamTransform<OUTPUT>[];
+  MastraStreamTransform<OUTPUT> | readonly MastraStreamTransform<OUTPUT>[];
 
 export type MastraModelOutputOptions<OUTPUT = undefined> = {
   runId: string;

@@ -336,6 +336,13 @@ export class SessionRunEngine {
     message.content.metadata.errorMessage = errorMessage;
   }
 
+  private stampResponseModel(message: MastraDBMessage, stepStart: StreamChunkPayload): void {
+    const modelId = getString(stepStart.modelId);
+    if (!modelId) return;
+    const provider = getString(stepStart.provider);
+    message.content.metadata = { ...message.content.metadata, modelId, ...(provider ? { provider } : {}) };
+  }
+
   private startCurrentMessage(state: StreamState): boolean {
     if (state.messageStarted) return false;
     this.#session.emit({ type: 'message_start', message: structuredClone(state.currentMessage) });
@@ -671,7 +678,8 @@ export class SessionRunEngine {
         // the next, so every id after the first marks that boundary — rotate
         // with it, or the persisted tail comes back as a duplicate on reload.
         // An emitted id never changes, and an id binds to one message only.
-        const messageId = getString(getPayload(chunk).messageId);
+        const payload = getPayload(chunk);
+        const messageId = getString(payload.messageId);
         if (!messageId || state.offeredResponseIds.has(messageId)) break;
         // A resumed tool can finish before the first model step starts. Seal
         // that tool-only prelude without changing its already observable id.
@@ -689,6 +697,7 @@ export class SessionRunEngine {
         if (!this.isCurrentMessageObserved(state)) {
           state.currentMessage.id = messageId;
         }
+        this.stampResponseModel(state.currentMessage, payload);
         break;
       }
 

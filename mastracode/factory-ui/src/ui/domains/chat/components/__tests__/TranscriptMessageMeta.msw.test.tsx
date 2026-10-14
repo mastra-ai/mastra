@@ -124,4 +124,24 @@ describe('message meta', () => {
     expect(times).toHaveLength(1);
     expect(screen.getByRole('group', { name: 'Tool: read' })).toContainElement(times[0]);
   });
+
+  it('names the model under a finished reply, once however many messages it took', () => {
+    const stampedStep = (id: string, text: string): TimelineEntry => ({
+      kind: 'message',
+      id,
+      message: {
+        id,
+        role: 'assistant',
+        createdAt: CREATED_AT,
+        content: { format: 2, parts: [{ type: 'text', text }], metadata: { modelId: 'claude-opus-4-6' } },
+      },
+    });
+    renderEntries([
+      messageEntry('user-1', 'user', [{ type: 'text', text: 'ship it' }]),
+      stampedStep('assistant-1', 'reading the file'),
+      stampedStep('assistant-2', 'shipped'),
+    ]);
+
+    expect(screen.getAllByText('Claude Opus 4.6')).toHaveLength(1);
+  });
 });

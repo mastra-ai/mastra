@@ -14,9 +14,16 @@ import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
 
 import { channelOrigin, messageAuthor } from '../services/message-author';
+import { formatModelName } from '../services/model-name';
 import type { MessageEntry, SuspensionPrompt } from '../services/transcript';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
-import { Message, MessageActions, MessageCopyButton, MessageTimestamp } from '@mastra/playground-ui/components/Message';
+import {
+  Message,
+  MessageActions,
+  MessageCopyButton,
+  MessageMetadata,
+  MessageTimestamp,
+} from '@mastra/playground-ui/components/Message';
 import { ChannelOriginBadge, SenderAvatar } from './MessageSender';
 import { ToolCard } from './tool/ToolCard';
 import { ToolGroup } from './tool/ToolGroup';
@@ -82,6 +89,8 @@ export function MessageBubble({
   const steeringStatus = steeringLabel(entry);
   const steeringPending = entry.deliveryStatus === 'pending';
   const steeringFailed = entry.deliveryStatus === 'failed';
+  const modelId = entry.message.content.metadata?.modelId;
+  const replyModelId = meta && typeof modelId === 'string' ? modelId : undefined;
   const messageActions = meta ? (
     <MessageActions>
       <MessageCopyButton text={meta} />
@@ -117,7 +126,17 @@ export function MessageBubble({
       </Message>
     ),
     Assistant: ({ children }) => (
-      <Message from="assistant" footer={messageActions}>
+      <Message
+        from="assistant"
+        footer={
+          messageActions && (
+            <div className="flex flex-wrap items-center gap-2">
+              {replyModelId && <MessageMetadata title={replyModelId}>{formatModelName(replyModelId)}</MessageMetadata>}
+              {messageActions}
+            </div>
+          )
+        }
+      >
         {children}
       </Message>
     ),
