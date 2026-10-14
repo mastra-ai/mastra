@@ -414,7 +414,14 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         await params.setState(nextState);
         workflowState = nextState;
       };
-      const llmOutput = await executeLLM({ ...params, setState });
+      // Copy descriptors rather than spreading: spreading would invoke the lazy
+      // `writer` getter and allocate a ToolStream on every LLM step.
+      const llmOutput = await executeLLM(
+        Object.defineProperties({} as typeof params, {
+          ...Object.getOwnPropertyDescriptors(params),
+          setState: { value: setState, enumerable: true, configurable: true, writable: true },
+        }),
+      );
       if (llmOutput && llmOutput.stepResult.reason === 'abort') {
         const initData = params.getInitData() as IterationState;
         // Preserve transcript, usage and span bookkeeping, then finish only this
