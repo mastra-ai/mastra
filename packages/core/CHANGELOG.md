@@ -1,5 +1,17 @@
 # @mastra/core
 
+## 1.78.0-alpha.2
+
+### Patch Changes
+
+- Disabled workspace tools no longer add setup work on every agent turn. Agents with workspace tools turned off now start each turn faster and allocate less memory. Fixes #26401. ([#26657](https://github.com/mastra-ai/mastra/pull/26657))
+
+- Fixed Amazon Bedrock India inference profiles (`in.` prefix, e.g. `in.anthropic.claude-sonnet-5`) sending `temperature` to models that reject it, which returned a 400. They now resolve model capabilities like the other geography prefixes. Fixes #26387. ([#26982](https://github.com/mastra-ai/mastra/pull/26982))
+
+- Fixed step scorers in nested workflows so their scores are saved. Before, scores from steps inside a child workflow were silently dropped. ([#26984](https://github.com/mastra-ai/mastra/pull/26984))
+
+- Fixed new conversation failures when ToolSearchProcessor uses context storage with memory. ([#26902](https://github.com/mastra-ai/mastra/pull/26902))
+
 ## 1.78.0-alpha.1
 
 ### Minor Changes
