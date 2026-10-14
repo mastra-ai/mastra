@@ -701,6 +701,26 @@ const sidebars = {
       label: 'Overview',
     },
     {
+      type: 'doc',
+      id: 'mastra-platform/deploy',
+      label: 'Deploy',
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/environments',
+      label: 'Environments',
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/system-environment-variables',
+      label: 'System environment variables',
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/regions',
+      label: 'Regions',
+    },
+    {
       type: 'category',
       label: 'Connect',
       collapsed: true,
@@ -729,26 +749,6 @@ const sidebars = {
           label: 'Channels',
         },
       ],
-    },
-    {
-      type: 'doc',
-      id: 'mastra-platform/deploy',
-      label: 'Deploy',
-    },
-    {
-      type: 'doc',
-      id: 'mastra-platform/environments',
-      label: 'Environments',
-    },
-    {
-      type: 'doc',
-      id: 'mastra-platform/system-environment-variables',
-      label: 'System environment variables',
-    },
-    {
-      type: 'doc',
-      id: 'mastra-platform/regions',
-      label: 'Regions',
     },
     {
       type: 'doc',
