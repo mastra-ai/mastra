@@ -1788,11 +1788,19 @@ describe('trace-query discovery contract', () => {
     expect(
       getTraceQueryFieldsArgsSchema.safeParse({ ...discoveryArgs, limit: TRACE_QUERY_DISCOVERY_MAX_LIMIT + 1 }).success,
     ).toBe(false);
+  });
+
+  it('accepts discovery time ranges of any positive width', () => {
+    const wide = { from: '2025-09-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+    expect(getTraceQueryFieldsArgsSchema.safeParse({ ...discoveryArgs, timeRange: wide }).success).toBe(true);
     expect(
-      getTraceQueryFieldsArgsSchema.safeParse({
-        ...discoveryArgs,
-        timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00.001Z' },
-      }).success,
+      getTraceQueryValuesArgsSchema.safeParse({ ...discoveryArgs, path: 'environment', timeRange: wide }).success,
+    ).toBe(true);
+
+    const empty = { from: wide.to, to: wide.to };
+    expect(getTraceQueryFieldsArgsSchema.safeParse({ ...discoveryArgs, timeRange: empty }).success).toBe(false);
+    expect(
+      getTraceQueryValuesArgsSchema.safeParse({ ...discoveryArgs, path: 'environment', timeRange: empty }).success,
     ).toBe(false);
   });
 
