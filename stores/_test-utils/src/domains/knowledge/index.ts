@@ -501,6 +501,23 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       ]);
     });
 
+    it('rejects blank node names on create and rename without writing', async () => {
+      const before = await store.listNodes({ scopeIds: [PROJECT_SCOPE_ID] });
+      for (const name of ['', '   ', '\t\n']) {
+        await expect(store.createNode({ name, scopeIds: [PROJECT_SCOPE_ID] })).rejects.toThrow(
+          'Knowledge node names must not be blank.',
+        );
+      }
+      expect(await store.listNodes({ scopeIds: [PROJECT_SCOPE_ID] })).toEqual(before);
+
+      const node = await store.createNode({ name: 'Named subject', scopeIds: [PROJECT_SCOPE_ID] });
+      await expect(store.updateNode({ id: node.id, version: node.version, name: '  ' })).rejects.toThrow(
+        'Knowledge node names must not be blank.',
+      );
+      expect(await store.getNode(node.id)).toEqual(node);
+      expect(await store.getNodeByName({ name: 'Named subject', scopeIds: [PROJECT_SCOPE_ID] })).toEqual(node);
+    });
+
     it('rejects creating a record with no scopes', async () => {
       const node = await store.createNode({ name: 'Unscoped subject', scopeIds: [PROJECT_SCOPE_ID] });
 
