@@ -1,10 +1,10 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
 
 const FACTORY_ID = 'fp-1';
@@ -30,7 +30,17 @@ const wardSession = {
   updatedAt: '2026-10-01T00:00:00.000Z',
 };
 
-function openWardSessionAs(viewerUserId: string) {
+const wardSessionWithoutProfile = { ...wardSession, owner: undefined };
+const USER_THREAD_PATH = `/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`;
+const BOARD_THREAD_PATH = `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/thread-review-1`;
+
+function openWardSessionAs(
+  viewerUserId: string,
+  {
+    session = wardSession,
+    path = USER_THREAD_PATH,
+  }: { session?: typeof wardSession | typeof wardSessionWithoutProfile; path?: string } = {},
+) {
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: viewerUserId } }),
@@ -60,10 +70,10 @@ function openWardSessionAs(viewerUserId: string) {
       HttpResponse.json({ workItems: [] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
-      HttpResponse.json({ sessions: [wardSession] }),
+      HttpResponse.json({ sessions: [session] }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
-    http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, () => HttpResponse.json({ session: wardSession })),
+    http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, () => HttpResponse.json({ session })),
     http.post(`${AC}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: SESSION_ID, threadId: SESSION_ID }),
     ),
@@ -90,22 +100,41 @@ function openWardSessionAs(viewerUserId: string) {
     http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
   );
   const router = createMemoryRouter(createAppRoutes(), {
-    initialEntries: [`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`],
+    initialEntries: [path],
   });
-  renderWithProviders(<RouterProvider router={router} />);
+  return renderWithProviders(<RouterProvider router={router} />).client;
 }
 
-describe("ThreadPage in a teammate's session", () => {
-  it('names whose session the teammate is steering', async () => {
-    openWardSessionAs('user-damien');
+describe("a teammate's Factory session", () => {
+  describe('when a teammate opens it', () => {
+    it('names the owner inside the composer region', async () => {
+      openWardSessionAs('user-damien');
 
-    expect(await screen.findByText('You’re steering Ward Peeters’s session')).toBeInTheDocument();
+      const composer = await screen.findByRole('region', { name: 'Thread composer' });
+      expect(await within(composer).findByText('You’re steering Ward Peeters’s session')).toBeInTheDocument();
+    });
+
+    it('names the owner on a Work or Review board thread too', async () => {
+      openWardSessionAs('user-damien', { path: BOARD_THREAD_PATH });
+
+      expect(await screen.findByText('You’re steering Ward Peeters’s session')).toBeInTheDocument();
+    });
+
+    it('says "a teammate" when the owner has no profile, never the raw user id', async () => {
+      openWardSessionAs('user-damien', { session: wardSessionWithoutProfile });
+
+      expect(await screen.findByText('You’re steering a teammate’s session')).toBeInTheDocument();
+      expect(screen.queryByText(/user-ward/)).not.toBeInTheDocument();
+    });
   });
 
-  it('says nothing to the owner of the session', async () => {
-    openWardSessionAs('user-ward');
+  describe('when the owner opens it', () => {
+    it('shows no steering line', async () => {
+      const client = openWardSessionAs('user-ward');
 
-    await screen.findByRole('region', { name: 'Thread composer' });
-    expect(screen.queryByText(/You’re steering/)).not.toBeInTheDocument();
+      await screen.findByRole('region', { name: 'Thread composer' });
+      await waitForMutationsIdle(client);
+      expect(screen.queryByText(/You’re steering/)).not.toBeInTheDocument();
+    });
   });
 });

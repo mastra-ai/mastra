@@ -70,10 +70,10 @@ export function SessionChatSurface({
               <ChatShell.ScrollButton aria-label="Jump to latest message" />
               <ChatShell.Column className={cn('gap-2', composerColumnClass)}>
                 <TaskPanel />
-                <div role="region" aria-label={composerLabel}>
+                <div role="region" aria-label={composerLabel} className="flex flex-col gap-2">
                   <ComposerPanel />
+                  {composerFooter}
                 </div>
-                {composerFooter}
               </ChatShell.Column>
             </ChatShell.Dock>
           </div>
