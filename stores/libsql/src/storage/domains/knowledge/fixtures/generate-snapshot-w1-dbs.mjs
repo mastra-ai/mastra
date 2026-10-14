@@ -6,8 +6,7 @@
 // Run from an empty directory:
 //   npm i @mastra/core@0.0.0-knowledge-w1-20261009054256 @mastra/libsql@0.0.0-knowledge-w1-20261009054256 zod@^3.25.0
 //   node <path>/generate-snapshot-w1-dbs.mjs <output directory>
-import { rm } from 'node:fs/promises';
-import { writeFile } from 'node:fs/promises';
+import { rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { createClient } from '@libsql/client';
 import { Knowledge } from '@mastra/core/knowledge';
