@@ -123,7 +123,7 @@ describe('Settings ownership', () => {
     );
     const user = userEvent.setup();
     renderSettings('memory');
-    const input = await screen.findByDisplayValue('1000');
+    const input = await screen.findByDisplayValue('1,000');
     expect(requestedFactoryId).toBeNull();
     await user.clear(input);
     await user.type(input, '3000');
@@ -146,9 +146,9 @@ describe('Settings ownership', () => {
     );
     const user = userEvent.setup();
     renderSettings('memory');
-    await screen.findByDisplayValue('1000');
+    await screen.findByDisplayValue('1,000');
     await user.click(screen.getByRole('link', { name: 'Factory memory' }));
-    const input = await screen.findByDisplayValue('1000');
+    const input = await screen.findByDisplayValue('1,000');
     await waitFor(() => expect(requestedFactoryIds).toContain('fp-1'));
     expect(screen.queryByRole('group', { name: 'Who these settings apply to' })).not.toBeInTheDocument();
     await user.clear(input);

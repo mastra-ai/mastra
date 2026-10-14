@@ -1,6 +1,12 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Input } from '@mastra/playground-ui/components/Input';
+import { InputGroupAddon, InputGroupText } from '@mastra/playground-ui/components/InputGroup';
+import {
+  InputNumber,
+  InputNumberDecrement,
+  InputNumberGroup,
+  InputNumberIncrement,
+  InputNumberInput,
+} from '@mastra/playground-ui/components/InputNumber';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -31,39 +37,54 @@ function choiceToAttachment(choice: AttachmentChoice): 'auto' | boolean {
   return 'auto';
 }
 
-function ThresholdInput({
-  value,
-  disabled,
-  onCommit,
-}: {
-  value: number;
-  disabled: boolean;
-  onCommit: (value: number) => void;
-}) {
-  const [draft, setDraft] = useState(String(value));
+/**
+ * Token count field with steppers. It stays editable while a save is in flight, since
+ * disabling it would drop focus mid-edit; each save returns the full config, so the
+ * last response wins.
+ */
+function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (value: number) => void }) {
+  const [draft, setDraft] = useState<number | null>(value);
+  const [syncedValue, setSyncedValue] = useState(value);
+  // Follow the saved value (e.g. after another surface changed it) without remounting,
+  // so focus stays on the field or stepper the person is using.
+  if (syncedValue !== value) {
+    setSyncedValue(value);
+    setDraft(value);
+  }
 
-  const commit = () => {
-    const parsed = Number(draft);
-    const rounded = Number.isFinite(parsed) ? Math.round(parsed) : NaN;
+  const commit = (next: number | null) => {
+    const rounded = next == null ? NaN : Math.round(next);
     if (!Number.isFinite(rounded) || rounded <= 0) {
-      setDraft(String(value));
+      setDraft(value);
       return;
     }
-    setDraft(String(rounded));
+    setDraft(rounded);
     if (rounded !== value) onCommit(rounded);
   };
 
   return (
-    <Input
-      size="sm"
-      type="number"
+    <InputNumber
+      value={draft}
       min={1}
       step={1000}
-      value={draft}
-      disabled={disabled}
-      onChange={event => setDraft(event.target.value)}
-      onBlur={commit}
-    />
+      largeStep={10000}
+      format={{ maximumFractionDigits: 0 }}
+      onValueChange={setDraft}
+      onValueCommitted={(next, details) => {
+        // Typing and arrow-key stepping save once on blur; a stepper press saves when released.
+        if (details.reason === 'increment-press' || details.reason === 'decrement-press') commit(next);
+      }}
+      className="sm:w-64 sm:shrink-0"
+    >
+      <InputNumberGroup size="sm">
+        <InputNumberInput className="tabular-nums" onBlur={() => commit(draft)} />
+        <InputGroupAddon align="inline-end">
+          <InputGroupText>tokens</InputGroupText>
+          <InputNumberDecrement />
+          <InputNumberIncrement />
+        </InputGroupAddon>
+      </InputNumberGroup>
+    </InputNumber>
   );
 }
 
@@ -107,11 +128,6 @@ export function OMSection({
     mutation.mutate({ modelId });
   };
 
-  const resetModel = (role: OMRole) => {
-    const mutation = role === 'observer' ? observerMutation : reflectorMutation;
-    mutation.mutate({ modelId: 'auto' });
-  };
-
   if (loading) {
     return (
       <div className="px-4 py-3">
@@ -121,11 +137,6 @@ export function OMSection({
   }
 
   const attachmentChoice = attachmentToChoice(config?.observeAttachments ?? 'auto');
-  // In Auto the combobox has no value, so its placeholder shows the model Auto picked.
-  const autoPlaceholder = (role: { model: string; effectiveModelId?: string | null } | undefined, fallback: string) =>
-    role?.model === 'auto' && role.effectiveModelId ? role.effectiveModelId : fallback;
-  const observerValue = config?.observer.model === 'auto' ? '' : (config?.observer.model ?? '');
-  const reflectorValue = config?.reflector.model === 'auto' ? '' : (config?.reflector.model ?? '');
   return (
     <>
       {error && (
@@ -146,63 +157,33 @@ export function OMSection({
       )}
 
       <SettingsRow label="Observer model" description="Summarizes the conversation into observations">
-        <div className="flex w-full max-w-72 items-center gap-2">
-          <Button
-            variant={config?.observer.model === 'auto' ? 'primary' : 'default'}
-            size="sm"
-            aria-label="Use automatic observer model"
-            aria-pressed={config?.observer.model === 'auto'}
-            disabled={busy || !config}
-            onClick={() => resetModel('observer')}
-          >
-            Auto
-          </Button>
-          <ModelCombobox
-            models={models}
-            value={observerValue}
-            placeholder={autoPlaceholder(config?.observer, 'Select observer model…')}
-            disabled={busy}
-            onValueChange={modelId => switchModel('observer', modelId)}
-            className="flex-1"
-          />
-        </div>
+        <ModelCombobox
+          models={models}
+          value={config?.observer.model ?? ''}
+          auto={{ effectiveModelId: config?.observer.effectiveModelId }}
+          placeholder="Select observer model…"
+          disabled={busy || !config}
+          onValueChange={modelId => switchModel('observer', modelId)}
+        />
       </SettingsRow>
 
       <SettingsRow label="Reflector model" description="Distills observations into longer-term memory">
-        <div className="flex w-full max-w-72 items-center gap-2">
-          <Button
-            variant={config?.reflector.model === 'auto' ? 'primary' : 'default'}
-            size="sm"
-            aria-label="Use automatic reflector model"
-            aria-pressed={config?.reflector.model === 'auto'}
-            disabled={busy || !config}
-            onClick={() => resetModel('reflector')}
-          >
-            Auto
-          </Button>
-          <ModelCombobox
-            models={models}
-            value={reflectorValue}
-            placeholder={autoPlaceholder(config?.reflector, 'Select reflector model…')}
-            disabled={busy}
-            onValueChange={modelId => switchModel('reflector', modelId)}
-            className="flex-1"
-          />
-        </div>
+        <ModelCombobox
+          models={models}
+          value={config?.reflector.model ?? ''}
+          auto={{ effectiveModelId: config?.reflector.effectiveModelId }}
+          placeholder="Select reflector model…"
+          disabled={busy || !config}
+          onValueChange={modelId => switchModel('reflector', modelId)}
+        />
       </SettingsRow>
 
       <SettingsRow label="Messages before observation" description="Message tokens processed before the observer runs.">
         {config && (
-          <div className="w-full max-w-40">
-            <ThresholdInput
-              key={config.observationThreshold}
-              value={config.observationThreshold}
-              disabled={busy}
-              onCommit={observationThreshold => {
-                thresholdsMutation.mutate({ observationThreshold });
-              }}
-            />
-          </div>
+          <TokenThresholdInput
+            value={config.observationThreshold}
+            onCommit={observationThreshold => thresholdsMutation.mutate({ observationThreshold })}
+          />
         )}
       </SettingsRow>
 
@@ -211,16 +192,10 @@ export function OMSection({
         description="Observation tokens accumulated before the reflector runs."
       >
         {config && (
-          <div className="w-full max-w-40">
-            <ThresholdInput
-              key={config.reflectionThreshold}
-              value={config.reflectionThreshold}
-              disabled={busy}
-              onCommit={reflectionThreshold => {
-                thresholdsMutation.mutate({ reflectionThreshold });
-              }}
-            />
-          </div>
+          <TokenThresholdInput
+            value={config.reflectionThreshold}
+            onCommit={reflectionThreshold => thresholdsMutation.mutate({ reflectionThreshold })}
+          />
         )}
       </SettingsRow>
 
