@@ -325,11 +325,9 @@ describe('factory_inspect_work_item', () => {
     await expect(run('factory_inspect_work_item', { workItem: '#8' })).rejects.toThrow('in this Factory');
   });
 
-  it('treats a ref that is neither a UUID nor a number as not found without querying by id', async () => {
+  it('rejects a ref that is neither a UUID nor a number before it reaches storage', async () => {
     const { run, deps } = setup({ items: [target] });
-    await expect(run('factory_inspect_work_item', { workItem: 'not-an-id' })).rejects.toThrow(
-      'No work item not-an-id was found in this Factory.',
-    );
+    await expect(run('factory_inspect_work_item', { workItem: 'not-an-id' })).resolves.toMatchObject({ error: true });
     expect(deps.workItems.getForProject).not.toHaveBeenCalled();
   });
 });
@@ -368,5 +366,35 @@ describe('factory_list_attention', () => {
     expect(result.proposals).toMatchObject([{ id: 'p1', number: 1 }]);
     expect(result.held.map(row => row.workItemId)).toEqual(['held']);
     expect(result.truncated).toBe(false);
+  });
+
+  it('flags truncation when incidents are cut by the limit', async () => {
+    const { run } = setup({
+      items: [item({ id: 'x' })],
+      decisions: [
+        decision({ id: 'f1', workItemId: 'x', failureCode: 'session_unavailable', lastError: 'a' }),
+        decision({ id: 'f2', workItemId: 'x', failureCode: 'run_overdue', lastError: 'b' }),
+      ],
+    });
+    const result = await run<{ incidents: unknown[]; truncated: boolean }>('factory_list_attention', { limit: 1 });
+    expect(result.incidents).toHaveLength(1);
+    expect(result.truncated).toBe(true);
+  });
+
+  it('flags truncation when one incident has more decisions than the limit', async () => {
+    const { run } = setup({
+      items: [item({ id: 'x' })],
+      decisions: [
+        decision({ id: 'f1', workItemId: 'x', failureCode: 'session_unavailable', lastError: 'a' }),
+        decision({ id: 'f2', workItemId: 'x', failureCode: 'session_unavailable', lastError: 'a' }),
+      ],
+    });
+    const result = await run<{
+      incidents: Array<{ count: number; decisions: unknown[] }>;
+      truncated: boolean;
+    }>('factory_list_attention', { limit: 1 });
+    expect(result.incidents).toMatchObject([{ count: 2 }]);
+    expect(result.incidents[0]!.decisions).toHaveLength(1);
+    expect(result.truncated).toBe(true);
   });
 });

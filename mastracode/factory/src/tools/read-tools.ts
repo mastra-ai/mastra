@@ -58,6 +58,15 @@ export function workItemStage(item: Pick<WorkItemRow, 'stages'>): string {
   return item.stages.join('+');
 }
 
+/** A work item id or its card number; anything else can't name an item. */
+export const workItemRefSchema = z
+  .string()
+  .trim()
+  .refine(ref => z.string().uuid().safeParse(ref).success || /^#?\d+$/.test(ref), {
+    message: 'Use a work item id (UUID) or its number like "#123".',
+  })
+  .describe('Work item id, or its number like "#123".');
+
 /** Resolve `<uuid>` or `#123` to an item in this Factory only. */
 export async function findWorkItem(
   workItems: Pick<WorkItemsStorage, 'list' | 'getForProject'>,
@@ -66,11 +75,7 @@ export async function findWorkItem(
 ): Promise<WorkItemRow | null> {
   const trimmed = ref.trim();
   const number = /^#?(\d+)$/.exec(trimmed)?.[1];
-  if (number === undefined) {
-    // Ids are UUID columns; anything else can't match and must not reach the database.
-    if (!z.string().uuid().safeParse(trimmed).success) return null;
-    return workItems.getForProject(scope.orgId, scope.factoryProjectId, trimmed);
-  }
+  if (number === undefined) return workItems.getForProject(scope.orgId, scope.factoryProjectId, trimmed);
   const items = await workItems.list(scope);
   const matches = items.filter(item => workItemNumber(item) === Number(number));
   // Issue and PR numbers share a space on GitHub; prefer the Work-board card.
@@ -197,9 +202,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
       id: 'factory_inspect_work_item',
       description:
         'Everything the Factory knows about one work item: stage history, sessions by role, decisions with errors, recent audit events, recent feed comments, labels, linked items and the sessions following it. Use it to explain why an item is where it is.',
-      inputSchema: z
-        .object({ workItem: z.string().trim().min(1).max(64).describe('Work item id, or its number like "#123".') })
-        .strict(),
+      inputSchema: z.object({ workItem: workItemRefSchema }).strict(),
       execute: async ({ workItem }) => {
         const item = await findWorkItem(deps.workItems, scope, workItem);
         if (!item) throw workItemNotFound(workItem);
@@ -310,8 +313,8 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
             title: item ? truncate(item.title, MAX_TEXT) : null,
           };
         };
-        const incidents = [...groups.values()]
-          .sort((a, b) => b.decisions.length - a.decisions.length)
+        const allIncidents = [...groups.values()].sort((a, b) => b.decisions.length - a.decisions.length);
+        const incidents = allIncidents
           .slice(0, limit)
           .map(group => ({ ...group, shown: group.decisions.slice(0, limit) }));
         // Check exactly the decisions this call returns, so every canRetry is real.
@@ -344,7 +347,11 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
             triageType: item.triageType,
             stage: workItemStage(item),
           })),
-          truncated: incidents.length > limit || proposals.length > limit || held.length > limit,
+          truncated:
+            allIncidents.length > limit ||
+            incidents.some(group => group.shown.length < group.decisions.length) ||
+            proposals.length > limit ||
+            held.length > limit,
         };
       },
     }),
