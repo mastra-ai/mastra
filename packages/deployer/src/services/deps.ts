@@ -341,11 +341,23 @@ export class Deps extends MastraBase {
       return runPack();
     }
 
-    await fsPromises.writeFile(manifestPath, JSON.stringify({ ...manifest, version }, null, 2) + '\n');
+    // Write via temp file + rename so an interrupted write never leaves a truncated manifest.
+    const writeManifestAtomically = async (contents: string) => {
+      const tmpPath = `${manifestPath}.${process.pid}.${Date.now()}.tmp`;
+      try {
+        await fsPromises.writeFile(tmpPath, contents);
+        await fsPromises.rename(tmpPath, manifestPath);
+      } catch (error) {
+        await fsPromises.rm(tmpPath, { force: true });
+        throw error;
+      }
+    };
+
+    await writeManifestAtomically(JSON.stringify({ ...manifest, version }, null, 2) + '\n');
     try {
       return await runPack();
     } finally {
-      await fsPromises.writeFile(manifestPath, originalManifest);
+      await writeManifestAtomically(originalManifest);
     }
   }
 
