@@ -272,16 +272,25 @@ function assertImportRunTransition(
 }
 
 /** Mirrors `isKnowledgeNodeVisible`: a member of a visible scope, or a visible scope itself. Binds `scopeIds` twice. */
-function visibleNodeSql(scopeIds: KnowledgeScopeIds, alias = 'n'): string {
-  const ids = scopeIds.map(() => '?').join(',');
+function visibleNodeSql(scopeIds: KnowledgeScopeIds, alias = 'n', extraScopeSql?: string): string {
+  const ids = scopeIdListSql(scopeIds, extraScopeSql);
   return `((${alias}.isScope=TRUE AND ${alias}.id IN (${ids})) OR EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" v WHERE v.nodeId=${alias}.id AND v.scopeNodeId IN (${ids})))`;
 }
 
-/** A record is visible when one of its scopes is, its parent is live and visible, and so is every mention target. */
-function visibleRecordSql(scopeIds: KnowledgeScopeIds): { sql: string; args: string[] } {
-  const visibleNode = (alias: string) => `${alias}.deletedAt IS NULL AND ${visibleNodeSql(scopeIds, alias)}`;
+/** `?` placeholders for `scopeIds`, plus an optional SQL expression naming one more scope id per row. */
+function scopeIdListSql(scopeIds: KnowledgeScopeIds, extraScopeSql?: string): string {
+  return [...scopeIds.map(() => '?'), ...(extraScopeSql ? [extraScopeSql] : [])].join(',');
+}
+
+/**
+ * A record is visible when one of its scopes is, its parent is live and visible, and so is every mention target.
+ * `extraScopeSql` adds one more visible scope per row (e.g. a probed source's own session scope).
+ */
+function visibleRecordSql(scopeIds: KnowledgeScopeIds, extraScopeSql?: string): { sql: string; args: string[] } {
+  const visibleNode = (alias: string) =>
+    `${alias}.deletedAt IS NULL AND ${visibleNodeSql(scopeIds, alias, extraScopeSql)}`;
   return {
-    sql: `EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" rs WHERE rs.recordId=r.id AND rs.scopeNodeId IN (${scopeIds.map(() => '?').join(',')})) AND ${visibleNode('p')} AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" m WHERE m.recordId=r.id AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODES}" t WHERE t.id=m.targetNodeId AND ${visibleNode('t')}))`,
+    sql: `EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" rs WHERE rs.recordId=r.id AND rs.scopeNodeId IN (${scopeIdListSql(scopeIds, extraScopeSql)})) AND ${visibleNode('p')} AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" m WHERE m.recordId=r.id AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODES}" t WHERE t.id=m.targetNodeId AND ${visibleNode('t')}))`,
     args: [...scopeIds, ...scopeIds, ...scopeIds, ...scopeIds, ...scopeIds],
   };
 }
@@ -1287,15 +1296,19 @@ export class KnowledgePG extends KnowledgeStorage {
 
   async listSourcesWithVisibleRecords(input: ListKnowledgeSourcesWithVisibleRecordsInput): Promise<string[]> {
     assertKnowledgeSourceProbeLimit(input.sources);
-    const sources = [...new Set(input.sources)];
-    if (sources.length === 0) return [];
-    const visibleRecord = visibleRecordSql(canonicalizeKnowledgeScopeIds(input.scopeIds));
+    if (input.sources.length === 0) return [];
+    // Each probe row pairs a source with its own extra scope, so one query applies a per-source visibility set.
+    const probes = input.sources
+      .map(() => `SELECT CAST(? AS TEXT) AS source, CAST(? AS TEXT) AS scopeId`)
+      .join(' UNION ALL ');
+    const visibleRecord = visibleRecordSql(canonicalizeKnowledgeScopeIds(input.scopeIds), 'q.scopeId');
     const result = await this.#readExecutor.execute({
-      sql: `SELECT DISTINCT r.source FROM "${TABLE_KNOWLEDGE_RECORDS}" r JOIN "${TABLE_KNOWLEDGE_NODES}" p ON p.id=r.nodeId WHERE r.deletedAt IS NULL AND r.source IN (${sources.map(() => '?').join(',')}) AND ${visibleRecord.sql}`,
-      args: [...sources, ...visibleRecord.args],
+      sql: `SELECT DISTINCT q.source FROM (${probes}) q JOIN "${TABLE_KNOWLEDGE_RECORDS}" r ON r.source=q.source JOIN "${TABLE_KNOWLEDGE_NODES}" p ON p.id=r.nodeId WHERE r.deletedAt IS NULL AND ${visibleRecord.sql}`,
+      args: [...input.sources.flatMap(probe => [probe.source, probe.scopeId ?? null]), ...visibleRecord.args],
     });
     return result.rows.map(row => String(row.source));
   }
+
 
   async deleteRecord(input: { id: string; deletedBy: string; importRunId?: string }): Promise<KnowledgeRecord> {
     return this.#transaction(tx => this.#deleteRecord(tx, input));

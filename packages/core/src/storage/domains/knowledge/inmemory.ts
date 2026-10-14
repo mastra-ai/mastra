@@ -788,12 +788,16 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   async listSourcesWithVisibleRecords(input: ListKnowledgeSourcesWithVisibleRecordsInput): Promise<string[]> {
     assertKnowledgeSourceProbeLimit(input.sources);
-    const wanted = new Set(input.sources);
-    const scope = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    const scopesBySource = new Map<string, KnowledgeScopeIds[]>();
+    for (const probe of input.sources) {
+      const scope = canonicalizeKnowledgeScopeIds(probe.scopeId ? [...input.scopeIds, probe.scopeId] : input.scopeIds);
+      scopesBySource.set(probe.source, [...(scopesBySource.get(probe.source) ?? []), scope]);
+    }
     const found = new Set<string>();
     for (const record of this.#db.knowledgeRecords.values()) {
-      if (record.deletedAt || !record.source || !wanted.has(record.source) || found.has(record.source)) continue;
-      if (this.#isRecordVisible(record, scope)) found.add(record.source);
+      if (record.deletedAt || !record.source || found.has(record.source)) continue;
+      if (scopesBySource.get(record.source)?.some(scope => this.#isRecordVisible(record, scope)))
+        found.add(record.source);
     }
     return [...found];
   }
