@@ -41,12 +41,10 @@ export function sessionOwnerFilterValue(userId: string): string {
   return `${SESSION_OWNER_PREFIX}${userId}`;
 }
 
-/** A known viewer starts on their own sessions; an unknown viewer has none, so they start on everyone's. */
 export function defaultSessionFilters(viewerUserId: string | undefined): SessionFiltersState {
   return viewerUserId ? { ...EMPTY_SESSION_FILTERS, owner: MY_SESSIONS } : EMPTY_SESSION_FILTERS;
 }
 
-/** Counts the controls moved away from `defaults`, so the resting view never reads as filtered. */
 export function activeSessionFilterCount(
   filters: SessionFiltersState,
   defaults: SessionFiltersState = EMPTY_SESSION_FILTERS,
@@ -65,10 +63,15 @@ function matchesOwner(row: SessionListRow, owner: string, viewerUserId: string |
   return row.session.userId === owner.slice(SESSION_OWNER_PREFIX.length);
 }
 
+const UPDATED_WINDOW_HOURS: Record<Exclude<SessionUpdatedFilter, 'all'>, number> = {
+  '24h': 24,
+  '7d': 24 * 7,
+  '30d': 24 * 30,
+};
+
 function updatedCutoff(updated: SessionUpdatedFilter, now: number): number | undefined {
   if (updated === 'all') return undefined;
-  const hours = updated === '24h' ? 24 : updated === '7d' ? 24 * 7 : 24 * 30;
-  return now - hours * 60 * 60 * 1_000;
+  return now - UPDATED_WINDOW_HOURS[updated] * 60 * 60 * 1_000;
 }
 
 export function filterSessionRows(
@@ -91,7 +94,7 @@ export function sessionOwnerOptions(
   rows: readonly SessionListRow[],
   viewerUserId: string | undefined,
 ): DropdownMenuRadioOption<string>[] {
-  const ownerNameById = new Map(rows.map(row => [row.session.userId, row.ownerName]));
+  const ownerNameById = new Map(rows.map(row => [row.session.userId, row.owner.name]));
   const viewerOption = viewerUserId ? [{ value: MY_SESSIONS, label: 'Mine' }] : [];
   const namedOptions = Array.from(ownerNameById, ([userId, name]) => ({
     value: sessionOwnerFilterValue(userId),

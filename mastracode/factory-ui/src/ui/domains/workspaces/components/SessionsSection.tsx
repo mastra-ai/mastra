@@ -3,57 +3,48 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowUpDown, CircleDashed, Clock, MessagesSquare, Plus, UserRound } from 'lucide-react';
-import { useState } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useWorkspacePullRequestMerges } from '../../../../hooks/useWorkspacePullRequestMerges';
-import { useDeleteUserSessionMutation, useDeleteWorkspaceMutation } from '../../../../hooks/useWorkspaces';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
-import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { usePinnedSessions } from '../hooks/usePinnedSessions';
-import { useRegenerateSessionTitle } from '../hooks/useRegenerateSessionTitle';
+import { useSessionDeletion } from '../hooks/useSessionDeletion';
+import { useSessionFilters } from '../hooks/useSessionFilters';
 import { useSessionListRows } from '../hooks/useSessionListRows';
 import { useSessionListView } from '../hooks/useSessionListView';
 import {
   SESSION_STATUS_OPTIONS,
   SESSION_UPDATED_OPTIONS,
-  activeSessionFilterCount,
-  defaultSessionFilters,
   filterSessionRows,
   sessionOwnerOptions,
 } from '../services/sessionFilters';
-import type { SessionFiltersState } from '../services/sessionFilters';
-import { DEFAULT_SESSION_GROUP_BY, groupSessionRows, sessionGroupOrder } from '../services/sessionGroups';
+import {
+  DEFAULT_SESSION_GROUP_BY,
+  collapsedRowsKeepingActive,
+  groupSessionRows,
+  sessionGroupOrder,
+} from '../services/sessionGroups';
 import type { SessionGroupContext } from '../services/sessionGroups';
-import type { SessionListRow } from '../services/sessionRows';
+import { pullRequestMergeTargets } from '../services/sessionRows';
 import { DEFAULT_SESSION_SORT, SESSION_SORT_OPTIONS, compareSessionRows } from '../services/sessionSort';
 import { DeleteSessionDialog } from './DeleteSessionDialog';
-import { SessionGroupList, collapsedRowsKeepingActive } from './SessionGroupList';
+import { SessionGroupList } from './SessionGroupList';
 import { SessionGroupMenu } from './SessionGroupMenu';
+import { SessionListItem } from './SessionListItem';
 import { SessionListProperties } from './SessionListProperties';
 
 export function SessionsSection() {
   const { factoryId, sessionId: routeSessionId } = useParams<{ factoryId: string; sessionId: string }>();
   const { baseUrl, resourceId, sessionEnabled } = useChatSessionContext();
   const navigate = useNavigate();
-  const location = useLocation();
   const { rows, hasRepositories, loaded, loadFailed, retry } = useSessionListRows(factoryId);
   const catalog = useBoardCatalog(factoryId);
   const { view, updateView, resetView } = useSessionListView();
-  const auth = useFactoryAuth();
-  const viewerUserId = auth.data?.user?.userId;
-  const { setPinned } = usePinnedSessions();
-  const [filterChanges, setFilterChanges] = useState<Partial<SessionFiltersState>>({});
-  const [confirmDelete, setConfirmDelete] = useState<SessionListRow | null>(null);
-  const deleteWorkspace = useDeleteWorkspaceMutation(factoryId, { agentControllerId: AGENT_CONTROLLER_ID, resourceId });
-  const deleteUserSession = useDeleteUserSessionMutation(factoryId);
-  const { regenerate, regenerating } = useRegenerateSessionTitle(factoryId);
+  const viewerUserId = useFactoryAuth().data?.user?.userId;
+  const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters(viewerUserId);
+  const deletion = useSessionDeletion(factoryId, resourceId);
 
-  const defaultFilters = defaultSessionFilters(viewerUserId);
-  const filters: SessionFiltersState = { ...defaultFilters, ...filterChanges };
-  const activeFilterCount = activeSessionFilterCount(filters, defaultFilters);
   const hiddenGroupKeys = view.hiddenGroups[view.groupBy] ?? [];
   const storedGroupOrder = view.groupOrder[view.groupBy];
   const changedCount =
@@ -62,8 +53,6 @@ export function SessionsSection() {
     Number(hiddenGroupKeys.length > 0) +
     Number((storedGroupOrder?.length ?? 0) > 0) +
     activeFilterCount;
-  const changeFilters = (changes: Partial<SessionFiltersState>) =>
-    setFilterChanges(current => ({ ...current, ...changes }));
 
   const sortedRows = rows.toSorted(compareSessionRows(view.sort));
   const filteredRows = filterSessionRows(sortedRows, filters, viewerUserId);
@@ -83,43 +72,15 @@ export function SessionsSection() {
     updateView({ groupOrder: { ...view.groupOrder, [view.groupBy]: isDefaultOrder ? [] : keys } });
   };
 
-  const pullRequestTargets = groups
-    .flatMap(group => collapsedRowsKeepingActive(group.rows))
-    .flatMap(row =>
-      row.origin === 'factory' && row.threadId && row.pullRequestNumber !== undefined
-        ? [
-            {
-              sessionId: row.session.sessionId,
-              threadId: row.threadId,
-              projectPath: row.session.sessionId,
-              pullRequestNumber: row.pullRequestNumber,
-              provider: row.provider,
-              knownMerged: row.knownMerged,
-            },
-          ]
-        : [],
-    );
-  const mergedByPath = useWorkspacePullRequestMerges({
+  const chatSessionOpen = sessionEnabled && Boolean(routeSessionId) && Boolean(resourceId);
+  const mergedBySessionId = useWorkspacePullRequestMerges({
     baseUrl,
     resourceId,
-    targets: pullRequestTargets,
-    enabled: sessionEnabled && Boolean(routeSessionId) && Boolean(resourceId),
+    targets: pullRequestMergeTargets(groups.flatMap(group => collapsedRowsKeepingActive(group.rows))),
+    enabled: chatSessionOpen,
   });
 
   if (!factoryId || (!hasRepositories && rows.length === 0)) return null;
-
-  const pending = deleteWorkspace.isPending || deleteUserSession.isPending;
-  const closeDeleteDialog = () => setConfirmDelete(null);
-  const confirmDeleteSession = () => {
-    if (!confirmDelete) return;
-    if (confirmDelete.origin === 'factory') {
-      deleteWorkspace.mutate(confirmDelete.session, { onSuccess: closeDeleteDialog });
-    } else {
-      deleteUserSession.mutate(confirmDelete.session, { onSettled: closeDeleteDialog });
-    }
-  };
-  const openSession = (row: SessionListRow) =>
-    void navigate(row.openPath, row.origin === 'factory' ? { state: { from: location } } : undefined);
 
   return (
     <section className="flex flex-col gap-2" aria-label="Sessions">
@@ -131,7 +92,7 @@ export function SessionsSection() {
               changedCount={changedCount}
               onReset={() => {
                 resetView();
-                setFilterChanges({});
+                resetFilters();
               }}
             >
               <DropdownMenu.RadioSub
@@ -177,7 +138,7 @@ export function SessionsSection() {
                 size="icon-sm"
                 aria-label="New user session"
                 onClick={() => void navigate(`/factories/${factoryId}/user/new/${crypto.randomUUID()}`)}
-                disabled={pending}
+                disabled={deletion.deleting}
               >
                 <Plus size={15} />
               </Button>
@@ -194,15 +155,16 @@ export function SessionsSection() {
             key={group.key}
             group={group}
             showHeader={view.groupBy !== 'none'}
-            pending={pending}
-            mergedByPath={mergedByPath}
-            viewerUserId={viewerUserId}
-            viewerProfile={auth.data?.user}
-            regenerating={regenerating}
-            onOpen={openSession}
-            onPinChange={setPinned}
-            onDelete={setConfirmDelete}
-            onRegenerateTitle={row => regenerate(row.session)}
+            renderRow={row => (
+              <SessionListItem
+                key={row.session.sessionId}
+                factoryId={factoryId}
+                row={row}
+                disabled={deletion.deleting}
+                merged={row.pullRequest && (mergedBySessionId[row.session.sessionId] ?? row.pullRequest.knownMerged)}
+                onDelete={deletion.requestDeletion}
+              />
+            )}
           />
         ))}
       </div>
@@ -228,12 +190,12 @@ export function SessionsSection() {
         </Txt>
       )}
 
-      {confirmDelete && (
+      {deletion.pendingConfirmation && (
         <DeleteSessionDialog
-          row={confirmDelete}
-          pending={pending}
-          onCancel={closeDeleteDialog}
-          onConfirm={confirmDeleteSession}
+          row={deletion.pendingConfirmation}
+          pending={deletion.deleting}
+          onCancel={deletion.cancel}
+          onConfirm={deletion.confirm}
         />
       )}
     </section>
