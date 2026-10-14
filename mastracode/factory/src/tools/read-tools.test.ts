@@ -254,23 +254,26 @@ describe('factory_list_work_items', () => {
   });
 });
 
+const TARGET = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d';
+const FOREIGN = 'f0e1d2c3-b4a5-4697-8879-6a5b4c3d2e1f';
+
 describe('factory_inspect_work_item', () => {
   const target = item({
-    id: 'target',
+    id: TARGET,
     stages: ['execute'],
     metadata: { number: 7, labels: ['bug', 3, 'ui'] },
     stageHistory: [{ stage: 'intake', enteredAt: '2026-10-01T00:00:00Z', exitedAt: '2026-10-02T00:00:00Z', by: 'u' }],
-    sessions: { work: { sessionId: 'session-target', branch: 'b', threadId: 't', startedBy: 'user-1' } },
+    sessions: { work: { sessionId: `session-${TARGET}`, branch: 'b', threadId: 't', startedBy: 'user-1' } },
   });
-  const child = item({ id: 'child', parentWorkItemId: 'target' });
-  const foreign = item({ id: 'foreign', factoryProjectId: 'project-2', metadata: { number: 8 } });
+  const child = item({ id: 'child', parentWorkItemId: TARGET });
+  const foreign = item({ id: FOREIGN, factoryProjectId: 'project-2', metadata: { number: 8 } });
 
   it('inspects by id and by #number', async () => {
     const { run } = setup({
       items: [target, child, foreign],
-      bindings: [binding('target', 'work')],
+      bindings: [binding(TARGET, 'work')],
       decisions: [
-        decision({ id: 'd1', workItemId: 'target', lastError: 'e'.repeat(1000), failureCode: 'session_unavailable' }),
+        decision({ id: 'd1', workItemId: TARGET, lastError: 'e'.repeat(1000), failureCode: 'session_unavailable' }),
       ],
       comments: [{ id: 'c1', kind: 'comment', body: 'b'.repeat(1000), author: { type: 'human', id: 'u' } } as never],
       audit: [
@@ -279,19 +282,19 @@ describe('factory_inspect_work_item', () => {
           action: 'factory.work_item.created',
           actorId: 'user-1',
           actorType: 'human',
-          targets: [{ type: 'work_item', id: 'target' }],
+          targets: [{ type: 'work_item', id: TARGET }],
           occurredAt: new Date(),
         } as never,
         { id: 'a2', action: 'other', targets: [{ type: 'work_item', id: 'child' }], occurredAt: new Date() } as never,
       ],
     });
-    const byId = await run<Record<string, unknown>>('factory_inspect_work_item', { workItem: 'target' });
+    const byId = await run<Record<string, unknown>>('factory_inspect_work_item', { workItem: TARGET });
     const byNumber = await run<Record<string, unknown>>('factory_inspect_work_item', { workItem: '#7' });
     expect(byNumber).toEqual(byId);
     expect(byId).toMatchObject({
-      item: { id: 'target', number: 7, stage: 'execute', activeWorker: { role: 'work', sessionId: 'session-target' } },
+      item: { id: TARGET, number: 7, stage: 'execute', activeWorker: { role: 'work', sessionId: `session-${TARGET}` } },
       labels: ['bug', 'ui'],
-      sessions: [{ role: 'work', sessionId: 'session-target', active: true }],
+      sessions: [{ role: 'work', sessionId: `session-${TARGET}`, active: true }],
       decisions: [{ id: 'd1', canRetry: true, failureCode: 'session_unavailable' }],
       audit: [{ action: 'factory.work_item.created' }],
       children: [{ id: 'child' }],
@@ -305,9 +308,9 @@ describe('factory_inspect_work_item', () => {
   it('lists the sessions following the item and marks the caller', async () => {
     const { run } = setup({
       items: [target],
-      subscriptions: [follow('target', 'session-1', 'created'), follow('target', 'session-2', 'subscribed')],
+      subscriptions: [follow(TARGET, 'session-1', 'created'), follow(TARGET, 'session-2', 'subscribed')],
     });
-    const result = await run<{ subscribers: unknown[] }>('factory_inspect_work_item', { workItem: 'target' });
+    const result = await run<{ subscribers: unknown[] }>('factory_inspect_work_item', { workItem: TARGET });
     expect(result.subscribers).toEqual([
       { sessionId: 'session-1', reason: 'created', isCaller: true },
       { sessionId: 'session-2', reason: 'subscribed', isCaller: false },
@@ -316,10 +319,18 @@ describe('factory_inspect_work_item', () => {
 
   it('refuses an item from another Factory', async () => {
     const { run } = setup({ items: [target, foreign] });
-    await expect(run('factory_inspect_work_item', { workItem: 'foreign' })).rejects.toThrow(
-      'No work item foreign was found in this Factory.',
+    await expect(run('factory_inspect_work_item', { workItem: FOREIGN })).rejects.toThrow(
+      `No work item ${FOREIGN} was found in this Factory.`,
     );
     await expect(run('factory_inspect_work_item', { workItem: '#8' })).rejects.toThrow('in this Factory');
+  });
+
+  it('treats a ref that is neither a UUID nor a number as not found without querying by id', async () => {
+    const { run, deps } = setup({ items: [target] });
+    await expect(run('factory_inspect_work_item', { workItem: 'not-an-id' })).rejects.toThrow(
+      'No work item not-an-id was found in this Factory.',
+    );
+    expect(deps.workItems.getForProject).not.toHaveBeenCalled();
   });
 });
 

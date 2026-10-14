@@ -1272,6 +1272,7 @@ export class MastraFactory {
                           deps: {
                             workItems: workItemsStorage,
                             comments: workItemCommentsStorage,
+                            feed: commentsDomain,
                             audit: auditStorage,
                             boards: this.#boards,
                             transitionService,

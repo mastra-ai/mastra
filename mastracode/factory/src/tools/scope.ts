@@ -34,7 +34,7 @@ export interface ResolveFactoryToolScopeOptions {
   authEnabled: boolean;
   sessions: Pick<SourceControlSessionLookup, 'getBySessionId'>;
   projects: Pick<FactoryProjectsStorage, 'get'>;
-  workItems: Pick<WorkItemsStorage, 'findRunBindingBySession' | 'findActiveRunBindingForSession'>;
+  workItems: Pick<WorkItemsStorage, 'hasRunBindingForSession'>;
 }
 
 /**
@@ -74,19 +74,12 @@ export async function resolveFactoryToolScope({
   const project = await projects.get({ orgId: caller.orgId, id: row.factoryProjectId });
   if (!project) return null;
 
-  const [exact, active] = await Promise.all([
-    workItems.findRunBindingBySession({
-      factoryProjectId: row.factoryProjectId,
-      threadId,
-      resourceId,
-      sessionId: row.sessionId,
-    }),
-    workItems.findActiveRunBindingForSession({
-      orgId: caller.orgId,
-      factoryProjectId: row.factoryProjectId,
-      sessionId: row.sessionId,
-    }),
-  ]);
+  // Any binding, active or revoked, on any thread: a session that ever ran a role stays a worker.
+  const worker = await workItems.hasRunBindingForSession({
+    orgId: caller.orgId,
+    factoryProjectId: row.factoryProjectId,
+    sessionId: row.sessionId,
+  });
 
   return {
     orgId: caller.orgId,
@@ -95,7 +88,7 @@ export async function resolveFactoryToolScope({
     sessionId: row.sessionId,
     resourceId,
     threadId,
-    kind: exact || active ? 'worker' : 'user',
+    kind: worker ? 'worker' : 'user',
     interactive: requestContext.get(FACTORY_INTERACTIVE_KEY) === true,
   };
 }

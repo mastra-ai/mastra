@@ -66,7 +66,11 @@ export async function findWorkItem(
 ): Promise<WorkItemRow | null> {
   const trimmed = ref.trim();
   const number = /^#?(\d+)$/.exec(trimmed)?.[1];
-  if (number === undefined) return workItems.getForProject(scope.orgId, scope.factoryProjectId, trimmed);
+  if (number === undefined) {
+    // Ids are UUID columns; anything else can't match and must not reach the database.
+    if (!z.string().uuid().safeParse(trimmed).success) return null;
+    return workItems.getForProject(scope.orgId, scope.factoryProjectId, trimmed);
+  }
   const items = await workItems.list(scope);
   const matches = items.filter(item => workItemNumber(item) === Number(number));
   // Issue and PR numbers share a space on GitHub; prefer the Work-board card.
@@ -287,7 +291,6 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
         ]);
         const itemsById = new Map(items.map(item => [item.id, item]));
         const failed = decisions.filter(decision => decision.status === 'failed');
-        const overtaken = await overtakenDecisionIds(deps.workItems, deps.boards, project, failed.slice(0, MAX_LIST));
         const groups = new Map<
           string,
           { failureCode: string; error: string; decisions: FactoryDeferredDecisionRecord[] }
@@ -307,16 +310,26 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
             title: item ? truncate(item.title, MAX_TEXT) : null,
           };
         };
-        const incidents = [...groups.values()].sort((a, b) => b.decisions.length - a.decisions.length);
+        const incidents = [...groups.values()]
+          .sort((a, b) => b.decisions.length - a.decisions.length)
+          .slice(0, limit)
+          .map(group => ({ ...group, shown: group.decisions.slice(0, limit) }));
+        // Check exactly the decisions this call returns, so every canRetry is real.
+        const overtaken = await overtakenDecisionIds(
+          deps.workItems,
+          deps.boards,
+          project,
+          incidents.flatMap(group => group.shown),
+        );
         const proposals = decisions.filter(decision => decision.status === 'proposed');
         const held = items.filter(isHeld);
         return {
-          incidents: incidents.slice(0, limit).map(group => ({
+          incidents: incidents.map(group => ({
             failureCode: group.failureCode,
             failureLabel: factoryDispatchFailureMetadata(group.decisions[0]!.failureCode).label,
             error: group.error,
             count: group.decisions.length,
-            decisions: group.decisions.slice(0, limit).map(decision => ({
+            decisions: group.shown.map(decision => ({
               id: decision.id,
               ...ref(decision.workItemId),
               attempts: decision.attempts,
