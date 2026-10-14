@@ -37,8 +37,16 @@ export interface FactoryProject {
   lastBuildHeads: Record<string, string> | null;
   /** Fingerprint of the settings, repositories and setup commands the most recent build attempt used. */
   lastBuildInputs: string | null;
-  /** When the most recent build attempt started (also the leading edge of the push debounce window). */
+  /** When the most recent build attempt started, whatever triggered it. */
   lastBuildAttemptedAt: Date | null;
+  /** When a push last started a build: the leading edge of the push debounce window. */
+  lastPushBuildAt: Date | null;
+  /**
+   * A run's build-start lease lapsed, so a build it may have started is not
+   * on record. Cleared once a run reconciles it with the provider or a user
+   * builds anyway.
+   */
+  buildStartUncertain: boolean;
   /** Whether a push to an environment repository's default branch starts a build. */
   buildOnPushEnabled: boolean;
   /** Minutes after a push-triggered attempt during which further pushes do not build. */
@@ -96,6 +104,8 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     last_build_heads: { type: 'json', nullable: true },
     last_build_inputs: { type: 'text', nullable: true },
     last_build_attempted_at: { type: 'timestamp', nullable: true },
+    last_push_build_at: { type: 'timestamp', nullable: true },
+    build_start_uncertain: { type: 'boolean', default: false },
     build_start_claim: { type: 'text', nullable: true },
     build_start_claim_expires_at: { type: 'timestamp', nullable: true },
     build_on_push_enabled: { type: 'boolean', default: false },
@@ -128,6 +138,8 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   last_build_heads: Record<string, string> | null;
   last_build_inputs: string | null;
   last_build_attempted_at: Date | null;
+  last_push_build_at: Date | null;
+  build_start_uncertain: boolean | null;
   build_start_claim: string | null;
   build_start_claim_expires_at: Date | null;
   build_on_push_enabled: boolean | null;
@@ -158,6 +170,8 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     lastBuildHeads: row.last_build_heads ?? null,
     lastBuildInputs: row.last_build_inputs ?? null,
     lastBuildAttemptedAt: row.last_build_attempted_at ?? null,
+    lastPushBuildAt: row.last_push_build_at ?? null,
+    buildStartUncertain: row.build_start_uncertain ?? false,
     buildOnPushEnabled: row.build_on_push_enabled ?? false,
     buildPushDebounceMinutes: row.build_push_debounce_minutes ?? DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES,
     createdAt: row.created_at,
@@ -292,9 +306,10 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
 
   /**
    * Leading-edge debounce for push-triggered builds: stamps
-   * `last_build_attempted_at = now` and resolves true when no attempt started
+   * `last_push_build_at = now` and resolves true when no push started a build
    * within the last `debounceMinutes`, else writes nothing and resolves
-   * false. The read and the write run in one transaction, so two concurrent
+   * false. Taken right before the provider start, so a push that skips
+   * (another run starting, a build in progress) never closes the window. The read and the write run in one transaction, so two concurrent
    * webhooks never both win, even on different database connections.
    */
   async claimBuildAttempt({
@@ -309,10 +324,10 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
     let claimed = false;
     await this.storage.withTransaction(ops =>
       ops.updateAtomic<FactoryProjectDbRow>('factory_projects', { id }, current => {
-        const last = current.last_build_attempted_at;
+        const last = current.last_push_build_at;
         if (last && now.getTime() - last.getTime() < debounceMinutes * 60_000) return null;
         claimed = true;
-        return { last_build_attempted_at: now, updated_at: now };
+        return { last_push_build_at: now, updated_at: now };
       }),
     );
     return claimed;
@@ -324,9 +339,10 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
    * `builds.start` and recording the result, so two runs never both start a
    * build. `claimed` is false while another run holds an unexpired lease. The
    * holder renews the lease while it works (`renewBuildStart`), so a lease
-   * only expires when its run died or stalled; `recovered` reports that this
-   * claim replaced such an expired lease, whose start may have reached the
-   * provider. Only the claim is transactional; provider calls run outside it.
+   * only expires when its run died or stalled. Taking over an expired lease
+   * marks the start uncertain (that run's build may have reached the provider
+   * unrecorded), and the mark stays until a release resolves it; `uncertain`
+   * reports it. Only the claim is transactional; provider calls run outside it.
    */
   async claimBuildStart({
     id,
@@ -338,17 +354,18 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
     token: string;
     leaseMs: number;
     now?: Date;
-  }): Promise<{ claimed: boolean; recovered: boolean }> {
-    const result = { claimed: false, recovered: false };
+  }): Promise<{ claimed: boolean; uncertain: boolean }> {
+    const result = { claimed: false, uncertain: false };
     await this.storage.withTransaction(ops =>
       ops.updateAtomic<FactoryProjectDbRow>('factory_projects', { id }, current => {
         const expiresAt = current.build_start_claim_expires_at;
         if (current.build_start_claim && expiresAt && expiresAt.getTime() > now.getTime()) return null;
         result.claimed = true;
-        result.recovered = Boolean(current.build_start_claim);
+        result.uncertain = Boolean(current.build_start_claim) || current.build_start_uncertain === true;
         return {
           build_start_claim: token,
           build_start_claim_expires_at: new Date(now.getTime() + leaseMs),
+          ...(result.uncertain ? { build_start_uncertain: true } : {}),
           updated_at: now,
         };
       }),
@@ -386,16 +403,19 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
    * Releases the build-start lease taken with `token` and writes `changes` in
    * the same transaction, but only while `token` still holds the lease. A run
    * whose lease expired and was taken by a newer run writes nothing, so it
-   * never clears or overwrites that run's build. Resolves false when skipped.
+   * never clears or overwrites that run's build. `resolved` clears an
+   * uncertain start. Resolves false when skipped.
    */
   async releaseBuildStart({
     id,
     token,
     changes = {},
+    resolved = false,
     now = new Date(),
   }: {
     id: string;
     token: string;
+    resolved?: boolean;
     changes?: Pick<
       UpdateFactoryProjectInput,
       'lastBuildId' | 'lastBuildHeads' | 'lastBuildInputs' | 'lastBuildAttemptedAt'
@@ -414,6 +434,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
           ...(changes.lastBuildAttemptedAt !== undefined
             ? { last_build_attempted_at: changes.lastBuildAttemptedAt }
             : {}),
+          ...(resolved ? { build_start_uncertain: false } : {}),
           build_start_claim: null,
           build_start_claim_expires_at: null,
           updated_at: now,

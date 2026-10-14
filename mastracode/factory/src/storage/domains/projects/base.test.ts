@@ -126,15 +126,15 @@ describe('FactoryProjectsStorage builds', () => {
 
     expect(await seed.projects.claimBuildAttempt({ id: project.id, debounceMinutes: 10, now: t0 })).toBe(true);
     const afterFirst = await seed.projects.getById({ id: project.id });
-    expect(afterFirst?.lastBuildAttemptedAt).toEqual(t0);
+    expect(afterFirst?.lastPushBuildAt).toEqual(t0);
 
     const t1 = new Date(t0.getTime() + 9 * 60_000);
     expect(await seed.projects.claimBuildAttempt({ id: project.id, debounceMinutes: 10, now: t1 })).toBe(false);
-    expect((await seed.projects.getById({ id: project.id }))?.lastBuildAttemptedAt).toEqual(t0);
+    expect((await seed.projects.getById({ id: project.id }))?.lastPushBuildAt).toEqual(t0);
 
     const t2 = new Date(t0.getTime() + 10 * 60_000);
     expect(await seed.projects.claimBuildAttempt({ id: project.id, debounceMinutes: 10, now: t2 })).toBe(true);
-    expect((await seed.projects.getById({ id: project.id }))?.lastBuildAttemptedAt).toEqual(t2);
+    expect((await seed.projects.getById({ id: project.id }))?.lastPushBuildAt).toEqual(t2);
 
     // Two concurrent claims on a fresh window: exactly one wins.
     const t3 = new Date(t2.getTime() + 60 * 60_000);

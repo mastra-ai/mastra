@@ -540,14 +540,94 @@ describe('runEnvironmentBuild', () => {
     });
     clock = new Date(clock.getTime() + 11 * 60_000);
     sandbox.listed = [{ buildId: 'build-1', status: 'building' }];
+    for (let run = 0; run < 2; run++) {
+      // Every recovery run, not only the first, finds the unrecorded build.
+      expect(
+        await runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'schedule' }),
+      ).toEqual({
+        outcome: 'skipped',
+        reason: 'in_progress',
+        buildId: 'build-1',
+      });
+    }
+    expect(sandbox.starts).toHaveLength(1);
+
+    // Once that build is gone the start is reconciled, and a schedule builds again.
+    sandbox.listed = [{ buildId: 'build-1', status: 'ready' }];
+    await expect(
+      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'schedule' }),
+    ).resolves.toMatchObject({ outcome: 'started', buildId: 'build-2' });
+    expect(await seed.projects.getById({ id: project.id })).toMatchObject({
+      lastBuildId: 'build-2',
+      buildStartUncertain: false,
+    });
+  });
+
+  it('never starts again on its own after an unrecorded build when the provider cannot list builds', async () => {
+    const { project } = await seedProject(seed, ['acme/api']);
+    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { buildOnPushEnabled: true } });
+    const sandbox = new BuildingSandbox();
+    delete sandbox.builds.list;
+    sandbox.statusOf = () => 'building';
+    const projects = projectsWith(seed);
+    projects.releaseBuildStart = async args => {
+      if (args.changes?.lastBuildId) throw new Error('database unavailable');
+      return seed.projects.releaseBuildStart(args);
+    };
+    const deps = { ...depsFor(seed, sandbox, now), projects, sleep: async () => {} };
+
+    await expect(runEnvironmentBuild(deps, { projectId: project.id, trigger: 'manual' })).resolves.toMatchObject({
+      outcome: 'failed',
+      reason: 'not_recorded',
+    });
+    clock = new Date(clock.getTime() + 11 * 60_000);
+    for (const trigger of ['schedule', 'push', 'schedule'] as const) {
+      expect(await runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger })).toEqual({
+        outcome: 'skipped',
+        reason: 'unresolved',
+      });
+    }
+    expect(sandbox.starts).toHaveLength(1);
+
+    // Build now is the user's call to build anyway; it resolves the mark.
+    await expect(
+      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'manual' }),
+    ).resolves.toMatchObject({ outcome: 'started', buildId: 'build-2' });
     expect(
       await runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'schedule' }),
-    ).toEqual({
+    ).toEqual({ outcome: 'skipped', reason: 'in_progress', buildId: 'build-2' });
+    expect(await seed.projects.getById({ id: project.id })).toMatchObject({ buildStartUncertain: false });
+  });
+
+  it('keeps the push window open when a push finds a build already running', async () => {
+    const { project } = await seedProject(seed, ['acme/api']);
+    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { buildPushDebounceMinutes: 10 } });
+    const sandbox = new BuildingSandbox();
+    sandbox.statusOf = () => 'building';
+
+    await expect(
+      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'manual' }),
+    ).resolves.toMatchObject({ outcome: 'started', buildId: 'build-1' });
+    // The push lands commit B while the manual build runs on A.
+    heads.byBranch.set('acme/api@main', SHA_B);
+    clock = new Date(clock.getTime() + 60_000);
+    expect(await runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'push' })).toEqual({
       outcome: 'skipped',
       reason: 'in_progress',
       buildId: 'build-1',
     });
-    expect(sandbox.starts).toHaveLength(1);
+
+    // A minute later the manual build is ready on A; the next push builds B.
+    sandbox.statusOf = () => 'ready';
+    clock = new Date(clock.getTime() + 60_000);
+    await expect(
+      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'push' }),
+    ).resolves.toMatchObject({ outcome: 'started', buildId: 'build-2', heads: { 'acme/api': SHA_B } });
+    clock = new Date(clock.getTime() + 60_000);
+    expect(await runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'push' })).toEqual({
+      outcome: 'skipped',
+      reason: 'debounced',
+    });
   });
 
   it('pins a ready build whose poll never finished before deciding a schedule run has nothing to build', async () => {

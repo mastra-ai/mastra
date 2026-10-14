@@ -874,12 +874,28 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       checkout === undefined ? undefined : multiRepo ? path.posix.dirname(checkout) : checkout;
     const workdir = sessionWorkdir(sessionEntry.workdir);
     const isLocalSandbox = sessionEntry.sandbox.provider === 'local';
+    // Checkout directories under a multi-repository session's workspace root, the
+    // session's own first: each one's AGENTS.md/CLAUDE.md and project skills load.
+    const checkoutDirs =
+      environment && multiRepo
+        ? [
+            repositoryDirectoryName(repoFullName),
+            ...environment.repos
+              .filter(repo => repo.slug.toLowerCase() !== repoFullName.toLowerCase())
+              .map(repo => repositoryDirectoryName(repo.slug)),
+          ]
+        : undefined;
     // The SDK system prompt uses `state.projectPath` without falling back to
     // the server cwd. Pin the session workdir once known so the prompt and
     // workspace tools describe the same checkout. A remote workdir resolves at
     // the sandbox's first start, so the pin self-heals on the next resolution.
-    if (ctx && workdir && ctx.getState()?.projectPath !== workdir) {
-      await ctx.setState({ projectPath: workdir, projectName: repoFullName });
+    if (
+      ctx &&
+      workdir &&
+      (ctx.getState()?.projectPath !== workdir ||
+        ctx.getState()?.instructionRoots?.join('\n') !== checkoutDirs?.join('\n'))
+    ) {
+      await ctx.setState({ projectPath: workdir, projectName: repoFullName, instructionRoots: checkoutDirs });
     }
 
     // Keyed by the session, not the request's thread: a workspace built for a
@@ -1451,14 +1467,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         return sessionWorkdir(checkout) ?? checkout;
       },
     });
-    // Project skill roots live in the session's own checkout. The filesystem
-    // is rooted at the workspace root in a multi-repository session, so the
-    // roots are prefixed with that checkout's directory (the boot's rule for
-    // where the repository materializes).
-    const skillRoot = multiRepo ? `${repositoryDirectoryName(repoFullName)}/` : '';
-    const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'].map(
-      skillPath => `${skillRoot}${skillPath}`,
-    );
+    // Relative to the filesystem root. An environment session's root is the
+    // workspace root, so its project skills live under each checkout, the
+    // session's own first.
+    const skillRoots = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];
+    const projectSkillPaths = checkoutDirs
+      ? checkoutDirs.flatMap(dir => skillRoots.map(skillPath => path.posix.join(dir, skillPath)))
+      : skillRoots;
     const guardedSkillFallback = new UnmaterializedAwareSkillSource(
       filesystem,
       () => sessionEntry.sandbox.status === 'running',
