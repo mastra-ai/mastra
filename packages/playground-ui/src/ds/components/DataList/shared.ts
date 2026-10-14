@@ -34,6 +34,10 @@ export const dataListRowStateStyles = [
   'focus-visible:bg-surface-panel has-focus-visible:bg-surface-panel',
   'data-featured:before:bg-surface-panel has-data-featured:before:bg-surface-panel has-data-selected:before:bg-surface-panel',
   'data-[variant=error]:bg-destructive-subtle has-data-[variant=error]:bg-destructive-subtle data-[variant=error]:active:bg-destructive-subtle-active has-data-[variant=error]:active:bg-destructive-subtle-active',
+  // Info tints the row surface rather than the row element, so the fluid hover still glides over it. The stacked
+  // forms outrank the featured and selected surfaces, so an info row keeps its tint once it is selected.
+  'data-[variant=info]:before:bg-info-subtle has-data-[variant=info]:before:bg-info-subtle',
+  'data-featured:data-[variant=info]:before:bg-info-subtle has-data-featured:has-data-[variant=info]:before:bg-info-subtle has-data-selected:has-data-[variant=info]:before:bg-info-subtle',
 ] as const;
 
 /**
@@ -68,8 +72,8 @@ export const dataListStickyStartStyles = [
   'data-list-sticky-start sticky left-0 z-10 isolate self-stretch overflow-visible',
 ] as const;
 
-/** Tone for a single row. Exposed as `data-variant`; `error` tints the row. */
-export type DataListRowVariant = 'default' | 'error';
+/** Tone for a single row. Exposed as `data-variant`; `error` tints the row red, `info` tints it blue to set it apart. */
+export type DataListRowVariant = 'default' | 'error' | 'info';
 
 /**
  * Layout/state modifiers shared by interactive row primitives

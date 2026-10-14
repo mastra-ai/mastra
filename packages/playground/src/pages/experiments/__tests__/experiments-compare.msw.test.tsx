@@ -104,6 +104,17 @@ function isChecked(id: string) {
   return screen.getByRole('checkbox', { name: `Select experiment ${id}` }).getAttribute('aria-checked') === 'true';
 }
 
+/** Names of the experiments whose row carries the comparable (info) tone. */
+function highlightedExperiments() {
+  return ['run a', 'run b', 'run c'].filter(
+    name => screen.getByText(name).closest('a')?.getAttribute('data-variant') === 'info',
+  );
+}
+
+function getLegend() {
+  return screen.getByRole('note', { name: 'Comparable experiments' });
+}
+
 async function renderLoadedPage() {
   const result = renderPage();
   await screen.findByText('run a');
@@ -145,6 +156,18 @@ describe('Experiments page — selection and compare', () => {
       expect(screen.queryByRole('button', { name: /reset/i })).toBeNull();
       expect(screen.queryByRole('button', { name: /cancel/i })).toBeNull();
     });
+
+    it('highlights no experiment', async () => {
+      await renderLoadedPage();
+
+      expect(highlightedExperiments()).toEqual([]);
+    });
+
+    it('explains above the list that a selection highlights the comparable experiments', async () => {
+      await renderLoadedPage();
+
+      expect(getLegend().textContent).toBe('Select an experiment to highlight the ones you can compare it with.');
+    });
   });
 
   describe('when only one experiment is selected', () => {
@@ -154,6 +177,32 @@ describe('Experiments page — selection and compare', () => {
 
       expect(getCompareButton().hasAttribute('disabled')).toBe(true);
       expect(await getCompareTooltip()).toBe('Select at least two experiments to compare');
+    });
+
+    it('highlights every experiment of its dataset, itself included', async () => {
+      await renderLoadedPage();
+      select('exp-a');
+
+      expect(highlightedExperiments()).toEqual(['run a', 'run b']);
+    });
+
+    it('explains the highlight above the list, naming the dataset', async () => {
+      await renderLoadedPage();
+      select('exp-a');
+
+      expect(getLegend().textContent).toBe(
+        'Highlighted experiments ran on Dataset One, like your first selection, and can be compared with it.',
+      );
+    });
+  });
+
+  describe('when the first selected experiment is deselected', () => {
+    it('highlights the dataset of the next selected experiment instead', async () => {
+      await renderLoadedPage();
+      select('exp-a', 'exp-c', 'exp-a');
+
+      expect(highlightedExperiments()).toEqual(['run c']);
+      expect(getLegend().textContent).toMatch(/ran on Dataset Two/);
     });
   });
 
@@ -184,6 +233,13 @@ describe('Experiments page — selection and compare', () => {
 
       expect(getCompareButton().hasAttribute('disabled')).toBe(true);
       expect(await getCompareTooltip()).toMatch(/same dataset/i);
+    });
+
+    it('leaves the selected experiment of the other dataset without highlight', async () => {
+      await renderLoadedPage();
+      select('exp-a', 'exp-c');
+
+      expect(highlightedExperiments()).toEqual(['run a', 'run b']);
     });
   });
 

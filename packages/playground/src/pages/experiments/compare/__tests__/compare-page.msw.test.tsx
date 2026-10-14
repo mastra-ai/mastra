@@ -14,6 +14,7 @@ import {
   comparisonOf,
 } from './fixtures/page';
 import { storageWithoutMetrics } from '@/domains/configuration/hooks/__tests__/fixtures/observability-storage-capabilities';
+import { buildDataset } from '@/domains/datasets/components/__tests__/fixtures/datasets';
 import { buildListExperimentsResponse } from '@/domains/experiments/components/__tests__/fixtures/experiments';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
@@ -22,6 +23,10 @@ const allExperiments = [sameDatasetA, sameDatasetB, otherDataset, ...moreSameDat
 
 beforeEach(() => {
   server.use(
+    // The dataset header is covered by the comparison layout test.
+    http.get(`${TEST_BASE_URL}/api/datasets/:datasetId`, ({ params }) =>
+      HttpResponse.json(buildDataset({ id: String(params.datasetId) })),
+    ),
     // The comparison itself is covered by its own layout test; keep it inert here.
     http.post(`${TEST_BASE_URL}/api/datasets/:datasetId/compare`, () => HttpResponse.json(emptyComparison)),
     // Mirrors the server: 404 when the experiment does not belong to the dataset.
