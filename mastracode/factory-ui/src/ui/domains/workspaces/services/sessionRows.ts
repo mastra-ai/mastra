@@ -1,3 +1,4 @@
+import type { WorkspacePullRequestTarget } from '../../../../hooks/useWorkspacePullRequestMerges';
 import { changeRequestNumberForItem, pullRequestStatusForItem } from '../../factory/boardItems';
 import { itemBoard } from '../../factory/boardStages';
 import type { ChangeRequestProvider } from '../../factory/services/githubSubscriptions';
@@ -6,11 +7,18 @@ import type { WorkItem } from '../../factory/services/workItems';
 import { isTerminalStage } from '../../factory/stages';
 import type { SessionPreviewDetails } from '../components/SessionPreviewCard';
 import { getFactorySessionKind, getSessionOwnerDetails, getUserSessionLabel } from './sessionPresentation';
-import type { SessionViewerProfile } from './sessionPresentation';
+import type { SessionOwnerDetails, SessionViewerProfile } from './sessionPresentation';
 import { sessionRowStatus } from './sessionStatus';
+import type { SessionRowStatus } from './sessionStatus';
 import type { FactoryUserSession } from './user-sessions';
 
 export type SessionActivityStatus = 'waiting' | 'working' | 'initializing' | 'idle' | 'done';
+
+export interface SessionPullRequest {
+  number?: number;
+  provider: ChangeRequestProvider;
+  knownMerged: boolean;
+}
 
 export interface SessionListRow {
   session: FactoryUserSession;
@@ -21,18 +29,13 @@ export interface SessionListRow {
   url: string;
   openPath: string;
   active: boolean;
-  initializing: boolean;
-  running: boolean;
-  attention: boolean;
-  settled: boolean;
   status: SessionActivityStatus;
-  ownerName: string;
+  owner: SessionOwnerDetails;
+  ownedByViewer: boolean;
   itemLabel?: string;
   itemTitle?: string;
   threadId?: string;
-  pullRequestNumber?: number;
-  provider: ChangeRequestProvider;
-  knownMerged: boolean;
+  pullRequest?: SessionPullRequest;
   pinned: boolean;
   createdAt: string;
   updatedAt: string;
@@ -49,6 +52,18 @@ export function sessionActivityStatus(row: {
   return marker ?? (row.settled ? 'done' : 'idle');
 }
 
+export const STATUS_MARKER_BY_ACTIVITY: Record<SessionActivityStatus, SessionRowStatus | undefined> = {
+  waiting: 'ready',
+  working: 'working',
+  initializing: 'initializing',
+  idle: undefined,
+  done: undefined,
+};
+
+function isOwnedByViewer(session: FactoryUserSession, viewer: SessionViewerProfile | undefined): boolean {
+  return !viewer?.userId || session.userId === viewer.userId;
+}
+
 export function sessionBoard(session: FactoryUserSession, item: WorkItem | undefined): string {
   return item ? itemBoard(item) : getFactorySessionKind(session, undefined);
 }
@@ -58,6 +73,15 @@ function isSettled(item: WorkItem | undefined, pullRequest: WorkItem | undefined
   if (!pullRequest) return false;
   const status = pullRequestStatusForItem(pullRequest);
   return status === 'merged' || status === 'closed';
+}
+
+function sessionPullRequest(pullRequest: WorkItem | undefined): SessionPullRequest | undefined {
+  if (!pullRequest) return undefined;
+  return {
+    number: changeRequestNumberForItem(pullRequest),
+    provider: pullRequest.source === 'gitlab-pr' ? 'gitlab' : 'github',
+    knownMerged: pullRequest.metadata.merged === true,
+  };
 }
 
 export interface FactorySessionRowInput {
@@ -86,8 +110,6 @@ export function buildFactorySessionRow({
   viewer,
 }: FactorySessionRowInput): SessionListRow {
   const url = `/factories/${factoryId}/workspaces/${session.sessionId}`;
-  const initializing = !session.materializedAt;
-  const settled = isSettled(item, pullRequest);
   return {
     session,
     origin: 'factory',
@@ -97,18 +119,18 @@ export function buildFactorySessionRow({
     url,
     openPath: `${url}/threads/${session.sessionId}`,
     active: session.sessionId === routeSessionId,
-    initializing,
-    running,
-    attention,
-    settled,
-    status: sessionActivityStatus({ initializing, running, attention, settled }),
-    ownerName: getSessionOwnerDetails(session, viewer).name,
+    status: sessionActivityStatus({
+      initializing: !session.materializedAt,
+      running,
+      attention,
+      settled: isSettled(item, pullRequest),
+    }),
+    owner: getSessionOwnerDetails(session, viewer),
+    ownedByViewer: isOwnedByViewer(session, viewer),
     itemLabel: item && item.source !== 'manual' ? relationshipLabel(item) : undefined,
     itemTitle: item?.title,
     threadId,
-    pullRequestNumber: pullRequest ? changeRequestNumberForItem(pullRequest) : undefined,
-    provider: pullRequest?.source === 'gitlab-pr' ? 'gitlab' : 'github',
-    knownMerged: pullRequest?.metadata.merged === true,
+    pullRequest: sessionPullRequest(pullRequest),
     pinned,
     createdAt: session.createdAt,
     updatedAt: item?.updatedAt ?? session.updatedAt,
@@ -133,7 +155,6 @@ export function buildUserSessionRow({
   viewer,
 }: UserSessionRowInput): SessionListRow {
   const url = `/factories/${factoryId}/user/threads/${session.sessionId}`;
-  const initializing = !session.materializedAt;
   return {
     session,
     origin: 'user',
@@ -143,16 +164,34 @@ export function buildUserSessionRow({
     url,
     openPath: url,
     active: pathname === url,
-    initializing,
-    running,
-    attention: false,
-    settled: false,
-    status: sessionActivityStatus({ initializing, running, attention: false, settled: false }),
-    ownerName: getSessionOwnerDetails(session, viewer).name,
-    provider: 'github',
-    knownMerged: false,
+    status: sessionActivityStatus({
+      initializing: !session.materializedAt,
+      running,
+      attention: false,
+      settled: false,
+    }),
+    owner: getSessionOwnerDetails(session, viewer),
+    ownedByViewer: isOwnedByViewer(session, viewer),
     pinned,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
   };
+}
+
+function pullRequestMergeTarget({ session, threadId, pullRequest }: SessionListRow): WorkspacePullRequestTarget[] {
+  if (!threadId || pullRequest?.number === undefined) return [];
+  return [
+    {
+      sessionId: session.sessionId,
+      threadId,
+      projectPath: session.sessionId,
+      pullRequestNumber: pullRequest.number,
+      provider: pullRequest.provider,
+      knownMerged: pullRequest.knownMerged,
+    },
+  ];
+}
+
+export function pullRequestMergeTargets(rows: readonly SessionListRow[]): WorkspacePullRequestTarget[] {
+  return rows.flatMap(pullRequestMergeTarget);
 }

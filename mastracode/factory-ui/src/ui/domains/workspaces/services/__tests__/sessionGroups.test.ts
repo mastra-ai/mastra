@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { builtinBoardCatalog, releaseBoard } from '../../../../../../e2e/ui/board-catalog';
-import { groupSessionRowsByBoard } from '../sessionGroups';
+import { collapsedRowsKeepingActive, groupSessionRowsByBoard } from '../sessionGroups';
 import type { SessionGroup } from '../sessionGroups';
 import { factoryRow, testSession, testWorkItem, userRow } from './fixtures/sessionRows';
 
@@ -42,5 +42,31 @@ describe('groupSessionRowsByBoard', () => {
     const groups = groupSessionRowsByBoard([secondWorkRow, workRow], builtinBoardCatalog.boards);
 
     expect(groupSummary(groups)).toEqual([{ label: 'Work', sessionIds: ['work-2', 'work-1'] }]);
+  });
+});
+
+describe('collapsedRowsKeepingActive', () => {
+  const rows = (activeIndex?: number) =>
+    Array.from({ length: 8 }, (_, index) =>
+      factoryRow(testSession(`work-${index + 1}`), {
+        routeSessionId: activeIndex === index ? `work-${index + 1}` : undefined,
+      }),
+    );
+  const sessionIds = (visible: ReturnType<typeof collapsedRowsKeepingActive>) =>
+    visible.map(row => row.session.sessionId);
+
+  it('keeps the first five rows of a long group', () => {
+    expect(sessionIds(collapsedRowsKeepingActive(rows()))).toEqual(['work-1', 'work-2', 'work-3', 'work-4', 'work-5']);
+  });
+
+  it('keeps the open session visible when it sorts past the fold', () => {
+    expect(sessionIds(collapsedRowsKeepingActive(rows(6)))).toEqual([
+      'work-1',
+      'work-2',
+      'work-3',
+      'work-4',
+      'work-5',
+      'work-7',
+    ]);
   });
 });

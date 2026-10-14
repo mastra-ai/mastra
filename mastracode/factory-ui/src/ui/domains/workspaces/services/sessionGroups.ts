@@ -14,6 +14,8 @@ export interface SessionGroup extends SessionGroupHeading {
   rows: SessionListRow[];
 }
 
+export const COLLAPSED_GROUP_ROW_COUNT = 5;
+
 const USER_GROUP: SessionGroupHeading = { key: 'user', label: 'User', icon: 'user' };
 
 function boardGroupKey(row: SessionListRow): string {
@@ -50,4 +52,11 @@ export function groupSessionRowsByBoard(
     const groupRows = rows.filter(row => boardGroupKey(row) === heading.key);
     return groupRows.length > 0 ? [{ ...heading, rows: groupRows }] : [];
   });
+}
+
+export function collapsedRowsKeepingActive(rows: readonly SessionListRow[]): SessionListRow[] {
+  const visible = rows.slice(0, COLLAPSED_GROUP_ROW_COUNT);
+  const open = rows.find(row => row.active);
+  if (open && !visible.includes(open)) visible.push(open);
+  return visible;
 }
