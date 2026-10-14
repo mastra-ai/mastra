@@ -40,8 +40,8 @@ export interface UpdateActiveObservationsResult {
  * The append targets the head generation: when `input.id` was superseded, the chunk is
  * appended to the current head instead. The append is skipped (`persisted: false`) when the
  * head already holds a chunk with the same `cycleId`, or when the chunk is wholly covered by
- * the head's cursor. Chunks carry `lastObservedAt = max message time + 1ms`, so a chunk is
- * wholly covered iff `head.lastObservedAt >= chunk.lastObservedAt - 1ms`.
+ * the head's cursor. Chunks carry `lastObservedAt = max message time`, so a chunk is
+ * wholly covered iff `head.lastObservedAt >= chunk.lastObservedAt`.
  */
 export interface UpdateBufferedObservationsResult {
   /** Whether the chunk was stored. */
@@ -73,16 +73,15 @@ export function compareObservationalMemoryHeadOrder(
 }
 
 /**
- * A buffered chunk stores `lastObservedAt = max message time + 1ms`. It is wholly covered
- * (every message it observed is already at or before the cursor) iff
- * `cursor >= chunk.lastObservedAt - 1ms`.
+ * A buffered chunk stores `lastObservedAt = max message time`. It is wholly covered
+ * (every message it observed is already at or before the cursor) iff `cursor >= chunk.lastObservedAt`.
  */
 export function isBufferedChunkCoveredByCursor(
   chunkLastObservedAt: Date | string,
   cursor: Date | string | null | undefined,
 ): boolean {
   if (!cursor) return false;
-  return new Date(cursor).getTime() >= new Date(chunkLastObservedAt).getTime() - 1;
+  return new Date(cursor).getTime() >= new Date(chunkLastObservedAt).getTime();
 }
 
 /** The later of two cursors; `undefined` only when both are absent. */

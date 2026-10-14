@@ -1068,20 +1068,20 @@ describe('observational memory lifecycle (supersededBy)', () => {
       expect(parseStoredChunks(docs[0]!.bufferedObservationChunks)).toHaveLength(1);
     });
 
-    it('skips a chunk the cursor wholly covers (cursor T, chunk T+1ms) but stores one past it (chunk T+2ms)', async () => {
+    it('skips a chunk the cursor wholly covers (cursor T, chunk T) but stores one past it (chunk T+1ms)', async () => {
       const cursor = '2026-06-01T01:00:00.000Z';
       const { ctx, docs } = createFakeOMDb([storedOMDoc({ lastObservedAt: cursor })]);
 
       const covered = await run(ctx, {
         op: 'omAppendBufferedChunk',
         id: 'om-1',
-        chunk: serializedChunk({ cycleId: 'c-covered', lastObservedAt: '2026-06-01T01:00:00.001Z' }),
+        chunk: serializedChunk({ cycleId: 'c-covered', lastObservedAt: '2026-06-01T01:00:00.000Z' }),
         updatedAt: NOW,
       });
       const uncovered = await run(ctx, {
         op: 'omAppendBufferedChunk',
         id: 'om-1',
-        chunk: serializedChunk({ cycleId: 'c-new', lastObservedAt: '2026-06-01T01:00:00.002Z' }),
+        chunk: serializedChunk({ cycleId: 'c-new', lastObservedAt: '2026-06-01T01:00:00.001Z' }),
         updatedAt: NOW,
       });
 

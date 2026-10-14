@@ -25,7 +25,7 @@ const ts = (list: MessageList, id: string) =>
 const ids = (list: MessageList) => list.get.all.db().map(m => m.id);
 
 // MessageList spaces messages added within the same millisecond 1ms apart, so the next
-// message can land exactly on the observation cursor.
+// message lands 1ms after the observation cursor (= newest observed message time).
 describe('filterObservedMessages at the lastObservedAt boundary', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -41,10 +41,10 @@ describe('filterObservedMessages at the lastObservedAt boundary', () => {
     return list;
   }
 
-  it('keeps an unobserved message created exactly on a newest-observed + 1ms cursor', () => {
+  it('keeps the unobserved successor 1ms after the cursor', () => {
     const list = threeMessages();
-    const lastObservedAt = new Date(ts(list, 'a1') + 1); // async buffering cursor
-    expect(ts(list, 'a2')).toBe(lastObservedAt.getTime());
+    const lastObservedAt = new Date(ts(list, 'a1'));
+    expect(ts(list, 'a2')).toBe(lastObservedAt.getTime() + 1);
 
     filterObservedMessages({
       messageList: list,
@@ -54,23 +54,23 @@ describe('filterObservedMessages at the lastObservedAt boundary', () => {
     expect(ids(list)).toEqual(['a2']);
   });
 
-  it('keeps an unobserved message sharing the timestamp of a newest-observed cursor', () => {
+  it('keeps the unobserved successor for records without observed ids (activation/reflection)', () => {
     const list = threeMessages();
-    const lastObservedAt = new Date(ts(list, 'a2')); // sync cursor = newest observed timestamp
-    filterObservedMessages({
-      messageList: list,
-      record: { lastObservedAt, observedMessageIds: ['u1', 'a1'] } as never,
-    });
-
-    expect(ids(list)).toEqual(['a2']);
-  });
-
-  it('still prunes everything at or before the cursor for records without observed ids', () => {
-    const list = threeMessages();
-    const lastObservedAt = new Date(ts(list, 'a1') + 1);
+    const lastObservedAt = new Date(ts(list, 'a1'));
 
     filterObservedMessages({ messageList: list, record: { lastObservedAt, observedMessageIds: [] } as never });
 
-    expect(ids(list)).toEqual([]);
+    expect(ids(list)).toEqual(['a2']);
+  });
+
+  it('keeps an unobserved message sharing the cursor millisecond when observed ids say so', () => {
+    const list = threeMessages();
+    const lastObservedAt = new Date(ts(list, 'a2'));
+    filterObservedMessages({
+      messageList: list,
+      record: { lastObservedAt, observedMessageIds: ['u1', 'a1'] } as never,
+    });
+
+    expect(ids(list)).toEqual(['a2']);
   });
 });

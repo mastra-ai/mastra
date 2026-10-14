@@ -57,19 +57,19 @@ describe('selectSafeBufferPrefix', () => {
     expect(selectSafeBufferPrefix([message('a', 100, [{ id: 't', state: 'call' }])])).toEqual([]);
   });
 
-  it.each([{ gap: 0 }, { gap: 1 }])('defers when the retained message is only $gap ms newer', ({ gap }) => {
+  it('defers when the retained message shares the newest prefix timestamp', () => {
     const result = selectSafeBufferPrefix([
       message('a', 100),
       message('b', 200),
-      message('c', 200 + gap, [{ id: 't', state: 'call' }]),
+      message('c', 200, [{ id: 't', state: 'call' }]),
     ]);
     expect(result).toEqual([]);
   });
 
-  it('buffers the prefix when the retained message is 2 ms newer', () => {
+  it('buffers the prefix when the retained message is 1 ms newer', () => {
     const result = selectSafeBufferPrefix([message('a', 100), message('b', 200, [{ id: 't', state: 'call' }])]);
     expect(ids(result)).toEqual(['a']);
-    const adjacent = selectSafeBufferPrefix([message('a', 198), message('b', 200, [{ id: 't', state: 'call' }])]);
+    const adjacent = selectSafeBufferPrefix([message('a', 199), message('b', 200, [{ id: 't', state: 'call' }])]);
     expect(ids(adjacent)).toEqual(['a']);
   });
 

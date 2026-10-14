@@ -411,10 +411,11 @@ describe('22573 idle', () => {
     // Pending call on the newest message: buffer everything before it.
     { times: [100, 200, 300, 400], pendingIndex: 3, expected: 3 },
     { times: [100, 200, 300, 400], pendingIndex: 3, expected: 3, reverse: true },
-    // Cursor collision (max(prefix)+1ms >= pending): defer the whole attempt.
+    // Cursor collision (max(prefix) >= pending): defer the whole attempt.
     { times: [100, 200, 400, 400], pendingIndex: 3, expected: 0 },
-    { times: [100, 200, 399, 400], pendingIndex: 3, expected: 0 },
-    { times: [399, 399, 399, 400], pendingIndex: 3, expected: 0 },
+    // The cursor lands on max(prefix), so a pending message 1ms later stays visible.
+    { times: [100, 200, 399, 400], pendingIndex: 3, expected: 3 },
+    { times: [399, 399, 399, 400], pendingIndex: 3, expected: 3 },
     // A toolCallId shared across the cut: defer the whole attempt.
     { times: [100, 200, 300, 400], pendingIndex: 3, expected: 0, splitTool: true },
     // A `call` that is not on the newest message is an orphan — the conversation

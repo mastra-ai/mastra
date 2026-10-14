@@ -377,7 +377,7 @@ describe('MongoDB observational memory supersededBy, rollover recovery, and appe
 
   it('skips the chunk when the cursor moves past all of its messages between the read and the write', async () => {
     const record = await a.initializeObservationalMemory(newKey('cursor-past'));
-    const c = chunk('covered', 101); // max message time = 100ms
+    const c = chunk('covered', 100); // max message time = 100ms
     interceptAppend(() =>
       b.commitActiveObservations({ id: record.id, observations: '- synced', tokenCount: 1, lastObservedAt: at(100) }),
     );
@@ -390,7 +390,7 @@ describe('MongoDB observational memory supersededBy, rollover recovery, and appe
 
   it('stores the chunk when the cursor stops just before its last message', async () => {
     const record = await a.initializeObservationalMemory(newKey('cursor-before'));
-    const c = chunk('partial', 101);
+    const c = chunk('partial', 100);
     interceptAppend(() =>
       b.commitActiveObservations({ id: record.id, observations: '- synced', tokenCount: 1, lastObservedAt: at(99) }),
     );
