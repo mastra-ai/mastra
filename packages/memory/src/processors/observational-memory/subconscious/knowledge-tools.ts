@@ -43,6 +43,17 @@ export type KnowledgeToolContext = {
   requestContext?: { get(key: string): unknown };
 };
 
+/**
+ * Older Cores clone materializeScope's input, so a live request context (which can hold functions)
+ * is only passed to a Core that advertises the vouch capability.
+ */
+export function knowledgeRunContext(
+  requestContext: KnowledgeToolContext['requestContext'],
+  knowledgeModule: Record<string, unknown> = coreKnowledge,
+): { requestContext?: KnowledgeToolContext['requestContext'] } {
+  return knowledgeModule.KNOWLEDGE_VOUCH_RUN_SCOPES === true ? { requestContext } : {};
+}
+
 export async function getKnowledgeStore(memory: KnowledgeStoreMemory): Promise<KnowledgeStorage> {
   if (memory.getKnowledgeStore) return memory.getKnowledgeStore();
   const store = await memory.storage?.getStore('knowledge');
@@ -63,12 +74,7 @@ export async function resolveKnowledgeScopeIds(
   if (!rung) throw new Error('Knowledge tools require an active resourceId.');
   if (!threadId) throw new Error('Knowledge tools require an active threadId.');
   const knowledge = memory.getKnowledgeInstance?.();
-  // Older Cores clone materializeScope's input, so a live request context (which can hold functions)
-  // must only be passed to a Core that advertises the vouch capability.
-  const runContext =
-    (coreKnowledge as Record<string, unknown>).KNOWLEDGE_VOUCH_RUN_SCOPES === true
-      ? { requestContext: context?.requestContext }
-      : {};
+  const runContext = knowledgeRunContext(context?.requestContext);
 
   const orgAddress = `org:${organizationId}`;
   const resourceAddress = rung.address;

@@ -1,31 +1,25 @@
+import * as coreKnowledge from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-// Simulate an older Core that ships the Knowledge API but not the vouch hook: no capability
-// marker, and materializeScope clones its whole input.
-vi.mock('@mastra/core/knowledge', async importOriginal => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  const { KNOWLEDGE_VOUCH_RUN_SCOPES: _marker, ...rest } = actual;
-  return { ...rest, KNOWLEDGE_VOUCH_RUN_SCOPES: undefined };
-});
-
-import { resolveKnowledgeScopeIds } from '../subconscious/knowledge-tools';
+import { knowledgeRunContext } from '../subconscious/knowledge-tools';
 
 describe('Knowledge vouch capability', () => {
-  it('does not hand a live request context to a Core without the vouch hook', async () => {
-    const materializeScope = vi.fn(async (input: { address: string }) => {
-      structuredClone(input);
-      return { scopes: { [input.address]: `id:${input.address}` } };
-    });
-    const memory = { getKnowledgeInstance: () => ({ materializeScope }) } as any;
-    const requestContext = new RequestContext<any>([
-      ['organizationId', 'acme'],
-      ['onEvent', () => undefined],
-    ]);
+  const requestContext = new RequestContext<any>([
+    ['organizationId', 'acme'],
+    ['onEvent', () => undefined],
+  ]);
 
-    await expect(
-      resolveKnowledgeScopeIds(memory, { agent: { resourceId: 'r1', threadId: 't1' }, requestContext }),
-    ).resolves.toHaveLength(3);
-    for (const [input] of materializeScope.mock.calls) expect(input).not.toHaveProperty('requestContext');
+  it('does not hand a live request context to a Core without the vouch hook', () => {
+    // An older Core: the Knowledge API without the capability marker. It clones its input.
+    const { KNOWLEDGE_VOUCH_RUN_SCOPES: _marker, ...olderCore } = coreKnowledge as Record<string, unknown>;
+    const input = { address: 'org:acme', ...knowledgeRunContext(requestContext, olderCore) };
+
+    expect(input).not.toHaveProperty('requestContext');
+    expect(() => structuredClone(input)).not.toThrow();
+  });
+
+  it('passes the request context to a Core that advertises the vouch capability', () => {
+    expect(knowledgeRunContext(requestContext, coreKnowledge as Record<string, unknown>)).toEqual({ requestContext });
   });
 });
