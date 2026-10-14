@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
 import { useLinearStatusQuery } from '../../../../../hooks/useLinearData';
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
@@ -13,9 +14,13 @@ export function OnboardingLinearConnection({ onConnect }: { onConnect: () => voi
       <OnboardingConnectionRow
         compact
         icon={<LinearIcon />}
-        name="Linear connected"
-        connected
+        name="Linear"
         description={`Connected to ${status.workspace?.name ?? 'Linear'}.`}
+        action={
+          <Txt as="span" variant="caption" tone="muted">
+            Connected
+          </Txt>
+        }
       />
     );
   if (status?.reason === 'missing_config')
@@ -44,7 +49,7 @@ export function OnboardingLinearConnection({ onConnect }: { onConnect: () => voi
         name="Linear"
         description="Authorization expired. Reconnect Linear to continue."
         action={
-          <Button variant="ghost" size="sm" aria-label="Reconnect Linear" onClick={onConnect}>
+          <Button size="sm" aria-label="Reconnect Linear" onClick={onConnect}>
             Reconnect
           </Button>
         }
@@ -58,7 +63,7 @@ export function OnboardingLinearConnection({ onConnect }: { onConnect: () => voi
         name="Linear"
         description="Issues and priorities for your work board."
         action={
-          <Button variant="ghost" size="sm" aria-label="Connect Linear" onClick={onConnect}>
+          <Button size="sm" aria-label="Connect Linear" onClick={onConnect}>
             Connect
           </Button>
         }
