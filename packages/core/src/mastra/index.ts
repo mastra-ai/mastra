@@ -4546,10 +4546,10 @@ export class Mastra<
    * ```
    */
   public getScorerById<TScorerName extends keyof TScorers>(id: TScorers[TScorerName]['id']): TScorers[TScorerName] {
-    for (const [_key, value] of Object.entries(this.#scorers ?? {})) {
-      if (value.id === id || value?.name === id) {
-        return value as TScorers[TScorerName];
-      }
+    const scorers = Object.values(this.#scorers ?? {});
+    const match = scorers.find(value => value.id === id) ?? scorers.find(value => value?.name === id);
+    if (match) {
+      return match as TScorers[TScorerName];
     }
 
     const error = new MastraError({

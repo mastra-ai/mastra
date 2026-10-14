@@ -114,6 +114,7 @@ describe('createOnScorerHook', () => {
     mockMastra = {
       getStorage: vi.fn().mockReturnValue(mockStorage),
       getLogger: vi.fn().mockReturnValue({
+        debug: vi.fn(),
         error: vi.fn(),
         warn: vi.fn(),
         trackException: vi.fn(),
@@ -354,6 +355,54 @@ describe('createOnScorerHook', () => {
     });
 
     expect(mockScorer.run.mock.calls[0][0].output).toBe(output);
+  });
+
+  it('should fall back to the mastra-registered scorer when the workflow cannot be resolved', async () => {
+    const mockScorer = {
+      id: 'nested-step-scorer',
+      name: 'Nested step scorer',
+      run: vi.fn().mockResolvedValue({ score: 1 }),
+    };
+    mockMastra.getWorkflowById.mockImplementation(() => {
+      throw new Error('Workflow with ID inner not found');
+    });
+    mockMastra.getScorerById.mockReturnValue(mockScorer);
+
+    await hook({
+      runId: 'test-run',
+      scorer: { id: mockScorer.id },
+      input: [],
+      output: { value: 'step-result' },
+      source: 'LIVE',
+      entity: { id: 'inner' },
+      entityType: 'WORKFLOW',
+    });
+
+    expect(mockMastra.getScorerById).toHaveBeenCalledWith(mockScorer.id);
+    expect(mockScorer.run).toHaveBeenCalledTimes(1);
+    expect(mockScoresStore.saveScore).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not fall back to a mastra-registered scorer when a registered workflow fails to list scorers', async () => {
+    const mockScorer = { id: 'quality', name: 'Quality', run: vi.fn().mockResolvedValue({ score: 1 }) };
+    mockMastra.getWorkflowById.mockReturnValue({
+      listScorers: vi.fn().mockRejectedValue(new Error('dynamic scorers failed')),
+    });
+    mockMastra.getScorerById.mockReturnValue(mockScorer);
+
+    await hook({
+      runId: 'test-run',
+      scorer: { id: mockScorer.id },
+      input: [],
+      output: {},
+      source: 'LIVE',
+      entity: { id: 'wf' },
+      entityType: 'WORKFLOW',
+    });
+
+    expect(mockMastra.getScorerById).not.toHaveBeenCalled();
+    expect(mockScorer.run).not.toHaveBeenCalled();
+    expect(mockScoresStore.saveScore).not.toHaveBeenCalled();
   });
 
   it('should pass live span correlation context and metadata into scorer.run', async () => {
@@ -651,7 +700,7 @@ describe('createOnScorerHook owner-scoped dispatch', () => {
     return {
       runId: 'run-1',
       scorerId: 'test-scorer',
-      scorerObject: { scorer: { id: 'test-scorer', name: 'Test Scorer', description: 'test' } } as any,
+      scorerObject: { scorer: mockScorer } as any,
       input: {},
       output: {},
       requestContext: {},
@@ -709,6 +758,20 @@ describe('createOnScorerHook owner-scoped dispatch', () => {
 
     // executeHook defers via setImmediate, so flush the queue before asserting
     // that nothing happened.
+    for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve));
+
+    expect(mockScorer.run).not.toHaveBeenCalled();
+    expect(mockScoresStore.saveScore).not.toHaveBeenCalled();
+  });
+
+  it('does not let an ownerless payload carry its scorer to an instance that does not know it', async () => {
+    // Swap the registered hook for one whose Mastra has no matching scorer.
+    deregisterHook(AvailableHooks.ON_SCORER_RUN, onScorerHook);
+    onScorerHook = createOnScorerHook(makeMastra(undefined) as any);
+    registerHook(AvailableHooks.ON_SCORER_RUN, onScorerHook);
+
+    runScorer(scorerArgs(undefined));
+
     for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve));
 
     expect(mockScorer.run).not.toHaveBeenCalled();

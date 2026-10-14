@@ -213,6 +213,19 @@ describe('Scorer Registration', () => {
     expect(allScorers?.['agent-level-scorer']).toBeDefined();
   });
 
+  it('should prefer an exact id match over a name match in getScorerById', () => {
+    const nameCollision = createScorer({ id: 'other-scorer', name: 'target-scorer', description: 'collides by name' });
+    const exact = createTestScorer('target-scorer');
+
+    const mastra = new Mastra({
+      logger: false,
+      scorers: { nameCollision, exact },
+    });
+
+    expect(mastra.getScorerById('target-scorer')).toBe(exact);
+    expect(mastra.getScorerById('target-scorer-name')).toBe(exact);
+  });
+
   it('should register static workflow step scorers before addWorkflow returns', () => {
     const workflowScorer = createTestScorer('workflow-step-scorer');
     const step = createStep({
@@ -363,5 +376,133 @@ describe('Scorer Registration', () => {
         }),
       );
     });
+  });
+
+  it('should save step scores from a nested workflow that is not registered on the Mastra instance', async () => {
+    const nestedScorer = createTestScorer('nested-step-scorer');
+    const saveScore = vi.fn().mockResolvedValue({ score: {} });
+    const innerStep = createStep({
+      id: 'inner-step',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      scorers: { nested: { scorer: nestedScorer } },
+      execute: async ({ inputData }) => inputData,
+    });
+    const inner = createWorkflow({
+      id: 'inner-workflow',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+    })
+      .then(innerStep)
+      .commit();
+    const outer = createWorkflow({
+      id: 'outer-workflow',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+    })
+      .then(inner)
+      .commit();
+
+    const mastra = new Mastra({
+      logger: false,
+      storage: {
+        init: vi.fn().mockResolvedValue(undefined),
+        getStore: vi.fn(async (domain: string) => (domain === 'scores' ? { saveScore } : null)),
+        __setLogger: vi.fn(),
+      } as any,
+      workflows: { outer },
+    });
+    vi.spyOn(mastra.observability, 'addScore').mockResolvedValue(undefined);
+
+    const run = await outer.createRun({ disableScorers: false });
+    const result = await run.start({ inputData: { value: 'input' } });
+
+    expect(result.status).toBe('success');
+    await vi.waitFor(() => {
+      expect(saveScore).toHaveBeenCalledWith(expect.objectContaining({ scorerId: 'nested-step-scorer' }));
+    });
+  });
+
+  describe.each([
+    ['top-level', false],
+    ['nested, unregistered', true],
+  ])('step scorer whose id is also registered on the instance (%s workflow)', (_label, nested) => {
+    it("scores with the step's own scorer, not the instance-registered one", async () => {
+      const instanceScorer = createScorer({ id: 'quality', description: 'instance' }).generateScore(() => 0.1);
+      const stepScorer = createScorer({ id: 'quality', description: 'step' }).generateScore(() => 0.9);
+      const saveScore = vi.fn().mockResolvedValue({ score: {} });
+      const step = createStep({
+        id: 'draft',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
+        scorers: { quality: { scorer: stepScorer } },
+        execute: async ({ inputData }) => inputData,
+      });
+      const io = { inputSchema: z.object({ value: z.string() }), outputSchema: z.object({ value: z.string() }) };
+      const inner = createWorkflow({ id: 'inner', ...io })
+        .then(step)
+        .commit();
+      const wf = nested
+        ? createWorkflow({ id: 'outer', ...io })
+            .then(inner)
+            .commit()
+        : createWorkflow({ id: 'outer', ...io })
+            .then(step)
+            .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: {
+          init: vi.fn().mockResolvedValue(undefined),
+          getStore: vi.fn(async (domain: string) => (domain === 'scores' ? { saveScore } : null)),
+          __setLogger: vi.fn(),
+        } as any,
+        scorers: { quality: instanceScorer },
+        workflows: { wf },
+      });
+      vi.spyOn(mastra.observability, 'addScore').mockResolvedValue(undefined);
+
+      const result = await (await wf.createRun({ disableScorers: false })).start({ inputData: { value: 'x' } });
+
+      expect(result.status).toBe('success');
+      await vi.waitFor(() => expect(saveScore).toHaveBeenCalled());
+      // Let any further deferred hook dispatches settle before asserting exclusivity.
+      for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve));
+      expect(saveScore).toHaveBeenCalledTimes(1);
+      expect(saveScore).toHaveBeenCalledWith(expect.objectContaining({ scorerId: 'quality', score: 0.9 }));
+    });
+  });
+
+  it('does not save step scores from a standalone workflow into an unrelated Mastra instance', async () => {
+    const saveScore = vi.fn().mockResolvedValue({ score: {} });
+    const step = createStep({
+      id: 'draft',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      scorers: { standalone: { scorer: createTestScorer('standalone-step-scorer') } },
+      execute: async ({ inputData }) => inputData,
+    });
+    const standalone = createWorkflow({
+      id: 'standalone',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+    })
+      .then(step)
+      .commit();
+
+    new Mastra({
+      logger: false,
+      storage: {
+        init: vi.fn().mockResolvedValue(undefined),
+        getStore: vi.fn(async (domain: string) => (domain === 'scores' ? { saveScore } : null)),
+        __setLogger: vi.fn(),
+      } as any,
+    });
+
+    const result = await (await standalone.createRun({ disableScorers: false })).start({ inputData: { value: 'x' } });
+
+    expect(result.status).toBe('success');
+    for (let i = 0; i < 10; i++) await new Promise(resolve => setImmediate(resolve));
+    expect(saveScore).not.toHaveBeenCalled();
   });
 });
