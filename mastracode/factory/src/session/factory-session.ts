@@ -1,7 +1,8 @@
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 
-import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
+import type { FactoryModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import {
   SourceControlConnectionNotFoundError,
   type SourceControlSession,
@@ -14,20 +15,32 @@ type FactorySession = Awaited<ReturnType<AgentController<MastraCodeState>['creat
 
 export class FactorySourceControlConflictError extends Error {}
 
-/**
- * Read the factory project's default model. Best-effort: a missing project or an
- * uninitialized storage domain means "no default", never a failed run.
- */
-export async function resolveFactoryDefaultModelId(
-  projects: FactoryProjectsStorage | undefined,
-  factoryProjectId: string | undefined,
-): Promise<string | undefined> {
-  if (!projects || !factoryProjectId) return undefined;
+/** Resolve the model and exclusive credential scope for a Factory session. */
+export async function resolveFactorySessionModel(args: {
+  projects: FactoryProjectsStorage | undefined;
+  modelDefaults: ModelDefaultsStorage | undefined;
+  factoryProjectId: string | undefined;
+  orgId: string;
+  ownerUserId: string;
+}): Promise<{ modelScope: FactoryModelScope; modelId?: string }> {
+  if (!args.projects || !args.factoryProjectId) throw new Error('Factory model policy is unavailable.');
+
+  const project = await args.projects.getById({ id: args.factoryProjectId });
+  if (!project || project.orgId !== args.orgId) throw new Error('Factory model policy is unavailable.');
+  if (project.modelScope !== 'user') {
+    return { modelScope: 'factory', ...(project.defaultModelId ? { modelId: project.defaultModelId } : {}) };
+  }
+
   try {
-    const project = await projects.getById({ id: factoryProjectId });
-    return project?.defaultModelId ?? undefined;
-  } catch {
-    return undefined;
+    const userDefault = await args.modelDefaults?.get({ orgId: args.orgId, userId: args.ownerUserId });
+    return { modelScope: 'user', ...(userDefault?.modelId ? { modelId: userDefault.modelId } : {}) };
+  } catch (error) {
+    console.warn('[Factory] Owner default model lookup failed; using the mode default model', {
+      orgId: args.orgId,
+      ownerUserId: args.ownerUserId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { modelScope: 'user' };
   }
 }
 
@@ -277,7 +290,9 @@ export async function ensureFactorySourceSession(
 
 export interface HydrateFactorySessionArgs {
   orgId: string;
-  /** The factory project's default model. Without it the session keeps the SDK's built-in mode default. */
+  modelScope: FactoryModelScope;
+  ownerUserId: string;
+  /** The model selected by the Factory scope. Without it the SDK mode default is applied. */
   defaultModelId?: string;
 }
 
@@ -285,37 +300,41 @@ export interface HydrateFactorySessionArgs {
  * Apply a factory project's main model to a session on every run.
  *
  * The model switch is best-effort. A retired model id must not sink a run that
- * is otherwise ready — the session simply keeps the default it was created with,
- * and the reason is logged. Observational-memory settings are resolved from the
+ * is otherwise ready, and the reason is logged. Observational-memory settings are resolved from the
  * authoritative row per invocation before memory processors run.
  */
 export async function hydrateFactorySession(session: FactorySession, args: HydrateFactorySessionArgs): Promise<void> {
   // The org rung knowledge curation scopes on. Seeded first so it lands even if
   // a later best-effort step fails; an empty org marks the session unresolved.
   await seedSessionOrg(session, args.orgId);
+  await session.state.set({
+    factoryModelScope: args.modelScope,
+    factoryOwnerUserId: args.ownerUserId,
+  });
 
-  if (args.defaultModelId) {
+  const selectedModelId = args.defaultModelId ?? session.mode.resolve().defaultModelId;
+  if (!selectedModelId) return;
+
+  try {
+    await session.model.switch(selectedModelId);
+  } catch (error) {
+    console.warn('[Factory Start] Failed to apply scoped default model', {
+      modelId: selectedModelId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  // Subagents otherwise keep the server-wide settings (or the SDK's built-in
+  // default), which may name a provider this factory has no credentials for.
+  // Each role is independent, so one failure doesn't strand the others.
+  for (const agentType of ['explore', 'plan', 'execute']) {
     try {
-      await session.model.switch(args.defaultModelId);
+      await session.subagents.model.set({ modelId: selectedModelId, agentType });
     } catch (error) {
-      console.warn('[Factory Start] Failed to apply factory default model', {
-        modelId: args.defaultModelId,
+      console.warn('[Factory Start] Failed to apply scoped default subagent model', {
+        agentType,
+        modelId: selectedModelId,
         error: error instanceof Error ? error.message : String(error),
       });
-    }
-    // Subagents otherwise keep the server-wide settings (or the SDK's built-in
-    // default), which may name a provider this factory has no credentials for.
-    // Each role is independent, so one failure doesn't strand the others.
-    for (const agentType of ['explore', 'plan', 'execute']) {
-      try {
-        await session.subagents.model.set({ modelId: args.defaultModelId, agentType });
-      } catch (error) {
-        console.warn('[Factory Start] Failed to apply factory default subagent model', {
-          agentType,
-          modelId: args.defaultModelId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
     }
   }
 }

@@ -254,6 +254,7 @@ const ScrollAreaViewportContext = React.createContext<ScrollAreaViewportContextV
 
 export type ScrollAreaViewportProps = {
   className?: string;
+  contentClassName?: string;
   children?: React.ReactNode;
   /** The scrolling element, e.g. a virtualizer's `getScrollElement`. */
   ref?: React.Ref<HTMLDivElement>;
@@ -265,7 +266,7 @@ function useScrollAreaViewportContext() {
   return viewport;
 }
 
-function ScrollAreaViewport({ className, children, ref }: ScrollAreaViewportProps) {
+function ScrollAreaViewport({ className, contentClassName, children, ref }: ScrollAreaViewportProps) {
   const viewport = useScrollAreaViewportContext();
   const { areaRef } = viewport;
   const viewportRef = React.useMemo(() => mergeRefs(areaRef, ref), [areaRef, ref]);
@@ -276,7 +277,7 @@ function ScrollAreaViewport({ className, children, ref }: ScrollAreaViewportProp
       className={cn(viewport.className, className)}
       style={viewport.style}
     >
-      <ScrollAreaPrimitive.Content style={viewport.contentStyle}>
+      <ScrollAreaPrimitive.Content className={contentClassName} style={viewport.contentStyle}>
         <ScrollAreaViewportContext value={null}>{children}</ScrollAreaViewportContext>
       </ScrollAreaPrimitive.Content>
     </ScrollAreaPrimitive.Viewport>

@@ -157,8 +157,6 @@ export const queryKeys = {
     filePath: string | undefined,
     previousFilePath: string | undefined,
   ) => ['workspace-changes', workspacePath ?? null, 'diff', filePath ?? null, previousFilePath ?? null] as const,
-  agentControllerModes: (agentControllerId: string | undefined) =>
-    ['agent-controller', agentControllerId ?? null, 'modes'] as const,
   // Sessions are scoped per worktree (projectPath), so every session-derived key
   // includes the projectPath — two worktrees over the same resourceId are
   // independent sessions with independent state.

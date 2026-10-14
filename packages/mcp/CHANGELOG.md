@@ -1,5 +1,19 @@
 # @mastra/mcp
 
+## 2.4.1-alpha.0
+
+### Patch Changes
+
+- Fixed `MCPClient` sending malformed tool input schemas to model providers. One MCP tool with a broken schema (for example a `required` list placed inside `properties`) used to make strict providers such as OpenAI reject every request, even ones that didn't use that tool. ([#25995](https://github.com/mastra-ai/mastra/pull/25995))
+
+  - Tools with a malformed input schema, or one over the nesting/size limit, are now skipped with a warning naming the server, tool, and problem. The server's other tools keep working.
+  - `toolsFromDefinitions` skips such cached definitions; `toolFromDefinition` throws `MCP_CLIENT_INVALID_TOOL_INPUT_SCHEMA` for them.
+
+  Fixes #23731.
+
+- Updated dependencies [[`bed1ccc`](https://github.com/mastra-ai/mastra/commit/bed1cccea5817d68faa42a15fda3a0b329f70680), [`02e2eae`](https://github.com/mastra-ai/mastra/commit/02e2eae3aee1c5b5b9c807a6a3389b88eca1440c), [`b2dd0c6`](https://github.com/mastra-ai/mastra/commit/b2dd0c6333691467e61406ac920eb6f861db6bc0), [`ad16eae`](https://github.com/mastra-ai/mastra/commit/ad16eae7eec9af386c9eee81f4f30ef65d0df48b)]:
+  - @mastra/core@1.78.0-alpha.1
+
 ## 2.4.0
 
 ### Minor Changes

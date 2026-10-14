@@ -1,5 +1,14 @@
 # @mastra/clickhouse
 
+## 1.25.1-alpha.0
+
+### Patch Changes
+
+- Fixed ClickHouse deleteMessages bumping thread updatedAt with an ALTER TABLE UPDATE mutation, which rewrote whole data parts (often forbidden on managed deployments) and stamped the same updatedAt on every stored version of the thread row — making thread reads ambiguous on the ReplacingMergeTree until parts merged, so a just-renamed or archived thread could read back its previous state. The timestamp bump now inserts a strictly newer thread version, like every other thread write. Fixes #25580 ([#26838](https://github.com/mastra-ai/mastra/pull/26838))
+
+- Updated dependencies [[`bed1ccc`](https://github.com/mastra-ai/mastra/commit/bed1cccea5817d68faa42a15fda3a0b329f70680), [`02e2eae`](https://github.com/mastra-ai/mastra/commit/02e2eae3aee1c5b5b9c807a6a3389b88eca1440c), [`b2dd0c6`](https://github.com/mastra-ai/mastra/commit/b2dd0c6333691467e61406ac920eb6f861db6bc0), [`ad16eae`](https://github.com/mastra-ai/mastra/commit/ad16eae7eec9af386c9eee81f4f30ef65d0df48b)]:
+  - @mastra/core@1.78.0-alpha.1
+
 ## 1.25.0
 
 ### Minor Changes
