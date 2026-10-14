@@ -20,8 +20,7 @@ const GROUP_ICONS: Record<SessionGroupIcon, ReactNode> = {
   user: <MessageSquare />,
 };
 
-/** The first rows of a group, plus the open session when it sorts past the cut so it never vanishes. */
-export function collapsedRows(rows: readonly SessionListRow[]): SessionListRow[] {
+export function collapsedRowsKeepingActive(rows: readonly SessionListRow[]): SessionListRow[] {
   const visible = rows.slice(0, COLLAPSED_ROW_COUNT);
   const open = rows.find(row => row.active);
   if (open && !visible.includes(open)) visible.push(open);
@@ -54,7 +53,7 @@ export function SessionGroupList({
   onRegenerateTitle: (row: SessionListRow) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const collapsed = collapsedRows(group.rows);
+  const collapsed = collapsedRowsKeepingActive(group.rows);
   const visibleRows = expanded ? group.rows : collapsed;
   const hiddenCount = group.rows.length - collapsed.length;
 
