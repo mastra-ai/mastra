@@ -120,8 +120,7 @@ function buildApp(agentScopes?: string[]) {
     execute: (_input, context) => {
       // Memory identity lands on the nested agent execution context, which the
       // generic createTool context type does not surface.
-      const agentContext = (context as typeof context & { agent?: { threadId?: string; resourceId?: string } })
-        .agent;
+      const agentContext = (context as typeof context & { agent?: { threadId?: string; resourceId?: string } }).agent;
       const requestContext = (context?.requestContext ?? new RequestContext()) as RequestContext;
       sightings.push({
         scopes: requestContext.get(MASTRA_SCOPES_KEY),
