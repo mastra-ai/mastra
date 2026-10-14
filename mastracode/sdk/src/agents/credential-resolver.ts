@@ -3,8 +3,8 @@
  *
  * Locally, model resolution reads the server-global file-backed `AuthStorage`.
  * A deployed web host registers a {@link CredentialStoreProvider} at boot; from
- * then on `resolveModel` derives one exclusive credential scope from session
- * state. Factory scope reads organization credentials only. User scope reads
+ * then on `resolveModel` uses the host's trusted execution policy, never mutable
+ * session state. Factory scope reads organization credentials only. User scope reads
  * the Factory session owner's credentials only, or the authenticated principal
  * for project-less personal sessions.
  *
@@ -34,7 +34,12 @@ export interface CredentialTenant {
  */
 export type CredentialStoreProvider = (tenant: CredentialTenant) => CredentialStore | undefined;
 
+export type CredentialTenantResolver = (requestContext: RequestContext) => Promise<CredentialTenant | undefined>;
+
+const CREDENTIAL_POLICY_KEY = 'mastracode__credentialPolicy';
 let credentialStoreProvider: CredentialStoreProvider | undefined;
+let credentialTenantResolver: CredentialTenantResolver | undefined;
+let trustedTenants = new WeakMap<object, { tenant?: CredentialTenant; sourceContext: RequestContext }>();
 
 const unavailableTenantCredentialStore: CredentialStore = {
   allowEnvironmentFallback: false,
@@ -51,8 +56,40 @@ const unavailableTenantCredentialStore: CredentialStore = {
 };
 
 /** Register (or clear) the tenant credential store provider. Deployed-web only. */
-export function setCredentialStoreProvider(provider: CredentialStoreProvider | undefined): void {
+export function setCredentialStoreProvider(
+  provider: CredentialStoreProvider | undefined,
+  resolveTenant?: CredentialTenantResolver,
+): void {
   credentialStoreProvider = provider;
+  credentialTenantResolver = provider ? resolveTenant : undefined;
+  trustedTenants = new WeakMap();
+}
+
+/** Refresh authority before a fresh model invocation; cloned contexts inherit only an opaque token. */
+export async function prepareCredentialTenant(requestContext?: RequestContext): Promise<void> {
+  if (!credentialTenantResolver) return;
+  if (!requestContext) throw new Error('Tenant model resolution requires a request context.');
+  const inheritedToken = requestContext.get(CREDENTIAL_POLICY_KEY);
+  const inheritedPolicy =
+    inheritedToken && typeof inheritedToken === 'object' ? trustedTenants.get(inheritedToken) : undefined;
+  // Subagents and internal memory contexts can strip the controller's thread identity.
+  // Keep their billing origin outside those mutable context fields.
+  const sourceController = inheritedPolicy?.sourceContext.get('controller') as { resourceId?: string } | undefined;
+  const sourceContext =
+    inheritedPolicy && sourceController?.resourceId ? inheritedPolicy.sourceContext : requestContext;
+  const token = {};
+  requestContext.set(CREDENTIAL_POLICY_KEY, token);
+  trustedTenants.set(token, { sourceContext });
+  const tenant = await credentialTenantResolver(sourceContext);
+  if (!tenant) throw new Error('Tenant model credential policy could not be resolved.');
+  trustedTenants.set(token, { tenant, sourceContext });
+}
+
+export function withCredentialTenantPreparation<T>(resolve: (ctx: { requestContext: RequestContext }) => T) {
+  return async (ctx: { requestContext: RequestContext }): Promise<T> => {
+    await prepareCredentialTenant(ctx.requestContext);
+    return resolve(ctx);
+  };
 }
 
 /**
@@ -62,6 +99,10 @@ export function setCredentialStoreProvider(provider: CredentialStoreProvider | u
  */
 export function hasCredentialStoreProvider(): boolean {
   return credentialStoreProvider !== undefined;
+}
+
+export function hasCredentialTenantResolver(): boolean {
+  return credentialTenantResolver !== undefined;
 }
 
 /** Shape the web auth gate stashes on the request context under `user`. */
@@ -80,27 +121,8 @@ interface RequestContextSession {
   session?: { activeOrganizationId?: string };
 }
 
-interface FactoryCredentialState {
-  factoryProjectId?: unknown;
-  factoryModelScope?: unknown;
-  factoryOwnerUserId?: unknown;
-  factoryOrgId?: unknown;
-}
-
-function resolveFactoryCredentialState(requestContext?: RequestContext): FactoryCredentialState | undefined {
-  const controller = requestContext?.get('controller') as { state?: FactoryCredentialState } | undefined;
-  if (!controller || typeof controller !== 'object' || !controller.state || typeof controller.state !== 'object') {
-    return undefined;
-  }
-  return controller.state;
-}
-
 export function resolveCredentialScope(requestContext?: RequestContext): CredentialScope {
-  const state = resolveFactoryCredentialState(requestContext);
-  if (state?.factoryModelScope === 'user') return 'user';
-  if (state?.factoryModelScope === 'factory') return 'factory';
-  if (typeof state?.factoryProjectId === 'string' && state.factoryProjectId.length > 0) return 'factory';
-  return 'user';
+  return resolveTenantFromRequestContext(requestContext)?.credentialScope ?? 'user';
 }
 
 /**
@@ -108,11 +130,16 @@ export function resolveCredentialScope(requestContext?: RequestContext): Credent
  * user was stashed on it. Mirrors the web layer's stable-id resolution
  * (`workosId` falling back to the provider `id`).
  *
- * Factory user scope resolves the stamped session owner rather than the person
- * sending the current message. A stamped Factory session without an owner
- * fails closed instead of borrowing the principal's credentials.
+ * Session state and HTTP-supplied policy values never establish credential authority.
  */
 export function resolveTenantFromRequestContext(requestContext?: RequestContext): CredentialTenant | undefined {
+  if (!credentialTenantResolver) return resolveAuthenticatedCredentialTenant(requestContext);
+  const token = requestContext?.get(CREDENTIAL_POLICY_KEY);
+  return token && typeof token === 'object' ? trustedTenants.get(token)?.tenant : undefined;
+}
+
+/** Authenticated principal only, for hosts resolving durable session ownership. */
+export function resolveAuthenticatedCredentialTenant(requestContext?: RequestContext): CredentialTenant | undefined {
   const raw = requestContext?.get('user') as (RequestContextUser & RequestContextSession) | undefined;
   if (!raw || typeof raw !== 'object') return undefined;
 
@@ -125,22 +152,7 @@ export function resolveTenantFromRequestContext(requestContext?: RequestContext)
   if (typeof principalUserId !== 'string' || !principalUserId) return undefined;
   if (principalOrgId !== undefined && typeof principalOrgId !== 'string') return undefined;
 
-  const state = resolveFactoryCredentialState(requestContext);
-  const credentialScope = resolveCredentialScope(requestContext);
-  const hasFactoryContext =
-    state?.factoryModelScope === 'factory' ||
-    state?.factoryModelScope === 'user' ||
-    (typeof state?.factoryProjectId === 'string' && state.factoryProjectId.length > 0);
-
-  let userId = principalUserId;
-  if (credentialScope === 'user' && hasFactoryContext) {
-    if (typeof state?.factoryOwnerUserId !== 'string' || !state.factoryOwnerUserId) return undefined;
-    userId = state.factoryOwnerUserId;
-  }
-
-  const orgId = state?.factoryOrgId ?? principalOrgId;
-  if (orgId !== undefined && typeof orgId !== 'string') return undefined;
-  return { orgId, userId, credentialScope };
+  return { orgId: principalOrgId, userId: principalUserId, credentialScope: 'user' };
 }
 
 /**
@@ -154,12 +166,9 @@ export function resolveCredentialStore(requestContext?: RequestContext): Credent
   const tenant = resolveTenantFromRequestContext(requestContext);
   if (!tenant) {
     const rawUser = requestContext?.get('user');
-    const state = resolveFactoryCredentialState(requestContext);
     console.warn('[MastraCode] Tenant credential resolution failed closed', {
-      reason: rawUser === undefined ? 'missing-user-context' : 'invalid-principal-or-owner',
+      reason: rawUser === undefined ? 'missing-user-context' : 'credential-policy-unavailable',
       hasRequestContext: requestContext !== undefined,
-      credentialScope: resolveCredentialScope(requestContext),
-      ownerResolved: typeof state?.factoryOwnerUserId === 'string' && state.factoryOwnerUserId.length > 0,
     });
     return unavailableTenantCredentialStore;
   }

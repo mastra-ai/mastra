@@ -1510,7 +1510,7 @@ describe('session start (onSessionStart)', () => {
     modelScope = 'factory' as 'factory' | 'user',
   } = {}) {
     return {
-      projects: { getById: vi.fn(async () => ({ id: 'fp-1', defaultModelId, modelScope })) } as any,
+      projects: { getById: vi.fn(async () => ({ id: 'fp-1', orgId: 'org-1', defaultModelId, modelScope })) } as any,
       sourceControl: {
         sessions: { getBySessionId: vi.fn(async () => session) },
         projectRepositories: { get: vi.fn(async () => ({ id: 'pr-1', connectionId: 'conn-gh' })) },
@@ -1651,7 +1651,12 @@ describe('session start (onSessionStart)', () => {
     deps.modelDefaults.get.mockClear();
     deps.projects.getById.mockClear();
     deps.modelDefaults.get.mockResolvedValue({ modelId: 'openai/gpt-6' });
-    deps.projects.getById.mockResolvedValue({ id: 'fp-1', defaultModelId: 'anthropic/claude-opus-6' });
+    deps.projects.getById.mockResolvedValue({
+      id: 'fp-1',
+      orgId: 'org-1',
+      modelScope: 'factory',
+      defaultModelId: 'anthropic/claude-opus-6',
+    });
     const session = makeSession({ settings: threadSettings });
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);

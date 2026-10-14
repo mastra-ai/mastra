@@ -1,4 +1,9 @@
-import { resolveCredentialStore, setCredentialStoreProvider } from '@mastra/code-sdk/agents/credential-resolver';
+import {
+  prepareCredentialTenant,
+  resolveAuthenticatedCredentialTenant,
+  resolveCredentialStore,
+  setCredentialStoreProvider,
+} from '@mastra/code-sdk/agents/credential-resolver';
 import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -171,7 +176,7 @@ describe('registerTenantCredentialResolver', () => {
     await expect(store!.getApiKey('openai')).resolves.toBe('user-key');
   });
 
-  it('primes the stamped session owner instead of the sender', async () => {
+  it('primes the trusted session owner instead of the sender or writable state', async () => {
     await seed.credentials.setCredential({ orgId: ORG, userId: 'owner' }, 'openai', {
       type: 'api_key',
       key: 'owner-key',
@@ -180,7 +185,11 @@ describe('registerTenantCredentialResolver', () => {
       type: 'api_key',
       key: 'sender-key',
     });
-    registerTenantCredentialResolver(seed.credentials);
+    registerTenantCredentialResolver(seed.credentials, new Set(), async () => ({
+      orgId: ORG,
+      userId: 'owner',
+      credentialScope: 'user',
+    }));
 
     const ctx = new RequestContext();
     ctx.set('user', { workosId: 'sender', organizationId: ORG });
@@ -219,13 +228,16 @@ describe('registerTenantCredentialResolver', () => {
   it('invalidates both exclusive scope snapshots for a user', async () => {
     await seed.credentials.setCredential(USER_TENANT, 'openai', { type: 'api_key', key: 'user-key' });
     await seed.credentials.setCredential(ORG_TENANT, 'openai', { type: 'api_key', key: 'org-key' });
-    registerTenantCredentialResolver(seed.credentials);
+    registerTenantCredentialResolver(seed.credentials, new Set(), async context => ({
+      ...resolveAuthenticatedCredentialTenant(context)!,
+      credentialScope: context.get('controller') ? 'factory' : 'user',
+    }));
 
     const userContext = new RequestContext();
     userContext.set('user', { workosId: USER, organizationId: ORG });
     const factoryContext = new RequestContext();
     factoryContext.set('user', { workosId: USER, organizationId: ORG });
-    factoryContext.set('controller', { state: { factoryModelScope: 'factory' } });
+    factoryContext.set('controller', { resourceId: 'factory-session' });
     await primeTenantCredentialsForRequestContext(userContext);
     await primeTenantCredentialsForRequestContext(factoryContext);
     const userStore = resolveCredentialStore(userContext);
@@ -297,18 +309,23 @@ describe('createTenantCredentialPrimer', () => {
   it('primes snapshots for both exclusive credential scopes', async () => {
     await seed.credentials.setCredential(USER_TENANT, 'openai', { type: 'api_key', key: 'user-key' });
     await seed.credentials.setCredential(ORG_TENANT, 'openai', { type: 'api_key', key: 'org-key' });
-    registerTenantCredentialResolver(seed.credentials);
+    registerTenantCredentialResolver(seed.credentials, new Set(), async context => ({
+      ...resolveAuthenticatedCredentialTenant(context)!,
+      credentialScope: context.get('controller') ? 'factory' : 'user',
+    }));
 
     const res = await buildApp({ workosId: USER, organizationId: ORG }).request('/ok');
     expect(res.status).toBe(200);
 
     const userContext = new RequestContext();
     userContext.set('user', { workosId: USER, organizationId: ORG });
+    await prepareCredentialTenant(userContext);
     expect(resolveCredentialStore(userContext)!.getStoredApiKey('openai')).toBe('user-key');
 
     const factoryContext = new RequestContext();
     factoryContext.set('user', { workosId: USER, organizationId: ORG });
-    factoryContext.set('controller', { state: { factoryModelScope: 'factory' } });
+    factoryContext.set('controller', { resourceId: 'factory-session' });
+    await prepareCredentialTenant(factoryContext);
     expect(resolveCredentialStore(factoryContext)!.getStoredApiKey('openai')).toBe('org-key');
   });
 

@@ -312,7 +312,11 @@ describe('FactoryStartCoordinator', () => {
       undefined,
       {
         projects: {
-          getById: vi.fn(async () => ({ modelScope: 'user', defaultModelId: 'anthropic/factory-model' })),
+          getById: vi.fn(async () => ({
+            orgId: 'org-1',
+            modelScope: 'user',
+            defaultModelId: 'anthropic/factory-model',
+          })),
         } as never,
         modelDefaults: {
           get: vi.fn(async () => ({ modelId: 'openai/owner-model' })),

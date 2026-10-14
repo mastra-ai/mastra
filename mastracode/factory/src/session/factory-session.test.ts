@@ -405,28 +405,27 @@ describe('resolveFactorySessionModel', () => {
     ).resolves.toEqual({ modelScope: 'user' });
   });
 
-  it('defaults to factory scope when the project is missing or project storage fails', async () => {
+  it('refuses missing, unavailable, and cross-org project policy', async () => {
     const seeded = await createFactoryStorageForTests();
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'owner-1', input: { name: 'Mastra' } });
+    await seeded.projects.update({ orgId: 'org-1', id: project.id, input: { modelScope: 'user' } });
+    const args = {
+      projects: seeded.projects,
+      modelDefaults: seeded.modelDefaults,
+      factoryProjectId: project.id,
+      orgId: 'org-1',
+      ownerUserId: 'owner-1',
+    };
+    await expect(resolveFactorySessionModel({ ...args, projects: undefined })).rejects.toThrow('policy is unavailable');
+    await expect(resolveFactorySessionModel({ ...args, factoryProjectId: undefined })).rejects.toThrow(
+      'policy is unavailable',
+    );
+    await expect(resolveFactorySessionModel({ ...args, factoryProjectId: 'missing' })).rejects.toThrow(
+      'policy is unavailable',
+    );
+    await expect(resolveFactorySessionModel({ ...args, orgId: 'other-org' })).rejects.toThrow('policy is unavailable');
     vi.spyOn(seeded.projects, 'getById').mockRejectedValueOnce(new Error('storage unavailable'));
-
-    await expect(
-      resolveFactorySessionModel({
-        projects: undefined,
-        modelDefaults: seeded.modelDefaults,
-        factoryProjectId: 'project-1',
-        orgId: 'org-1',
-        ownerUserId: 'owner-1',
-      }),
-    ).resolves.toEqual({ modelScope: 'factory' });
-    await expect(
-      resolveFactorySessionModel({
-        projects: seeded.projects,
-        modelDefaults: seeded.modelDefaults,
-        factoryProjectId: 'project-1',
-        orgId: 'org-1',
-        ownerUserId: 'owner-1',
-      }),
-    ).resolves.toEqual({ modelScope: 'factory' });
+    await expect(resolveFactorySessionModel(args)).rejects.toThrow('storage unavailable');
   });
 });
 

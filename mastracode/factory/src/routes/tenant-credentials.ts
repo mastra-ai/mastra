@@ -16,8 +16,12 @@
  * environment fallback so server-shell credentials never leak into tenants.
  */
 
-import type { CredentialTenant as SdkCredentialTenant } from '@mastra/code-sdk/agents/credential-resolver';
+import type {
+  CredentialTenant as SdkCredentialTenant,
+  CredentialTenantResolver,
+} from '@mastra/code-sdk/agents/credential-resolver';
 import {
+  prepareCredentialTenant,
   resolveTenantFromRequestContext,
   setCredentialStoreProvider,
 } from '@mastra/code-sdk/agents/credential-resolver';
@@ -201,11 +205,21 @@ function storeFor(tenant: SdkCredentialTenant, credentials: ModelCredentialsStor
 export function registerTenantCredentialResolver(
   credentials: ModelCredentialsStorage,
   deploymentProviders: ReadonlySet<string> = new Set(),
+  resolveTenant?: CredentialTenantResolver,
 ): void {
   registeredCredentials = credentials;
   registeredDeploymentProviders = deploymentProviders;
   tenantStores.clear();
-  setCredentialStoreProvider(tenant => storeFor(tenant, credentials));
+  setCredentialStoreProvider(
+    tenant => storeFor(tenant, credentials),
+    resolveTenant
+      ? async requestContext => {
+          const tenant = await resolveTenant(requestContext);
+          if (tenant) await storeFor(tenant, credentials).ensureFresh();
+          return tenant;
+        }
+      : undefined,
+  );
 }
 
 /**
@@ -215,8 +229,10 @@ export function registerTenantCredentialResolver(
  * model against an empty snapshot and fail closed. No-op before registration.
  */
 export async function primeTenantCredentialsForRequestContext(requestContext: RequestContext): Promise<void> {
+  if (!registeredCredentials) return;
+  await prepareCredentialTenant(requestContext);
   const tenant = resolveTenantFromRequestContext(requestContext);
-  if (!tenant || !registeredCredentials) return;
+  if (!tenant) return;
   await storeFor(tenant, registeredCredentials).ensureFresh();
 }
 

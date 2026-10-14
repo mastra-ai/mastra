@@ -22,15 +22,10 @@ export async function resolveFactorySessionModel(args: {
   orgId: string;
   ownerUserId: string;
 }): Promise<{ modelScope: FactoryModelScope; modelId?: string }> {
-  if (!args.projects || !args.factoryProjectId) return { modelScope: 'factory' };
+  if (!args.projects || !args.factoryProjectId) throw new Error('Factory model policy is unavailable.');
 
-  let project;
-  try {
-    project = await args.projects.getById({ id: args.factoryProjectId });
-  } catch {
-    return { modelScope: 'factory' };
-  }
-  if (!project) return { modelScope: 'factory' };
+  const project = await args.projects.getById({ id: args.factoryProjectId });
+  if (!project || project.orgId !== args.orgId) throw new Error('Factory model policy is unavailable.');
   if (project.modelScope !== 'user') {
     return { modelScope: 'factory', ...(project.defaultModelId ? { modelId: project.defaultModelId } : {}) };
   }

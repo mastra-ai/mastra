@@ -11,8 +11,8 @@
  * - **org-scoped** rows (`userId` absent): shared API keys set by an org
  *   admin, inherited by every member.
  *
- * Resolution order at model-call time is user > org (the caller layers server
- * env vars underneath as a final fallback).
+ * Model calls resolve exactly one scope: user or org. Deployed tenant stores
+ * never fall back to the other scope or implicitly borrow server environment keys.
  *
  * Secrets posture: credentials are stored server-side only and never returned
  * to the client (same as `linear_connections.access_token`). Encryption at
