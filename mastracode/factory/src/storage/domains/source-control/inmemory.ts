@@ -490,7 +490,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         ...fields,
         factoryProjectId,
         title: input.title ?? null,
-        visibility: input.visibility ?? 'org',
+        visibility: input.visibility ?? 'private',
         originSessionId: origin?.sessionId ?? null,
         originThreadId: origin?.threadId ?? null,
         originMutedAt: null,

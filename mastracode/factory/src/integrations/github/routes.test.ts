@@ -1951,6 +1951,12 @@ describe('project settings routes', () => {
 });
 
 describe('Factory session routes', () => {
+  // Sessions are created private; owner-enrichment cases need a teammate's
+  // session the viewer is allowed to list.
+  const shareSessionsOf = (userId: string) => {
+    for (const row of tables.sessions) if (row.userId === userId) row.visibility = 'org';
+  };
+
   it('creates metadata without provisioning a sandbox or worktree', async () => {
     seedMaterializedProject();
     const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', {
@@ -1965,7 +1971,7 @@ describe('Factory session routes', () => {
       branch: 'feat/x',
       baseBranch: 'main',
       title: null,
-      visibility: 'org',
+      visibility: 'private',
       sandboxId: null,
       sandboxWorkdir: null,
     });
@@ -1994,6 +2000,7 @@ describe('Factory session routes', () => {
     await postJson(buildApp({ workosId: 'u2' }, { users }), '/web/github/projects/p1/sessions', {
       branch: 'feat/theirs',
     });
+    shareSessionsOf('u2');
 
     const response = await buildApp({ workosId: 'u1' }, { users }).request('/web/github/projects/p1/sessions');
 
@@ -2017,6 +2024,7 @@ describe('Factory session routes', () => {
     seedMaterializedProject();
     await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', { branch: 'feat/mine' });
     await postJson(buildApp({ workosId: 'u2' }), '/web/github/projects/p1/sessions', { branch: 'feat/theirs' });
+    shareSessionsOf('u2');
     const users = {
       getUser: vi.fn(async (id: string) => {
         if (id === 'u1') return { id, email: 'ada@example.com' };
@@ -2039,6 +2047,7 @@ describe('Factory session routes', () => {
     seedMaterializedProject();
     await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', { branch: 'feat/mine' });
     await postJson(buildApp({ workosId: 'u2' }), '/web/github/projects/p1/sessions', { branch: 'feat/theirs' });
+    shareSessionsOf('u2');
     const users = {
       getUsers: vi.fn(async () => {
         throw new Error('Directory unavailable');
@@ -2118,6 +2127,25 @@ describe('Factory session routes', () => {
     expect(tables.sessions).toHaveLength(1);
   });
 
+  it('creates sessions private so same-org teammates can neither open nor list them', async () => {
+    seedMaterializedProject();
+    const owner = buildApp({ workosId: 'u1' });
+    const sessionId = '00000000-0000-4000-8000-000000000013';
+    const created = await postJson(owner, '/web/github/projects/p1/sessions', { sessionId });
+    expect(created.status).toBe(200);
+    expect((await created.json()).session).toMatchObject({ userId: 'u1', visibility: 'private' });
+
+    const ownerOpened = await owner.request(`/web/user-sessions/${sessionId}`);
+    expect(ownerOpened.status).toBe(200);
+    expect((await (await owner.request('/web/github/projects/p1/sessions')).json()).sessions).toEqual([
+      expect.objectContaining({ sessionId }),
+    ]);
+
+    const viewer = buildApp({ workosId: 'u2' });
+    expect((await viewer.request(`/web/user-sessions/${sessionId}`)).status).toBe(404);
+    expect((await (await viewer.request('/web/github/projects/p1/sessions')).json()).sessions).toEqual([]);
+  });
+
   it('returns an org-visible session to a same-org non-owner', async () => {
     seedMaterializedProject();
     const owner = buildApp({ workosId: 'u1' });
@@ -2125,6 +2153,7 @@ describe('Factory session routes', () => {
       sessionId: '00000000-0000-4000-8000-000000000010',
     });
     expect(created.status).toBe(200);
+    shareSessionsOf('u1');
 
     const viewer = buildApp({ workosId: 'u2' });
     const res = await viewer.request('/web/user-sessions/00000000-0000-4000-8000-000000000010');

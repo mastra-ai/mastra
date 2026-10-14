@@ -406,7 +406,7 @@ function projectSessionRoutes(
             branch,
             baseBranch,
             title: normalizedTitle,
-            visibility: 'org',
+            visibility: 'private',
           })
           .catch(async error => {
             if (!(error instanceof UniqueViolationError) || !requestedSessionId) throw error;
