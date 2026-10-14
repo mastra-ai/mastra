@@ -89,6 +89,7 @@ import type {
 } from './step';
 import { createMappingStep, createStepFromAgent, createStepFromClassifier, createStepFromTool } from './step-factories';
 import type { AgentStepOptions, ClassifierStepOptions } from './step-factories';
+import { collectPredicateStepRefs, resolveStepOutputs } from './step-refs';
 import type {
   DefaultEngineType,
   DynamicMapping,
@@ -192,12 +193,20 @@ function isDeclarativePredicateArg(value: unknown): value is { predicate: Predic
  * conditional/loop entries from stored predicates.
  */
 export function predicateToCondition(predicate: Predicate): (params: any) => Promise<boolean> {
+  const stepRefs = collectPredicateStepRefs(predicate);
   return async (params: any) => {
+    // Resolve every referenced step up front. Passing the sync getStepResult
+    // instead would let the predicate's fail-quiet lookup swallow its throw on
+    // runs that can't serve it, and silently take the wrong branch.
+    const stepResults =
+      typeof params?.getStepResultAsync === 'function'
+        ? Object.fromEntries(await resolveStepOutputs(stepRefs, id => params.getStepResultAsync(id)))
+        : {};
     return evaluatePredicate(predicate, {
       initData: params?.getInitData ? params.getInitData() : undefined,
       inputData: params?.inputData,
       state: params?.state,
-      getStepResult: typeof params?.getStepResult === 'function' ? (id: string) => params.getStepResult(id) : undefined,
+      stepResults,
     });
   };
 }
