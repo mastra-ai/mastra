@@ -435,6 +435,7 @@ export class SkillsPG extends SkillsStorage {
       authorId,
       visibility,
       status,
+      metadata,
       entityIds,
       pinFavoritedFor,
       favoritedOnly,
@@ -502,6 +503,26 @@ export class SkillsPG extends SkillsStorage {
         const placeholders = entityIds.map(() => `$${paramIdx++}`).join(', ');
         conditions.push(`s.id IN (${placeholders})`);
         queryParams.push(...entityIds);
+      }
+
+      if (metadata && Object.keys(metadata).length > 0) {
+        const versionsTable = getTableName({
+          indexName: TABLE_SKILL_VERSIONS,
+          schemaName: getSchemaName(this.#schema),
+        });
+        // Match listResolved: drafts use the latest version; otherwise prefer an
+        // existing active version, falling back to latest only when it is missing.
+        const latestVersionId = `(SELECT id FROM ${versionsTable}
+          WHERE "skillId" = s.id ORDER BY "versionNumber" DESC LIMIT 1)`;
+        const resolvedVersionId =
+          status === 'draft'
+            ? latestVersionId
+            : `COALESCE((SELECT id FROM ${versionsTable} WHERE id = s."activeVersionId"), ${latestVersionId})`;
+        conditions.push(`EXISTS (
+          SELECT 1 FROM ${versionsTable} v
+          WHERE v.id = ${resolvedVersionId} AND v.metadata @> $${paramIdx++}::jsonb
+        )`);
+        queryParams.push(toPgJson(metadata));
       }
 
       if (useJoin && favoritedOnly) {
