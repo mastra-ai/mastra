@@ -335,6 +335,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         if (changedMessages.length === 0 || !saveQueueManager || !threadId) return matchedEntry;
         messageList.add(changedMessages, 'response');
+        if (memoryConfig?.readOnly) return matchedEntry;
         try {
           await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
         } catch (error) {
@@ -828,7 +829,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             const sqm = readScoped(scopeCtx, SAVE_QUEUE_MANAGER_KEY, 'saveQueueManager');
             const tid = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
             const mcfg = readScoped(scopeCtx, MEMORY_CONFIG_KEY, 'memoryConfig');
-            return sqm && tid ? () => sqm.flushMessages(messageList, tid, mcfg) : undefined;
+            return sqm && tid && !mcfg?.readOnly ? () => sqm.flushMessages(messageList, tid, mcfg) : undefined;
           })(),
           suspend: async (suspendPayload: any, options?: SuspendOptions) => {
             // A tool can suspend at runtime without declaring a suspend schema, so the

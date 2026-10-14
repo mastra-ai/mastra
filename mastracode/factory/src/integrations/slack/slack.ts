@@ -54,22 +54,8 @@ type HandlerThread = Parameters<ChannelHandler>[0];
 type HandlerMessage = Parameters<ChannelHandler>[1];
 
 const SLACK_REQUEST_TIMEOUT_MS = 15_000;
-const MAX_WORK_ITEM_TITLE_CHARS = 80;
-const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
 class SlackSessionStartError extends Error {}
-
-/**
- * A card is titled with what the sender wrote. Cutting counts graphemes, not
- * code points: `👍🏼` is a base plus a skin-tone modifier, and a cut between
- * them leaves the wrong emoji.
- */
-function workItemTitleFrom(messageText: string): string {
-  const resolved = resolveEmojiShortcodes(messageText);
-  const characters = [...graphemes.segment(resolved)].map(({ segment }) => segment);
-  if (characters.length <= MAX_WORK_ITEM_TITLE_CHARS) return resolved;
-  return `${characters.slice(0, MAX_WORK_ITEM_TITLE_CHARS - 1).join('')}…`;
-}
 
 /** Dependencies the Slack channel handlers close over, injected from the web entry. */
 interface SlackChannelDeps {
@@ -112,15 +98,13 @@ interface SlackChannelDeps {
    */
   modelDefaults?: ModelDefaultsStorage;
   /**
-   * Factory work-items domain. When provided, a dispatched new-session thread
-   * (DM or mention) upserts a Work-board card in Building (`execute`) carrying
-   * the Slack thread as its external source and binding the repo-backed
-   * session. Best-effort — a failure never blocks the run. Unset → no card.
+   * Factory work-items domain, used to find the card a Slack thread already
+   * has so an `aside` can land on it. New threads never create cards.
    */
   workItems?: WorkItemsStorage;
   /**
    * Work-item feed. With it (and `workItems`), an `aside` lands as a comment on
-   * the card the thread created. Unset → asides stay ignored, as before.
+   * the card the thread already has. Unset → asides stay ignored, as before.
    */
   feed?: Pick<CommentsDomain, 'createComment'>;
   /** Overrides applied to the Slack channel adapter entry. */
@@ -238,7 +222,7 @@ type FactoryRouteResult =
   /** No factory resolved — prompt card posted (when possible), do not dispatch. */
   | { status: 'blocked' }
   /** The Factory project this sender's runs route to. */
-  | { status: 'resolved'; factoryProjectId: string; slackWorkItemsEnabled: boolean };
+  | { status: 'resolved'; factoryProjectId: string };
 
 /**
  * Decide which Factory project a linked sender's run belongs to:
@@ -272,11 +256,7 @@ export async function resolveFactoryForLink({
   if (link.defaultFactoryProjectId) {
     const existing = await projects.get({ orgId, id: link.defaultFactoryProjectId });
     if (existing) {
-      return {
-        status: 'resolved',
-        factoryProjectId: existing.id,
-        slackWorkItemsEnabled: existing.slackWorkItemsEnabled,
-      };
+      return { status: 'resolved', factoryProjectId: existing.id };
     }
   }
 
@@ -284,11 +264,7 @@ export async function resolveFactoryForLink({
   if (factories.length === 1) {
     const only = factories[0]!;
     await accountLinks.setDefaultFactory({ ...key, userId: link.userId, factoryProjectId: only.id });
-    return {
-      status: 'resolved',
-      factoryProjectId: only.id,
-      slackWorkItemsEnabled: only.slackWorkItemsEnabled,
-    };
+    return { status: 'resolved', factoryProjectId: only.id };
   }
 
   const publicUrl = webPublicUrl();
@@ -716,7 +692,7 @@ async function gateDispatch(
   ctx: ChannelHandlerContext,
   options: { requireInternalThread: boolean } = { requireInternalThread: false },
 ): Promise<{
-  routed?: { link: ChannelAccountLink; factoryProjectId: string; slackWorkItemsEnabled: boolean };
+  routed?: { link: ChannelAccountLink; factoryProjectId: string };
 } | null> {
   const { accountLinks, projects } = deps;
   const sender = await resolveLinkedSender({ thread, message, accountLinks });
@@ -747,13 +723,7 @@ async function gateDispatch(
     const route = await resolveFactoryForLink({ thread, ...sender, accountLinks, projects });
     if (route.status === 'blocked') return null;
     if (route.status === 'resolved') {
-      return {
-        routed: {
-          link: sender.link,
-          factoryProjectId: route.factoryProjectId,
-          slackWorkItemsEnabled: route.slackWorkItemsEnabled,
-        },
-      };
+      return { routed: { link: sender.link, factoryProjectId: route.factoryProjectId } };
     }
   }
   return {};
@@ -782,62 +752,6 @@ async function findThreadWorkItem(
   const scoped = await workItems.getBySource(slackThreadSource(thread, teamId));
   if (scoped || !teamId) return scoped;
   return workItems.getBySource(slackThreadSource(thread));
-}
-
-/**
- * Upsert the Work-board card for a dispatched Slack-thread run. Keyed on the
- * thread via `externalSource` — the work-items domain's unique
- * `(factory_project_id, source_key)` index makes repeat messages reuse the
- * same card, and `reuseMode: 'preserve'` keeps a card a human already dragged
- * across stages untouched. The card lands in Building (`execute`) for every
- * dispatched thread (DM or mention) — there is deliberately no per-origin
- * stage split; smart routing is a follow-up.
- *
- * The session id / branch / threadId and the workspace deep-link are resolved
- * by the caller (which already looked up the internal thread), so this helper
- * just shapes and writes. Best-effort: the run is already dispatched, so a
- * failure logs instead of throwing — work-item creation must never abort a Slack run.
- */
-export async function upsertThreadWorkItem({
-  workItems,
-  thread,
-  message,
-  link,
-  factoryProjectId,
-  session,
-  url,
-}: {
-  workItems: WorkItemsStorage;
-  thread: HandlerThread;
-  message: HandlerMessage;
-  link: ChannelAccountLink;
-  factoryProjectId: string;
-  /**
-   * The repo-backed Factory session to bind under the `chat` role, or
-   * `undefined` for a chat-only thread (no Factory session to bind).
-   */
-  session?: { sessionId: string; branch: string; threadId: string };
-  /** Workspace deep-link to the running session; omitted when no public URL. */
-  url?: string;
-}): Promise<void> {
-  try {
-    const title = workItemTitleFrom(message.text);
-
-    await workItems.upsert({
-      orgId: link.orgId ?? '',
-      userId: link.userId,
-      factoryProjectId,
-      reuseMode: 'preserve',
-      input: {
-        title: title || 'Slack thread',
-        externalSource: { ...slackThreadSource(thread, slackTeamId(message)), ...(url ? { url } : {}) },
-        stages: ['execute'],
-        ...(session ? { sessions: { chat: session } } : {}),
-      },
-    });
-  } catch (error) {
-    console.warn('[slack] work-item creation failed for thread', thread.id, error);
-  }
 }
 
 function preDispatchErrorDetails(error: unknown): { message: string; cause?: { message: string } } {
@@ -890,7 +804,6 @@ async function reportPreDispatchError(
 }
 
 function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
-  const { workItems } = deps;
   return async (thread, message, defaultHandler, ctx) => {
     // Gate on the sender having linked their Slack account to a Mastra tenant.
     // Unlinked → post the ephemeral Connect card and stop; no session/run is
@@ -918,10 +831,7 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
 
     if (!isNewSession) return;
 
-    // The internal-thread lookup and deep-link are needed by BOTH the
-    // announcement card AND work-item creation, so they run BEFORE the
-    // card-only `MASTRACODE_PUBLIC_URL` gate — a deployment without a public
-    // origin should still create board cards, just without a clickable link.
+    // The internal thread names the session the announcement card links to.
     const internalThread = await findInternalThread(ctx.mastra, thread);
     if (!internalThread) {
       console.warn('[onMention] no internal thread found for', thread.id);
@@ -948,10 +858,7 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
     // ignores. Chat-only threads need it (their segment is the literal string
     // `channel`), and so does the unrouted fallback, which has no workspace
     // segment at all — `ChannelThreadRedirect` forwards the search through.
-    //
-    // One shared deep-link: the card's button and the work-item `url` read the
-    // SAME value so they can never drift. Undefined without a public origin —
-    // the card is then skipped, but the work item is still created (url omitted).
+    // Undefined without a public origin, and the card is then skipped.
     const needsResourceParam = isChatOnly || !gate.routed;
     const deepLink = process.env.MASTRACODE_PUBLIC_URL
       ? needsResourceParam
@@ -959,29 +866,9 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
         : `${process.env.MASTRACODE_PUBLIC_URL}${threadPath}`
       : undefined;
 
-    // A dispatched, routed new-session thread becomes a Work-board card in
-    // Building. Only routed senders (linked → factory) have the org/user/factory
-    // a work item needs. Bind the repo-backed Factory session under the `chat`
-    // role; a chat-only `channel:` resourceId is NOT a session id, so bind
-    // nothing rather than a bad id. Best-effort (the helper swallows failures).
-    if (workItems && gate.routed?.slackWorkItemsEnabled) {
-      const session = isChatOnly
-        ? undefined
-        : { sessionId: internalThread.resourceId, branch: threadBranch(thread.id), threadId: internalThread.id };
-      await upsertThreadWorkItem({
-        workItems,
-        thread,
-        message,
-        link: gate.routed.link,
-        factoryProjectId: gate.routed.factoryProjectId,
-        session,
-        url: deepLink,
-      });
-    }
-
     // The announcement card is only useful with a public origin to deep-link
     // to — otherwise the link would be `undefined/threads/...`. Without one the
-    // session (and now the work item) still exist; we just skip the broken card.
+    // session still exists; we just skip the broken card.
     if (!deepLink) return;
 
     await thread.post(
@@ -995,7 +882,7 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
 
 /**
  * An `aside` never reaches the agent, but it is still part of the conversation:
- * record it on the card the thread created. The link is resolved here rather
+ * record it on the card the thread already has. The link is resolved here rather
  * than through `gateDispatch`, which posts a Connect card an aside must not
  * trigger. Best-effort — nothing here may surface in the Slack thread.
  */

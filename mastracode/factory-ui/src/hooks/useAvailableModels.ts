@@ -2,7 +2,9 @@ import type { ModelReasoningOption } from '@mastra/core/llm';
 import { queryOptions, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
-import { queryKeys } from '../api/keys';
+import { queryKeys, type AvailableModelsFilter } from '../api/keys';
+
+export type AvailableModelsTarget = AvailableModelsFilter;
 
 /** One selectable model from `GET /web/config/models` (credentialed providers only). */
 export interface AvailableModelOption {
@@ -16,13 +18,21 @@ export interface AvailableModelOption {
 /**
  * Session-independent model catalog for settings pickers (Factory default,
  * personal default, OM models). Server-filtered to providers with a
- * credential, so pickers never offer models that cannot run.
+ * credential, so pickers never offer models that cannot run. Pass a Factory
+ * in `factoryProjectId` to narrow the catalog to its credential scope, or
+ * `scope: 'user'` for the caller's own credentials (personal defaults).
  */
-export function availableModelsQueryOptions(baseUrl: string) {
+export function availableModelsQueryOptions(baseUrl: string, options?: AvailableModelsTarget) {
   return queryOptions({
-    queryKey: queryKeys.availableModels(),
+    queryKey: queryKeys.availableModels(options),
     queryFn: async () => {
-      const res = await fetch(`${baseUrl}/web/config/models`, {
+      const query =
+        options?.scope === 'user'
+          ? '?scope=user'
+          : options?.factoryProjectId
+            ? `?factoryId=${encodeURIComponent(options.factoryProjectId)}`
+            : '';
+      const res = await fetch(`${baseUrl}/web/config/models${query}`, {
         credentials: 'include',
         headers: { Accept: 'application/json' },
       });
@@ -33,12 +43,21 @@ export function availableModelsQueryOptions(baseUrl: string) {
   });
 }
 
-export function useAvailableModelsQuery() {
+export function useAvailableModelsQuery(options?: AvailableModelsTarget) {
   const { baseUrl } = useApiConfig();
-  return useQuery(availableModelsQueryOptions(baseUrl));
+  return useQuery(availableModelsQueryOptions(baseUrl, options));
 }
 
-export function useModelReasoningOptions(modelId: string | undefined): ModelReasoningOption[] | undefined {
-  const { data: models } = useAvailableModelsQuery();
+/** Catalog reachable with the caller's own credentials, for personal defaults. */
+export function usePersonalAvailableModelsQuery() {
+  const { baseUrl } = useApiConfig();
+  return useQuery(availableModelsQueryOptions(baseUrl, { scope: 'user' }));
+}
+
+export function useModelReasoningOptions(
+  modelId: string | undefined,
+  options?: AvailableModelsTarget,
+): ModelReasoningOption[] | undefined {
+  const { data: models } = useAvailableModelsQuery(options);
   return models?.find(model => model.id === modelId)?.reasoningOptions;
 }

@@ -86,7 +86,7 @@ export function ChatSessionConfigProvider({
   const resolvingSession = inSession && sessionQuery.isPending;
   // Sessions and their threads are provisioned with the session's own id as the
   // memory resourceId and no scope (see FactoryStartCoordinator.prepare and
-  // UserSessionsSection), so the chat surface must address the same
+  // useSessionListRows), so the chat surface must address the same
   // (resourceId, no scope) session to read threads and share the live run.
   const resourceId = userScoped ? (draftSessionId ?? threadId) : (storedSession?.sessionId ?? sessionId ?? factory?.id);
   const projectPath = undefined;
