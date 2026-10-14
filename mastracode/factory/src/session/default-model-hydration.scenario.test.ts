@@ -64,6 +64,24 @@ describe('scenario: a new user session starts on its owner default model', () =>
     expect(session.model.get()).toBe('anthropic/claude-opus-4-6');
   });
 
+  it('given a thread-agnostic request opens the session first, when the UI binds the conventional thread, then that thread runs the personal default', async () => {
+    const { seed, controller } = await mountController();
+    await seed.modelDefaults.set({ orgId: 'org-1', userId: 'user-1', modelId: 'anthropic/claude-opus-4-6' });
+
+    // Server read routes (SSE, messages) get-or-create the session without a thread id.
+    await controller.createSession({ resourceId: 'session-1', id: 'session-1', ownerId: 'code' });
+    // The Factory UI then binds the session's conventional thread (threadId === sessionId).
+    const session = await controller.createSession({
+      resourceId: 'session-1',
+      id: 'session-1',
+      ownerId: 'code',
+      threadId: 'session-1',
+    });
+
+    expect(session.thread.getId()).toBe('session-1');
+    expect(session.model.get()).toBe('anthropic/claude-opus-4-6');
+  });
+
   it('given a chat holding only coordinator signals, when the server restarts, then it starts on the current default', async () => {
     const { seed, storage, controller } = await mountController();
     await seed.modelDefaults.set({ orgId: 'org-1', userId: 'user-1', modelId: 'anthropic/claude-opus-4-6' });

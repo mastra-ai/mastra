@@ -44,7 +44,7 @@ function sourceControlRow(): SourceControlSession {
 function createSession(state: Record<string, unknown> = {}): DefaultModelHydrationSession {
   return {
     identity: { getResourceId: () => 'session-1' },
-    model: { switch: vi.fn().mockResolvedValue(undefined) },
+    model: { switch: vi.fn().mockResolvedValue(undefined), setDefault: vi.fn() },
     state: {
       get: () => state,
       set: vi.fn(async (updates: Record<string, unknown>) => void Object.assign(state, updates)),

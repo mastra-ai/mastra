@@ -44,7 +44,7 @@ export function useSetFactoryModelScopeMutation(factoryProjectId: string | undef
     onSuccess: project => {
       queryClient.setQueryData(queryKeys.factoryProject(factoryProjectId), project);
       // The scope picks which credentials serve this Factory's models.
-      void queryClient.invalidateQueries({ queryKey: queryKeys.availableModels(factoryProjectId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.availableModels({ factoryProjectId }) });
     },
   });
 }

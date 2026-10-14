@@ -11,7 +11,7 @@ export function useEffectiveThinkingLevel(
   factoryProjectId?: string,
 ): { level: EffectiveThinkingLevel | undefined; loadError: Error | undefined } {
   const thinkingConfigQuery = useThinkingConfigQuery();
-  const reasoningOptions = useModelReasoningOptions(modelId, factoryProjectId);
+  const reasoningOptions = useModelReasoningOptions(modelId, { factoryProjectId });
   const level = resolveEffectiveThinkingLevel({
     modelId,
     reasoningOptions,
