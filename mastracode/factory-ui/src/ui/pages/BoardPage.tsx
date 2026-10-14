@@ -36,7 +36,7 @@ function BoardLayout({ kind }: { kind: string }) {
   const factory = useActiveFactory();
   const slots = useSidebarHeaderSlots();
   return (
-    <PageLayout variant="fit" stableGutter={false} {...slots}>
+    <PageLayout variant="fit" {...slots}>
       <Board factory={factory} kind={kind} />
     </PageLayout>
   );

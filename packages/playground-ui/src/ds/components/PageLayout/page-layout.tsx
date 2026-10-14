@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 import { Header } from '../Header';
+import { ScrollArea, ScrollAreaViewport } from '../ScrollArea';
+import type { ScrollAreaMask } from '../ScrollArea';
 import { cn } from '@/lib/utils';
 
 export interface PageLayoutProps {
@@ -17,7 +19,7 @@ export interface PageLayoutProps {
    * `fit` lets the body fill the page edge to edge.
    */
   variant?: 'container' | 'fit' | 'narrow';
-  stableGutter?: boolean;
+  mask?: ScrollAreaMask;
 }
 
 export function PageLayout({
@@ -27,7 +29,7 @@ export function PageLayout({
   actionRow,
   header,
   variant = 'container',
-  stableGutter = true,
+  mask = false,
 }: PageLayoutProps) {
   const headerSlot = header ? (
     <div data-slot="page-layout-header" className={cn(variant === 'fit' && 'p-4')}>
@@ -50,35 +52,40 @@ export function PageLayout({
           {actionRow}
         </div>
       )}
-      <main
-        className={cn(
-          'min-h-0 flex-1 overflow-y-auto',
-          stableGutter && '[scrollbar-gutter:stable]',
-          variant === 'container' && 'p-4',
-          // `fit` hands the remaining body height to its child (panels, graphs, tables that own their scroll).
-          variant === 'fit' &&
-            (header ? 'grid grid-cols-1 grid-rows-[auto_minmax(0,1fr)]' : 'grid grid-cols-1 grid-rows-1'),
-        )}
-      >
-        {variant === 'narrow' ? (
-          // Horizontal gutter is the variant's contract; keep px/py explicit rather than the `p-4` shorthand.
-          // eslint-disable-next-line tailwindcss/enforces-shorthand
-          <div
-            data-slot="page-layout-container"
-            className={cn(
-              'mx-auto grid min-h-full w-full max-w-5xl grid-cols-1 p-4',
-              header ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr]',
+      <main className="flex min-h-0 flex-1 flex-col">
+        <ScrollArea mask={mask} className="min-h-0 flex-1">
+          <ScrollAreaViewport
+            contentClassName={cn(
+              variant === 'container' && 'p-4',
+              variant === 'narrow' && 'grid min-h-full grid-cols-1',
+              // `fit` hands the remaining body height to its child (panels, graphs, tables that own their scroll).
+              variant === 'fit' &&
+                (header
+                  ? 'grid h-full grid-cols-1 grid-rows-[auto_minmax(0,1fr)]'
+                  : 'grid h-full grid-cols-1 grid-rows-1'),
             )}
           >
-            {headerSlot}
-            {children}
-          </div>
-        ) : (
-          <>
-            {headerSlot}
-            {children}
-          </>
-        )}
+            {variant === 'narrow' ? (
+              // Horizontal gutter is the variant's contract; keep px/py explicit rather than the `p-4` shorthand.
+              // eslint-disable-next-line tailwindcss/enforces-shorthand
+              <div
+                data-slot="page-layout-container"
+                className={cn(
+                  'mx-auto grid min-h-full w-full max-w-5xl grid-cols-1 p-4',
+                  header ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr]',
+                )}
+              >
+                {headerSlot}
+                {children}
+              </div>
+            ) : (
+              <>
+                {headerSlot}
+                {children}
+              </>
+            )}
+          </ScrollAreaViewport>
+        </ScrollArea>
       </main>
     </div>
   );
