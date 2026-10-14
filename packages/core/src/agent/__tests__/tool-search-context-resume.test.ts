@@ -167,7 +167,7 @@ describe('ToolSearchProcessor storage: context — resume tool rebuild', () => {
     });
 
     await expect(response.text).resolves.toBe('Dummy response');
-    await expect(memory.getThreadById({ threadId: 'new-thread' })).resolves.toBeDefined();
+    await expect(memory.getThreadById({ threadId: 'new-thread' })).resolves.toMatchObject({ id: 'new-thread' });
   });
 
   it('preserves tools loaded in runMessages when the thread does not exist', async () => {
