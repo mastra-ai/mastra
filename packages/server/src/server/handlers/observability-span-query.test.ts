@@ -96,6 +96,8 @@ describe('QUERY_SPANS', () => {
           inputTruncated: false,
           outputPreview: null,
           outputTruncated: false,
+          errorPreview: 'Weather service unavailable',
+          errorTruncated: false,
           cost: { state: 'missing' },
         },
       ],
