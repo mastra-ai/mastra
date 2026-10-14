@@ -387,7 +387,9 @@ describe('SkillsProcessor', () => {
         expect(mockMessageList.addSystem).not.toHaveBeenCalled();
       });
 
-      it('injects nothing when its skills source discovered no skills', async () => {
+      it('still injects the hint when its own skills source is empty', async () => {
+        // The agent builds skill_search from agent-level and workspace skills together,
+        // so an empty workspace source says nothing about whether there are skills to find.
         const emptyWorkspace = createMockWorkspace({
           ...createMockWorkspaceSkills(),
           list: vi.fn().mockResolvedValue([]),
@@ -396,7 +398,7 @@ describe('SkillsProcessor', () => {
 
         await searchFirst.processInputStep({ messageList: mockMessageList as any, tools: skillTools } as any);
 
-        expect(mockMessageList.addSystem).not.toHaveBeenCalled();
+        expect(mockMessageList.addSystem).toHaveBeenCalledTimes(1);
       });
 
       it('rejects catalog options without a skills source', () => {

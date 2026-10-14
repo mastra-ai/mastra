@@ -54,7 +54,7 @@ const skills = new SkillsProcessor({
             name: 'injectCatalog',
             type: 'boolean',
             description:
-              'When false, injects an instruction to find skills with `skill_search` and load them with `skill` instead of listing every skill. The instruction is added whenever the agent exposes the `skill_search` tool, so it also covers skills configured on the agent. When a `skills` or `workspace` source is given but discovered no skills, nothing is injected.',
+              'When false, injects an instruction to find skills with `skill_search` and load them with `skill` instead of listing every skill. The instruction is added whenever the agent exposes the `skill_search` tool, so it also covers skills configured on the agent.',
             isOptional: true,
             default: 'true',
           },

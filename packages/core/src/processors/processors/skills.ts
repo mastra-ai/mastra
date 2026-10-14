@@ -79,9 +79,8 @@ interface SkillsProcessorBaseOptions {
    * the catalog costs too many tokens. The hint is injected whenever the
    * `skill_search` tool is available, so it also covers skills configured on
    * the agent; `skills` and `workspace` become optional. Without them, the
-   * `skillCount` span attribute is 0. With them, the hint is skipped when the
-   * source discovered no skills, and `format` and `formatLocation` have no
-   * effect because no catalog is rendered.
+   * `skillCount` span attribute is 0. With them, `format` and `formatLocation`
+   * have no effect because no catalog is rendered.
    *
    * The model finds skills through `skill_search`, which works without any
    * search setup. For larger collections, configure BM25 or vector search on
@@ -395,12 +394,11 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
     // rather than this processor's own skills: the agent builds the skill tools
     // from agent-level and workspace skills together, and drops them when an
     // on-demand discovery processor takes over, or when `activeTools` excludes it.
-    // A skills source that discovered nothing (e.g. a path that doesn't resolve)
-    // gets no hint either: the tool exists, but there is nothing to find.
+    // This processor's own source may be empty while the agent still has
+    // agent-level skills, so an empty source is not a reason to stay silent.
     if (!this._injectCatalog) {
       const hasSearchTool = tools && 'skill_search' in tools && (!activeTools || activeTools.includes('skill_search'));
-      const sourceIsEmpty = skills !== undefined && !hasSkills;
-      if (hasSearchTool && !sourceIsEmpty) {
+      if (hasSearchTool) {
         messageList.addSystem({ role: 'system', content: SKILL_SEARCH_HINT });
       }
       return;
