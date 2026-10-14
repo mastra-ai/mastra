@@ -134,4 +134,19 @@ describe('Sessions sidebar groups', () => {
     expect(rowNamesIn('Release Preview sessions')).toEqual(['Release new', 'Release old']);
     expect(rowNamesIn('User sessions')).toEqual(['User new', 'User old']);
   });
+
+  it("lists sessions in a custom board's terminal phase under Done", async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items`, () =>
+        HttpResponse.json({ workItems: [{ ...releaseItem, stages: ['shipped'] }] }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByRole('button', { name: 'Release old' });
+
+    await pickSessionProperty(user, 'Status', 'Done');
+
+    await waitFor(() => expect(groupRegions()).toEqual(['Release Preview sessions']));
+  });
 });

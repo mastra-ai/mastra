@@ -56,6 +56,7 @@ export function factoryRow(
   return buildFactorySessionRow({
     session,
     item: undefined,
+    boardDefinition: undefined,
     threadId: undefined,
     pullRequest: undefined,
     factoryId: 'fp-1',

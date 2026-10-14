@@ -21,7 +21,7 @@ import {
 } from '../services/sessionFilters';
 import { collapsedRowsKeepingActive, groupSessionRowsByBoard } from '../services/sessionGroups';
 import { pullRequestMergeTargets } from '../services/sessionRows';
-import { DEFAULT_SESSION_SORT, SESSION_SORT_OPTIONS, compareSessionRows } from '../services/sessionSort';
+import { SESSION_SORT_OPTIONS, compareSessionRows } from '../services/sessionSort';
 import { DeleteSessionDialog } from './DeleteSessionDialog';
 import { SessionGroupList } from './SessionGroupList';
 import { SessionListItem } from './SessionListItem';
@@ -33,7 +33,7 @@ export function SessionsSection() {
   const navigate = useNavigate();
   const { rows, hasRepositories, loaded, loadFailed, retry } = useSessionListRows(factoryId);
   const catalog = useBoardCatalog(factoryId);
-  const { view, updateView, resetView } = useSessionListView();
+  const { view, changedSettingCount, updateView, resetView } = useSessionListView();
   const viewerUserId = useFactoryAuth().data?.user?.userId;
   const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters(viewerUserId);
   const deletion = useSessionDeletion(factoryId, resourceId);
@@ -69,7 +69,7 @@ export function SessionsSection() {
               </Button>
             )}
             <SessionListProperties
-              changedCount={Number(view.sort !== DEFAULT_SESSION_SORT) + activeFilterCount}
+              changedCount={changedSettingCount + activeFilterCount}
               onReset={() => {
                 resetView();
                 resetFilters();
