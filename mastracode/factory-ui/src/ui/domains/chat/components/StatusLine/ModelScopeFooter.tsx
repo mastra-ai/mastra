@@ -18,7 +18,7 @@ export function useOrganizationScopedFactory(factoryId: string | undefined): boo
  */
 export function ModelScopeFooter({ factoryId }: { factoryId: string }) {
   return (
-    <Txt as="p" variant="caption" tone="muted" role="note" className="border-t border-border px-3 py-2">
+    <Txt as="p" variant="caption" tone="muted" role="note" className="border-border border-t px-3 py-2">
       Showing models this Factory&apos;s organization credentials can run.{' '}
       <Link to={settingsSectionPath(factoryId, 'models')} className="underline underline-offset-2">
         Manage
