@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -8,6 +8,13 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { UserSessionsSection } from '../UserSessionsSection';
+import {
+  closeSessionProperties,
+  openSessionProperties,
+  openSessionProperty,
+  pickSessionProperty,
+  sessionPropertiesTrigger,
+} from './fixtures/sessionProperties';
 
 const projectRepositoryId = 'repo-1';
 
@@ -43,7 +50,7 @@ const sessions: FactoryUserSession[] = [
     sandboxId: 'sandbox-2',
     sandboxWorkdir: '/workspace/working',
     materializedAt: '2026-09-04T10:00:00.000Z',
-    createdAt: '2026-09-04T09:00:00.000Z',
+    createdAt: '2026-09-04T08:00:00.000Z',
     updatedAt: '2026-09-04T10:30:00.000Z',
   },
   {
@@ -60,7 +67,7 @@ const sessions: FactoryUserSession[] = [
     sandboxId: null,
     sandboxWorkdir: null,
     materializedAt: null,
-    createdAt: '2026-09-04T09:00:00.000Z',
+    createdAt: '2026-09-04T09:30:00.000Z',
     updatedAt: '2026-09-04T10:00:00.000Z',
   },
 ];
@@ -123,47 +130,38 @@ async function renderSection({ waitForIdle = true } = {}) {
   if (waitForIdle) await waitForMutationsIdle(client);
 }
 
-async function openFilters() {
-  const trigger = await screen.findByRole('button', { name: 'Filter sessions' });
-  await userEvent.setup().click(trigger);
-  return screen.findByRole('searchbox', { name: 'Search sessions' });
-}
+const sessionRowLabels = () =>
+  screen
+    .getAllByRole('button', { name: /^(Fix authentication|Improve compiler output|Prepare release)$/ })
+    .map(row => row.getAttribute('aria-label'));
 
-async function selectFilter(label: string, option: string) {
-  fireEvent.click(screen.getByRole('combobox', { name: label }));
-  const item = await screen.findByRole('option', { name: option });
-  fireEvent.pointerDown(item, { pointerType: 'mouse' });
-  fireEvent.click(item, { detail: 1 });
-}
-
-async function closeFilters() {
-  await userEvent.setup().keyboard('{Escape}');
-}
-
-describe('User session filters', () => {
-  it("opens on the viewer's own sessions without reading as filtered", async () => {
+describe('User sessions properties', () => {
+  it("opens on the viewer's own sessions without reading as changed", async () => {
+    const user = userEvent.setup();
     await renderSection();
 
     expect(await screen.findByRole('button', { name: 'Fix authentication' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Improve compiler output' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Filter sessions' })).toBeInTheDocument();
+    expect(sessionPropertiesTrigger('User sessions')).toBeInTheDocument();
 
-    await openFilters();
-    expect(screen.getByRole('combobox', { name: 'Owner' })).toHaveTextContent('Mine');
-    expect(screen.getByRole('button', { name: 'Reset filters' })).toBeDisabled();
+    await openSessionProperties(user, 'User sessions');
+    expect(screen.getByRole('menuitem', { name: /^Owner\s*Mine$/ })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Reset to default' })).toHaveAttribute('aria-disabled', 'true');
+    await closeSessionProperties(user);
 
-    await selectFilter('Owner', 'All owners');
+    await pickSessionProperty(user, 'User sessions', 'Owner', 'All owners');
 
     expect(await screen.findByRole('button', { name: 'Improve compiler output' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Filter sessions, 1 active' })).toBeInTheDocument();
+    expect(sessionPropertiesTrigger('User sessions', 1)).toBeInTheDocument();
 
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Reset filters' }));
+    await openSessionProperties(user, 'User sessions');
+    await user.click(screen.getByRole('menuitem', { name: 'Reset to default' }));
 
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: 'Improve compiler output' })).not.toBeInTheDocument();
     });
     expect(screen.getByRole('button', { name: 'Fix authentication' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Filter sessions' })).toBeInTheDocument();
+    expect(sessionPropertiesTrigger('User sessions')).toBeInTheDocument();
   });
 
   it('says so when the viewer owns no sessions yet', async () => {
@@ -172,12 +170,12 @@ describe('User session filters', () => {
         HttpResponse.json({ sessions: sessions.filter(session => session.userId !== 'user-me') }),
       ),
     );
+    const user = userEvent.setup();
     await renderSection();
 
     expect(await screen.findByText('No sessions of your own.')).toHaveAttribute('role', 'status');
 
-    await openFilters();
-    await selectFilter('Owner', 'All owners');
+    await pickSessionProperty(user, 'User sessions', 'Owner', 'All owners');
 
     expect(await screen.findByRole('button', { name: 'Improve compiler output' })).toBeInTheDocument();
     expect(screen.queryByText('No sessions of your own.')).not.toBeInTheDocument();
@@ -198,75 +196,71 @@ describe('User session filters', () => {
         });
       }),
     );
-    // /auth/me is held open, so the queries never go idle until it is released.
+    const user = userEvent.setup();
     await renderSection({ waitForIdle: false });
 
     expect(await screen.findByRole('button', { name: 'Improve compiler output' })).toBeInTheDocument();
-    await openFilters();
-    await selectFilter('Status', 'Working');
-    await closeFilters();
+    await pickSessionProperty(user, 'User sessions', 'Status', 'Working');
 
     releaseAuth();
 
-    // Mine now applies on top of the status change: the viewer has no working session.
     expect(await screen.findByText('No sessions match these filters')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Improve compiler output' })).not.toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Filter sessions, 1 active' }));
-    expect(await screen.findByRole('combobox', { name: 'Owner' })).toHaveTextContent('Mine');
-  });
-
-  it('keeps controls in a popover and searches across session details', async () => {
-    await renderSection();
-
-    expect(await screen.findByRole('button', { name: 'Fix authentication' })).toBeInTheDocument();
-    expect(screen.queryByRole('searchbox', { name: 'Search sessions' })).not.toBeInTheDocument();
-
-    const search = await openFilters();
-    await selectFilter('Owner', 'All owners');
-    await userEvent.setup().type(search, 'COMPILER-OUTPUT');
-
-    await waitFor(() => {
-      expect(screen.queryByText('Fix authentication')).not.toBeInTheDocument();
-    });
-    expect(screen.getByText('Improve compiler output')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Filter sessions, 2 active' })).toBeInTheDocument();
-
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Reset filters' }));
-    expect(await screen.findByText('Fix authentication')).toBeInTheDocument();
-    expect(screen.queryByText('Improve compiler output')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Filter sessions' })).toBeInTheDocument();
+    await openSessionProperties(user, 'User sessions');
+    expect(screen.getByRole('button', { name: 'User sessions properties, 1 changed' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /^Owner\s*Mine$/ })).toBeInTheDocument();
   });
 
   it('filters by a specific owner and deduplicates owner choices', async () => {
+    const user = userEvent.setup();
     await renderSection();
-    await openFilters();
 
-    await selectFilter('Owner', 'Grace Hopper');
+    await pickSessionProperty(user, 'User sessions', 'Owner', 'Grace Hopper');
 
     expect(await screen.findByRole('button', { name: 'Improve compiler output' })).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: 'Fix authentication' })).not.toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('combobox', { name: 'Owner' }));
-    expect(await screen.findAllByRole('option', { name: 'Grace Hopper' })).toHaveLength(1);
-    await closeFilters();
+    await openSessionProperty(user, 'User sessions', 'Owner');
+    expect(screen.getAllByRole('menuitemradio', { name: 'Grace Hopper' })).toHaveLength(1);
+    await closeSessionProperties(user);
   });
 
   it('uses the existing status precedence and shows a filtered-empty state', async () => {
+    const user = userEvent.setup();
     await renderSection();
-    await openFilters();
 
-    await selectFilter('Owner', 'All owners');
-    await selectFilter('Status', 'Initializing');
+    await pickSessionProperty(user, 'User sessions', 'Owner', 'All owners');
+    await pickSessionProperty(user, 'User sessions', 'Status', 'Initializing');
 
     expect(await screen.findByRole('button', { name: 'Prepare release' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Improve compiler output' })).not.toBeInTheDocument();
 
-    const popover = screen.getByRole('searchbox', { name: 'Search sessions' }).closest('[data-slot="popover-content"]');
-    if (!(popover instanceof HTMLElement)) throw new Error('Filter popover not found');
-    await userEvent.setup().type(within(popover).getByRole('searchbox', { name: 'Search sessions' }), 'does-not-exist');
+    await pickSessionProperty(user, 'User sessions', 'Owner', 'Mine');
 
     expect(await screen.findByText('No sessions match these filters')).toHaveAttribute('role', 'status');
+  });
+
+  it('lists sessions by last update with pinned first, and resets a chosen sort', async () => {
+    localStorage.setItem('mastracode.pinnedSessions', JSON.stringify(['session-working']));
+    const user = userEvent.setup();
+    await renderSection();
+
+    await pickSessionProperty(user, 'User sessions', 'Owner', 'All owners');
+    await screen.findByRole('button', { name: 'Improve compiler output' });
+    expect(sessionRowLabels()).toEqual(['Improve compiler output', 'Fix authentication', 'Prepare release']);
+
+    await pickSessionProperty(user, 'User sessions', 'Sort', 'Last created');
+
+    expect(sessionRowLabels()).toEqual(['Improve compiler output', 'Prepare release', 'Fix authentication']);
+    expect(sessionPropertiesTrigger('User sessions', 2)).toBeInTheDocument();
+
+    await openSessionProperties(user, 'User sessions');
+    await user.click(screen.getByRole('menuitem', { name: 'Reset to default' }));
+
+    await waitFor(() => expect(sessionPropertiesTrigger('User sessions')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Fix authentication' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Improve compiler output' })).not.toBeInTheDocument();
   });
 });
