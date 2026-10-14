@@ -230,4 +230,21 @@ describe('Sessions sidebar groups', () => {
 
     await waitFor(() => expect(groupRegions()).toEqual(['Release Preview sessions']));
   });
+
+  it('moves a group with Alt and the arrow keys, keeping focus on it', async () => {
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByRole('button', { name: 'Release old' });
+
+    await openSessionProperty(user, 'Group');
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('menuitemcheckbox', { name: 'Work' })).toHaveFocus();
+    await user.keyboard('{Alt>}{ArrowDown}{/Alt}');
+    await waitFor(() => expect(screen.getByRole('menuitemcheckbox', { name: 'Work' })).toHaveFocus());
+    await user.keyboard('{Alt>}{ArrowDown}{/Alt}');
+    await waitFor(() => expect(screen.getByRole('menuitemcheckbox', { name: 'Work' })).toHaveFocus());
+    await closeSessionProperties(user);
+
+    expect(groupRegions()).toEqual(['Review sessions', 'Release Preview sessions', 'Work sessions', 'User sessions']);
+  });
 });
