@@ -688,6 +688,62 @@ describe('KnowledgeRoutes', () => {
     expect(probe.status).toBe(400);
   });
 
+  it('proves session visibility in bounded storage reads and keeps a late live session reachable by cursor', async () => {
+    class CountingStore extends InMemoryKnowledgeStorage {
+      reads = 0;
+      override async listRecordsBySource(input: Parameters<KnowledgeStorage['listRecordsBySource']>[0]) {
+        this.reads += 1;
+        return super.listRecordsBySource(input);
+      }
+      override async listSourcesWithVisibleRecords(
+        input: Parameters<KnowledgeStorage['listSourcesWithVisibleRecords']>[0],
+      ) {
+        this.reads += 1;
+        return super.listSourcesWithVisibleRecords(input);
+      }
+    }
+    const store = new CountingStore({ db: new InMemoryDB() });
+    const h = await createHarness({ knowledge: store });
+    // 120 recordless sessions sort ahead of the only live one.
+    const emptyIds: string[] = [];
+    for (let index = 0; index < 120; index++) {
+      const threadId = `aaa-empty-${String(index).padStart(3, '0')}`;
+      await scopePathIds(store, h.threadScope(threadId));
+      emptyIds.push((await store.getScopeAddress(`resource:${h.projectId}:thread:${threadId}`))!.scopeNodeId);
+    }
+    const anchor = await node(store, 'Late Anchor', h.threadScope('zzz-live'));
+    await record(store, anchor, 'Late evidence', h.threadScope('zzz-live'), 'zzz-live');
+    const liveAddress = `resource:${h.projectId}:thread:zzz-live`;
+
+    store.reads = 0;
+    const first = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    expect(first.status).toBe(200);
+    // One read answers all 121 sessions, well under one page of probes.
+    expect(store.reads).toBeLessThanOrEqual(1);
+    const tree = (await first.json()) as KnowledgeScopeTreePayload;
+    const project = tree.scopeNodes!.find(scopeNode => scopeNode.address === `resource:${h.projectId}`)!;
+    expect(project.childScopeCount).toBe(1);
+
+    const bodies = [JSON.stringify(tree)];
+    let found = tree.scopeNodes!.some(scopeNode => scopeNode.address === liveAddress);
+    let cursor = tree.childCursors?.[project.id];
+    for (let page = 0; !found && cursor && page < 10; page++) {
+      store.reads = 0;
+      const next = await h.app.request(
+        `/web/factory/projects/${h.projectId}/knowledge/scopes?parentId=${project.id}&cursor=${cursor}`,
+      );
+      expect(next.status).toBe(200);
+      expect(store.reads).toBeLessThanOrEqual(1);
+      const pageTree = (await next.json()) as KnowledgeScopeTreePayload;
+      bodies.push(JSON.stringify(pageTree));
+      found = pageTree.scopeNodes!.some(scopeNode => scopeNode.address === liveAddress);
+      cursor = pageTree.nextCursor;
+    }
+    expect(found).toBe(true);
+    // No recordless session id appears in any row, cursor or count.
+    for (const body of bodies) for (const id of emptyIds) expect(body).not.toContain(id);
+  });
+
   it('keeps the identity chain in the initial tree even when earlier-sorting scopes fill the window', async () => {
     const h = await createHarness({ limits: { maxNodes: 4 } });
     await h.knowledge.reconcileStructure({
