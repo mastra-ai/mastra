@@ -40,7 +40,10 @@ export function useAvailableModelsQuery(factoryProjectId?: string) {
   return useQuery(availableModelsQueryOptions(baseUrl, factoryProjectId));
 }
 
-export function useModelReasoningOptions(modelId: string | undefined): ModelReasoningOption[] | undefined {
-  const { data: models } = useAvailableModelsQuery();
+export function useModelReasoningOptions(
+  modelId: string | undefined,
+  factoryProjectId?: string,
+): ModelReasoningOption[] | undefined {
+  const { data: models } = useAvailableModelsQuery(factoryProjectId);
   return models?.find(model => model.id === modelId)?.reasoningOptions;
 }
