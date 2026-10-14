@@ -178,6 +178,28 @@ describe('discoverFsAgents', () => {
     }
   });
 
+  it.each(['js', 'javascript'])(
+    'rejects ---%s frontmatter in a packaged SKILL.md without evaluating it',
+    async language => {
+      const flag = '__fsRoutingJsFrontmatterRan';
+      delete (globalThis as Record<string, unknown>)[flag];
+      await writeAgent('weather', {
+        config: `export default { model: 'openai/gpt-4o' };`,
+        instructions: 'hi',
+        skills: {
+          'evil/SKILL.md': `---${language}\n{ name: "evil", description: (globalThis.${flag} = true, "d") }\n---\n\n# Evil`,
+        },
+      });
+
+      try {
+        await expect(discoverFsAgents(dir)).rejects.toThrow(/JavaScript frontmatter is not supported/);
+        expect((globalThis as Record<string, unknown>)[flag]).toBeUndefined();
+      } finally {
+        delete (globalThis as Record<string, unknown>)[flag];
+      }
+    },
+  );
+
   it('skips symlinked skill references so arbitrary files are not embedded', async () => {
     // A secret outside the agent directory the symlink would otherwise leak.
     const secret = join(dir, 'secret.txt');
@@ -1716,6 +1738,27 @@ describe('schedules discovery', () => {
     });
     expect(schedule.path).toMatch(/agents\/support\/schedules\/digest\.md$/);
   });
+
+  it.each(['js', 'javascript'])(
+    'rejects ---%s frontmatter in a markdown schedule without evaluating it',
+    async language => {
+      const flag = '__fsRoutingJsFrontmatterRan';
+      delete (globalThis as Record<string, unknown>)[flag];
+      await writeAgent('support', {
+        instructions: 'hi',
+        schedules: {
+          'evil.md': `---${language}\n{ cron: (globalThis.${flag} = true, "0 9 * * *") }\n---\n\nRun.`,
+        },
+      });
+
+      try {
+        await expect(discoverFsAgents(dir)).rejects.toThrow(/uses JavaScript frontmatter/);
+        expect((globalThis as Record<string, unknown>)[flag]).toBeUndefined();
+      } finally {
+        delete (globalThis as Record<string, unknown>)[flag];
+      }
+    },
+  );
 
   it('fails the build when a markdown schedule has no cron', async () => {
     await writeAgent('support', {

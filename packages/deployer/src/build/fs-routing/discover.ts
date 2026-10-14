@@ -5,6 +5,23 @@ import type { AgentSchedulePromptDefinition } from '@mastra/core/schedules';
 import matter from 'gray-matter';
 import { slash } from '../utils';
 
+const JS_FRONTMATTER_ERROR = 'JavaScript frontmatter is not supported';
+
+// gray-matter's default `---js` / `---javascript` engines run eval() on the frontmatter block,
+// so a vendored SKILL.md or schedule file could execute code on the build machine. Passing
+// options replaces those engines with ones that throw (and also disables gray-matter's
+// process-wide cache). Mirrors MATTER_OPTIONS in @mastra/core's workspace skill schemas.
+const MATTER_OPTIONS = {
+  engines: {
+    js: () => {
+      throw new Error(JS_FRONTMATTER_ERROR);
+    },
+    javascript: () => {
+      throw new Error(JS_FRONTMATTER_ERROR);
+    },
+  },
+};
+
 /**
  * A file-system routed agent directory discovered under `<mastraDir>/agents/`.
  * All paths are absolute and slash-normalized so they can be embedded into
@@ -328,7 +345,7 @@ async function parsePackagedSkill(
   references: Record<string, string> = {},
 ): Promise<Extract<DiscoveredFsSkill, { kind: 'packaged' }>> {
   const raw = await readFile(skillMdPath, 'utf-8');
-  const parsed = matter(raw);
+  const parsed = matter(raw, MATTER_OPTIONS);
   const frontmatter = parsed.data as { name?: string; description?: string };
   const name = frontmatter.name ?? fallbackName;
   const description = frontmatter.description;
@@ -414,12 +431,17 @@ async function parseMarkdownSchedule(path: string, key: string): Promise<Markdow
 
   let parsed: ReturnType<typeof matter>;
   try {
-    parsed = matter(raw);
+    parsed = matter(raw, MATTER_OPTIONS);
   } catch (error) {
     // The most common cron form starts with `*`, which YAML reads as an alias
     // indicator, so `cron: */5 * * * *` fails with an opaque parser error.
     // Name the actual fix instead of surfacing that raw.
     const detail = error instanceof Error ? error.message.split('\n')[0] : String(error);
+    if (detail === JS_FRONTMATTER_ERROR) {
+      throw new Error(
+        `Schedule "${key}" in ${path} uses JavaScript frontmatter (---js), which is not supported. Use YAML frontmatter.`,
+      );
+    }
     throw new Error(
       `Schedule "${key}" in ${path} has invalid YAML frontmatter: ${detail}. ` +
         `Cron expressions must be quoted (cron: "*/5 * * * *"), because a leading "*" is a YAML alias.`,
