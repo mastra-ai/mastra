@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_SESSION_LIST_VIEW, useSessionListView } from './useSessionListView';
+import type { SessionGroupHeading } from '../services/sessionGroups';
 
 const STORAGE_KEY = 'mastracode.sessionListView';
 
@@ -65,6 +66,34 @@ describe('useSessionListView', () => {
     );
 
     expect(renderHook(() => useSessionListView()).result.current.changedSettingCount).toBe(0);
+  });
+
+  it('reads a stored group order and drops malformed entries', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ groupOrder: { board: ['user', 'board:work'], status: [1, 'status:done'], tag: ['x'] } }),
+    );
+
+    expect(renderHook(() => useSessionListView()).result.current.view.groupOrder).toEqual({
+      board: ['user', 'board:work'],
+    });
+  });
+
+  it('forgets a group order once it is moved back to the default', () => {
+    const defaultHeadings: SessionGroupHeading[] = [
+      { key: 'board:work', label: 'Work', icon: 'board' },
+      { key: 'user', label: 'User', icon: 'user' },
+    ];
+    const { result } = renderHook(() => useSessionListView());
+
+    act(() => result.current.changeGroupOrder(['user', 'board:work'], defaultHeadings));
+    expect(storedView()).toEqual({ groupOrder: { board: ['user', 'board:work'] } });
+    expect(result.current.groupOrderKeys).toEqual(['user', 'board:work']);
+    expect(result.current.changedSettingCount).toBe(1);
+
+    act(() => result.current.changeGroupOrder(['board:work', 'user'], defaultHeadings));
+    expect(storedView()).toEqual({});
+    expect(result.current.groupOrderKeys).toEqual([]);
   });
 
   it('stores only what differs from the default, and forgets a choice set back to it', () => {

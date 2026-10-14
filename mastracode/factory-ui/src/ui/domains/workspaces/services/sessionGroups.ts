@@ -120,14 +120,30 @@ export function sessionGroupHeadings(
   }
 }
 
+export function orderGroupHeadings(
+  defaults: readonly SessionGroupHeading[],
+  storedKeys: readonly string[],
+): readonly SessionGroupHeading[] {
+  const rankOf = (heading: SessionGroupHeading) => {
+    const index = storedKeys.indexOf(heading.key);
+    return index === -1 ? storedKeys.length : index;
+  };
+  return defaults.toSorted((a, b) => rankOf(a) - rankOf(b));
+}
+
+export function customGroupOrder(keys: readonly string[], defaultHeadings: readonly SessionGroupHeading[]): string[] {
+  const isDefaultOrder = defaultHeadings.every((heading, index) => heading.key === keys[index]);
+  return isDefaultOrder ? [] : [...keys];
+}
+
 export function groupSessionRows(
   rows: readonly SessionListRow[],
   groupBy: SessionGroupBy,
-  context: SessionGroupContext,
+  headings: readonly SessionGroupHeading[],
   hiddenKeys: readonly string[],
 ): SessionGroup[] {
   const groupKeyOf = GROUP_KEY_OF_ROW[groupBy];
-  return sessionGroupHeadings(rows, groupBy, context).flatMap(heading => {
+  return headings.flatMap(heading => {
     if (hiddenKeys.includes(heading.key)) return [];
     const groupRows = rows.filter(row => groupKeyOf(row) === heading.key);
     return groupRows.length > 0 ? [{ ...heading, rows: groupRows }] : [];

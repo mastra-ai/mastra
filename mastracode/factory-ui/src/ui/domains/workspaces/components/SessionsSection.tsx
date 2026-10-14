@@ -19,7 +19,12 @@ import {
   filterSessionRows,
   sessionOwnerOptions,
 } from '../services/sessionFilters';
-import { collapsedRowsKeepingActive, groupSessionRows, sessionGroupHeadings } from '../services/sessionGroups';
+import {
+  collapsedRowsKeepingActive,
+  groupSessionRows,
+  orderGroupHeadings,
+  sessionGroupHeadings,
+} from '../services/sessionGroups';
 import type { SessionGroupContext } from '../services/sessionGroups';
 import { pullRequestMergeTargets } from '../services/sessionRows';
 import { SESSION_SORT_OPTIONS, compareSessionRows } from '../services/sessionSort';
@@ -35,8 +40,16 @@ export function SessionsSection() {
   const navigate = useNavigate();
   const { rows, hasRepositories, loaded, loadFailed, retry } = useSessionListRows(factoryId);
   const catalog = useBoardCatalog(factoryId);
-  const { view, hiddenGroupKeys, changedSettingCount, updateView, changeGroupVisibility, resetView } =
-    useSessionListView();
+  const {
+    view,
+    hiddenGroupKeys,
+    groupOrderKeys,
+    changedSettingCount,
+    updateView,
+    changeGroupVisibility,
+    changeGroupOrder,
+    resetView,
+  } = useSessionListView();
   const viewerUserId = useFactoryAuth().data?.user?.userId;
   const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters(viewerUserId);
   const deletion = useSessionDeletion(factoryId, resourceId);
@@ -44,7 +57,9 @@ export function SessionsSection() {
   const sortedRows = rows.toSorted(compareSessionRows(view.sort));
   const filteredRows = filterSessionRows(sortedRows, filters, viewerUserId);
   const groupContext: SessionGroupContext = { boards: catalog.data, viewerUserId };
-  const groups = groupSessionRows(filteredRows, view.groupBy, groupContext, hiddenGroupKeys);
+  const defaultHeadings = sessionGroupHeadings(sortedRows, view.groupBy, groupContext);
+  const menuGroups = orderGroupHeadings(defaultHeadings, groupOrderKeys);
+  const groups = groupSessionRows(filteredRows, view.groupBy, menuGroups, hiddenGroupKeys);
   const chatSessionOpen = sessionEnabled && Boolean(routeSessionId) && Boolean(resourceId);
   const mergedBySessionId = useWorkspacePullRequestMerges({
     baseUrl,
@@ -119,9 +134,10 @@ export function SessionsSection() {
               <SessionGroupMenu
                 groupBy={view.groupBy}
                 onGroupByChange={groupBy => updateView({ groupBy })}
-                groups={sessionGroupHeadings(sortedRows, view.groupBy, groupContext)}
+                groups={menuGroups}
                 hiddenKeys={hiddenGroupKeys}
                 onVisibilityChange={changeGroupVisibility}
+                onOrderChange={keys => changeGroupOrder(keys, defaultHeadings)}
               />
             </SessionListProperties>
           </div>
