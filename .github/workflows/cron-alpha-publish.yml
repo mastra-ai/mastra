@@ -2,7 +2,6 @@ name: Cron Alpha Version
 
 permissions:
   contents: read
-  actions: read
 
 on:
   schedule:
@@ -95,7 +94,6 @@ jobs:
           cd ../..
 
       - name: Commit and push version changes
-        id: push-version
         if: steps.ensure-prerelease.outputs.restored != 'true' && steps.check-changes.outputs.has_changes == 'true'
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
@@ -106,40 +104,3 @@ jobs:
           git fetch origin "${GITHUB_REF_NAME}"
           git rebase "origin/${GITHUB_REF_NAME}"
           git push origin HEAD:"${GITHUB_REF_NAME}"
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-      # The changesets consumed above are also versioned on the release PR branch, which now
-      # conflicts with main. Deleting the branch closes the PR; version-packages.yml recreates
-      # it from main on the next push that adds a changeset.
-      # Version Packages runs for commits before our push would recreate the branch from that
-      # older main, so wait for them to finish first. Runs for our commit or later ones are safe.
-      - name: Close stale release PR
-        if: steps.ensure-prerelease.outputs.restored != 'true' && steps.check-changes.outputs.has_changes == 'true'
-        timeout-minutes: 45
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION_SHA: ${{ steps.push-version.outputs.sha }}
-          RELEASE_BRANCH: changeset-release/${{ github.ref_name }}
-        run: |
-          while true; do
-            git fetch --quiet origin "${GITHUB_REF_NAME}"
-            pending=""
-            # Assigned first so a failed query aborts the step instead of looking like "nothing pending".
-            shas=$(gh run list --workflow version-packages.yml --branch "${GITHUB_REF_NAME}" --limit 100 \
-              --json headSha,status --jq '.[] | select(.status != "completed") | .headSha' | sort -u)
-            for sha in ${shas}; do
-              if ! git merge-base --is-ancestor "${VERSION_SHA}" "${sha}" 2>/dev/null; then
-                pending="${pending} ${sha}"
-              fi
-            done
-            [ -z "${pending}" ] && break
-            echo "Waiting for Version Packages runs on older commits:${pending}"
-            sleep 20
-          done
-
-          if git ls-remote --exit-code --heads origin "${RELEASE_BRANCH}" > /dev/null; then
-            git push origin --delete "${RELEASE_BRANCH}"
-          else
-            echo "No ${RELEASE_BRANCH} branch to delete"
-          fi
