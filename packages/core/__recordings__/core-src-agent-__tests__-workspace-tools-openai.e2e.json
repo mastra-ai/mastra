@@ -30029,7 +30029,7 @@
               "id": "fc_081a5273f0e90f00006aa041199dec87d18359ef72c7f78a41",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"pattern\":\"Hello\",\"path\":\".\",\"contextLines\":0,\"maxCount\":null,\"caseSensitive\":true,\"includeHidden\":false}",
+              "arguments": "{\"caseSensitive\":true,\"contextLines\":0,\"includeHidden\":false,\"maxCount\":null,\"path\":\".\",\"pattern\":\"Hello\"}",
               "call_id": "call_reT7kHMqWIvcpfN4V0pw6Twy",
               "name": "mastra_workspace_grep"
             }
@@ -33104,7 +33104,7 @@
               "id": "fc_085c181a5a3f1f4a006aa0411ef58c87d19ce8a0c5af94c67a",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"path\":\".\",\"maxDepth\":1,\"showHidden\":true,\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"pattern\":\"*\",\"respectGitignore\":true}",
+              "arguments": "{\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"maxDepth\":1,\"path\":\".\",\"pattern\":\"*\",\"respectGitignore\":true,\"showHidden\":true}",
               "call_id": "call_JKqw4AG6L64jbSIYWYU0w7Pr",
               "name": "mastra_workspace_list_files"
             }
@@ -45334,7 +45334,7 @@
               "id": "fc_0749a165df1a904f006aa04130dffc87d1808a026efabedd33",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"path\":\".\",\"maxDepth\":2,\"showHidden\":false,\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"pattern\":\"\",\"respectGitignore\":true}",
+              "arguments": "{\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"maxDepth\":2,\"path\":\".\",\"pattern\":\"\",\"respectGitignore\":true,\"showHidden\":false}",
               "call_id": "call_1b3la7Nn4PsEEc61LKt2ztAH",
               "name": "mastra_workspace_list_files"
             }
@@ -46070,7 +46070,7 @@
       }
     },
     {
-      "hash": "085e6615ec10ea03",
+      "hash": "415daa246e209c2f",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -46098,7 +46098,7 @@
               "type": "function_call",
               "call_id": "call_1b3la7Nn4PsEEc61LKt2ztAH",
               "name": "mastra_workspace_list_files",
-              "arguments": "{\"path\":\".\",\"maxDepth\":2,\"showHidden\":false,\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"pattern\":\"\",\"respectGitignore\":true}"
+              "arguments": "{\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"maxDepth\":2,\"path\":\".\",\"pattern\":\"\",\"respectGitignore\":true,\"showHidden\":false}"
             },
             {
               "type": "function_call_output",
@@ -49981,7 +49981,7 @@
               "id": "fc_0a5fa0fd71a68e0e006aa04138e23487d181876f96fe669336",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"path\":\".\",\"maxDepth\":3,\"showHidden\":false,\"dirsOnly\":false,\"exclude\":\"node_modules\",\"extension\":null,\"pattern\":[],\"respectGitignore\":false}",
+              "arguments": "{\"dirsOnly\":false,\"exclude\":\"node_modules\",\"extension\":null,\"maxDepth\":3,\"path\":\".\",\"pattern\":[],\"respectGitignore\":false,\"showHidden\":false}",
               "call_id": "call_yPG64B233VHx2Unk3o9gGnoG",
               "name": "mastra_workspace_list_files"
             }
@@ -50743,7 +50743,7 @@
       }
     },
     {
-      "hash": "ad5e8d5db448eb05",
+      "hash": "f9db9a19bef0440b",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -50771,7 +50771,7 @@
               "type": "function_call",
               "call_id": "call_yPG64B233VHx2Unk3o9gGnoG",
               "name": "mastra_workspace_list_files",
-              "arguments": "{\"path\":\".\",\"maxDepth\":3,\"showHidden\":false,\"dirsOnly\":false,\"exclude\":\"node_modules\",\"extension\":null,\"pattern\":[],\"respectGitignore\":false}"
+              "arguments": "{\"dirsOnly\":false,\"exclude\":\"node_modules\",\"extension\":null,\"maxDepth\":3,\"path\":\".\",\"pattern\":[],\"respectGitignore\":false,\"showHidden\":false}"
             },
             {
               "type": "function_call_output",
@@ -53040,7 +53040,7 @@
               "id": "fc_0fddd0919b04c982006aa0413d70e487d18aa4a0a850d119a0",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"pattern\":\"Hello\",\"path\":\".\",\"contextLines\":0,\"maxCount\":null,\"caseSensitive\":true,\"includeHidden\":false}",
+              "arguments": "{\"caseSensitive\":true,\"contextLines\":0,\"includeHidden\":false,\"maxCount\":null,\"path\":\".\",\"pattern\":\"Hello\"}",
               "call_id": "call_CuTcA8SPa3MmP1bwq556CHBA",
               "name": "mastra_workspace_grep"
             }
@@ -53802,7 +53802,7 @@
       }
     },
     {
-      "hash": "89303d3a4c2a72e2",
+      "hash": "e00057fcd82371ca",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -53830,7 +53830,7 @@
               "type": "function_call",
               "call_id": "call_CuTcA8SPa3MmP1bwq556CHBA",
               "name": "mastra_workspace_grep",
-              "arguments": "{\"pattern\":\"Hello\",\"path\":\".\",\"contextLines\":0,\"maxCount\":null,\"caseSensitive\":true,\"includeHidden\":false}"
+              "arguments": "{\"caseSensitive\":true,\"contextLines\":0,\"includeHidden\":false,\"maxCount\":null,\"path\":\".\",\"pattern\":\"Hello\"}"
             },
             {
               "type": "function_call_output",
@@ -56099,7 +56099,7 @@
               "id": "fc_0b0036ef53e7ce34006aa041417bdc87d18f6070c65a076854",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"path\":\".\",\"maxDepth\":1,\"showHidden\":true,\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"pattern\":\"*\",\"respectGitignore\":true}",
+              "arguments": "{\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"maxDepth\":1,\"path\":\".\",\"pattern\":\"*\",\"respectGitignore\":true,\"showHidden\":true}",
               "call_id": "call_HbTryyFheg7lhVxOZucXWvcX",
               "name": "mastra_workspace_list_files"
             }
@@ -56861,7 +56861,7 @@
       }
     },
     {
-      "hash": "9dce80b5ef0e6bf3",
+      "hash": "ab12e9b26cf929c0",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -56889,7 +56889,7 @@
               "type": "function_call",
               "call_id": "call_HbTryyFheg7lhVxOZucXWvcX",
               "name": "mastra_workspace_list_files",
-              "arguments": "{\"path\":\".\",\"maxDepth\":1,\"showHidden\":true,\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"pattern\":\"*\",\"respectGitignore\":true}"
+              "arguments": "{\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"maxDepth\":1,\"path\":\".\",\"pattern\":\"*\",\"respectGitignore\":true,\"showHidden\":true}"
             },
             {
               "type": "function_call_output",
@@ -62192,7 +62192,7 @@
               "id": "fc_0dfa99e0a4ba68f5006aa0414b8d1087d19d68e168dc581023",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"path\":\".\",\"maxDepth\":2,\"showHidden\":false,\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"pattern\":\"\",\"respectGitignore\":true}",
+              "arguments": "{\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"maxDepth\":2,\"path\":\".\",\"pattern\":\"\",\"respectGitignore\":true,\"showHidden\":false}",
               "call_id": "call_bNaIQsUCCdUftVpI87d3u6wH",
               "name": "mastra_workspace_list_files"
             }
@@ -62943,7 +62943,7 @@
       }
     },
     {
-      "hash": "6e14bb0ed5e6f30d",
+      "hash": "418634171d2d4a2e",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -62971,7 +62971,7 @@
               "type": "function_call",
               "call_id": "call_bNaIQsUCCdUftVpI87d3u6wH",
               "name": "mastra_workspace_list_files",
-              "arguments": "{\"path\":\".\",\"maxDepth\":2,\"showHidden\":false,\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"pattern\":\"\",\"respectGitignore\":true}"
+              "arguments": "{\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"maxDepth\":2,\"path\":\".\",\"pattern\":\"\",\"respectGitignore\":true,\"showHidden\":false}"
             },
             {
               "type": "function_call_output",
@@ -65210,7 +65210,7 @@
               "id": "fc_063d275f98e273cc006aa04150cd6887d1b5dae0623cb52095",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"path\":\".\",\"maxDepth\":2,\"showHidden\":false,\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"pattern\":\".\",\"respectGitignore\":true}",
+              "arguments": "{\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"maxDepth\":2,\"path\":\".\",\"pattern\":\".\",\"respectGitignore\":true,\"showHidden\":false}",
               "call_id": "call_bgO7XfnnzcD9EpElnZKOOSmn",
               "name": "mastra_workspace_list_files"
             }
@@ -65987,7 +65987,7 @@
       }
     },
     {
-      "hash": "9ca3adb3bd4a1d24",
+      "hash": "50d4ba082bbe588b",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -66015,7 +66015,7 @@
               "type": "function_call",
               "call_id": "call_bgO7XfnnzcD9EpElnZKOOSmn",
               "name": "mastra_workspace_list_files",
-              "arguments": "{\"path\":\".\",\"maxDepth\":2,\"showHidden\":false,\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"pattern\":\".\",\"respectGitignore\":true}"
+              "arguments": "{\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"maxDepth\":2,\"path\":\".\",\"pattern\":\".\",\"respectGitignore\":true,\"showHidden\":false}"
             },
             {
               "type": "function_call_output",
@@ -68274,7 +68274,7 @@
               "id": "fc_00b6844676e8a23e006aa04154b31087d19542a89e3b2fb098",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"path\":\".\",\"maxDepth\":2,\"showHidden\":false,\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"pattern\":\"\",\"respectGitignore\":true}",
+              "arguments": "{\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"maxDepth\":2,\"path\":\".\",\"pattern\":\"\",\"respectGitignore\":true,\"showHidden\":false}",
               "call_id": "call_jwQeP1LQZL4Y9apa7mMgMAqU",
               "name": "mastra_workspace_list_files"
             }
@@ -69010,7 +69010,7 @@
       }
     },
     {
-      "hash": "085e6615ec10ea03",
+      "hash": "415daa246e209c2f",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -69038,7 +69038,7 @@
               "type": "function_call",
               "call_id": "call_jwQeP1LQZL4Y9apa7mMgMAqU",
               "name": "mastra_workspace_list_files",
-              "arguments": "{\"path\":\".\",\"maxDepth\":2,\"showHidden\":false,\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"pattern\":\"\",\"respectGitignore\":true}"
+              "arguments": "{\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"maxDepth\":2,\"path\":\".\",\"pattern\":\"\",\"respectGitignore\":true,\"showHidden\":false}"
             },
             {
               "type": "function_call_output",
@@ -72921,7 +72921,7 @@
               "id": "fc_0319a2c10e92f6c9006aa0415bd0f487d1bffe7524b41dcf83",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"path\":\".\",\"maxDepth\":2,\"showHidden\":false,\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"pattern\":[],\"respectGitignore\":true}",
+              "arguments": "{\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"maxDepth\":2,\"path\":\".\",\"pattern\":[],\"respectGitignore\":true,\"showHidden\":false}",
               "call_id": "call_wHc4zE25LjWwnMdcTfVSyXdP",
               "name": "mastra_workspace_list_files"
             }
@@ -73683,7 +73683,7 @@
       }
     },
     {
-      "hash": "29ac481d684c9c63",
+      "hash": "36936bbe18254960",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -73711,7 +73711,7 @@
               "type": "function_call",
               "call_id": "call_wHc4zE25LjWwnMdcTfVSyXdP",
               "name": "mastra_workspace_list_files",
-              "arguments": "{\"path\":\".\",\"maxDepth\":2,\"showHidden\":false,\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"pattern\":[],\"respectGitignore\":true}"
+              "arguments": "{\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"maxDepth\":2,\"path\":\".\",\"pattern\":[],\"respectGitignore\":true,\"showHidden\":false}"
             },
             {
               "type": "function_call_output",
@@ -75980,7 +75980,7 @@
               "id": "fc_0157d59b4df1f530006aa041602a7c87d1bd86b4be8d2cf4e7",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"pattern\":\"Hello\",\"path\":\"**/*\",\"contextLines\":0,\"maxCount\":null,\"caseSensitive\":true,\"includeHidden\":false}",
+              "arguments": "{\"caseSensitive\":true,\"contextLines\":0,\"includeHidden\":false,\"maxCount\":null,\"path\":\"**/*\",\"pattern\":\"Hello\"}",
               "call_id": "call_9UIgM9JCSBlTj5QuIvmdWq2m",
               "name": "mastra_workspace_grep"
             }
@@ -76742,7 +76742,7 @@
       }
     },
     {
-      "hash": "77b2da9353f9791e",
+      "hash": "3654ca37f0d28c83",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -76770,7 +76770,7 @@
               "type": "function_call",
               "call_id": "call_9UIgM9JCSBlTj5QuIvmdWq2m",
               "name": "mastra_workspace_grep",
-              "arguments": "{\"pattern\":\"Hello\",\"path\":\"**/*\",\"contextLines\":0,\"maxCount\":null,\"caseSensitive\":true,\"includeHidden\":false}"
+              "arguments": "{\"caseSensitive\":true,\"contextLines\":0,\"includeHidden\":false,\"maxCount\":null,\"path\":\"**/*\",\"pattern\":\"Hello\"}"
             },
             {
               "type": "function_call_output",
@@ -79039,7 +79039,7 @@
               "id": "fc_0811bd0e5a40e54e006aa0416800ec87d182a44bb7c65680ee",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"path\":\".\",\"maxDepth\":1,\"showHidden\":true,\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"pattern\":\"*\",\"respectGitignore\":true}",
+              "arguments": "{\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"maxDepth\":1,\"path\":\".\",\"pattern\":\"*\",\"respectGitignore\":true,\"showHidden\":true}",
               "call_id": "call_Ws151yFe7wjpJrO84eEZtHfA",
               "name": "mastra_workspace_list_files"
             }
@@ -79801,7 +79801,7 @@
       }
     },
     {
-      "hash": "9dce80b5ef0e6bf3",
+      "hash": "ab12e9b26cf929c0",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -79829,7 +79829,7 @@
               "type": "function_call",
               "call_id": "call_Ws151yFe7wjpJrO84eEZtHfA",
               "name": "mastra_workspace_list_files",
-              "arguments": "{\"path\":\".\",\"maxDepth\":1,\"showHidden\":true,\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"pattern\":\"*\",\"respectGitignore\":true}"
+              "arguments": "{\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"maxDepth\":1,\"path\":\".\",\"pattern\":\"*\",\"respectGitignore\":true,\"showHidden\":true}"
             },
             {
               "type": "function_call_output",
@@ -85132,7 +85132,7 @@
               "id": "fc_094506f6899bc2c7006aa0416f672c87d1b18b33ef81b698a0",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"path\":\".\",\"maxDepth\":2,\"showHidden\":false,\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"pattern\":\"\",\"respectGitignore\":true}",
+              "arguments": "{\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"maxDepth\":2,\"path\":\".\",\"pattern\":\"\",\"respectGitignore\":true,\"showHidden\":false}",
               "call_id": "call_dVStTWFTDaHKNFS6JFzsVGRB",
               "name": "mastra_workspace_list_files"
             }
@@ -85883,7 +85883,7 @@
       }
     },
     {
-      "hash": "6e14bb0ed5e6f30d",
+      "hash": "418634171d2d4a2e",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -85911,7 +85911,7 @@
               "type": "function_call",
               "call_id": "call_dVStTWFTDaHKNFS6JFzsVGRB",
               "name": "mastra_workspace_list_files",
-              "arguments": "{\"path\":\".\",\"maxDepth\":2,\"showHidden\":false,\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"pattern\":\"\",\"respectGitignore\":true}"
+              "arguments": "{\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"maxDepth\":2,\"path\":\".\",\"pattern\":\"\",\"respectGitignore\":true,\"showHidden\":false}"
             },
             {
               "type": "function_call_output",
@@ -88150,7 +88150,7 @@
               "id": "fc_050e99842698d9a5006aa0417338a087d195b255bb0d1a316c",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"path\":\".\",\"maxDepth\":2,\"showHidden\":false,\"dirsOnly\":false,\"exclude\":\"node_modules\",\"extension\":null,\"pattern\":\"\",\"respectGitignore\":true}",
+              "arguments": "{\"dirsOnly\":false,\"exclude\":\"node_modules\",\"extension\":null,\"maxDepth\":2,\"path\":\".\",\"pattern\":\"\",\"respectGitignore\":true,\"showHidden\":false}",
               "call_id": "call_pOMhoX7GDKycxyibLHOERU6b",
               "name": "mastra_workspace_list_files"
             }
@@ -88927,7 +88927,7 @@
       }
     },
     {
-      "hash": "9e61e6ae0e4b923d",
+      "hash": "eaf6657ac5e5af9b",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -88955,7 +88955,7 @@
               "type": "function_call",
               "call_id": "call_pOMhoX7GDKycxyibLHOERU6b",
               "name": "mastra_workspace_list_files",
-              "arguments": "{\"path\":\".\",\"maxDepth\":2,\"showHidden\":false,\"dirsOnly\":false,\"exclude\":\"node_modules\",\"extension\":null,\"pattern\":\"\",\"respectGitignore\":true}"
+              "arguments": "{\"dirsOnly\":false,\"exclude\":\"node_modules\",\"extension\":null,\"maxDepth\":2,\"path\":\".\",\"pattern\":\"\",\"respectGitignore\":true,\"showHidden\":false}"
             },
             {
               "type": "function_call_output",
