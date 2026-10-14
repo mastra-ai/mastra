@@ -226,7 +226,7 @@ test('--oidc passes when npm grants the token exchange for every package (trust 
   const oidc = await startOidc(t, { exchange: { '@mastra%2fcore': 200, '@mastra%2fsprites': 200 } });
   const result = await run(t, cwd, oidc.url, ['--oidc'], oidc.env);
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /npm trusted publishing works for all 2 package\(s\)/);
+  assert.match(result.stdout, /npm granted this job a trusted-publishing token for all 2 package\(s\)/);
   assertNoTokens(result);
 
   // Same request pnpm makes at publish time: GitHub token for the registry

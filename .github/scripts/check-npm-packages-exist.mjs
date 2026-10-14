@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Verifies that every non-private workspace package already exists on npm
-// and, with --oidc, that npm trusted publishing works for it from this job.
+// and, with --oidc, that npm grants this job a trusted-publishing token for it.
 //
 // npm-publish.yml publishes with npm trusted publishing (OIDC) and has no token
 // fallback. npm only allows a trusted publisher on a package that already
@@ -15,8 +15,15 @@
 // for every package, the same OIDC token exchange pnpm/npm perform at publish
 // time: a GitHub OIDC token for audience `npm:<registry host>` is POSTed to
 // <registry>/-/npm/v1/oidc/token/exchange/package/<name>. npm returns a
-// short-lived publish token only if the package's trusted publisher matches
-// this repo and workflow. That token is discarded unused and never printed.
+// short-lived token only if the package has a trusted publisher for this repo
+// and workflow (and GitHub environment, if the publisher names one). That token
+// is discarded unused and never printed. A granted token proves the exchange
+// works, not that the publish PUT will be accepted: npm uses the same exchange
+// for publish, stage publish and dist-tag, and the token's permissions can't
+// be read anonymously, so a trusted publisher that allows only staged
+// publishing (createStagedPackage, no createPackage) passes --oidc and fails
+// at publish. scripts/npm-placeholder-publish.mjs checks those permissions
+// when it configures or reads back trust.
 // Without --oidc (PR checks: no secrets), a package that exists but has no
 // version published through trusted publishing is reported as a warning only:
 // a fresh placeholder looks like that until CI's first publish.
@@ -27,7 +34,7 @@
 //                                     [--oidc]
 //
 // Exit codes: 0 = all publishable packages exist on npm (and, with --oidc,
-//                 all can publish through trusted publishing)
+//                 npm granted this job a trusted-publishing token for each)
 //             1 = packages missing from npm, or (--oidc) npm refused the
 //                 token exchange for them (publish would fail)
 //             2 = could not verify (registry or GitHub OIDC unreachable /
@@ -254,11 +261,11 @@ function printRecoveryInstructions(pkg) {
 function printTrustInstructions({ pkg, refusal }) {
   console.error(`✘ npm refused trusted publishing for ${pkg.name} (${refusal}).`);
   console.error('');
-  console.error('  npm only hands this job a publish token when the package has a trusted');
+  console.error('  npm only hands this job a token when the package has a trusted');
   console.error('  publisher for GitHub repo mastra-ai/mastra, workflow npm-publish.yml.');
   console.error('  This package has none, one for another repo or workflow, or one limited');
-  console.error('  to staged publishing or to a GitHub environment, so its publish would');
-  console.error('  fail mid-release (ERR_PNPM_AUTH_TOKEN_EXCHANGE).');
+  console.error('  to a GitHub environment, so its publish would fail mid-release');
+  console.error('  (ERR_PNPM_AUTH_TOKEN_EXCHANGE).');
   console.error('');
   console.error('  An npm org admin must configure it. After `npm login`, from a checkout of');
   console.error('  mastra-ai/mastra (publishes nothing for a package that already exists):');
@@ -374,4 +381,6 @@ if (trustUnverifiable.length > 0) {
   await reportUnverifiable(trustUnverifiable, 'for trusted publishing');
 }
 
-console.log(`npm trusted publishing works for all ${packages.length} package(s).`);
+console.log(
+  `npm granted this job a trusted-publishing token for all ${packages.length} package(s) (publish permission is not checked here; see scripts/npm-placeholder-publish.mjs).`,
+);
