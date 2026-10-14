@@ -648,6 +648,29 @@ A repository maintainer with write or admin access can start a Factory review fr
 
 `@<factory-app> re-review` is also accepted. Factory resolves `<factory-app>` from its observed or configured GitHub App login (without the `[bot]` suffix), so commands are ignored until that identity is known. The command creates and starts a first Review pass for a missing or Intake card, restarts a completed card with `factory-rereview`, and is a no-op while the card is already Reviewing. Other prose, quoted mentions, edited comments, and comments from untrusted users do not trigger a run.
 
+### Factory tools in user sessions
+
+A person's own Factory session (a user session) gets tools to find, file and manage the Factory's work items through its agent. Factory scopes the tools from the stored session row, never from the thread's `factoryProjectId` tag: the session must belong to a Factory in the caller's organization, and a private session only works for its owner. With authentication disabled, the shared `local` tenant applies. Sessions bound to a run (workers) don't get these tools.
+
+| Tool                            | Input                                                                                                                                           | Approval |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `factory_list_work_items`       | Optional `query` (title text or `#number`), `stage`, `board`, `role`, `active`, `requestedBy: 'me'`, `subscribed`, `limit` (default 25, max 50) | No       |
+| `factory_inspect_work_item`     | `workItem` (id or `#number`)                                                                                                                    | No       |
+| `factory_list_attention`        | Optional `limit` (max 50)                                                                                                                       | No       |
+| `factory_create_work_item`      | `title`, `brief`                                                                                                                                | No       |
+| `factory_subscribe_work_item`   | `workItem`                                                                                                                                      | No       |
+| `factory_unsubscribe_work_item` | `workItem`                                                                                                                                      | No       |
+| `factory_transition_work_item`  | `workItem`, `stage`                                                                                                                             | Yes      |
+| `factory_retry_decision`        | `decisionId`                                                                                                                                    | Yes      |
+| `factory_dismiss_decision`      | `decisionId`                                                                                                                                    | Yes      |
+| `factory_resolve_proposal`      | `decisionId`, `action` (`approve` or `dismiss`)                                                                                                 | Yes      |
+
+Read tools are available on every turn. The other tools only appear on turns a signed-in person started, so text arriving from a notification, webhook or channel can't drive them. Tools without approval are allowed on the session when it's created, unless the person has set their own policy for the tool or for the `mcp` category.
+
+`factory_create_work_item` files the card as the caller in its board's first phase, exactly like **New card**, posts the brief as its first comment, and subscribes the session. Subscriptions are stored per work item and session in the `factory_work_item_subscriptions` collection and are removed with the item, so any number of sessions can follow one item.
+
+The tools take their scope as an argument rather than reading the request, so the same tool set can later be mounted elsewhere, such as an MCP server.
+
 ### Development
 
 Run focused package checks from the repository root:
