@@ -1,0 +1,385 @@
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { RequestContext } from '@mastra/core/di';
+import { useMastraClient } from '@mastra/react';
+import {
+  memoryStatusQueryKey,
+  memoryThreadMessagesQueryKey,
+  observationalMemoryQueryKey,
+} from '@mastra/react/hooks/memory';
+import { useQueryClient } from '@tanstack/react-query';
+import { useCallback, useRef } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
+
+import {
+  buildMaxStepsStreamErrorMessage,
+  buildStreamErrorMessage,
+  isMaxStepsFinishChunk,
+} from '@/domains/agents/session/lib/stream-error-message';
+import type { ChatSendArgs } from '@/domains/chat/context/chat-context';
+import { injectBufferingEnds } from '@/domains/chat/om/om-parts-converter';
+
+/**
+ * The OM/error stream chunks this hook reacts to are not part of the typed
+ * `useChat` chunk union, so we narrow them at the stream boundary.
+ */
+type OmStreamChunk =
+  | { type: 'data-om-observation-start'; data?: { operationType?: string } }
+  | { type: 'data-om-observation-end'; data?: { operationType?: string } }
+  | { type: 'data-om-observation-failed'; data?: { operationType?: string } }
+  | {
+      type: 'data-om-status';
+      data?: {
+        windows?: unknown;
+        recordId?: string;
+        threadId?: string;
+        stepNumber?: number;
+        generationCount?: number;
+      };
+    }
+  | { type: 'data-om-activation'; data?: { operationType?: string; cycleId?: string } };
+
+type ErrorStreamChunk = { type: 'error'; runId?: string; payload?: { error?: unknown } };
+type HandledStreamChunk = OmStreamChunk | ErrorStreamChunk;
+
+const asHandledStreamChunk = (chunk: unknown): HandledStreamChunk | undefined => {
+  const type = (chunk as { type?: unknown }).type;
+  if (
+    type === 'error' ||
+    type === 'data-om-observation-start' ||
+    type === 'data-om-observation-end' ||
+    type === 'data-om-observation-failed' ||
+    type === 'data-om-status' ||
+    type === 'data-om-activation'
+  ) {
+    return chunk as HandledStreamChunk;
+  }
+  return undefined;
+};
+
+interface SendDeps {
+  model?: string;
+  requestContext?: Record<string, any>;
+  agentVersionId?: string;
+  threadId?: string;
+  modelSettingsArgs: Record<string, unknown>;
+  chatWithNetwork?: boolean;
+  chatWithGenerate?: boolean;
+  maxSteps?: number;
+  isOMEnabled: boolean;
+  tracingOptions?: unknown;
+}
+
+interface UseChatSendHandlerArgs {
+  agentId: string;
+  requestContext?: Record<string, any>;
+  agentVersionId?: string;
+  threadId?: string;
+  modelSettingsArgs: Record<string, unknown>;
+  model?: string;
+  chatWithNetwork?: boolean;
+  chatWithGenerate?: boolean;
+  maxSteps?: number;
+  isOMEnabled: boolean;
+  tracingOptions?: unknown;
+  threadSignalsUnsupportedRef: { current: boolean };
+  isRunningStream: boolean;
+  sendMessage: (args: any) => Promise<void>;
+  cancelRun?: () => void;
+  setMessages: Dispatch<SetStateAction<MastraDBMessage[]>>;
+  setStreamErrors: Dispatch<SetStateAction<MastraDBMessage[]>>;
+  refreshThreadList?: () => void | Promise<void>;
+  refreshWorkingMemory?: () => void | Promise<unknown>;
+  handleObservationStart: (operationType?: string) => void;
+  handleProgressUpdate: (data: any) => void;
+  refreshObservationalMemory: (operationType?: string) => void;
+  handleActivation: (data: any) => void;
+  resetObservationalMemoryStreamState: () => void;
+  /** Signal the memory timeline panel to refetch (mirrors left OM sidebar freshness). */
+  signalTimelineRefresh: () => void;
+}
+
+const buildRequestContext = (deps: SendDeps) => {
+  const requestContextInstance = new RequestContext();
+  Object.entries(deps.requestContext ?? {}).forEach(([key, value]) => {
+    requestContextInstance.set(key, value);
+  });
+  if (deps.agentVersionId) {
+    requestContextInstance.set('agentVersionId', deps.agentVersionId);
+  }
+  return requestContextInstance;
+};
+
+/**
+ * A server error (5xx) can come after the agent ran and stored the turn, as in generate mode where no
+ * chunk arrives first: putting the message back in the composer would invite sending it twice. A
+ * request that got no response, or that the server refused (4xx, such as a body too large), left
+ * nothing behind.
+ */
+const mayHaveBeenStored = (error: unknown) => {
+  const status = (error as { status?: unknown } | null)?.status;
+  return typeof status === 'number' && status >= 500;
+};
+
+const didUpdateWorkingMemory = (chunk: any) =>
+  (chunk.type === 'tool-result' || chunk.type === 'tool-execution-end') &&
+  chunk.payload?.toolName === 'updateWorkingMemory' &&
+  typeof chunk.payload.result === 'object' &&
+  chunk.payload.result !== null &&
+  'success' in chunk.payload.result &&
+  chunk.payload.result?.success;
+
+export const useChatSendHandler = ({
+  agentId,
+  requestContext,
+  agentVersionId,
+  threadId,
+  modelSettingsArgs,
+  model,
+  chatWithNetwork,
+  chatWithGenerate,
+  maxSteps,
+  isOMEnabled,
+  tracingOptions,
+  threadSignalsUnsupportedRef,
+  isRunningStream,
+  sendMessage,
+  cancelRun,
+  setMessages,
+  setStreamErrors,
+  refreshThreadList,
+  refreshWorkingMemory,
+  handleObservationStart,
+  handleProgressUpdate,
+  refreshObservationalMemory,
+  handleActivation,
+  resetObservationalMemoryStreamState,
+  signalTimelineRefresh,
+}: UseChatSendHandlerArgs) => {
+  const baseClient = useMastraClient();
+  const queryClient = useQueryClient();
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const sendDepsRef = useRef<SendDeps>({
+    requestContext,
+    agentVersionId,
+    threadId,
+    modelSettingsArgs,
+    model,
+    chatWithNetwork,
+    chatWithGenerate,
+    maxSteps,
+    isOMEnabled,
+    tracingOptions,
+  });
+  sendDepsRef.current = {
+    requestContext,
+    agentVersionId,
+    threadId,
+    modelSettingsArgs,
+    model,
+    chatWithNetwork,
+    chatWithGenerate,
+    maxSteps,
+    isOMEnabled,
+    tracingOptions,
+  };
+
+  // Force an immediate refetch of the memory timeline panel (playground-ui
+  // ['memory', ...] keys), scoped to the given thread, so the panel shows live
+  // data right away. Runs on every chat completion regardless of whether
+  // observational memory is enabled, so the thread messages and memory status
+  // shown in the panel are never stale after a stream finishes.
+  const refreshTimelinePanel = useCallback(
+    (currentThreadId?: string) => {
+      if (!currentThreadId) return;
+      void queryClient.refetchQueries({ queryKey: observationalMemoryQueryKey(agentId, currentThreadId) });
+      void queryClient.refetchQueries({ queryKey: memoryThreadMessagesQueryKey(currentThreadId) });
+      void queryClient.refetchQueries({ queryKey: memoryStatusQueryKey(agentId, currentThreadId) });
+      // Also poke the timeline panel directly. The panel resolves its own thread id
+      // from the route, so it stays correct even for brand-new threads where
+      // `deps.threadId` is still undefined at send time and the keyed refetch above
+      // cannot target the real thread yet.
+      signalTimelineRefresh();
+    },
+    [agentId, queryClient, signalTimelineRefresh],
+  );
+
+  const completeObservationalMemoryBuffering = useCallback(
+    (currentThreadId?: string) => {
+      if (!currentThreadId || !sendDepsRef.current.isOMEnabled) return;
+      baseClient
+        .awaitBufferStatus({ agentId, resourceId: agentId, threadId: currentThreadId })
+        .then(result => {
+          setMessages(prev => injectBufferingEnds(prev, result?.record));
+          void queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
+          void queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
+          // Refetch the panel again once buffering completes, so any records that
+          // only landed after awaitBufferStatus resolved are reflected immediately.
+          refreshTimelinePanel(currentThreadId);
+          void refreshWorkingMemory?.();
+        })
+        .catch(() => {});
+    },
+    [agentId, baseClient, queryClient, refreshTimelinePanel, refreshWorkingMemory, setMessages],
+  );
+
+  const handleHandledChunk = useCallback(
+    (handled: HandledStreamChunk | undefined) => {
+      if (handled?.type === 'error') {
+        setStreamErrors(prev => [...prev, buildStreamErrorMessage(handled)]);
+      }
+      if (handled?.type === 'data-om-observation-start') {
+        handleObservationStart(handled.data?.operationType);
+      }
+      if (handled?.type === 'data-om-status') {
+        handleProgressUpdate(handled.data);
+      }
+      if (
+        handled?.type === 'data-om-observation-end' ||
+        handled?.type === 'data-om-observation-failed' ||
+        handled?.type === 'data-om-activation'
+      ) {
+        refreshObservationalMemory(handled.data?.operationType);
+      }
+      if (handled?.type === 'data-om-observation-end') {
+        void refreshWorkingMemory?.();
+      }
+      if (handled?.type === 'data-om-activation') {
+        handleActivation(handled.data);
+      }
+    },
+    [
+      handleActivation,
+      handleObservationStart,
+      handleProgressUpdate,
+      refreshObservationalMemory,
+      refreshWorkingMemory,
+      setStreamErrors,
+    ],
+  );
+
+  const send = useCallback(
+    async ({ message, attachments = [] }: ChatSendArgs): Promise<boolean> => {
+      const deps = sendDepsRef.current;
+      if (threadSignalsUnsupportedRef.current && (isRunningStream || abortControllerRef.current)) return false;
+
+      setStreamErrors([]);
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      const requestContextInstance = buildRequestContext(deps);
+      // An error can still be thrown once the server has the message, by a chunk handler or a refresh.
+      // Those must not put the message back in the composer.
+      let delivered = false;
+
+      try {
+        if (deps.chatWithNetwork) {
+          await sendMessage({
+            message,
+            mode: 'network',
+            coreUserMessages: attachments,
+            requestContext: requestContextInstance,
+            threadId: deps.threadId,
+            modelSettings: deps.modelSettingsArgs,
+            model: deps.model,
+            signal: controller.signal,
+            tracingOptions: deps.tracingOptions,
+            onNetworkChunk: async (chunk: any) => {
+              delivered = true;
+              if (didUpdateWorkingMemory(chunk)) {
+                void refreshWorkingMemory?.();
+              }
+              if (chunk.type === 'network-execution-event-step-finish') {
+                void refreshThreadList?.();
+              }
+              handleHandledChunk(asHandledStreamChunk(chunk));
+            },
+          });
+        } else if (deps.chatWithGenerate) {
+          await sendMessage({
+            message,
+            mode: 'generate',
+            coreUserMessages: attachments,
+            requestContext: requestContextInstance,
+            threadId: deps.threadId,
+            modelSettings: deps.modelSettingsArgs,
+            model: deps.model,
+            signal: controller.signal,
+            tracingOptions: deps.tracingOptions,
+          });
+          delivered = true;
+          await refreshThreadList?.();
+          refreshTimelinePanel(deps.threadId);
+          return true;
+        } else {
+          await sendMessage({
+            message,
+            mode: 'stream',
+            coreUserMessages: attachments,
+            requestContext: requestContextInstance,
+            threadId: deps.threadId,
+            modelSettings: deps.modelSettingsArgs,
+            model: deps.model,
+            tracingOptions: deps.tracingOptions,
+            onChunk: async (chunk: any) => {
+              delivered = true;
+              if (chunk.type === 'finish') {
+                if (isMaxStepsFinishChunk(chunk)) {
+                  setStreamErrors(prev => [...prev, buildMaxStepsStreamErrorMessage(chunk, deps.maxSteps)]);
+                }
+                await refreshThreadList?.();
+                refreshTimelinePanel(deps.threadId);
+                completeObservationalMemoryBuffering(deps.threadId);
+              }
+              if (didUpdateWorkingMemory(chunk)) {
+                void refreshWorkingMemory?.();
+              }
+              handleHandledChunk(asHandledStreamChunk(chunk));
+            },
+            signal: controller.signal,
+          });
+
+          return true;
+        }
+
+        delivered = true;
+        setTimeout(() => {
+          void refreshThreadList?.();
+        }, 500);
+        refreshTimelinePanel(deps.threadId);
+        completeObservationalMemoryBuffering(deps.threadId);
+        return true;
+      } catch (error: any) {
+        console.error('Error occurred in ChatProvider', error);
+        if (error.name === 'AbortError') {
+          return true;
+        }
+        setStreamErrors(prev => [...prev, buildStreamErrorMessage({ runId: 'thrown', payload: { error } })]);
+        resetObservationalMemoryStreamState();
+        return delivered || mayHaveBeenStored(error);
+      } finally {
+        abortControllerRef.current = null;
+      }
+    },
+    [
+      completeObservationalMemoryBuffering,
+      handleHandledChunk,
+      isRunningStream,
+      refreshThreadList,
+      refreshTimelinePanel,
+      refreshWorkingMemory,
+      resetObservationalMemoryStreamState,
+      sendMessage,
+      setStreamErrors,
+      threadSignalsUnsupportedRef,
+    ],
+  );
+
+  const cancel = useCallback(async () => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    resetObservationalMemoryStreamState();
+    cancelRun?.();
+    completeObservationalMemoryBuffering(sendDepsRef.current.threadId);
+  }, [cancelRun, completeObservationalMemoryBuffering, resetObservationalMemoryStreamState]);
+
+  return { send, cancel };
+};
