@@ -458,6 +458,18 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
                 delete prop.type;
                 prop.anyOf = [propSchema, { type: 'null' }];
               }
+            } else if (Array.isArray(prop.anyOf)) {
+              // A typeless anyOf has no `type` for the branches above to extend. OpenAI strict
+              // mode still lists the key in `required`, so an optional union needs a null
+              // alternative to keep the omitted value representable. See #26703.
+              const hasNullBranch = prop.anyOf.some(
+                branch =>
+                  typeof branch !== 'boolean' &&
+                  (branch.type === 'null' || (Array.isArray(branch.type) && branch.type.includes('null'))),
+              );
+              if (!hasNullBranch) {
+                prop.anyOf = [...prop.anyOf, { type: 'null' } as JSONSchema7];
+              }
             }
           }
         }

@@ -722,6 +722,70 @@ describe('OpenAISchemaCompatLayer', () => {
         requiredKind: 'input',
       });
     });
+
+    // https://github.com/mastra-ai/mastra/issues/26703
+    it('adds a null alternative for optional anyOf properties without a top-level type', async () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          value: {
+            description: 'String or number',
+            anyOf: [{ type: 'string', enum: ['fast', 'slow'] }, { type: 'number' }],
+          },
+          requiredValue: { anyOf: [{ type: 'string' }, { type: 'number' }] },
+          alreadyNullable: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+          nested: {
+            type: 'object',
+            properties: {
+              value: { anyOf: [{ type: 'string' }, { type: 'boolean' }] },
+            },
+            additionalProperties: false,
+          },
+        },
+        required: ['requiredValue'],
+        additionalProperties: false,
+      };
+      const compatSchema = compat.processToCompatSchema(schema);
+      const result = compatSchema['~standard'].jsonSchema.input({ target: 'draft-07' }) as Record<string, any>;
+
+      expect(result.required).toEqual(['requiredValue', 'value', 'alreadyNullable', 'nested']);
+      expect(result['x-optional']).toEqual(['value', 'alreadyNullable', 'nested']);
+
+      const value = result.properties.value;
+      expect(value.description).toBe('String or number');
+      expect(value.anyOf).toEqual([{ type: 'string', enum: ['fast', 'slow'] }, { type: 'number' }, { type: 'null' }]);
+
+      expect(result.properties.requiredValue.anyOf).toEqual([{ type: 'string' }, { type: 'number' }]);
+      expect(result.properties.alreadyNullable.anyOf).toEqual([{ type: 'string' }, { type: 'null' }]);
+
+      const nestedObject = result.properties.nested.anyOf.find((branch: any) => branch.type === 'object');
+      expect(nestedObject.properties.value.anyOf).toEqual([{ type: 'string' }, { type: 'boolean' }, { type: 'null' }]);
+      expect(nestedObject.required).toEqual(['value']);
+      expect(nestedObject['x-optional']).toEqual(['value']);
+      expect(result.properties.nested.anyOf.find((branch: any) => branch.type === 'null')).toEqual({ type: 'null' });
+
+      const validate = new Ajv({ strict: false }).compile(result);
+      expect(validate({ value: null, requiredValue: 'ok', alreadyNullable: null, nested: null })).toBe(true);
+      expect(validate({ value: 'fast', requiredValue: 1, alreadyNullable: 'ok', nested: { value: null } })).toBe(true);
+      expect(validate({ value: 'fast', requiredValue: 1, alreadyNullable: 'ok', nested: { value: true } })).toBe(true);
+      expect(validate({ requiredValue: 'ok', alreadyNullable: null, nested: null })).toBe(false);
+      expect(validate({ value: null, requiredValue: null, alreadyNullable: null, nested: null })).toBe(false);
+      expect(validate({ value: 'maybe', requiredValue: 'ok', alreadyNullable: null, nested: null })).toBe(false);
+
+      const nullResult: any = await compatSchema['~standard'].validate({
+        value: null,
+        requiredValue: 1,
+        alreadyNullable: null,
+        nested: { value: null },
+      });
+      expect(nullResult).not.toHaveProperty('issues');
+      expect(nullResult.value).toEqual({
+        value: undefined,
+        requiredValue: 1,
+        alreadyNullable: undefined,
+        nested: { value: undefined },
+      });
+    });
   });
 
   // OpenAI strict mode rejects `propertyNames`, which z.record() emits for its key type.
