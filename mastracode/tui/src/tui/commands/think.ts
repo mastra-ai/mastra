@@ -26,6 +26,10 @@ function levelLabel(levelId: string): string {
   return THINKING_LEVELS.find(l => l.id === levelId)?.label ?? levelId;
 }
 
+function runningLevelLabel(ctx: SlashCommandContext, level: ThinkingLevelSetting): string {
+  return levelLabel(runCatalogThinkingLevel(ctx.state.session.model.get() ?? '', level));
+}
+
 function sourceLabel(source: ThinkingLevelSource, modeId: string | null): string {
   return source === 'mode-default' && modeId ? `${modeId} mode default` : 'global default';
 }
@@ -51,9 +55,9 @@ function getThinkingStatusLine(ctx: SlashCommandContext): string {
   const override = getSessionOverride(ctx);
   const fallback = getConfiguredDefault(ctx);
   if (override !== undefined) {
-    return `Thinking: ${levelLabel(override)} (session override) · default: ${levelLabel(fallback.level)} (${sourceLabel(fallback.source, fallback.modeId)})`;
+    return `Thinking: ${runningLevelLabel(ctx, override)} (session override) · default: ${runningLevelLabel(ctx, fallback.level)} (${sourceLabel(fallback.source, fallback.modeId)})`;
   }
-  return `Thinking: ${levelLabel(fallback.level)} (${sourceLabel(fallback.source, fallback.modeId)})`;
+  return `Thinking: ${runningLevelLabel(ctx, fallback.level)} (${sourceLabel(fallback.source, fallback.modeId)})`;
 }
 
 function getModelNote(ctx: SlashCommandContext): string | null {
@@ -85,7 +89,7 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
     if (action.kind === 'clear') {
       await ctx.state.session.state.set({ thinkingLevel: undefined });
       ctx.showInfo(
-        `Thinking → ${levelLabel(configuredDefault.level)} (${sourceLabel(configuredDefault.source, configuredDefault.modeId)})`,
+        `Thinking → ${runningLevelLabel(ctx, configuredDefault.level)} (${sourceLabel(configuredDefault.source, configuredDefault.modeId)})`,
       );
       return;
     }
@@ -103,7 +107,7 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
   }
 
   // No argument: show inline selector
-  const defaultDescription = `${levelLabel(configuredDefault.level)} · ${sourceLabel(configuredDefault.source, configuredDefault.modeId)}`;
+  const defaultDescription = `${runningLevelLabel(ctx, configuredDefault.level)} · ${sourceLabel(configuredDefault.source, configuredDefault.modeId)}`;
   const items: SelectItem[] = [
     {
       value: DEFAULT_ITEM_VALUE,
@@ -138,7 +142,7 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
         if (selectedValue === DEFAULT_ITEM_VALUE) {
           await ctx.state.session.state.set({ thinkingLevel: undefined });
           ctx.showInfo(
-            `Thinking → ${levelLabel(configuredDefault.level)} (${sourceLabel(configuredDefault.source, configuredDefault.modeId)})`,
+            `Thinking → ${runningLevelLabel(ctx, configuredDefault.level)} (${sourceLabel(configuredDefault.source, configuredDefault.modeId)})`,
           );
         } else if (isThinkingLevelSetting(selectedValue)) {
           await ctx.state.session.state.set({ thinkingLevel: selectedValue });

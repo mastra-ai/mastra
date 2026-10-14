@@ -130,6 +130,14 @@ describe('handleThinkCommand', () => {
     expect(showInfo).toHaveBeenCalledWith(expect.stringContaining('Invalid thinking level'));
   });
 
+  it('status shows the level a default Off runs at on a model that always thinks', async () => {
+    const { ctx, showInfo } = makeCtx({ modelId: 'groq/openai/gpt-oss-120b' });
+
+    await handleThinkCommand(ctx, ['status']);
+
+    expect(showInfo).toHaveBeenCalledWith('Thinking: Low (global default)');
+  });
+
   it('marks and preselects the level a saved override runs at', async () => {
     const { ctx } = makeCtx({ sessionThinkingLevel: 'max', modelId: 'anthropic/claude-haiku-4-5' });
 
