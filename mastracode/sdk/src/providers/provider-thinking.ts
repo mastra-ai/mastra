@@ -1,9 +1,11 @@
 import { getModelReasoningOptions, ModelRouterLanguageModel } from '@mastra/core/llm';
+import type { ModelReasoningOption } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
 import type { JSONValue } from 'ai';
 import { requestableReasoningOptions, runThinkingLevel } from '../thinking.js';
-import type { ThinkingLevelSetting } from '../thinking.js';
-import { thinkingRequestFormatFor } from './thinking-request.js';
+import type { ActiveThinkingLevel, ThinkingLevelSetting } from '../thinking.js';
+import { thinkingOffOptions, thinkingRequestFormatFor } from './thinking-request.js';
+import type { ThinkingRequestFormat } from './thinking-request.js';
 
 type ProviderOptions = Record<string, Record<string, JSONValue | undefined>>;
 
@@ -20,15 +22,28 @@ export function providerThinkingOptions(
   const format = thinkingRequestFormatFor(routedModelId);
   if (!format || !level) return undefined;
   const catalogOptions = getModelReasoningOptions(routedModelId);
-  const requestable = requestableReasoningOptions(routedModelId, catalogOptions);
   const runLevel = runThinkingLevel(routedModelId, level, catalogOptions);
-  if (!requestable?.length || runLevel === 'off') return undefined;
-  const effortOptions = format.sendEffort?.(runLevel);
-  const sendsEffort = requestable.some(option => option.type === 'effort');
-  const options = sendsEffort ? effortOptions : format.enableThinking;
+  const options =
+    runLevel === 'off'
+      ? thinkingOffOptions(format, catalogOptions)
+      : thinkingOnOptions(format, requestableReasoningOptions(routedModelId, catalogOptions), runLevel);
   if (!options) return undefined;
-  const controlKeys = new Set([...Object.keys(effortOptions ?? {}), ...Object.keys(format.enableThinking ?? {})]);
-  return { optionsKey: format.optionsKey, options, controlKeys };
+  return { optionsKey: format.optionsKey, options, controlKeys: thinkingControlKeys(format) };
+}
+
+function thinkingOnOptions(
+  format: ThinkingRequestFormat,
+  requestable: readonly ModelReasoningOption[] | undefined,
+  runLevel: ActiveThinkingLevel,
+): Record<string, JSONValue> | undefined {
+  if (!requestable?.length) return undefined;
+  const sendsEffort = requestable.some(option => option.type === 'effort');
+  return sendsEffort ? format.sendEffort?.(runLevel) : format.enableThinking;
+}
+
+function thinkingControlKeys(format: ThinkingRequestFormat): ReadonlySet<string> {
+  const formatOptions = [format.sendEffort?.('none'), format.enableThinking, format.disableThinking];
+  return new Set(formatOptions.flatMap(options => Object.keys(options ?? {})));
 }
 
 function withThinkingOptions<CallOptions extends { providerOptions?: ProviderOptions }>(

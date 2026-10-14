@@ -155,10 +155,10 @@ describe('MastraCodeGateway thinking level forwarding', () => {
     expect(body.reasoning_effort).toBe('max');
   });
 
-  it.each([undefined, 'off'] as const)('leaves every path untouched when thinking is %s', async level => {
-    expect(await requestBody(resolve(level, 'my-local', 'local-model'))).not.toHaveProperty('reasoning_effort');
-    expect(await requestBody(resolve(level, 'openai', 'gpt-5.5'))).not.toHaveProperty('reasoning');
-    const google = await requestBody(resolve(level, 'google', 'gemini-3-flash-preview'));
+  it('leaves every path untouched when no thinking level is set', async () => {
+    expect(await requestBody(resolve(undefined, 'my-local', 'local-model'))).not.toHaveProperty('reasoning_effort');
+    expect(await requestBody(resolve(undefined, 'openai', 'gpt-5.5'))).not.toHaveProperty('reasoning');
+    const google = await requestBody(resolve(undefined, 'google', 'gemini-3-flash-preview'));
     expect(google.generationConfig?.thinkingConfig).toBeUndefined();
     for (const [providerId, modelId] of [
       ['deepseek', 'deepseek-v4-pro'],
@@ -167,11 +167,47 @@ describe('MastraCodeGateway thinking level forwarding', () => {
       ['alibaba', 'qwen-flash'],
       ['openrouter', 'deepseek/deepseek-v4-pro'],
     ] as const) {
-      const body = await requestBody(resolve(level, providerId, modelId));
+      const body = await requestBody(resolve(undefined, providerId, modelId));
       for (const thinkingField of ['thinking', 'reasoning_effort', 'reasoning', 'enable_thinking']) {
         expect(body).not.toHaveProperty(thinkingField);
       }
     }
+  });
+
+  it.each([
+    ['groq', 'qwen/qwen3.8-27b'],
+    ['cerebras', 'qwen-3.8-27b'],
+    ['mistral', 'mistral-small-latest'],
+  ])(
+    'turns %s thinking off with the none effort the model lists, since its default is to reason',
+    async (providerId, modelId) => {
+      expect((await requestBody(resolve('off', providerId, modelId))).reasoning_effort).toBe('none');
+    },
+  );
+
+  it('switches DeepSeek and Alibaba thinking off, since both reason by default', async () => {
+    const deepseek = await requestBody(resolve('off', 'deepseek', 'deepseek-v4-pro'));
+    expect(deepseek.thinking).toEqual({ type: 'disabled' });
+    expect(deepseek).not.toHaveProperty('reasoning_effort');
+    expect((await requestBody(resolve('off', 'alibaba', 'qwen-flash'))).enable_thinking).toBe(false);
+  });
+
+  it.each([
+    ['groq', 'openai/gpt-oss-120b'],
+    ['perplexity', 'sonar-reasoning-pro'],
+  ])(
+    'sends %s models that always reason the lowest effort on off, not the provider default',
+    async (providerId, modelId) => {
+      expect((await requestBody(resolve('off', providerId, modelId))).reasoning_effort).toBe('low');
+    },
+  );
+
+  it('leaves off untouched where the request has no way to turn thinking off', async () => {
+    expect(await requestBody(resolve('off', 'my-local', 'local-model'))).not.toHaveProperty('reasoning_effort');
+    expect(await requestBody(resolve('off', 'togetherai', 'Qwen/Qwen3.5-9B'))).not.toHaveProperty('reasoning');
+    expect(await requestBody(resolve('off', 'openai', 'gpt-5.5'))).not.toHaveProperty('reasoning');
+    const google = await requestBody(resolve('off', 'google', 'gemini-3-flash-preview'));
+    expect(google.generationConfig?.thinkingConfig).toBeUndefined();
   });
 
   it('leaves Gemini models without thinking support untouched', async () => {

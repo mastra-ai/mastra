@@ -50,10 +50,10 @@ describe('thinking model capabilities', () => {
       ['off', 'low', 'medium', 'high', 'xhigh'],
     ],
     [
-      'gateway-prefixed ids follow the routed provider',
+      'Mastra gateway ids offer only off, since the gateway forwards the body as is to an org key',
       'mastra/anthropic/claude-haiku-4-5',
       undefined,
-      ['off', 'low', 'medium', 'high', 'xhigh'],
+      ['off'],
     ],
     [
       'adaptive Claude offers the efforts the model publishes',
@@ -101,6 +101,18 @@ describe('thinking model capabilities', () => {
       'xAI offers only the efforts its package accepts',
       'xai/grok-4.6',
       effort('low', 'medium', 'high', 'xhigh'),
+      ['low', 'medium', 'high'],
+    ],
+    [
+      'models that always reason drop off, since sending nothing leaves the effort to the provider',
+      'groq/openai/gpt-oss-120b',
+      effort('low', 'medium', 'high'),
+      ['low', 'medium', 'high'],
+    ],
+    [
+      'models whose effort lists none keep off',
+      'cerebras/qwen-3.8-27b',
+      effort('none', 'low', 'medium', 'high'),
       ['off', 'low', 'medium', 'high'],
     ],
     [
@@ -149,7 +161,8 @@ describe('thinking model capabilities', () => {
       'high',
     ],
     ['low on a model with only high', 'openai/gpt-5-pro', 'low', effort('high'), 'high'],
-    ['off anywhere', 'openai/gpt-5-pro', 'off', effort('high'), 'off'],
+    ['off on a thinking adapter', 'openai/gpt-5-pro', 'off', effort('high'), 'off'],
+    ['off on a model that always reasons', 'groq/openai/gpt-oss-120b', 'off', effort('low', 'medium', 'high'), 'low'],
   ] as const)('runs %s as the closest level the request sends', (_, modelId, level, reasoningOptions, runLevel) => {
     expect(runThinkingLevel(modelId, level, reasoningOptions)).toBe(runLevel);
   });
