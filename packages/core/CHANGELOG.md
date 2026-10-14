@@ -1,5 +1,118 @@
 # @mastra/core
 
+## 1.77.0-alpha.4
+
+### Minor Changes
+
+- AgentController `steer` and `followUp` now accept file attachments, matching `sendMessage`. Attached files reach the model the same way whether the message is sent right away or queued behind an active run. ([#26909](https://github.com/mastra-ai/mastra/pull/26909))
+
+  ```typescript
+  await session.followUp({
+    content: 'Then compare against this screenshot.',
+    files: [{ data: screenshotBase64, mediaType: 'image/png', filename: 'expected.png' }],
+  });
+  ```
+
+  The `/steer` and `/follow-up` routes accept the same `files` field and limits as `/messages`.
+
+- Added `FactorySandbox`, the contract a host implements to plug a sandbox provider into Mastra Factory. The bare callback that builds one `MastraSandbox` per session still works, but it gives a provider no way to expose tunable settings, a prebuilt repository template or template builds. A `FactorySandbox` owns all four, and lives in `@mastra/core/workspace` so provider packages implement it without depending on `@mastra/factory`. ([#26467](https://github.com/mastra-ai/mastra/pull/26467))
+
+  **Required:** `provider` and `create`, which returns the session's `MastraSandbox`.
+
+  **Optional:** `settings`, a schema of what a user can tune (zod, JSON Schema or Standard Schema; every field optional, absent means the provider default; no settings when omitted); `template` returns the environment's repository template for a context and settings; `builds` starts, reads and lists template builds ahead of any session.
+
+  ```ts
+  import { FactorySandbox } from '@mastra/core/workspace';
+  import type { FactorySandboxContext } from '@mastra/core/workspace';
+  import type { PublicSchema } from '@mastra/core/schema';
+
+  interface Settings {
+    region?: 'us' | 'eu';
+  }
+
+  class MyFactorySandbox extends FactorySandbox<Settings> {
+    readonly provider = 'my-cloud';
+    readonly settings: PublicSchema<Settings> = {
+      type: 'object',
+      properties: { region: { type: 'string', enum: ['us', 'eu'], default: 'us' } },
+      additionalProperties: false,
+    };
+
+    create(ctx: FactorySandboxContext, settings: Settings) {
+      return new MyCloudSandbox({
+        id: ctx.sessionId,
+        sandboxId: ctx.sandboxId,
+        template: this.template(ctx, settings),
+        workingDirectory: ctx.workingDirectory,
+        region: settings.region ?? 'us',
+      });
+    }
+
+    // Optional: the sandbox template image Factory can build ahead of time
+    template(ctx: FactorySandboxContext, settings: Settings) {
+      return myCloudTemplate(ctx, settings);
+    }
+
+    // Optional: build that template ahead of time and report on it
+    readonly builds = {
+      start: async (ctx: FactorySandboxContext, settings: Settings) => myCloud.startBuild(this.template(ctx, settings)),
+      get: async (ctx: FactorySandboxContext, settings: Settings, buildId: string) => myCloud.buildStatus(buildId),
+      list: async (ctx: FactorySandboxContext, settings: Settings) => myCloud.builds(this.template(ctx, settings).name),
+    };
+  }
+  ```
+
+- Added an optional `pricing` field to gateway provider configs. A custom gateway can now state what its models cost, in USD per 1 million tokens with the same keys as models.dev, so calls to private or reseller models get cost estimates. ([#26875](https://github.com/mastra-ai/mastra/pull/26875))
+
+  ```ts
+  async fetchProviders() {
+    return {
+      'my-provider': {
+        name: 'My Provider',
+        models: ['model-1'],
+        apiKeyEnvVar: 'MY_API_KEY',
+        gateway: 'private',
+        url: 'https://api.myprovider.com/v1',
+        pricing: { 'model-1': { input: 0.5, output: 1.5 } },
+      },
+    };
+  }
+  ```
+
+### Patch Changes
+
+- Fixed durable agents returning empty step data in callbacks and results. `onStepFinish`, `onFinish`, `onAbort`, `output.steps` and `output.response` now include each step's response messages and model id, the same as a regular agent. A `model` passed to a durable agent's `stream()` call is now the model that actually runs, instead of the agent's default model. (#26780) ([#26933](https://github.com/mastra-ai/mastra/pull/26933))
+
+- Document that in-memory, LibSQL, and PostgreSQL workflow result updates no-op after run deletion while remaining adapters are aligned under COR-1448. ([#26901](https://github.com/mastra-ai/mastra/pull/26901))
+
+- Fixed delayed interruption of Evented agent responses while preserving partial output and graceful run cleanup. ([#26926](https://github.com/mastra-ai/mastra/pull/26926))
+
+- Fixed core builds failing when regenerated model provider types grow large. ([#26876](https://github.com/mastra-ai/mastra/pull/26876))
+
+- Fixed TypeScript types for Standard Schemas that transform their input, such as Effect's `Schema.toStandardSchemaV1(Schema.DateFromString)`. Tool `execute` functions now receive the transformed output type instead of a union of input and output types. Tool `requestContextSchema` now accepts these schemas, and tool request context is typed with the transformed output. ([#26815](https://github.com/mastra-ai/mastra/pull/26815))
+
+  ```typescript
+  const DateSchema = Schema.toStandardSchemaV1(Schema.Struct({ date: Schema.DateFromString }));
+
+  const tool = createTool({
+    id: 'schedule',
+    description: 'Schedules an event',
+    inputSchema: DateSchema,
+    requestContextSchema: DateSchema,
+    execute: async ({ date }, { requestContext }) => {
+      date.toISOString(); // date is typed as Date
+      requestContext.get('date').toISOString(); // request context value is typed as Date
+    },
+  });
+  ```
+
+- Fixed reasoning from later steps being dropped when the reasoning text is empty. This affected providers that store reasoning identity outside the text, such as Anthropic, Bedrock and Gemini signatures or redacted thinking. Each distinct reasoning block now stays in the conversation when its provider metadata, provider options or reasoning details have an item ID, signature, redacted data, encrypted content or digest field. Identical reasoning blocks are not added again. ([#26941](https://github.com/mastra-ai/mastra/pull/26941))
+
+- Preserve output processor retry metadata in durable step events ([#26898](https://github.com/mastra-ai/mastra/pull/26898))
+
+- Updated dependencies [[`ca92c02`](https://github.com/mastra-ai/mastra/commit/ca92c02696427baad81dd7a61b049ef37c332452)]:
+  - @mastra/schema-compat@1.3.14-alpha.0
+
 ## 1.77.0-alpha.3
 
 ### Minor Changes

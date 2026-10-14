@@ -1,5 +1,29 @@
 # @mastra/docker
 
+## 0.11.0-alpha.0
+
+### Minor Changes
+
+- Added `DockerFactorySandbox`, which plugs Docker into Mastra Factory as the sandbox provider. Factory gets one container per session, a repository image it can build ahead of the first session, and user-tunable settings. It takes the same options as `DockerSandbox` except `id` and `template`. ([#26467](https://github.com/mastra-ai/mastra/pull/26467))
+
+  ```ts
+  import { MastraFactory } from '@mastra/factory';
+  import { DockerFactorySandbox } from '@mastra/docker';
+
+  new MastraFactory({
+    sandbox: new DockerFactorySandbox({ defaults: { baseImage: 'node:22-slim' } }),
+  });
+  ```
+
+  **Settings:** `baseImage`, the image the repository image builds from, and `owner`, the `user[:group]` that owns the checked-out repositories in it. Unset values fall back to the `defaults` option, then to `node:22-slim` and root.
+
+  **Builds:** builds the repository image in the background and reports its status. Builds live in the host process, so after a restart an earlier build id reads as `unknown`. No build history.
+
+### Patch Changes
+
+- Updated dependencies [[`f8c0ce2`](https://github.com/mastra-ai/mastra/commit/f8c0ce2646427327b63c05d2eb09e76a3b04133e), [`4df792b`](https://github.com/mastra-ai/mastra/commit/4df792b5b9146b5a2d6726193ee82d9db31180a4), [`0017956`](https://github.com/mastra-ai/mastra/commit/001795671cf329997bee74541f5de9056e6b1cec), [`36fc7ea`](https://github.com/mastra-ai/mastra/commit/36fc7eabf79ca70bd489e4022eb39a3d8382ace5), [`2ec9c07`](https://github.com/mastra-ai/mastra/commit/2ec9c07eddb142c965f1201f5c6e5dbb288405f9), [`380e9f5`](https://github.com/mastra-ai/mastra/commit/380e9f57ea9ba7c37950b989d145b70c03a09a6c), [`4029a96`](https://github.com/mastra-ai/mastra/commit/4029a964848512399f27bca283915d49fd106717), [`ca92c02`](https://github.com/mastra-ai/mastra/commit/ca92c02696427baad81dd7a61b049ef37c332452), [`d9da0da`](https://github.com/mastra-ai/mastra/commit/d9da0da5e5d36023469b527f7be55c017634b186), [`67a6b30`](https://github.com/mastra-ai/mastra/commit/67a6b30769f041244f75f9093a181cdf38e1f2e7)]:
+  - @mastra/core@1.77.0-alpha.4
+
 ## 0.10.0
 
 ### Minor Changes

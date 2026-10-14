@@ -1,5 +1,20 @@
 # @mastra/playground-ui
 
+## 63.0.0-alpha.4
+
+### Patch Changes
+
+- Fixed `PageHeader` shifting between pages. The title row is now 32px tall with the title in the same position whether or not the header has an icon or `PageHeader.Action`, so moving between pages no longer moves the title. `PageLayout` also reserves the scrollbar gutter in its scroll area, so a narrow, centered column no longer shifts sideways when a page starts to scroll. ([#26915](https://github.com/mastra-ai/mastra/pull/26915))
+
+- The inline `DataPanel` now uses the same rounded corners as the app frame, so it lines up with the main card when it sits next to it. The drawer keeps its current corners. ([#26887](https://github.com/mastra-ai/mastra/pull/26887))
+
+- Updated dependencies [[`f8c0ce2`](https://github.com/mastra-ai/mastra/commit/f8c0ce2646427327b63c05d2eb09e76a3b04133e), [`4df792b`](https://github.com/mastra-ai/mastra/commit/4df792b5b9146b5a2d6726193ee82d9db31180a4), [`0017956`](https://github.com/mastra-ai/mastra/commit/001795671cf329997bee74541f5de9056e6b1cec), [`36fc7ea`](https://github.com/mastra-ai/mastra/commit/36fc7eabf79ca70bd489e4022eb39a3d8382ace5), [`53d95e0`](https://github.com/mastra-ai/mastra/commit/53d95e0d2259a66a7ceaa3cafeb415446507f54c), [`2ec9c07`](https://github.com/mastra-ai/mastra/commit/2ec9c07eddb142c965f1201f5c6e5dbb288405f9), [`380e9f5`](https://github.com/mastra-ai/mastra/commit/380e9f57ea9ba7c37950b989d145b70c03a09a6c), [`4029a96`](https://github.com/mastra-ai/mastra/commit/4029a964848512399f27bca283915d49fd106717), [`ca92c02`](https://github.com/mastra-ai/mastra/commit/ca92c02696427baad81dd7a61b049ef37c332452), [`d9da0da`](https://github.com/mastra-ai/mastra/commit/d9da0da5e5d36023469b527f7be55c017634b186), [`67a6b30`](https://github.com/mastra-ai/mastra/commit/67a6b30769f041244f75f9093a181cdf38e1f2e7)]:
+  - @mastra/core@1.77.0-alpha.4
+  - @mastra/client-js@1.54.0-alpha.4
+  - @mastra/memory@1.37.1-alpha.3
+  - @mastra/react@1.10.0-alpha.4
+  - @mastra/ai-sdk@1.11.1-alpha.0
+
 ## 63.0.0-alpha.3
 
 ### Minor Changes
