@@ -21,7 +21,7 @@ function createTextStreamModel(responseText: string) {
       warnings: [],
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
-        { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+        { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id-2026-01-01', timestamp: new Date(0) },
         { type: 'text-start', id: 'text-1' },
         { type: 'text-delta', id: 'text-1', delta: responseText },
         { type: 'text-end', id: 'text-1' },
