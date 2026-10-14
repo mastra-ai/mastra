@@ -15,9 +15,16 @@ const structure = {
   ],
 };
 
+// vi.waitFor advances fake time while it polls. Starting just after a second boundary keeps that
+// polling from crossing the next every-second cron fire before a test changes its binding set.
+function useAlignedFakeTimers() {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-01-01T00:00:00.100Z'));
+}
+
 describe('Knowledge importer dynamic cron bindings', () => {
   it('fans a cron fire out across the bindings the resolver returns', async () => {
-    vi.useFakeTimers();
+    useAlignedFakeTimers();
     try {
       const handler = vi.fn(noopHandler);
       const knowledge = new Knowledge({
@@ -49,7 +56,7 @@ describe('Knowledge importer dynamic cron bindings', () => {
   });
 
   it('picks up bindings added between fires and stops firing removed ones', async () => {
-    vi.useFakeTimers();
+    useAlignedFakeTimers();
     try {
       const current: KnowledgeImporterBindingInput[] = [one];
       const handled: string[] = [];
@@ -87,7 +94,7 @@ describe('Knowledge importer dynamic cron bindings', () => {
   });
 
   it('unions resolved bindings with static ones, deduplicated by binding key', async () => {
-    vi.useFakeTimers();
+    useAlignedFakeTimers();
     try {
       const handler = vi.fn(noopHandler);
       const knowledge = new Knowledge({
@@ -124,7 +131,7 @@ describe('Knowledge importer dynamic cron bindings', () => {
   });
 
   it('falls back to static bindings when the resolver throws and retries on the next fire', async () => {
-    vi.useFakeTimers();
+    useAlignedFakeTimers();
     try {
       let calls = 0;
       const handled: string[] = [];
@@ -169,8 +176,52 @@ describe('Knowledge importer dynamic cron bindings', () => {
     }
   });
 
+  it('does not reuse a previously resolved set when a later resolution throws', async () => {
+    useAlignedFakeTimers();
+    try {
+      let fail = false;
+      const handled: string[] = [];
+      const knowledge = new Knowledge({
+        storage: new InMemoryStore({ id: 'dynamic-bindings-no-reuse' }),
+        structure,
+        importers: [
+          {
+            id: 'tickets',
+            access: { 'project:$projectId': 'append' },
+            triggers: {
+              cron: {
+                schedule: '* * * * * *',
+                bindings: [two],
+                resolveBindings: () => {
+                  if (fail) throw new Error('platform unavailable');
+                  return [one];
+                },
+              },
+            },
+            handler: async ctx => {
+              handled.push(ctx.run.binding);
+            },
+          },
+        ],
+      });
+      await knowledge.reconcile();
+      knowledge.__registerMastra({} as never);
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      await vi.waitFor(() => expect(handled).toHaveLength(2));
+      fail = true;
+      await vi.advanceTimersByTimeAsync(1_000);
+      await vi.waitFor(() => expect(handled).toHaveLength(3));
+      // A revoked connection must not keep syncing through an outage: only the static binding runs.
+      expect(handled[2]).toBe(knowledgeImporterBindingKey(two));
+      await knowledge.shutdownImporters();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('skips invalid resolved entries without blocking valid ones', async () => {
-    vi.useFakeTimers();
+    useAlignedFakeTimers();
     try {
       const handler = vi.fn(noopHandler);
       const knowledge = new Knowledge({
@@ -203,7 +254,7 @@ describe('Knowledge importer dynamic cron bindings', () => {
   });
 
   it('treats an empty resolution as no destinations, not an error', async () => {
-    vi.useFakeTimers();
+    useAlignedFakeTimers();
     try {
       const handler = vi.fn(noopHandler);
       const knowledge = new Knowledge({
@@ -261,7 +312,7 @@ describe('Knowledge importer dynamic cron bindings', () => {
   });
 
   it('keeps per-binding cursor state across a binding disappearing and returning', async () => {
-    vi.useFakeTimers();
+    useAlignedFakeTimers();
     try {
       const current: KnowledgeImporterBindingInput[] = [one];
       const seenCursors: (string | undefined)[] = [];
@@ -300,6 +351,65 @@ describe('Knowledge importer dynamic cron bindings', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('skips a resolved binding outside the importer access map so nothing is written there', async () => {
+    useAlignedFakeTimers();
+    try {
+      const outside = { source: 'tickets:other', scope: 'org:other' } as const;
+      const warn = vi.fn();
+      const knowledge = new Knowledge({
+        storage: new InMemoryStore({ id: 'dynamic-bindings-confinement' }),
+        structure: { scopes: [...structure.scopes, { address: 'org:other', name: 'Other' }] },
+        importers: [
+          {
+            id: 'tickets',
+            access: { 'project:$projectId': 'append' },
+            triggers: { cron: { schedule: '* * * * * *', resolveBindings: async () => [one, outside] } },
+            handler: async ctx => {
+              const ops = await ctx.importer().catch(() => null);
+              await ops?.upsertNode('ticket:1', { name: 'Ticket 1' });
+            },
+          },
+        ],
+      });
+      (knowledge as unknown as { logger: unknown }).logger = { warn, info() {}, debug() {}, error() {} };
+      await knowledge.reconcile();
+      knowledge.__registerMastra({} as never);
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      await vi.waitFor(async () => {
+        const { runs } = await knowledge.listImportRuns({ importerId: 'tickets' });
+        expect(runs.some(run => run.binding === knowledgeImporterBindingKey(one) && run.status === 'succeeded')).toBe(
+          true,
+        );
+      });
+      const { runs } = await knowledge.listImportRuns({ importerId: 'tickets' });
+      expect(runs.map(run => run.binding)).not.toContain(knowledgeImporterBindingKey(outside));
+      const storage = await knowledge.getStorage();
+      expect(await storage.getNodeAddress({ source: 'tickets:other', address: 'ticket:1' })).toBeNull();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('outside its access map'), expect.anything());
+      await knowledge.shutdownImporters();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('refuses a cron resolver on a registration without an access map', () => {
+    expect(
+      () =>
+        new Knowledge({
+          storage: new InMemoryStore({ id: 'dynamic-bindings-no-access' }),
+          structure,
+          importers: [
+            {
+              id: 'tickets',
+              triggers: { cron: { schedule: '* * * * * *', resolveBindings: async () => [one] } },
+              handler: noopHandler,
+            },
+          ],
+        }),
+    ).toThrow(/resolveBindings requires an access map/);
   });
 
   it('rejects invalid trigger declarations at registration', () => {

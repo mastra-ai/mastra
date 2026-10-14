@@ -10,7 +10,7 @@ import {
 import type { Knowledge } from '../index';
 import { runAgenticKnowledgeImport } from './agent-importer';
 import { KnowledgeCitationResolver } from './citations';
-import { createStaticKnowledgeImporterOperations } from './static-importer';
+import { createStaticKnowledgeImporterOperations, matchAddressPattern } from './static-importer';
 import {
   KNOWLEDGE_IMPORT_INTERNAL_STATE_PREFIX,
   type KnowledgeCitationRef,
@@ -122,7 +122,15 @@ export class KnowledgeImporterRunner {
     for (const binding of staticBindings) byKey.set(knowledgeImporterBindingKey(binding), binding);
     for (const binding of resolved) {
       try {
-        byKey.set(knowledgeImporterBindingKey(binding), binding);
+        const key = knowledgeImporterBindingKey(binding);
+        if (!coveredByAccess(importer.access, binding.scope)) {
+          this.#getLogger()?.warn(
+            `Knowledge importer ${importer.importerId} cron resolveBindings returned a destination outside its access map; skipping it`,
+            { binding: key },
+          );
+          continue;
+        }
+        byKey.set(key, binding);
       } catch (error) {
         this.#getLogger()?.warn(
           `Knowledge importer ${importer.importerId} cron resolveBindings produced an invalid binding; skipping it`,
@@ -537,4 +545,12 @@ export class KnowledgeImporterRunner {
     } while (after);
     return runs;
   }
+}
+
+/** Resolved bindings are trusted only for scopes the registration's access map can write. */
+function coveredByAccess(access: KnowledgeImporterHandle['access'], scope: string): boolean {
+  if (!access) return false;
+  return Object.entries(access).some(
+    ([pattern, role]) => role !== 'readonly' && matchAddressPattern(pattern, scope.trim()) !== null,
+  );
 }
