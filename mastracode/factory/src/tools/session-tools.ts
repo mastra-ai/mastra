@@ -38,7 +38,6 @@ import { findWorkItem, workItemNotFound, workItemNumber, workItemRefSchema } fro
 import { createWorkItemRunEndReporter, sendRunEndReport } from './reports.js';
 import type { FactoryReporting, FactoryRunEndResult, FactoryRunOutcome } from './reports.js';
 import type { FactoryToolScope } from './scope.js';
-import { FACTORY_SESSIONS_MAX_AGE_MS } from './sessions-state-processor.js';
 
 const TITLE_LENGTH = 120;
 
@@ -69,6 +68,9 @@ export interface FactorySessionToolDependencies {
   startCoordinator: () => Pick<FactoryStartCoordinator, 'prepare'> | undefined;
 }
 
+/** How long a spawned session is watched for a final report before the watch gives up. */
+const SPAWNED_SESSION_WATCH_MS = 24 * 60 * 60 * 1000;
+
 /**
  * Watch a spawned session until its work reaches a final outcome, so its
  * followers hear once. Renews the kicked-off run's open-run entry until that run
@@ -83,7 +85,7 @@ function watchStartedRun(
     onEnd,
   }: { kickoffId?: string; onEnd: (outcome: FactoryRunOutcome, since: Date) => Promise<FactoryRunEndResult> },
 ) {
-  let endReason: RunEndReason | undefined;
+  let firstEndReason: RunEndReason | undefined;
   let parked: { toolName: string; toolCallId: string } | undefined;
   let since = new Date();
   const timer =
@@ -91,7 +93,7 @@ function watchStartedRun(
       ? undefined
       : setInterval(() => void heartbeatSessionOpenRun(session, kickoffId), Math.floor(FACTORY_OPEN_RUN_STALE_MS / 3));
   timer?.unref?.();
-  const lifetime = setTimeout(() => close(), FACTORY_SESSIONS_MAX_AGE_MS);
+  const lifetime = setTimeout(() => close(), SPAWNED_SESSION_WATCH_MS);
   lifetime.unref?.();
   const close = () => {
     clearInterval(timer);
@@ -108,22 +110,23 @@ function watchStartedRun(
       return;
     }
     if (event.type !== 'agent_end') return;
-    endReason ??= event.reason;
+    firstEndReason ??= event.reason;
     clearInterval(timer);
     const outcome = runOutcome(event.reason, parked?.toolName);
     parked = undefined;
     if (!outcome) return;
-    // Reports made up to the end, including its last millisecond, belong to this run.
-    const endedAt = new Date(Date.now() + 1);
-    void onEnd(outcome, since).then(
+    // Move the window now, so a run that starts before this report settles is judged on its own;
+    // reports made up to the end, including its last millisecond, belong to the run that ended.
+    const runSince = since;
+    since = new Date(Date.now() + 1);
+    void onEnd(outcome, runSince).then(
       result => {
-        if (result.waiting) since = endedAt;
-        else close();
+        if (!result.waiting) close();
       },
       () => close(),
     );
   });
-  return { endReason: () => endReason, close };
+  return { endReason: () => firstEndReason, close };
 }
 
 /** `null` for an aborted run: someone stopped or steered it, which is not a final outcome. */
