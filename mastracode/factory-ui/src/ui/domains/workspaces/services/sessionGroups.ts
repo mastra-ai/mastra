@@ -47,19 +47,30 @@ export interface SessionGroupContext {
 const USER_GROUP: SessionGroupHeading = { key: 'user', label: 'User', icon: 'user' };
 const ALL_GROUP: SessionGroupHeading = { key: 'all', label: 'All', icon: 'all' };
 
+function boardGroupKey(boardId: string): string {
+  return `board:${boardId}`;
+}
+
 const STATUS_GROUPS: readonly SessionGroupHeading[] = SESSION_STATUS_OPTIONS.flatMap((option): SessionGroupHeading[] =>
   option.value === 'all' ? [] : [{ key: `status:${option.value}`, label: option.label, icon: 'status' }],
 );
 
 const GROUP_KEY_OF_ROW: Record<SessionGroupBy, (row: SessionListRow) => string> = {
-  board: row => (row.board === undefined ? USER_GROUP.key : `board:${row.board}`),
+  board: row => (row.board === undefined ? USER_GROUP.key : boardGroupKey(row.board)),
   status: row => `status:${row.status}`,
   owner: row => `owner:${row.session.userId}`,
   none: () => ALL_GROUP.key,
 };
 
 function boardHeading(boardId: string, label: string): SessionGroupHeading {
-  return { key: `board:${boardId}`, label, icon: boardId === 'review' ? 'review' : 'board' };
+  return { key: boardGroupKey(boardId), label, icon: boardId === 'review' ? 'review' : 'board' };
+}
+
+function uncatalogedBoardIds(rows: readonly SessionListRow[], catalogIds: ReadonlySet<string>): string[] {
+  const boardIds = new Set(
+    rows.flatMap(row => (row.board !== undefined && !catalogIds.has(row.board) ? [row.board] : [])),
+  );
+  return [...boardIds].toSorted((a, b) => a.localeCompare(b));
 }
 
 function boardGroupHeadings(
@@ -68,11 +79,7 @@ function boardGroupHeadings(
 ): SessionGroupHeading[] {
   const catalog = orderedBoards(boards ?? []);
   const catalogIds = new Set(catalog.map(board => board.id));
-  const uncatalogedBoards = orderedBoards(
-    [...new Set(rows.flatMap(row => (row.board !== undefined && !catalogIds.has(row.board) ? [row.board] : [])))]
-      .toSorted((a, b) => a.localeCompare(b))
-      .map(id => ({ id })),
-  );
+  const uncatalogedBoards = orderedBoards(uncatalogedBoardIds(rows, catalogIds).map(id => ({ id })));
   return [
     ...catalog.map(board => boardHeading(board.id, board.title)),
     ...uncatalogedBoards.map(({ id }) => boardHeading(id, id.charAt(0).toUpperCase() + id.slice(1))),

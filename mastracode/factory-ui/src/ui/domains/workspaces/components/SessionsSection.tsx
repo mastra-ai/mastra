@@ -61,7 +61,8 @@ export function SessionsSection() {
     enabled: chatSessionOpen,
   });
 
-  if (!factoryId || (!hasRepositories && rows.length === 0 && !loadFailed)) return null;
+  const nothingToList = !hasRepositories && rows.length === 0 && !loadFailed;
+  if (!factoryId || nothingToList) return null;
 
   return (
     <section className="flex flex-col gap-2" aria-label="Sessions">
@@ -137,11 +138,10 @@ export function SessionsSection() {
             showHeader={view.groupBy !== 'none'}
             renderRow={row => (
               <SessionListItem
-                key={row.session.sessionId}
                 factoryId={factoryId}
                 row={row}
                 disabled={deletion.deleting}
-                merged={row.pullRequest && (mergedBySessionId[row.session.sessionId] ?? row.pullRequest.knownMerged)}
+                merged={mergedBySessionId[row.session.sessionId] ?? row.pullRequest?.knownMerged}
                 onDelete={deletion.requestDeletion}
               />
             )}

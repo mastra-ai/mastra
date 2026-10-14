@@ -9,8 +9,11 @@ import { createLocalStorageStore, useLocalStorageStore } from '@mastra/playgroun
 
 const pinnedStore = createLocalStorageStore<ReadonlySet<string>>({
   key: 'app.pinned',
-  empty: new Set(),
-  parse: stored => new Set(Array.isArray(stored) ? stored.filter(id => typeof id === 'string') : []),
+  defaultValue: new Set(),
+  parse: stored => {
+    if (!Array.isArray(stored)) throw new Error('not a list of ids');
+    return new Set(stored.filter(id => typeof id === 'string'));
+  },
   toJSON: pinned => [...pinned],
 });
 

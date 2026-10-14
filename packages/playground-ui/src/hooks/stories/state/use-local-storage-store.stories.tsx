@@ -6,8 +6,11 @@ import { createLocalStorageStore, useLocalStorageStore } from '@/hooks/use-local
 
 const counterStore = createLocalStorageStore<number>({
   key: 'storybook:hooks:local-storage-store:count',
-  empty: 0,
-  parse: stored => (typeof stored === 'number' ? stored : 0),
+  defaultValue: 0,
+  parse: stored => {
+    if (typeof stored !== 'number') throw new Error('not a count');
+    return stored;
+  },
 });
 
 function CountReader({ label }: { label: string }) {

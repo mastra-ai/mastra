@@ -44,6 +44,6 @@ describe('factory session status on a custom board', () => {
   ] as const)('reads a quiet session in the %s phase as %s', (phase, status) => {
     const item = testWorkItem({ board: releaseBoard.id, stages: [phase] });
 
-    expect(factoryRow(testSession('s1'), { item, boardDefinition: releaseBoard }).status).toBe(status);
+    expect(factoryRow(testSession('s1'), { item, boards: [releaseBoard] }).status).toBe(status);
   });
 });

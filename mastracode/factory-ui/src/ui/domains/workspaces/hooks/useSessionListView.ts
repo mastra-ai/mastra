@@ -22,44 +22,45 @@ export const DEFAULT_SESSION_LIST_VIEW: SessionListView = {
 type SessionListViewChanges = Partial<SessionListView>;
 const NO_CHANGES: SessionListViewChanges = {};
 
-function parseViewChanges(parsed: unknown): SessionListViewChanges {
-  if (typeof parsed !== 'object' || parsed === null) return NO_CHANGES;
-  const stored: Partial<Record<keyof SessionListView, unknown>> = parsed;
-  const hiddenGroups =
-    typeof stored.hiddenGroups === 'object' && stored.hiddenGroups !== null
-      ? nonEmptyHiddenGroups(stored.hiddenGroups)
-      : undefined;
-  return {
-    ...(isSessionSort(stored.sort) && { sort: stored.sort }),
-    ...(isSessionGroupBy(stored.groupBy) && { groupBy: stored.groupBy }),
-    ...(hiddenGroups && { hiddenGroups }),
-  };
+function parseHiddenGroups(value: unknown): HiddenSessionGroups | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const hiddenGroups: HiddenSessionGroups = {};
+  for (const groupBy of SESSION_GROUP_BYS) {
+    const keys: unknown = groupBy in value ? Reflect.get(value, groupBy) : undefined;
+    if (isNonEmptyStringArray(keys)) hiddenGroups[groupBy] = keys;
+  }
+  return Object.keys(hiddenGroups).length > 0 ? hiddenGroups : undefined;
 }
 
 function isNonEmptyStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.length > 0 && value.every(entry => typeof entry === 'string');
 }
 
-function nonEmptyHiddenGroups(hiddenGroups: Partial<Record<SessionGroupBy, unknown>>): HiddenSessionGroups | undefined {
-  const entries = SESSION_GROUP_BYS.flatMap((groupBy): [SessionGroupBy, string[]][] => {
-    const keys = hiddenGroups[groupBy];
-    return isNonEmptyStringArray(keys) ? [[groupBy, keys]] : [];
-  });
-  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+function parseViewChanges(stored: unknown): SessionListViewChanges {
+  if (typeof stored !== 'object' || stored === null) throw new Error('Stored session list view is not an object');
+  const changes: SessionListViewChanges = {};
+  if ('sort' in stored && isSessionSort(stored.sort)) changes.sort = stored.sort;
+  if ('groupBy' in stored && isSessionGroupBy(stored.groupBy)) changes.groupBy = stored.groupBy;
+  const hiddenGroups = 'hiddenGroups' in stored ? parseHiddenGroups(stored.hiddenGroups) : undefined;
+  if (hiddenGroups !== undefined) changes.hiddenGroups = hiddenGroups;
+  return changes;
+}
+
+function hasHiddenGroups(hiddenGroups: HiddenSessionGroups): boolean {
+  return Object.values(hiddenGroups).some(keys => keys.length > 0);
 }
 
 function changesFromDefault(view: SessionListView): SessionListViewChanges {
-  const hiddenGroups = nonEmptyHiddenGroups(view.hiddenGroups);
-  return {
-    ...(view.sort !== DEFAULT_SESSION_LIST_VIEW.sort && { sort: view.sort }),
-    ...(view.groupBy !== DEFAULT_SESSION_LIST_VIEW.groupBy && { groupBy: view.groupBy }),
-    ...(hiddenGroups && { hiddenGroups }),
-  };
+  const changes: SessionListViewChanges = {};
+  if (view.sort !== DEFAULT_SESSION_LIST_VIEW.sort) changes.sort = view.sort;
+  if (view.groupBy !== DEFAULT_SESSION_LIST_VIEW.groupBy) changes.groupBy = view.groupBy;
+  if (hasHiddenGroups(view.hiddenGroups)) changes.hiddenGroups = view.hiddenGroups;
+  return changes;
 }
 
 const sessionListViewStore = createLocalStorageStore<SessionListViewChanges>({
   key: 'mastracode.sessionListView',
-  empty: NO_CHANGES,
+  defaultValue: NO_CHANGES,
   parse: parseViewChanges,
 });
 
