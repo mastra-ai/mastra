@@ -45,9 +45,14 @@ const upstream: Record<string, Array<{ address: string; name: string; text: stri
 
 const synced: Record<string, string[]> = {};
 const bindings: Record<string, Array<{ source: string; scope: string }>> = {};
+const nodeIds: Record<string, string> = {};
+const evict: Record<string, string[]> = {};
+const rejected: string[] = [];
 
 async function createKnowledge() {
-  for (const state of [synced, bindings, upstream]) for (const key of Object.keys(state)) delete state[key];
+  for (const state of [synced, bindings, upstream, nodeIds, evict])
+    for (const key of Object.keys(state)) delete state[key];
+  rejected.length = 0;
   const importer = (id: string, source: string) => ({
     id,
     access: { 'project:$projectId': 'owner' as const },
@@ -58,7 +63,15 @@ async function createKnowledge() {
       const items = upstream[source] ?? [];
       for (const item of items) {
         const node = await handle.upsertNode(item.address, { name: item.name });
-        if ((await node.listKnowledge()).length === 0) await node.appendKnowledge({ text: item.text });
+        nodeIds[`${source}\u0000${item.address}`] = node.node.id;
+        // Provider reconcile: drop this binding's records whose text changed upstream.
+        const current = await node.listKnowledge();
+        for (const record of current) if (record.text !== item.text) await node.removeKnowledge(record.id);
+        if (!current.some(record => record.text === item.text)) await node.appendKnowledge({ text: item.text });
+        // A provider that evicts by remembered record id.
+        for (const id of evict[source] ?? []) {
+          await node.removeKnowledge(id).catch((error: Error) => rejected.push(error.message));
+        }
       }
       const previous = synced[source] ?? [];
       for (const address of previous) {
@@ -167,5 +180,48 @@ describe('Factory connection imports on a real Wave 2 Knowledge', () => {
     await knowledge.runImporter('notion', notion, undefined, { triggerKind: 'cron' });
     expect(await readable(knowledge, p1, 'runbook')).toHaveLength(0);
     expect(await readable(knowledge, p1, 'roadmap')).not.toHaveLength(0);
+  });
+
+  it('never lets a Notion re-sync remove records another binding keeps on the same node', async () => {
+    const knowledge = await createKnowledge();
+    upstream['notion:conn-notion'] = [{ address: 'page-1', name: 'Runbook', text: 'notion runbook v1' }];
+    const notion = await bind(knowledge, connections.notion);
+    await knowledge.runImporter('notion', notion, undefined, { triggerKind: 'cron' });
+    const shared = nodeIds['notion:conn-notion\u0000page-1']!;
+    const p1Scope = (await sessionReadScopeIds(knowledge, 'p1'))[1]!;
+    const p2Scope = (await sessionReadScopeIds(knowledge, 'p2'))[1]!;
+
+    // Records on Notion's own node that Notion's binding does not own:
+    // Linear's (same project scope, other source) and one of Notion's own
+    // source that is also shared into another scope.
+    const linearRecord = await knowledge.createRecord({
+      node: shared,
+      text: 'linear roadmap',
+      source: 'linear:conn-linear',
+      scopeIds: [p1Scope],
+      contextScopeId: p1Scope,
+    });
+    const widened = await knowledge.createRecord({
+      node: shared,
+      text: 'shared runbook',
+      source: 'notion:conn-notion',
+      scopeIds: [p1Scope, p2Scope],
+      contextScopeId: p1Scope,
+    });
+
+    // Notion re-syncs an edit and tries to evict Linear's record by id.
+    upstream['notion:conn-notion'] = [{ address: 'page-1', name: 'Runbook', text: 'notion runbook v2' }];
+    evict['notion:conn-notion'] = [linearRecord.id];
+    await expect(knowledge.runImporter('notion', notion, undefined, { triggerKind: 'cron' })).resolves.toMatchObject({
+      status: 'succeeded',
+    });
+
+    expect(rejected).toEqual([expect.stringContaining('owned by another binding')]);
+    const store = await knowledge.getStorage();
+    expect((await store.getRecord({ id: linearRecord.id }))?.deletedAt).toBeFalsy();
+    expect((await store.getRecord({ id: widened.id }))?.deletedAt).toBeFalsy();
+    const p1 = await sessionReadScopeIds(knowledge, 'p1');
+    expect(await readable(knowledge, p1, 'roadmap')).toHaveLength(1);
+    expect(await readable(knowledge, p1, 'v1')).toHaveLength(0);
   });
 });
