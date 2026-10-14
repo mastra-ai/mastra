@@ -104,6 +104,44 @@ describe('agentic importer runs carry the importer as an FGA subject', () => {
     expect(fga.require).not.toHaveBeenCalled();
   });
 
+  it("takes a dynamically resolved run's org from the registration, never from its destination", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.100Z'));
+    try {
+      const fga = fgaProvider();
+      const agent = realAgent(fga);
+      const generate = vi.spyOn(agent, 'generate');
+      const foreign = { source: 'slack:general', scope: 'org:globex' } as const;
+      const knowledge = new Knowledge({
+        storage: new InMemoryStore({ id: 'importer-actor-resolved' }),
+        structure: { scopes: [...structure.scopes, { address: 'org:globex', name: 'Globex' }] },
+        importers: [
+          {
+            id: 'slack',
+            organizationId: 'acme',
+            access: { 'org:$orgId': 'edit' },
+            agentic: { agent },
+            triggers: { cron: { schedule: '* * * * * *', resolveBindings: async () => [foreign] } },
+            handler: async ctx => {
+              await ctx.agentImport!({ instructions: 'Import.', data: { m: 1 }, checkpoint: 'c1' });
+            },
+          },
+        ],
+      });
+      await knowledge.reconcile();
+      knowledge.__registerMastra({} as never);
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      await vi.waitFor(() => expect(generate).toHaveBeenCalled());
+      const options = (generate.mock.calls[0] as unknown[])[1] as any;
+      expect(options.actor.scope).toEqual({ org: 'acme' });
+      expect(options.requestContext.get('organizationId')).toBe('acme');
+      await knowledge.shutdownImporters();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('rejects an org id that is empty or nests a scope separator at registration', () => {
     const agent = realAgent(fgaProvider());
     expect(() => knowledgeWith(agent, ' ')).toThrow(/organizationId/);
