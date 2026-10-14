@@ -28,6 +28,7 @@ export const SIGNAL_RATE_WINDOW_MS = 10 * 60 * 1000;
 /** How many recent `factory-session` notifications on a thread the rate and duplicate checks read. */
 const RECENT_SCAN = 100;
 const SUMMARY_LENGTH = 200;
+const RATE_LIMITED = 'Too many messages to that session in the last 10 minutes; wait before sending more.';
 
 export interface FactoryMessaging {
   controller: FactoryDeliveryController;
@@ -169,7 +170,7 @@ export function createFactoryMessagingTools(
       if (!threadId) throw new Error('The session is not available (thread-not-found).');
 
       if (overRateLimit(await recent(messaging.notifications, threadId))) {
-        throw new Error('Too many messages to this session; wait for a reply.');
+        throw new Error(RATE_LIMITED);
       }
 
       const result = await deliverFactorySessionNotification({
@@ -242,7 +243,6 @@ export function createFactoryMessagingTools(
       const onSenderThread = await recent(messaging.notifications, fromThread);
       // Replies count toward the same cap as messages, so records written to
       // this session can't turn it into an unlimited high-priority sender.
-      if (overRateLimit(onSenderThread)) throw new Error('Too many messages to that session; wait before answering.');
       const answered = onSenderThread.some(
         record =>
           record.kind === 'reply' &&
@@ -250,6 +250,7 @@ export function createFactoryMessagingTools(
           record.attributes?.['from-session'] === scope.sessionId,
       );
       if (answered) throw new Error(`You already answered ${inReplyTo}.`);
+      if (overRateLimit(onSenderThread)) throw new Error(RATE_LIMITED);
 
       const result = await deliverFactorySessionNotification({
         controller: messaging.controller,
