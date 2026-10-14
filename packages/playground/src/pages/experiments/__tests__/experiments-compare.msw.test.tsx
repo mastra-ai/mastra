@@ -186,12 +186,12 @@ describe('Experiments page — selection and compare', () => {
       expect(highlightedExperiments()).toEqual(['run a', 'run b']);
     });
 
-    it('explains the highlight above the list, naming the dataset', async () => {
+    it('explains the highlight above the list, giving the dataset id', async () => {
       await renderLoadedPage();
       select('exp-a');
 
       expect(getLegend().textContent).toBe(
-        'Highlighted experiments ran on Dataset One, like your first selection, and can be compared with it.',
+        'Highlighted experiments ran on dataset dataset-1, like your first selection, and can be compared with it.',
       );
     });
   });
@@ -202,7 +202,7 @@ describe('Experiments page — selection and compare', () => {
       select('exp-a', 'exp-c', 'exp-a');
 
       expect(highlightedExperiments()).toEqual(['run c']);
-      expect(getLegend().textContent).toMatch(/ran on Dataset Two/);
+      expect(getLegend().textContent).toMatch(/ran on dataset dataset-2,/);
     });
   });
 
