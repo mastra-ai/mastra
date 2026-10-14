@@ -2,6 +2,6 @@
 '@mastra/schema-compat': patch
 ---
 
-Fixed optional union fields losing their empty value when converted for OpenAI strict mode. An optional `anyOf` property stays required, and now also allows `null`, so the omitted value can still be represented.
+Fixed optional union fields in OpenAI tool schemas. Tools can now use `null` when those fields have no value.
 
 Fixes https://github.com/mastra-ai/mastra/issues/26703

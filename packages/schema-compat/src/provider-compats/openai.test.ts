@@ -786,6 +786,109 @@ describe('OpenAISchemaCompatLayer', () => {
         nested: { value: undefined },
       });
     });
+
+    it('does not append a duplicate null branch when null is already accepted', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          nestedAnyOf: {
+            anyOf: [
+              { type: 'string', enum: ['a', 'b'] },
+              { anyOf: [{ type: 'string', const: 'a' }, { type: 'null' }] },
+            ],
+          },
+          constNull: {
+            anyOf: [{ type: 'string' }, { const: null }],
+          },
+          enumNull: {
+            anyOf: [{ type: 'number' }, { enum: [null] }],
+          },
+          arrayTypeNull: {
+            anyOf: [{ type: 'boolean' }, { type: ['string', 'null'] }],
+          },
+        },
+        additionalProperties: false,
+      };
+      const result = compat.processToJSONSchema(schema) as Record<string, any>;
+
+      expect(result.properties.nestedAnyOf.anyOf).toEqual([
+        { type: 'string', enum: ['a', 'b'] },
+        { anyOf: [{ type: 'string', const: 'a' }, { type: 'null' }] },
+      ]);
+      expect(result.properties.nestedAnyOf.anyOf.filter((branch: any) => branch.type === 'null')).toEqual([]);
+
+      // `{ const: null }` / `{ enum: [null] }` are normalized into a nested anyOf that
+      // already contains `{ type: 'null' }`. The property itself must not gain another one.
+      for (const key of ['constNull', 'enumNull'] as const) {
+        const property = result.properties[key];
+        expect(property.anyOf.some((branch: any) => branch.type === 'null')).toBe(false);
+        expect(JSON.stringify(property).split('"type":"null"').length - 1).toBeGreaterThan(0);
+      }
+
+      expect(result.properties.arrayTypeNull.anyOf).toEqual([{ type: 'boolean' }, { type: ['string', 'null'] }]);
+
+      const validate = new Ajv({ strict: false }).compile(result);
+      expect(validate({ nestedAnyOf: null, constNull: null, enumNull: null, arrayTypeNull: null })).toBe(true);
+      expect(validate({ nestedAnyOf: 'a', constNull: 'ok', enumNull: 1, arrayTypeNull: false })).toBe(true);
+      expect(validate({ nestedAnyOf: 'a', constNull: 'ok', enumNull: 1, arrayTypeNull: 'ok' })).toBe(true);
+      expect(validate({ nestedAnyOf: 'z', constNull: null, enumNull: null, arrayTypeNull: null })).toBe(false);
+    });
+
+    it('moves a sibling enum that excludes null into existing branches so null validates', async () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          value: {
+            description: 'String or number',
+            anyOf: [
+              { type: 'string', description: 'named speed' },
+              { type: 'number', enum: [1, 2] },
+            ],
+            enum: ['fast', 'slow', 1],
+          },
+          requiredValue: {
+            anyOf: [{ type: 'string' }, { type: 'number' }],
+            enum: ['fast', 1],
+          },
+        },
+        required: ['requiredValue'],
+        additionalProperties: false,
+      };
+      const compatSchema = compat.processToCompatSchema(schema);
+      const result = compatSchema['~standard'].jsonSchema.input({ target: 'draft-07' }) as Record<string, any>;
+
+      expect(result.required).toEqual(['requiredValue', 'value']);
+      expect(result['x-optional']).toEqual(['value']);
+
+      const value = result.properties.value;
+      expect(value.description).toBe('String or number');
+      expect(value).not.toHaveProperty('enum');
+      expect(value.anyOf).toEqual([
+        { type: 'string', description: 'named speed', enum: ['fast', 'slow', 1] },
+        { type: 'number', enum: [1] },
+        { type: 'null' },
+      ]);
+
+      expect(result.properties.requiredValue).toEqual({
+        anyOf: [{ type: 'string' }, { type: 'number' }],
+        enum: ['fast', 1],
+      });
+
+      const validate = new Ajv({ strict: false }).compile(result);
+      expect(validate({ value: null, requiredValue: 'fast' })).toBe(true);
+      expect(validate({ value: 'slow', requiredValue: 1 })).toBe(true);
+      expect(validate({ value: 1, requiredValue: 'fast' })).toBe(true);
+      expect(validate({ value: 2, requiredValue: 'fast' })).toBe(false);
+      expect(validate({ value: 'maybe', requiredValue: 'fast' })).toBe(false);
+      expect(validate({ value: null, requiredValue: null })).toBe(false);
+
+      const nullResult: any = await compatSchema['~standard'].validate({
+        value: null,
+        requiredValue: 'fast',
+      });
+      expect(nullResult).not.toHaveProperty('issues');
+      expect(nullResult.value).toEqual({ value: undefined, requiredValue: 'fast' });
+    });
   });
 
   // OpenAI strict mode rejects `propertyNames`, which z.record() emits for its key type.
