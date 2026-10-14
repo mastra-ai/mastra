@@ -980,8 +980,9 @@ class MastraScorer<
    * Projects the run's RequestContext down to the keys that should be persisted
    * on the scorer-run span input for repeatability.
    *
-   * `serializeForSpan()` provides the safe base projection — the framework auth
-   * token is redacted and values are shaped for the trace serializer to bound.
+   * `serializeForSpan()` provides the safe base projection — reserved Mastra keys
+   * (auth token, internal plumbing) are omitted and values are shaped for the
+   * trace serializer to bound.
    * `requestContextKeys` then selects from it:
    * - omitted / empty → nothing is persisted (secure default)
    * - `['*']`         → the full (safe) context
@@ -1251,8 +1252,8 @@ class MastraScorer<
         description: `Scorer step: ${scorerStep.name}`,
         inputSchema: z.any(),
         outputSchema: z.any(),
-        execute: async ({ inputData, getInitData, bail, ...rest }) => {
-          const observabilityContext = resolveObservabilityContext(rest);
+        execute: async ({ inputData, getInitData, bail, tracing, tracingContext, loggerVNext, metrics }) => {
+          const observabilityContext = resolveObservabilityContext({ tracing, tracingContext, loggerVNext, metrics });
           const { accumulatedResults = {}, generatedPrompts = {}, judge } = inputData;
           const { run } = getInitData<{ run: ScorerRun<TInput, TRunOutput> }>();
 

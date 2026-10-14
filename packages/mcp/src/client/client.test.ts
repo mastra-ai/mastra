@@ -6,6 +6,7 @@ import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { RequestContext } from '@mastra/core/di';
+import type { AnySpan } from '@mastra/core/observability';
 import { toStandardSchema } from '@mastra/schema-compat';
 import { Client, SdkErrorCode, SdkHttpError, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { toNodeHandler } from '@modelcontextprotocol/node';
@@ -16,6 +17,8 @@ import { z } from 'zod';
 
 import type { MCPTraceContext } from '../shared/trace-context.js';
 import { InternalMastraMCPClient, getMcpCallToolContent, getMcpCallToolMeta } from './client.js';
+import { MALFORMED_INPUT_SCHEMAS, VALID_INPUT_SCHEMAS } from './input-schema-test-cases.js';
+import type { MastraMCPServerDefinition } from './types.js';
 
 // exit-hook keeps its callbacks in a module-level Set and installs its own process
 // listeners exactly once behind an internal flag, so process.listenerCount('exit') is
@@ -586,7 +589,7 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     expect(callTool).not.toHaveBeenCalled();
   });
 
-  it('bounds nested input subschemas before compiling them', async () => {
+  it('skips tools whose input schema is nested too deeply to validate', async () => {
     const sdkClient = (client as any).client as Client;
     let nestedSchema: Record<string, unknown> = { type: 'string' };
     for (let depth = 0; depth < 150; depth++) {
@@ -595,13 +598,13 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
       tools: [{ name: 'deep_input', inputSchema: nestedSchema as any }],
     });
-    const callTool = vi.spyOn(sdkClient, 'callTool');
+    const warn = vi.spyOn((client as any).logger, 'warn');
 
-    const tool = (await client.tools()).deep_input;
-    const result = await tool.execute?.({} as any);
-
-    expect(result).toMatchObject({ error: true, message: expect.stringMatching(/maximum depth/i) });
-    expect(callTool).not.toHaveBeenCalled();
+    expect(await client.tools()).toEqual({});
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping MCP tool "deep_input"'),
+      expect.objectContaining({ reason: expect.stringMatching(/maximum depth/i) }),
+    );
   });
 
   it('preserves JSON Schema 2020-12 identity, composition, and boolean subschemas', async () => {
@@ -2134,6 +2137,121 @@ describe('MastraMCPClient - Custom _meta', () => {
     });
   });
 
+  describe('trace context from the calling span', () => {
+    const TRACE_ID = '0af7651916cd43dd8448eb211c80319c';
+    const SPAN_ID = 'b7ad6b7169203331';
+    const callingSpan = (overrides: Record<string, unknown> = {}) =>
+      ({ isValid: true, traceId: TRACE_ID, id: SPAN_ID, ...overrides }) as unknown as AnySpan;
+
+    const sentCallMeta = async (
+      server: Partial<MastraMCPServerDefinition>,
+      context: { tracingContext?: { currentSpan?: AnySpan }; _meta?: Record<string, unknown> },
+    ) => {
+      client = new InternalMastraMCPClient({
+        name: 'span-trace-client',
+        server: { url: testServer.baseUrl, enableServerLogs: false, ...server } as MastraMCPServerDefinition,
+      });
+      await client.connect();
+      const tools = await client.tools();
+      const sendSpy = vi.spyOn(((client as any).client as any).transport, 'send');
+      await tools['echo']?.execute?.({ msg: 'hi' }, context);
+      const call = sendSpy.mock.calls
+        .map(args => args[0] as { method?: string; params?: { _meta?: Record<string, unknown> } })
+        .find(message => message.method === 'tools/call');
+      return call?.params?._meta ?? {};
+    };
+
+    it('names the calling span as the parent of the request', async () => {
+      const meta = await sentCallMeta({}, { tracingContext: { currentSpan: callingSpan() } });
+
+      expect(meta.traceparent).toBe(`00-${TRACE_ID}-${SPAN_ID}-01`);
+      expect(meta).not.toHaveProperty('tracestate');
+    });
+
+    it('names the closest exported ancestor when the calling span is hidden from exporters', async () => {
+      const meta = await sentCallMeta(
+        {},
+        { tracingContext: { currentSpan: callingSpan({ getExportedSpanId: () => '1111111111111111' }) } },
+      );
+
+      expect(meta.traceparent).toBe(`00-${TRACE_ID}-1111111111111111-01`);
+    });
+
+    it('keeps a `traceparent` the caller set in `_meta`', async () => {
+      const explicit = '00-33333333333333333333333333333333-3333333333333333-01';
+      const meta = await sentCallMeta(
+        {},
+        { tracingContext: { currentSpan: callingSpan() }, _meta: { traceparent: explicit } },
+      );
+
+      expect(meta.traceparent).toBe(explicit);
+    });
+
+    it('leaves the trace fields to a configured `traceContext` provider', async () => {
+      const meta = await sentCallMeta(
+        { traceContext: () => undefined },
+        { tracingContext: { currentSpan: callingSpan() } },
+      );
+
+      expect(meta).not.toHaveProperty('traceparent');
+    });
+
+    it('links the calling span to the server span named in the reply and drops that key', async () => {
+      client = new InternalMastraMCPClient({
+        name: 'reply-trace-client',
+        server: { url: testServer.baseUrl, enableServerLogs: false },
+      });
+      await client.connect();
+      vi.spyOn((client as any).client as Client, 'callTool').mockResolvedValue({
+        content: [{ type: 'text', text: 'ok' }],
+        _meta: {
+          mastra: { traceparent: '00-11111111111111111111111111111111-2222222222222222-01', other: 1 },
+          vendor: true,
+        },
+      });
+      const existingLink = { traceId: '33333333333333333333333333333333', spanId: '4444444444444444' };
+      const span = callingSpan({ links: [existingLink] });
+      const tools = await client.tools();
+
+      const output = await tools['echo']?.execute?.({ msg: 'hi' }, { tracingContext: { currentSpan: span } });
+
+      expect(span.links).toEqual([
+        existingLink,
+        { traceId: '11111111111111111111111111111111', spanId: '2222222222222222' },
+      ]);
+      expect((output as any)._meta).toEqual({ mastra: { other: 1 }, vendor: true });
+    });
+
+    it('adds no link when the reply names no server span', async () => {
+      client = new InternalMastraMCPClient({
+        name: 'reply-no-trace-client',
+        server: { url: testServer.baseUrl, enableServerLogs: false },
+      });
+      await client.connect();
+      vi.spyOn((client as any).client as Client, 'callTool').mockResolvedValue({
+        content: [{ type: 'text', text: 'ok' }],
+        _meta: { mastra: { traceparent: 'garbage' } },
+      });
+      const span = callingSpan();
+      const tools = await client.tools();
+
+      await tools['echo']?.execute?.({ msg: 'hi' }, { tracingContext: { currentSpan: span } });
+
+      expect(span.links).toBeUndefined();
+    });
+
+    it.each([
+      ['there is no calling span', undefined],
+      ['the calling span is not recorded', callingSpan({ isValid: false, traceId: 'no-op-trace', id: 'no-op' })],
+      ['the trace id is not W3C-sized', callingSpan({ traceId: 'abc123' })],
+      ['no ancestor of the calling span is exported', callingSpan({ getExportedSpanId: () => undefined })],
+    ])('sends no `traceparent` when %s', async (_label, currentSpan) => {
+      const meta = await sentCallMeta({}, { tracingContext: { currentSpan } });
+
+      expect(meta).not.toHaveProperty('traceparent');
+    });
+  });
+
   it('should merge custom _meta with progressToken when progress tracking is enabled', async () => {
     client = new InternalMastraMCPClient({
       name: 'meta-progress-client',
@@ -3618,5 +3736,96 @@ describe('InternalMastraMCPClient - concurrent tool reconnects', () => {
     await expect(result).rejects.toThrow('MCP client was disconnected while recovering the failed transport');
     expect(connect).not.toHaveBeenCalled();
     expect(transport.close).toHaveBeenCalledOnce();
+  });
+});
+
+describe('InternalMastraMCPClient - malformed input schemas (issue #23731)', () => {
+  function createClientWithTools(tools: unknown[]) {
+    const client = new InternalMastraMCPClient({
+      name: 'schema-test-server',
+      server: { url: new URL('http://localhost:1/mcp') },
+    });
+    vi.spyOn((client as any).client as Client, 'listTools').mockResolvedValue({ tools } as any);
+    const warn = vi.spyOn((client as any).logger, 'warn');
+    return { client, warn };
+  }
+
+  const validTool = {
+    name: 'get_candles',
+    inputSchema: { type: 'object', properties: { coin: { type: 'string' } }, required: ['coin'] },
+  };
+
+  it('skips a tool whose required list is nested under properties and keeps its siblings', async () => {
+    const { client, warn } = createClientWithTools([
+      validTool,
+      {
+        name: 'get_l2_book',
+        inputSchema: { type: 'object', properties: { coin: { type: 'string' }, required: ['coin'] } },
+      },
+    ]);
+
+    const tools = await client.tools();
+
+    expect(Object.keys(tools)).toEqual(['get_candles']);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping MCP tool "get_l2_book" with an invalid input schema'),
+      expect.objectContaining({
+        serverName: 'schema-test-server',
+        toolName: 'get_l2_book',
+        reason: '#/properties/required: Instance type "array" is invalid. Expected "object", "boolean".',
+      }),
+    );
+  });
+
+  it.each(MALFORMED_INPUT_SCHEMAS)('skips a tool with a %s input schema', async (_, inputSchema) => {
+    const { client } = createClientWithTools([validTool, { name: 'bad', inputSchema }]);
+
+    expect(Object.keys(await client.tools())).toEqual(['get_candles']);
+  });
+
+  it.each(VALID_INPUT_SCHEMAS)('keeps a tool whose input schema uses %s', async (_, inputSchema) => {
+    const { client, warn } = createClientWithTools([{ name: 'ok', inputSchema }]);
+
+    expect(Object.keys(await client.tools())).toEqual(['ok']);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('terminates on self-referencing schema objects', async () => {
+    const node: Record<string, unknown> = { type: 'object' };
+    node.properties = { self: node };
+    const { client, warn } = createClientWithTools([{ name: 'cyclic', inputSchema: node }]);
+
+    expect(Object.keys(await client.tools())).toEqual(['cyclic']);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('skips an oversized input schema even when its leaf is malformed', async () => {
+    let inputSchema: Record<string, unknown> = { type: 'object', properties: { required: ['coin'] } };
+    for (let depth = 0; depth < 130; depth++) {
+      inputSchema = { type: 'object', properties: { nested: inputSchema } };
+    }
+    const { client, warn } = createClientWithTools([validTool, { name: 'malformed', inputSchema }]);
+
+    expect(Object.keys(await client.tools())).toEqual(['get_candles']);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping MCP tool "malformed"'),
+      expect.objectContaining({ reason: expect.stringMatching(/maximum depth/i) }),
+    );
+  });
+
+  it('rejects explicit hydration of an invalid definition with a dedicated error', async () => {
+    const { client } = createClientWithTools([]);
+    // The async discovery path waits for the lazily loaded schema validator.
+    await client.tools();
+
+    expect(() =>
+      client.toolFromDefinition({
+        definition: {
+          name: 'get_l2_book',
+          inputSchema: { type: 'object', properties: { required: ['coin'] } } as any,
+          server: { name: 'schema-test-server' },
+        },
+      }),
+    ).toThrow(expect.objectContaining({ id: 'MCP_CLIENT_INVALID_TOOL_INPUT_SCHEMA' }));
   });
 });

@@ -1008,7 +1008,7 @@ export type ToolResultInfo = {
  *
  * @example
  * ```ts
- * import { extractToolResults } from '@mastra/evals/scorers';
+ * import { extractToolResults } from '@mastra/evals/scorers/utils';
  * import { createHallucinationScorer } from '@mastra/evals/scorers/prebuilt';
  *
  * const scorer = createHallucinationScorer({
@@ -1284,6 +1284,7 @@ function compareRelaxedOrder(
 const COMPARABLE_FIELDS_BY_TYPE: Record<string, string[]> = {
   tool_call: ['toolArgs', 'toolResult', 'success'],
   mcp_tool_call: ['toolArgs', 'toolResult', 'mcpServer', 'success'],
+  provider_tool_call: ['toolArgs', 'toolResult', 'success'],
   model_generation: ['modelId', 'promptTokens', 'completionTokens', 'finishReason'],
   agent_run: ['agentId'],
   workflow_step: ['stepId', 'status', 'output'],

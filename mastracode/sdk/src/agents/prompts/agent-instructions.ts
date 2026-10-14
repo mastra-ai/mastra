@@ -267,11 +267,71 @@ export function getStaticallyLoadedInstructionPaths(
   configDirName = DEFAULT_CONFIG_DIR,
   projectReader?: InstructionFileReader,
 ): string[] {
-  const canonicalRoot = realpathOrResolved(projectPath);
-  return loadAgentInstructions(projectPath, configDirName, projectReader).flatMap(source => {
+  return instructionSourcePaths(loadAgentInstructions(projectPath, configDirName, projectReader), [projectPath]);
+}
+
+/**
+ * Directories a session's project instructions load from: the host's
+ * `instructionRoots` (resolved against the working directory, the session's
+ * own checkout first) when it sets any, else the working directory itself.
+ */
+export function sessionInstructionRoots(workingDir: string, instructionRoots?: readonly string[]): string[] {
+  if (!instructionRoots?.length) return [workingDir];
+  return [...new Set(instructionRoots.map(root => resolve(workingDir, root)))];
+}
+
+/**
+ * The instruction files a session's system prompt carries. Global files load
+ * once (unless `skipGlobal`), then each instruction root's project files, in
+ * root order. An untrusted checkout never reads project files off the working
+ * tree: with a `baseRef` the first root (the session's own checkout) is served
+ * from that ref and the other roots are skipped; without one no project files
+ * load.
+ */
+export function loadSessionInstructions({
+  workingDir,
+  instructionRoots,
+  configDir,
+  untrustedCheckout = false,
+  baseRef,
+  skipGlobal = false,
+}: {
+  workingDir: string;
+  instructionRoots?: readonly string[];
+  configDir?: string;
+  untrustedCheckout?: boolean;
+  baseRef?: string;
+  skipGlobal?: boolean;
+}): InstructionSource[] {
+  const [primary, ...others] = sessionInstructionRoots(workingDir, instructionRoots);
+  const primaryReader = untrustedCheckout
+    ? baseRef
+      ? createGitRefInstructionReader(primary!, baseRef)
+      : { exists: () => false, read: () => '' }
+    : undefined;
+  const sources = loadAgentInstructions(primary!, configDir, primaryReader, { skipGlobal });
+  if (untrustedCheckout) return sources;
+  for (const root of others) {
+    sources.push(...loadAgentInstructions(root, configDir, undefined, { skipGlobal: true }));
+  }
+  return sources;
+}
+
+/**
+ * Paths of loaded instruction sources, each project source also under its
+ * root's canonical path, so reactive reminders never repeat a file the
+ * system prompt already carries.
+ */
+export function instructionSourcePaths(sources: InstructionSource[], roots: readonly string[]): string[] {
+  return sources.flatMap(source => {
     const path = normalize(source.path);
     if (source.scope !== 'project') return [path];
-    const canonicalPath = join(canonicalRoot, relative(projectPath, path));
+    const root = roots.find(candidate => {
+      const rel = relative(candidate, path);
+      return rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+    });
+    if (!root) return [path];
+    const canonicalPath = join(realpathOrResolved(root), relative(root, path));
     return path === canonicalPath ? [path] : [path, canonicalPath];
   });
 }

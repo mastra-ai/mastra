@@ -77,7 +77,7 @@ const renderIntake = (
   elsewhereSourceKeys?: Set<string>,
 ) =>
   renderHookWithProviders(() =>
-    useBoardIntake({ factoryProjectId, repository, definition, knownSourceKeys, elsewhereSourceKeys }),
+    useBoardIntake({ factoryProjectId, repositories: [repository], definition, knownSourceKeys, elsewhereSourceKeys }),
   );
 
 describe('useBoardIntake Linear gating', () => {
@@ -259,7 +259,7 @@ describe('useBoardIntake GitLab routing', () => {
     const { result } = renderHookWithProviders(() =>
       useBoardIntake({
         factoryProjectId: 'factory-1',
-        repository: { ...repository, provider: 'gitlab' },
+        repositories: [{ ...repository, provider: 'gitlab' }],
         definition: workBoard,
         knownSourceKeys: new Set(),
       }),
@@ -306,7 +306,7 @@ describe('useBoardIntake GitLab routing', () => {
     const { result } = renderHookWithProviders(() =>
       useBoardIntake({
         factoryProjectId: 'factory-1',
-        repository: { ...repository, provider: 'gitlab' },
+        repositories: [{ ...repository, provider: 'gitlab' }],
         definition: reviewBoard,
         knownSourceKeys: new Set(),
       }),
@@ -722,5 +722,122 @@ describe('useBoardIntake query loading', () => {
         unmount();
       }
     });
+  });
+});
+
+describe('useBoardIntake across linked repositories', () => {
+  const repositories: LinkedRepositoryPayload[] = [
+    { projectRepositoryId: 'repo-1', slug: 'acme/app', externalId: '1' },
+    { projectRepositoryId: 'repo-2', slug: 'acme/api', externalId: '2' },
+    { projectRepositoryId: 'repo-3', slug: 'acme/docs', externalId: '3' },
+  ];
+  const issueIn = (repositoryId: number, number: number): GithubIssue => ({
+    repositoryId,
+    number,
+    title: `Issue ${number}`,
+    url: `https://github.com/acme/repo-${repositoryId}/issues/${number}`,
+    author: 'octocat',
+    labels: [],
+    comments: 0,
+    createdAt: '2026-07-01T00:00:00Z',
+    updatedAt: '2026-07-02T00:00:00Z',
+  });
+  const pullIn = (repositoryId: number, number: number) => ({
+    repositoryId,
+    number,
+    title: `PR ${number}`,
+    url: `https://github.com/acme/repo-${repositoryId}/pull/${number}`,
+    author: 'octocat',
+    baseBranch: 'main',
+    headBranch: `feat/${number}`,
+    createdAt: '2026-07-01T00:00:00Z',
+    updatedAt: '2026-07-02T00:00:00Z',
+  });
+
+  function stubRepositories(requested: string[]) {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({ projects: [{ id: 'factory-1', name: 'factory-1', repositories: [] }] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+        HttpResponse.json({
+          config: {
+            github: { enabled: true, sourceIds: ['acme/app', 'acme/api'] },
+            linear: { enabled: false, sourceIds: null },
+          },
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
+      http.get(`${TEST_BASE_URL}/web/intake/label-routes`, () => HttpResponse.json({ routes: [] })),
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () => HttpResponse.json({ enabled: false, connected: false })),
+      http.get(`${TEST_BASE_URL}/web/github/projects/:id/issues`, ({ params, request }) => {
+        const id = String(params.id);
+        const labelled = new URL(request.url).searchParams.get('label');
+        if (!labelled) requested.push(`issues:${id}`);
+        const repositoryId = Number(id.replace('repo-', ''));
+        return HttpResponse.json({ issues: labelled ? [] : [issueIn(repositoryId, 5)], nextPage: null });
+      }),
+      http.get(`${TEST_BASE_URL}/web/github/projects/:id/prs`, ({ params }) => {
+        const id = String(params.id);
+        requested.push(`prs:${id}`);
+        return HttpResponse.json({ pullRequests: [pullIn(Number(id.replace('repo-', '')), 9)], nextPage: null });
+      }),
+    );
+  }
+
+  it('offers Work the issues of every repository selected as an issue source, kept apart by repository', async () => {
+    stubRepositories([]);
+
+    const { result } = renderHookWithProviders(() =>
+      useBoardIntake({
+        factoryProjectId: 'factory-1',
+        repositories,
+        definition: workBoard,
+        knownSourceKeys: new Set(),
+      }),
+    );
+
+    await waitFor(() => expect(result.current.candidates).toHaveLength(2));
+    expect(result.current.candidates.map(candidate => candidate.sourceKey)).toEqual([
+      'github:1:issue:5',
+      'github:2:issue:5',
+    ]);
+  });
+
+  it('offers Review the pull requests of every linked GitHub repository', async () => {
+    const requested: string[] = [];
+    stubRepositories(requested);
+
+    const { result } = renderHookWithProviders(() =>
+      useBoardIntake({
+        factoryProjectId: 'factory-1',
+        repositories,
+        definition: reviewBoard,
+        knownSourceKeys: new Set(),
+      }),
+    );
+
+    await waitFor(() => expect(result.current.candidates).toHaveLength(3));
+    expect(result.current.candidates.map(candidate => candidate.sourceKey)).toEqual([
+      'github:1:pull-request:9',
+      'github:2:pull-request:9',
+      'github:3:pull-request:9',
+    ]);
+  });
+
+  it('drops a second repository candidate that is already a card without hiding the first repository one', async () => {
+    stubRepositories([]);
+
+    const { result } = renderHookWithProviders(() =>
+      useBoardIntake({
+        factoryProjectId: 'factory-1',
+        repositories,
+        definition: workBoard,
+        knownSourceKeys: new Set(['github:2:issue:5']),
+      }),
+    );
+
+    await waitFor(() => expect(result.current.candidates).toHaveLength(1));
+    expect(result.current.candidates[0]).toMatchObject({ sourceKey: 'github:1:issue:5' });
   });
 });

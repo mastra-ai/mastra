@@ -104,6 +104,80 @@ describe('Agent ↔ DurableAgent ↔ EventedAgent parity', () => {
     });
   });
 
+  describe('prepareStep system messages', () => {
+    const echo = createTool({
+      id: 'echo',
+      description: 'Echo the input',
+      inputSchema: z.object({ value: z.string() }),
+      execute: async ({ value }) => value,
+    });
+    const tapes = [
+      toolCallTape('echo', { value: 'one' }, 'call-1'),
+      toolCallTape('echo', { value: 'two' }, 'call-2'),
+      textOnlyTape('done'),
+    ];
+
+    it('restores the original system messages after a one-step override', async () => {
+      const results = await expectEngineParity({
+        model: { tapes },
+        buildAgent: ({ model }) =>
+          new Agent({
+            id: 'parity-prepare-step-system-once',
+            name: 'Prepare Step System Once',
+            instructions: 'original system message',
+            model,
+            tools: { echo },
+          }),
+        input: 'run three model calls',
+        options: {
+          maxSteps: 3,
+          prepareStep: ({ stepNumber }) =>
+            stepNumber === 1
+              ? { systemMessages: [{ role: 'system' as const, content: 'step-two-only override' }] }
+              : undefined,
+        },
+      });
+
+      for (const engine of PARITY_ENGINES) {
+        const requests = results[engine]!.requests;
+        expect(requests).toHaveLength(3);
+        expect(requests[0]!.prompt).toContainEqual({ role: 'system', content: 'original system message' });
+        expect(requests[1]!.prompt).toContainEqual({ role: 'system', content: 'step-two-only override' });
+        expect(requests[2]!.prompt).toContainEqual({ role: 'system', content: 'original system message' });
+        expect(requests[2]!.prompt).not.toContainEqual({ role: 'system', content: 'step-two-only override' });
+      }
+    });
+
+    it('applies an override returned on every step', async () => {
+      const results = await expectEngineParity({
+        model: { tapes },
+        buildAgent: ({ model }) =>
+          new Agent({
+            id: 'parity-prepare-step-system-every-step',
+            name: 'Prepare Step System Every Step',
+            instructions: 'original system message',
+            model,
+            tools: { echo },
+          }),
+        input: 'run three model calls',
+        options: {
+          maxSteps: 3,
+          prepareStep: () => ({
+            systemMessages: [{ role: 'system' as const, content: 'every-step override' }],
+          }),
+        },
+      });
+
+      for (const engine of PARITY_ENGINES) {
+        expect(results[engine]!.requests).toHaveLength(3);
+        for (const request of results[engine]!.requests) {
+          expect(request.prompt).toContainEqual({ role: 'system', content: 'every-step override' });
+          expect(request.prompt).not.toContainEqual({ role: 'system', content: 'original system message' });
+        }
+      }
+    });
+  });
+
   // -------------------------------------------------------------------------
   // The following blocks are written but intentionally `it.todo` — they are
   // the failing-test placeholders for the rest of the workstream. Each one
@@ -133,6 +207,8 @@ describe('Agent ↔ DurableAgent ↔ EventedAgent parity', () => {
     // 'per-call tool injection survives in-process resume' describe block.
     // A true cross-process resume falls back to the agent's static tools
     // because per-call tools carry closures and cannot be JSON-serialized.
+    // Cross-process toolsets cannot be rebuilt; the worker now fails loudly
+    // instead (see utils/toolsets-xproc.test.ts).
     it.todo('preserves toolsets across resume (cross-process; gated on a future serialization story)');
     it.todo('preserves clientTools across resume (cross-process; gated on a future serialization story)');
   });

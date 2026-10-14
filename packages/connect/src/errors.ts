@@ -83,8 +83,13 @@ interface ProblemJson {
   detail?: string;
   code?: string;
   error?: string | { message?: unknown; code?: unknown };
+  // GitHub-style bodies surface a top-level `message` string.
+  message?: string;
+  // Jira surfaces human-readable messages as `errorMessages: string[]`.
+  errorMessages?: unknown;
   // Many providers (Clerk, Nango v2, Linear's GraphQL envelope) surface
   // errors as an array of objects with a `message` / `long_message` field.
+  // Jira instead uses an object map of `{ field: message }`.
   errors?: unknown;
 }
 
@@ -112,7 +117,7 @@ export async function extractProblemDetail(
           ? data.error.code
           : undefined;
       const code = typeof data.code === 'string' ? data.code : undefined;
-      for (const field of ['detail', 'title', 'error'] as const) {
+      for (const field of ['detail', 'title', 'error', 'message'] as const) {
         const value = data[field];
         if (typeof value === 'string' && value) {
           return { detail: truncate(value), code, isProblemJson };
@@ -125,9 +130,18 @@ export async function extractProblemDetail(
           }
         }
       }
+      // Jira: `{ errorMessages: ["..."], errors: {} }`.
+      if (Array.isArray(data.errorMessages)) {
+        const message = data.errorMessages.find(entry => typeof entry === 'string' && entry);
+        if (typeof message === 'string') return { detail: truncate(message), code, isProblemJson };
+      }
       if (Array.isArray(data.errors)) {
         const message = extractFirstArrayMessage(data.errors);
         if (message) return { detail: truncate(message), code, isProblemJson };
+      } else if (data.errors && typeof data.errors === 'object') {
+        // Jira: `{ errorMessages: [], errors: { summary: "Field required" } }`.
+        const entry = Object.entries(data.errors).find(([, value]) => typeof value === 'string' && value);
+        if (entry) return { detail: truncate(`${entry[0]}: ${entry[1]}`), code, isProblemJson };
       }
       // Graph sometimes returns an empty message (e.g. a 401 `UnknownError`);
       // its code is then the only diagnostic it offers.

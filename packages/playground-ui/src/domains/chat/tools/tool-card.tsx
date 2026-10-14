@@ -78,7 +78,7 @@ export const ToolCardInner = ({
   const { isRunning } = useChatRunning();
   const handleMcpAppSendMessage = useCallback(
     (content: string) => {
-      send({ message: content });
+      void send({ message: content });
     },
     [send],
   );

@@ -226,6 +226,9 @@ describe('provider attribution', () => {
   it('maps built-in OpenAI model ids to the Codex OAuth provider', () => {
     expect(providerFromModelId('openai/gpt-5.6-sol')).toBe('openai-codex');
     expect(providerFromModelId('mastracode/openai/gpt-5.6-sol')).toBe('openai-codex');
+    expect(providerFromModelId('kimi-code-plan-cn/k3')).toBe('kimi-for-coding');
+    expect(providerFromModelId('mastracode/kimi-for-coding/k3')).toBe('kimi-for-coding');
+    expect(providerFromModelId('kimi-code-plan-global/k3')).toBeUndefined();
   });
 
   it('reads rewritten requestUrl fields and rejects lookalike hosts', () => {
@@ -695,7 +698,7 @@ describe('AccountStartNoticeProcessor model routes', () => {
     expect(createRequestScopedCredentialStore(seeded.storage, route.requestContext).get(PROVIDER)).toBeUndefined();
   });
 
-  it('uses normal active-account behavior when no model route is supplied', async () => {
+  it('keeps the active account without announcing it when no model route is supplied', async () => {
     const seeded = await makeTwoAccountStorage();
     seeded.storage.activateAccount(PROVIDER, seeded.accountB.id);
     const requestContext = new RequestContext();
@@ -707,12 +710,8 @@ describe('AccountStartNoticeProcessor model routes', () => {
 
     await new AccountStartNoticeProcessor({ credentialStore: seeded.storage }).processInput(args as never);
 
-    expect(args.writer.custom).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: ACCOUNT_SWITCH_PART_TYPE,
-        data: expect.objectContaining({ reason: 'starting-on-account' }),
-      }),
-    );
+    expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountB.id);
+    expect(args.writer.custom).not.toHaveBeenCalled();
   });
 });
 

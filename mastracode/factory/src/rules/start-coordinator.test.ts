@@ -1,4 +1,3 @@
-import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -33,7 +32,9 @@ function makeController(sendMessage = vi.fn(async () => {})) {
     getWorkspace: vi.fn(() => ({ skills: undefined })),
     state: { get: vi.fn(() => ({})), set: vi.fn(async () => {}) },
     permissions: { setForTool: vi.fn(async () => {}) },
+    mode: { resolve: () => ({ defaultModelId: 'openai/gpt-5.5' }) },
     model: { switch: vi.fn(async () => {}) },
+    subagents: { model: { set: vi.fn(async () => {}) } },
     om: {
       observer: { modelId: vi.fn(() => undefined), switchModel: vi.fn(async () => {}) },
       reflector: { modelId: vi.fn(() => undefined), switchModel: vi.fn(async () => {}) },
@@ -112,6 +113,7 @@ function startRequest(
     sessionId: string;
     kickoffKey: string;
     role: string;
+    modelScope: 'factory' | 'user';
     defaultModelId: string;
     id: string;
   }> = {},
@@ -124,6 +126,7 @@ function startRequest(
     threadTitle: 'Investigate issue 1',
     kickoffKey: overrides.kickoffKey ?? 'kickoff-1',
     destinationStage: 'intake' as const,
+    modelScope: overrides.modelScope ?? ('factory' as const),
     defaultModelId: overrides.defaultModelId,
     workItem: {
       id: overrides.id,
@@ -215,6 +218,8 @@ describe('FactoryStartCoordinator', () => {
     });
     expect(session.state.set).toHaveBeenCalledWith(
       expect.objectContaining({
+        factoryModelScope: 'factory',
+        factoryOwnerUserId: 'user-1',
         pluginInstructions: [
           "Target repository: owner/repo. Before editing files or creating a pull request, verify this session's checkout matches the target repository.",
         ],
@@ -224,7 +229,6 @@ describe('FactoryStartCoordinator', () => {
     expect(requestContext?.get('user')).toEqual({
       workosId: 'user-1',
       organizationId: 'org-1',
-      orgFirstCredentials: true,
     });
     expect(sendMessage).not.toHaveBeenCalled();
     const item = await storage.get({ orgId: 'org-1', id: prepared.workItemId });
@@ -274,11 +278,10 @@ describe('FactoryStartCoordinator', () => {
     expect(requestContext.get('user')).toEqual({
       workosId: 'user-1',
       organizationId: 'org-1',
-      orgFirstCredentials: true,
     });
   });
 
-  it('keeps an authenticated identity but marks the run org-first for credentials', async () => {
+  it('keeps an authenticated identity unchanged', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { controller } = makeController();
     const coordinator = new FactoryStartCoordinator(
@@ -295,8 +298,38 @@ describe('FactoryStartCoordinator', () => {
     expect(requestContext.get('user')).toEqual({
       workosId: 'authenticated-user',
       organizationId: 'org-1',
-      orgFirstCredentials: true,
     });
+  });
+
+  it("applies the owner's default model and stamps user scope", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller, session } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+      undefined,
+      {
+        projects: {
+          getById: vi.fn(async () => ({
+            orgId: 'org-1',
+            modelScope: 'user',
+            defaultModelId: 'anthropic/factory-model',
+          })),
+        } as never,
+        modelDefaults: {
+          get: vi.fn(async () => ({ modelId: 'openai/owner-model' })),
+        } as never,
+      },
+    );
+
+    await coordinator.prepare(startRequest());
+
+    expect(session.model.switch).toHaveBeenCalledWith('openai/owner-model');
+    expect(session.state.set).toHaveBeenCalledWith(
+      expect.objectContaining({ factoryModelScope: 'user', factoryOwnerUserId: 'user-1' }),
+    );
   });
 
   it('applies the Factory default model before preparing a board run', async () => {
@@ -314,9 +347,7 @@ describe('FactoryStartCoordinator', () => {
     expect(session.model.switch).toHaveBeenCalledWith('anthropic/claude-fable-5');
   });
 
-  it('hydrates board runs with built-in memory defaults, never per-user settings', async () => {
-    // The connection owner ("user-1") has personal OM settings stored — a
-    // board run must not inherit them: it hydrates with the built-in defaults.
+  it('leaves persisted observational-memory settings for per-invocation resolution', async () => {
     const storage = await createFactoryStorageForTests();
     await storage.memorySettings.patch({
       orgId: 'org-1',
@@ -335,50 +366,15 @@ describe('FactoryStartCoordinator', () => {
       storage.workItems,
       undefined,
       makeSourceControl() as never,
-      storage.memorySettings,
     );
 
     await coordinator.prepare(startRequest());
 
-    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: DEFAULT_OM_MODEL_ID });
-    expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: DEFAULT_OM_MODEL_ID });
-    expect(session.state.set).toHaveBeenCalledWith({
-      observationThreshold: DEFAULT_OBSERVATION_THRESHOLD,
-      reflectionThreshold: DEFAULT_REFLECTION_THRESHOLD,
-    });
-  });
-
-  it("hydrates board runs with the factory project's shared memory settings when stored", async () => {
-    const storage = await createFactoryStorageForTests();
-    await storage.memorySettings.patch({
-      orgId: 'org-1',
-      userId: factoryMemorySettingsUserId(PROJECT_ID),
-      patch: {
-        observerModelId: 'anthropic/claude-haiku-4-5',
-        reflectorModelId: 'anthropic/claude-opus-5',
-        observationThreshold: 12_000,
-        reflectionThreshold: 23_000,
-        observeAttachments: true,
-      },
-    });
-    const { controller, session } = makeController();
-    const coordinator = new FactoryStartCoordinator(
-      controller as never,
-      storage.workItems,
-      undefined,
-      makeSourceControl() as never,
-      storage.memorySettings,
+    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
+    expect(session.state.set).not.toHaveBeenCalledWith(
+      expect.objectContaining({ observationThreshold: expect.any(Number) }),
     );
-
-    await coordinator.prepare(startRequest());
-
-    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
-    expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
-    expect(session.state.set).toHaveBeenCalledWith({
-      observationThreshold: 12_000,
-      reflectionThreshold: 23_000,
-      observeAttachments: true,
-    });
   });
 
   it('continues preparing a board run when its saved default model is no longer available', async () => {
@@ -396,7 +392,7 @@ describe('FactoryStartCoordinator', () => {
     await expect(
       coordinator.prepare(startRequest({ defaultModelId: 'anthropic/claude-fable-5' })),
     ).resolves.toMatchObject({ threadId: 'session-1', kickoffStatus: 'sent' });
-    expect(warn).toHaveBeenCalledWith('[Factory Start] Failed to apply factory default model', {
+    expect(warn).toHaveBeenCalledWith('[Factory Start] Failed to apply scoped default model', {
       modelId: 'anthropic/claude-fable-5',
       error: 'Unknown model',
     });

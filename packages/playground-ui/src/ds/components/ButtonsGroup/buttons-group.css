@@ -130,9 +130,12 @@
   /* One border per seam, and no overlap. A border is a translucent alpha of the
      foreground, so two 1px edges collapsed onto the same pixel (the `-ml-px` trick) stack
      to double the alpha and out-read the ring around the group. The left segment owns the
-     seam with its right border; the segment after it drops its left edge entirely. */
+     seam with its right border; the segment after it drops its left edge entirely.
+     `~` rather than `:not(:first-child)`: an open Popover puts a focus guard BEFORE its
+     trigger, which would otherwise strip the first segment's leading corner. */
   [data-slot='buttons-group'][data-orientation='horizontal']
-    > :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(:first-child) {
+    > :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns])
+    ~ :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]) {
     border-left-width: 0;
     border-top-left-radius: 0;
     border-bottom-left-radius: 0;
@@ -156,7 +159,8 @@
   /* Vertical mirrors it: the top segment owns the seam. The children are capsules, so the
      outer ends are re-rounded to the container radius. */
   [data-slot='buttons-group'][data-orientation='vertical']
-    > :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(:first-child) {
+    > :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns])
+    ~ :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]) {
     border-top-width: 0;
     border-top-left-radius: 0;
     border-top-right-radius: 0;
@@ -168,12 +172,18 @@
     border-bottom-right-radius: 0;
   }
 
-  [data-slot='buttons-group'][data-orientation='vertical'] > :first-child {
+  [data-slot='buttons-group'][data-orientation='vertical']
+    > :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(
+      :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]) ~ *
+    ) {
     border-top-left-radius: var(--radius-xl);
     border-top-right-radius: var(--radius-xl);
   }
 
-  [data-slot='buttons-group'][data-orientation='vertical'] > :last-child {
+  [data-slot='buttons-group'][data-orientation='vertical']
+    > :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(
+      :has(~ :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]))
+    ) {
     border-bottom-left-radius: var(--radius-xl);
     border-bottom-right-radius: var(--radius-xl);
   }

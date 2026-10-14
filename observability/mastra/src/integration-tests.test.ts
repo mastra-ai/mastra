@@ -23,9 +23,9 @@ import { Observability } from './default';
 import { TestExporter } from './exporters';
 import { PricingRegistry } from './metrics/pricing-registry';
 
-const testPricingRegistry = PricingRegistry.fromText(`
-{"i":"mock-provider-mock-model-id","p":"mock-provider","m":"mock-model-id","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"it":{"c":1e-7},"ot":{"c":2e-7}}}]}}}
-`);
+const testPricingRegistry = PricingRegistry.fromModelsDev({
+  'mock-provider': { models: { 'mock-model-id': { cost: { input: 0.1, output: 0.2 } } } },
+});
 
 /**
  * Performs final test expectations that are common to all tracing tests.

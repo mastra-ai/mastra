@@ -80,6 +80,7 @@ import type {
   StepMetadata,
   CreateWorkflowParams,
   InferSchemaOutput,
+  InferWorkflowRequestContext,
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import type { ClassifierStepOutput } from '../entry-executors';
@@ -91,7 +92,7 @@ import { waitForSuspendedSnapshot } from '../utils';
 import { Workflow, Run } from '../workflow';
 import type { AgentStepOptions } from '../workflow';
 import { EventedExecutionEngine } from './execution-engine';
-import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk } from './helpers';
+import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk, withoutAuthToken } from './helpers';
 import type { TripwireChunk } from './helpers';
 import { WorkflowEventProcessor } from './workflow-event-processor';
 
@@ -412,7 +413,7 @@ function createStepFromParams<
   TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
   TSuspendSchema extends PublicSchema<any> ? InferPublicSchema<TSuspendSchema> : unknown,
   DefaultEngineType,
-  TRequestContextSchema extends PublicSchema<any> ? InferPublicSchema<TRequestContextSchema> : unknown
+  InferWorkflowRequestContext<TRequestContextSchema>
 > {
   // Type assertion needed because toStandardSchema returns StandardSchemaWithJSON<unknown>
   // but we need it to match the inferred generic types. The public overloads ensure
@@ -437,7 +438,7 @@ function createStepFromParams<
       TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
       TSuspendSchema extends PublicSchema<any> ? InferPublicSchema<TSuspendSchema> : unknown,
       DefaultEngineType,
-      TRequestContextSchema extends PublicSchema<any> ? InferPublicSchema<TRequestContextSchema> : unknown
+      InferWorkflowRequestContext<TRequestContextSchema>
     >['execute'],
   };
 }
@@ -597,75 +598,89 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
       // Get the appropriate stream based on model version
       let fullStream: AsyncIterable<unknown>;
       let textPromise: Promise<string>;
+      let cleanup: (() => void) | undefined;
 
-      if (isV2Model) {
-        // V2+ model path: use .stream() which returns MastraModelOutput
-        const modelOutput = await params.stream((inputData as { prompt: string }).prompt, {
-          ...(agentOptions ?? {}),
-          ...observabilityContext,
-          requestContext,
-          onFinish: (result: any) => {
-            handleFinish(result);
-            void safeOnFinish((agentOptions as any)?.onFinish, result, logger);
-          },
-          abortSignal,
-        });
-        fullStream = modelOutput.fullStream;
-        textPromise = modelOutput.text;
-      } else {
-        // V1 model path: use .streamLegacy() for backwards compatibility
-        let resolveText: (value: string) => void;
-        textPromise = new Promise(resolve => {
-          resolveText = resolve;
-        });
+      try {
+        if (isV2Model) {
+          const streamResult = await params.stream((inputData as { prompt: string }).prompt, {
+            ...(agentOptions ?? {}),
+            ...observabilityContext,
+            requestContext,
+            onFinish: (result: any) => {
+              handleFinish(result);
+              void safeOnFinish((agentOptions as any)?.onFinish, result, logger);
+            },
+            abortSignal,
+          });
+          const durableStreamResult = streamResult as typeof streamResult & {
+            output?: typeof streamResult;
+            cleanup?: () => void;
+          };
+          const isDurableStreamResult =
+            typeof durableStreamResult.cleanup === 'function' &&
+            durableStreamResult.output &&
+            typeof durableStreamResult.output === 'object';
+          const modelOutput = isDurableStreamResult ? durableStreamResult.output! : streamResult;
+          cleanup = isDurableStreamResult ? durableStreamResult.cleanup : undefined;
+          fullStream = modelOutput.fullStream;
+          textPromise = modelOutput.text;
+        } else {
+          // V1 model path: use .streamLegacy() for backwards compatibility
+          let resolveText: (value: string) => void;
+          textPromise = new Promise(resolve => {
+            resolveText = resolve;
+          });
 
-        if (typeof params.streamLegacy !== 'function') {
-          throw new Error(`Agent step "${params.id}" uses a legacy v1 model but does not implement streamLegacy().`);
+          if (typeof params.streamLegacy !== 'function') {
+            throw new Error(`Agent step "${params.id}" uses a legacy v1 model but does not implement streamLegacy().`);
+          }
+
+          const legacyResult = await params.streamLegacy((inputData as { prompt: string }).prompt, {
+            ...(agentOptions ?? {}),
+            ...observabilityContext,
+            requestContext,
+            onFinish: (result: any) => {
+              handleFinish(result);
+              resolveText!(result.text);
+              void safeOnFinish((agentOptions as any)?.onFinish, result, logger);
+            },
+            abortSignal,
+          });
+          fullStream = legacyResult.fullStream;
         }
 
-        const legacyResult = await params.streamLegacy((inputData as { prompt: string }).prompt, {
-          ...(agentOptions ?? {}),
-          ...observabilityContext,
-          requestContext,
-          onFinish: (result: any) => {
-            handleFinish(result);
-            resolveText!(result.text);
-            void safeOnFinish((agentOptions as any)?.onFinish, result, logger);
-          },
-          abortSignal,
+        if (abortSignal.aborted) {
+          return abort() as TStepOutput;
+        }
+
+        // Process the stream (unified for V1/V2)
+        const { tripwireChunk } = await processAgentStream({
+          fullStream,
+          isV2Model,
+          pubsub,
+          runId,
+          toolData,
+          logger,
+          writer,
+          streamFormat,
         });
-        fullStream = legacyResult.fullStream;
+
+        // Handle tripwire if detected
+        if (tripwireChunk) {
+          throw createTripWireFromChunk(tripwireChunk);
+        }
+
+        // Return structured output if available, otherwise return text
+        if (structuredResult !== null) {
+          return structuredResult as TStepOutput;
+        }
+
+        return {
+          text: await textPromise,
+        } as TStepOutput;
+      } finally {
+        cleanup?.();
       }
-
-      if (abortSignal.aborted) {
-        return abort() as TStepOutput;
-      }
-
-      // Process the stream (unified for V1/V2)
-      const { tripwireChunk } = await processAgentStream({
-        fullStream,
-        isV2Model,
-        pubsub,
-        runId,
-        toolData,
-        logger,
-        writer,
-        streamFormat,
-      });
-
-      // Handle tripwire if detected
-      if (tripwireChunk) {
-        throw createTripWireFromChunk(tripwireChunk);
-      }
-
-      // Return structured output if available, otherwise return text
-      if (structuredResult !== null) {
-        return structuredResult as TStepOutput;
-      }
-
-      return {
-        text: await textPromise,
-      } as TStepOutput;
     },
     component: 'AGENT',
   };
@@ -815,8 +830,8 @@ function createStepFromProcessor<TProcessorId extends string>(
     outputSchema: toStandardSchema(ProcessorStepOutputSchema) as StandardSchemaWithJSON<
       z.infer<typeof ProcessorStepOutputSchema>
     >,
-    execute: async ({ inputData, requestContext, outputWriter, ...obsFields }) => {
-      const observabilityContext = resolveObservabilityContext(obsFields);
+    execute: async ({ inputData, requestContext, outputWriter, tracing, tracingContext, loggerVNext, metrics }) => {
+      const observabilityContext = resolveObservabilityContext({ tracing, tracingContext, loggerVNext, metrics });
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
       // we need access to all possible properties
@@ -1998,7 +2013,7 @@ export class EventedRun<
       status: 'running',
       value: {},
       context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
-      requestContext: requestContext.toJSON(),
+      requestContext: withoutAuthToken(requestContext.toJSON()),
       activePaths: [],
       activeStepsPath: {},
       suspendedPaths: {},
@@ -2136,7 +2151,7 @@ export class EventedRun<
       status: 'running',
       value: {},
       context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
-      requestContext: requestContext.toJSON(),
+      requestContext: withoutAuthToken(requestContext.toJSON()),
       activePaths: [],
       activeStepsPath: {},
       suspendedPaths: {},
@@ -2446,7 +2461,13 @@ export class EventedRun<
 
     // Check if workflow is suspended before proceeding
     if (snapshot.status !== 'suspended') {
-      throw new Error('This workflow run was not suspended');
+      throw new MastraError({
+        id: 'WORKFLOW_RUN_NOT_SUSPENDED',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: 'This workflow run was not suspended',
+        details: { workflowId: this.workflowId, runId: this.runId, status: snapshot.status },
+      });
     }
 
     // Resolve label to step path if provided
@@ -2522,8 +2543,9 @@ export class EventedRun<
     }
 
     const resumePath = snapshot.suspendedPaths?.[steps[0]!] as any;
-    // Start with the snapshot's request context (old values)
-    const requestContextObj = snapshot.requestContext ?? {};
+    // Start with the snapshot's request context (old values). Rows written before the
+    // auth token was stripped may still hold one; never restore a stale bearer token.
+    const requestContextObj = withoutAuthToken(snapshot.requestContext ?? {});
     const requestContext = new RequestContext();
 
     // First, set values from the snapshot
