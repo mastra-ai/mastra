@@ -5,11 +5,17 @@ import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import { useParams } from 'react-router';
 
 import { useFactoryProjectQuery, useSetFactoryModelScopeMutation } from '../../../../hooks/useFactoryDefaultModel';
+import type { FactoryModelScope } from '../../workspaces/services/github';
 
-const MODEL_SCOPE_LABELS = {
+const MODEL_SCOPE_LABELS: Record<FactoryModelScope, string> = {
+  hybrid: 'Personal for sessions, Factory for work items',
   factory: 'Factory model and credentials',
   user: "Each user's model and credentials",
-} as const;
+};
+
+function isModelScope(value: string): value is FactoryModelScope {
+  return value in MODEL_SCOPE_LABELS;
+}
 
 export function FactoryModelScopeSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -22,7 +28,7 @@ export function FactoryModelScopeSection() {
   const error = setModelScope.error ?? projectQuery.error;
 
   const saveModelScope = (value: string) => {
-    if (value !== 'factory' && value !== 'user') return;
+    if (!isModelScope(value)) return;
     if (value === modelScope) return;
     setModelScope.mutate(value);
   };
@@ -33,8 +39,8 @@ export function FactoryModelScopeSection() {
       description={
         <>
           <span>
-            Factory: sessions use only organization credentials and start on the Factory default model. User: each
-            session uses only its owner's credentials and starts on the owner's default model. Changing the scope never
+            Hybrid: sessions use their owner's credentials and default model, while work items use organization
+            credentials and the Factory default. Factory and User apply one of those to both. Changing the scope never
             replaces a model a thread already selected.
           </span>
           {error && (
@@ -60,6 +66,7 @@ export function FactoryModelScopeSection() {
             </Txt>
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="hybrid">{MODEL_SCOPE_LABELS.hybrid}</SelectItem>
             <SelectItem value="factory">{MODEL_SCOPE_LABELS.factory}</SelectItem>
             <SelectItem value="user">{MODEL_SCOPE_LABELS.user}</SelectItem>
           </SelectContent>

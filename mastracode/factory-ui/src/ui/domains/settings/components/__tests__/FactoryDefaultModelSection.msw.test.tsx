@@ -65,6 +65,39 @@ async function pickModel(user: ReturnType<typeof userEvent.setup>, modelId: stri
 }
 
 describe('FactoryDefaultModelSection', () => {
+  it('stays available in a hybrid Factory and says it drives work items', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
+        HttpResponse.json({
+          project: { id: 'fp-1', name: 'Mastra', defaultModelId: 'openai/gpt-5', modelScope: 'hybrid' },
+        }),
+      ),
+    );
+
+    renderSection();
+
+    expect(
+      await screen.findByText(
+        "Work items (triage, board runs) start on this model and run on organization credentials. Interactive sessions start on each owner's personal default instead.",
+      ),
+    ).toBeInTheDocument();
+    const combobox = screen.getByRole('combobox');
+    await waitFor(() => expect(combobox).toBeEnabled());
+    expect(combobox).toHaveTextContent('GPT-5');
+  });
+
+  it('keeps the Factory-run copy outside hybrid scope', async () => {
+    stubProject('openai/gpt-5');
+
+    renderSection();
+
+    expect(
+      await screen.findByText(
+        "Factory runs (triage, board work items) start on this model and use the Factory memory settings. Your personal defaults don't apply to them.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it('shows the saved default model and offers no way to clear it', async () => {
     stubProject('anthropic/claude-sonnet-4-5');
     const user = userEvent.setup();

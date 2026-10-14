@@ -49,7 +49,7 @@ describe('ProjectRoutes', () => {
     const created = (await createdResponse.json()) as {
       project: { id: string; name: string; description: string; modelScope: string };
     };
-    expect(created.project).toMatchObject({ name: 'Platform', description: 'Core services', modelScope: 'factory' });
+    expect(created.project).toMatchObject({ name: 'Platform', description: 'Core services', modelScope: 'hybrid' });
 
     const listed = (await (await app.request('/web/factory/projects')).json()) as { projects: Array<{ id: string }> };
     expect(listed.projects.map(project => project.id)).toEqual([created.project.id]);
@@ -152,13 +152,45 @@ describe('ProjectRoutes', () => {
     expect(denied.status).toBe(403);
     expect(await denied.json()).toMatchObject({ error: 'forbidden' });
     expect(isOrganizationAdmin).toHaveBeenCalledWith('org-1', 'member');
-    expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('factory');
+    expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('hybrid');
 
     expect((await patch({ name: 'Renamed' })).status).toBe(200);
 
     isOrganizationAdmin.mockResolvedValue(true);
     expect((await patch({ modelScope: 'user' })).status).toBe(200);
     expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('user');
+
+    isOrganizationAdmin.mockResolvedValue(false);
+    expect((await patch({ modelScope: 'hybrid' })).status).toBe(403);
+    expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('user');
+
+    isOrganizationAdmin.mockResolvedValue(true);
+    expect((await patch({ modelScope: 'hybrid' })).status).toBe(200);
+    expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('hybrid');
+  });
+
+  it('creates a project in the requested model scope and rejects unknown scopes', async () => {
+    const seed = await createFactoryStorageForTests();
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, projectRoutes(seed));
+    const create = (body: Record<string, unknown>) =>
+      app.request('/web/factory/projects', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    const created = await create({ name: 'Personal', modelScope: 'user' });
+    expect(created.status).toBe(201);
+    const { project } = (await created.json()) as { project: { id: string; modelScope: string } };
+    expect(project.modelScope).toBe('user');
+    expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('user');
+
+    expect((await create({ name: 'Bad', modelScope: 'org' })).status).toBe(400);
   });
 
   describe('apply default model', () => {

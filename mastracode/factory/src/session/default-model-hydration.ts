@@ -1,5 +1,6 @@
 import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
+import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { SourceControlSessionLookup } from './factory-session.js';
@@ -33,7 +34,7 @@ async function applyDefaultModel(session: DefaultModelApplicableSession, modelId
 export interface DefaultModelHydrationDependencies {
   sourceControl: Pick<SourceControlSessionLookup, 'getBySessionId'>;
   projects: Pick<FactoryProjectsStorage, 'getById'>;
-  workItems: Pick<WorkItemsStorage, 'findActiveRunBindingByThread'>;
+  workItems: Pick<WorkItemsStorage, 'findRunBindingByThread'>;
   modelDefaults: Pick<ModelDefaultsStorage, 'get'>;
 }
 
@@ -61,13 +62,23 @@ export async function hydrateSessionDefaultModel(
       await clearFactoryIdentity();
       return;
     }
-    const project = await projects.getById({ id: sourceSession.factoryProjectId });
-    if (!project) {
+    // Historical thread membership keeps completed work items on Factory billing in hybrid scope.
+    const threadId = session.thread.getId();
+    const binding = threadId
+      ? await workItems.findRunBindingByThread({
+          orgId: sourceSession.orgId,
+          threadId,
+          resourceId,
+          sessionId: resourceId,
+          rejectAmbiguous: true,
+        })
+      : null;
+    const project = await projects.getById({ id: binding?.factoryProjectId ?? sourceSession.factoryProjectId });
+    if (!project || project.orgId !== sourceSession.orgId) {
       await clearFactoryIdentity();
       return;
     }
-
-    const modelScope = project.modelScope === 'user' ? 'user' : 'factory';
+    const modelScope = effectiveModelScope(project.modelScope, binding ? 'run' : 'session');
     await session.state.set({
       factoryOrgId: sourceSession.orgId,
       factoryModelScope: modelScope,
@@ -80,18 +91,7 @@ export async function hydrateSessionDefaultModel(
       credentialScope: modelScope,
     });
 
-    const threadId = session.thread.getId();
-    if (
-      threadId &&
-      (await workItems.findActiveRunBindingByThread({
-        orgId: sourceSession.orgId,
-        threadId,
-        resourceId,
-        sessionId: resourceId,
-      }))
-    ) {
-      return;
-    }
+    if (binding) return;
     if (threadId && (await session.thread.firstUserMessage({ threadId }))) return;
 
     const scopedModelId =

@@ -2895,6 +2895,27 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return row ? toBinding(row) : null;
   }
 
+  /** Historical thread membership for model/billing policy only; never grants active agent authority. */
+  async findRunBindingByThread(input: {
+    orgId: string;
+    threadId: string;
+    resourceId: string;
+    sessionId: string;
+    rejectAmbiguous?: boolean;
+  }): Promise<FactoryRunBindingRecord | null> {
+    const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
+      org_id: input.orgId,
+      thread_id: input.threadId,
+      resource_id: input.resourceId,
+      session_id: input.sessionId,
+    });
+    const projectCount = new Set(rows.map(row => row.factory_project_id)).size;
+    if (projectCount > 1 && input.rejectAmbiguous) throw new Error('Factory session has ambiguous run bindings.');
+    if (projectCount !== 1) return null;
+    const row = rows.sort((left, right) => right.created_at.getTime() - left.created_at.getTime())[0];
+    return row ? toBinding(row) : null;
+  }
+
   /**
    * The active binding a Factory session is serving, keyed by the session
    * alone so it resolves before the session has a live thread (e.g. when the

@@ -3,8 +3,12 @@ import { queryOptions, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys, type AvailableModelsFilter } from '../api/keys';
-
-export type AvailableModelsTarget = AvailableModelsFilter;
+import {
+  fetchSessionModelCatalog,
+  sessionModelCatalogQueryOptions,
+  type SessionModelCatalog,
+  type SessionModelCatalogTarget,
+} from './useSessionModelCatalog';
 
 /** One selectable model from `GET /web/config/models` (credentialed providers only). */
 export interface AvailableModelOption {
@@ -15,37 +19,49 @@ export interface AvailableModelOption {
   reasoningOptions?: ModelReasoningOption[];
 }
 
-/**
- * Session-independent model catalog for settings pickers (Factory default,
- * personal default, OM models). Server-filtered to providers with a
- * credential, so pickers never offer models that cannot run. Pass a Factory
- * in `factoryProjectId` to narrow the catalog to its credential scope, or
- * `scope: 'user'` for the caller's own credentials (personal defaults).
- */
-export function availableModelsQueryOptions(baseUrl: string, options?: AvailableModelsTarget) {
+export interface AvailableModelsTarget extends AvailableModelsFilter {
+  enabled?: boolean;
+}
+
+async function fetchSettingsModels(baseUrl: string, target?: AvailableModelsTarget) {
+  const query =
+    target?.scope === 'user'
+      ? '?scope=user'
+      : target?.factoryProjectId
+        ? `?factoryId=${encodeURIComponent(target.factoryProjectId)}`
+        : '';
+  const res = await fetch(`${baseUrl}/web/config/models${query}`, {
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
+  if (!res.ok) throw new Error(`Failed to load models (${res.status})`);
+  const data = (await res.json()) as { models: AvailableModelOption[] };
+  return data.models;
+}
+
+/** Settings catalogs use the Factory's scope or the caller's own personal credentials. */
+export function availableModelsQueryOptions(baseUrl: string, target?: AvailableModelsTarget) {
   return queryOptions({
-    queryKey: queryKeys.availableModels(options),
-    queryFn: async () => {
-      const query =
-        options?.scope === 'user'
-          ? '?scope=user'
-          : options?.factoryProjectId
-            ? `?factoryId=${encodeURIComponent(options.factoryProjectId)}`
-            : '';
-      const res = await fetch(`${baseUrl}/web/config/models${query}`, {
-        credentials: 'include',
-        headers: { Accept: 'application/json' },
-      });
-      if (!res.ok) throw new Error(`Failed to load models (${res.status})`);
-      const data = (await res.json()) as { models: AvailableModelOption[] };
-      return data.models;
-    },
+    queryKey: queryKeys.availableModels(target && { factoryProjectId: target.factoryProjectId, scope: target.scope }),
+    queryFn: () => fetchSettingsModels(baseUrl, target),
   });
 }
 
-export function useAvailableModelsQuery(options?: AvailableModelsTarget) {
-  const { baseUrl } = useApiConfig();
-  return useQuery(availableModelsQueryOptions(baseUrl, options));
+export function useAvailableModelsQuery(target?: AvailableModelsTarget) {
+  const { baseUrl, client } = useApiConfig();
+  const session: SessionModelCatalogTarget | undefined =
+    target?.resourceId && target.threadId
+      ? { ...target, resourceId: target.resourceId, threadId: target.threadId }
+      : undefined;
+  const queryKey = session
+    ? sessionModelCatalogQueryOptions(client, session).queryKey
+    : availableModelsQueryOptions(baseUrl, target).queryKey;
+  return useQuery<AvailableModelOption[] | SessionModelCatalog, Error, AvailableModelOption[]>({
+    queryKey,
+    queryFn: session ? () => fetchSessionModelCatalog(client, session) : () => fetchSettingsModels(baseUrl, target),
+    enabled: target?.enabled !== false,
+    select: data => (Array.isArray(data) ? data : data.models),
+  });
 }
 
 /** Catalog reachable with the caller's own credentials, for personal defaults. */
@@ -56,8 +72,8 @@ export function usePersonalAvailableModelsQuery() {
 
 export function useModelReasoningOptions(
   modelId: string | undefined,
-  options?: AvailableModelsTarget,
+  target?: AvailableModelsTarget,
 ): ModelReasoningOption[] | undefined {
-  const { data: models } = useAvailableModelsQuery(options);
+  const { data: models } = useAvailableModelsQuery(target);
   return models?.find(model => model.id === modelId)?.reasoningOptions;
 }
