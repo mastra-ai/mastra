@@ -206,10 +206,10 @@ describe('QUERY_SPANS', () => {
       issues: [{ code: 'invalid_request', path: ['orderBy', 0, 'field'] }],
     });
 
-    const tooWide = strictValidationError({
-      timeRange: { from: '2026-01-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+    const emptyRange = strictValidationError({
+      timeRange: { from: '2026-09-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
     });
-    expect(getDeclaredErrorSchema(422).parse(tooWide?.body)).toMatchObject({
+    expect(getDeclaredErrorSchema(422).parse(emptyRange?.body)).toMatchObject({
       issues: [{ code: 'invalid_request', path: ['timeRange'] }],
     });
   });
