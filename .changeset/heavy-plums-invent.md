@@ -1,8 +1,5 @@
 ---
 '@mastra/core': minor
-'@mastra/client-js': patch
-'@mastra/server': patch
-'mastra': patch
 ---
 
 Added `queueSignal()` to `Agent` and AgentController `Session`. It queues a typed signal behind the active run like `queueMessage()`, but keeps the signal type, tag, and attributes instead of turning it into a plain user message.

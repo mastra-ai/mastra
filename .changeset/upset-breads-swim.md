@@ -1,8 +1,5 @@
 ---
 '@mastra/client-js': minor
-'@mastra/server': patch
-'@mastra/core': patch
-'mastra': patch
 ---
 
 Added `agent.queueSignal()` for queuing a typed signal behind the active thread run.
