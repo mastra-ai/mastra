@@ -176,7 +176,7 @@ export function ChatSessionBoundary({
   threadId?: string;
   deferUntilMessagesReady?: boolean;
 }) {
-  const { resourceId, resourceReady, projectPath, baseUrl } = useChatSessionContext();
+  const { resourceId, resourceReady, projectPath, baseUrl, sessionThreadId } = useChatSessionContext();
   const messagesQuery = useAgentControllerThreadMessages({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -184,6 +184,7 @@ export function ChatSessionBoundary({
     threadId,
     baseUrl,
     enabled: resourceReady && Boolean(threadId),
+    isSessionThread: Boolean(threadId) && threadId === sessionThreadId,
   });
   const messages = {
     threadId,

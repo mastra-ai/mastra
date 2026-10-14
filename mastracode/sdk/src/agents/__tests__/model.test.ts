@@ -267,7 +267,7 @@ describe('resolveModel', () => {
     process.env = { ...originalEnv };
   });
 
-  it('discovers custom and Copilot providers through the MastraCode gateway', async () => {
+  it('lists only custom providers under the MastraCode gateway namespace', async () => {
     mockLoadSettings.mockReturnValue({
       customProviders: [
         {
@@ -279,8 +279,6 @@ describe('resolveModel', () => {
       ],
       memoryGateway: {},
     });
-    mockGetCopilotModelCatalog.mockResolvedValueOnce([{ id: 'gpt-4.1' }] as any);
-
     const gateway = createMastraCodeGateway({
       mastraGatewayBaseUrl: 'https://gateway-api.mastra.ai',
       routeThroughMastraGateway: false,
@@ -289,20 +287,16 @@ describe('resolveModel', () => {
     expect(gateway).toBeInstanceOf(MastraCodeGateway);
     expect(gateway.id).toBe('mastracode');
 
-    await expect(gateway.fetchProviders()).resolves.toMatchObject({
-      'acme-models': {
-        name: 'Acme Models',
-        url: 'https://llm.acme.dev/v1',
-        gateway: 'mastracode',
-        models: ['reasoner-v1'],
-      },
-      'github-copilot': {
-        name: 'GitHub Copilot',
-        gateway: 'mastracode',
-        models: ['gpt-4.1'],
-      },
+    const providers = await gateway.fetchProviders();
+    // Kimi augments models.dev `kimi-code-plan-cn`, and Copilot has its own
+    // gateway, so neither surfaces as `mastracode/<provider>/<model>`.
+    expect(Object.keys(providers)).toEqual(['acme-models']);
+    expect(providers['acme-models']).toMatchObject({
+      name: 'Acme Models',
+      url: 'https://llm.acme.dev/v1',
+      gateway: 'mastracode',
+      models: ['reasoner-v1'],
     });
-    expect(mockGetCopilotModelCatalog).toHaveBeenCalled();
   });
 
   it('claims models.dev providers authenticated by the injected credential store', () => {

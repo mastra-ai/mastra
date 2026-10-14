@@ -117,6 +117,8 @@ The CLI can infer platform credentials from your project environment. See the [`
 
 You can query exported feedback over HTTP. See the [Feedback API](/docs/mastra-platform/api#feedback-api) for its current status, regional endpoints, authentication, project scoping, and supported query parameters such as `traceId` and `environment`.
 
+You can query exported metrics over HTTP, with `MastraClient`, or with `mastra api metric`. See the [Metrics API](/docs/mastra-platform/api#metrics-api) for regional endpoints, authentication, project scoping, and supported endpoints.
+
 ## Import existing traces
 
 Use `mastra traces import` to move existing trace history from a supported observability provider into an existing Mastra Platform project. The command reads and validates complete traces at the source, converts them into Mastra spans, then uses a shared workflow for preparation, upload, resume, and verification.

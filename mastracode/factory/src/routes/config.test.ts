@@ -415,6 +415,23 @@ describe('provider key routes with a tenant', () => {
     expect(await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic')).toBeUndefined();
   });
 
+  it('stores a Kimi key under the credential id model resolution reads', async () => {
+    const res = await buildApp(userA).request('/web/config/providers/kimi-code-plan-cn/key', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ key: 'sk-kimi' }),
+    });
+    expect(res.status).toBe(200);
+
+    expect(await seed.credentials.getCredential({ orgId: 'org1', userId: 'user-a' }, 'kimi-for-coding')).toEqual({
+      type: 'api_key',
+      key: 'sk-kimi',
+    });
+    expect(
+      await seed.credentials.getCredential({ orgId: 'org1', userId: 'user-a' }, 'kimi-code-plan-cn'),
+    ).toBeUndefined();
+  });
+
   it('does not materialize OM models when a provider key is connected', async () => {
     await putKey(buildApp(userA), { key: 'sk-mine' });
     expect(await seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).toBeNull();

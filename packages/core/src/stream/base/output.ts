@@ -334,6 +334,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     totalTokens: undefined,
   };
   #usageCountMissing = new Set<(typeof primaryUsageCountKeys)[number]>();
+  /**
+   * Usage of the most recently completed step. Kept apart from `#bufferedSteps`
+   * because goal truncation clears that buffer while usage keeps accumulating.
+   */
+  #lastStepUsage: LLMStepResult<OUTPUT>['usage'] | undefined = undefined;
   #finishUsageIsTotal = false;
   #tripwire: StepTripwireData | undefined = undefined;
   #wasSuspended = false;
@@ -991,7 +996,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   ...otherMetadata,
                   modelId:
                     (chunk.payload.metadata?.modelId as string) || (chunk.payload.metadata?.model as string) || '',
-                  messages: chunk.payload.messages?.nonUser || [],
+                  messages: (chunk.payload as any)?._durableResponseMessages ?? chunk.payload.messages?.nonUser ?? [],
                   dbMessages: self.messageList.get.response.db(),
                   // We have to cast this until messageList can take generics also and type metadata, it was too
                   // complicated to do this in this PR, it will require a much bigger change.
@@ -1006,6 +1011,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               });
 
               self.#bufferedSteps.push(stepResult);
+              self.#lastStepUsage = stepResult.usage;
 
               // `text` is excluded from a rejected attempt via the empty `stepText`
               // above; the structured object needs the same treatment. Drop the
@@ -1189,6 +1195,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   messages: messageList.get.response.aiV5.model(),
                   uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
                 };
+              } else if (self.#bufferedSteps.length > 0) {
+                // Durable finish chunks carry no model metadata; the last step's response
+                // already holds the run's response messages and model id (#26780).
+                response = { ...self.#bufferedSteps[self.#bufferedSteps.length - 1]!.response };
               }
 
               if (self.#finishUsageIsTotal) {
@@ -2176,6 +2186,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #createAbortedOnFinishPayload(): MastraOnFinishCallbackArgs<OUTPUT> {
     // Capture only text buffered before the abort event. Providers may continue producing
     // chunks after cancellation, but those chunks cannot extend this terminal snapshot.
+    const emptyUsage = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
+    // Steps that completed before the abort were already billed by the provider, so keep their usage.
     return {
       finishReason: 'aborted',
       text: this.#bufferedText.join(''),
@@ -2190,13 +2202,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       dynamicToolCalls: [],
       dynamicToolResults: [],
       content: [],
-      usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+      usage: this.#lastStepUsage ?? emptyUsage,
       warnings: [],
       providerMetadata: undefined,
       request: {},
       response: {},
       steps: [],
-      totalUsage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+      totalUsage: this.#lastStepUsage ? this.#getTotalUsage() : emptyUsage,
       object: undefined as OUTPUT,
     };
   }
@@ -2395,6 +2407,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       request: this.#request,
       usageCount: this.#usageCount,
       usageCountMissing: [...this.#usageCountMissing],
+      lastStepUsage: this.#lastStepUsage,
       tripwire: this.#tripwire,
       wasSuspended: this.#wasSuspended,
       messageList: this.messageList.serialize(),
@@ -2442,6 +2455,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     }
 
     this.#tripwire = state.tripwire;
+    this.#lastStepUsage = state.lastStepUsage ?? state.bufferedSteps?.at(-1)?.usage;
     this.#wasSuspended = state.wasSuspended ?? state.status === 'suspended';
     this.messageList = this.messageList.deserialize(state.messageList);
     // Buffered steps hold only the IDs of the response messages they had seen;
