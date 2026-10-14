@@ -44,8 +44,8 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const factories = useFactoriesQuery().data ?? [];
   const activeFactory = factories.find(factory => factory.id === factoryId);
   const repositoryIds = activeFactory?.repositories.map(repository => repository.projectRepositoryId) ?? [];
-  const sessions = useGlobalSearchSessions(repositoryIds);
   const searchableFactoryId = repositoryIds.length > 0 ? factoryId : undefined;
+  const sessions = useGlobalSearchSessions(searchableFactoryId);
   const workItems = useGlobalSearchWorkItems(searchableFactoryId);
   const intake = useGlobalSearchIntake(factoryId, activeFactory?.repositories ?? []);
   const toastFailureAfterPaletteCloses = (message: string) => toast.error(message);
@@ -167,12 +167,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
             <GlobalSearchSessionResults title="User Sessions" results={sessionGroups.user} onSelect={selectPath} />
           )}
           {isSessionScope(activeScope) && hasRepositories && (
-            <GlobalSearchSessionsStatus
-              pending={sessionsPending}
-              failedCount={sessions.failedCount}
-              allFailed={sessions.allFailed}
-              onRetry={sessions.retry}
-            />
+            <GlobalSearchSessionsStatus pending={sessionsPending} failed={sessions.failed} onRetry={sessions.retry} />
           )}
           {isWorkItemScope(activeScope) && hasRepositories && (
             <GlobalSearchWorkItemsStatus

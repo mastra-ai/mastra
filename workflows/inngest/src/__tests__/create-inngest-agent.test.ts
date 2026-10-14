@@ -1761,6 +1761,37 @@ describe('InngestAgent parity surface', () => {
       }
     });
 
+    it('rejects a resume that adds scopes without closing the parked run stream', async () => {
+      const durableAgent = makeAgentWithSnapshot('resume-scope-conflict', {
+        value: {},
+        context: { 'agentic-loop': nestedSuspension },
+        status: 'suspended',
+        suspendedPaths: { 'agentic-loop': [0] },
+        resumeLabels: {},
+        requestContext: { mastra__scopes: ['org:a'] },
+      });
+      const sendSpy = stubInngestSend();
+      const publishSpy = vi.spyOn(durableAgent.pubsub, 'publish');
+      const runId = 'resume-scope-conflict-run';
+
+      try {
+        await expect(
+          durableAgent.resume(
+            runId,
+            { approved: true },
+            { requestContext: new RequestContext([['mastra__scopes', ['org:b']]]) },
+          ),
+        ).rejects.toMatchObject({ id: 'AGENT_SCOPES_CONFLICT' });
+        expect(sendSpy).not.toHaveBeenCalled();
+        const errorEvents = publishSpy.mock.calls.filter(([, event]: any[]) => event?.type === 'error');
+        expect(errorEvents).toEqual([]);
+        expect(globalRunRegistry.get(runId)).toBeUndefined();
+      } finally {
+        publishSpy.mockRestore();
+        sendSpy.mockRestore();
+      }
+    });
+
     it('rejects resume() when dispatching the resume event fails', async () => {
       // Dispatch used to be fire-and-forget: resume() resolved while the run
       // stayed parked, and the failure only ever showed up as a stream error.

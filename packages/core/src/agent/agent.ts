@@ -41,11 +41,17 @@ import { MastraLLMVNext } from '../llm/model/model.loop';
 import { mergeProviderOptions } from '../llm/model/provider-options';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../llm/model/router';
-import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
+import type {
+  MastraLanguageModel,
+  MastraLegacyLanguageModel,
+  MastraModelConfig,
+  WidenedMastraModelConfig,
+} from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import { AGENTIC_EXECUTION_WORKFLOW_ID, AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
 import { networkLoop } from '../loop/network';
 import { getRunStreamSlot, getScopeStreamSlot } from '../loop/shared/stream-until-idle-helpers';
+import type { AgentLoopResumeClaim } from '../loop/types';
 // `Mastra` is imported type-only here: a runtime import would create an ESM
 // init cycle (agent → mastra → agent/durable → agent) that breaks
 // `class DurableAgent extends Agent` with a TDZ error. The constructor is read
@@ -107,6 +113,7 @@ import {
   RequestContext,
   MASTRA_INHERITED_MEMORY_KEY,
   MASTRA_RESOURCE_ID_KEY,
+  MASTRA_SCOPES_KEY,
   MASTRA_THREAD_ID_KEY,
   MASTRA_VERSIONS_KEY,
 } from '../request-context';
@@ -196,6 +203,14 @@ import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMes
 import { createStoredMessageLoader } from './message-list/memory-message-refs';
 import { buildResumeSpanInput } from './resume-span-input';
 import { SaveQueueManager } from './save-queue';
+import {
+  applyResolvedAgentScopes,
+  parseAgentScope,
+  resolveAgentScopes,
+  setRunAgentScopes,
+  withoutIdentityAgentScopes,
+} from './scopes';
+import type { AgentScopesSnapshot, ResolvedAgentScopes } from './scopes';
 import type { CreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import type { SubAgent, SubAgentToolCall, SubAgentToolResult } from './subagent';
@@ -289,6 +304,18 @@ interface StandaloneDurableWrapper {
 const RESUME_SUSPEND_DURABILITY_TIMEOUT_MS = 30_000;
 /** Upper bound for the exponential poll backoff inside that wait. */
 const RESUME_SUSPEND_DURABILITY_MAX_POLL_INTERVAL_MS = 500;
+
+/**
+ * Agentic-loop runs currently being resumed in this process, for stores that
+ * cannot claim a run atomically. Keyed by runId.
+ */
+const inFlightUnclaimedResumes = new Set<string>();
+
+/**
+ * How long a resume claim may stay `pending` (claimed but not started) before a later resume
+ * treats it as abandoned by a process that died, and takes the suspension over.
+ */
+export const AGENT_RESUME_CLAIM_STALE_MS = 60_000;
 
 const createSubAgentInputSchema = ({ withResultRefs = false }: { withResultRefs?: boolean } = {}) =>
   z.object({
@@ -434,7 +461,7 @@ function logPendingSubAgentToolCalls(
 
 type ModelFallbacks = {
   id: string;
-  model: DynamicArgument<MastraModelConfig>;
+  model: DynamicArgument<WidenedMastraModelConfig>;
   maxRetries: number;
   maxRetriesConfigured: boolean;
   enabled: boolean;
@@ -443,7 +470,7 @@ type ModelFallbacks = {
   headers?: DynamicArgument<Record<string, string>>;
 }[];
 
-type ResolvedModelSelection = MastraModelConfig | ModelFallbacks;
+type ResolvedModelSelection = WidenedMastraModelConfig | ModelFallbacks;
 
 type ProcessorLoadedToolsProvider = {
   getLoadedToolsForRequestContext?: (args: {
@@ -697,6 +724,26 @@ function hasOnDemandSkillDiscoveryProcessor(processors: InputProcessorOrWorkflow
   return hasConfiguredProcessor(processors, processor => processor.providesSkillDiscovery === 'on-demand');
 }
 
+function alreadyClaimedResumeError({
+  agentName,
+  method,
+  runId,
+  toolCallId,
+}: {
+  agentName: string;
+  method: string;
+  runId: string;
+  toolCallId?: string;
+}): MastraError {
+  return new MastraError({
+    id: 'AGENT_RESUME_ALREADY_CLAIMED',
+    domain: ErrorDomain.AGENT,
+    category: ErrorCategory.USER,
+    text: `Agent "${agentName}" ${method}() cannot resume run "${runId}" because another resume of it already claimed it.`,
+    details: { agentName, method, runId, ...(toolCallId !== undefined ? { toolCallId } : {}) },
+  });
+}
+
 /**
  * Creates an AI agent that generates and streams responses, with optional tools,
  * memory, and voice capabilities.
@@ -801,6 +848,7 @@ export class Agent<
   #tools: DynamicArgument<TTools, TRequestContext>;
   #hooks?: ToolHooks;
   #scorers: DynamicArgument<MastraScorers, TRequestContext>;
+  #scopes?: DynamicArgument<string[], TRequestContext>;
   #agents: DynamicArgument<Record<string, SubAgent<string, TRequestContext>>, TRequestContext>;
   #voice: DynamicArgument<MastraVoice, TRequestContext>;
   #agentChannels: AgentChannels | null = null;
@@ -954,6 +1002,7 @@ export class Agent<
       });
     }
 
+    this.#scopes = config.scopes;
     this.#scorers = config.scorers || ({} as MastraScorers);
 
     // Validate statically-configured scoring filters at definition time so a
@@ -1253,6 +1302,20 @@ export class Agent<
   __getSubscribePendingSignals(): (runId: string, listener: () => void) => () => void {
     const pubsub = this.getPubSub();
     return (runId, listener) => agentThreadStreamRuntime.subscribePendingSignals(runId, listener, pubsub);
+  }
+
+  /** @internal Read one JSON-safe request-context value captured in a suspended run snapshot. */
+  async __getSuspendedRunRequestContextValue({ runId, key }: { runId: string; key: string }): Promise<unknown> {
+    try {
+      const snapshot = await this.#loadAgenticLoopSnapshotOrThrow({
+        runId,
+        method: '__getSuspendedRunRequestContextValue',
+      });
+      return snapshot.requestContext?.[key];
+    } catch (error) {
+      if (error instanceof MastraError && error.id === 'AGENT_RESUME_NO_SNAPSHOT_FOUND') return undefined;
+      throw error;
+    }
   }
 
   /**
@@ -2888,6 +2951,22 @@ export class Agent<
     return workflowRecord;
   }
 
+  /**
+   * Resolves the agent's configured `scopes` for a request.
+   * Per-call `scopes` and the reserved `mastra__scopes` request-context key are not included.
+   */
+  async getScopes({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}): Promise<
+    string[] | undefined
+  > {
+    if (typeof this.#scopes !== 'function') {
+      return this.#scopes;
+    }
+    return this.#scopes({
+      requestContext: requestContext as RequestContext<TRequestContext>,
+      mastra: this.#mastra,
+    });
+  }
+
   async listScorers({
     requestContext = new RequestContext(),
   }: { requestContext?: RequestContext } = {}): Promise<MastraScorers> {
@@ -3169,6 +3248,7 @@ export class Agent<
         getDefaultGenerateOptionsLegacy: this.getDefaultGenerateOptionsLegacy.bind(this),
         getDefaultStreamOptionsLegacy: this.getDefaultStreamOptionsLegacy.bind(this),
         hasOwnMemory: this.hasOwnMemory.bind(this),
+        getScopes: this.getScopes.bind(this),
         getInstructions: async (options: { requestContext: RequestContext }) => {
           const result = await this.getInstructions(options);
           return result;
@@ -3749,14 +3829,19 @@ export class Agent<
   /** @internal */
   public async __getModelAndModelList({
     requestContext = new RequestContext(),
+    model: modelOverride,
   }: {
     requestContext?: RequestContext;
+    /** Per-call model override (`stream(msgs, { model })`). */
+    model?: Parameters<Agent['resolveModelSelection']>[0];
   } = {}): Promise<{
     model: MastraLanguageModel | MastraLegacyLanguageModel;
     modelList: Array<AgentModelManagerConfig> | null;
     fallbackTimeouts: Array<ModelFallbackSettings['timeout'] | undefined>;
   }> {
-    const resolvedSelection = await this.resolveModelSelection(this.model, requestContext);
+    let selectionInput: Parameters<Agent['resolveModelSelection']>[0] = this.model;
+    if (modelOverride) selectionInput = modelOverride;
+    const resolvedSelection = await this.resolveModelSelection(selectionInput, requestContext);
     const model = await this.resolveModelFromSelection(resolvedSelection, requestContext);
     if (!Array.isArray(resolvedSelection)) {
       return { model, modelList: null, fallbackTimeouts: [] };
@@ -4696,6 +4781,8 @@ export class Agent<
         vectorMessageSearch: '',
         memoryConfig,
         requestContext,
+        returnEmptyIfThreadMissing: true,
+        runId,
       }).then(result => {
         if (!runMessages?.length) return result.messages;
         const seen = new Set(result.messages.map(m => m.id));
@@ -5086,12 +5173,16 @@ export class Agent<
     vectorMessageSearch,
     memoryConfig,
     requestContext,
+    returnEmptyIfThreadMissing,
+    runId,
   }: {
     resourceId?: string;
     threadId: string;
     vectorMessageSearch: string;
     memoryConfig?: MemoryConfigInternal;
     requestContext: RequestContext;
+    returnEmptyIfThreadMissing?: boolean;
+    runId?: string;
   }): Promise<{ messages: MastraDBMessage[] }> {
     const memory = await this.getMemory({ requestContext });
     if (!memory) {
@@ -5101,6 +5192,15 @@ export class Agent<
     const threadConfig = memory.getMergedThreadConfig(memoryConfig || {});
     const history = normalizeMessageHistoryConfig(threadConfig.lastMessages, threadConfig.messageHistory);
     if (!history.enabled && !threadConfig.semanticRecall) {
+      return { messages: [] };
+    }
+
+    if (returnEmptyIfThreadMissing && !(await memory.getThreadById({ threadId }))) {
+      this.logger.debug('Skipping processor-loaded tool history (thread does not exist yet)', {
+        agent: this.name,
+        runId,
+        threadId,
+      });
       return { messages: [] };
     }
 
@@ -5509,6 +5609,14 @@ export class Agent<
                   key !== MASTRA_INHERITED_MEMORY_KEY,
               ),
             );
+            // Sub-agents inherit the parent's non-identity scopes (org:, custom) and pick
+            // their own resource/thread, as with the reserved ID keys above.
+            const parentScopes = subAgentRequestContext.get(MASTRA_SCOPES_KEY);
+            if (Array.isArray(parentScopes)) {
+              const inheritedScopes = withoutIdentityAgentScopes(parentScopes);
+              if (inheritedScopes.length > 0) setRunAgentScopes(subAgentRequestContext, inheritedScopes);
+              else subAgentRequestContext.delete(MASTRA_SCOPES_KEY);
+            }
 
             // Expand `contextFromRefs` into the prompt before any hook runs so
             // onDelegationStart and messageFilter see the prompt the sub-agent
@@ -7516,9 +7624,16 @@ export class Agent<
   async #loadAgenticLoopSnapshotOrThrow({ runId, method }: { runId: string; method: string }) {
     const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
     const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
+    let claimedThenFinished = false;
     const existingSnapshot = await waitForSuspendedSnapshot(workflowsStore, 'agentic-loop', runId, {
       missingSnapshotGraceReads: 3,
+      onClaimedRunFinished: () => {
+        claimedThenFinished = true;
+      },
     });
+
+    // The run was claimed by another resume while we waited, then finished and was cleaned up.
+    if (claimedThenFinished) throw alreadyClaimedResumeError({ agentName: this.name, method, runId });
 
     if (!existingSnapshot) {
       const hasStorage = !!workflowsStore;
@@ -7529,7 +7644,7 @@ export class Agent<
         text:
           `Agent "${this.name}" ${method}() could not find a suspended run for runId "${runId}". ` +
           (hasStorage
-            ? `The run may have already completed, never suspended, or the runId is invalid. `
+            ? `The run has already finished (for example, an earlier approval or resume already handled it), never suspended, or the runId is invalid. `
             : `No storage is configured on this Mastra instance, so workflow snapshots can't be persisted. Register the agent on a Mastra instance with persistent storage (e.g. PostgreSQL, LibSQL). See https://mastra.ai/docs/storage. `) +
           `Ensure you are calling ${method}() only with a runId from a currently-suspended run.`,
         details: {
@@ -7762,6 +7877,144 @@ export class Agent<
   }
 
   /**
+   * Claims a suspended agentic-loop run for one resume before the resumed loop starts, so
+   * concurrent approvals/resumes of the same run (double clicks, client retries, two tabs)
+   * cannot both execute the suspended tool. Losers throw `AGENT_RESUME_ALREADY_CLAIMED`.
+   *
+   * Stores that support atomic updates get compare-and-set transitions that hold across
+   * processes, and the resumed run starts from the claimed snapshot. Other stores only get an
+   * in-process guard. The `agentic-loop` row moves:
+   *
+   * - `suspended -> pending` when claimed, stamped with `resumeClaimedAt`.
+   * - `pending -> running` in `claim.start()`, right before the resumed run executes. Only one
+   *   caller can make this move, so only one resume executes the tool.
+   * - back to `suspended` in `claim.release()` when the resume fails before the run executes.
+   *
+   * A claim left `pending` by a process that died before starting or releasing it is abandoned.
+   * Once it is older than `AGENT_RESUME_CLAIM_STALE_MS`, a later resume hands the suspension back
+   * and claims it again. A live claimant that loses the suspension this way fails in `start()`.
+   *
+   * `claim.release()` is idempotent. The loop calls it when the resumed run ends; resume methods
+   * also call it on any failure before or after handing the claim to the loop. It hands the
+   * suspension back to later callers only if the resumed run never started executing.
+   */
+  async #claimSuspendedAgenticLoopRun({
+    snapshot,
+    runId,
+    toolCallId,
+    method,
+  }: {
+    snapshot: WorkflowRunState;
+    runId: string;
+    toolCallId: string | undefined;
+    method: string;
+  }): Promise<AgentLoopResumeClaim> {
+    const throwAlreadyClaimed = (): never => {
+      throw alreadyClaimedResumeError({ agentName: this.name, method, runId, toolCallId });
+    };
+
+    const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
+    const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
+
+    if (!workflowsStore?.supportsConcurrentUpdates()) {
+      if (workflowsStore) {
+        this.logger.warn(
+          `[Agent:${this.name}] - The configured workflow storage does not support concurrent updates, so concurrent ${method}() calls for run ${runId} are only de-duplicated within this process. Resumes arriving at other processes may execute the suspended tool more than once.`,
+        );
+      }
+      if (inFlightUnclaimedResumes.has(runId)) throwAlreadyClaimed();
+      inFlightUnclaimedResumes.add(runId);
+      return {
+        release: async () => {
+          inFlightUnclaimedResumes.delete(runId);
+        },
+      };
+    }
+
+    const claim = () =>
+      workflowsStore.updateWorkflowState({
+        workflowName: AGENTIC_LOOP_WORKFLOW_ID,
+        runId,
+        opts: { status: 'pending', expectedStatus: 'suspended', resumeClaimedAt: Date.now() },
+      });
+
+    let claimed = await claim();
+    if (!claimed) {
+      const current = await workflowsStore.loadWorkflowSnapshot({ workflowName: AGENTIC_LOOP_WORKFLOW_ID, runId });
+      const abandoned =
+        current?.status === 'pending' &&
+        current.timestamp === snapshot.timestamp &&
+        typeof current.resumeClaimedAt === 'number' &&
+        Date.now() - current.resumeClaimedAt >= AGENT_RESUME_CLAIM_STALE_MS;
+      if (!abandoned) throwAlreadyClaimed();
+
+      // Hand the abandoned suspension back, then claim it like any other. If a concurrent caller
+      // re-claimed it in between, this hand-back can only make that caller's `start()` fail; the
+      // single `pending -> running` move still lets at most one resume execute.
+      this.logger.warn(
+        `[Agent:${this.name}] - Taking over resume claim for run ${runId} that was not started within ${AGENT_RESUME_CLAIM_STALE_MS}ms.`,
+      );
+      await workflowsStore.updateWorkflowState({
+        workflowName: AGENTIC_LOOP_WORKFLOW_ID,
+        runId,
+        opts: { status: 'suspended', expectedStatus: 'pending' },
+      });
+      claimed = await claim();
+      if (!claimed) throwAlreadyClaimed();
+    }
+
+    const claimedAt = claimed!.resumeClaimedAt;
+    let claimStatus: 'pending' | 'running' = 'pending';
+    let started = false;
+    let released = false;
+    const release = async () => {
+      if (started || released) return;
+      released = true;
+      try {
+        // Skip when a later resume took this claim over: the suspension is no longer ours.
+        const current = await workflowsStore.loadWorkflowSnapshot({ workflowName: AGENTIC_LOOP_WORKFLOW_ID, runId });
+        if (current?.resumeClaimedAt !== claimedAt) return;
+        await workflowsStore.updateWorkflowState({
+          workflowName: AGENTIC_LOOP_WORKFLOW_ID,
+          runId,
+          opts: { status: 'suspended', expectedStatus: claimStatus },
+        });
+      } catch (error) {
+        this.logger.warn(`[Agent ${this.name}] Failed to release resume claim for run ${runId}`, { error });
+      }
+    };
+
+    // Another resume can claim, run, and re-suspend the run between the validation read and this
+    // claim. Every suspend persist rewrites the snapshot timestamp, so a different timestamp means
+    // this caller claimed a newer suspension than the one it validated.
+    if (claimed!.timestamp !== snapshot.timestamp) {
+      await release();
+      throwAlreadyClaimed();
+    }
+
+    return {
+      snapshot,
+      start: async () => {
+        const running = await workflowsStore.updateWorkflowState({
+          workflowName: AGENTIC_LOOP_WORKFLOW_ID,
+          runId,
+          opts: { status: 'running', expectedStatus: 'pending' },
+        });
+        if (!running) {
+          // A later resume took this claim over as abandoned; it owns the suspension now.
+          released = true;
+          throwAlreadyClaimed();
+        }
+        claimStatus = 'running';
+      },
+      onExecutionStarted: () => {
+        started = true;
+      },
+      release,
+    };
+  }
+
+  /**
    * Suspend payloads persisted before they carried `toolCallId` only hold the
    * id as the workflow resume label (`resumeLabels[toolCallId] = { stepId }`).
    * Recover it when exactly one label points at the suspended step.
@@ -7788,6 +8041,118 @@ export class Agent<
           })
         : suspendedToolCalls[0];
     return info ? { toolCallId: info.toolCallId, toolName: info.toolName } : undefined;
+  }
+
+  /**
+   * The scopes a suspended network run held. Its run-scoped request context (persisted with the
+   * network workflow snapshot) carries the non-identity scopes; its input carries the thread and
+   * resource. Returns undefined when no snapshot is stored.
+   */
+  async #getNetworkSnapshotScopes(runId: string): Promise<AgentScopesSnapshot | undefined> {
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: 'agent-loop-main-workflow', runId });
+    if (!snapshot) return undefined;
+    const scopes = snapshot.requestContext?.[MASTRA_SCOPES_KEY];
+    if (scopes !== undefined && (!Array.isArray(scopes) || scopes.some(scope => typeof scope !== 'string'))) {
+      // A malformed persisted set must not be coerced to "no scopes": that would both
+      // drop the run's scopes and falsely reject re-supplied ones as additions.
+      throw new MastraError({
+        id: 'AGENT_SCOPES_INVALID',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.SYSTEM,
+        // Corrupted persisted state is a system fault, not a caller error: no
+        // `details.status`, so server handlers surface it as HTTP 500.
+        text: `Agent "${this.name}" resume(${runId}): persisted network run scopes are malformed; expected an array of strings.`,
+        details: { agentName: this.name, runId },
+      });
+    }
+    const input = snapshot.context?.input as { threadId?: string; threadResourceId?: string } | undefined;
+    return {
+      resourceId: input?.threadResourceId,
+      threadId: input?.threadId,
+      // `network()` records the run's scope set unconditionally ([] included), so a recorded
+      // empty set is authoritative: a resume may not add scopes. An ABSENT key marks a run
+      // suspended before the scopes upgrade — it adopts the supplied scopes, the same trust
+      // posture as a fresh run (identity stays pinned by the snapshot's resource/thread above).
+      scopes: Array.isArray(scopes) ? scopes : undefined,
+    };
+  }
+
+  /** The full scope set a suspended run resolved, persisted beside its stream state. */
+  #getSnapshotScopes(existingSnapshot: WorkflowRunState | null | undefined): string[] | undefined {
+    for (const key in existingSnapshot?.context) {
+      const step = existingSnapshot?.context[key];
+      const persisted = step?.status === 'suspended' ? step.suspendPayload?.__resolvedScopes : undefined;
+      if (persisted === undefined) continue;
+      // Corrupted persisted state is a system fault, not a client error: coercing it to
+      // "no scopes" would silently drop the run's scope set and misreport a re-supplied
+      // scope as AGENT_SCOPES_CONFLICT. Mirrors the durable resume and network snapshot
+      // rehydration guards.
+      if (!Array.isArray(persisted)) {
+        throw new MastraError({
+          id: 'AGENT_SCOPES_INVALID',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.SYSTEM,
+          text: `Agent "${this.name}": persisted run scopes are malformed; expected an array of strings.`,
+          details: { agentName: this.name },
+        });
+      }
+      return persisted;
+    }
+    return undefined;
+  }
+
+  /**
+   * Resolves a run's scopes (see `resolveAgentScopes`) and returns the options the run
+   * executes with. When scopes carry `resource:`/`thread:`, `memory` is set from them so
+   * every downstream reader sees the same identity. When the run has scopes, the options
+   * carry a run-scoped copy of the request context (`deriveAgentRunRequestContext`); the
+   * caller's context is never modified. Options without scopes are returned unchanged.
+   */
+  async #resolveRunScopes<T extends { requestContext?: RequestContext; memory?: AgentMemoryOption }>(
+    options: T,
+    {
+      callScopes,
+      defaultScopes,
+      existingSnapshot,
+      snapshot,
+    }: {
+      callScopes?: string[];
+      defaultScopes?: string[];
+      existingSnapshot?: WorkflowRunState | null;
+      snapshot?: AgentScopesSnapshot;
+    },
+  ): Promise<{ options: T; resolved: ResolvedAgentScopes }> {
+    const requestContext = options.requestContext ?? new RequestContext();
+    const snapshotMemoryInfo = this.#getSnapshotMemoryInfo(existingSnapshot);
+    const resumeSnapshot =
+      snapshot ??
+      (existingSnapshot
+        ? {
+            resourceId: snapshotMemoryInfo?.resourceId,
+            threadId: snapshotMemoryInfo?.threadId,
+            // Suspensions persist their scope set unconditionally ([] included), so a recorded
+            // empty set is authoritative: a resume may not add scopes. An ABSENT set marks a
+            // run suspended before the scopes upgrade — it adopts the supplied scopes, the
+            // same trust posture as a fresh run (identity is still pinned by the snapshot's
+            // resource/thread above).
+            scopes: this.#getSnapshotScopes(existingSnapshot),
+          }
+        : undefined);
+    // A resumed run keeps its suspended scopes, so the Agent's configuration is not consulted.
+    const agentScopes = resumeSnapshot?.scopes
+      ? []
+      : [...((await this.getScopes({ requestContext })) ?? []), ...(defaultScopes ?? [])];
+    const resolved = resolveAgentScopes({
+      requestContext,
+      agentScopes,
+      callScopes,
+      memory: options.memory,
+      snapshot: resumeSnapshot,
+      mastra: this.#mastra,
+    });
+
+    return { options: applyResolvedAgentScopes(options, resolved, requestContext), resolved };
   }
 
   #getAgentExecutionResourceId({
@@ -8282,6 +8647,7 @@ export class Agent<
       agentId: this.id,
       actor: options.actor,
       agentVersionId: this.toRawConfig()?.resolvedVersionId as string | undefined,
+      resolvedScopes: options.resolvedScopes,
       agentName: this.name,
       toolCallId: options.toolCallId,
       workspace,
@@ -8678,31 +9044,39 @@ export class Agent<
     options?: MultiPrimitiveExecutionOptions<OUTPUT>,
   ): Promise<MastraAgentNetworkStream<OUTPUT>>;
   async network<OUTPUT = undefined>(messages: MessageListInput, options?: MultiPrimitiveExecutionOptions<OUTPUT>) {
-    const requestContextToUse = options?.requestContext || new RequestContext();
+    const callerRequestContext = options?.requestContext || new RequestContext();
 
     // Merge default network options with call-specific options
-    const defaultNetworkOptions = await this.getDefaultNetworkOptions({ requestContext: requestContextToUse });
-    const mergedOptions = {
-      ...defaultNetworkOptions,
-      ...options,
-      routing: { ...defaultNetworkOptions?.routing, ...options?.routing },
-      completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
-    };
+    const defaultNetworkOptions = await this.getDefaultNetworkOptions({ requestContext: callerRequestContext });
+    const { options: mergedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(
+      {
+        ...defaultNetworkOptions,
+        ...options,
+        requestContext: callerRequestContext,
+        routing: { ...defaultNetworkOptions?.routing, ...options?.routing },
+        completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
+      },
+      { callScopes: options?.scopes, defaultScopes: defaultNetworkOptions?.scopes },
+    );
+    let requestContextToUse = mergedOptions.requestContext;
+    // Persist the run's scope set unconditionally — [] included — so a resume can tell
+    // "held no scopes" (recorded [], re-supplied scopes are rejected) from a pre-upgrade
+    // snapshot (key absent, supplied scopes are adopted). The derived run context omits
+    // the key when the run has no non-identity scopes, so stamp a marked empty set on a
+    // copy (never the caller's context) before the workflow run snapshots it. Mirrors
+    // prepareForDurableExecution's persisted-entries stamp.
+    if (!Array.isArray(requestContextToUse.get(MASTRA_SCOPES_KEY))) {
+      const stamped = new RequestContext(Array.from(requestContextToUse.entries())) as typeof requestContextToUse;
+      setRunAgentScopes(stamped, []);
+      requestContextToUse = stamped;
+    }
 
     const runId = mergedOptions?.runId || this.#mastra?.generateId() || globalThis.crypto.randomUUID();
 
-    // Reserved keys from requestContext take precedence for security.
+    // Reserved keys from requestContext take precedence for security (see resolveAgentScopes).
     // This allows middleware to securely set resourceId/threadId based on authenticated user,
     // preventing attackers from hijacking another user's memory by passing different values in the body.
-    const resourceIdFromContext = requestContextToUse.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
-    const threadIdFromContext = requestContextToUse.get(MASTRA_THREAD_ID_KEY) as string | undefined;
-
-    const threadId =
-      threadIdFromContext ||
-      (typeof mergedOptions?.memory?.thread === 'string'
-        ? mergedOptions?.memory?.thread
-        : mergedOptions?.memory?.thread?.id);
-    const resourceId = resourceIdFromContext || mergedOptions?.memory?.resource;
+    const { threadId, resourceId } = resolvedScopes;
 
     return await networkLoop<OUTPUT>({
       networkName: this.name,
@@ -8756,29 +9130,42 @@ export class Agent<
    */
   async resumeNetwork(resumeData: any, options: Omit<MultiPrimitiveExecutionOptions, 'runId'> & { runId: string }) {
     const runId = options.runId;
-    const requestContextToUse = options?.requestContext || new RequestContext();
+    const callerRequestContext = options?.requestContext || new RequestContext();
 
     // Merge default network options with call-specific options
-    const defaultNetworkOptions = await this.getDefaultNetworkOptions({ requestContext: requestContextToUse });
-    const mergedOptions = {
-      ...defaultNetworkOptions,
-      ...options,
-      routing: { ...defaultNetworkOptions?.routing, ...options?.routing },
-      completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
-    };
+    const defaultNetworkOptions = await this.getDefaultNetworkOptions({ requestContext: callerRequestContext });
+    const { options: mergedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(
+      {
+        ...defaultNetworkOptions,
+        ...options,
+        requestContext: callerRequestContext,
+        routing: { ...defaultNetworkOptions?.routing, ...options?.routing },
+        completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
+      },
+      {
+        callScopes: options?.scopes,
+        defaultScopes: defaultNetworkOptions?.scopes,
+        // Without a stored snapshot at all there is nothing to resume against, so a resume
+        // may not add scopes. Key-absent-on-snapshot (pre-upgrade) adopts — see
+        // #getNetworkSnapshotScopes.
+        snapshot: (await this.#getNetworkSnapshotScopes(runId)) ?? { scopes: [] },
+      },
+    );
+    const requestContextToUse = mergedOptions.requestContext;
 
-    // Reserved keys from requestContext take precedence for security.
-    // This allows middleware to securely set resourceId/threadId based on authenticated user,
-    // preventing attackers from hijacking another user's memory by passing different values in the body.
-    const resourceIdFromContext = requestContextToUse.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
-    const threadIdFromContext = requestContextToUse.get(MASTRA_THREAD_ID_KEY) as string | undefined;
-
-    const threadId =
-      threadIdFromContext ||
-      (typeof mergedOptions?.memory?.thread === 'string'
-        ? mergedOptions?.memory?.thread
-        : mergedOptions?.memory?.thread?.id);
-    const resourceId = resourceIdFromContext || mergedOptions?.memory?.resource;
+    // The snapshot is used only to check re-supplied scopes. Identity comes from scopes when
+    // present, else from the reserved keys then memory, as before scopes existed.
+    const hasScopeIdentity = (type: 'resource' | 'thread') =>
+      resolvedScopes.scopes.some(scope => parseAgentScope(scope)?.type === type);
+    const threadId = hasScopeIdentity('thread')
+      ? resolvedScopes.threadId
+      : (requestContextToUse.get(MASTRA_THREAD_ID_KEY) as string | undefined) ||
+        (typeof mergedOptions?.memory?.thread === 'string'
+          ? mergedOptions.memory.thread
+          : mergedOptions?.memory?.thread?.id);
+    const resourceId = hasScopeIdentity('resource')
+      ? resolvedScopes.resourceId
+      : (requestContextToUse.get(MASTRA_RESOURCE_ID_KEY) as string | undefined) || mergedOptions?.memory?.resource;
 
     return await networkLoop({
       networkName: this.name,
@@ -8897,10 +9284,15 @@ export class Agent<
     const defaultOptions = await this.getDefaultOptions({
       requestContext: options?.requestContext,
     });
-    const mergedOptions = deepMerge(
-      defaultOptions as Record<string, unknown>,
-      (options ?? {}) as Record<string, unknown>,
-    ) as AgentExecutionOptions<any> & { model?: DynamicArgument<MastraModelConfig> };
+    const { options: mergedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(
+      deepMerge(
+        defaultOptions as Record<string, unknown>,
+        (options ?? {}) as Record<string, unknown>,
+      ) as AgentExecutionOptions<any> & {
+        model?: DynamicArgument<MastraModelConfig>;
+      },
+      { callScopes: options?.scopes, defaultScopes: defaultOptions?.scopes },
+    );
     const loopOptions = { ...mergedOptions };
     const actor = mergedOptions.actor;
     delete loopOptions.actor;
@@ -8953,6 +9345,7 @@ export class Agent<
           }
         : undefined,
       messages,
+      resolvedScopes: resolvedScopes.scopes,
       methodType: 'generate',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
@@ -9630,10 +10023,15 @@ export class Agent<
     const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,
     });
-    const mergedOptions = deepMerge(
-      defaultOptions as Record<string, unknown>,
-      (streamOptions ?? {}) as Record<string, unknown>,
-    ) as AgentExecutionOptions<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> };
+    const { options: mergedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(
+      deepMerge(
+        defaultOptions as Record<string, unknown>,
+        (streamOptions ?? {}) as Record<string, unknown>,
+      ) as AgentExecutionOptions<OUTPUT> & {
+        model?: DynamicArgument<MastraModelConfig>;
+      },
+      { callScopes: streamOptions?.scopes, defaultScopes: defaultOptions?.scopes },
+    );
     validateModelTimeoutSettings(mergedOptions.modelSettings?.timeout);
     const loopOptions = { ...mergedOptions };
     const actor = mergedOptions.actor;
@@ -9648,7 +10046,9 @@ export class Agent<
       return runStreamUntilIdle<OUTPUT>(
         this,
         messages,
-        { ...rest, maxIdleMs },
+        // Continuations re-enter stream() and resolve scopes again, so they get the
+        // caller's own request context rather than this call's run-scoped copy.
+        { ...rest, requestContext: streamOptions?.requestContext, maxIdleMs },
         {
           activeStreams: this.#activeStreamUntilIdle,
           bgManager: this.#mastra?.backgroundTaskManager,
@@ -9725,6 +10125,7 @@ export class Agent<
           }
         : undefined,
       messages,
+      resolvedScopes: resolvedScopes.scopes,
       methodType: 'stream',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
@@ -10027,6 +10428,13 @@ export class Agent<
       loopStreamOptions.memory = mergedStreamOptions.memory;
     }
 
+    const { options: scopedStreamOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(
+      mergedStreamOptions,
+      { callScopes: streamOptions?.scopes, defaultScopes: defaultOptions?.scopes, existingSnapshot },
+    );
+    mergedStreamOptions.memory = loopStreamOptions.memory = scopedStreamOptions.memory;
+    mergedStreamOptions.requestContext = loopStreamOptions.requestContext = scopedStreamOptions.requestContext;
+
     await this.requireAgentExecutionFGA({
       requestContext: mergedStreamOptions.requestContext,
       memory: mergedStreamOptions.memory,
@@ -10040,43 +10448,50 @@ export class Agent<
       runId,
       method: 'resumeStream',
     });
-
-    const llm = await this.getLLM({
-      requestContext: mergedStreamOptions.requestContext,
-      model: mergedStreamOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
+    const resumeClaim = await this.#claimSuspendedAgenticLoopRun({
+      snapshot: resumeSnapshot,
+      runId,
+      toolCallId: streamOptions?.toolCallId,
+      method: 'resumeStream',
     });
 
-    if (!isSupportedLanguageModel(llm.getModel())) {
-      const modelInfo = llm.getModel();
-      const specVersion = modelInfo.specificationVersion;
-      throw new MastraError({
-        id: 'AGENT_STREAM_V1_MODEL_NOT_SUPPORTED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text:
-          specVersion === 'v1'
-            ? 'V1 models are not supported for resumeStream. Please use streamLegacy instead.'
-            : `Model has unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
-        details: {
-          modelId: modelInfo.modelId,
-          provider: modelInfo.provider,
-          specificationVersion: specVersion,
-        },
-      });
-    }
-
+    let preparedOptions: AgentExecutionOptions<OUTPUT> | undefined;
     const threadStreamPubSub = this.getPubSub();
-    await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
-      this as Agent<any, any, any, any>,
-      loopStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
-      threadStreamPubSub,
-    );
-    const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
-      { ...loopStreamOptions, actor } as unknown as AgentExecutionOptions<OUTPUT>,
-      threadStreamPubSub,
-    );
-
     try {
+      const llm = await this.getLLM({
+        requestContext: mergedStreamOptions.requestContext,
+        model: mergedStreamOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
+      });
+
+      if (!isSupportedLanguageModel(llm.getModel())) {
+        const modelInfo = llm.getModel();
+        const specVersion = modelInfo.specificationVersion;
+        throw new MastraError({
+          id: 'AGENT_STREAM_V1_MODEL_NOT_SUPPORTED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text:
+            specVersion === 'v1'
+              ? 'V1 models are not supported for resumeStream. Please use streamLegacy instead.'
+              : `Model has unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
+          details: {
+            modelId: modelInfo.modelId,
+            provider: modelInfo.provider,
+            specificationVersion: specVersion,
+          },
+        });
+      }
+
+      await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+        this as Agent<any, any, any, any>,
+        loopStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
+        threadStreamPubSub,
+      );
+      preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
+        { ...loopStreamOptions, actor } as unknown as AgentExecutionOptions<OUTPUT>,
+        threadStreamPubSub,
+      );
+
       const result = await this.#execute({
         ...preparedOptions,
         actor,
@@ -10087,9 +10502,11 @@ export class Agent<
             }
           : undefined,
         messages: [],
+        resolvedScopes: resolvedScopes.scopes,
         resumeContext: {
           resumeData,
           snapshot: resumeSnapshot,
+          claim: resumeClaim,
         },
         methodType: 'stream',
         // Use agent's maxProcessorRetries as default, allow options to override
@@ -10126,14 +10543,17 @@ export class Agent<
 
       return result.result as unknown as MastraModelOutput<OUTPUT>;
     } catch (error) {
+      await resumeClaim.release();
       // Release the thread reservation taken by waitForCrossAgentThreadRun so
       // a failed resume does not block subsequent runs on this thread.
-      agentThreadStreamRuntime.releaseThreadRunReservation(
-        runId,
-        threadStreamPubSub,
-        undefined,
-        preparedOptions.abortSignal,
-      );
+      if (preparedOptions) {
+        agentThreadStreamRuntime.releaseThreadRunReservation(
+          runId,
+          threadStreamPubSub,
+          undefined,
+          preparedOptions.abortSignal,
+        );
+      }
       throw error;
     }
   }
@@ -10204,6 +10624,13 @@ export class Agent<
 
     const runId = options?.runId ?? '';
     const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeGenerate' });
+    const { options: scopedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(mergedOptions, {
+      callScopes: options?.scopes,
+      defaultScopes: defaultOptions?.scopes,
+      existingSnapshot,
+    });
+    mergedOptions.memory = loopOptions.memory = scopedOptions.memory;
+    mergedOptions.requestContext = loopOptions.requestContext = scopedOptions.requestContext;
     await this.requireAgentExecutionFGA({
       requestContext: mergedOptions.requestContext,
       memory: mergedOptions.memory,
@@ -10217,86 +10644,100 @@ export class Agent<
       runId,
       method: 'resumeGenerate',
     });
-
-    const llm = await this.getLLM({
-      requestContext: mergedOptions.requestContext,
-      model: mergedOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
+    const resumeClaim = await this.#claimSuspendedAgenticLoopRun({
+      snapshot: resumeSnapshot,
+      runId,
+      toolCallId: options?.toolCallId,
+      method: 'resumeGenerate',
     });
 
-    const modelInfo = llm.getModel();
-
-    if (!isSupportedLanguageModel(modelInfo)) {
-      const modelId = modelInfo.modelId || 'unknown';
-      const provider = modelInfo.provider || 'unknown';
-      const specVersion = modelInfo.specificationVersion;
-      throw new MastraError({
-        id: 'AGENT_GENERATE_V1_MODEL_NOT_SUPPORTED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text:
-          specVersion === 'v1'
-            ? `Agent "${this.name}" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with generate(). Please use AI SDK v5+ models or call the generateLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`
-            : `Agent "${this.name}" has a model (${provider}:${modelId}) with unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
-        details: {
-          agentName: this.name,
-          modelId,
-          provider,
-          specificationVersion: specVersion,
-        },
+    let fullOutput: Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
+    try {
+      const llm = await this.getLLM({
+        requestContext: mergedOptions.requestContext,
+        model: mergedOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
       });
-    }
 
-    const result = await this.#execute({
-      ...loopOptions,
-      actor,
-      structuredOutput: mergedOptions.structuredOutput
-        ? {
-            ...mergedOptions.structuredOutput,
-            schema: toStandardSchema(mergedOptions.structuredOutput.schema),
-          }
-        : undefined,
-      messages: [],
-      resumeContext: {
-        resumeData,
-        snapshot: resumeSnapshot,
-      },
-      methodType: 'generate',
-      // Use agent's maxProcessorRetries as default, allow options to override
-      maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-    } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub });
+      const modelInfo = llm.getModel();
 
-    if (result.status !== 'success') {
-      if (result.status === 'failed') {
-        throw new MastraError(
-          {
-            id: 'AGENT_GENERATE_FAILED',
-            domain: ErrorDomain.AGENT,
-            category: ErrorCategory.USER,
+      if (!isSupportedLanguageModel(modelInfo)) {
+        const modelId = modelInfo.modelId || 'unknown';
+        const provider = modelInfo.provider || 'unknown';
+        const specVersion = modelInfo.specificationVersion;
+        throw new MastraError({
+          id: 'AGENT_GENERATE_V1_MODEL_NOT_SUPPORTED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text:
+            specVersion === 'v1'
+              ? `Agent "${this.name}" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with generate(). Please use AI SDK v5+ models or call the generateLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`
+              : `Agent "${this.name}" has a model (${provider}:${modelId}) with unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
+          details: {
+            agentName: this.name,
+            modelId,
+            provider,
+            specificationVersion: specVersion,
           },
-          // pass original error to preserve stack trace
-          result.error,
-        );
+        });
       }
-      throw new MastraError({
-        id: 'AGENT_GENERATE_UNKNOWN_ERROR',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: 'An unknown error occurred while generating',
-      });
-    }
 
-    if (typeof result.result?.getFullOutput !== 'function') {
-      throw new MastraError({
-        id: 'AGENT_GENERATE_MALFORMED_RESULT',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.SYSTEM,
-        text: 'Execution workflow produced a result without getFullOutput',
-      });
-    }
+      const result = await this.#execute({
+        ...loopOptions,
+        actor,
+        structuredOutput: mergedOptions.structuredOutput
+          ? {
+              ...mergedOptions.structuredOutput,
+              schema: toStandardSchema(mergedOptions.structuredOutput.schema),
+            }
+          : undefined,
+        messages: [],
+        resolvedScopes: resolvedScopes.scopes,
+        resumeContext: {
+          resumeData,
+          snapshot: resumeSnapshot,
+          claim: resumeClaim,
+        },
+        methodType: 'generate',
+        // Use agent's maxProcessorRetries as default, allow options to override
+        maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
+      } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub });
 
-    const fullOutput = (await result.result.getFullOutput()) as Awaited<
-      ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>
-    >;
+      if (result.status !== 'success') {
+        if (result.status === 'failed') {
+          throw new MastraError(
+            {
+              id: 'AGENT_GENERATE_FAILED',
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.USER,
+            },
+            // pass original error to preserve stack trace
+            result.error,
+          );
+        }
+        throw new MastraError({
+          id: 'AGENT_GENERATE_UNKNOWN_ERROR',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: 'An unknown error occurred while generating',
+        });
+      }
+
+      if (typeof result.result?.getFullOutput !== 'function') {
+        throw new MastraError({
+          id: 'AGENT_GENERATE_MALFORMED_RESULT',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.SYSTEM,
+          text: 'Execution workflow produced a result without getFullOutput',
+        });
+      }
+
+      fullOutput = (await result.result.getFullOutput()) as Awaited<
+        ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>
+      >;
+    } catch (error) {
+      await resumeClaim.release();
+      throw error;
+    }
 
     const error = fullOutput.error;
 
