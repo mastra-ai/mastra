@@ -99,18 +99,48 @@ describe('signal sent while a tool is executing', () => {
     await consumed;
 
     expect(prompts).toHaveLength(2);
-    const nextPrompt = JSON.stringify(prompts[1]);
-    expect(nextPrompt).toContain('Reminder arrived while the tool ran');
-    expect(nextPrompt).toContain('running-call');
-    expect(nextPrompt).toContain('tool-finished');
+    expect(JSON.stringify(prompts[1])).toContain('Reminder arrived while the tool ran');
+    const promptParts = (prompts[1] as Array<{ role: string; content: unknown }>).flatMap(message =>
+      Array.isArray(message.content)
+        ? (message.content as Array<Record<string, unknown>>).map(part => ({ role: message.role, ...part }))
+        : [],
+    );
+    expect(promptParts).toContainEqual(
+      expect.objectContaining({
+        role: 'assistant',
+        type: 'tool-call',
+        toolCallId: 'running-call',
+        toolName: 'slowTool',
+      }),
+    );
+    expect(promptParts).toContainEqual(
+      expect.objectContaining({
+        role: 'tool',
+        type: 'tool-result',
+        toolCallId: 'running-call',
+        output: expect.objectContaining({ value: { ok: 'tool-finished' } }),
+      }),
+    );
 
     const { messages } = await memory.recall({ threadId: thread.thread, resourceId: thread.resource });
-    const parts = messages.flatMap(message => message.content.parts);
-    expect(
-      parts.find(part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === 'running-call'),
-    ).toMatchObject({
-      toolInvocation: { toolCallId: 'running-call', state: 'result', result: { ok: 'tool-finished' } },
-    });
-    expect(parts.some(part => part.type === 'data-tool-exit')).toBe(true);
+    const owner = messages.find(message =>
+      message.content.parts.some(
+        part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === 'running-call',
+      ),
+    );
+    expect(owner).toBeDefined();
+    expect(owner!.content.parts).toContainEqual(
+      expect.objectContaining({
+        type: 'tool-invocation',
+        toolInvocation: expect.objectContaining({
+          toolCallId: 'running-call',
+          state: 'result',
+          result: { ok: 'tool-finished' },
+        }),
+      }),
+    );
+    expect(owner!.content.parts).toContainEqual(
+      expect.objectContaining({ type: 'data-tool-exit', data: { toolCallId: 'running-call' } }),
+    );
   });
 });
