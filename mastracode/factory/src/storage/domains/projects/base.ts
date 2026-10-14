@@ -43,8 +43,7 @@ export interface FactoryProject {
   lastPushBuildAt: Date | null;
   /**
    * A run's build-start lease lapsed, so a build it may have started is not
-   * on record. Cleared once a run reconciles it with the provider or a user
-   * builds anyway.
+   * on record. Cleared once a run reconciles it with a provider that lists builds.
    */
   buildStartUncertain: boolean;
   /** Whether a push to an environment repository's default branch starts a build. */
