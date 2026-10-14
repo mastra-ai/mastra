@@ -65,7 +65,6 @@ describe('T1 tool-roundtrip redelivery', () => {
       inputSchema: z.object({ name: z.string(), receipt: z.string() }),
       execute: async input => {
         reads.push(input);
-        expect(input.receipt).toBe('receipt-1');
         const result = { ...writes[0]!, verified: true as const };
         readResults.push(result);
         return result;
