@@ -158,23 +158,6 @@ describe('ChatShell scrollbar room', () => {
     expect(viewport).toContain('[scrollbar-gutter:stable_both-edges]');
     expect(screen.getByTestId('shell').className).toContain('[--chat-edge:0.5rem]');
   });
-
-  it('drops the reserved gutter but keeps the edge room when stableGutter is off', () => {
-    render(
-      <ChatShell>
-        <ChatShell.Stage>
-          <ChatShell.Viewport data-testid="viewport" stableGutter={false}>
-            <ChatShell.Content>transcript</ChatShell.Content>
-          </ChatShell.Viewport>
-        </ChatShell.Stage>
-      </ChatShell>,
-    );
-
-    const viewport = screen.getByTestId('viewport').className;
-    expect(viewport).not.toContain('scrollbar-gutter');
-    expect(viewport).toContain('ps-(--chat-edge)');
-    expect(viewport).toContain('pe-[calc(var(--chat-edge)+var(--chat-inset-end))]');
-  });
 });
 
 describe('ChatShell.Turn', () => {

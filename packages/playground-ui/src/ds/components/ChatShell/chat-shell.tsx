@@ -63,10 +63,6 @@ export function ChatShellStage({ className, ...props }: ComponentPropsWithoutRef
   return <MessageScroller className={cn('h-auto min-h-0 flex-1', className)} {...props} />;
 }
 
-export type ChatShellViewportProps = MessageScrollerViewportProps & {
-  stableGutter?: boolean;
-};
-
 /**
  * The one scroll container. It takes the end inset itself — on an ancestor the
  * same room would drag the scrollbar inward, off the true edge. No overscroll
@@ -76,12 +72,12 @@ export type ChatShellViewportProps = MessageScrollerViewportProps & {
  * The same edge room on both sides keeps the scrollbar clear of the composer and
  * the column centred, with a matching gutter for classic scrollbars.
  */
-export function ChatShellViewport({ className, children, stableGutter = true, ...props }: ChatShellViewportProps) {
+export function ChatShellViewport({ className, children, ...props }: MessageScrollerViewportProps) {
   return (
     <MessageScrollerViewport
       className={cn(
         'h-auto min-h-0 flex-1 overscroll-none ps-(--chat-edge) pe-[calc(var(--chat-edge)+var(--chat-inset-end))]',
-        stableGutter && '[scrollbar-gutter:stable_both-edges]',
+        '[scrollbar-gutter:stable_both-edges]',
         'transition-[padding] duration-360 ease-out-custom motion-reduce:transition-none',
         className,
       )}
