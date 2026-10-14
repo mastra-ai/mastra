@@ -17,7 +17,7 @@ export function OnboardingLinearConnection({ onConnect }: { onConnect: () => voi
         name="Linear"
         description={`Connected to ${status.workspace?.name ?? 'Linear'}.`}
         action={
-          <Txt as="span" variant="caption" tone="muted">
+          <Txt as="span" variant="caption" tone="muted" className="me-3">
             Connected
           </Txt>
         }

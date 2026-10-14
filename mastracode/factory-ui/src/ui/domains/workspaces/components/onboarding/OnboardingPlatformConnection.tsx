@@ -34,7 +34,7 @@ export function OnboardingPlatformConnection({ provider }: { provider: 'jira' | 
         name={name}
         description={description}
         action={
-          <Txt as="span" variant="caption" tone="muted">
+          <Txt as="span" variant="caption" tone="muted" className="me-3">
             Connected
           </Txt>
         }
