@@ -723,7 +723,7 @@ export interface ToolAction<
    * When provided, the request context will be validated against this schema before tool execution.
    * If validation fails, a validation error is returned instead of executing the tool.
    */
-  requestContextSchema?: PublicSchema<TRequestContext>;
+  requestContextSchema?: PublicSchema<TRequestContext, any>;
   /**
    * Optional MCP-specific properties.
    * Only populated when the tool is being used in an MCP context.
