@@ -509,6 +509,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
         }
 
         case AgentStreamEventTypes.FINISH: {
+          clearIdleTimer();
           await onChunkDelivery;
           if (!controller || terminated) return;
           const data = streamEvent.data as AgentFinishEventData;

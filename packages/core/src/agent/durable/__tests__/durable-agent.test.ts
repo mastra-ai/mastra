@@ -771,6 +771,65 @@ describe('createDurableAgentStream', () => {
     cleanup();
   });
 
+  it('should stop the idle timer while FINISH waits for chunk delivery', async () => {
+    vi.useFakeTimers();
+    const { createDurableAgentStream, emitChunkEvent, emitFinishEvent } = await import('../stream-adapter');
+
+    let releaseCallback!: () => void;
+    let markCallbackStarted!: () => void;
+    const callbackBlocked = new Promise<void>(resolve => {
+      releaseCallback = resolve;
+    });
+    const callbackStarted = new Promise<void>(resolve => {
+      markCallbackStarted = resolve;
+    });
+    const onChunk = vi.fn(async () => {
+      markCallbackStarted();
+      await callbackBlocked;
+    });
+    const onFinish = vi.fn();
+    const onError = vi.fn();
+    const runId = 'test-finish-delivery-idle-timer';
+    const { output, cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId,
+      messageId: 'msg-finish-delivery-idle-timer',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      idleTimeoutMs: 20,
+      onChunk,
+      onFinish,
+      onError,
+    });
+
+    try {
+      await ready;
+      await emitChunkEvent(pubsub, runId, {
+        type: 'text-delta',
+        payload: { text: 'test' },
+      } as any);
+      await callbackStarted;
+      await emitFinishEvent(pubsub, runId, {
+        output: { text: 'done', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
+        stepResult: { reason: 'stop', warnings: [], isContinued: false },
+      });
+      await Promise.resolve();
+
+      await vi.advanceTimersByTimeAsync(20);
+      expect(onError).not.toHaveBeenCalled();
+      expect(onFinish).not.toHaveBeenCalled();
+
+      releaseCallback();
+      for await (const _chunk of output.fullStream) {
+        // Drain the stream after FINISH completes.
+      }
+      expect(onFinish).toHaveBeenCalledOnce();
+      expect(onError).not.toHaveBeenCalled();
+    } finally {
+      cleanup();
+      vi.useRealTimers();
+    }
+  });
+
   it('should terminate when subscription setup fails', async () => {
     const { createDurableAgentStream } = await import('../stream-adapter');
     const subscribeError = new Error('subscription failed');

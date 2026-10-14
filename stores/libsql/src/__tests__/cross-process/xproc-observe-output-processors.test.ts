@@ -93,7 +93,12 @@ for (const engine of ['durable', 'evented'] as const) {
 
       const produced = await producerOutput;
       if (blockRefresh) {
-        await Promise.race([peer.waitFor('refresh-started'), peerResult]);
+        await Promise.race([
+          peer.waitFor('refresh-started'),
+          peerResult.then(() => {
+            throw new Error('Observation completed before the final transcript refresh was blocked');
+          }),
+        ]);
         peer.send('release-refresh', { runId });
       }
       const observed = await peerResult;

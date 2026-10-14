@@ -72,9 +72,15 @@ void runPeer<Cor1411PeerArgs>(async (peer): Promise<Cor1411PeerResult> => {
     const getWorkflowRunById = workflowsStore?.getWorkflowRunById.bind(workflowsStore);
     let blockRefresh = false;
     let refreshBlocked = false;
+    let observedFinalText = false;
     if (workflowsStore && getWorkflowRunById) {
       workflowsStore.getWorkflowRunById = async args => {
-        if (blockRefresh && !refreshBlocked && args.workflowName === DurableStepIds.AGENTIC_EXECUTION) {
+        if (
+          blockRefresh &&
+          observedFinalText &&
+          !refreshBlocked &&
+          args.workflowName === DurableStepIds.AGENTIC_EXECUTION
+        ) {
           refreshBlocked = true;
           await peer.signal('refresh-started', { runId });
           await peer.waitFor('release-refresh', { timeoutMs: 60_000 });
@@ -85,6 +91,11 @@ void runPeer<Cor1411PeerArgs>(async (peer): Promise<Cor1411PeerResult> => {
 
     let onFinishMessagesIncludeAnswer = false;
     const observed = await runner.observe(runId, {
+      onChunk: chunk => {
+        if (chunk.type === 'text-delta' && chunk.payload.text.includes(finalText.toUpperCase())) {
+          observedFinalText = true;
+        }
+      },
       onFinish: data => {
         onFinishMessagesIncludeAnswer = JSON.stringify(data.messages).includes(finalText.toUpperCase());
       },
