@@ -116,6 +116,7 @@ jobs:
       - name: Close stale release PR
         if: steps.ensure-prerelease.outputs.restored != 'true' && steps.check-changes.outputs.has_changes == 'true'
         timeout-minutes: 45
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION_SHA: ${{ steps.push-version.outputs.sha }}
@@ -124,8 +125,10 @@ jobs:
           while true; do
             git fetch --quiet origin "${GITHUB_REF_NAME}"
             pending=""
-            for sha in $(gh run list --workflow version-packages.yml --branch "${GITHUB_REF_NAME}" --limit 100 \
-              --json headSha,status --jq '.[] | select(.status != "completed") | .headSha' | sort -u); do
+            # Assigned first so a failed query aborts the step instead of looking like "nothing pending".
+            shas=$(gh run list --workflow version-packages.yml --branch "${GITHUB_REF_NAME}" --limit 100 \
+              --json headSha,status --jq '.[] | select(.status != "completed") | .headSha' | sort -u)
+            for sha in ${shas}; do
               if ! git merge-base --is-ancestor "${VERSION_SHA}" "${sha}" 2>/dev/null; then
                 pending="${pending} ${sha}"
               fi
