@@ -574,7 +574,13 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         } satisfies LinearWorkspace;
       }),
     );
-    return workspaces;
+    // Several connections can authorize the same Linear workspace; keep one so
+    // its projects, teams and issues are listed once.
+    const byWorkspaceId = new Map<string, LinearWorkspace>();
+    for (const workspace of workspaces) {
+      if (!byWorkspaceId.has(workspace.linearWorkspaceId)) byWorkspaceId.set(workspace.linearWorkspaceId, workspace);
+    }
+    return [...byWorkspaceId.values()];
   }
 
   async #listIssues(sourceIds: string[], cursor?: string, labels?: string[], attributionSourceIds = sourceIds) {

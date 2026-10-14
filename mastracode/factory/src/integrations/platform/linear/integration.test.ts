@@ -190,6 +190,21 @@ describe('PlatformLinearIntegration', () => {
     expect(proxied).not.toContain('conn-stale');
   });
 
+  it('lists a workspace once when several connections authorize it', async () => {
+    fakePlatform({
+      connections: [
+        { id: 'conn-acme', status: 'active', accountLabel: 'Acme' },
+        { id: 'conn-acme-2', status: 'active', accountLabel: 'Acme' },
+      ],
+      workspaces: { 'conn-acme': acme(), 'conn-acme-2': acme() },
+    });
+    const linear = new PlatformLinearIntegration();
+
+    const sources = await linear.intake.listSources({ connection });
+    expect(sources.map(source => source.name)).toEqual(['Platform', 'Engineering']);
+    expect((await linear.listAllTeams()).map(team => team.key)).toEqual(['ENG']);
+  });
+
   it('lists issues for a team source through the owning connection proxy', async () => {
     const { proxied } = fakePlatform();
     const teamSource = encodeTeamSourceId('org-beta', 'team-ops');
