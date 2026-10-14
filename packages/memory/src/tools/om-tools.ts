@@ -311,7 +311,7 @@ export async function listThreadsForResource({
 // ── Cross-thread search ─────────────────────────────────────────────
 
 export const SEARCH_NOT_CONFIGURED_MESSAGE =
-  'Search is not configured. Enable it with `retrieval: { vector: true }` and configure a vector store and embedder on your Memory instance.';
+  'Search is not configured. Enable it with `retrieval: { vector: true }` and configure a vector store and an embedder, or a vector store that generates embeddings itself, on your Memory instance.';
 
 export async function searchMessagesForResource({
   memory,
