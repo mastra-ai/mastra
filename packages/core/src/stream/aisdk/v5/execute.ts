@@ -116,11 +116,14 @@ function readStrictJsonSchemaOption(options: unknown): boolean | undefined {
  * Model-router models always advertise structured output support, so they keep deciding by
  * provider id.
  */
+// Native @ai-sdk/openai ids are 'openai.chat', 'openai.responses', ...; 'openai-compatible.*' reads its own provider options.
+const isNativeOpenAIProvider = (provider: string) => /^openai(\.|$)/.test(provider);
+
 export function usesOpenAIStrictJsonSchema(
   model: Pick<MastraLanguageModel, 'provider'> & { supportsStructuredOutputs?: unknown },
   providerOptions?: SharedProviderOptions,
 ): boolean {
-  if (model.provider.startsWith('openai')) return true;
+  if (isNativeOpenAIProvider(model.provider)) return true;
   if (model instanceof ModelRouterLanguageModel || model.supportsStructuredOutputs !== true) return false;
 
   const providerKey = model.provider.split('.')[0]!;
@@ -372,7 +375,7 @@ export function execute<OUTPUT = undefined>({
    */
   // Strict json_schema (OpenAI, and OpenAI-compatible providers with native structured output)
   // requires all properties to be required, additionalProperties: false, and no unsupported keywords.
-  const isOpenAIProvider = model.provider.startsWith('openai');
+  const isOpenAIProvider = isNativeOpenAIProvider(model.provider);
   // OpenAI rejects free-form objects in strict mode, so send those schemas non-strict instead of
   // rewriting them into objects that can hold no keys. Mastra still validates the result against the schema.
   const sendNonStrict =
