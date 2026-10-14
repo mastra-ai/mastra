@@ -36,8 +36,9 @@ import { deliverFactorySessionNotification } from './deliver.js';
 import type { FactoryMessaging } from './messaging-tools.js';
 import { findWorkItem, workItemNotFound, workItemNumber, workItemRefSchema } from './read-tools.js';
 import { createWorkItemRunEndReporter, sendRunEndReport } from './reports.js';
-import type { FactoryReporting, FactoryRunOutcome } from './reports.js';
+import type { FactoryReporting, FactoryRunEndResult, FactoryRunOutcome } from './reports.js';
 import type { FactoryToolScope } from './scope.js';
+import { FACTORY_SESSIONS_MAX_AGE_MS } from './sessions-state-processor.js';
 
 const TITLE_LENGTH = 120;
 
@@ -69,22 +70,32 @@ export interface FactorySessionToolDependencies {
 }
 
 /**
- * Renew this process's open-run entry while the run is live, and remember how
- * it ended. Stops at `agent_end` or `close()`, like the dispatcher's heartbeat.
+ * Watch a spawned session until its work reaches a final outcome, so its
+ * followers hear once. Renews the kicked-off run's open-run entry until that run
+ * ends, like the dispatcher's heartbeat. A run that was aborted (stopped or
+ * steered), or that ended waiting for an answer, hands over to the next run;
+ * the watch ends at a final report, at `close()`, or after a day.
  */
 function watchStartedRun(
   session: RunEndCaptureSession,
-  { kickoffId, onEnd }: { kickoffId?: string; onEnd: (outcome: FactoryRunOutcome) => Promise<void> },
+  {
+    kickoffId,
+    onEnd,
+  }: { kickoffId?: string; onEnd: (outcome: FactoryRunOutcome, since: Date) => Promise<FactoryRunEndResult> },
 ) {
   let endReason: RunEndReason | undefined;
   let parked: { toolName: string; toolCallId: string } | undefined;
+  let since = new Date();
   const timer =
     kickoffId === undefined
       ? undefined
       : setInterval(() => void heartbeatSessionOpenRun(session, kickoffId), Math.floor(FACTORY_OPEN_RUN_STALE_MS / 3));
   timer?.unref?.();
+  const lifetime = setTimeout(() => close(), FACTORY_SESSIONS_MAX_AGE_MS);
+  lifetime.unref?.();
   const close = () => {
     clearInterval(timer);
+    clearTimeout(lifetime);
     unsubscribe();
   };
   const unsubscribe = session.subscribe(event => {
@@ -97,10 +108,20 @@ function watchStartedRun(
       return;
     }
     if (event.type !== 'agent_end') return;
-    endReason = event.reason;
-    close();
+    endReason ??= event.reason;
+    clearInterval(timer);
     const outcome = runOutcome(event.reason, parked?.toolName);
-    if (outcome) void onEnd(outcome);
+    parked = undefined;
+    if (!outcome) return;
+    // Reports made up to the end, including its last millisecond, belong to this run.
+    const endedAt = new Date(Date.now() + 1);
+    void onEnd(outcome, since).then(
+      result => {
+        if (result.waiting) since = endedAt;
+        else close();
+      },
+      () => close(),
+    );
   });
   return { endReason: () => endReason, close };
 }
@@ -229,14 +250,13 @@ export function createFactorySessionTools(
         credentialScope: sessionModel.modelScope,
       });
       // The backstop: if the run ends without the agent's own final report, its origin still hears.
-      const since = new Date();
       const sender = { sessionId: ensured.sessionId, threadId, userId: scope.userId };
       const watcher = watchStartedRun(session, {
-        onEnd: async outcome => {
+        onEnd: async (outcome, since) => {
           try {
             const resolved = await reporting();
-            if (!resolved) return;
-            await sendRunEndReport(resolved, {
+            if (!resolved) return { waiting: false };
+            return await sendRunEndReport(resolved, {
               sender,
               recipients: [{ sessionId: scope.sessionId, threadId: scope.threadId }],
               since,
@@ -245,6 +265,7 @@ export function createFactorySessionTools(
             });
           } catch (error) {
             console.warn('[Factory reports] Unable to send the side session run-end report.', error);
+            return { waiting: false };
           }
         },
       });
@@ -393,10 +414,9 @@ export function createFactorySessionTools(
     const kickoffId = globalThis.crypto.randomUUID();
     // Watch before the kickoff so a fast run's end is not missed; the open-run
     // entry and audit follow the accepted kickoff, as the dispatcher records them.
-    const since = new Date();
     const watcher = watchStartedRun(session, {
       kickoffId,
-      onEnd: outcome =>
+      onEnd: (outcome, since) =>
         workItemRunEnd({
           orgId: scope.orgId,
           factoryProjectId: scope.factoryProjectId,

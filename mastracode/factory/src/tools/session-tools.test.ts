@@ -368,12 +368,17 @@ describe('the side session run-end backstop', () => {
     expect(reports[0]!.input).toMatchObject({ kind: 'failed', priority: 'urgent' });
   });
 
-  it('says nothing when the run is aborted: someone stopped or steered it', async () => {
+  it('says nothing for an aborted run and reports the run that follows it', async () => {
     const { session, reports } = await started();
     session.emit({ type: 'agent_end', reason: 'aborted' } as AgentControllerEvent);
     await new Promise(resolve => setTimeout(resolve, 10));
     expect(reports).toHaveLength(0);
-    expect(session.listenerCount()).toBe(0);
+    expect(session.listenerCount()).toBe(1);
+
+    session.emit({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
+    await vi.waitFor(() => expect(reports).toHaveLength(1));
+    expect(reports[0]!.input).toMatchObject({ kind: 'done' });
+    await vi.waitFor(() => expect(session.listenerCount()).toBe(0));
   });
 
   it('does not report done when the agent reported blocked and ended its turn to wait', async () => {
@@ -389,6 +394,34 @@ describe('the side session run-end backstop', () => {
     });
     session.emit({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
     await new Promise(resolve => setTimeout(resolve, 10));
+    expect(reports).toHaveLength(0);
+    expect(session.listenerCount()).toBe(1);
+
+    // Answered, the next run finishes without its own report: the backstop covers it.
+    session.emit({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
+    await vi.waitFor(() => expect(reports).toHaveLength(1));
+    expect(reports[0]!.input).toMatchObject({ kind: 'done', attributes: { backstop: 'true' } });
+    await vi.waitFor(() => expect(session.listenerCount()).toBe(0));
+  });
+
+  it('stays quiet after a waiting run when the next run sends its own done', async () => {
+    const { session, reports, notifications, result, scope } = await started();
+    const agentReport = (kind: string) =>
+      notifications.createNotification({
+        source: 'factory-session',
+        kind,
+        priority: 'high',
+        summary: kind,
+        threadId: scope.threadId,
+        resourceId: scope.sessionId,
+        attributes: { 'from-session': result.sessionId },
+      });
+    await agentReport('blocked');
+    session.emit({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    await agentReport('done');
+    session.emit({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
+    await vi.waitFor(() => expect(session.listenerCount()).toBe(0));
     expect(reports).toHaveLength(0);
   });
 
@@ -638,7 +671,8 @@ describe('factory_start_session in work-item mode', () => {
       expect(isOpenRunLiveElsewhere(renewed, 'factory-rule-dispatcher:other')).toBe(true);
 
       session.emit({ type: 'agent_end', reason: 'suspended' } as AgentControllerEvent);
-      expect(session.listenerCount()).toBe(0);
+      // A parked run waits for an answer: the watch carries on, the heartbeat does not.
+      expect(session.listenerCount()).toBe(1);
       const parked = (await listSessionOpenRuns(session))[0]!;
       await vi.advanceTimersByTimeAsync(FACTORY_OPEN_RUN_STALE_MS * 2);
       expect((await listSessionOpenRuns(session))[0]!.heartbeatAt).toBe(parked.heartbeatAt);
