@@ -1,0 +1,56 @@
+import { Agent } from '@mastra/core/agent';
+import { AgentController } from '@mastra/core/agent-controller';
+import { InMemoryStore } from '@mastra/core/storage';
+import { Workspace } from '@mastra/core/workspace';
+import { describe, expect, it } from 'vitest';
+
+import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { hydrateSessionDefaultModel } from './default-model-hydration.js';
+
+async function mountController() {
+  const seed = await createFactoryStorageForTests();
+  const controller = new AgentController({
+    workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
+    id: 'code',
+    storage: new InMemoryStore({ id: 'default-model-hydration' }),
+    stateSchema: undefined,
+    modes: [
+      {
+        id: 'build',
+        name: 'Build',
+        default: true,
+        defaultModelId: 'openai/gpt-5.5',
+        agent: new Agent({
+          id: 'test-agent',
+          name: 'test-agent',
+          instructions: 'Test.',
+          model: { id: 'openai/gpt-4o' },
+        }),
+      },
+    ],
+  });
+  await controller.init();
+  controller.onSessionCreated(
+    session =>
+      hydrateSessionDefaultModel(session, {
+        sourceControl: {
+          sessions: { getBySessionId: async sessionId => ({ sessionId, orgId: 'org-1', userId: 'user-1' }) as never },
+        },
+        workItems: seed.workItems,
+        modelDefaults: seed.modelDefaults,
+      }),
+    { blocking: true },
+  );
+  return { seed, controller };
+}
+
+describe('scenario: a new user session starts on its owner default model', () => {
+  it('runs the personal default model, not the mode default', async () => {
+    const { seed, controller } = await mountController();
+    await seed.modelDefaults.set({ orgId: 'org-1', userId: 'user-1', modelId: 'anthropic/claude-opus-4-6' });
+
+    const session = await controller.createSession({ resourceId: 'session-1', ownerId: 'user-1' });
+
+    expect(session.model.get()).toBe('anthropic/claude-opus-4-6');
+  });
+});
