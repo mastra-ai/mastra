@@ -50,10 +50,11 @@ const evict: Record<string, string[]> = {};
 const rejected: string[] = [];
 
 async function createKnowledge() {
-  for (const state of [synced, bindings, upstream, nodeIds, evict])
-    for (const key of Object.keys(state)) delete state[key];
-  rejected.length = 0;
-  const importer = (id: string, source: string) => ({
+  return createKnowledgeWith([importer('notion', 'notion:conn-notion'), importer('linear', 'linear:conn-linear')]);
+}
+
+function importer(id: string, source: string) {
+  return {
     id,
     access: { 'project:$projectId': 'owner' as const },
     // Factory's shape: a cron trigger whose bindings come from the project-scopes resolver.
@@ -79,12 +80,15 @@ async function createKnowledge() {
       }
       synced[source] = items.map(item => item.address);
     },
-  });
-  const knowledge = new Knowledge({
-    id: 'factory',
-    storage: new InMemoryStore(),
-    importers: [importer('notion', 'notion:conn-notion'), importer('linear', 'linear:conn-linear')] as any,
-  });
+  };
+}
+
+/** `importers` is a static list, or a resolver re-read on each reconcile (Factory's connection-driven shape). */
+async function createKnowledgeWith(importers: unknown) {
+  for (const state of [synced, bindings, upstream, nodeIds, evict])
+    for (const key of Object.keys(state)) delete state[key];
+  rejected.length = 0;
+  const knowledge = new Knowledge({ id: 'factory', storage: new InMemoryStore(), importers: importers as any });
   await knowledge.reconcile();
   knowledge.__registerMastra({} as never);
   return knowledge;
@@ -223,5 +227,44 @@ describe('Factory connection imports on a real Wave 2 Knowledge', () => {
     const p1 = await sessionReadScopeIds(knowledge, 'p1');
     expect(await readable(knowledge, p1, 'roadmap')).toHaveLength(1);
     expect(await readable(knowledge, p1, 'v1')).toHaveLength(0);
+  });
+
+  it('picks up a connection added between fires and stops one removed between fires', async () => {
+    const connected = new Set(['notion']);
+    const knowledge = await createKnowledgeWith(async () =>
+      [importer('notion', 'notion:conn-notion'), importer('linear', 'linear:conn-linear')].filter(definition =>
+        connected.has(definition.id),
+      ),
+    );
+    upstream['notion:conn-notion'] = [{ address: 'page-1', name: 'Runbook', text: 'notion runbook' }];
+    upstream['linear:conn-linear'] = [{ address: 'doc-1', name: 'Q3 plan', text: 'linear roadmap' }];
+    const p1 = await sessionReadScopeIds(knowledge, 'p1');
+
+    const notion = await bind(knowledge, connections.notion);
+    const linear = await bind(knowledge, connections.linear);
+    await expect(knowledge.runImporter('notion', notion, undefined, { triggerKind: 'cron' })).resolves.toMatchObject({
+      status: 'succeeded',
+    });
+    expect(knowledge.getImporter('linear')).toBeUndefined();
+
+    // Linear connects between fires: the next reconcile registers it and its fire imports.
+    connected.add('linear');
+    await knowledge.reconcileImportersInternal();
+    expect(knowledge.getImporter('linear')).toBeDefined();
+    await expect(knowledge.runImporter('linear', linear, undefined, { triggerKind: 'cron' })).resolves.toMatchObject({
+      status: 'succeeded',
+    });
+    expect(await readable(knowledge, p1, 'roadmap')).toHaveLength(1);
+
+    // Notion disconnects between fires: it is unregistered and cannot fire again.
+    connected.delete('notion');
+    upstream['notion:conn-notion'] = [{ address: 'page-1', name: 'Runbook', text: 'notion runbook v2' }];
+    await knowledge.reconcileImportersInternal();
+    expect(knowledge.getImporter('notion')).toBeUndefined();
+    await expect(
+      Promise.resolve().then(() => knowledge.runImporter('notion', notion, undefined, { triggerKind: 'cron' })),
+    ).rejects.toThrow('Knowledge importer notion is not registered');
+    expect(await readable(knowledge, p1, 'v2')).toHaveLength(0);
+    expect(await readable(knowledge, p1, 'roadmap')).toHaveLength(1);
   });
 });
