@@ -328,6 +328,7 @@ const createSessionResponseSchema = z.object({
 const ackResponseSchema = z.object({
   ok: z.boolean(),
 });
+const transferOwnershipResponseSchema = ackResponseSchema.extend({ ownerId: z.string() });
 
 const toolCommandAckResponseSchema = z.object({
   ok: z.boolean(),
@@ -942,6 +943,38 @@ export const SWITCH_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error switching controller thread');
+    }
+  },
+});
+
+export const TRANSFER_AGENT_CONTROLLER_THREAD_OWNERSHIP_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/owner',
+  responseType: 'json' as const,
+  pathParamSchema: threadPathParams,
+  queryParamSchema: sessionScopeQuerySchema,
+  responseSchema: transferOwnershipResponseSchema,
+  summary: 'Take ownership of a thread',
+  description:
+    'Transfers ownership of the specified thread to the authenticated user from the request context. The session switches to the thread if it is not already active.',
+  tags: ['AgentController', 'Threads'],
+  requiresAuth: true,
+  requiresPermission: 'agent-controller:execute',
+  handler: async ({ mastra, controllerId, resourceId, sessionScope, threadId, requestContext }) => {
+    try {
+      const ownerId = getRequestMessageAuthor(requestContext)?.id;
+      if (!ownerId) {
+        throw new HTTPException(401, { message: 'An authenticated user is required to transfer thread ownership' });
+      }
+      const controller = getAgentControllerOrThrow(mastra, controllerId);
+      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      if (session.thread.getId() !== threadId) {
+        await session.thread.switch({ threadId, requestContext });
+      }
+      await session.thread.transferOwnership({ toOwnerId: ownerId });
+      return { ok: true, ownerId };
+    } catch (error) {
+      return handleError(error, 'error transferring controller thread ownership');
     }
   },
 });

@@ -28,6 +28,7 @@ import {
   SEND_AGENT_CONTROLLER_NOTIFICATION_ROUTE,
   LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE,
   SWITCH_AGENT_CONTROLLER_THREAD_ROUTE,
+  TRANSFER_AGENT_CONTROLLER_THREAD_OWNERSHIP_ROUTE,
   STEER_AGENT_CONTROLLER_SESSION_ROUTE,
   FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE,
   AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE,
@@ -446,6 +447,61 @@ describe('agent-controller routes', () => {
       } as any);
 
       expect(spy).toHaveBeenCalledWith({ threadId: 'another-thread', requestContext });
+    });
+
+    it('transfers thread ownership to the authenticated user from the request context', async () => {
+      const session = await getRouteSession('user-transfer');
+      const switchSpy = vi.spyOn(session.thread, 'switch');
+      const requestContext = makeRequestContext();
+
+      const res = await TRANSFER_AGENT_CONTROLLER_THREAD_OWNERSHIP_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-transfer',
+        threadId: session.thread.getId(),
+        requestContext,
+      } as any);
+
+      expect(res).toEqual({ ok: true, ownerId: 'user-123' });
+      expect(switchSpy).not.toHaveBeenCalled();
+      await expect(session.thread.getOwner()).resolves.toBe('user-123');
+    });
+
+    it('switches to a non-active thread before transferring its ownership', async () => {
+      const session = await getRouteSession('user-transfer-switch');
+      const switchSpy = vi.spyOn(session.thread, 'switch').mockResolvedValue(undefined);
+      const transferSpy = vi.spyOn(session.thread, 'transferOwnership').mockResolvedValue(undefined);
+      const requestContext = makeRequestContext();
+
+      await TRANSFER_AGENT_CONTROLLER_THREAD_OWNERSHIP_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-transfer-switch',
+        threadId: 'another-thread',
+        requestContext,
+      } as any);
+
+      expect(switchSpy).toHaveBeenCalledWith({ threadId: 'another-thread', requestContext });
+      expect(transferSpy).toHaveBeenCalledWith({ toOwnerId: 'user-123' });
+      expect(switchSpy.mock.invocationCallOrder[0]).toBeLessThan(transferSpy.mock.invocationCallOrder[0]!);
+    });
+
+    it('rejects ownership transfer without an authenticated user id', async () => {
+      const session = await getRouteSession('user-transfer-anon');
+      const spy = vi.spyOn(session.thread, 'transferOwnership');
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_USER_KEY, { name: 'Missing id' });
+
+      await expect(
+        TRANSFER_AGENT_CONTROLLER_THREAD_OWNERSHIP_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-transfer-anon',
+          threadId: session.thread.getId(),
+          requestContext,
+        } as any),
+      ).rejects.toMatchObject({ status: 401 });
+      expect(spy).not.toHaveBeenCalled();
     });
 
     it('forwards requestContext to session.thread.switch when renaming another thread', async () => {
