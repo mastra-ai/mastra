@@ -207,6 +207,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { fromNodeProviderChain } from '@aws-sdk/credential-providers';
 import { MastraGateway, ModelRouterLanguageModel } from '@mastra/core/llm';
+import { RequestContext } from '@mastra/core/request-context';
 import { wrapLanguageModel } from 'ai';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MODEL_TOKENS } from '../../../../../docs/src/plugins/remark-model-tokens/models.js';
@@ -575,7 +576,7 @@ describe('resolveModel', () => {
       requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
 
       expect(() => resolveModel('openai/gpt-4o', { requestContext })).toThrow(
-        'No usable openai credential is configured for this signed-in Factory account.',
+        "No usable openai personal credential is connected for this session's account. It uses personal credentials only, so organization credentials are not used.",
       );
       expect(() => resolveModel('openai/gpt-4o', { requestContext })).toThrow(ProviderAuthRequiredError);
       try {
@@ -583,6 +584,39 @@ describe('resolveModel', () => {
       } catch (error) {
         expect((error as Error).name).toBe('ProviderAuthRequiredError');
       }
+    });
+
+    it('names organization scope when an organization-scoped Factory has no credential', async () => {
+      setCredentialStoreProvider(
+        () => ({
+          allowEnvironmentFallback: false,
+          reload() {},
+          get: () => undefined,
+          getStoredApiKey: () => undefined,
+          getApiKey: async () => undefined,
+        }),
+        async () => ({ orgId: 'org-1', userId: 'user-1', credentialScope: 'factory' as const }),
+      );
+      // Keep the router lazy so the test owns the request-scoped resolution promise.
+      vi.mocked(ModelRouterLanguageModel).mockImplementationOnce(function (
+        this: Record<string, unknown>,
+        _config: unknown,
+        customGateways?: unknown,
+      ) {
+        this.customGateways = customGateways;
+      } as never);
+      const requestContext = new RequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+
+      const model = resolveModel('openai/gpt-4o', { requestContext }) as unknown as {
+        customGateways: Array<{ resolveLanguageModel: () => Promise<unknown> }>;
+      };
+      const resolution = model.customGateways[0]!.resolveLanguageModel();
+
+      await expect(resolution).rejects.toThrow(ProviderAuthRequiredError);
+      await expect(resolution).rejects.toThrow(
+        'No usable openai organization credential is configured for this Factory. It uses organization credentials only, so personal provider sign-ins are not used.',
+      );
     });
 
     it('passes controller headers to the OpenAI OAuth provider', () => {

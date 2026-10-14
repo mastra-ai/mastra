@@ -16,6 +16,7 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check, ChevronDown, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
+import { useParams } from 'react-router';
 
 import type { AvailableModelOption } from '../../../../../hooks/useAvailableModels';
 import { useAvailableModelsQuery } from '../../../../../hooks/useAvailableModels';
@@ -45,7 +46,8 @@ export function ModelPicker() {
   const { kind, sessionEnabled, draftSessionId } = useChatSessionContext();
   const { status } = useChatConnection();
   const { activeModelId, defaultModelId, setModel, isLoading, error } = useChatModels();
-  const modelsQuery = useAvailableModelsQuery();
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const modelsQuery = useAvailableModelsQuery(factoryId);
   const [open, setOpen] = useState(false);
   const [pendingModelId, setPendingModelId] = useState<string>();
 
