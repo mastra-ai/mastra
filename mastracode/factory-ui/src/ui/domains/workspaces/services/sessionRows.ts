@@ -1,3 +1,4 @@
+import type { InstalledBoardInfo } from '../../../../api/types';
 import type { WorkspacePullRequestTarget } from '../../../../hooks/useWorkspacePullRequestMerges';
 import { changeRequestNumberForItem, pullRequestStatusForItem } from '../../factory/boardItems';
 import { itemBoard } from '../../factory/boardStages';
@@ -68,8 +69,18 @@ export function sessionBoard(session: FactoryUserSession, item: WorkItem | undef
   return item ? itemBoard(item) : getFactorySessionKind(session, undefined);
 }
 
-function isSettled(item: WorkItem | undefined, pullRequest: WorkItem | undefined): boolean {
-  if (item?.stages.some(isTerminalStage)) return true;
+function reachedTerminalPhase(item: WorkItem, boardDefinition: InstalledBoardInfo | undefined): boolean {
+  return item.stages.some(
+    stage => isTerminalStage(stage) || boardDefinition?.phases.find(phase => phase.id === stage)?.kind === 'terminal',
+  );
+}
+
+function isSettled(
+  item: WorkItem | undefined,
+  boardDefinition: InstalledBoardInfo | undefined,
+  pullRequest: WorkItem | undefined,
+): boolean {
+  if (item && reachedTerminalPhase(item, boardDefinition)) return true;
   if (!pullRequest) return false;
   const status = pullRequestStatusForItem(pullRequest);
   return status === 'merged' || status === 'closed';
@@ -87,6 +98,7 @@ function sessionPullRequest(pullRequest: WorkItem | undefined): SessionPullReque
 export interface FactorySessionRowInput {
   session: FactoryUserSession;
   item: WorkItem | undefined;
+  boardDefinition: InstalledBoardInfo | undefined;
   threadId: string | undefined;
   pullRequest: WorkItem | undefined;
   factoryId: string;
@@ -100,6 +112,7 @@ export interface FactorySessionRowInput {
 export function buildFactorySessionRow({
   session,
   item,
+  boardDefinition,
   threadId,
   pullRequest,
   factoryId,
@@ -123,7 +136,7 @@ export function buildFactorySessionRow({
       initializing: !session.materializedAt,
       running,
       attention,
-      settled: isSettled(item, pullRequest),
+      settled: isSettled(item, boardDefinition, pullRequest),
     }),
     owner: getSessionOwnerDetails(session, viewer),
     ownedByViewer: isOwnedByViewer(session, viewer),

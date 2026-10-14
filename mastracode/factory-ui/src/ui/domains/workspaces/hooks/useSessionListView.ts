@@ -65,12 +65,14 @@ const sessionListViewStore = createLocalStorageStore<SessionListViewChanges>({
 
 export function useSessionListView(): {
   view: SessionListView;
+  changedSettingCount: number;
   updateView: (changes: Partial<SessionListView>) => void;
   resetView: () => void;
 } {
   const changes = useLocalStorageStore(sessionListViewStore);
   return {
     view: { ...DEFAULT_SESSION_LIST_VIEW, ...changes },
+    changedSettingCount: Object.keys(changes).length,
     updateView: next =>
       sessionListViewStore.write(
         changesFromDefault({ ...DEFAULT_SESSION_LIST_VIEW, ...sessionListViewStore.read(), ...next }),

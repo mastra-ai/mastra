@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import { releaseBoard } from '../../../../../../e2e/ui/board-catalog';
 import { sessionActivityStatus, sessionBoard } from '../sessionRows';
-import { testSession, testWorkItem } from './fixtures/sessionRows';
+import { factoryRow, testSession, testWorkItem } from './fixtures/sessionRows';
 
 describe('sessionBoard', () => {
   it('puts a pull request item from before boards existed on the review board', () => {
@@ -33,5 +34,16 @@ describe('sessionActivityStatus', () => {
     [quiet, 'idle'],
   ] as const)('reads %o as %s', (row, status) => {
     expect(sessionActivityStatus(row)).toBe(status);
+  });
+});
+
+describe('factory session status on a custom board', () => {
+  it.each([
+    ['shipped', 'done'],
+    ['shipping', 'idle'],
+  ] as const)('reads a quiet session in the %s phase as %s', (phase, status) => {
+    const item = testWorkItem({ board: releaseBoard.id, stages: [phase] });
+
+    expect(factoryRow(testSession('s1'), { item, boardDefinition: releaseBoard }).status).toBe(status);
   });
 });

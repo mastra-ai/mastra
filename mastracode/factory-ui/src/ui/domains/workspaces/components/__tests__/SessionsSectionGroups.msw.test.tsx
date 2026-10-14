@@ -202,4 +202,32 @@ describe('Sessions sidebar groups', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('All groups with sessions are hidden');
     expect(groupRegions()).toEqual([]);
   });
+
+  it('offers Reset for groups hidden under another grouping', async () => {
+    localStorage.setItem('mastracode.sessionListView', JSON.stringify({ hiddenGroups: { status: ['status:idle'] } }));
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByRole('button', { name: 'Release old' });
+    expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
+
+    await openSessionProperties(user);
+    await user.click(screen.getByRole('menuitem', { name: 'Reset to default' }));
+
+    await waitFor(() => expect(sessionPropertiesTrigger()).toBeInTheDocument());
+  });
+
+  it("lists sessions in a custom board's terminal phase under Done", async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items`, () =>
+        HttpResponse.json({ workItems: [{ ...releaseItem, stages: ['shipped'] }] }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByRole('button', { name: 'Release old' });
+
+    await pickSessionProperty(user, 'Status', 'Done');
+
+    await waitFor(() => expect(groupRegions()).toEqual(['Release Preview sessions']));
+  });
 });
