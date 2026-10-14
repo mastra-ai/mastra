@@ -138,6 +138,7 @@
     "google-ai-studio/gemini-3.6-flash",
     "google-ai-studio/gemini-3.7-flash",
     "google-ai-studio/gemini-3.8-flash",
+    "google-ai-studio/gemini-4-argon",
     "google-ai-studio/gemini-pro-latest",
     "google-vertex/gemini-2.5-flash",
     "google-vertex/gemini-2.5-flash-lite",
@@ -720,6 +721,7 @@
     "google-ai-studio/gemini-3.6-flash",
     "google-ai-studio/gemini-3.7-flash",
     "google-ai-studio/gemini-3.8-flash",
+    "google-ai-studio/gemini-4-argon",
     "google-ai-studio/gemini-pro-latest",
     "google-vertex/gemini-2.5-flash",
     "google-vertex/gemini-2.5-flash-lite",
@@ -1297,6 +1299,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "google-ai-studio/gemini-4-argon": [
+      {
+        "type": "effort",
+        "values": ["high"]
       }
     ],
     "google-ai-studio/gemini-3.1-flash-lite": [

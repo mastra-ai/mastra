@@ -7,7 +7,7 @@ description: "Browse Deep Infra model IDs, capabilities, context windows, and pr
 
 # <img src="https://models.dev/logos/deepinfra.svg" alt="Deep Infra logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Deep Infra
 
-Access 73 Deep Infra models through Mastra's model router. Authentication is handled automatically using the `DEEPINFRA_API_KEY` environment variable.
+Access 74 Deep Infra models through Mastra's model router. Authentication is handled automatically using the `DEEPINFRA_API_KEY` environment variable.
 
 Learn more in the [Deep Infra documentation](https://deepinfra.com/models).
 
@@ -39,6 +39,18 @@ for await (const chunk of stream) {
 
 <ProviderModelsTable
   models={[
+  {
+    "model": "deepinfra/anthropic/claude-fable-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 10,
+    "outputCost": 50
+  },
   {
     "model": "deepinfra/ByteDance/Seed-2.0-code",
     "imageInput": true,
