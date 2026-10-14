@@ -22,8 +22,13 @@ import type { ToolAction } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import { PlatformMemoryClient } from './client';
-import type { MemoryMessage, MemoryMessageInput, MemoryThread, PlatformMemoryClientOptions } from './client';
-import { promptOf } from './parts';
+import type {
+  MemoryMessage,
+  MemoryMessageInput,
+  MemoryProcessorsResult,
+  MemoryThread,
+  PlatformMemoryClientOptions,
+} from './client';
 
 export type PlatformMemoryOptions = PlatformMemoryClientOptions & {
   id?: string;
@@ -100,6 +105,16 @@ function memoryContext(requestContext: RequestContext | undefined, messageList: 
   return null;
 }
 
+async function applyResult(
+  result: MemoryProcessorsResult,
+  agent: Pick<ProcessInputStepArgs, 'messageList' | 'writer' | 'abort' | 'rotateResponseMessageId'>,
+) {
+  for (const chunk of result.chunks) await agent.writer?.custom(chunk as never);
+  for (let i = 0; i < result.rotations; i++) agent.rotateResponseMessageId?.();
+  if (result.aborted !== null || !result.messageList) return agent.abort(result.aborted ?? undefined);
+  return agent.messageList.deserialize(result.messageList);
+}
+
 /**
  * Mastra memory backed by a hosted Platform Memory instance.
  *
@@ -136,50 +151,25 @@ export class PlatformMemory extends MastraMemory {
     };
   }
 
+  // The instance runs the real @mastra/memory processors; these only ship the message list
+  // there and apply what comes back (list, stream parts, message-id rotations, abort).
   async getInputProcessors(): Promise<InputProcessor[]> {
     const client = this.client;
-    const workingMemory = this.workingMemoryMode;
     return [
       {
-        id: 'platform-memory-context',
-        name: 'Platform Memory context',
-        async processInput({ messageList, requestContext }: ProcessInputArgs) {
-          const ctx = memoryContext(requestContext, messageList);
-          if (!ctx) return messageList;
-          const context = await client.getContext(ctx.threadId, ctx.resourceId, { workingMemory });
-          for (const message of promptOf(context)) {
-            if (message.role === 'system') messageList.addSystem(message.content, 'memory');
-            // Keeps ids like `om-continuation`, which @mastra/memory never persists.
-            else messageList.add(messageFromApi(message, ctx.threadId, ctx.resourceId), 'memory');
-          }
-          return messageList;
-        },
-        // Long tool loops: once the turn so far crosses the observation threshold,
-        // observe now and continue from the compressed context, like @mastra/memory does.
-        async processInputStep({
-          messageList,
-          requestContext,
-          stepNumber,
-          rotateResponseMessageId,
-        }: ProcessInputStepArgs) {
-          if (stepNumber === 0) return messageList;
+        id: 'platform-memory',
+        name: 'Platform Memory',
+        async processInputStep({ messageList, requestContext, stepNumber, model, writer, abort, rotateResponseMessageId }: ProcessInputStepArgs) {
           const ctx = memoryContext(requestContext, messageList);
           if (!ctx || ctx.readOnly) return messageList;
-          const messages = toApiMessages([...messageList.get.input.db(), ...messageList.get.response.db()]);
-          if (!messages.length) return messageList;
-          await client.saveMessages(ctx.threadId, { resourceId: ctx.resourceId, messages });
-          const status = await client.getObservationStatus(ctx.threadId);
-          if (!status.shouldObserve) return messageList;
-          await client.observe(ctx.threadId);
-          const context = await client.getContext(ctx.threadId, ctx.resourceId, { workingMemory });
-          rotateResponseMessageId?.();
-          messageList.removeByIds(messageList.get.all.db().map(m => m.id));
-          messageList.clearSystemMessages('memory');
-          for (const message of promptOf(context)) {
-            if (message.role === 'system') messageList.addSystem(message.content, 'memory');
-            else messageList.add(messageFromApi(message, ctx.threadId, ctx.resourceId), 'memory');
-          }
-          return messageList;
+          const result = await client.runProcessors(ctx.threadId, {
+            phase: 'inputStep',
+            resourceId: ctx.resourceId,
+            stepNumber,
+            messageList: messageList.serialize(),
+            model: model ? { provider: model.provider, modelId: model.modelId } : undefined,
+          });
+          return applyResult(result, { messageList, writer, abort, rotateResponseMessageId });
         },
       },
     ];
@@ -189,17 +179,18 @@ export class PlatformMemory extends MastraMemory {
     const client = this.client;
     return [
       {
-        id: 'platform-memory-save',
-        name: 'Platform Memory save',
-        async processOutputResult({ messageList, requestContext, result }: ProcessOutputResultArgs) {
+        id: 'platform-memory',
+        name: 'Platform Memory',
+        async processOutputResult({ messageList, requestContext, result, writer, abort }: ProcessOutputResultArgs) {
           const ctx = memoryContext(requestContext, messageList);
           if (!ctx || ctx.readOnly) return messageList;
-          const output = messageList.get.response.db();
-          // Don't persist an input-only failed turn; it would orphan the user message.
-          if (result?.finishReason === 'error' && output.length === 0) return messageList;
-          const messages = toApiMessages([...messageList.get.input.db(), ...output]);
-          if (messages.length) await client.saveMessages(ctx.threadId, { resourceId: ctx.resourceId, messages });
-          return messageList;
+          const res = await client.runProcessors(ctx.threadId, {
+            phase: 'output',
+            resourceId: ctx.resourceId,
+            messageList: messageList.serialize(),
+            finishReason: result?.finishReason,
+          });
+          return applyResult(res, { messageList, writer, abort });
         },
       },
     ];

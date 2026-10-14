@@ -64,19 +64,14 @@ export function createTurnMemory(client: PlatformMemoryClient, readOnly = false)
   }
 
   /**
-   * Call before each model call. Mid tool loop it saves the turn so far (observing first if over
-   * threshold) and returns true: memory then serves the whole turn, so send only memory's prompt.
+   * Call before each model call. Mid tool loop it saves the turn so far and returns true: memory
+   * then serves the whole turn, so send only memory's prompt.
+   * TODO: run the instance's processors here like PlatformMemory does; adapters don't observe mid-turn yet.
    */
   async function beforeStep(threadId: string, resourceId: string, items: TurnItem[]): Promise<boolean> {
     const lastUser = items.findLastIndex(m => m.role === 'user');
     if (readOnly || lastUser < 0 || !items.slice(lastUser + 1).some(m => m.role === 'tool')) return false;
     await save(threadId, resourceId, items);
-    if ((await client.getObservationStatus(threadId)).shouldObserve) {
-      await client.observe(threadId);
-      const turn = currentTurn(threadId, items);
-      turn.from = items.length;
-      turn.seq++;
-    }
     return true;
   }
 

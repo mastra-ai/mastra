@@ -68,14 +68,24 @@ export interface MemoryObservationRecord {
   [key: string]: unknown;
 }
 
-export interface MemoryObservationStatus {
-  pendingTokens: number;
-  observationThreshold: number;
-  shouldObserve: boolean;
-  shouldReflect: boolean;
-  observationTokenCount: number;
-  reflectionThreshold: number;
-  lastObservedAt: string | null;
+type SerializedMessageList = ReturnType<import('@mastra/core/agent').MessageList['serialize']>;
+
+export type RunMemoryProcessorsInput =
+  | {
+      phase: 'inputStep';
+      resourceId: string;
+      stepNumber: number;
+      messageList: SerializedMessageList;
+      model?: { provider: string; modelId: string };
+    }
+  | { phase: 'output'; resourceId: string; messageList: SerializedMessageList; finishReason?: string };
+
+export interface MemoryProcessorsResult {
+  /** Null when a processor aborted the run. */
+  messageList: SerializedMessageList | null;
+  chunks: unknown[];
+  rotations: number;
+  aborted: string | null;
 }
 
 export interface MemoryObservationMatch {
@@ -235,19 +245,13 @@ export class PlatformMemoryClient {
   }
 
   /** Runs observation/reflection now instead of waiting for the background worker. */
-  observe(threadId: string) {
-    return this.request<{ observed: boolean; reflected: boolean; record: MemoryObservationRecord | null }>(
-      'POST',
-      `/threads/${encodeURIComponent(threadId)}/observe`,
-    );
+  /** Runs the instance's memory processors for one agent phase on a serialized message list. */
+  runProcessors(threadId: string, body: RunMemoryProcessorsInput) {
+    return this.request<MemoryProcessorsResult>('POST', `/threads/${encodeURIComponent(threadId)}/processors`, {
+      body,
+    });
   }
 
-  /** Live observation status: pending tokens against the observe/reflect thresholds. */
-  getObservationStatus(threadId: string) {
-    return this.request<MemoryObservationStatus>('GET', `/threads/${encodeURIComponent(threadId)}/observations/status`);
-  }
-
-  /** Observer/reflector runs for the instance, newest first: token compression, duration, failures. */
   async listObservationRuns(query: { threadId?: string; limit?: number } = {}) {
     const res = await this.request<{ runs: MemoryObservationRun[] }>('GET', '/runs', { query });
     return res.runs;
