@@ -1306,7 +1306,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // undefined when structuringModelConfig routes through a separate
             // structuring step instead of asking the model for json_schema.
             // Skipped when tracing is off or the trace was not sampled (a
-            // no-op span still hands out a tracker).
+            // no-op span still hands out a tracker). The prompt is passed at
+            // creation so MODEL_INFERENCE records what this call sent.
             const inferenceTools = modelSpanTracker?.getTracingContext()?.currentSpan?.isValid
               ? getToolDefinitionsForTracing({
                   tools: currentTools,
@@ -1324,7 +1325,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               toolChoice: currentToolChoice,
               responseFormat: structuredOutput ? 'json_schema' : undefined,
             });
-            modelSpanTracker?.startInference?.();
+            modelSpanTracker?.startInference?.({ request: {}, inputMessages, messageId: currentMessageId });
             let inferenceStartedAt: number | undefined;
 
             // Collect chunks for post-stream message building (via

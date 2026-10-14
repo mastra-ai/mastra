@@ -2039,7 +2039,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // tools / availableTools / toolChoice reflect any per-step mutations.
           // availableTools is derived from the serialized definitions so the
           // two can't disagree. Skipped when tracing is off or the trace was
-          // not sampled (a no-op span still hands out a tracker).
+          // not sampled (a no-op span still hands out a tracker). The prompt is
+          // passed at creation so MODEL_INFERENCE records what this call sent.
           const inferenceTools = modelSpanTracker?.getTracingContext()?.currentSpan?.isValid
             ? getToolDefinitionsForTracing({
                 tools: currentStep.tools,
@@ -2057,7 +2058,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             toolChoice: currentStep.toolChoice as ModelInferenceContext['toolChoice'],
             responseFormat: currentStep.structuredOutput ? 'json_schema' : undefined,
           });
-          modelSpanTracker?.startInference?.();
+          modelSpanTracker?.startInference?.({ request: {}, inputMessages, messageId: currentStep.messageId });
           const inferenceStartedAt = Date.now();
 
           modelResult = executeWithContextSync({
