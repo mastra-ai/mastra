@@ -394,7 +394,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
     return [
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuild.path, {
         method: FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuild.method,
-        requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
@@ -411,7 +410,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
       }),
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuilds.path, {
         method: FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuilds.method,
-        requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
@@ -431,7 +429,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
       }),
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuildGet.path, {
         method: FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuildGet.method,
-        requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
@@ -831,7 +828,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
       }),
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentGet.path, {
         method: FACTORY_ROUTE_CONTRACTS.projectEnvironmentGet.method,
-        requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
@@ -845,7 +841,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
       }),
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentUpdate.path, {
         method: FACTORY_ROUTE_CONTRACTS.projectEnvironmentUpdate.method,
-        requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
