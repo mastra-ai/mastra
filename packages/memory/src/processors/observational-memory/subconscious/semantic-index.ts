@@ -98,9 +98,29 @@ export class KnowledgeSemanticIndexCoordinator {
       const existing = deduped.get(candidate.id);
       if (!existing || candidate.score > existing.score) deduped.set(candidate.id, candidate);
     }
-    return [...deduped.values()]
-      .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id))
-      .slice(0, limit);
+    const ranked = [...deduped.values()].sort(
+      (left, right) => right.score - left.score || left.id.localeCompare(right.id),
+    );
+    // Vector metadata can be stale (written before a rescope, or by a worker whose outbox claim
+    // expired), so it only narrows candidates. Storage decides what the caller may see.
+    const results: typeof ranked = [];
+    for (const candidate of ranked) {
+      if (results.length >= limit) break;
+      if (await this.#visibleInStorage(candidate.id, scopeIds)) results.push(candidate);
+    }
+    return results;
+  }
+
+  async #visibleInStorage(documentId: string, scopeIds: KnowledgeScopeIds): Promise<boolean> {
+    if (documentId.startsWith('knowledge:node:')) {
+      const node = await this.#knowledge.getNode(documentId.slice('knowledge:node:'.length));
+      return !!node && isKnowledgeScopeVisible(await this.#knowledge.getNodeScopeIds(node.id), scopeIds);
+    }
+    if (!documentId.startsWith('knowledge:record:')) return false;
+    const record = await this.#knowledge.getRecord({ id: documentId.slice('knowledge:record:'.length) });
+    if (!record || !isKnowledgeScopeVisible(await this.#knowledge.getRecordScopeIds(record.id), scopeIds)) return false;
+    const node = await this.#knowledge.getNode(record.nodeId);
+    return !!node && isKnowledgeScopeVisible(await this.#knowledge.getNodeScopeIds(node.id), scopeIds);
   }
 
   async #drain(scopeIds?: KnowledgeScopeIds): Promise<number> {
