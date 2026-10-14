@@ -16,7 +16,7 @@ export function SessionListProperties({
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger
-        variant={changedCount > 0 ? 'default' : 'ghost'}
+        variant="ghost"
         size="icon-sm"
         aria-label={changedCount === 0 ? MENU_LABEL : `${MENU_LABEL}, ${changedCount} changed`}
         tooltip={MENU_LABEL}
