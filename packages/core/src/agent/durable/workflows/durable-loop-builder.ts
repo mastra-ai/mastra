@@ -65,6 +65,20 @@ const COLLECT_TOOL_RESULTS_STEP_ID = 'collect-tool-results';
  * The outer step that publishes FINISH. Recovery reads its saved status to tell
  * whether FINISH already went out before a crash.
  */
+
+/**
+ * Copies step params with some fields overridden, keeping accessors intact.
+ * A spread would invoke the lazy `writer` getter (see `defineLazyWriter`) and
+ * allocate a ToolStream the step never uses.
+ */
+function withParams<T extends object>(params: T, overrides: Record<string, unknown>): T {
+  const descriptors: PropertyDescriptorMap = Object.getOwnPropertyDescriptors(params);
+  for (const [key, value] of Object.entries(overrides)) {
+    descriptors[key] = { value, enumerable: true, configurable: true, writable: true };
+  }
+  return Object.defineProperties({}, descriptors) as T;
+}
+
 export const MAP_FINAL_OUTPUT_STEP_ID = 'map-final-output';
 
 /**
@@ -414,31 +428,25 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         await params.setState(nextState);
         workflowState = nextState;
       };
-      // Copy descriptors rather than spreading: spreading would invoke the lazy
-      // `writer` getter and allocate a ToolStream on every LLM step.
-      const llmOutput = await executeLLM(
-        Object.defineProperties({} as typeof params, {
-          ...Object.getOwnPropertyDescriptors(params),
-          setState: { value: setState, enumerable: true, configurable: true, writable: true },
-        }),
-      );
+      const llmOutput = await executeLLM(withParams(params, { setState }));
       if (llmOutput && llmOutput.stepResult.reason === 'abort') {
         const initData = params.getInitData() as IterationState;
         // Preserve transcript, usage and span bookkeeping, then finish only this
         // iteration. The outer loop still runs its normal terminal side effects.
-        const executionOutput = await llmMappingStep.execute({
-          ...params,
-          state: workflowState,
-          bail: params.bail<unknown>,
-          inputData: {
-            llmOutput,
-            toolResults: [],
-            runId: initData.runId,
-            agentId: initData.agentId,
-            messageId: initData.messageId,
-            state: llmOutput.state ?? initData.state,
-          },
-        });
+        const executionOutput = await llmMappingStep.execute(
+          withParams(params, {
+            state: workflowState,
+            bail: params.bail<unknown>,
+            inputData: {
+              llmOutput,
+              toolResults: [],
+              runId: initData.runId,
+              agentId: initData.agentId,
+              messageId: initData.messageId,
+              state: llmOutput.state ?? initData.state,
+            },
+          }),
+        );
         if (!executionOutput) return executionOutput;
         return params.bail<IterationState>({
           ...createBaseIterationStateUpdate({ currentState: initData, executionOutput }),
