@@ -461,7 +461,7 @@ describe('MastraFactory.prepare', () => {
     const blockingCalls = controllerMock.onSessionCreated.mock.calls.filter(
       call => (call[1] as { blocking?: boolean } | undefined)?.blocking === true,
     );
-    expect(blockingCalls).toHaveLength(2);
+    expect(blockingCalls).toHaveLength(3);
     const blockingCall = blockingCalls[0];
 
     // Seed the owner's web session row and stored memory settings through the
@@ -1233,7 +1233,8 @@ describe('MastraFactory.prepare', () => {
   it('installs the auth gate and tenant credential primer when auth is configured', async () => {
     // Both modes mount the custom-providers primer and the SPA static
     // middleware is environment-dependent (present when ui/dist exists), so
-    // assert the delta from the two auth-specific middleware.
+    // assert the delta: the gate and the credential primer replace the open
+    // mode's interactive marker (the gate marks signed-in requests itself).
     const openConfig = await prepareFactory({ storage: fakeStorage(), auth: null });
     const openMiddleware = (openConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
 
@@ -1241,7 +1242,7 @@ describe('MastraFactory.prepare', () => {
 
     const gatedConfig = await prepareFactory({ storage: fakeStorage(), auth: fakeProvider() });
     const gatedMiddleware = (gatedConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
-    expect(gatedMiddleware).toHaveLength(openMiddleware.length + 2);
+    expect(gatedMiddleware).toHaveLength(openMiddleware.length + 1);
   });
 
   it('passes the resolved auth provider to both server.auth and studio.auth', async () => {
