@@ -357,10 +357,8 @@ function handleEvent(event: AgentControllerEvent) {
       const message = activeMessages.get(event.id)
       if (!message) break
 
-      const completed = event.metadata
-        ? { ...message, content: { ...message.content, metadata: event.metadata } }
-        : message
-      renderComplete(completed)
+      const metadata = event.metadata ?? message.content.metadata
+      renderComplete({ ...message, content: { ...message.content, metadata } })
       activeMessages.delete(event.id)
       break
     }
