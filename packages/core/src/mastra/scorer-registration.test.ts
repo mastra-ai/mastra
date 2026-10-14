@@ -466,9 +466,43 @@ describe('Scorer Registration', () => {
 
       expect(result.status).toBe('success');
       await vi.waitFor(() => expect(saveScore).toHaveBeenCalled());
+      // Let any further deferred hook dispatches settle before asserting exclusivity.
       for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve));
       expect(saveScore).toHaveBeenCalledTimes(1);
       expect(saveScore).toHaveBeenCalledWith(expect.objectContaining({ scorerId: 'quality', score: 0.9 }));
     });
+  });
+
+  it('does not save step scores from a standalone workflow into an unrelated Mastra instance', async () => {
+    const saveScore = vi.fn().mockResolvedValue({ score: {} });
+    const step = createStep({
+      id: 'draft',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      scorers: { standalone: { scorer: createTestScorer('standalone-step-scorer') } },
+      execute: async ({ inputData }) => inputData,
+    });
+    const standalone = createWorkflow({
+      id: 'standalone',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+    })
+      .then(step)
+      .commit();
+
+    new Mastra({
+      logger: false,
+      storage: {
+        init: vi.fn().mockResolvedValue(undefined),
+        getStore: vi.fn(async (domain: string) => (domain === 'scores' ? { saveScore } : null)),
+        __setLogger: vi.fn(),
+      } as any,
+    });
+
+    const result = await (await standalone.createRun({ disableScorers: false })).start({ inputData: { value: 'x' } });
+
+    expect(result.status).toBe('success');
+    for (let i = 0; i < 10; i++) await new Promise(resolve => setImmediate(resolve));
+    expect(saveScore).not.toHaveBeenCalled();
   });
 });

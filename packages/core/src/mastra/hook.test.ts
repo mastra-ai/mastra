@@ -383,6 +383,28 @@ describe('createOnScorerHook', () => {
     expect(mockScoresStore.saveScore).toHaveBeenCalledTimes(1);
   });
 
+  it('should not fall back to a mastra-registered scorer when a registered workflow fails to list scorers', async () => {
+    const mockScorer = { id: 'quality', name: 'Quality', run: vi.fn().mockResolvedValue({ score: 1 }) };
+    mockMastra.getWorkflowById.mockReturnValue({
+      listScorers: vi.fn().mockRejectedValue(new Error('dynamic scorers failed')),
+    });
+    mockMastra.getScorerById.mockReturnValue(mockScorer);
+
+    await hook({
+      runId: 'test-run',
+      scorer: { id: mockScorer.id },
+      input: [],
+      output: {},
+      source: 'LIVE',
+      entity: { id: 'wf' },
+      entityType: 'WORKFLOW',
+    });
+
+    expect(mockMastra.getScorerById).not.toHaveBeenCalled();
+    expect(mockScorer.run).not.toHaveBeenCalled();
+    expect(mockScoresStore.saveScore).not.toHaveBeenCalled();
+  });
+
   it('should pass live span correlation context and metadata into scorer.run', async () => {
     const correlationContext = {
       traceId: 'trace-live',
