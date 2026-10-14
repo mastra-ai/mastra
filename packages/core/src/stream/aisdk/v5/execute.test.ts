@@ -640,6 +640,14 @@ describe('execute OpenAI strict-mode schema preparation (issue #23795)', () => {
     expect(captured.options.providerOptions?.openai).toBeUndefined();
   });
 
+  // openai-compatible sends strict by default, so the schema must be prepared to match.
+  it('prepares record schemas for openai-compatible models that keep the strict default', async () => {
+    const { model, captured } = makeCapturingModel('openai-compatible.chat', true);
+    await run(model, { schema: z.object({ labels: z.record(z.string(), z.string()) }) });
+    expect(captured.options.responseFormat.schema.properties.labels.additionalProperties).toBe(false);
+    expect(captured.options.providerOptions?.openai).toBeUndefined();
+  });
+
   it('sends schemas with a record inside a tuple non-strict for OpenAI models', async () => {
     const { model, captured } = makeCapturingModel('openai.responses');
     await run(model, { schema: z.object({ pair: z.tuple([z.string(), z.record(z.string(), z.string())]) }) });
