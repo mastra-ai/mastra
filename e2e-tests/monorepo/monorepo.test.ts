@@ -236,7 +236,6 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         value: 'a -> b -> c',
         root: 'external-workspace-root-implementation-marker',
         app: 'App value is BEFORE.',
-        versionless: 'versionless-workspace-package',
       });
     });
 
@@ -318,6 +317,7 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     const buildReservation = reserveBuildQueue();
     let port = await getPort();
     let proc: ReturnType<typeof execa> | undefined;
+    let originalMastraIndex: string | undefined;
     const controller = new AbortController();
     const cancelSignal = controller.signal;
 
@@ -326,14 +326,27 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       try {
         const inputFile = join(fixturePath, 'apps', 'custom');
         const mastraIndexPath = join(inputFile, 'src', 'mastra', 'index.ts');
-        const mastraIndex = (await readFile(mastraIndexPath, 'utf8'))
+        originalMastraIndex = await readFile(mastraIndexPath, 'utf8');
+        // The versionless route is dev-only: `mastra build` cannot pack a workspace package without a version.
+        const mastraIndex = originalMastraIndex
           .replace(
             "import { testRoute } from '@/api/route/test';",
-            "import { testRoute } from '@/api/route/test';\nimport { environmentRoute } from '@/api/route/environment';",
+            "import { testRoute } from '@/api/route/test';\nimport { environmentRoute } from '@/api/route/environment';\nimport { versionlessRoute } from '@/api/route/versionless';",
           )
-          .replace(/apiRoutes: \[\s*testRoute,/, 'apiRoutes: [testRoute, environmentRoute,');
+          .replace(/apiRoutes: \[\s*testRoute,/, 'apiRoutes: [testRoute, environmentRoute, versionlessRoute,');
         await Promise.all([
           writeFile(mastraIndexPath, mastraIndex),
+          writeFile(
+            join(inputFile, 'src', 'mastra', 'api', 'route', 'versionless.ts'),
+            `import { registerApiRoute } from '@mastra/core/server';
+import { versionlessValue } from '@inner/versionless';
+
+export const versionlessRoute = registerApiRoute('/versionless', {
+  method: 'GET',
+  handler: async c => c.json({ value: versionlessValue }),
+});
+`,
+          ),
           writeFile(join(inputFile, '.env'), 'BASE_ONLY=base\nSHARED=base\n'),
           writeFile(join(inputFile, '.env.local'), 'LOCAL_ONLY=local\nSHARED=local\n'),
           writeFile(join(inputFile, '.env.development'), 'ENVIRONMENT_ONLY=development\n'),
@@ -408,12 +421,22 @@ export const environmentRoute = registerApiRoute('/environment', {
           }
         }
       } finally {
+        // Restore the index so the build/start suites never import the versionless package.
+        if (originalMastraIndex) {
+          await writeFile(join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts'), originalMastraIndex);
+        }
         buildReservation.release();
       }
       await killOrphanedDevServer(join(fixturePath, 'apps', 'custom'));
     }, timeout);
 
     runApiTests(port);
+
+    it('should resolve a workspace package that has no version (#26321)', async () => {
+      const res = await fetch(`http://localhost:${port}/versionless`);
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({ value: 'versionless-workspace-package' });
+    });
 
     it('layers development dotenv files without overriding the shell environment', async () => {
       const res = await fetch(`http://localhost:${port}/environment`);
@@ -516,7 +539,6 @@ export const environmentRoute = registerApiRoute('/environment', {
             value: 'a -> b -> c',
             root: 'external-workspace-root-implementation-marker',
             app: 'App value is BEFORE.',
-            versionless: 'versionless-workspace-package',
           });
           const initialInstance = await readServerInstance();
           expect(await readServerInstance()).toBe(initialInstance);
@@ -530,7 +552,6 @@ export const environmentRoute = registerApiRoute('/environment', {
             value: 'a -> b -> c-AFTER',
             root: 'external-workspace-root-implementation-marker',
             app: 'App value is BEFORE.',
-            versionless: 'versionless-workspace-package',
           });
           // A browser reconnecting after this broadcast must still detect the restart.
           await fetch(`http://localhost:${port}/__refresh`, { method: 'POST' });
@@ -547,7 +568,6 @@ export const environmentRoute = registerApiRoute('/environment', {
             value: 'a -> b -> c-AFTER',
             root: 'external-workspace-root-implementation-marker',
             app: 'App value is AFTER.',
-            versionless: 'versionless-workspace-package',
           });
         } finally {
           // Restore fixture so subsequent build/start suites see the original sources.
@@ -1377,7 +1397,6 @@ class AliasDeployer extends Deployer {
             value: 'a -> b -> c',
             root: 'external-workspace-root-implementation-marker',
             app: 'App value is BEFORE.',
-            versionless: 'versionless-workspace-package',
           });
         } finally {
           if (proc) {
