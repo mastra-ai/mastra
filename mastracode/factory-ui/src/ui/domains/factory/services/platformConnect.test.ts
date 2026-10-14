@@ -18,6 +18,7 @@ import {
  */
 const EXPECTED_IDS = [
   'jira',
+  'gitlab',
   'incident-io',
   'notion',
   'confluence',

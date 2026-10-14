@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import {
   Dialog,
   DialogAction,
@@ -65,8 +66,8 @@ function ConnectParamsDialog({ provider, title, pending, onSubmit, onClose }: Co
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            {meta.displayName} needs this to open the right sign-in page. You'll authorize in a {meta.displayName}{' '}
-            popup next.
+            {meta.displayName} needs this to open the right sign-in page. You'll authorize in a {meta.displayName} popup
+            next.
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="flex flex-col gap-3">
