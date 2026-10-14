@@ -153,7 +153,7 @@ When the user asks the agent to "watch acme-app-main", the agent calls `watchPip
 
 When an agent is created with a provider, it calls `connect()`, starts polling if `pollInterval` is set, and then calls `start()` if you defined it. Keep in mind:
 
-- **Subscriptions don't survive a restart.** Store them yourself if they must, and restore them in `start()`.
+- **Subscriptions don't survive a restart.** Store them yourself if they must, and restore them in an overridden [`__registerMastra()`](/reference/signals/signal-provider#__registermastramastra) that calls `super`. `start()` runs when the agent is created, usually before the provider can reach `this.mastra` and its storage.
 - **`start()` isn't awaited.** The agent can receive input before it finishes, and a rejected promise isn't caught by Mastra. Handle errors inside `start()`.
 - **Mastra doesn't call `stop()`.** Call `provider.stop()` during your app's shutdown to stop polling and clear subscriptions. If you override `stop()`, call `super.stop()`.
 - **Use one provider instance per agent.** A provider connects to the first agent that registers it. Another agent that registers the same instance gets its tools and processors, but notifications still go through the first agent.

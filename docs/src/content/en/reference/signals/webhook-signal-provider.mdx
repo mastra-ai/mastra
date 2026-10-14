@@ -158,9 +158,9 @@ const result = await webhookProvider.handleWebhook({
 })
 ```
 
-Returns: `Promise<{ status: number; body: { matched: number } }>`
+Returns: `Promise<{ status?: number; body?: unknown }>`
 
-Returns `{ status: 200, body: { matched: N } }` where `N` is the number of notifications sent. Returns `matched: 0` when no resource ID could be extracted or no subscriptions match. If a notification fails, the error is logged, the subscription isn't counted, and the remaining subscriptions are still notified.
+At runtime it returns `{ status: 200, body: { matched: N } }` where `N` is the number of notifications sent. Returns `matched: 0` when no resource ID could be extracted or no subscriptions match. If a notification fails, the error is logged, the subscription isn't counted, and the remaining subscriptions are still notified.
 
 <PropertiesTable
   content={[

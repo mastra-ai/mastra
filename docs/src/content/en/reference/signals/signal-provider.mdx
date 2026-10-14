@@ -116,7 +116,7 @@ class MySignals extends SignalProvider<'my-signals'> {
 
 #### `__registerMastra(mastra)`
 
-Called when the provider's agent is registered with a Mastra instance. Override to access storage or other Mastra services. Always call `super.__registerMastra(mastra)`.
+Called when the provider's agent is registered with a Mastra instance. Override to access storage or other Mastra services, for example to restore saved subscriptions. Always call `super.__registerMastra(mastra)`.
 
 ```typescript oxfmt:false
 override __registerMastra(mastra) {
@@ -359,7 +359,7 @@ Returns: `Promise<{ status?: number; body?: unknown }>`
 
 #### `start()`
 
-Called after `connect()` and `startPolling()` to run async initialization. Override when setup requires the agent or Mastra instance to be available.
+Called after `connect()` and `startPolling()` to run async initialization. Mastra calls it from the `Agent` constructor, so when an agent is created before it's passed to `new Mastra()`, `this.mastra` is unset in `start()`, even after an `await`. Restore anything that needs storage or other Mastra services in an overridden [`__registerMastra()`](#__registermastramastra) instead.
 
 The agent doesn't await `start()`, so the agent can receive input before it finishes, and Mastra doesn't catch a rejected promise. Handle errors inside `start()`.
 

@@ -34,9 +34,9 @@ Any local process running as your user can list the threads your instances adver
 A peer is one exact agent thread, identified by `{ agentId, resourceId, threadId }`. The agent uses four tools:
 
 1. `agent_connections_list` lists peers advertised right now and peers this thread has saved.
-2. `agent_connect` saves a discovered peer to the current thread.
-3. `agent_signal_send` sends a notification to a saved peer.
-4. `agent_disconnect` removes a saved peer. The peer doesn't need to be online, and disconnecting twice is safe.
+1. `agent_connect` saves a discovered peer to the current thread.
+1. `agent_signal_send` sends a notification to a saved peer.
+1. `agent_disconnect` removes a saved peer. The peer doesn't need to be online, and disconnecting twice is safe.
 
 You can ask the agent in plain language, for example "list the other agents and connect to the one working on the docs".
 
@@ -61,9 +61,18 @@ A saved peer stays saved until you disconnect it. Saving records that you intend
 
 `agent_signal_send` checks discovery again before every send, and only sends when the exact peer is still saved and advertised. A peer seen earlier but missing now can't receive messages.
 
-Once the message reaches the target thread, the result shows what happened to it: `wake`, `deliver`, `persist`, `blocked`, or `discard`, depending on the target's state and its [delivery policy](https://mastra.ai/docs/harness/notifications#change-the-delivery-policy). If the thread's owner doesn't acknowledge the send, the tool returns an error and the `messageId` isn't used up, so the sender can retry with the same ID.
+Once the message reaches the target thread, the result shows what happened to it: `wake`, `deliver`, `persist`, `blocked`, or `discard`, depending on the target's state and its [delivery policy](https://mastra.ai/docs/harness/notifications#change-the-delivery-policy). If the thread's owner doesn't acknowledge the send, the message waits in the target's notification inbox and the `messageId` isn't used up, so the sender can retry with the same ID. Without `expectsReply` the tool reports this as `Queued for …`. With `expectsReply` it returns an error.
 
-Set `expectsReply` when the peer should answer, and `replyTo` to the original `messageId` when answering. `priority` controls how the receiving agent sees the message. A `low` or `medium` priority message sent to a busy agent arrives as a summary first, so use `high` or `urgent` when you need a reply.
+Set `expectsReply` when the peer should answer, and `replyTo` to the original `messageId` when answering. `priority` controls how the receiving agent sees the message:
+
+| Priority | Target idle | Target busy |
+| - | - | - |
+| `urgent` | Delivered | Delivered |
+| `high` | Delivered | Summary first, full message after the run |
+| `medium` | Delivered | Summary |
+| `low` | Summary | Summary |
+
+A send with `expectsReply` fails when the message would arrive as a summary, because the peer hasn't seen it yet. Only `urgent` reliably reaches the peer directly. `high` and `medium` do so only when the peer is idle.
 
 ## Agents in other projects
 

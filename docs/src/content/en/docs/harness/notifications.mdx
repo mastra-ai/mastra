@@ -98,7 +98,12 @@ Summarized notifications stay `pending` in the inbox until the agent reads them 
 
 ### Dispatch
 
-Deferred deliveries and `low` priority summaries are sent by a dispatcher that runs every minute. Dispatch is on by default and needs a storage adapter with the `schedules` domain, which libSQL, PostgreSQL, and MongoDB provide. Configure or turn it off with `notifications.dispatch` on [`Mastra`](/reference/core/mastra-class#constructor-parameters):
+Deferred deliveries and `low` priority summaries are sent by a dispatcher that runs every minute. Dispatch is on by default, with two requirements:
+
+- A storage adapter with the `schedules` domain, which libSQL, PostgreSQL, and MongoDB provide. Without one, nothing is dispatched and no error is raised.
+- Running Mastra workers. The Mastra server and worker builds start them. A standalone script that only creates a `Mastra` instance never dispatches.
+
+Change the schedule with `notifications.dispatch` on [`Mastra`](/reference/core/mastra-class#constructor-parameters), or set `dispatch: { enabled: false }` to turn it off:
 
 ```typescript title="src/mastra/index.ts"
 export const mastra = new Mastra({
@@ -141,10 +146,11 @@ Mastra checks `decide` first, then `sources` by the record's `source`, then `pri
 The actions are:
 
 - `deliver`: Show the full notification now. Wakes an idle thread.
-- `summarize`: Send a summary now or at `summaryAt`. Return a decision object such as `{ action: 'summarize', summaryAt, deliverAt }` to also schedule full delivery.
-- `defer`: Keep the record pending until `deliverAt`, then deliver it through the dispatcher.
+- `summarize`: Send a summary at `summaryAt`. Return a decision object such as `{ action: 'summarize', summaryAt, deliverAt }`. Add `deliverAt` to also schedule full delivery. A bare `'summarize'` string has no `summaryAt`. The record stays `pending` and is never summarized or delivered.
+- `defer`: Keep the record pending until `deliverAt`, then deliver it through the dispatcher. Return `{ action: 'defer', deliverAt }`. Without `deliverAt` the record stays `pending` and is never delivered.
 - `persist`: Store the record without notifying the agent. It's available through the inbox tool.
 - `discard`: Store the record as `discarded` and never deliver it.
+- `queue`: Handled the same as `deliver`.
 
 Mastra runs `decide` again when the dispatcher delivers a deferred or summarized record. At that point only the returned `streamOptions` and `hold` are used, so keep `decide` free of side effects. Use `streamOptions` to pass the request context an idle thread needs to start a run, such as model selection.
 
@@ -156,7 +162,7 @@ After a summary, the agent calls `read`. Mastra delivers the unread notification
 
 ## Merge repeated events
 
-Set `dedupeKey` or `coalesceKey` when the same event can be sent more than once. If a `pending` record on the same thread has the same `source`, `kind`, and key, Mastra updates that record with the new summary and payload and increments its `coalescedCount` instead of creating another. Once a record has been delivered or read, the next send with the same key creates a new record.
+Set `dedupeKey` or `coalesceKey` when the same event can be sent more than once. If a `pending` record has the same thread, resource, agent, `source`, and `kind`, and either its `dedupeKey` matches the `dedupeKey` you send or its `coalesceKey` matches the `coalesceKey` you send, Mastra updates that record with the new summary and payload and increments its `coalescedCount` instead of creating another. Once a record has been delivered or read, the next send with the same key creates a new record.
 
 ## Related
 

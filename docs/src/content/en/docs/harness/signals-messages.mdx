@@ -74,7 +74,17 @@ const { cancelledSignalIds } = agent.cancelQueuedMessages({
 
 `cancelledSignalIds` lists only the messages this process removed. Mastra also publishes the cancellation through pub/sub so other processes subscribed to the thread can remove their copy, but the result doesn't confirm that. Cancellation can't reach a message that has already started running, and it doesn't delete saved messages or revoke the `accepted` result the message already returned.
 
-Cancellation applies to everything pending on the thread, including messages queued by other agents that share the same runtime and pub/sub.
+Cancelling by `signalIds` reaches any listed message pending on the thread, including messages queued by other agents that share the same runtime.
+
+To cancel a group of messages without tracking their IDs, pass a `queueOwnerId` to `queueMessage()` and cancel by that ID instead. This form only cancels messages the calling agent queued with that `queueOwnerId`:
+
+```typescript title="src/chat.ts"
+agent.queueMessage('And summarize it in one line.', { ...thread, queueOwnerId: 'tab_1' })
+
+agent.cancelQueuedMessages({ ...thread, queueOwnerId: 'tab_1' })
+```
+
+`queueOwnerId` only groups messages locally. It isn't sent to other processes and isn't an authorization check.
 
 ## Stop the run
 
@@ -86,7 +96,7 @@ subscription.abort({ clearPendingSignals: true })
 
 Without a subscription, call `agent.abortThreadStream({ ...thread, clearPendingSignals: true })`. An aborted run ends with an `abort` chunk instead of `finish`. The subscription stays open, and later messages can start a new run.
 
-With a shared pub/sub, an abort reaches the instance that owns the run. Clearing pending input only clears what the owning instance has queued, and neither abort nor cancellation stops continuations created with `continueWithMessages()`.
+With a shared pub/sub, an abort reaches the instance that owns the run. With `clearPendingSignals`, the calling instance clears its own pending input and then asks the owning instance to clear its queue too. Neither abort nor cancellation stops continuations created with `continueWithMessages()`.
 
 ## Approve tool calls
 

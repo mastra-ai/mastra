@@ -94,7 +94,7 @@ What happens to an input depends on whether the thread has a run in progress.
 | Idle | `wake`: start a run with the input | `persist`: save it for the next run, `discard`: drop it |
 | Active | `deliver`: add the input to the running loop | `persist`, `discard` |
 
-Set `ifIdle.behavior` and `ifActive.behavior` on [`sendSignal()`](/docs/harness/custom-signals#choose-what-happens-on-arrival) to change this. Every send returns an `accepted` promise. It resolves to the action Mastra took (`wake`, `deliver`, `persist`, `discard`, or `blocked` when the thread is busy with a different agent's run or with a run suspended for tool approval).
+Set `ifIdle.behavior` and `ifActive.behavior` on [`sendSignal()`](/docs/harness/custom-signals#choose-what-happens-on-arrival) to change this. Every send returns an `accepted` promise. It resolves to the action Mastra took (`wake`, `deliver`, `persist`, `discard`, or `blocked`). You get `blocked` when the thread's run is suspended, for example waiting on a tool approval, or when the run belongs to another agent on a different instance.
 
 `queueMessage()` is the exception: on an active thread it waits for the current run to finish and then starts a new one. See [Messages and steering](/docs/harness/signals-messages#queue-a-message-for-the-next-turn).
 
