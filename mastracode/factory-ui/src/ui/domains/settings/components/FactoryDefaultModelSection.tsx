@@ -1,6 +1,7 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { formatModelName } from '@mastra/playground-ui/utils/model';
 import type { MouseEvent } from 'react';
 import { useRef, useState } from 'react';
 import { useParams } from 'react-router';
@@ -13,7 +14,6 @@ import {
 } from '../../../../hooks/useFactoryDefaultModel';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 
-import { formatModelName } from './model-display-name';
 import { ModelCombobox } from './ModelCombobox';
 import { SharedCredentialNotice } from './SharedCredentialNotice';
 

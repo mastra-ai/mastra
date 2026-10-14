@@ -39,6 +39,7 @@ const WORD_NAMES = new Map([
 ]);
 
 const DATE_SUFFIX = /(-\d{8}|-\d{4}-\d{2}-\d{2}|-\d{2}-\d{4}|-\d{4})$/;
+const BEDROCK_VENDOR_PREFIX = /^[a-z]+\./i;
 
 const titleCase = (word: string) => WORD_NAMES.get(word) ?? word.charAt(0).toUpperCase() + word.slice(1);
 
@@ -49,7 +50,7 @@ function formatWord(word: string) {
 }
 
 export function formatModelName(model: string): string {
-  const base = model.split('/').pop() || model;
+  const base = (model.split('/').pop() || model).replace(BEDROCK_VENDOR_PREFIX, '');
   const tokens = base
     .toLowerCase()
     .replace(DATE_SUFFIX, '')

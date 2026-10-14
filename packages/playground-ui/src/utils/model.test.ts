@@ -44,6 +44,7 @@ describe('formatModelName', () => {
     ['llama-3.1-70b-instruct', 'Llama 3.1 70B Instruct'],
     ['deepseek-chat', 'DeepSeek Chat'],
     ['grok-4-fast', 'Grok 4 Fast'],
+    ['amazon-bedrock/anthropic.claude-sonnet-4-5', 'Claude Sonnet 4.5'],
   ])('%s reads as %s', (model, name) => {
     expect(formatModelName(model)).toBe(name);
   });
