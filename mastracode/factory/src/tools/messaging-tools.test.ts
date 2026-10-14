@@ -53,6 +53,11 @@ const ROWS: Record<string, SourceControlSession> = {
   'session-other-factory': row('session-other-factory', { factoryProjectId: 'project-2' }),
   'session-other-org': row('session-other-org', { orgId: 'org-2' }),
   'session-worker': row('session-worker'),
+  'session-side': row('session-side', {
+    userId: 'user-1',
+    originSessionId: 'session-1',
+    originThreadId: 'thread-session-1',
+  }),
 };
 
 function setup({
@@ -83,7 +88,12 @@ function setup({
   };
   const auditRecorder = { record: vi.fn(async () => undefined) };
   const deps: FactoryMessagingToolDependencies = {
-    sessions: { getBySessionId: vi.fn(async (id: string) => ROWS[id] ?? null) },
+    sessions: {
+      getBySessionId: vi.fn(async (id: string) => ROWS[id] ?? null),
+      listByOrigin: vi.fn(async ({ orgId, originSessionId }: { orgId: string; originSessionId: string }) =>
+        Object.values(ROWS).filter(row => row.orgId === orgId && row.originSessionId === originSessionId),
+      ),
+    },
     workItems: {
       findActiveRunBindingForSession: vi.fn(
         async ({ sessionId }: { sessionId: string }) =>
@@ -252,7 +262,7 @@ describe('factory_signal_session', () => {
 
     await expect(
       run(nonInteractive, 'factory_signal_session', { sessionId: 'session-b', message: 'hi' }),
-    ).rejects.toThrow(/sessions working on items this session follows/);
+    ).rejects.toThrow(/sessions working on items it follows/);
     expect(sent).toHaveLength(0);
 
     await expect(
@@ -272,6 +282,21 @@ describe('factory_signal_session', () => {
     expect(auditRecorder.record).toHaveBeenCalledWith(
       expect.objectContaining({ actorId: 'agent:thread-session-1', actorType: 'agent' }),
     );
+  });
+
+  it('on a turn nobody signed in started, reaches its own side sessions but not unrelated ones', async () => {
+    const nonInteractive = { ...USER, interactive: false };
+    const { run, sent } = setup();
+
+    await expect(
+      run(nonInteractive, 'factory_signal_session', { sessionId: 'session-side', message: 'Ask the API team.' }),
+    ).resolves.toMatchObject({ delivered: 'woken' });
+    expect(sent[0]?.target).toEqual({ resourceId: 'session-side', threadId: 'thread-session-side' });
+
+    await expect(
+      run(nonInteractive, 'factory_signal_session', { sessionId: 'session-b', message: 'hi' }),
+    ).rejects.toThrow(/side sessions and sessions working on items it follows/);
+    expect(sent).toHaveLength(1);
   });
 
   it('does not reach a revoked worker of a followed item on a non-interactive turn', async () => {
@@ -475,7 +500,7 @@ describe('Factory toolset composition', () => {
     expect(names(WORKER)).toEqual(['factory_message_origin']);
   });
 
-  it('gives a user session the Segment 1 tools plus both messaging tools', () => {
+  it('gives a user session the Segment 1 tools, both messaging tools and factory_start_session', () => {
     expect(names(USER)).toEqual(
       [
         'factory_list_work_items',
@@ -491,6 +516,7 @@ describe('Factory toolset composition', () => {
         'factory_unsubscribe_work_item',
         'factory_signal_session',
         'factory_message_origin',
+        'factory_start_session',
       ].sort(),
     );
   });
