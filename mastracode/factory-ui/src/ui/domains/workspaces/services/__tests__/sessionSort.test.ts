@@ -1,91 +1,60 @@
 import { describe, expect, it } from 'vitest';
 
-import { WORKSPACE_SESSION_SORTS, compareUserSessions, compareWorkspaceRows } from '../sessionSort';
-import type { SortableWorkspaceRow } from '../sessionSort';
-import type { FactoryUserSession } from '../user-sessions';
+import type { SessionListRow } from '../sessionRows';
+import { SESSION_SORTS, compareSessionRows } from '../sessionSort';
+import { factoryRow, testSession, testWorkItem, userRow } from './fixtures/sessionRows';
 
-function row(sessionId: string, overrides: Partial<SortableWorkspaceRow> = {}): SortableWorkspaceRow {
-  return {
-    pinned: false,
-    initializing: false,
-    running: false,
-    attention: false,
-    settled: false,
-    createdAt: '2026-09-04T09:00:00.000Z',
-    updatedAt: '2026-09-04T09:00:00.000Z',
-    workspace: { sessionId },
-    ...overrides,
-  };
-}
+const sessionIds = (rows: SessionListRow[]) => rows.map(row => row.session.sessionId);
 
-function userSession(sessionId: string, overrides: Partial<FactoryUserSession> = {}): FactoryUserSession {
-  return {
-    id: `row-${sessionId}`,
-    sessionId,
-    projectRepositoryId: 'repo-1',
-    orgId: 'org-1',
-    userId: 'user-1',
-    visibility: 'org',
-    title: sessionId,
-    branch: `user/${sessionId}`,
-    baseBranch: 'main',
-    sandboxId: 'sandbox-1',
-    sandboxWorkdir: '/workspace',
-    materializedAt: '2026-09-04T09:00:00.000Z',
-    createdAt: '2026-09-04T09:00:00.000Z',
-    updatedAt: '2026-09-04T09:00:00.000Z',
-    ...overrides,
-  };
-}
-
-const sessionIds = (rows: { workspace: { sessionId: string } }[]) => rows.map(item => item.workspace.sessionId);
-
-describe('compareWorkspaceRows', () => {
-  it.each(WORKSPACE_SESSION_SORTS)('keeps a pinned settled row above an unpinned running row under %s', sort => {
+describe('compareSessionRows', () => {
+  it.each(SESSION_SORTS)('keeps a pinned done row above an unpinned running row under %s', sort => {
     const rows = [
-      row('running', { running: true, createdAt: '2026-09-04T11:00:00.000Z', updatedAt: '2026-09-04T11:00:00.000Z' }),
-      row('pinned', { pinned: true, settled: true }),
+      userRow(
+        'running',
+        { createdAt: '2026-09-04T11:00:00.000Z', updatedAt: '2026-09-04T11:00:00.000Z' },
+        { running: true },
+      ),
+      factoryRow(testSession('pinned'), { item: testWorkItem({ stages: ['done'] }), pinned: true }),
     ];
 
-    expect(sessionIds(rows.sort(compareWorkspaceRows(sort)))).toEqual(['pinned', 'running']);
+    expect(sessionIds(rows.sort(compareSessionRows(sort)))).toEqual(['pinned', 'running']);
   });
 
-  it('orders activity as running, then idle, then settled, whatever their age', () => {
+  it('orders activity as live work, then idle, then done, across factory and user rows whatever their age', () => {
     const rows = [
-      row('settled', { settled: true, createdAt: '2026-09-04T12:00:00.000Z' }),
-      row('idle', { createdAt: '2026-09-04T11:00:00.000Z' }),
-      row('running', { running: true, createdAt: '2026-09-04T08:00:00.000Z' }),
+      factoryRow(testSession('done', { createdAt: '2026-09-04T12:00:00.000Z' }), {
+        item: testWorkItem({ stages: ['done'] }),
+      }),
+      factoryRow(testSession('idle', { createdAt: '2026-09-04T11:00:00.000Z' })),
+      userRow('running', { createdAt: '2026-09-04T08:00:00.000Z' }, { running: true }),
     ];
 
-    expect(sessionIds(rows.sort(compareWorkspaceRows('activity')))).toEqual(['running', 'idle', 'settled']);
+    expect(sessionIds(rows.sort(compareSessionRows('activity')))).toEqual(['running', 'idle', 'done']);
   });
 
   it('orders by last update even when creation order disagrees', () => {
     const rows = [
-      row('created-last', { createdAt: '2026-09-04T12:00:00.000Z', updatedAt: '2026-09-04T10:00:00.000Z' }),
-      row('updated-last', { createdAt: '2026-09-04T08:00:00.000Z', updatedAt: '2026-09-04T11:00:00.000Z' }),
+      userRow('created-last', { createdAt: '2026-09-04T12:00:00.000Z', updatedAt: '2026-09-04T10:00:00.000Z' }),
+      factoryRow(
+        testSession('updated-last', { createdAt: '2026-09-04T08:00:00.000Z', updatedAt: '2026-09-04T11:00:00.000Z' }),
+      ),
     ];
 
-    expect(sessionIds(rows.sort(compareWorkspaceRows('updated')))).toEqual(['updated-last', 'created-last']);
+    expect(sessionIds(rows.sort(compareSessionRows('updated')))).toEqual(['updated-last', 'created-last']);
+  });
+
+  it('orders by creation even when update order disagrees', () => {
+    const rows = [
+      userRow('updated-last', { createdAt: '2026-09-04T08:00:00.000Z', updatedAt: '2026-09-04T12:00:00.000Z' }),
+      userRow('created-last', { createdAt: '2026-09-04T11:00:00.000Z' }),
+    ];
+
+    expect(sessionIds(rows.sort(compareSessionRows('created')))).toEqual(['created-last', 'updated-last']);
   });
 
   it('breaks timestamp ties by session id so the order never flickers', () => {
-    expect(sessionIds([row('a'), row('c'), row('b')].sort(compareWorkspaceRows('created')))).toEqual(['c', 'b', 'a']);
-  });
-});
+    const rows = [userRow('a'), userRow('c'), userRow('b')];
 
-describe('compareUserSessions', () => {
-  it('puts pinned sessions first, then the newest created', () => {
-    const sessions = [
-      userSession('old', { createdAt: '2026-09-04T08:00:00.000Z', updatedAt: '2026-09-04T12:00:00.000Z' }),
-      userSession('new', { createdAt: '2026-09-04T11:00:00.000Z' }),
-      userSession('pinned', { createdAt: '2026-09-04T07:00:00.000Z' }),
-    ];
-
-    expect(sessions.sort(compareUserSessions('created', new Set(['pinned']))).map(item => item.sessionId)).toEqual([
-      'pinned',
-      'new',
-      'old',
-    ]);
+    expect(sessionIds(rows.sort(compareSessionRows('created')))).toEqual(['c', 'b', 'a']);
   });
 });

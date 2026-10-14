@@ -47,14 +47,9 @@ describe('ProjectRoutes', () => {
     });
     expect(createdResponse.status).toBe(201);
     const created = (await createdResponse.json()) as {
-      project: { id: string; name: string; description: string; modelScope: string; slackWorkItemsEnabled: boolean };
+      project: { id: string; name: string; description: string; modelScope: string };
     };
-    expect(created.project).toMatchObject({
-      name: 'Platform',
-      description: 'Core services',
-      modelScope: 'factory',
-      slackWorkItemsEnabled: false,
-    });
+    expect(created.project).toMatchObject({ name: 'Platform', description: 'Core services', modelScope: 'factory' });
 
     const listed = (await (await app.request('/web/factory/projects')).json()) as { projects: Array<{ id: string }> };
     expect(listed.projects.map(project => project.id)).toEqual([created.project.id]);
@@ -67,16 +62,42 @@ describe('ProjectRoutes', () => {
         name: 'Platform engineering',
         description: null,
         modelScope: 'user',
-        slackWorkItemsEnabled: true,
       }),
     });
     expect(updatedResponse.status).toBe(200);
     expect((await updatedResponse.json()) as unknown).toMatchObject({
-      project: { name: 'Platform engineering', description: null, modelScope: 'user', slackWorkItemsEnabled: true },
+      project: { name: 'Platform engineering', description: null, modelScope: 'user' },
     });
 
     expect((await app.request(`/web/factory/projects/${created.project.id}`, { method: 'DELETE' })).status).toBe(204);
     expect((await app.request(`/web/factory/projects/${created.project.id}`)).status).toBe(404);
+  });
+
+  it('treats the removed slackWorkItemsEnabled setting from an old client as an unknown field', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, projectRoutes(seed));
+    const patch = (body: unknown) =>
+      app.request(`/web/factory/projects/${project.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    // Sent alone it is an empty update.
+    expect((await patch({ slackWorkItemsEnabled: true })).status).toBe(400);
+
+    // Sent with other fields it is ignored.
+    const mixed = await patch({ name: 'Renamed', slackWorkItemsEnabled: true });
+    expect(mixed.status).toBe(200);
+    const { project: updated } = (await mixed.json()) as { project: Record<string, unknown> };
+    expect(updated.name).toBe('Renamed');
+    expect(updated).not.toHaveProperty('slackWorkItemsEnabled');
   });
 
   it('requires an organization and scopes project access by organization', async () => {

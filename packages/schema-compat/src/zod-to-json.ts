@@ -265,6 +265,8 @@ const STRICT_MODE_DROPPED_KEYWORDS = [
   'minProperties',
   'maxProperties',
   'patternProperties',
+  // z.record() emits this for its key type.
+  'propertyNames',
   'unevaluatedItems',
   'unevaluatedProperties',
   // Conditional/dependency keywords: unsupported by OpenAI strict mode with no

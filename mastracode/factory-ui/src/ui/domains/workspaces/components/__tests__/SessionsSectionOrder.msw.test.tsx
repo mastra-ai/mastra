@@ -8,8 +8,9 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
+import { stubSessionsFactory, testChatSession } from './fixtures/sessionsSection';
 import type { FactoryUserSession } from '../../services/user-sessions';
-import { WorkspacesSection } from '../WorkspacesSection';
+import { SessionsSection } from '../SessionsSection';
 import { pickSessionProperty } from './fixtures/sessionProperties';
 
 const factoryProjectId = 'fp-1';
@@ -88,28 +89,17 @@ function stubSidebar(
 }
 
 function renderSection(openSessionId?: string) {
+  stubSessionsFactory(factoryProjectId, [projectRepositoryId]);
   return renderWithProviders(
     <MemoryRouter
       initialEntries={[
         openSessionId ? `/factories/${factoryProjectId}/workspaces/${openSessionId}` : `/factories/${factoryProjectId}`,
       ]}
     >
-      <ChatSessionContext.Provider
-        value={{
-          resourceId: 'resource-1',
-          sessionEnabled: false,
-          resourceReady: false,
-          sandboxReady: false,
-          sandboxPreparing: false,
-          resourceEnabled: false,
-          factorySessionState: { factoryProjectId, projectRepositoryId },
-          baseUrl: TEST_BASE_URL,
-          kind: 'factory',
-        }}
-      >
+      <ChatSessionContext.Provider value={testChatSession(factoryProjectId, projectRepositoryId)}>
         <Routes>
-          <Route path="/factories/:factoryId" element={<WorkspacesSection />} />
-          <Route path="/factories/:factoryId/workspaces/:sessionId" element={<WorkspacesSection />} />
+          <Route path="/factories/:factoryId" element={<SessionsSection />} />
+          <Route path="/factories/:factoryId/workspaces/:sessionId" element={<SessionsSection />} />
         </Routes>
       </ChatSessionContext.Provider>
     </MemoryRouter>,
@@ -118,12 +108,12 @@ function renderSection(openSessionId?: string) {
 
 async function reviewRowLabels(client: QueryClient): Promise<(string | null)[]> {
   await waitForMutationsIdle(client);
-  const group = await screen.findByRole('region', { name: 'Review Sessions' });
+  const group = await screen.findByRole('region', { name: 'Review sessions' });
   const rows = await within(group).findAllByRole('button', { name: /^factory\/pr-\d+$/ });
   return rows.map(row => row.getAttribute('aria-label'));
 }
 
-describe('Workspaces sidebar order', () => {
+describe('Sessions sidebar order', () => {
   it('sinks a merged session below the open ones and keeps the rest newest-first', async () => {
     const oldestOpen = reviewSession(101, '2026-07-23T09:00:00.000Z');
     const newestOpen = reviewSession(102, '2026-07-23T11:00:00.000Z');
@@ -249,7 +239,7 @@ describe('Workspaces sidebar order', () => {
       'factory/pr-603',
     ]);
 
-    await pickSessionProperty(user, 'Review sessions', 'Sort', 'Last updated');
+    await pickSessionProperty(user, 'Sort', 'Last updated');
 
     const byLastUpdate = ['factory/pr-601', 'factory/pr-603', 'factory/pr-604', 'factory/pr-602'];
     expect(await reviewRowLabels(rendered.client)).toEqual(byLastUpdate);
@@ -257,6 +247,6 @@ describe('Workspaces sidebar order', () => {
 
     const remounted = renderSection();
     expect(await reviewRowLabels(remounted.client)).toEqual(byLastUpdate);
-    expect(JSON.parse(localStorage.getItem('mastracode.sessionSort') ?? '{}')).toEqual({ review: 'updated' });
+    expect(JSON.parse(localStorage.getItem('mastracode.sessionListView') ?? '{}')).toEqual({ sort: 'updated' });
   });
 });
