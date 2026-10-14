@@ -71,18 +71,21 @@ export async function resolveKnowledgeScopeIds(
       address: orgAddress,
       contextualScopeAddress: orgAddress,
       parameters: { orgId: organizationId },
+      requestContext: context?.requestContext,
     });
     const resource = await knowledge.materializeScope({
       address: resourceAddress,
       parentAddresses: [orgAddress],
       contextualScopeAddress: orgAddress,
       parameters: { orgId: organizationId, ...rung.parameters },
+      requestContext: context?.requestContext,
     });
     const thread = await knowledge.materializeScope({
       address: threadAddress,
       parentAddresses: [resourceAddress],
       contextualScopeAddress: resourceAddress,
       parameters: { orgId: organizationId, ...rung.parameters, threadId },
+      requestContext: context?.requestContext,
     });
     return [org.scopes[orgAddress]!, resource.scopes[resourceAddress]!, thread.scopes[threadAddress]!];
   }

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { getRunAgentScopes } from '../agent/scopes';
 import { MastraBase } from '../base';
 import type { Mastra } from '../mastra';
 import type { MastraCompositeStore } from '../storage';
@@ -273,7 +274,10 @@ export class Knowledge extends MastraBase {
    * The planner is synchronous, so an async vouch hook is resolved in two passes: the first
    * collects which parameters the plan needs vouched, the second plans with the resolved values.
    */
-  async #planScope(input: MaterializeKnowledgeScopeInput): Promise<KnowledgeStructurePlan> {
+  async #planScope(
+    input: MaterializeKnowledgeScopeInput,
+    runScopes: readonly string[] | undefined,
+  ): Promise<KnowledgeStructurePlan> {
     const hook = this.#vouch;
     if (!hook) return materializeKnowledgeScopePlan(this.#scopeTypes, input);
     const requested = new Set<string>();
@@ -290,7 +294,7 @@ export class Knowledge extends MastraBase {
     }
     const resolved = new Map<string, string | undefined>();
     for (const parameter of requested) {
-      resolved.set(parameter, await hook({ address: input.address, parameter }));
+      resolved.set(parameter, await hook({ address: input.address, parameter, scopes: runScopes }));
     }
     return materializeKnowledgeScopePlan(this.#scopeTypes, {
       ...input,
@@ -299,10 +303,11 @@ export class Knowledge extends MastraBase {
   }
 
   async materializeScope(input: MaterializeKnowledgeScopeInput): Promise<KnowledgeStructureReconcileResult> {
-    // The vouch hook is host configuration, never per-call input.
-    const { vouch: _ignored, ...rest } = input;
+    // The vouch hook is host configuration, never per-call input. The request context is read only
+    // for the run's Core-marked scopes and never enters the plan.
+    const { vouch: _ignored, requestContext, ...rest } = input;
     const snapshot = structuredClone(rest);
-    const plan = await this.#planScope(snapshot);
+    const plan = await this.#planScope(snapshot, getRunAgentScopes(requestContext));
     const existing = this.#materializePromises.get(snapshot.address);
     if (existing) {
       if (JSON.stringify(existing.plan) !== JSON.stringify(plan)) {

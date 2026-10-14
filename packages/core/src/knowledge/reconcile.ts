@@ -46,6 +46,11 @@ export interface MaterializeKnowledgeScopeInput {
    * hook gets no implicit owner grant.
    */
   vouch?: KnowledgeScopeVouch;
+  /**
+   * The run's request context, when the caller owns a run. `Knowledge` reads only the Core-marked
+   * agent scopes from it to pass to the vouch hook; nothing else in it is used or persisted.
+   */
+  requestContext?: { get(key: string): unknown };
 }
 
 export type KnowledgeScopeVouch = (request: { address: string; parameter: string }) => string | undefined;
@@ -54,6 +59,11 @@ export type KnowledgeScopeVouch = (request: { address: string; parameter: string
 export type KnowledgeScopeVouchHook = (request: {
   address: string;
   parameter: string;
+  /**
+   * The run's Core-marked agent scopes (as read by `getRunAgentScopes`), or `undefined` when the
+   * materialization has no run or the run carries no Core-marked scopes. Never the raw request context.
+   */
+  scopes?: readonly string[];
 }) => string | undefined | Promise<string | undefined>;
 
 const BUILT_IN_SCOPE_TYPES: KnowledgeScopeTypesConfig = {

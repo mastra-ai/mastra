@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { ConsoleLogger } from '../../logger';
 import { Mastra } from '../../mastra';
 import { InMemoryStore, KnowledgeInvisibleRecordError, MastraCompositeStore } from '../../storage';
+import { setRunAgentScopes } from '../../agent/scopes';
+import { MASTRA_SCOPES_KEY, RequestContext } from '../../request-context';
 import { Knowledge } from '../index';
 
 const scopeIds = ['10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002'];
@@ -112,6 +114,46 @@ describe('Knowledge', () => {
     await vouched.reconcile();
     await expect(vouched.materializeScope(input)).resolves.toMatchObject({ changed: true });
     expect(seen).toEqual([{ address: 'agent:weather:public', parameter: 'orgId' }]);
+  });
+
+  describe('vouch hook run scopes', () => {
+    const scopes = { 'agent:$agentId:public': { access: [{ principal: 'team:$orgId', role: 'readonly' as const }] } };
+    const input = { address: 'agent:weather:public', contextualScopeAddress: 'resource:weather' };
+    function vouchingKnowledge(id: string) {
+      const seen: Array<readonly string[] | undefined> = [];
+      const knowledge = new Knowledge({
+        storage: new InMemoryStore({ id }),
+        structure: { scopes: [{ address: 'team:acme', name: 'Acme team' }] },
+        scopes,
+        vouch: async ({ parameter, scopes: runScopes }) => {
+          seen.push(runScopes);
+          const org = runScopes?.find(scope => scope.startsWith('org:'))?.slice(4);
+          return parameter === 'orgId' ? org : undefined;
+        },
+      });
+      return { knowledge, seen };
+    }
+
+    it('passes the Core-marked run scopes to the hook', async () => {
+      const { knowledge, seen } = vouchingKnowledge('marked');
+      await knowledge.reconcile();
+      const requestContext = new RequestContext();
+      setRunAgentScopes(requestContext, ['org:acme', 'project:p1']);
+
+      await expect(knowledge.materializeScope({ ...input, requestContext })).resolves.toMatchObject({ changed: true });
+      expect(seen).toEqual([['org:acme', 'project:p1']]);
+    });
+
+    it('never passes unmarked scopes to the hook', async () => {
+      const { knowledge, seen } = vouchingKnowledge('unmarked');
+      await knowledge.reconcile();
+      const requestContext = new RequestContext([[MASTRA_SCOPES_KEY, ['org:acme']]]);
+
+      await expect(knowledge.materializeScope({ ...input, requestContext })).rejects.toThrow(
+        'Missing host-vouched Knowledge scope parameter: orgId',
+      );
+      expect(seen).toEqual([undefined]);
+    });
   });
 
   it('adds parent edges declared after first boot to existing static scopes', async () => {
