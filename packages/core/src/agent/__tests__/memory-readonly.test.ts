@@ -356,6 +356,7 @@ describe('Memory readOnly option on resume', () => {
           await ctx?.agent?.suspend?.({ question: 'ok?' });
           return;
         }
+        expect(ctx?.agent?.flushMessages).toBeUndefined();
         rowsSeenInTool.push((await memory.recall({ threadId, resourceId })).messages.length);
         return { answer: resumeData.answer };
       },
