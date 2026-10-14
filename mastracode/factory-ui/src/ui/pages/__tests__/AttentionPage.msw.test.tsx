@@ -96,6 +96,22 @@ function activityItem(workItemId: string, title: string): FactoryActivityAttenti
   };
 }
 
+/** An attention row of a kind this client does not render. */
+function retiredKindItem() {
+  return {
+    key: `factory:${FACTORY_ID}:attention:retired-kind:finding-1:0`,
+    kind: 'retired-kind',
+    occurrence: 0,
+    workItemId: null,
+    title: 'Retired kind row',
+    detail: 'A server older than this client still reports it.',
+    occurredAt: '2026-08-22T10:00:00.000Z',
+    read: false,
+    archived: false,
+    target: { kind: 'rules' },
+  };
+}
+
 describe('AttentionPage', () => {
   it('saves repository choice by work-item ID before retrying without loading the board', async () => {
     const events: string[] = [];
@@ -410,18 +426,7 @@ describe('AttentionPage', () => {
 
   it('skips attention kinds this client does not know and keeps rendering the rest', async () => {
     const known = [mentionItem('comment-1', 'Fix login bug')];
-    const retiredKind = {
-      key: `factory:${FACTORY_ID}:attention:retired-kind:finding-1:0`,
-      kind: 'retired-kind',
-      occurrence: 0,
-      workItemId: null,
-      title: 'Retired kind row',
-      detail: 'A server older than this client still reports it.',
-      occurredAt: '2026-08-22T10:00:00.000Z',
-      read: false,
-      archived: false,
-      target: { kind: 'rules' },
-    };
+    const retiredKind = retiredKindItem();
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, () =>
         HttpResponse.json({ items: [retiredKind, ...known], kinds: attentionKindSummaries(known), hasMore: false }),
@@ -438,18 +443,7 @@ describe('AttentionPage', () => {
   });
 
   it('shows the empty state when every open item is of a kind this client does not know', async () => {
-    const retiredKind = {
-      key: `factory:${FACTORY_ID}:attention:retired-kind:finding-1:0`,
-      kind: 'retired-kind',
-      occurrence: 0,
-      workItemId: null,
-      title: 'Retired kind row',
-      detail: 'A server older than this client still reports it.',
-      occurredAt: '2026-08-22T10:00:00.000Z',
-      read: false,
-      archived: false,
-      target: { kind: 'rules' },
-    };
+    const retiredKind = retiredKindItem();
     const retiredSummary = {
       open: 1,
       unread: 1,
