@@ -12,6 +12,7 @@ import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import { GaugeIcon } from 'lucide-react';
 import { getResultErrorMessage, getResultOutputPreview } from '../utils/result-output';
 import { formatCostValue, formatTokenCount, totalTokens } from './comparison/comparison-metric-format';
+import { ScoreReasonHoverCard } from './comparison/score-reason-hover-card';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
 /**
@@ -68,7 +69,8 @@ export type ExperimentResultsListProps<T extends ExperimentResultsListItem> = {
   featuredResultId: string | null;
   onResultClick: (resultId: string) => void;
   columns: ExperimentResultsListColumn[];
-  scoresByItemId?: Record<string, ClientScoreRowData[]>;
+  /** Structurally narrowed to what the scorer cells read, so `ClientScoreRowData[]` fits. */
+  scoresByItemId?: Record<string, Array<Pick<ClientScoreRowData, 'scorerId' | 'score' | 'reason'>>>;
   scorerIds?: string[];
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   isFetchingNextPage?: boolean;
@@ -277,9 +279,14 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                 {scorerIds?.map(scorerId => {
                   const scores = scoresByItemId?.[result.itemId];
                   const score = scores?.find(s => s.scorerId === scorerId);
+                  const reason = score?.reason?.trim();
                   return (
-                    <DataList.Cell key={scorerId} className="text-muted-foreground tabular-nums">
+                    <DataList.Cell
+                      key={scorerId}
+                      className="flex items-center gap-1.5 text-muted-foreground tabular-nums"
+                    >
                       {score != null ? score.score.toFixed(3) : '-'}
+                      {reason && <ScoreReasonHoverCard scorerId={scorerId} reason={reason} nested />}
                     </DataList.Cell>
                   );
                 })}

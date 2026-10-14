@@ -1,7 +1,9 @@
 import type { Client } from '@libsql/client';
 import { createClient } from '@libsql/client';
+import { TABLE_NOTIFICATIONS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { LibSQLDB } from '../../db';
 import { NotificationsLibSQL } from './index';
 
 const TEST_DB_URL = 'file::memory:?cache=shared';
@@ -405,4 +407,81 @@ describe('NotificationsLibSQL', () => {
     const records = await store.listNotifications(input);
     expect(records.map(record => record.id)).toEqual(ids);
   }
+});
+
+describe('NotificationsLibSQL primary key', () => {
+  let client: Client;
+
+  beforeEach(() => {
+    client = createClient({ url: ':memory:' });
+  });
+
+  afterEach(() => {
+    client.close();
+  });
+
+  const insertRaw = (id: string, threadId: string) =>
+    client.execute({
+      sql: `INSERT INTO "${TABLE_NOTIFICATIONS}" (id, "threadId", source, kind, priority, status, summary, "coalescedCount", "createdAt", "updatedAt", "deliveryAttempts") VALUES (?, ?, 'test', 'manual', 'medium', 'pending', 's', 1, ?, ?, 0)`,
+      args: [id, threadId, new Date().toISOString(), new Date().toISOString()],
+    });
+
+  const createLegacyTable = () =>
+    new LibSQLDB({ client, maxRetries: 1, initialBackoffMs: 10 }).createTable({
+      tableName: TABLE_NOTIFICATIONS,
+      schema: TABLE_SCHEMAS[TABLE_NOTIFICATIONS],
+    });
+
+  it('creates new tables with the ("threadId", "id") primary key', async () => {
+    await new NotificationsLibSQL({ client }).init();
+
+    const columns = await client.execute(`PRAGMA table_info("${TABLE_NOTIFICATIONS}")`);
+    const pk = columns.rows
+      .filter(row => Number(row.pk) > 0)
+      .sort((a, b) => Number(a.pk) - Number(b.pk))
+      .map(row => row.name);
+    expect(pk).toEqual(['threadId', 'id']);
+
+    const indexes = await client.execute(`PRAGMA index_list("${TABLE_NOTIFICATIONS}")`);
+    expect(indexes.rows.map(row => row.name)).not.toContain('idx_notifications_thread_id_unique');
+  });
+
+  it('upserts when the same notification id is written twice in a thread', async () => {
+    const store = new NotificationsLibSQL({ client });
+    await store.init();
+    await store.createNotification({ id: 'same', threadId: 't1', source: 's', kind: 'manual', summary: 'first' });
+    await store.createNotification({ id: 'same', threadId: 't1', source: 's', kind: 'manual', summary: 'second' });
+    await store.createNotification({ id: 'same', threadId: 't2', source: 's', kind: 'manual', summary: 'other' });
+
+    const rows = await client.execute(`SELECT "threadId", summary FROM "${TABLE_NOTIFICATIONS}" ORDER BY "threadId"`);
+    expect(rows.rows.map(row => [row.threadId, row.summary])).toEqual([
+      ['t1', 'second'],
+      ['t2', 'other'],
+    ]);
+  });
+
+  it('enforces uniqueness on legacy tables created without the key', async () => {
+    await createLegacyTable();
+    await insertRaw('n1', 't1');
+
+    await new NotificationsLibSQL({ client }).init();
+    await new NotificationsLibSQL({ client }).init();
+
+    await expect(
+      client.execute({
+        sql: `INSERT INTO "${TABLE_NOTIFICATIONS}" (id, "threadId", source, kind, priority, status, summary, "coalescedCount", "createdAt", "updatedAt", "deliveryAttempts") VALUES ('n1', 't1', 'test', 'manual', 'medium', 'pending', 's', 1, '', '', 0)`,
+        args: [],
+      }),
+    ).rejects.toThrow(/UNIQUE/i);
+  });
+
+  it('does not fail init when a legacy table already contains duplicates', async () => {
+    await createLegacyTable();
+    await insertRaw('dup', 't1');
+    await insertRaw('dup', 't1');
+
+    await expect(new NotificationsLibSQL({ client }).init()).resolves.toBeUndefined();
+    const count = await client.execute(`SELECT count(*) AS c FROM "${TABLE_NOTIFICATIONS}"`);
+    expect(Number(count.rows[0]?.c)).toBe(2);
+  });
 });

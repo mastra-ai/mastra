@@ -13,6 +13,7 @@ import {
 } from '../../../../hooks/useFactoryDefaultModel';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 
+import { formatModelName } from './model-display-name';
 import { ModelCombobox } from './ModelCombobox';
 import { SharedCredentialNotice } from './SharedCredentialNotice';
 
@@ -109,7 +110,9 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
       <AlertDialog open={!!confirmModelId} onOpenChange={setDialogOpen}>
         <AlertDialog.Content>
           <AlertDialog.Header>
-            <AlertDialog.Title>Also switch running sessions to {confirmModelId}?</AlertDialog.Title>
+            <AlertDialog.Title>
+              Also switch running sessions to {confirmModelId ? formatModelName(confirmModelId) : ''}?
+            </AlertDialog.Title>
             <AlertDialog.Description>
               New Factory runs will use this model. Running work and review sessions keep their current model unless you
               switch them. Switched sessions keep their work and pick up the new model on their next step.

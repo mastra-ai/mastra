@@ -290,6 +290,12 @@ describe('MastraFactory constructor', () => {
 });
 
 describe('MastraFactory.prepare', () => {
+  it('given a Factory deployment, when the controller mounts, then sessions run without modes', async () => {
+    const config = await prepareFactory({ storage: fakeStorage(), auth: null });
+
+    expect(config.modes).toBe(false);
+  });
+
   it('loads authoritative memory settings before dynamic memory resolves for each invocation', async () => {
     const storage = fakeStorage();
     const config = await prepareFactory({ storage, auth: null });
