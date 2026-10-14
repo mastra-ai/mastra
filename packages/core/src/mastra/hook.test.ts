@@ -114,6 +114,7 @@ describe('createOnScorerHook', () => {
     mockMastra = {
       getStorage: vi.fn().mockReturnValue(mockStorage),
       getLogger: vi.fn().mockReturnValue({
+        debug: vi.fn(),
         error: vi.fn(),
         warn: vi.fn(),
         trackException: vi.fn(),
@@ -677,7 +678,7 @@ describe('createOnScorerHook owner-scoped dispatch', () => {
     return {
       runId: 'run-1',
       scorerId: 'test-scorer',
-      scorerObject: { scorer: { id: 'test-scorer', name: 'Test Scorer', description: 'test' } } as any,
+      scorerObject: { scorer: mockScorer } as any,
       input: {},
       output: {},
       requestContext: {},
