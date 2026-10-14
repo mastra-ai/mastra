@@ -142,6 +142,7 @@ import { deliverFactorySessionNotification } from './tools/deliver.js';
 import { applyFactoryToolPermissions, createFactoryTools, resolveFactoryToolScope } from './tools/index.js';
 import { createStageChangeNotifier, createWorkItemRunEndReporter } from './tools/reports.js';
 import type { FactoryReporting } from './tools/reports.js';
+import { FactorySessionsStateProcessor } from './tools/sessions-state-processor.js';
 import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
 import type { FactorySandboxStart } from './workspace.js';
 
@@ -1199,9 +1200,26 @@ export class MastraFactory {
         // comes after it.
         inputProcessors: async ({ requestContext }: { requestContext: RequestContext }) => {
           const environmentProcessor = new FactoryEnvironmentStateProcessor();
+          const sessionsProcessor =
+            workItemsStorage && storage.isDomainReady('source-control')
+              ? [
+                  new FactorySessionsStateProcessor({
+                    authEnabled: routeAuth.enabled(),
+                    sessions: sourceControlSessions,
+                    projects: factoryProjectsStorage,
+                    workItems: workItemsStorage,
+                    boards: this.#boards,
+                    isRunning: async sessionId => {
+                      const session = await this.#prepared?.base.controller.getSessionByResource(sessionId);
+                      return session?.stream.isActive() ?? false;
+                    },
+                    notifications: async () => (await factoryMessaging())?.notifications ?? null,
+                  }),
+                ]
+              : [];
           if (factoryProcessor) {
             await factoryProcessor.prepareMemorySettings(requestContext);
-            return [environmentProcessor, factoryProcessor];
+            return [environmentProcessor, ...sessionsProcessor, factoryProcessor];
           }
           // Without work items there is no run binding, so the caller's row applies.
           try {
@@ -1209,7 +1227,7 @@ export class MastraFactory {
           } catch (error) {
             reportMemorySettingsUnavailable(requestContext, error instanceof Error ? error.message : String(error));
           }
-          return [environmentProcessor];
+          return [environmentProcessor, ...sessionsProcessor];
         },
         ...(vector ? { vector } : {}),
         ...(toolIntegrations.length > 0 ||
