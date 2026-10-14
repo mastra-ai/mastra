@@ -317,6 +317,21 @@ describe.each([
     expect(screen.getByRole(role, { name: 'Stream responses' }).getAttribute('aria-checked')).toBe('true');
   });
 
+  it('toggles when a label wrapping it is clicked, as in a full-row option', () => {
+    render(
+      <Field>
+        <FieldLabel>
+          {control}
+          <span>Stream responses</span>
+        </FieldLabel>
+      </Field>,
+    );
+
+    fireEvent.click(screen.getByText('Stream responses'));
+
+    expect(screen.getByRole(role).getAttribute('aria-checked')).toBe('true');
+  });
+
   it('ignores label clicks when the Field is disabled', () => {
     render(
       <Field orientation="horizontal" disabled>
