@@ -23,7 +23,7 @@ export function SessionListProperties({
       >
         <Settings2 size={15} aria-hidden />
       </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="end">
+      <DropdownMenu.Content align="start">
         {children}
         <DropdownMenu.Separator />
         <DropdownMenu.Item disabled={changedCount === 0} onClick={onReset}>

@@ -12,7 +12,6 @@ interface LocalStorageStoreOptions<T> {
   empty: T;
   /** Receives the JSON-parsed stored value. Throw, or return `empty`, to reject it. */
   parse: (stored: unknown) => T;
-  /** Maps the value to what `JSON.stringify` stores, e.g. a `Set` to an array. */
   toJSON?: (value: T) => unknown;
 }
 
