@@ -1,8 +1,8 @@
 import * as coreKnowledge from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { knowledgeRunContext } from '../subconscious/knowledge-tools';
+import { knowledgeRunContext, resolveKnowledgeScopeIds } from '../subconscious/knowledge-tools';
 
 describe('Knowledge vouch capability', () => {
   const requestContext = new RequestContext<any>([
@@ -21,5 +21,19 @@ describe('Knowledge vouch capability', () => {
 
   it('passes the request context to a Core that advertises the vouch capability', () => {
     expect(knowledgeRunContext(requestContext, coreKnowledge as Record<string, unknown>)).toEqual({ requestContext });
+  });
+
+  it('resolveKnowledgeScopeIds withholds the request context from an older Core', async () => {
+    const { KNOWLEDGE_VOUCH_RUN_SCOPES: _marker, ...olderCore } = coreKnowledge as Record<string, unknown>;
+    const materializeScope = vi.fn(async (input: { address: string }) => {
+      structuredClone(input);
+      return { scopes: { [input.address]: `id:${input.address}` } };
+    });
+    const memory = { getKnowledgeInstance: () => ({ materializeScope }) } as any;
+
+    await resolveKnowledgeScopeIds(memory, { agent: { resourceId: 'r1', threadId: 't1' }, requestContext }, olderCore);
+
+    expect(materializeScope).toHaveBeenCalledTimes(3);
+    for (const [input] of materializeScope.mock.calls) expect(input).not.toHaveProperty('requestContext');
   });
 });

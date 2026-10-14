@@ -64,6 +64,7 @@ export async function getKnowledgeStore(memory: KnowledgeStoreMemory): Promise<K
 export async function resolveKnowledgeScopeIds(
   memory: KnowledgeStoreMemory,
   context: KnowledgeToolContext | undefined,
+  knowledgeModule: Record<string, unknown> = coreKnowledge,
 ): Promise<KnowledgeScopeIds> {
   const organizationId = resolveKnowledgeOrgId(context?.requestContext);
   const rung = resolveKnowledgeRung(context?.requestContext, context?.agent?.resourceId);
@@ -74,7 +75,7 @@ export async function resolveKnowledgeScopeIds(
   if (!rung) throw new Error('Knowledge tools require an active resourceId.');
   if (!threadId) throw new Error('Knowledge tools require an active threadId.');
   const knowledge = memory.getKnowledgeInstance?.();
-  const runContext = knowledgeRunContext(context?.requestContext);
+  const runContext = knowledgeRunContext(context?.requestContext, knowledgeModule);
 
   const orgAddress = `org:${organizationId}`;
   const resourceAddress = rung.address;
