@@ -34,12 +34,18 @@ async function mountController(
     ],
   });
   await controller.init();
+  const project =
+    (await seed.projects.list({ orgId: 'org-1' }))[0] ??
+    (await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Personal models' } }));
+  await seed.projects.update({ orgId: 'org-1', id: project.id, input: { modelScope: 'user' } });
   controller.onSessionCreated(
     session =>
       hydrateSessionDefaultModel(session, {
         sourceControl: {
-          sessions: { getBySessionId: async sessionId => ({ sessionId, orgId: 'org-1', userId: 'user-1' }) as never },
+          getBySessionId: async sessionId =>
+            ({ sessionId, orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id }) as never,
         },
+        projects: seed.projects,
         workItems: seed.workItems,
         modelDefaults: seed.modelDefaults,
       }),

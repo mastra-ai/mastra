@@ -24,6 +24,7 @@ function sourceControlRow(): SourceControlSession {
     id: 'row-1',
     sessionId: 'session-1',
     projectRepositoryId: 'repo-1',
+    factoryProjectId: 'factory-1',
     orgId: 'org-1',
     userId: 'user-1',
     branch: 'user/session-1',
@@ -44,7 +45,10 @@ function createSession(state: Record<string, unknown> = {}): DefaultModelHydrati
   return {
     identity: { getResourceId: () => 'session-1' },
     model: { switch: vi.fn().mockResolvedValue(undefined) },
-    state: { get: () => state },
+    state: {
+      get: () => state,
+      set: vi.fn(async (updates: Record<string, unknown>) => void Object.assign(state, updates)),
+    },
     subagents: { model: { set: vi.fn().mockResolvedValue(undefined) } },
     thread: {
       getId: () => 'session-1',
@@ -53,9 +57,22 @@ function createSession(state: Record<string, unknown> = {}): DefaultModelHydrati
   };
 }
 
-function createDependencies(record: ModelDefaultRecord | null = modelDefault()): DefaultModelHydrationDependencies {
+function createDependencies(
+  record: ModelDefaultRecord | null = modelDefault(),
+  modelScope: 'factory' | 'user' = 'user',
+): DefaultModelHydrationDependencies {
+  const sourceSession = sourceControlRow();
   return {
-    sourceControl: { sessions: { getBySessionId: vi.fn().mockResolvedValue(sourceControlRow()) } },
+    sourceControl: {
+      getBySessionId: vi.fn().mockResolvedValue(sourceSession),
+    },
+    projects: {
+      getById: vi.fn().mockResolvedValue({
+        id: 'factory-1',
+        modelScope,
+        defaultModelId: 'openai/factory-model',
+      }),
+    },
     workItems: { findActiveRunBindingByThread: vi.fn().mockResolvedValue(null) },
     modelDefaults: { get: vi.fn().mockResolvedValue(record) },
   };
@@ -73,6 +90,26 @@ describe('hydrateSessionDefaultModel', () => {
     expect(session.subagents.model.set).toHaveBeenCalledWith({ modelId, agentType: 'explore' });
     expect(session.subagents.model.set).toHaveBeenCalledWith({ modelId, agentType: 'plan' });
     expect(session.subagents.model.set).toHaveBeenCalledWith({ modelId, agentType: 'execute' });
+    expect(session.state.set).toHaveBeenCalledWith({
+      factoryOrgId: 'org-1',
+      factoryModelScope: 'user',
+      factoryOwnerUserId: 'user-1',
+    });
+  });
+
+  it('applies the Factory model and never reads the owner default under factory scope', async () => {
+    const session = createSession();
+    const dependencies = createDependencies(modelDefault(), 'factory');
+
+    await hydrateSessionDefaultModel(session, dependencies);
+
+    expect(dependencies.modelDefaults.get).not.toHaveBeenCalled();
+    expect(session.model.switch).toHaveBeenCalledExactlyOnceWith('openai/factory-model');
+    expect(session.state.set).toHaveBeenCalledWith({
+      factoryOrgId: 'org-1',
+      factoryModelScope: 'factory',
+      factoryOwnerUserId: 'user-1',
+    });
   });
 
   it('keeps the model of a chat that already has a user message when the session is recreated', async () => {
@@ -84,6 +121,11 @@ describe('hydrateSessionDefaultModel', () => {
 
     expect(dependencies.modelDefaults.get).not.toHaveBeenCalled();
     expect(session.model.switch).not.toHaveBeenCalled();
+    expect(session.state.set).toHaveBeenCalledWith({
+      factoryOrgId: 'org-1',
+      factoryModelScope: 'user',
+      factoryOwnerUserId: 'user-1',
+    });
   });
 
   it('does not apply a default when thread messages cannot be read', async () => {
@@ -94,8 +136,85 @@ describe('hydrateSessionDefaultModel', () => {
 
     await hydrateSessionDefaultModel(session, dependencies);
 
-    expect(dependencies.sourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
+    expect(dependencies.sourceControl.getBySessionId).not.toHaveBeenCalled();
     expect(dependencies.modelDefaults.get).not.toHaveBeenCalled();
+  });
+
+  it('clears stale Factory identity when the project is unresolvable', async () => {
+    const state: Record<string, unknown> = {
+      factoryOrgId: 'old-org',
+      factoryModelScope: 'factory',
+      factoryOwnerUserId: 'old-owner',
+    };
+    const session = createSession(state);
+    const dependencies = createDependencies();
+    vi.mocked(dependencies.projects.getById).mockResolvedValue(null);
+
+    await hydrateSessionDefaultModel(session, dependencies);
+
+    expect(session.state.set).toHaveBeenCalledWith({
+      factoryOrgId: undefined,
+      factoryModelScope: undefined,
+      factoryOwnerUserId: undefined,
+    });
+    expect(state).toEqual({
+      factoryOrgId: undefined,
+      factoryModelScope: undefined,
+      factoryOwnerUserId: undefined,
+    });
+    expect(session.model.switch).not.toHaveBeenCalled();
+  });
+
+  it('preserves durable Factory identity when project lookup temporarily fails', async () => {
+    const state = {
+      factoryOrgId: 'org-1',
+      factoryModelScope: 'factory',
+      factoryOwnerUserId: 'user-1',
+    };
+    const session = createSession(state);
+    const dependencies = createDependencies();
+    vi.mocked(dependencies.projects.getById).mockRejectedValue(new Error('database unavailable'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await hydrateSessionDefaultModel(session, dependencies);
+
+    expect(session.state.set).not.toHaveBeenCalled();
+    expect(state).toEqual({
+      factoryOrgId: 'org-1',
+      factoryModelScope: 'factory',
+      factoryOwnerUserId: 'user-1',
+    });
+    expect(session.model.switch).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('fails closed when identity lookup errors before any Factory identity is known', async () => {
+    const state: Record<string, unknown> = {};
+    const session = createSession(state);
+    const dependencies = createDependencies();
+    vi.mocked(dependencies.sourceControl.getBySessionId).mockRejectedValue(new Error('database unavailable'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await hydrateSessionDefaultModel(session, dependencies);
+
+    expect(session.state.set).toHaveBeenCalledWith({ factoryModelScope: 'user', factoryOwnerUserId: undefined });
+    expect(state).toEqual({ factoryModelScope: 'user', factoryOwnerUserId: undefined });
+    expect(session.model.switch).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('normalizes a partial owner-only identity to a fail-closed stamp after lookup errors', async () => {
+    const state: Record<string, unknown> = { factoryOwnerUserId: 'old-owner' };
+    const session = createSession(state);
+    const dependencies = createDependencies();
+    vi.mocked(dependencies.sourceControl.getBySessionId).mockRejectedValue(new Error('database unavailable'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await hydrateSessionDefaultModel(session, dependencies);
+
+    expect(session.state.set).toHaveBeenCalledWith({ factoryModelScope: 'user', factoryOwnerUserId: undefined });
+    expect(state).toEqual({ factoryModelScope: 'user', factoryOwnerUserId: undefined });
+    warn.mockRestore();
   });
 
   it('does not apply a user default to Factory work sessions', async () => {
@@ -104,7 +223,7 @@ describe('hydrateSessionDefaultModel', () => {
 
     await hydrateSessionDefaultModel(session, dependencies);
 
-    expect(dependencies.sourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
+    expect(dependencies.sourceControl.getBySessionId).not.toHaveBeenCalled();
     expect(dependencies.modelDefaults.get).not.toHaveBeenCalled();
   });
 
@@ -142,9 +261,14 @@ describe('hydrateSessionDefaultModel', () => {
     await expect(hydrateSessionDefaultModel(session, dependencies)).resolves.toBeUndefined();
 
     expect(warn).toHaveBeenCalledWith(
-      '[Factory default-model hydration] Unable to apply the user default model.',
+      '[Factory default-model hydration] Unable to apply the scoped default model.',
       expect.any(Error),
     );
+    expect(session.state.set).toHaveBeenCalledWith({
+      factoryOrgId: 'org-1',
+      factoryModelScope: 'user',
+      factoryOwnerUserId: 'user-1',
+    });
     expect(session.model.switch).not.toHaveBeenCalled();
     warn.mockRestore();
   });

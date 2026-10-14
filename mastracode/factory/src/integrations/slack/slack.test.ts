@@ -10,8 +10,10 @@ const primedUsers: unknown[] = [];
 const prime = vi.fn(async (context: RequestContext) => {
   primedUsers.push(context.get('user'));
 });
+const primeTenant = vi.fn(async (_tenant: unknown) => undefined);
 vi.mock('../../routes/tenant-credentials.js', () => ({
   primeTenantCredentialsForRequestContext: (context: RequestContext) => prime(context),
+  primeTenantCredentialsForTenant: (tenant: unknown) => primeTenant(tenant),
 }));
 
 import {
@@ -1478,7 +1480,7 @@ describe('session start (onSessionStart)', () => {
     if (persistedModel) settings.set('currentModelId', persistedModel);
     if (persistedModeModel) settings.set(`modeModelId_${mode}`, persistedModeModel);
     return {
-      mode: { get: () => mode },
+      mode: { get: () => mode, resolve: () => ({ defaultModelId: currentModel }) },
       thread: {
         getId: vi.fn(() => 'thread-1'),
         getById: vi.fn(async () => ({ metadata: Object.fromEntries(settings) })),
@@ -1539,9 +1541,10 @@ describe('session start (onSessionStart)', () => {
     personalMemoryLookupError = null as Error | null,
     userDefaultModel = null as string | null,
     defaultLookupError = null as Error | null,
+    modelScope = 'factory' as 'factory' | 'user',
   } = {}) {
     return {
-      projects: { getById: vi.fn(async () => ({ id: 'fp-1', defaultModelId })) } as any,
+      projects: { getById: vi.fn(async () => ({ id: 'fp-1', orgId: 'org-1', defaultModelId, modelScope })) } as any,
       sourceControl: {
         sessions: { getBySessionId: vi.fn(async () => session) },
       } as any,
@@ -1580,16 +1583,20 @@ describe('session start (onSessionStart)', () => {
     // works on a thread created before this process started.
     expect(deps.sourceControl.sessions.getBySessionId).toHaveBeenCalledWith('us-1');
     expect(deps.projects.getById).toHaveBeenCalledWith({ id: 'fp-1' });
-    // No personal default exists, so the factory default is this thread's model
-    // from now on: the choice is on the thread, not re-derived per message.
-    expect(deps.modelDefaults.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    // Factory scope never reads the owner's personal model default.
+    expect(deps.modelDefaults.get).not.toHaveBeenCalled();
+    expect(session.state.set).toHaveBeenCalledWith({
+      factoryProjectId: 'fp-1',
+      factoryModelScope: 'factory',
+      factoryOwnerUserId: 'user-1',
+    });
     expect(session.model.switch).toHaveBeenCalledTimes(1);
     expect(session.restoredModel()).toBe('anthropic/claude-opus-5');
   });
 
   // The sender's own choice outranks the factory's shared default.
   it("starts on the linked sender's default model rather than the factory default", async () => {
-    const deps = makeStartDeps({ userDefaultModel: 'openai/gpt-5.6' });
+    const deps = makeStartDeps({ modelScope: 'user', userDefaultModel: 'openai/gpt-5.6' });
     const session = makeSession();
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
@@ -1610,17 +1617,17 @@ describe('session start (onSessionStart)', () => {
   // apply them again rather than falling back to the server-wide settings.
   it('re-applies subagent models when a restarted session restores its thread model', async () => {
     const settings = new Map<string, unknown>();
-    await createChannelSessionStartHook(makeStartDeps({ userDefaultModel: 'openai/gpt-5.6-mini' }) as any)(
+    await createChannelSessionStartHook(makeStartDeps({ modelScope: 'user', userDefaultModel: 'openai/gpt-5.6-mini' }) as any)(
       startArgs(makeSession({ settings })) as any,
     );
 
     // The default changed since the thread started; the thread keeps its models.
     const restarted = makeSession({ settings });
-    const restartDeps = makeStartDeps({ userDefaultModel: 'openai/gpt-5.7-mini' });
+    const restartDeps = makeStartDeps({ modelScope: 'user', userDefaultModel: 'openai/gpt-5.7-mini' });
     await createChannelSessionStartHook(restartDeps as any)(startArgs(restarted) as any);
 
     expect(restarted.model.switch).not.toHaveBeenCalled();
-    expect(restartDeps.modelDefaults.get).not.toHaveBeenCalled();
+    expect(restartDeps.modelDefaults.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
     expect(restarted.subagents.model.set.mock.calls.map(([arg]) => arg)).toEqual([
       { modelId: 'openai/gpt-5.6-mini', agentType: 'explore' },
       { modelId: 'openai/gpt-5.6-mini', agentType: 'plan' },
@@ -1630,6 +1637,7 @@ describe('session start (onSessionStart)', () => {
 
   it("keeps observational memory invocation-scoped when applying the sender's model", async () => {
     const deps = makeStartDeps({
+      modelScope: 'user',
       defaultModelId: 'openai/gpt-5.6',
       userDefaultModel: 'deepseek/deepseek-chat',
     });
@@ -1645,17 +1653,18 @@ describe('session start (onSessionStart)', () => {
   it('does not materialize observational memory when the sender model cannot be applied', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const deps = makeStartDeps({
+      modelScope: 'user',
       defaultModelId: 'anthropic/claude-opus-5',
       userDefaultModel: 'deepseek/deepseek-chat',
     });
     const session = makeSession({ currentModel: 'anthropic/claude-opus-5' });
-    session.model.switch.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('missing credentials'));
+    session.model.switch.mockRejectedValueOnce(new Error('missing credentials'));
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
     expect(session.om.observer.switchModel).not.toHaveBeenCalled();
     expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
-    expect(warn).toHaveBeenCalledWith("[slack] Failed to apply the sender's default model", {
+    expect(warn).toHaveBeenCalledWith('[Factory Start] Failed to apply scoped default model', {
       modelId: 'deepseek/deepseek-chat',
       error: 'missing credentials',
     });
@@ -1667,14 +1676,19 @@ describe('session start (onSessionStart)', () => {
   // moved on — must not retarget a conversation already under way.
   it('keeps the first model when a later start runs with changed defaults', async () => {
     const threadSettings = new Map<string, unknown>();
-    const deps = makeStartDeps({ userDefaultModel: 'openai/gpt-5.6' });
+    const deps = makeStartDeps({ modelScope: 'user', userDefaultModel: 'openai/gpt-5.6' });
 
     await createChannelSessionStartHook(deps as any)(startArgs(makeSession({ settings: threadSettings })) as any);
 
     deps.modelDefaults.get.mockClear();
     deps.projects.getById.mockClear();
     deps.modelDefaults.get.mockResolvedValue({ modelId: 'openai/gpt-6' });
-    deps.projects.getById.mockResolvedValue({ id: 'fp-1', defaultModelId: 'anthropic/claude-opus-6' });
+    deps.projects.getById.mockResolvedValue({
+      id: 'fp-1',
+      orgId: 'org-1',
+      modelScope: 'factory',
+      defaultModelId: 'anthropic/claude-opus-6',
+    });
     const session = makeSession({ settings: threadSettings });
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
@@ -1685,7 +1699,7 @@ describe('session start (onSessionStart)', () => {
   });
 
   it("starts on the sender's default even when the factory has no default model", async () => {
-    const deps = makeStartDeps({ defaultModelId: null, userDefaultModel: 'openai/gpt-5.6' });
+    const deps = makeStartDeps({ modelScope: 'user', defaultModelId: null, userDefaultModel: 'openai/gpt-5.6' });
     const session = makeSession();
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
@@ -1695,19 +1709,17 @@ describe('session start (onSessionStart)', () => {
     expect(session.restoredModel()).toBe('openai/gpt-5.6');
   });
 
-  // Reaching a storage domain can fail on its own (uninitialized table, a
-  // transient read error). A personal preference that cannot be read is not
-  // worth dropping the sender's message over.
-  it('falls back to the factory default when the default-model lookup fails', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const deps = makeStartDeps({ defaultLookupError: new Error('model defaults unavailable') });
-    const session = makeSession();
+  it('does not cross-fallback to the factory model when the owner default lookup fails', async () => {
+    const deps = makeStartDeps({
+      modelScope: 'user',
+      defaultLookupError: new Error('model defaults unavailable'),
+    });
+    const session = makeSession({ currentModel: 'openai/gpt-5.5' });
 
     await expect(createChannelSessionStartHook(deps as any)(startArgs(session) as any)).resolves.toBeUndefined();
 
-    expect(session.model.switch).toHaveBeenCalledWith('anthropic/claude-opus-5');
-    expect(session.restoredModel()).toBe('anthropic/claude-opus-5');
-    expect(warn).toHaveBeenCalled();
+    expect(session.model.switch).toHaveBeenCalledExactlyOnceWith('openai/gpt-5.5');
+    expect(session.restoredModel()).toBe('openai/gpt-5.5');
   });
 
   it('leaves observational-memory settings for per-invocation resolution', async () => {
@@ -1748,7 +1760,7 @@ describe('session start (onSessionStart)', () => {
     expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
     // Still no model re-resolution: the migrated thread choice remains authoritative.
     expect(deps.modelDefaults.get).not.toHaveBeenCalled();
-    expect(deps.projects.getById).not.toHaveBeenCalled();
+    expect(deps.projects.getById).toHaveBeenCalledWith({ id: 'fp-1' });
     expect(session.model.switch).not.toHaveBeenCalled();
     expect(session.restoredModel()).toBe('deepseek/deepseek-chat');
     expect(settings.get('modelPersistenceVersion')).toBe(2);
@@ -1761,20 +1773,23 @@ describe('session start (onSessionStart)', () => {
   // user's own switch. Re-applying a preference over it would undo the user's
   // selection every time the process restarts or another message arrives.
   it('leaves the model alone when the thread already has a current model persisted', async () => {
-    const deps = makeStartDeps({ userDefaultModel: 'openai/gpt-5.6' });
+    const deps = makeStartDeps({ modelScope: 'user', userDefaultModel: 'openai/gpt-5.6' });
     const session = makeSession({ persistedModel: 'anthropic/claude-fable-5' });
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
     expect(session.model.switch).not.toHaveBeenCalled();
-    // Nothing is re-resolved: the thread's model was decided when it started,
-    // and a pack the user has since changed must not retarget it.
-    expect(deps.modelDefaults.get).not.toHaveBeenCalled();
-    expect(deps.projects.getById).not.toHaveBeenCalled();
+    // Scope is re-resolved for credential authority, but the thread's persisted
+    // model remains authoritative and is not retargeted.
+    expect(deps.modelDefaults.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    expect(deps.projects.getById).toHaveBeenCalledWith({ id: 'fp-1' });
     expect(session.restoredModel()).toBe('anthropic/claude-fable-5');
-    // The factory stamp still lands: org-first credential resolution keys off
-    // controller state even when the model choice is already persisted.
-    expect(session.state.set).toHaveBeenCalledWith({ factoryProjectId: 'fp-1' });
+    // Scope and durable ownership still land even when the model is persisted.
+    expect(session.state.set).toHaveBeenCalledWith({
+      factoryProjectId: 'fp-1',
+      factoryModelScope: 'user',
+      factoryOwnerUserId: 'user-1',
+    });
     expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ factoryOrgId: 'org-1' }));
   });
 
