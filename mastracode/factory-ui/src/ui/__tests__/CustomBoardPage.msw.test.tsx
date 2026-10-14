@@ -1,4 +1,5 @@
 import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
@@ -8,6 +9,7 @@ import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, waitForMutationsIdle } from '../../../e2e/ui/render';
 import type { BoardCatalogResponse } from '../../api/types';
 import { createAppRoutes } from '../router';
+import { saveKanbanView, stageToggle } from './boardLayoutQueries';
 
 function renderBoard(board = 'boards/release', workItems: unknown[] = []) {
   const intakeRequest = vi.fn(() => HttpResponse.json({ issues: [], pullRequests: [] }));
@@ -66,17 +68,22 @@ describe('custom-only board routing', () => {
         .getAllByRole('region')
         .map(region => region.getAttribute('aria-label')),
     ).toEqual(['Queued', 'Preparing', 'Shipping', 'Shipped']);
-    expect(within(columns).getByRole('button', { name: 'Collapse Preparing' })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    );
-    expect(within(columns).getByRole('button', { name: 'Collapse Shipping' })).toBeInTheDocument();
-    expect(within(columns).getByRole('button', { name: 'Collapse Shipped' })).toBeInTheDocument();
+    for (const label of ['Preparing', 'Shipping', 'Shipped']) {
+      expect(stageToggle(label, columns)).toHaveAttribute('aria-expanded', 'true');
+    }
     expect(screen.queryByText('Auto-approve plans')).toBeNull();
     // Columns render before every query settles, so only judge the feeds once idle.
     await waitForMutationsIdle(client);
     expect(intakeRequest).not.toHaveBeenCalled();
   });
+
+  it('labels each custom phase kind on a Kanban view', async () => {
+    renderBoard();
+    await saveKanbanView(userEvent.setup());
+    expect(screen.getAllByLabelText('working phase')).toHaveLength(2);
+    expect(screen.getByLabelText('terminal phase')).toBeTruthy();
+  });
+
   it.each([
     ['github pull request', { integrationId: 'github', type: 'pull-request', externalId: 'github:1', url: null }],
     ['gitlab merge request', { integrationId: 'gitlab', type: 'pull-request', externalId: 'gitlab:1', url: null }],

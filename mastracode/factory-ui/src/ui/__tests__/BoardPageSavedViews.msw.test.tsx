@@ -8,6 +8,7 @@ import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 import { FACTORY_ID, stubWorkBoard } from './workBoardStubs';
+import { stageToggle } from './boardLayoutQueries';
 
 describe('Factory board saved views', () => {
   it('starts on All cards and offers layout controls for a custom view', async () => {
@@ -272,7 +273,8 @@ describe('Factory board list layout', () => {
     const { row, transitions } = await openListBoard();
     const user = userEvent.setup();
     const planning = screen.getByTestId('board-column-planning');
-    await user.click(within(planning).getByRole('button', { name: 'Collapse Planning' }));
+    await user.click(stageToggle('Planning', planning));
+    expect(stageToggle('Planning', planning)).toHaveAttribute('aria-expanded', 'false');
     const dataTransfer = createDataTransfer();
 
     fireEvent.dragStart(row, { dataTransfer });

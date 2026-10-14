@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
+import { stageToggle } from './boardLayoutQueries';
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'repo-1';
@@ -120,10 +121,7 @@ describe('Board loading states', () => {
     const planning = screen.getByTestId('board-column-planning');
     await waitFor(() => expect(within(planning).queryByRole('status')).not.toBeInTheDocument());
     expect(planning).toHaveAccessibleName('Planning');
-    expect(within(planning).getByRole('button', { name: 'Collapse Planning' })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    );
+    expect(stageToggle('Planning', planning)).toHaveAttribute('aria-expanded', 'true');
     expect(within(planning).getByText('Nothing in planning')).toBeInTheDocument();
     const intake = screen.getByTestId('board-column-intake');
     within(intake).getByRole('status', { name: 'Loading Intake column' });

@@ -13,6 +13,7 @@ import type { JiraIssue } from '../domains/factory/services/jira';
 import type { LinearIssue } from '../domains/factory/services/linear';
 import { useStartFactoryRun } from '../../hooks/useStartFactoryRun';
 import { createAppRoutes } from '../router';
+import { saveKanbanView } from './boardLayoutQueries';
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'repo-1';
@@ -1289,17 +1290,14 @@ describe('Board card pending states', () => {
     expect(currentColumn).toContainElement(card);
   });
 
-  it('moves a card when it is dropped into a collapsed empty column', async () => {
+  it('moves a card when it is dropped into a collapsed empty Kanban column', async () => {
     const { transitionGate, transitionRequests } = stubBoardEndpoints();
     renderWorkBoard();
+    await saveKanbanView(userEvent.setup());
 
     const card = await screen.findByTestId('work-item-card');
     const planningColumn = screen.getByTestId('board-column-planning');
-    await userEvent.setup().click(within(planningColumn).getByRole('button', { name: 'Collapse Planning' }));
-    expect(within(planningColumn).getByRole('button', { name: 'Expand Planning' })).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    );
+    await waitFor(() => expect(planningColumn).toHaveAccessibleName('Planning, empty'));
     const dataTransfer = createDataTransfer();
 
     fireEvent.dragStart(card, { dataTransfer });

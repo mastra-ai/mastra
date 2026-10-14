@@ -20,6 +20,7 @@ type BoardListRowCells = {
   icon?: ReactNode;
   key?: ReactNode;
   title?: ReactNode;
+  links?: ReactNode;
   labels?: ReactNode;
   status?: ReactNode;
   action?: ReactNode;
@@ -68,6 +69,9 @@ export function BoardListRow({
       <DataList.Cell className="text-foreground empty:before:content-none max-sm:col-start-2 max-sm:row-start-1">
         <span className="flex min-w-0 items-center gap-3">
           <span className="min-w-0 flex-1 truncate">{cells.title}</span>
+          <span onClick={stopRowClick} className="flex shrink-0 items-center gap-2 empty:hidden max-sm:hidden">
+            {cells.links}
+          </span>
           <span className="max-w-[min(18rem,45%)] min-w-0 shrink-0 empty:hidden max-sm:hidden [&>*]:max-w-full">
             {cells.labels}
           </span>

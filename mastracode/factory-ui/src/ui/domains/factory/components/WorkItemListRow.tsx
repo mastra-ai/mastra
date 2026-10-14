@@ -1,8 +1,6 @@
 import { knownExternalAuthor } from '@mastra/factory/rules/types';
 import type { ActivityStatus } from '@mastra/playground-ui/components/Activity';
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { MessageSquare } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { BoardCardStatus } from '../boardCardState';
@@ -13,7 +11,15 @@ import type { CardMorph } from '../hooks/useCardMorph';
 import type { AuditActorProfile } from '../services/audit';
 import type { WorkItem } from '../services/workItems';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
-import { CardActions, CardStatus, MetadataLabels, SourceTitle, WorkItemSourceIcon } from './BoardCardParts';
+import {
+  CardActions,
+  CardStatus,
+  CommentCount,
+  ExternalAuthorBadge,
+  MetadataLabels,
+  SourceTitle,
+  WorkItemSourceIcon,
+} from './BoardCardParts';
 import { BoardListRow } from './BoardListRow';
 import { WorkItemActivity } from './WorkItemActivity';
 
@@ -72,30 +78,17 @@ export function WorkItemListRow({
             <SourceTitle source={item.source} title={item.title} />
           </Txt>
         ),
+        links: relatedLinks,
         labels: (
           <span className="flex items-center gap-2">
-            <span className="contents" onClick={event => event.stopPropagation()}>
-              {relatedLinks}
-            </span>
-            {item.commentCount > 0 && (
-              <Txt
-                as="span"
-                variant="meta"
-                tone="faint"
-                className="flex shrink-0 items-center gap-1"
-                aria-label={`${item.commentCount} ${item.commentCount === 1 ? 'comment' : 'comments'}`}
-              >
-                <MessageSquare size={11} aria-hidden />
-                {item.commentCount}
-              </Txt>
-            )}
+            <CommentCount count={item.commentCount} />
             <MetadataLabels metadata={item.metadata} />
           </span>
         ),
         status: (status.kind !== 'idle' || external) && (
           <span className="flex items-center gap-2">
             <CardStatus status={status} />
-            {external && <Badge size="xs">External</Badge>}
+            {external && <ExternalAuthorBadge />}
           </span>
         ),
         action: <CardActions actions={actions} />,

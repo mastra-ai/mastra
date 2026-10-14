@@ -5,13 +5,14 @@ import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureCh
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useState } from 'react';
 import type { ReactNode } from 'react';
 
 import type { DragPayload } from '../boardDrag';
 import { useBoardDropZone } from '../hooks/useBoardDropZone';
 import type { BoardStageId } from '../stages';
 import { BoardStageIcon, stageTintClass } from './BoardIcons';
+
+const SPANS_LIST_GRID = 'col-span-full grid grid-cols-subgrid';
 
 /** Every stage shares one grid, so a column lines up from the first stage to the last. */
 export function BoardList({ children }: { children: ReactNode }) {
@@ -36,7 +37,8 @@ export function BoardListGroup({
   loading,
   action,
   extras,
-  revealKey = '',
+  open,
+  onOpenChange,
   onDrop,
   children,
 }: {
@@ -47,20 +49,18 @@ export function BoardListGroup({
   loading: boolean;
   action?: ReactNode;
   extras?: ReactNode;
-  /** A newly opened composer or linked item reveals its group without discarding other groups' state. */
-  revealKey?: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onDrop: (payload: DragPayload, toStage: BoardStageId) => void;
   children: ReactNode;
 }) {
   const dropZone = useBoardDropZone({ stage, onDrop });
-  const [collapsedKey, setCollapsedKey] = useState<string>();
-  const open = collapsedKey !== revealKey;
 
   return (
     <Collapsible
       render={<DataList.Group />}
       open={open}
-      onOpenChange={nextOpen => setCollapsedKey(nextOpen ? undefined : revealKey)}
+      onOpenChange={onOpenChange}
       aria-label={label}
       data-testid={`board-column-${stage}`}
       className="content-start pb-4"
@@ -74,12 +74,12 @@ export function BoardListGroup({
       >
         <h2 className="m-0 min-w-0 flex-1">
           <CollapsibleTrigger
-            aria-label={`${open ? 'Collapse' : 'Expand'} ${label}`}
+            aria-label={loading ? label : `${label}, ${count}`}
             className="flex w-full items-center gap-2 text-left"
           >
             <DisclosureChevron direction="right" className="size-3.5" />
             <BoardStageIcon stage={stage} kind={phaseKind} decorative />
-            <Txt as="span" variant="label" tone="ink" className="truncate">
+            <Txt as="span" variant="label" tone="ink" className="truncate font-semibold">
               {label}
             </Txt>
             {loading ? (
@@ -98,8 +98,8 @@ export function BoardListGroup({
       </div>
       <CollapsibleContent
         keepMounted
-        render={<div className="col-span-full grid grid-cols-subgrid" />}
-        className="col-span-full grid grid-cols-subgrid gap-y-px [&>:not(.data-list-row)]:col-span-full"
+        render={<div className={SPANS_LIST_GRID} />}
+        className={cn(SPANS_LIST_GRID, 'gap-y-px [&>:not(.data-list-row)]:col-span-full')}
       >
         {children}
       </CollapsibleContent>
