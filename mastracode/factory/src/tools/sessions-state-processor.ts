@@ -176,6 +176,8 @@ export class FactorySessionsStateProcessor implements Processor<'factory-session
       workItemId: binding.workItemId,
     });
     const following = subscribers.filter(subscriber => subscriber.sessionId !== scope.sessionId).length;
+    // Nobody to report to: nothing worth showing (most board-started workers).
+    if (following === 0) return null;
     const label = item ? itemLabel(item) : binding.workItemId;
     return `Working on ${label} as ${binding.role}. Reports go to ${following} following session${following === 1 ? '' : 's'}.`;
   }

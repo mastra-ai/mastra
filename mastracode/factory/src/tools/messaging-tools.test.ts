@@ -516,6 +516,20 @@ describe('factory_message_origin reports', () => {
     expect(env.auditRecorder.record).toHaveBeenCalledTimes(1);
   });
 
+  it('caps reports per follower thread, except progress updates', async () => {
+    const env = setup();
+    for (let i = 0; i < SIGNAL_RATE_LIMIT; i += 1) {
+      await env.run(SIDE, 'factory_message_origin', { message: `note ${i}` });
+    }
+    await expect(env.run(SIDE, 'factory_message_origin', { message: 'one more', status: 'blocked' })).rejects.toThrow(
+      'Too many messages to that session in the last 10 minutes; wait before sending more.',
+    );
+    await expect(
+      env.run(SIDE, 'factory_message_origin', { message: 'still going', status: 'progress' }),
+    ).resolves.toMatchObject({ delivered: 1 });
+    expect(env.sent).toHaveLength(SIGNAL_RATE_LIMIT + 1);
+  });
+
   it('fans an item worker’s report out to every subscriber but itself', async () => {
     const env = setup({
       bindings: [binding('item-7', 'session-b')],

@@ -104,7 +104,9 @@ export function createFactoryMessagingTools(
     return (
       records.filter(
         record =>
-          (record.kind === 'message' || record.kind === 'reply') &&
+          // Everything this session sends counts except coalescing progress updates.
+          record.kind !== 'progress' &&
+          record.kind !== 'stage' &&
           record.attributes?.['from-session'] === scope.sessionId &&
           record.createdAt.getTime() >= since,
       ).length >= SIGNAL_RATE_LIMIT
@@ -317,8 +319,13 @@ export function createFactoryMessagingTools(
 
     const messaging = await requireMessaging();
     const notification = reportNotification({ sender, status, message: text, attributes });
-    const results = [];
+    const results: Array<{ sessionId: string; delivered: FactoryDeliveryResult['delivered']; reason?: string }> = [];
     for (const recipient of recipients) {
+      // Progress replaces itself while unread; anything else can wake a follower, so it counts.
+      if (status !== 'progress' && overRateLimit(await recent(messaging.notifications, recipient.threadId))) {
+        results.push({ sessionId: recipient.sessionId, delivered: 'skipped', reason: 'rate-limited' });
+        continue;
+      }
       const result = await deliverFactorySessionNotification({
         controller: messaging.controller,
         sessions: deps.sessions,
@@ -334,7 +341,9 @@ export function createFactoryMessagingTools(
         delivery: result.delivered,
       });
     }
-    return { delivered: results.filter(result => result.delivered !== 'skipped').length, recipients: results };
+    const delivered = results.filter(result => result.delivered !== 'skipped').length;
+    if (delivered === 0 && results.every(result => result.reason === 'rate-limited')) throw new Error(RATE_LIMITED);
+    return { delivered, recipients: results };
   }
 
   if (scope.kind === 'worker') return { factory_message_origin: reply };
