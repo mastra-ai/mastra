@@ -855,7 +855,7 @@ export type AgentControllerEvent =
         | { type: 'reasoning-delta'; index: number; delta: string }
         | { type: 'part'; index: number; part: MastraMessagePart };
     }
-  | { type: 'message_end'; id: string }
+  | { type: 'message_end'; id: string; metadata?: MastraDBMessage['content']['metadata'] }
   | ({ threadId?: string } & (
       | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown; title?: string }
       | { type: 'tool_approval_required'; toolCallId: string; toolName: string; args: unknown }
