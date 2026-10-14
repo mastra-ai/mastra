@@ -52,7 +52,7 @@ function createSession(state: Record<string, unknown> = {}): DefaultModelHydrati
     subagents: { model: { set: vi.fn().mockResolvedValue(undefined) } },
     thread: {
       getId: () => 'session-1',
-      getSetting: vi.fn().mockResolvedValue(undefined),
+      firstUserMessage: vi.fn().mockResolvedValue(null),
     },
   };
 }
@@ -112,11 +112,9 @@ describe('hydrateSessionDefaultModel', () => {
     });
   });
 
-  it('preserves the current thread model when the session is recreated', async () => {
+  it('keeps the model of a chat that already has a user message when the session is recreated', async () => {
     const session = createSession();
-    vi.mocked(session.thread.getSetting).mockImplementation(async ({ key }) =>
-      key === 'currentModelId' ? 'anthropic/claude-haiku-4-5' : undefined,
-    );
+    vi.mocked(session.thread.firstUserMessage).mockResolvedValue({ id: 'message-1' });
     const dependencies = createDependencies();
 
     await hydrateSessionDefaultModel(session, dependencies);
@@ -130,27 +128,10 @@ describe('hydrateSessionDefaultModel', () => {
     });
   });
 
-  it('preserves a legacy per-mode model when the session is recreated', async () => {
+  it('does not apply a default when thread messages cannot be read', async () => {
     const session = createSession();
-    vi.mocked(session.thread.getSetting).mockImplementation(async ({ key }) =>
-      key === 'modeModelId_build' ? 'anthropic/claude-haiku-4-5' : undefined,
-    );
-    const dependencies = createDependencies();
-
-    await hydrateSessionDefaultModel(session, dependencies);
-
-    expect(dependencies.modelDefaults.get).not.toHaveBeenCalled();
-    expect(session.model.switch).not.toHaveBeenCalled();
-    expect(session.state.set).toHaveBeenCalledWith({
-      factoryOrgId: 'org-1',
-      factoryModelScope: 'user',
-      factoryOwnerUserId: 'user-1',
-    });
-  });
-
-  it('does not apply a default when thread settings cannot be read', async () => {
-    const session = createSession();
-    delete (session.thread as { getSetting?: DefaultModelHydrationSession['thread']['getSetting'] }).getSetting;
+    delete (session.thread as { firstUserMessage?: DefaultModelHydrationSession['thread']['firstUserMessage'] })
+      .firstUserMessage;
     const dependencies = createDependencies();
 
     await hydrateSessionDefaultModel(session, dependencies);

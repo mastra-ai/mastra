@@ -17,7 +17,7 @@ export interface DefaultModelHydrationSession extends DefaultModelApplicableSess
   };
   thread: {
     getId(): string | null | undefined;
-    getSetting(args: { key: string }): Promise<unknown>;
+    firstUserMessage(args: { threadId: string }): Promise<unknown>;
   };
 }
 
@@ -36,14 +36,14 @@ export interface DefaultModelHydrationDependencies {
   modelDefaults: Pick<ModelDefaultsStorage, 'get'>;
 }
 
-/** Seed a repo session's scoped default model unless its thread already selected one. */
+/** Seed a new chat's scoped default model; a chat with a user message keeps its model. */
 export async function hydrateSessionDefaultModel(
   session: DefaultModelHydrationSession,
   { sourceControl, projects, workItems, modelDefaults }: DefaultModelHydrationDependencies,
 ): Promise<void> {
   const resourceId = session.identity.getResourceId();
   const initialState = session.state.get() ?? {};
-  if (initialState.factoryProjectId || typeof session.thread.getSetting !== 'function') return;
+  if (initialState.factoryProjectId || typeof session.thread.firstUserMessage !== 'function') return;
   const hadFactoryIdentity = initialState.factoryModelScope === 'factory' || initialState.factoryModelScope === 'user';
   const clearFactoryIdentity = () =>
     session.state.set({ factoryOrgId: undefined, factoryModelScope: undefined, factoryOwnerUserId: undefined });
@@ -91,13 +91,7 @@ export async function hydrateSessionDefaultModel(
     ) {
       return;
     }
-    const existingThreadSettings = await Promise.all([
-      session.thread.getSetting({ key: 'currentModelId' }),
-      session.thread.getSetting({ key: 'modeModelId_build' }),
-      session.thread.getSetting({ key: 'modeModelId_plan' }),
-      session.thread.getSetting({ key: 'modeModelId_fast' }),
-    ]);
-    if (existingThreadSettings.some(setting => typeof setting === 'string')) return;
+    if (threadId && (await session.thread.firstUserMessage({ threadId }))) return;
 
     if (modelScope === 'factory') {
       if (project.defaultModelId) await applyDefaultModel(session, project.defaultModelId);
