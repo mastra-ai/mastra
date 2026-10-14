@@ -127,6 +127,7 @@ export class GeminiLiveVoice extends MastraVoice<
   private sessionStartTime?: number;
   private isResuming = false;
   private sessionDurationTimeout?: NodeJS.Timeout;
+  private sessionExpiringTimeout?: NodeJS.Timeout;
 
   // Tool integration properties
   private tools?: ToolsInput;
@@ -551,10 +552,7 @@ export class GeminiLiveVoice extends MastraVoice<
     this.emit('session', { state: 'disconnecting' });
 
     // Clean up session duration monitoring
-    if (this.sessionDurationTimeout) {
-      clearTimeout(this.sessionDurationTimeout);
-      this.sessionDurationTimeout = undefined;
-    }
+    this.clearSessionTimers();
 
     // Session handle is set by the server via sessionResumptionUpdate frames.
     // Do not overwrite it with the client-side sessionId here.
@@ -1186,15 +1184,13 @@ export class GeminiLiveVoice extends MastraVoice<
     }
 
     // Clear existing monitor if any
-    if (this.sessionDurationTimeout) {
-      clearTimeout(this.sessionDurationTimeout);
-    }
+    this.clearSessionTimers();
 
     // Set timeout for session expiry warning
     const warningTime = durationMs - 5 * 60 * 1000; // 5 minutes before expiry
 
     if (warningTime > 0) {
-      setTimeout(() => {
+      this.sessionExpiringTimeout = setTimeout(() => {
         this.emit('sessionExpiring', {
           expiresIn: 5 * 60 * 1000,
           sessionId: this.sessionId,
@@ -1207,6 +1203,32 @@ export class GeminiLiveVoice extends MastraVoice<
       this.log('Session duration limit reached, disconnecting');
       void this.disconnect();
     }, durationMs);
+  }
+
+  /**
+   * Clear the session expiry and expiry-warning timers
+   * @private
+   */
+  private clearSessionTimers(): void {
+    if (this.sessionDurationTimeout) {
+      clearTimeout(this.sessionDurationTimeout);
+      this.sessionDurationTimeout = undefined;
+    }
+    if (this.sessionExpiringTimeout) {
+      clearTimeout(this.sessionExpiringTimeout);
+      this.sessionExpiringTimeout = undefined;
+    }
+  }
+
+  /**
+   * Release per-session resources when the socket goes away without disconnect().
+   * disconnect() returns early once state is 'disconnected', so the socket close and
+   * error handlers have to end speaker streams and clear session timers themselves.
+   * @private
+   */
+  private releaseSessionResources(): void {
+    this.clearSessionTimers();
+    this.audioStreamManager.cleanupSpeakerStreams();
   }
 
   /**
@@ -1261,6 +1283,7 @@ export class GeminiLiveVoice extends MastraVoice<
       const reasonText = reason.toString();
       this.log('WebSocket connection closed', { code, reason: reasonText });
       this.state = 'disconnected';
+      this.releaseSessionResources();
       this.emit('session', { state: 'disconnected', code, reason: reasonText });
 
       // A clean server-initiated close (e.g. 1007 invalid-argument for a bad model id or a
@@ -1279,6 +1302,7 @@ export class GeminiLiveVoice extends MastraVoice<
     this.ws.on('error', (error: Error) => {
       this.log('WebSocket error', error);
       this.state = 'disconnected';
+      this.releaseSessionResources();
       this.emit('session', { state: 'disconnected' });
       this.emit('error', {
         message: error.message,

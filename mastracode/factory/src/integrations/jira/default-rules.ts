@@ -1,3 +1,4 @@
+import { recordExplicitRuleOverrides } from '../../rules/event-rules.js';
 import type { FactoryJiraEventName, FactoryJiraRuleContext, FactoryRuleHandler } from '../../rules/types.js';
 import { jiraClaimKey } from './claim.js';
 
@@ -42,20 +43,22 @@ function jiraIssueObserved(context: FactoryJiraRuleContext) {
 
 function jiraIssueClosed(context: FactoryJiraRuleContext) {
   if (!context.item || context.item.source !== 'jira-issue') return;
-  if (context.board !== 'work') return;
-  // Already off the board: nothing to reconcile.
-  if (context.item.stages.some(stage => stage === 'done' || stage === 'canceled')) return;
+  // The card's board decides where a closed source sends it; boards that declare no
+  // `sourceClosed` mapping keep the card where it is, as do cards already finished.
+  const closure = context.boardClosure;
+  if (!context.board || !closure || closure.itemTerminal) return;
   // Only terminal state types trigger close.
   const stateType = context.issue.stateType;
   if (stateType !== 'completed' && stateType !== 'canceled') return;
   const canceled = stateType === 'canceled';
+  const target = canceled ? closure.canceled : closure.completed;
   return {
     type: 'transition',
     idempotencyKey: `${context.ingress.id}:issue-closed`,
-    board: 'work',
-    stage: canceled ? 'canceled' : 'done',
+    board: context.board,
+    stage: target.phase,
     message: {
-      text: `Jira issue ${context.issue.identifier} was ${canceled ? 'canceled' : 'completed'}; this Work card was moved to ${canceled ? 'Canceled' : 'Done'}.`,
+      text: `Jira issue ${context.issue.identifier} was ${canceled ? 'canceled' : 'completed'}; this ${closure.boardTitle} card was moved to ${target.title}.`,
     },
   } as const;
 }
@@ -86,5 +89,5 @@ export function resolveJiraRules(overrides?: JiraRuleOverrides): JiraEventRules 
     }
     if (handler !== undefined) rules[key] = handler;
   }
-  return Object.freeze(rules) as JiraEventRules;
+  return recordExplicitRuleOverrides(Object.freeze(rules) as JiraEventRules, overrides);
 }

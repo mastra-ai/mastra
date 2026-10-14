@@ -19,8 +19,9 @@ The `listen()` method is a core function available in all Mastra voice providers
   content={[
   {
     name: 'audioStream',
-    type: 'NodeJS.ReadableStream',
-    description: 'Audio stream to transcribe. This can be a file stream or a microphone stream.',
+    type: 'NodeJS.ReadableStream | unknown',
+    description:
+      'Audio to transcribe. This is usually a file stream or a microphone stream; some realtime providers accept other audio input types.',
     isOptional: false,
   },
   {
