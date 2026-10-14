@@ -146,6 +146,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/aimlapi',
+          label: 'AI/ML API',
+        },
+        {
+          type: 'doc',
           id: 'providers/aiand',
           label: 'ai&',
         },
@@ -616,6 +621,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/lowrouter',
+          label: 'LowRouter',
+        },
+        {
+          type: 'doc',
           id: 'providers/lucidquery',
           label: 'LucidQuery',
         },
@@ -742,7 +752,7 @@ const sidebars = {
         {
           type: 'doc',
           id: 'providers/novita-ai',
-          label: 'NovitaAI',
+          label: 'Novita AI',
         },
         {
           type: 'doc',
@@ -771,13 +781,13 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/opencode-go',
-          label: 'OpenCode Go',
+          id: 'providers/opencode',
+          label: 'OpenCode',
         },
         {
           type: 'doc',
-          id: 'providers/opencode',
-          label: 'OpenCode Zen',
+          id: 'providers/opencode-go',
+          label: 'OpenCode Go',
         },
         {
           type: 'doc',
@@ -833,6 +843,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/poolside',
           label: 'Poolside',
+        },
+        {
+          type: 'doc',
+          id: 'providers/prime',
+          label: 'Prime Inference',
         },
         {
           type: 'doc',

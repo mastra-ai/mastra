@@ -75,13 +75,13 @@ function renderItemPage(results: DatasetExperimentResult[]) {
   );
 }
 
-describe('ExperimentItemPanel — flag for review', () => {
+describe('ExperimentItemPanel — request review', () => {
   it('flags the result for review from the item view', async () => {
     renderItemPage([buildResult('pending')]);
 
-    const flagButton = await screen.findByRole('button', { name: /flag for review/i });
+    const flagButton = await screen.findByRole('button', { name: 'Request review' });
     // Lives in the panel header (same container as the heading), as the primary action.
-    const heading = screen.getByRole('heading', { name: /result result-1/i });
+    const heading = screen.getByRole('heading', { name: 'Experiment result' });
     expect(heading.parentElement?.contains(flagButton)).toBe(true);
     fireEvent.click(flagButton);
 
@@ -94,7 +94,7 @@ describe('ExperimentItemPanel — flag for review', () => {
     renderItemPage([buildResult('needs-review')]);
 
     const completeButton = await screen.findByRole('button', { name: /mark as reviewed/i });
-    expect(screen.queryByRole('button', { name: /flag for review/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Request review' })).toBeNull();
     fireEvent.click(completeButton);
 
     await waitFor(() => expect(patchCalls).toHaveLength(1));

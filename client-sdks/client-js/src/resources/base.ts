@@ -1,6 +1,6 @@
 import type { RequestOptions, ClientOptions } from '../types';
 import { MastraClientError } from '../types';
-import { mergeAbortSignals, normalizeRoutePath } from '../utils';
+import { isTerminalHttpError, mergeAbortSignals, normalizeRoutePath } from '../utils';
 
 export class BaseResource {
   readonly options: ClientOptions;
@@ -101,8 +101,7 @@ export class BaseResource {
         }
 
         // Don't retry 4xx client errors or 501 Not Implemented - they won't resolve with retries
-        const status = (error as Error & { status?: number }).status;
-        if (status !== undefined && ((status >= 400 && status < 500) || status === 501)) {
+        if (isTerminalHttpError(error)) {
           throw error;
         }
 

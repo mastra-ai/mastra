@@ -1007,6 +1007,32 @@ describe('InngestAgent parity surface', () => {
     }
   });
 
+  it('an external abortSignal asks the worker to abort a resumed run', async () => {
+    const durableAgent = makeIsolatedAgent('resume-external-abort');
+    setSuspendedSnapshot(durableAgent);
+    const sendSpy = stubInngestSend();
+    const publish = vi.spyOn(durableAgent.pubsub, 'publish').mockResolvedValue(undefined as any);
+    const runId = 'resume-external-abort-run';
+    const abortRequests = () =>
+      publish.mock.calls.filter(
+        ([topic, event]: any[]) =>
+          topic === AGENT_CONTROL_TOPIC(runId) && event?.type === AgentControlEventTypes.ABORT_REQUEST,
+      );
+    const external = new AbortController();
+
+    const result = await durableAgent.resume(runId, { approved: true }, { abortSignal: external.signal });
+    try {
+      expect(abortRequests()).toHaveLength(0);
+      external.abort(new Error('external-cancel'));
+      expect(globalRunRegistry.get(runId)?.abortSignal?.aborted).toBe(true);
+      await vi.waitFor(() => expect(abortRequests()).toHaveLength(1));
+    } finally {
+      result.cleanup();
+      publish.mockRestore();
+      sendSpy.mockRestore();
+    }
+  });
+
   it.each([
     { closeOnSuspend: false, registrationOptions: { continuation: 'across-suspension' } },
     { closeOnSuspend: true, registrationOptions: undefined },
@@ -1735,6 +1761,37 @@ describe('InngestAgent parity surface', () => {
       }
     });
 
+    it('rejects a resume that adds scopes without closing the parked run stream', async () => {
+      const durableAgent = makeAgentWithSnapshot('resume-scope-conflict', {
+        value: {},
+        context: { 'agentic-loop': nestedSuspension },
+        status: 'suspended',
+        suspendedPaths: { 'agentic-loop': [0] },
+        resumeLabels: {},
+        requestContext: { mastra__scopes: ['org:a'] },
+      });
+      const sendSpy = stubInngestSend();
+      const publishSpy = vi.spyOn(durableAgent.pubsub, 'publish');
+      const runId = 'resume-scope-conflict-run';
+
+      try {
+        await expect(
+          durableAgent.resume(
+            runId,
+            { approved: true },
+            { requestContext: new RequestContext([['mastra__scopes', ['org:b']]]) },
+          ),
+        ).rejects.toMatchObject({ id: 'AGENT_SCOPES_CONFLICT' });
+        expect(sendSpy).not.toHaveBeenCalled();
+        const errorEvents = publishSpy.mock.calls.filter(([, event]: any[]) => event?.type === 'error');
+        expect(errorEvents).toEqual([]);
+        expect(globalRunRegistry.get(runId)).toBeUndefined();
+      } finally {
+        publishSpy.mockRestore();
+        sendSpy.mockRestore();
+      }
+    });
+
     it('rejects resume() when dispatching the resume event fails', async () => {
       // Dispatch used to be fire-and-forget: resume() resolved while the run
       // stayed parked, and the failure only ever showed up as a stream error.
@@ -2303,6 +2360,17 @@ describe('InngestAgent fork and resume overrides (#24736)', () => {
     expect(closeOnSuspendSet(opts as object)).toBe(true);
   });
 
+  it('resumeStream forwards an external abortSignal to resume()', async () => {
+    const durableAgent = makeDurable('resume-stream-abort-signal');
+    const { output, resumeSpy } = spyResume(durableAgent);
+    const abortSignal = new AbortController().signal;
+
+    const result = await durableAgent.resumeStream({ approved: true }, { runId: 'r1', abortSignal });
+
+    expect(result).toBe(output);
+    expect(resumeSpy.mock.calls[0]![2]).toMatchObject({ abortSignal });
+  });
+
   it('resumeStream throws without a runId', async () => {
     const durableAgent = makeDurable('resume-stream-no-run');
     await expect(durableAgent.resumeStream({ approved: true })).rejects.toThrow(/requires a runId/);
@@ -2837,6 +2905,26 @@ describe('thread and run abort (#25156)', () => {
     expect(publish.mock.calls.filter(([topic]: any[]) => String(topic).startsWith('agent.control.'))).toHaveLength(0);
   });
 
+  // #26538: the step worker may be another process, so an external abortSignal
+  // must publish the abort request just like result.abort().
+  it('an external abortSignal asks the worker to abort the run', async () => {
+    const durableAgent = makeDurable('abort-external-signal');
+    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const sendSpy = vi.spyOn(inngest as any, 'send').mockResolvedValue(undefined as any);
+    const external = new AbortController();
+    const result = await durableAgent.stream([{ role: 'user', content: 'hi' }], { abortSignal: external.signal });
+
+    try {
+      expect(abortRequestsFor(publish, result.runId)).toHaveLength(0);
+      external.abort(new Error('external-cancel'));
+      expect(globalRunRegistry.get(result.runId)?.abortSignal?.aborted).toBe(true);
+      await vi.waitFor(() => expect(abortRequestsFor(publish, result.runId)).toHaveLength(1));
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
   it('abortRunStream asks the worker to abort a run this process does not know', async () => {
     const durableAgent = makeDurable('abort-run-remote');
     const publish = vi.spyOn(durableAgent.pubsub, 'publish');
@@ -2859,6 +2947,21 @@ describe('thread and run abort (#25156)', () => {
     } finally {
       result.cleanup();
       sendSpy.mockRestore();
+    }
+  });
+
+  it("abortRunStream never aborts another Mastra instance's run with the same runId", async () => {
+    const durableAgent = makeDurable('abort-run-other-app');
+    new Mastra({ agents: { mine: durableAgent as any }, storage: new InMemoryStore(), logger: false });
+    const runId = 'abort-run-other-app-run';
+    const otherController = new AbortController();
+    globalRunRegistry.set(runId, { mastra: new Mastra({ logger: false }), abortController: otherController } as any);
+
+    try {
+      expect(durableAgent.abortRunStream(runId)).toBe(false);
+      expect(otherController.signal.aborted).toBe(false);
+    } finally {
+      globalRunRegistry.delete(runId);
     }
   });
 

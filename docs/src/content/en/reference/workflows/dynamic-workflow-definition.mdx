@@ -135,17 +135,18 @@ Add an `outputSchema` to request structured output from the agent:
 
 Use a `mapping` entry before an agent to build its `{ prompt }` input from workflow data.
 
-Agent entries accept an optional `description` and an `options` object:
+Agent entries accept an `options` object:
 
 ```json
 {
   "type": "agent",
   "id": "summarize",
   "agentId": "support-agent",
-  "description": "Summarize the incoming request",
   "options": { "retries": 2, "metadata": { "team": "support" } }
 }
 ```
+
+The step description comes from the registered agent. A `description` set on the agent entry is ignored when the workflow is rehydrated.
 
 Only `retries` and `metadata` persist. Function-valued options such as `onFinish` and function-valued `toolChoice` are rejected when a code-defined workflow is stored. Other agent call options don't persist.
 

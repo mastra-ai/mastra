@@ -1,4 +1,4 @@
-import { DurableAgentDefaults } from '@mastra/core/agent/durable';
+import { DurableAgentDefaults, globalRunRegistry } from '@mastra/core/agent/durable';
 
 import { MessageList } from '@mastra/core/agent/message-list';
 import { Mastra } from '@mastra/core/mastra';
@@ -148,6 +148,33 @@ describe('createInngestDurableAgenticWorkflow step-finish emission', () => {
       type: 'step-finish',
       payload: { stepResult: { reason: 'tool-calls', isContinued: true } },
     });
+  });
+
+  it("never calls another Mastra instance's stopWhen for a reused runId", async () => {
+    const runId = 'run-stop-when-foreign';
+    const foreignStopWhen = vi.fn(() => true);
+    globalRunRegistry.set(runId, { mastra: new Mastra({ logger: false }), stopWhen: foreignStopWhen } as any);
+
+    try {
+      const published: any[] = [];
+      const result = await conditionFor(5)({
+        inputData: {
+          runId,
+          iterationCount: 1,
+          options: {},
+          accumulatedSteps: [{ text: 'mine', toolCalls: [], toolResults: [] }],
+          lastStepResult: { reason: 'tool-calls', isContinued: true, warnings: [] },
+        },
+        mastra: new Mastra({ logger: false }),
+        engine: { step: { run: async (_id: string, fn: () => Promise<boolean>) => fn() } },
+        [PUBSUB_SYMBOL]: { publish: vi.fn(async (_topic: string, event: any) => void published.push(event)) },
+      });
+
+      expect(foreignStopWhen).not.toHaveBeenCalled();
+      expect(result).toBe(true);
+    } finally {
+      globalRunRegistry.delete(runId);
+    }
   });
 
   it('emits the completed step-finish before a stopWhen decision error propagates', async () => {
@@ -655,5 +682,45 @@ describe('Inngest per-step processor history (#25193)', () => {
     const mapped = await entry.mapConfig({ inputData });
     expect(mapped.stepIndex).toBe(1);
     expect(mapped.accumulatedSteps).toEqual([priorStep]);
+  });
+});
+
+describe('Inngest fallback model list (#26146)', () => {
+  it('carries modelList into the LLM step on every iteration', async () => {
+    const inngest = new Inngest({ id: 'inngest-model-list-tests' });
+    const workflow = createInngestDurableAgenticWorkflow({ inngest });
+    const steps = (workflow as any).executionGraph.steps;
+    const byId = (id: string) => findEntry(steps, c => c.type === 'mapping' && c.id === id);
+
+    const modelList = [
+      { id: 'primary', config: { provider: 'openai', modelId: 'a' }, maxRetries: 0, enabled: true },
+      { id: 'backup', config: { provider: 'openai', modelId: 'b' }, maxRetries: 0, enabled: true },
+    ];
+    const state = await byId('init-iteration-state').mapConfig({
+      inputData: {
+        runId: 'run-1',
+        agentId: 'agent-1',
+        messageId: 'msg-1',
+        messageListState: emptyMessageListState(),
+        toolsMetadata: [],
+        modelConfig: {},
+        modelList,
+        options: {},
+        state: {},
+      },
+    });
+    expect((await byId('map-to-llm-input').mapConfig({ inputData: state })).modelList).toEqual(modelList);
+
+    const next = await byId('update-iteration-state').mapConfig({
+      inputData: {
+        messageListState: emptyMessageListState(),
+        messageId: 'msg-1',
+        state: {},
+        output: { usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+        stepResult: { reason: 'tool-calls' },
+      },
+      getInitData: () => state,
+    });
+    expect((await byId('map-to-llm-input').mapConfig({ inputData: next })).modelList).toEqual(modelList);
   });
 });

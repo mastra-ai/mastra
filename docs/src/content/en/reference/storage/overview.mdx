@@ -41,13 +41,13 @@ The schema definitions below cover the built-in database-backed tables documente
       columns={[
   {
     name: 'id',
-    type: 'uuidv4',
-    description: 'Unique identifier for the message (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)',
+    type: 'text',
+    description: 'Unique identifier for the message',
     constraints: [{ type: 'primaryKey' }, { type: 'nullable', value: false }],
   },
   {
     name: 'thread_id',
-    type: 'uuidv4',
+    type: 'text',
     description: 'Parent thread reference',
     constraints: [
       { type: 'foreignKey', value: 'threads.id' },
@@ -56,7 +56,7 @@ The schema definitions below cover the built-in database-backed tables documente
   },
   {
     name: 'resourceId',
-    type: 'uuidv4',
+    type: 'text',
     description: 'ID of the resource that owns this message',
     constraints: [{ type: 'nullable', value: true }],
   },
@@ -139,8 +139,8 @@ The schema definitions below cover the built-in database-backed tables documente
       columns={[
   {
     name: 'id',
-    type: 'uuidv4',
-    description: 'Unique identifier for the thread (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)',
+    type: 'text',
+    description: 'Unique identifier for the thread',
     constraints: [{ type: 'primaryKey' }, { type: 'nullable', value: false }],
   },
   {
@@ -158,12 +158,13 @@ The schema definitions below cover the built-in database-backed tables documente
   },
   {
     name: 'metadata',
-    type: 'text',
-    description: 'Custom thread metadata as stringified JSON. Example:',
+    type: 'jsonb',
+    description: 'Custom thread metadata as JSON. Example:',
     example: {
       category: 'support',
       priority: 1,
     },
+    constraints: [{ type: 'nullable', value: true }],
   },
   {
     name: 'createdAt',
@@ -237,15 +238,14 @@ The schema definitions below cover the built-in database-backed tables documente
   },
   {
     name: 'run_id',
-    type: 'uuidv4',
-    description:
-      'Unique identifier for the workflow execution. Used to track state across suspend/resume cycles (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)',
+    type: 'text',
+    description: 'Unique identifier for the workflow execution. Used to track state across suspend/resume cycles',
     constraints: [{ type: 'nullable', value: false }],
   },
   {
     name: 'snapshot',
-    type: 'text',
-    description: 'Serialized workflow state as JSON. Example:',
+    type: 'jsonb',
+    description: 'Workflow state as JSON. Example:',
     example: {
       value: { currentState: 'running' },
       context: {

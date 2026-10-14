@@ -837,8 +837,8 @@ export class FactoryDecisionDispatcher {
         const moved = await this.#storage.get({ orgId: record.orgId, id: item.id });
         if (!moved) return;
         const messageKey = `${record.idempotencyKey}:message`;
-        // Keyed by revision too: a stale commit is recorded as rejected under
-        // its identity, so the retry needs a fresh one to queue the message.
+        // Keyed by revision so a retry after a concurrent write commits under a
+        // fresh identity at the item's new revision.
         const queued = await this.#storage.commitRuleEvaluation({
           orgId: record.orgId,
           factoryProjectId: record.factoryProjectId,
@@ -862,6 +862,9 @@ export class FactoryDecisionDispatcher {
           now: new Date(),
         });
         if (queued.status === 'missing') return;
+        if (queued.status === 'stale') {
+          throw new Error('Factory transition message was not queued: the work item changed concurrently.');
+        }
         const queuedStatus = (queued.result as { status?: string }).status;
         if (queuedStatus !== 'accepted') {
           throw new Error(`Factory transition message was not queued: ${queuedStatus ?? 'unknown'}.`);
@@ -974,6 +977,9 @@ export class FactoryDecisionDispatcher {
             { orgId: record.orgId, factoryProjectId: record.factoryProjectId, workItemId: record.workItemId },
             resolved.message,
           );
+          // The feed read is async storage I/O; the card can move while it runs.
+          if (await kickoffLanded()) return;
+          if (await kickoffStale()) throw new FactoryDecisionSuperseded();
           if (decision.cancelInFlight && session.stream.isActive()) session.abort();
           const precedingMessage = decision.precedingMessage;
           if (precedingMessage) {
@@ -995,6 +1001,7 @@ export class FactoryDecisionDispatcher {
                 },
               ),
             );
+            if (await kickoffStale()) throw new FactoryDecisionSuperseded();
           }
           // The run's own verdict, not the delivery's. A signal can reach the
           // agent perfectly and the run still die on a provider error or be

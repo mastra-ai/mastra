@@ -33,8 +33,8 @@ async function createItem(storage: WorkItemsStorage, number: number, stage = 'in
 
 const builtInBoards = createBoardRegistry();
 
-/** Queue one invokeSkill decision on a fresh card by moving it into Execute under a rule override. */
-async function queueFailedPlan(storage: WorkItemsStorage, number: number) {
+/** Queue and lease one invokeSkill decision on a fresh card by moving it into Execute under a rule override. */
+async function queueClaimedPlan(storage: WorkItemsStorage, number: number) {
   const item = await createItem(storage, number);
   const boards = createLifecycleTestRegistry({
     execute: {
@@ -70,6 +70,11 @@ async function queueFailedPlan(storage: WorkItemsStorage, number: number) {
     leaseExpiresAt: new Date(CLAIM_NOW.getTime() + 30_000),
     limit: 1,
   });
+  return { item, claimed: claimed! };
+}
+
+async function queueFailedPlan(storage: WorkItemsStorage, number: number) {
+  const { item, claimed } = await queueClaimedPlan(storage, number);
   const failed = await storage.failDeferredDecision({
     id: claimed!.id,
     orgId: 'org-1',
@@ -110,6 +115,37 @@ describe('createFactorySupervisorReadTools', () => {
     expect(overview.failedDecisions).toHaveLength(1);
     expect(overview.failedDecisions[0]).toMatchObject({ type: 'invokeSkill', role: 'plan', canRetry: true });
     expect(overview.checkedAt).toBe(NOW.toISOString());
+  });
+
+  it('reports a failed run as not retryable once its card has moved on, matching the retry tool', async () => {
+    const seed = await createFactoryStorageForTests();
+    const { workItems } = seed;
+    const { item, decision } = await queueFailedPlan(workItems, 7);
+    await new Promise(resolve => setTimeout(resolve, 5));
+    const moved = await new FactoryTransitionService({
+      storage: workItems,
+      configVersion: 'rules-v1',
+      boards: createLifecycleTestRegistry({}),
+    }).transition({
+      ...SCOPE,
+      workItemId: item.id,
+      board: 'work',
+      stage: 'review',
+      expectedRevision: item.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'move-7-review' },
+      cause: 'board_drag',
+    });
+    expect(moved.status).toBe('accepted');
+    const tools = createFactorySupervisorReadTools({ scope: SCOPE, boards: builtInBoards, ...seed, now: () => NOW });
+
+    const overview = await execute<any>(tools.factory_overview, {});
+    const detail = await execute<any>(tools.factory_inspect_work_item, { number: 7 });
+
+    expect(overview.failedDecisions).toEqual([expect.objectContaining({ id: decision.id, canRetry: false })]);
+    expect(detail.decisions).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: decision.id, canRetry: false })]),
+    );
   });
 
   it('factory_health_check returns the deterministic report', async () => {
@@ -190,6 +226,22 @@ describe('createFactorySupervisorReadTools', () => {
     );
     expect(attention.incidents[0].decisions.map((d: any) => d.number).sort()).toEqual([1, 2]);
     expect(attention.proposals).toEqual([]);
+  });
+
+  it('factory_list_attention lists proposals waiting on a person alongside failures', async () => {
+    const seed = await createFactoryStorageForTests();
+    await queueFailedPlan(seed.workItems, 1);
+    const { claimed } = await queueClaimedPlan(seed.workItems, 2);
+    await seed.workItems.proposeDeferredDecision(
+      { id: claimed.id, orgId: 'org-1', factoryProjectId: PROJECT_ID, ownerId: 'test' },
+      NOW,
+    );
+    const tools = createFactorySupervisorReadTools({ scope: SCOPE, boards: builtInBoards, ...seed });
+
+    const attention = await execute<any>(tools.factory_list_attention, { limit: 10 });
+
+    expect(attention.incidents).toHaveLength(1);
+    expect(attention.proposals.map((d: any) => d.id)).toEqual([claimed.id]);
   });
 
   it("factory_read_session reads the card's thread newest-last with text and tool names, bounded", async () => {

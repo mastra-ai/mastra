@@ -193,7 +193,9 @@ export async function startConnectInngestDevServer(): Promise<ChildProcess | nul
  *
  * This starts the Inngest dev server using npx (no Docker required).
  */
-export async function setupSharedTestInfrastructure(): Promise<void> {
+export async function setupSharedTestInfrastructure({
+  observability,
+}: { observability?: NonNullable<ConstructorParameters<typeof Mastra>[0]>['observability'] } = {}): Promise<void> {
   // Start Inngest dev server first (needs to be running before we create the app server)
   // Skip if INNGEST_DEV_EXTERNAL=true (for running against Docker or existing server)
   if (process.env.INNGEST_DEV_EXTERNAL !== 'true') {
@@ -224,6 +226,7 @@ export async function setupSharedTestInfrastructure(): Promise<void> {
     workflows: {
       [workflow.id]: workflow,
     },
+    ...(observability ? { observability } : {}),
     server: {
       apiRoutes: [
         {

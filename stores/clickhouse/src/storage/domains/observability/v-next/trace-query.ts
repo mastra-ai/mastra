@@ -374,20 +374,19 @@ function compileClickHouseTraceScope(
   // ClickHouse cannot push the time range through `LIMIT 1 BY`, so narrow the dedupe to
   // traces with a root in the range first. All roots of those traces stay in, so a
   // non-current root inside the range cannot resurrect a trace whose current root is outside it.
+  // The re-read carries the tenant scope so it reads only the tenant's rows, and another
+  // tenant's root with the same traceId cannot win the dedupe. One `LIMIT 1 BY traceId`
+  // picks the same root as deduping by dedupeKey first: the lowest dedupeKey of the trace.
   const ctes = [
     `current_roots AS (
-    SELECT * FROM (
-      SELECT *
-      FROM ${TABLE_TRACE_ROOTS}
-      WHERE traceId IN (
-        SELECT traceId
-        FROM ${TABLE_TRACE_ROOTS} r
-        WHERE startedAt >= ${from}
-          AND startedAt < ${to}${tenant}${seedFilter}
-      )
-      ORDER BY dedupeKey
-      LIMIT 1 BY dedupeKey
-    )
+    SELECT *
+    FROM ${TABLE_TRACE_ROOTS}
+    WHERE traceId IN (
+      SELECT traceId
+      FROM ${TABLE_TRACE_ROOTS} r
+      WHERE startedAt >= ${from}
+        AND startedAt < ${to}${tenant}${seedFilter}
+    )${tenant}
     ORDER BY traceId, dedupeKey
     LIMIT 1 BY traceId
   )`,
