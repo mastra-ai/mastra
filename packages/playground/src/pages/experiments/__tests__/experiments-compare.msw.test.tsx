@@ -149,10 +149,10 @@ describe('Experiments page — selection and compare', () => {
       expect(await getCompareTooltip()).toBe('Select at least two experiments to compare');
     });
 
-    it('offers Run Experiment without a Reset button', async () => {
+    it('offers New experiment without a Reset button', async () => {
       await renderLoadedPage();
 
-      expect(screen.getByRole('button', { name: /run experiment/i })).toBeDefined();
+      expect(screen.getByRole('button', { name: /new experiment/i })).toBeDefined();
       expect(screen.queryByRole('button', { name: /reset/i })).toBeNull();
       expect(screen.queryByRole('button', { name: /cancel/i })).toBeNull();
     });

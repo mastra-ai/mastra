@@ -8,7 +8,7 @@ import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-
 import { useDatasets } from '@mastra/react/hooks/datasets';
 import { useInfiniteExperiments } from '@mastra/react/hooks/experiments';
 import { useReviewSummary } from '@mastra/react/hooks/review';
-import { Play } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -205,14 +205,8 @@ export default function Experiments() {
     <PageLayout
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={
-        <Button
-          variant="primary"
-          size="sm"
-          icon={<Play />}
-          tooltip="Run an experiment"
-          onClick={() => setRunDialogOpen(true)}
-        >
-          Run Experiment
+        <Button variant="primary" size="sm" icon={<Plus />} onClick={() => setRunDialogOpen(true)}>
+          New experiment
         </Button>
       }
       actionRow={
