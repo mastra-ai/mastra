@@ -1,6 +1,6 @@
 import { useLocation, useNavigate } from 'react-router';
 
-import { usePinnedSessions } from '../hooks/usePinnedSessions';
+import { setSessionPinned } from '../hooks/usePinnedSessions';
 import { useRegenerateSessionTitle } from '../hooks/useRegenerateSessionTitle';
 import { STATUS_MARKER_BY_ACTIVITY } from '../services/sessionRows';
 import type { SessionListRow } from '../services/sessionRows';
@@ -21,7 +21,6 @@ export function SessionListItem({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { setPinned } = usePinnedSessions();
   const { regenerate, regenerating } = useRegenerateSessionTitle(factoryId, row.session.sessionId);
   const canRegenerateTitle = row.origin === 'user' && row.ownedByViewer;
 
@@ -45,7 +44,7 @@ export function SessionListItem({
         updatedAt: row.updatedAt,
       }}
       onSelect={() => void navigate(row.openPath, row.origin === 'factory' ? { state: { from: location } } : undefined)}
-      onPinChange={pinned => setPinned(row.session.sessionId, pinned)}
+      onPinChange={pinned => setSessionPinned(row.session.sessionId, pinned)}
       onDelete={row.ownedByViewer ? () => onDelete(row) : undefined}
       onRegenerateTitle={canRegenerateTitle ? regenerate : undefined}
       regeneratingTitle={regenerating}

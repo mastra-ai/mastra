@@ -4,34 +4,33 @@ export interface LocalStorageStore<T> {
   read: () => T;
   write: (value: T) => void;
   subscribe: (onStoreChange: () => void) => () => void;
-  empty: T;
+  defaultValue: T;
 }
 
 interface LocalStorageStoreOptions<T> {
   key: string;
-  empty: T;
-  /** Receives the JSON-parsed stored value. Throw, or return `empty`, to reject it. */
+  defaultValue: T;
   parse: (stored: unknown) => T;
   toJSON?: (value: T) => unknown;
 }
 
 export function createLocalStorageStore<T>({
   key,
-  empty,
+  defaultValue,
   parse,
   toJSON = value => value,
 }: LocalStorageStoreOptions<T>): LocalStorageStore<T> {
   const listeners = new Set<() => void>();
   let cachedRaw: string | null = null;
-  let cachedValue = empty;
+  let cachedValue = defaultValue;
   let storageUnavailable = false;
 
   const parseRaw = (raw: string | null): T => {
-    if (raw === null) return empty;
+    if (raw === null) return defaultValue;
     try {
       return parse(JSON.parse(raw));
     } catch {
-      return empty;
+      return defaultValue;
     }
   };
 
@@ -76,9 +75,9 @@ export function createLocalStorageStore<T>({
     };
   };
 
-  return { read, write, subscribe, empty };
+  return { read, write, subscribe, defaultValue };
 }
 
 export function useLocalStorageStore<T>(store: LocalStorageStore<T>): T {
-  return useSyncExternalStore(store.subscribe, store.read, () => store.empty);
+  return useSyncExternalStore(store.subscribe, store.read, () => store.defaultValue);
 }

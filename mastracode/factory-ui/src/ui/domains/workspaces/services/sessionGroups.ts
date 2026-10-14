@@ -18,12 +18,23 @@ export const COLLAPSED_GROUP_ROW_COUNT = 5;
 
 const USER_GROUP: SessionGroupHeading = { key: 'user', label: 'User', icon: 'user' };
 
-function boardGroupKey(row: SessionListRow): string {
-  return row.board === undefined ? USER_GROUP.key : `board:${row.board}`;
+function boardGroupKey(boardId: string): string {
+  return `board:${boardId}`;
+}
+
+function rowGroupKey(row: SessionListRow): string {
+  return row.board === undefined ? USER_GROUP.key : boardGroupKey(row.board);
 }
 
 function boardHeading(boardId: string, label: string): SessionGroupHeading {
-  return { key: `board:${boardId}`, label, icon: boardId === 'review' ? 'review' : 'board' };
+  return { key: boardGroupKey(boardId), label, icon: boardId === 'review' ? 'review' : 'board' };
+}
+
+function uncatalogedBoardIds(rows: readonly SessionListRow[], catalogIds: ReadonlySet<string>): string[] {
+  const boardIds = new Set(
+    rows.flatMap(row => (row.board !== undefined && !catalogIds.has(row.board) ? [row.board] : [])),
+  );
+  return [...boardIds].toSorted((a, b) => a.localeCompare(b));
 }
 
 function boardGroupHeadings(
@@ -32,11 +43,7 @@ function boardGroupHeadings(
 ): SessionGroupHeading[] {
   const catalog = orderedBoards(boards ?? []);
   const catalogIds = new Set(catalog.map(board => board.id));
-  const uncatalogedBoards = orderedBoards(
-    [...new Set(rows.flatMap(row => (row.board !== undefined && !catalogIds.has(row.board) ? [row.board] : [])))]
-      .toSorted((a, b) => a.localeCompare(b))
-      .map(id => ({ id })),
-  );
+  const uncatalogedBoards = orderedBoards(uncatalogedBoardIds(rows, catalogIds).map(id => ({ id })));
   return [
     ...catalog.map(board => boardHeading(board.id, board.title)),
     ...uncatalogedBoards.map(({ id }) => boardHeading(id, id.charAt(0).toUpperCase() + id.slice(1))),
@@ -49,7 +56,7 @@ export function groupSessionRowsByBoard(
   boards: readonly InstalledBoardInfo[] | undefined,
 ): SessionGroup[] {
   return boardGroupHeadings(rows, boards).flatMap(heading => {
-    const groupRows = rows.filter(row => boardGroupKey(row) === heading.key);
+    const groupRows = rows.filter(row => rowGroupKey(row) === heading.key);
     return groupRows.length > 0 ? [{ ...heading, rows: groupRows }] : [];
   });
 }

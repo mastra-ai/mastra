@@ -28,7 +28,18 @@ export function stubSessionsFactory(factoryId: string, projectRepositoryIds: str
   );
 }
 
-export function testChatSession(factoryId: string, projectRepositoryId: string): ChatSessionContextApi {
+export const LIVE_SESSION: Partial<ChatSessionContextApi> = {
+  sessionEnabled: true,
+  resourceReady: true,
+  sandboxReady: true,
+  resourceEnabled: true,
+};
+
+export function testChatSession(
+  factoryId: string,
+  projectRepositoryId: string,
+  overrides: Partial<ChatSessionContextApi> = {},
+): ChatSessionContextApi {
   return {
     resourceId: 'resource-1',
     sessionEnabled: false,
@@ -39,5 +50,6 @@ export function testChatSession(factoryId: string, projectRepositoryId: string):
     factorySessionState: { factoryProjectId: factoryId, projectRepositoryId },
     baseUrl: TEST_BASE_URL,
     kind: 'factory',
+    ...overrides,
   };
 }

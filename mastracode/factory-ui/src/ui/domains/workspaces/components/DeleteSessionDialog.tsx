@@ -9,7 +9,6 @@ import {
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
 
-import { getUserSessionLabel } from '../services/sessionPresentation';
 import type { SessionListRow } from '../services/sessionRows';
 
 export function DeleteSessionDialog({
@@ -37,8 +36,8 @@ export function DeleteSessionDialog({
               </>
             ) : (
               <>
-                This deletes the <span className="text-foreground">{getUserSessionLabel(row.session)}</span> session and
-                its checkout with any uncommitted changes. This can’t be undone. Its conversation is kept.
+                This deletes the <span className="text-foreground">{row.name}</span> session and its checkout with any
+                uncommitted changes. This can’t be undone. Its conversation is kept.
               </>
             )}
           </DialogDescription>

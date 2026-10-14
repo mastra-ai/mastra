@@ -12,19 +12,22 @@ export const DEFAULT_SESSION_LIST_VIEW: SessionListView = { sort: DEFAULT_SESSIO
 type SessionListViewChanges = Partial<SessionListView>;
 const NO_CHANGES: SessionListViewChanges = {};
 
-function parseViewChanges(parsed: unknown): SessionListViewChanges {
-  if (typeof parsed !== 'object' || parsed === null) return NO_CHANGES;
-  const stored: Partial<Record<keyof SessionListView, unknown>> = parsed;
-  return { ...(isSessionSort(stored.sort) && { sort: stored.sort }) };
+function parseViewChanges(stored: unknown): SessionListViewChanges {
+  if (typeof stored !== 'object' || stored === null) throw new Error('Stored session list view is not an object');
+  const changes: SessionListViewChanges = {};
+  if ('sort' in stored && isSessionSort(stored.sort)) changes.sort = stored.sort;
+  return changes;
 }
 
 function changesFromDefault(view: SessionListView): SessionListViewChanges {
-  return { ...(view.sort !== DEFAULT_SESSION_LIST_VIEW.sort && { sort: view.sort }) };
+  const changes: SessionListViewChanges = {};
+  if (view.sort !== DEFAULT_SESSION_LIST_VIEW.sort) changes.sort = view.sort;
+  return changes;
 }
 
 const sessionListViewStore = createLocalStorageStore<SessionListViewChanges>({
   key: 'mastracode.sessionListView',
-  empty: NO_CHANGES,
+  defaultValue: NO_CHANGES,
   parse: parseViewChanges,
 });
 

@@ -22,12 +22,6 @@ describe('useSessionListView', () => {
     expect(renderHook(() => useSessionListView()).result.current.view).toEqual(DEFAULT_SESSION_LIST_VIEW);
   });
 
-  it('opens on the default view when the stored value is not JSON', () => {
-    localStorage.setItem(STORAGE_KEY, '{not json');
-
-    expect(renderHook(() => useSessionListView()).result.current.view).toEqual(DEFAULT_SESSION_LIST_VIEW);
-  });
-
   it('stores only what differs from the default, and forgets a choice set back to it', () => {
     const { result } = renderHook(() => useSessionListView());
 

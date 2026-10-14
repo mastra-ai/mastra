@@ -8,7 +8,7 @@ const KEY = 'test:tags';
 function tagStore() {
   return createLocalStorageStore<ReadonlySet<string>>({
     key: KEY,
-    empty: new Set(),
+    defaultValue: new Set(),
     parse: stored => {
       if (!Array.isArray(stored)) throw new Error('not a tag list');
       return new Set(stored.filter(tag => typeof tag === 'string'));

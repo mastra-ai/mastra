@@ -1,5 +1,6 @@
 import type { DropdownMenuRadioOption } from '@mastra/playground-ui/components/DropdownMenu';
 
+import { SESSION_ACTIVITY_STATUSES, SESSION_STATUS_LABELS } from './sessionRows';
 import type { SessionActivityStatus, SessionListRow } from './sessionRows';
 
 export type SessionStatusFilter = 'all' | SessionActivityStatus;
@@ -11,11 +12,7 @@ export const SESSION_OWNER_PREFIX = 'owner:';
 
 export const SESSION_STATUS_OPTIONS: readonly DropdownMenuRadioOption<SessionStatusFilter>[] = [
   { value: 'all', label: 'All statuses' },
-  { value: 'waiting', label: 'Waiting on you' },
-  { value: 'working', label: 'Working' },
-  { value: 'initializing', label: 'Initializing' },
-  { value: 'idle', label: 'Idle' },
-  { value: 'done', label: 'Done' },
+  ...SESSION_ACTIVITY_STATUSES.map(status => ({ value: status, label: SESSION_STATUS_LABELS[status] })),
 ];
 
 export const SESSION_UPDATED_OPTIONS: readonly DropdownMenuRadioOption<SessionUpdatedFilter>[] = [

@@ -1,9 +1,3 @@
-/**
- * BDD coverage for the sidebar session groups: each group shows the latest 5
- * sessions with a "Show N more" toggle that expands to the full list. Before
- * this, sessions past the cap were silently hidden — users with many review
- * sessions couldn't reach them from the sidebar at all.
- */
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
