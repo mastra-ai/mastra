@@ -226,6 +226,9 @@ describe('provider attribution', () => {
   it('maps built-in OpenAI model ids to the Codex OAuth provider', () => {
     expect(providerFromModelId('openai/gpt-5.6-sol')).toBe('openai-codex');
     expect(providerFromModelId('mastracode/openai/gpt-5.6-sol')).toBe('openai-codex');
+    expect(providerFromModelId('kimi-code-plan-cn/k3')).toBe('kimi-for-coding');
+    expect(providerFromModelId('mastracode/kimi-for-coding/k3')).toBe('kimi-for-coding');
+    expect(providerFromModelId('kimi-code-plan-global/k3')).toBeUndefined();
   });
 
   it('reads rewritten requestUrl fields and rejects lookalike hosts', () => {
