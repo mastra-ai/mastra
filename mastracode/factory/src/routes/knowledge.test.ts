@@ -1,10 +1,5 @@
 import { Knowledge } from '@mastra/core/knowledge';
-import {
-  InMemoryDB,
-  InMemoryKnowledgeStorage,
-  InMemoryStore,
-  KnowledgeUnsupportedError,
-} from '@mastra/core/storage';
+import { InMemoryDB, InMemoryKnowledgeStorage, InMemoryStore, KnowledgeUnsupportedError } from '@mastra/core/storage';
 import type { KnowledgeNode, KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
 import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
