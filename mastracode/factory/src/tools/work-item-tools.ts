@@ -24,7 +24,15 @@ import {
   retryFactoryDecision,
 } from '../work-items/decision-actions.js';
 import type { FactoryDecisionActionResult } from '../work-items/decision-actions.js';
-import { MAX_TEXT, findWorkItem, truncate, workItemNotFound, workItemNumber, workItemStage } from './read-tools.js';
+import {
+  MAX_TEXT,
+  findWorkItem,
+  workItemRefSchema,
+  truncate,
+  workItemNotFound,
+  workItemNumber,
+  workItemStage,
+} from './read-tools.js';
 import type { FactoryToolScope } from './scope.js';
 
 export interface FactoryWorkItemToolDependencies {
@@ -38,7 +46,6 @@ export interface FactoryWorkItemToolDependencies {
   feed: Pick<CommentsDomain, 'createComment'>;
 }
 
-const workItemRef = z.string().trim().min(1).max(64).describe('Work item id, or its number like "#123".');
 const decisionId = z.string().trim().uuid().describe('Decision id, from factory_list_attention or inspect.');
 
 function briefItem(item: WorkItemRow) {
@@ -145,7 +152,7 @@ export function createFactoryWorkItemTools(
         "Move a work item to another stage of its board, as the person you are working with. The board's rules decide whether the move is allowed and what it starts. Confirm with the person first.",
       inputSchema: z
         .object({
-          workItem: workItemRef,
+          workItem: workItemRefSchema,
           stage: z.string().trim().min(1).max(64).describe('Destination stage, e.g. "planning" or "done".'),
         })
         .strict(),
@@ -223,7 +230,7 @@ export function createFactoryWorkItemTools(
       id: 'factory_subscribe_work_item',
       description:
         'Follow a work item from this session, so you hear about its progress and its sessions report to you. Items you file or start are followed already.',
-      inputSchema: z.object({ workItem: workItemRef }).strict(),
+      inputSchema: z.object({ workItem: workItemRefSchema }).strict(),
       execute: async ({ workItem }) => {
         const item = await requireItem(workItem);
         const subscription = await follow(item, 'subscribed');
@@ -234,7 +241,7 @@ export function createFactoryWorkItemTools(
     factory_unsubscribe_work_item: createTool({
       id: 'factory_unsubscribe_work_item',
       description: 'Stop following a work item from this session.',
-      inputSchema: z.object({ workItem: workItemRef }).strict(),
+      inputSchema: z.object({ workItem: workItemRefSchema }).strict(),
       execute: async ({ workItem }) => {
         const item = await requireItem(workItem);
         const removed = await deps.workItems.unsubscribeFromWorkItem({
