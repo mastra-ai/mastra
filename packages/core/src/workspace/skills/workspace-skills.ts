@@ -1571,7 +1571,9 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     // queries rank skills instead of needing every word or the exact phrase.
     // Words found in the name or description count double: they say what the
     // skill is for. Words of one or two letters ("a", "do") appear in almost
-    // every skill, so they're ignored unless the query has nothing longer.
+    // every skill, so they're ignored unless the query has nothing longer, or
+    // the word is part of a skill's name ("ci", "pr", "db").
+    const nameWords = new Set(skills.flatMap(skill => skill.name.toLowerCase().split(/[-_\s]+/)));
     const allTerms = [
       ...new Set(
         query
@@ -1582,7 +1584,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
           .filter(Boolean),
       ),
     ];
-    const longTerms = allTerms.filter(term => term.length > 2);
+    const longTerms = allTerms.filter(term => term.length > 2 || nameWords.has(term));
     const terms = longTerms.length > 0 ? longTerms : allTerms;
 
     if (terms.length === 0) {

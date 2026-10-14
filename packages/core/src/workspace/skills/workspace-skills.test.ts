@@ -814,6 +814,23 @@ Read the diff carefully.
         expect((await createSkills().search('pr'))[0]?.skillName).toBe('pr-review');
       });
 
+      it('simple search keeps short words that are part of a skill name', async () => {
+        const skills = new WorkspaceSkillsImpl({
+          source: createMockFilesystem({
+            'skills/ci-pipeline/SKILL.md': `---\nname: ci-pipeline\ndescription: Debugs failing continuous integration runs\n---\n\nRead the job log first.\n`,
+            'skills/pr-review/SKILL.md': PR_REVIEW_SKILL_MD,
+          }),
+          skills: ['skills'],
+        });
+        // "ci" is two letters but names a skill, so it must count as a query word
+        const results = await skills.search('fix ci pipeline');
+        expect(results.map(r => r.skillName)).toEqual(['ci-pipeline']);
+        // "ci" and "pipeline" match the name, "fix" matches nothing
+        expect(results[0]?.score).toBeCloseTo(2 / 3);
+        // "pr" names a skill, but "it" still does not
+        expect((await skills.search('review it with pr')).map(r => r.skillName)).toEqual(['pr-review']);
+      });
+
       it('simple search ignores punctuation around query words', async () => {
         const results = await createSkills().search('"correctness", (style).');
         expect(results.map(r => r.skillName)).toEqual(['pr-review']);
