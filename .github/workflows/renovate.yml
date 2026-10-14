@@ -36,7 +36,7 @@ env:
 
 jobs:
   renovate:
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     if: github.repository == 'mastra-ai/mastra'
     steps:
       - name: Initial checkout

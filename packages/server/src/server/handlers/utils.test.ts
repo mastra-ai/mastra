@@ -1,7 +1,22 @@
+import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect } from 'vitest';
-import { sanitizeBody, stripClientCredentialHeaders } from './utils';
+import { MASTRA_SCOPES_KEY } from '../constants';
+import { mergeBodyRequestContext, sanitizeBody, stripClientCredentialHeaders } from './utils';
 
 describe('utils', () => {
+  describe('mergeBodyRequestContext', () => {
+    it('never lets a body set mastra__scopes', () => {
+      const empty = new RequestContext();
+      mergeBodyRequestContext(empty, { [MASTRA_SCOPES_KEY]: ['org:victim'], tenant: 'acme' });
+      expect(empty.has(MASTRA_SCOPES_KEY)).toBe(false);
+      expect(empty.get('tenant')).toBe('acme');
+
+      const middleware = new RequestContext([[MASTRA_SCOPES_KEY, ['org:acme']]]);
+      mergeBodyRequestContext(middleware, { [MASTRA_SCOPES_KEY]: ['org:victim'] });
+      expect(middleware.get(MASTRA_SCOPES_KEY)).toEqual(['org:acme']);
+    });
+  });
+
   describe('stripClientCredentialHeaders', () => {
     it('removes credential headers from modelSettings.headers and keeps the rest', () => {
       const body: Record<string, unknown> = {

@@ -7,9 +7,9 @@ description: "Browse OpenCode Go model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/opencode-go.svg" alt="OpenCode Go logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenCode Go
 
-Access 36 OpenCode Go models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
+Access 37 OpenCode Go models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
 
-Learn more in the [OpenCode Go documentation](https://opencode.ai/docs/go).
+Learn more in the [OpenCode Go documentation](https://opencode.ai/v2/docs/console/go/).
 
 ```bash title=".env"
 OPENCODE_API_KEY=your-api-key
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "opencode-go/claude-haiku-5-5"
+  model: "opencode-go/cat-jam-free"
 });
 
 // Generate a response
@@ -37,7 +37,7 @@ for await (const chunk of stream) {
 
 :::note
 
-Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [OpenCode Go documentation](https://opencode.ai/docs/go) for details.
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [OpenCode Go documentation](https://opencode.ai/v2/docs/console/go/) for details.
 
 :::
 
@@ -45,6 +45,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
+  {
+    "model": "opencode-go/cat-jam-free",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
   {
     "model": "opencode-go/claude-haiku-5-5",
     "imageInput": true,
@@ -431,8 +443,8 @@ const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
   model: {
-    url: "https://opencode.ai/zen/go/v1",
-    id: "opencode-go/claude-haiku-5-5",
+    url: "https://opencode.ai/inference/go/v1",
+    id: "opencode-go/cat-jam-free",
     apiKey: process.env.OPENCODE_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -451,7 +463,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "opencode-go/step-5-preview-free"
-      : "opencode-go/claude-haiku-5-5";
+      : "opencode-go/cat-jam-free";
   }
 });
 ```

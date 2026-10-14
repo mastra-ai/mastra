@@ -11,6 +11,7 @@ import { saveDoneSound } from '../../../settings/services/doneSound';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { resetSessionRunObserverForTests, SessionRunObserver } from '../SessionRunObserver';
 
+const FACTORY_ID = 'factory-1';
 const REPOSITORY_ID = 'repository-1';
 const SESSION_ID = 'session-1';
 const oscillatorStart = vi.fn();
@@ -51,7 +52,7 @@ const session: FactoryUserSession = {
 function stubRegistry(runningSessionIds: () => string[]) {
   const sessionsList = { requests: 0 };
   server.use(
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPOSITORY_ID}/sessions`, () => {
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => {
       sessionsList.requests += 1;
       return HttpResponse.json({ sessions: [session] });
     }),
@@ -84,7 +85,7 @@ describe('SessionRunObserver', () => {
   it('rings and refetches the sessions list once when a run it watched in flight ends', async () => {
     let running = false;
     const sessionsList = stubRegistry(() => (running ? [SESSION_ID] : []));
-    const { client } = renderWithProviders(<SessionRunObserver projectRepositoryId={REPOSITORY_ID} />);
+    const { client } = renderWithProviders(<SessionRunObserver factoryId={FACTORY_ID} />);
     await waitForMutationsIdle(client);
     expect(sessionsList.requests).toBe(1);
 
@@ -106,7 +107,7 @@ describe('SessionRunObserver', () => {
 
   it('stays silent for a run already over when the tab opened', async () => {
     stubRegistry(() => []);
-    const { client } = renderWithProviders(<SessionRunObserver projectRepositoryId={REPOSITORY_ID} />);
+    const { client } = renderWithProviders(<SessionRunObserver factoryId={FACTORY_ID} />);
     await waitForMutationsIdle(client);
     await refetchRegistry(client);
     expect(oscillatorStart).not.toHaveBeenCalled();
@@ -114,7 +115,7 @@ describe('SessionRunObserver', () => {
 
   it('refetches the sessions list once when a run starts on a session it has not listed', async () => {
     const sessionsList = stubRegistry(() => ['session-created-by-the-dispatcher']);
-    const { client } = renderWithProviders(<SessionRunObserver projectRepositoryId={REPOSITORY_ID} />);
+    const { client } = renderWithProviders(<SessionRunObserver factoryId={FACTORY_ID} />);
     await waitFor(() => expect(sessionsList.requests).toBe(2));
 
     await refetchRegistry(client);

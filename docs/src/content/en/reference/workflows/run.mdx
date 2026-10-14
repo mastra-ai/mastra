@@ -89,6 +89,21 @@ A workflow run's `status` indicates its current execution state. The possible va
 <PropertiesTable
   content={[
   {
+    name: 'pending',
+    type: 'string',
+    description: "The run was created but hasn't started executing yet",
+  },
+  {
+    name: 'running',
+    type: 'string',
+    description: 'Workflow execution is in progress',
+  },
+  {
+    name: 'waiting',
+    type: 'string',
+    description: 'Workflow execution was interrupted before finishing, for example when the executor was aborted',
+  },
+  {
     name: 'success',
     type: 'string',
     description: 'All steps finished executing successfully, with a valid result output',
@@ -99,15 +114,37 @@ A workflow run's `status` indicates its current execution state. The possible va
     description: 'Workflow execution encountered an error during execution, with error details available',
   },
   {
+    name: 'tripwire',
+    type: 'string',
+    description: 'A processor tripwire stopped workflow execution, with tripwire details available',
+  },
+  {
     name: 'suspended',
     type: 'string',
     description: 'Workflow execution is paused waiting for resume, with suspended step information',
+  },
+  {
+    name: 'paused',
+    type: 'string',
+    description: 'Workflow execution stopped after a single step because the run uses per-step execution',
   },
   {
     name: 'canceled',
     type: 'string',
     description:
       'Workflow execution was canceled via the cancel() method, stopping any running steps and preventing subsequent steps from executing',
+  },
+  {
+    name: 'bailed',
+    type: 'string',
+    description:
+      'A step called bail() to end the workflow early. The run itself completes with a success status and the bail payload as its result',
+  },
+  {
+    name: 'skipped',
+    type: 'string',
+    description:
+      "Execution was skipped, for example a branch whose condition didn't match. Mainly reported for individual steps",
   },
 ]}
 />

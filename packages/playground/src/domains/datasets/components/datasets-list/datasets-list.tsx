@@ -243,6 +243,8 @@ export function DatasetsList({
         <DataList.TopCell>Experiments</DataList.TopCell>
       </DataList.Top>
 
+      {filteredData.length === 0 && !hasNextPage ? <DataList.NoMatch message="No datasets match your filters" /> : null}
+
       {filteredData.map((ds, index) =>
         onSelectDataset ? (
           <SelectableDatasetRow

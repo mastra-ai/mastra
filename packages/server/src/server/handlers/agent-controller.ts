@@ -17,6 +17,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 // value import.
 import { z } from 'zod/v4';
 
+import { MASTRA_USER_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import { filterSchema, includeSchema, messageOrderBySchema } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -56,12 +57,21 @@ const RESERVED_THREAD_METADATA_KEYS = {
   observationThreshold: true,
   reflectionThreshold: true,
   tokenUsage: true,
+  ownerId: true,
+  createdBy: true,
   thinkingLevel: true,
   notifications: true,
 } satisfies Record<ReservedThreadMetadataKey, true>;
 
 function isReservedThreadMetadataKey(key: string): boolean {
   return Object.hasOwn(RESERVED_THREAD_METADATA_KEYS, key) || key.startsWith('modeModelId_');
+}
+
+function getRequestMessageAuthor(requestContext?: RequestContext): { id: string } | undefined {
+  const user = requestContext?.get(MASTRA_USER_KEY);
+  if (!user || typeof user !== 'object' || Array.isArray(user)) return undefined;
+  const id = (user as Record<string, unknown>).id;
+  return typeof id === 'string' && id ? { id } : undefined;
 }
 
 /**
@@ -189,25 +199,31 @@ const MAX_TOTAL_FILE_DATA_LENGTH = 28 * 1024 * 1024;
  */
 const bodyRequestContextSchema = z.record(z.string(), z.unknown()).optional();
 
+// Optional attachments (e.g. pasted images). `data` is base64-encoded.
+const messageFilesSchema = z
+  .array(
+    z.object({
+      data: z.string().max(MAX_FILE_DATA_LENGTH),
+      mediaType: z.string(),
+      filename: z.string().optional(),
+    }),
+  )
+  .max(20)
+  .refine(files => files.reduce((total, file) => total + file.data.length, 0) <= MAX_TOTAL_FILE_DATA_LENGTH, {
+    message: 'Total attachment size exceeds limit',
+  })
+  .optional();
+
 const sendMessageBodySchema = z.object({
   message: z.string(),
   requestContext: bodyRequestContextSchema,
-  // Optional attachments (e.g. pasted images). `data` is base64-encoded.
-  files: z
-    .array(
-      z.object({
-        data: z.string().max(MAX_FILE_DATA_LENGTH),
-        mediaType: z.string(),
-        filename: z.string().optional(),
-      }),
-    )
-    .max(20)
-    .refine(files => files.reduce((total, file) => total + file.data.length, 0) <= MAX_TOTAL_FILE_DATA_LENGTH, {
-      message: 'Total attachment size exceeds limit',
-    })
-    .optional(),
+  files: messageFilesSchema,
 });
-const steerBodySchema = z.object({ message: z.string(), requestContext: bodyRequestContextSchema });
+const steerBodySchema = z.object({
+  message: z.string(),
+  requestContext: bodyRequestContextSchema,
+  files: messageFilesSchema,
+});
 const toolApprovalBodySchema = z.object({
   toolCallId: z.string(),
   approved: z.boolean(),
@@ -215,6 +231,7 @@ const toolApprovalBodySchema = z.object({
 });
 const toolSuspensionBodySchema = z.object({
   toolCallId: z.string().min(1),
+  runId: z.string().min(1).optional(),
   // Free-form resume payload. For ask_user this is a string (or string[] for
   // multi-select); for submit_plan it's `{ action, feedback? }`; for
   // request_access it's "Yes"/"No".
@@ -281,7 +298,11 @@ const listThreadsQuerySchema = z.object({
     }, z.record(z.string(), z.string()).optional())
     .optional(),
 });
-const followUpBodySchema = z.object({ message: z.string(), requestContext: bodyRequestContextSchema });
+const followUpBodySchema = z.object({
+  message: z.string(),
+  requestContext: bodyRequestContextSchema,
+  files: messageFilesSchema,
+});
 
 const sendNotificationBodySchema = z.object({
   source: z.string(),
@@ -606,6 +627,19 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
             }, 25_000);
           };
 
+          // Live events are not replayed, so seed a late subscriber with the
+          // current display state (including the message in flight). This runs
+          // before subscribe() so it precedes the buffered workspace events
+          // subscribe() replays; both are synchronous, so no event slips between.
+          try {
+            controller.enqueue(
+              toWireEvent({ type: 'display_state_changed', displayState: session.displayState.get() }),
+            );
+          } catch {
+            cleanup(controller);
+            return;
+          }
+
           unsubscribe = session.subscribe(event => {
             if (cleanedUp) return;
             try {
@@ -653,8 +687,14 @@ export const SEND_AGENT_CONTROLLER_MESSAGE_ROUTE = createRoute({
       // Forward the server middleware's requestContext so identity injected in
       // `server.middleware` reaches dynamic instructions and tools (same as the
       // plain agent message route).
+      const author = getRequestMessageAuthor(requestContext);
       ackBackgroundSessionWork({
-        work: session.sendMessage({ content: message, files, requestContext }),
+        work: session.sendMessage({
+          content: message,
+          files,
+          requestContext,
+          ...(author ? { author } : {}),
+        }),
         session,
         mastra,
         operation: 'sendMessage',
@@ -762,7 +802,16 @@ export const AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, toolCallId, resumeData, requestContext }) => {
+  handler: async ({
+    mastra,
+    controllerId,
+    resourceId,
+    sessionScope,
+    toolCallId,
+    runId,
+    resumeData,
+    requestContext,
+  }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
@@ -771,13 +820,12 @@ export const AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE = createRoute({
       // can trip the request timeout and leave CORS mutating an already-sent response.
       // Claim the parked suspension before acking so a concurrent duplicate answer
       // (e.g. while an approved submit_plan awaits its mode switch) is rejected.
-      const claim = session.claimToolSuspension(toolCallId);
+      const claim = session.claimToolSuspension(toolCallId, runId);
       if (!claim.accepted) return { ok: false, reason: claim.reason };
-      const claimedToolCallId = claim.toolCallId;
       ackBackgroundSessionWork({
         work: session
-          .respondToToolSuspension({ toolCallId, resumeData, requestContext })
-          .finally(() => session.releaseToolResponse(claimedToolCallId)),
+          .respondToToolSuspension({ address: claim.address, resumeData, requestContext })
+          .finally(() => session.releaseToolResponse(claim.claimKey)),
         session,
         mastra,
         operation: 'respondToToolSuspension',
@@ -802,12 +850,13 @@ export const STEER_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, requestContext }) => {
+  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, files, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      const author = getRequestMessageAuthor(requestContext);
       ackBackgroundSessionWork({
-        work: session.steer({ content: message, requestContext }),
+        work: session.steer({ content: message, files, requestContext, ...(author ? { author } : {}) }),
         session,
         mastra,
         operation: 'steer',
@@ -1400,12 +1449,12 @@ export const FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, requestContext }) => {
+  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, files, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
       ackBackgroundSessionWork({
-        work: session.followUp({ content: message, requestContext }),
+        work: session.followUp({ content: message, files, requestContext }),
         session,
         mastra,
         operation: 'followUp',

@@ -2489,8 +2489,8 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     expect(result.stepResult.reason).toBe('retry');
     expect(result.messageId).toBe('rotated-response-id');
 
-    // The rotated id only splits the transcript if the failed response was
-    // sealed; without the boundary the retry merges back under `msg-0`.
+    // The failed attempt's partial response is rolled back, so the retry neither
+    // merges into it nor replays it to the model (#26081).
     messageList.add(
       {
         id: result.messageId,
@@ -2504,7 +2504,8 @@ describe('createLLMExecutionStep gateway provider tools', () => {
       .db()
       .filter(message => message.role === 'assistant')
       .map(message => message.id);
-    expect(assistantIds).toEqual(['msg-0', 'rotated-response-id']);
+    expect(assistantIds).toEqual(['rotated-response-id']);
+    expect(JSON.stringify(messageList.get.all.db())).not.toContain('half a sentence');
   });
 
   it('passes the rotated response message id to processor custom data writers', async () => {

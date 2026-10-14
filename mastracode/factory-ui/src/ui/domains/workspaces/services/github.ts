@@ -224,6 +224,8 @@ export interface FactoryProjectPayload {
   name: string;
   /** Org-wide default model for factory runs; null when unset. */
   defaultModelId?: string | null;
+  /** Whether sessions use the Factory's model and credentials or the current user's. */
+  modelScope?: 'factory' | 'user';
   /** Whether new Slack sessions create Work-board items for this Factory. */
   slackWorkItemsEnabled?: boolean;
   /** Whether Factory rules may start agent runs without someone asking for them. */
@@ -360,6 +362,40 @@ export async function updateFactoryDefaultModel(
   const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
     res,
     'Failed to update Factory default model',
+  );
+  return project;
+}
+
+export async function renameFactoryProject(
+  baseUrl: string,
+  factoryProjectId: string,
+  name: string,
+): Promise<FactoryProjectPayload> {
+  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to update Factory name');
+  return project;
+}
+
+/** Set whether sessions use the Factory's or current user's model and credentials. */
+export async function updateFactoryModelScope(
+  baseUrl: string,
+  factoryProjectId: string,
+  modelScope: 'factory' | 'user',
+): Promise<FactoryProjectPayload> {
+  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ modelScope }),
+  });
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
+    res,
+    'Failed to update Factory model scope',
   );
   return project;
 }

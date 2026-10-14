@@ -69,6 +69,44 @@ describe('extractProblemDetail', () => {
     expect(result.detail).toBe('Top-level detail.');
   });
 
+  it('surfaces the first Jira errorMessages[] entry', async () => {
+    const result = await extractProblemDetail(
+      jsonResponse({ errorMessages: ['The issue no longer exists.'], errors: {} }),
+    );
+    expect(result.detail).toBe('The issue no longer exists.');
+  });
+
+  it('surfaces a Jira errors object map as "field: message"', async () => {
+    const result = await extractProblemDetail(
+      jsonResponse({ errorMessages: [], errors: { summary: 'Field "summary" is required.' } }),
+    );
+    expect(result.detail).toBe('summary: Field "summary" is required.');
+  });
+
+  it('prefers errorMessages[] over the errors object map', async () => {
+    const result = await extractProblemDetail(
+      jsonResponse({ errorMessages: ['Top-level message.'], errors: { summary: 'field message' } }),
+    );
+    expect(result.detail).toBe('Top-level message.');
+  });
+
+  it('skips empty errorMessages[] and empty errors map without detail', async () => {
+    const result = await extractProblemDetail(jsonResponse({ errorMessages: [], errors: {} }));
+    expect(result.detail).toBeUndefined();
+  });
+
+  it('surfaces a GitHub-style top-level message', async () => {
+    const result = await extractProblemDetail(
+      jsonResponse({ message: 'Validation Failed', documentation_url: 'https://docs.github.com/rest' }),
+    );
+    expect(result.detail).toBe('Validation Failed');
+  });
+
+  it('prefers detail over a top-level message', async () => {
+    const result = await extractProblemDetail(jsonResponse({ detail: 'Top-level detail.', message: 'github message' }));
+    expect(result.detail).toBe('Top-level detail.');
+  });
+
   it('flags RFC-7807 responses via the content type only', async () => {
     const result = await extractProblemDetail(
       jsonResponse({ title: 'Bad Request' }, 'application/problem+json; charset=utf-8'),

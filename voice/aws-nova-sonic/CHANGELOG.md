@@ -1,5 +1,17 @@
 # @mastra/voice-aws-nova-sonic
 
+## 0.2.4
+
+### Patch Changes
+
+- Transcripts that contain the word "interrupted" are no longer swallowed as a barge-in. Only Nova Sonic's JSON `{ "interrupted": true }` marker emits `interrupt`; ordinary text now emits `writing` as usual. Fixes [#26504](https://github.com/mastra-ai/mastra/issues/26504). ([#26623](https://github.com/mastra-ai/mastra/pull/26623))
+
+## 0.2.4-alpha.0
+
+### Patch Changes
+
+- Transcripts that contain the word "interrupted" are no longer swallowed as a barge-in. Only Nova Sonic's JSON `{ "interrupted": true }` marker emits `interrupt`; ordinary text now emits `writing` as usual. Fixes [#26504](https://github.com/mastra-ai/mastra/issues/26504). ([#26623](https://github.com/mastra-ai/mastra/pull/26623))
+
 ## 0.2.3
 
 ### Patch Changes

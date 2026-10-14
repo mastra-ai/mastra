@@ -314,6 +314,33 @@ const result = await run.timeTravel({
 })
 ```
 
+## Concurrent time travel calls
+
+`timeTravel()` doesn't claim the run before it executes. It only rejects runs whose stored status is `running`. If two `timeTravel()` calls target the same run at the same time, both can proceed, and the target step and every step after it run once per call.
+
+This matters whenever time travel can be triggered more than once for the same run, such as a "retry from step" button pressed twice or a retried API request. Make sure only one call proceeds per run in your application, for example with a per-run lock or an idempotency key:
+
+```typescript
+const inFlight = new Set<string>()
+
+async function retryFromStep(runId: string, step: string) {
+  if (inFlight.has(runId)) {
+    throw new Error(`Time travel already in progress for run ${runId}`)
+  }
+  inFlight.add(runId)
+  try {
+    const run = await workflow.createRun({ runId })
+    return await run.timeTravel({ step })
+  } finally {
+    inFlight.delete(runId)
+  }
+}
+```
+
+The in-memory set above only protects a single process. If several server instances can handle the same run, use a shared lock instead, such as a database row lock.
+
+Unlike [`resume()`](./resume#concurrent-resume-calls), `timeTravel()` has no `WORKFLOW_RESUME_ALREADY_CLAIMED` equivalent, and the HTTP endpoint doesn't return `409 Conflict` for concurrent calls.
+
 ## Notes
 
 - Time travel requires storage to be configured since it relies on persisted workflow snapshots
