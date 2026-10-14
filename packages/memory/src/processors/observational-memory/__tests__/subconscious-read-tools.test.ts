@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../../../index';
 import { Subconscious } from '../subconscious';
-import { resolveKnowledgeScopeIds } from '../subconscious/knowledge-tools';
+import { createKnowledgeTools, resolveKnowledgeScopeIds } from '../subconscious/knowledge-tools';
 
 function createSemanticDependencies() {
   const indexes = new Set<string>();
@@ -218,5 +218,45 @@ describe('Subconscious knowledge read tools', () => {
     await expect(
       tools.knowledge_browse!.execute?.({}, { agent: { threadId: 'alpha', resourceId: 'user-42' } } as any),
     ).rejects.toThrow(/organizationId/);
+  });
+
+  it('lets storage decide semantic hit visibility, including scope nodes visible through their own id', async () => {
+    const memory = await createMemory();
+    const store = (await memory.storage.getStore('knowledge'))!;
+    const alphaScopeIds = await scopeIdsFor(memory);
+    const betaScopeIds = await scopeIdsFor(memory, 'beta');
+    // A scope node whose only membership is outside the caller's scopes; the caller sees it through its own id.
+    const team = await store.createNode({
+      name: 'Cobalt team',
+      kind: 'team',
+      isScope: true,
+      metadata: { description: 'Owns the cobalt rollout.' },
+      scopeIds: [betaScopeIds[2]!],
+    });
+    const note = await store.createRecord({
+      node: team,
+      text: 'The cobalt rollout ships on Friday.',
+      scopeIds: [team.id],
+      source: 'team',
+    });
+    const callerScopeIds = [...alphaScopeIds, team.id];
+    await memory.drainKnowledgeSemanticIndex(betaScopeIds);
+    await memory.drainKnowledgeSemanticIndex(callerScopeIds);
+    const visible = await store.listVisibleKnowledgeIds({
+      nodeIds: [team.id],
+      recordIds: [note.id],
+      scopeIds: callerScopeIds,
+    });
+    expect(visible).toEqual({ nodeIds: [team.id], recordIds: [note.id] });
+
+    const tools = createKnowledgeTools(memory as never, callerScopeIds);
+    const result = await tools.knowledge_search!.execute?.({ query: 'cobalt rollout' }, toolContext());
+    const semantic = (result as any).results.filter((hit: any) => hit.sources.includes('semantic'));
+    expect(semantic).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'node', id: team.id, name: 'Cobalt team' }),
+        expect.objectContaining({ type: 'record', id: note.id, recordId: team.id, name: 'Cobalt team' }),
+      ]),
+    );
   });
 });
