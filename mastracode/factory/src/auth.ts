@@ -133,10 +133,29 @@ const resolvedUsers = new WeakMap<object, FactoryAuthUser>();
  */
 const CORE_AUTH_USER_KEY = 'mastra__user';
 
+/**
+ * Request contexts whose user {@link createFactoryAfterAuth} authenticated
+ * itself, before core route auth (deployers without `afterAuth` support).
+ */
+const selfAuthenticated = new WeakSet<object>();
+
+/**
+ * The user Factory resolved for this request. When Factory authenticated ahead
+ * of core route auth, core authenticates again; if the two disagree, the
+ * identity core authorized wins and Factory's resolution is discarded.
+ */
+function resolvedRequestUser(requestContext: { get: (key: string) => unknown }): FactoryAuthUser | undefined {
+  const resolved = resolvedUsers.get(requestContext);
+  if (!resolved || !selfAuthenticated.has(requestContext)) return resolved;
+  const coreUser = requestContext.get(CORE_AUTH_USER_KEY);
+  if (coreUser !== undefined && toFactoryAuthUser(coreUser)?.id !== resolved.id) return undefined;
+  return resolved;
+}
+
 /** The authenticated user for an HTTP request, from trusted sources only. */
 function authenticatedRequestUser(requestContext: { get: (key: string) => unknown } | undefined) {
   if (!requestContext || typeof requestContext.get !== 'function') return undefined;
-  return resolvedUsers.get(requestContext) ?? toFactoryAuthUser(requestContext.get(CORE_AUTH_USER_KEY)) ?? undefined;
+  return resolvedRequestUser(requestContext) ?? toFactoryAuthUser(requestContext.get(CORE_AUTH_USER_KEY)) ?? undefined;
 }
 
 /**
@@ -169,7 +188,7 @@ export function getFactoryAuthUserFromContext(
   requestContext: { get: (key: string) => unknown } | undefined,
 ): FactoryAuthUser | undefined {
   if (!requestContext || typeof requestContext.get !== 'function') return undefined;
-  return resolvedUsers.get(requestContext) ?? toFactoryAuthUser(requestContext.get('user')) ?? undefined;
+  return resolvedRequestUser(requestContext) ?? toFactoryAuthUser(requestContext.get('user')) ?? undefined;
 }
 
 /** Resolve the stable user id from an authenticated user shape. */
@@ -881,6 +900,7 @@ export function createFactoryAfterAuth(provider: IMastraAuthProvider) {
         (await authenticateRequest(provider, getBearerToken(c.req.header('Authorization')), c.req.raw)) ?? undefined;
       forwardPendingResponseHeaders(provider, c);
       if (!user) return next();
+      selfAuthenticated.add(requestContext);
     }
 
     const token = getBearerToken(c.req.header('Authorization'));
