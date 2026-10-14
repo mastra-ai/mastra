@@ -648,7 +648,7 @@ describe('KnowledgePG timestamps', () => {
   });
 });
 
-describe('KnowledgePG interim canonical-model layout', () => {
+describe('KnowledgePG interim and released 1.76.0 canonical-model layout', () => {
   const INTERIM_FIXTURE = 'interim-1.76.0-alpha.3.sql';
 
   it('replaces the layout the interim release created, discarding its rows and keeping other storage', async () => {
@@ -675,6 +675,50 @@ describe('KnowledgePG interim canonical-model layout', () => {
     const threads = await pool.query(`SELECT id FROM "${schemaName}".mastra_threads`);
     expect(threads.rows.map(row => row.id)).toEqual(['preserved']);
     await new KnowledgePG({ pool, schemaName }).init();
+  });
+
+  describe('replacement warning', () => {
+    function storeWithWarnSpy(schemaName: string) {
+      const warn = vi.fn();
+      const store = new KnowledgePG({ pool, schemaName });
+      store.__setLogger({
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn,
+        error: vi.fn(),
+        trackException: vi.fn(),
+        getLogs: vi.fn(),
+        getLogsByRunId: vi.fn(),
+      } as any);
+      return { store, warn };
+    }
+
+    it('warns with the replaced layout and the rows it discards', async () => {
+      const schemaName = await createSchemaWithPublishedKnowledgeV1('knowledge_interim_warn', INTERIM_FIXTURE);
+      await pool.query(`INSERT INTO "${schemaName}".mastra_knowledge_access_state VALUES ('global',1,2)`);
+      await pool.query(
+        `INSERT INTO "${schemaName}".mastra_knowledge_semantic_outbox (id,"idempotencyKey","documentId","documentType",operation,scope,"scopeKey",status,attempts,"availableAt","createdAt") VALUES ('legacy','legacy','legacy','node','upsert','[]','legacy','completed',1,now(),now())`,
+      );
+      const { store, warn } = storeWithWarnSpy(schemaName);
+
+      await store.init();
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(
+        'Replaced the pre-release interim Knowledge storage layout; its 1 rows were discarded, not migrated',
+        { layout: 'interim', discardedRows: { mastra_knowledge_semantic_outbox: 1 } },
+      );
+    });
+
+    it('does not warn when the replaced layout holds no Knowledge rows', async () => {
+      const schemaName = await createSchemaWithPublishedKnowledgeV1('knowledge_interim_quiet', INTERIM_FIXTURE);
+      await pool.query(`INSERT INTO "${schemaName}".mastra_knowledge_access_state VALUES ('global',1,2)`);
+      const { store, warn } = storeWithWarnSpy(schemaName);
+
+      await store.init();
+
+      expect(warn).not.toHaveBeenCalled();
+    });
   });
 
   it('leaves a modified interim layout untouched', async () => {

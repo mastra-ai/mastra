@@ -10,6 +10,7 @@ import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
   getCustomHTTPExceptionResponse,
+  isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
@@ -271,13 +272,16 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         });
 
         file.on('end', () => {
-          if (!limitExceeded) {
+          if (!limitExceeded && isSafeObjectKey(fieldname)) {
             result[fieldname] = Buffer.concat(chunks);
           }
         });
       });
 
       busboy.on('field', (fieldname: string, value: string) => {
+        if (!isSafeObjectKey(fieldname)) {
+          return;
+        }
         // Try to parse JSON strings (like 'options')
         try {
           result[fieldname] = JSON.parse(value);

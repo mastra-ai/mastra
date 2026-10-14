@@ -10,13 +10,18 @@ import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { HeaderCreateAction } from '@/components/ui/header-create-action';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import type { DatasetsFilters } from '@/domains/datasets/components/datasets-filter-bar';
 import { DatasetsList } from '@/domains/datasets/components/datasets-list/datasets-list';
 import { DatasetsListSkeleton } from '@/domains/datasets/components/datasets-list/datasets-list-skeleton';
 import { getDatasetTagOptions } from '@/domains/datasets/components/datasets-list/helpers';
 import { NoDatasetsInfo } from '@/domains/datasets/components/datasets-list/no-datasets-info';
 import { DatasetsToolbar } from '@/domains/datasets/components/datasets-toolbar';
 import { navCrumb } from '@/domains/navigation/crumbs';
-import { useTargetFilterParams } from '@/domains/shared/hooks/use-target-filter-params';
+import {
+  TARGET_ID_PARAM,
+  TARGET_TYPE_PARAM,
+  useTargetFilterParams,
+} from '@/domains/shared/hooks/use-target-filter-params';
 
 const crumbs = [navCrumb('/datasets')];
 
@@ -39,7 +44,26 @@ export default function Datasets() {
   const [search, setSearch] = useState('');
   const [experimentFilter, setExperimentFilter] = useState('all');
   const [tagFilter, setTagFilter] = useState('all');
-  const { targetType, targetId, setTargetType, setTargetId, clear: clearTarget } = useTargetFilterParams();
+  const { targetType, targetId } = useTargetFilterParams();
+
+  const handleFiltersChange = (next: DatasetsFilters) => {
+    setSearch(next.search);
+    setExperimentFilter(next.experimentFilter);
+    setTagFilter(next.tagFilter);
+    // Type and id change together in one URL update; an id only makes sense within its type.
+    setSearchParams(
+      prev => {
+        const params = new URLSearchParams(prev);
+        const nextTargetId = next.targetType === targetType ? next.targetId : '';
+        if (next.targetType) params.set(TARGET_TYPE_PARAM, next.targetType);
+        else params.delete(TARGET_TYPE_PARAM);
+        if (nextTargetId) params.set(TARGET_ID_PARAM, nextTargetId);
+        else params.delete(TARGET_ID_PARAM);
+        return params;
+      },
+      { replace: true },
+    );
+  };
 
   const {
     data: datasets = [],
@@ -94,7 +118,7 @@ export default function Datasets() {
     );
   }
 
-  // With a target filter active, keep the toolbar so the user can reset it.
+  // With a target filter active, keep the toolbar so the user can remove it.
   if (datasets.length === 0 && !isLoading && !targetType) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={headerCreateAction}>
@@ -104,15 +128,6 @@ export default function Datasets() {
     );
   }
 
-  const hasFilters = experimentFilter !== 'all' || tagFilter !== 'all' || search !== '' || targetType !== '';
-
-  const resetFilters = () => {
-    setSearch('');
-    setExperimentFilter('all');
-    setTagFilter('all');
-    clearTarget();
-  };
-
   return (
     <PageLayout
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
@@ -120,18 +135,12 @@ export default function Datasets() {
       actionRow={
         <DatasetsToolbar
           search={search}
-          onSearchChange={setSearch}
           experimentFilter={experimentFilter}
-          onExperimentFilterChange={setExperimentFilter}
           tagFilter={tagFilter}
-          onTagFilterChange={setTagFilter}
           tagOptions={datasetTagOptions}
           targetType={targetType}
-          onTargetTypeChange={setTargetType}
           targetId={targetId}
-          onTargetIdChange={setTargetId}
-          onReset={resetFilters}
-          hasActiveFilters={hasFilters}
+          onFiltersChange={handleFiltersChange}
         />
       }
     >

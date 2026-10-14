@@ -5,6 +5,8 @@ import {
   canonicalizeKnowledgeScopeIds,
   createKnowledgeUlid,
   isKnowledgeNodeVisible,
+  assertKnowledgeSourceProbeLimit,
+  assertKnowledgeVisibilityProbeLimit,
   isKnowledgeScopeVisible,
   knowledgeScopeIdsKey,
   knowledgeSemanticDocumentId,
@@ -44,6 +46,9 @@ import type {
   KnowledgeSemanticOutboxEntry,
   KnowledgeStructurePlan,
   KnowledgeStructureReconcileResult,
+  ListKnowledgeSourcesWithVisibleRecordsInput,
+  ListVisibleKnowledgeIdsInput,
+  ListVisibleKnowledgeIdsOutput,
   QueryKnowledgeRecordsBySourceInput,
   QueryKnowledgeRecordsInput,
   QueryKnowledgeRecordsOutput,
@@ -235,6 +240,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   #createNode(input: CreateKnowledgeNodeInput, { coalesceByName = true } = {}): KnowledgeNode {
+    if (!input.name.trim()) throw new Error('Knowledge node names must not be blank.');
     this.#assertImportRunExists(input.importRunId);
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
     this.#assertScopeNodes(scopeIds);
@@ -446,7 +452,6 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       const node = this.#db.knowledgeNodes.get(binding.nodeId);
       if (!node) throw new KnowledgeNotFoundError('node', binding.nodeId);
       if (node.isScope) throw new KnowledgeConflictError(`Knowledge scopes cannot be permanently deleted: ${node.id}`);
-      this.#db.knowledgeNodeAddresses.delete(key);
       for (const record of [...this.#db.knowledgeRecords.values()]) {
         if (record.nodeId !== node.id || record.source !== input.source) continue;
         const recordScopeIds = this.#recordScopeIds(record.id);
@@ -458,11 +463,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         this.#db.knowledgeRecords.delete(record.id);
       }
       if (
-        [...this.#db.knowledgeNodeAddresses.values()].some(entry => entry.nodeId === node.id) ||
+        [...this.#db.knowledgeNodeAddresses.entries()].some(([k, entry]) => k !== key && entry.nodeId === node.id) ||
         [...this.#db.knowledgeRecords.values()].some(record => record.nodeId === node.id)
       ) {
         return { node: cloneNode(node), deleted: false };
       }
+      this.#db.knowledgeNodeAddresses.delete(key);
       const nodeScopeIds = this.#nodeScopeIds(node.id);
       this.#recordActivity('delete', 'node', node.id, nodeScopeIds[0], input.importRunId);
       this.#enqueue('node', node.id, 'delete', node.version + 1, nodeScopeIds);
@@ -562,6 +568,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   #updateNode(input: UpdateKnowledgeNodeInput): KnowledgeNode {
+    if (input.name !== undefined && !input.name.trim()) throw new Error('Knowledge node names must not be blank.');
     const existing = this.#db.knowledgeNodes.get(input.id);
     if (!existing) throw new KnowledgeNotFoundError('node', input.id);
     if (existing.version !== input.version) throw new KnowledgeConflictError(input.id);
@@ -781,6 +788,36 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       records: records.slice(0, limit).map(cloneRecord),
       nextCursor: records.length > limit ? records[limit - 1]?.id : undefined,
     };
+  }
+
+  async listSourcesWithVisibleRecords(input: ListKnowledgeSourcesWithVisibleRecordsInput): Promise<string[]> {
+    assertKnowledgeSourceProbeLimit(input.sources);
+    const scopesBySource = new Map<string, KnowledgeScopeIds[]>();
+    for (const probe of input.sources) {
+      const scope = canonicalizeKnowledgeScopeIds(probe.scopeId ? [...input.scopeIds, probe.scopeId] : input.scopeIds);
+      scopesBySource.set(probe.source, [...(scopesBySource.get(probe.source) ?? []), scope]);
+    }
+    const found = new Set<string>();
+    for (const record of this.#db.knowledgeRecords.values()) {
+      if (record.deletedAt || !record.source || found.has(record.source)) continue;
+      if (scopesBySource.get(record.source)?.some(scope => this.#isRecordVisible(record, scope)))
+        found.add(record.source);
+    }
+    return [...found];
+  }
+
+  async listVisibleKnowledgeIds(input: ListVisibleKnowledgeIdsInput): Promise<ListVisibleKnowledgeIdsOutput> {
+    assertKnowledgeVisibilityProbeLimit(input);
+    const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    const nodeIds = [...new Set(input.nodeIds)].filter(id => {
+      const node = this.#db.knowledgeNodes.get(id);
+      return Boolean(node && !node.deletedAt && isKnowledgeNodeVisible(node, this.#nodeScopeIds(id), scopeIds));
+    });
+    const recordIds = [...new Set(input.recordIds)].filter(id => {
+      const record = this.#db.knowledgeRecords.get(id);
+      return Boolean(record && !record.deletedAt && this.#isRecordVisible(record, scopeIds, input.recordScopeIds));
+    });
+    return { nodeIds, recordIds, ...(input.recordScopeIds ? { recordScopeIdsApplied: true as const } : {}) };
   }
 
   async deleteRecord(input: { id: string; deletedBy: string; importRunId?: string }): Promise<KnowledgeRecord> {
@@ -1382,8 +1419,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     return [...(this.#db.knowledgeRecordScopes.get(recordId) ?? [])].sort();
   }
 
-  #isRecordVisible(record: KnowledgeRecord, visibleScopeIds: KnowledgeScopeIds): boolean {
-    if (!isKnowledgeScopeVisible(this.#recordScopeIds(record.id), visibleScopeIds)) return false;
+  #isRecordVisible(
+    record: KnowledgeRecord,
+    visibleScopeIds: KnowledgeScopeIds,
+    recordScopeIds = this.#recordScopeIds(record.id),
+  ): boolean {
+    if (!isKnowledgeScopeVisible(recordScopeIds, visibleScopeIds)) return false;
     const relatedNodeIds = [record.nodeId, ...(this.#db.knowledgeMentions.get(`record:${record.id}`) ?? [])];
     return relatedNodeIds.every(nodeId => {
       const node = this.#db.knowledgeNodes.get(nodeId);
@@ -1468,9 +1509,11 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   #assertImportRunExists(importRunId?: string): void {
-    if (importRunId && !this.#db.knowledgeImportRuns.has(importRunId)) {
-      throw new KnowledgeNotFoundError('import run', importRunId);
-    }
+    if (!importRunId) return;
+    const run = this.#db.knowledgeImportRuns.get(importRunId);
+    if (!run) throw new KnowledgeNotFoundError('import run', importRunId);
+    // Mutation bodies are synchronous after this check, so a recovered run cannot interleave a write.
+    if (run.status !== 'running') throw new Error(`Knowledge import run ${importRunId} is not active`);
   }
 
   #recordActivity(

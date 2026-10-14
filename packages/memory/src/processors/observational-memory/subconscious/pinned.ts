@@ -5,7 +5,7 @@ import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 
-import { getKnowledgeStore } from './knowledge-tools';
+import { getKnowledgeStore, knowledgeRecordWriter } from './knowledge-tools';
 import type { KnowledgeStoreMemory } from './knowledge-tools';
 type PinnedScopeSelection = 'resource' | 'thread';
 
@@ -153,6 +153,7 @@ function resolveWriteScope(scopeIds: KnowledgeScopeIds, scope: PinnedScopeSelect
 const scopeLevelSchema: JSONSchema7 = { type: 'string', enum: ['resource', 'thread'] };
 
 async function writePinnedKnowledge(
+  memory: PinnedMemory,
   store: KnowledgeStorage,
   options: PinnedToolsOptions,
   scopeIds: KnowledgeScopeIds,
@@ -163,7 +164,7 @@ async function writePinnedKnowledge(
   const { pins } = await listPinnedKnowledge({ store, scopeIds });
   assertBudget(options, pins, text);
   const nodeId = await ensurePinnedNodeId(store, scopeIds);
-  return store.createRecord({
+  return knowledgeRecordWriter(memory, store).createRecord({
     node: nodeId,
     text,
     scopeIds: resolveWriteScope(scopeIds, level),
@@ -234,6 +235,7 @@ export function createPinnedTools(
         const store = await getStore(memory);
         const scopeIds = await resolveScopeIds();
         return writePinnedKnowledge(
+          memory,
           store,
           options,
           scopeIds,
@@ -284,7 +286,7 @@ export function createPinnedTools(
         const { pins } = await listPinnedKnowledge({ store, scopeIds });
         assertBudget(options, pins, value.text, record);
         await store.deleteRecord({ id: record.id, deletedBy: PIN_IDENTITY });
-        return store.createRecord({
+        return knowledgeRecordWriter(memory, store).createRecord({
           node: record.nodeId,
           text: value.text,
           scopeIds: await store.getRecordScopeIds(record.id),

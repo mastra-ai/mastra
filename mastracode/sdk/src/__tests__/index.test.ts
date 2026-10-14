@@ -144,7 +144,7 @@ function createMockSettings() {
       yolo: null,
       theme: 'auto',
       thinkingLevel: 'off',
-      quietMode: false,
+      previewLines: 2,
     },
     storage: {
       backend: 'libsql',
@@ -825,14 +825,15 @@ describe('createMastraCode', () => {
     expect(typeof agentControllerConfig?.memory).toBe('function');
   });
 
-  it('uses a host-owned Knowledge instance', async () => {
+  it('uses a host-owned Knowledge instance and preserves its registration key', async () => {
     const { Knowledge } = await import('@mastra/core/knowledge');
     const instance = new Knowledge({ id: 'mastra', description: 'Factory knowledge' });
     const { createMastraCode } = await import('../index.js');
 
-    const code = await createMastraCode({ knowledge: instance });
+    const code = await createMastraCode({ knowledge: { key: 'mastra', instance } });
 
     expect(code.knowledge).toBe(instance);
+    expect(code.knowledgeKey).toBe('mastra');
     // No `settingsPath` configured; Knowledge follows the memory options.
     expect(getDynamicMemoryMock).toHaveBeenCalledWith(
       expect.anything(),
@@ -849,7 +850,7 @@ describe('createMastraCode', () => {
     const instance = new Knowledge({ id: 'mastra' });
     const { createMastraCode } = await import('../index.js');
 
-    await createMastraCode({ knowledge: instance });
+    await createMastraCode({ knowledge: { key: 'mastra', instance } });
 
     expect(mastraStub.addKnowledge).toHaveBeenCalledWith(instance, 'mastra');
     expect(registeredKnowledge.mastra).toBe(instance);
@@ -860,24 +861,18 @@ describe('createMastraCode', () => {
     registeredKnowledge = { mastra: new Knowledge({ id: 'other' }) };
     const { createMastraCode } = await import('../index.js');
 
-    await expect(createMastraCode({ knowledge: new Knowledge({ id: 'mastra' }) })).rejects.toThrow(
-      'This Mastra already registers a different Knowledge instance under "mastra".',
-    );
+    await expect(
+      createMastraCode({ knowledge: { key: 'mastra', instance: new Knowledge({ id: 'mastra' }) } }),
+    ).rejects.toThrow('This Mastra already registers a different Knowledge instance under "mastra".');
   });
 
-  it('starts with an unavailable reason when Knowledge storage cannot be opened', async () => {
+  it('rejects an empty host-owned Knowledge registration key', async () => {
     const { Knowledge } = await import('@mastra/core/knowledge');
     const { createMastraCode } = await import('../index.js');
-    createKnowledgeInspectorMock.mockRejectedValueOnce(
-      new Error('Knowledge schema reset required: the existing Knowledge schema has no completion marker.'),
-    );
 
-    const code = await createMastraCode({ knowledge: new Knowledge({ id: 'mastra' }) });
-
-    expect(code.knowledgeInspector).toBeUndefined();
-    expect(code.knowledgeInspectorUnavailableReason).toBe(
-      'Knowledge is unavailable: Knowledge schema reset required: the existing Knowledge schema has no completion marker.',
-    );
+    await expect(
+      createMastraCode({ knowledge: { key: '  ', instance: new Knowledge({ id: 'mastra' }) } }),
+    ).rejects.toThrow('knowledge.key must be a non-empty string.');
   });
 
   it('does not touch Knowledge storage at startup when Knowledge is off', async () => {
@@ -894,6 +889,21 @@ describe('createMastraCode', () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  it('starts with an unavailable reason when Knowledge storage cannot be opened', async () => {
+    const { Knowledge } = await import('@mastra/core/knowledge');
+    const { createMastraCode } = await import('../index.js');
+    createKnowledgeInspectorMock.mockRejectedValueOnce(
+      new Error('Knowledge schema reset required: the existing Knowledge schema has no completion marker.'),
+    );
+
+    const code = await createMastraCode({ knowledge: { key: 'mastra', instance: new Knowledge({ id: 'mastra' }) } });
+
+    expect(code.knowledgeInspector).toBeUndefined();
+    expect(code.knowledgeInspectorUnavailableReason).toBe(
+      'Knowledge is unavailable: Knowledge schema reset required: the existing Knowledge schema has no completion marker.',
+    );
   });
 
   it('passes an injected vector to dynamic memory', async () => {

@@ -527,6 +527,29 @@ describe('Subconscious knowledge write tools', () => {
     expect(await store.getRecordScopeIds(narrow.id)).toEqual([scopeIds[0]]);
   });
 
+  it('rescopes through the guarded Knowledge write and keeps the record readable by the curator', async () => {
+    const { memory, store, source } = await fixture();
+    const knowledge = memory.getKnowledgeInstance()!;
+    const setRecordScopes = vi.spyOn(knowledge, 'setRecordScopes');
+    const createRecord = vi.spyOn(knowledge, 'createRecord');
+    const tools = createKnowledgeWriteTools(memory, { scopeIds, sourceThreadId: 'alpha' });
+    const record = (await tools.knowledge_append!.execute?.(
+      { node: source.id, text: 'Mentions [[Project Atlas]]', scope: 'thread' },
+      {} as any,
+    )) as any;
+    expect(createRecord).toHaveBeenCalledTimes(1);
+    for (const scope of ['org', 'resource', 'thread'] as const) {
+      const current = (await store.getRecord({ id: record.id }))!;
+      await tools.knowledge_rescope!.execute?.(
+        { recordId: record.id, expectedVersion: current.version, scope },
+        {} as any,
+      );
+      const visible = await store.listVisibleKnowledgeIds({ nodeIds: [], recordIds: [record.id], scopeIds });
+      expect(visible.recordIds).toEqual([record.id]);
+    }
+    expect(setRecordScopes).toHaveBeenCalledTimes(3);
+  });
+
   it('refuses to append to or remove from a node outside the curator’s visible scope', async () => {
     const { store, tools } = await fixture();
     const foreignScope = await store.createNode({ name: 'Other org', isScope: true, scopeIds: [] });
