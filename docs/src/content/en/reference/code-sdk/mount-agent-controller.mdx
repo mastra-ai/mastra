@@ -127,6 +127,13 @@ const { controller } = await mountAgentControllerOnMastra({ mastra })
     isOptional: true,
   },
   {
+    name: 'disableBuiltinTools',
+    type: 'BuiltinToolId[]',
+    description:
+      "Agent controller built-in tools (for example, 'submit_plan') removed from every session. The prompt doesn't mention a disabled tool.",
+    isOptional: true,
+  },
+  {
     name: 'storage',
     type: 'StorageConfig',
     description: 'Custom storage config instead of the auto-detected default.',

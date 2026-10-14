@@ -13,6 +13,7 @@ import type {
   AgentControllerMode,
   AgentControllerSubagent,
   AgentControllerRequestContext,
+  BuiltinToolId,
   Session,
 } from '@mastra/core/agent-controller';
 import { createCodingAgent } from '@mastra/core/coding-agent';
@@ -303,6 +304,13 @@ export interface MastraCodeConfig {
     | ((args: { requestContext: RequestContext }) => InputProcessor[] | Promise<InputProcessor[]>);
   /** Tools removed from the dynamic tool set before exposure to the model */
   disabledTools?: string[];
+  /**
+   * Agent controller built-in tools (e.g. `submit_plan`, `ask_user`) removed from
+   * every session. Unlike `disabledTools`, which filters Mastra Code's dynamic
+   * tools, this is forwarded to the AgentController. Prompt guidance for a
+   * disabled built-in is omitted so the model is never told to call it.
+   */
+  disableBuiltinTools?: BuiltinToolId[];
   /**
    * Custom storage config instead of auto-detected default, or a pre-built
    * store instance. An instance is used as-is: no connection test and no
@@ -1200,6 +1208,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         coAuthor: config?.coAuthor,
         hasSubconscious,
         hasSubagents: subagents.length > 0,
+        disabledBuiltinTools: config?.disableBuiltinTools,
       });
     },
     // `settingsPath` matches the source `createMastraCode()` reads from so the
@@ -1574,6 +1583,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     },
     agent: codeAgent,
     subagents,
+    ...(config?.disableBuiltinTools?.length ? { disableBuiltinTools: config.disableBuiltinTools } : {}),
     // Subagents resolve like the main agent: tenant credentials and
     // request-scoped custom providers come from the calling run's context.
     // Ids the model router would hand to another registered gateway (by

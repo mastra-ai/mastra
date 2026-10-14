@@ -772,6 +772,18 @@ describe('createMastraCode', () => {
     expect(definition.allowedControllerTools).toEqual(['task_write', 'task_check']);
   });
 
+  it('forwards disableBuiltinTools to the agent controller', async () => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ disableBuiltinTools: ['submit_plan'] });
+    expect(controllerConstructorMock.mock.calls[0]![0].disableBuiltinTools).toEqual(['submit_plan']);
+  });
+
+  it('does not set disableBuiltinTools on the agent controller by default', async () => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode();
+    expect(controllerConstructorMock.mock.calls[0]![0]).not.toHaveProperty('disableBuiltinTools');
+  });
+
   it('filters disabled workspace tools from native subagent allowlists', async () => {
     const { createMastraCode } = await import('../index.js');
     const { executeSubagent } = await import('../agents/subagents/execute.js');
