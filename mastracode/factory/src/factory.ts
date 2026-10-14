@@ -135,12 +135,6 @@ import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type { FactoryRunBindingRecord, WorkItemRow } from './storage/domains/work-items/base.js';
-import { FactorySupervisorHealthWorker } from './supervisor/health-worker.js';
-import { SUPERVISOR_INSTRUCTIONS } from './supervisor/instructions.js';
-import { createFactorySupervisorReadTools } from './supervisor/read-tools.js';
-import { messageWorkerSession } from './supervisor/session-messaging.js';
-import { hydrateSupervisorSession, parseSupervisorResourceId, resolveSupervisorScope } from './supervisor/session.js';
-import { createFactorySupervisorWriteTools } from './supervisor/write-tools.js';
 import { timedPhase } from './timing.js';
 import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
 import type { FactorySandboxStart } from './workspace.js';
@@ -1110,7 +1104,6 @@ export class MastraFactory {
           const context = requestContext.get('controller') as
             | AgentControllerRequestContext<MastraCodeState>
             | undefined;
-          if (parseSupervisorResourceId(context?.resourceId)) return SUPERVISOR_INSTRUCTIONS;
           // The SDK resolves this callback before it loads repository
           // AGENTS.md/CLAUDE.md. A controller recreated after restart has
           // only initialState, and a partially persisted one can keep
@@ -1261,67 +1254,6 @@ export class MastraFactory {
                       ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
                     }),
                   );
-                  // The supervisor session has no seat, so it never gets the
-                  // transition tool above; it gets the read surface instead,
-                  // and only once the caller's org is shown to own the project.
-                  const supervisorScope = await resolveSupervisorScope({
-                    requestContext,
-                    projects: factoryProjectsStorage,
-                  });
-                  if (supervisorScope) {
-                    const userId = getFactoryAuthUserId(getFactoryAuthUserFromContext(requestContext));
-                    mergeTools(
-                      'factory-supervisor',
-                      createFactorySupervisorReadTools({
-                        scope: supervisorScope,
-                        workItems: workItemsStorage,
-                        boards: this.#boards,
-                        comments: workItemCommentsStorage,
-                        audit: auditStorage,
-                        messageReader: {
-                          listMessages: async input => {
-                            const memory = await storage.getMastraStorage().getStore('memory');
-                            return memory ? memory.listMessages(input) : { messages: [], hasMore: false };
-                          },
-                        },
-                      }),
-                    );
-                    if (userId) {
-                      mergeTools(
-                        'factory-supervisor-write',
-                        createFactorySupervisorWriteTools({
-                          scope: supervisorScope,
-                          userId,
-                          workItems: workItemsStorage,
-                          boards: this.#boards,
-                          audit: auditDomain,
-                          transitionService,
-                          ...(githubIntegration
-                            ? {
-                                reconcileAcceptanceLabels: (args: {
-                                  orgId: string;
-                                  factoryProjectId: string;
-                                  item: WorkItemRow;
-                                }) =>
-                                  reconcileGithubAcceptanceLabels(
-                                    githubIntegration,
-                                    sourceControlStorage.forIntegration(githubIntegration.id),
-                                    args,
-                                  ),
-                              }
-                            : {}),
-                          messageSession: ({ sessionId, message, delivery }) =>
-                            messageWorkerSession({
-                              controller: prepared.base.controller,
-                              sessionId,
-                              message,
-                              delivery,
-                              ...(requestContext ? { requestContext } : {}),
-                            }),
-                        }),
-                      );
-                    }
-                  }
                 }
                 for (const { integration, ready, ensureReady } of toolIntegrations) {
                   if (!ready && ensureReady) {
@@ -1549,22 +1481,6 @@ export class MastraFactory {
       observeSessionRunEnd(session, { audit: auditDomain });
     });
 
-    // Supervisor sessions carry their project in the resourceId; re-stamp
-    // scope, instructions and factory defaults on every (re)creation so a
-    // restarted server heals the in-memory state.
-    prepared.base.controller.onSessionCreated(
-      session =>
-        hydrateSupervisorSession(session, {
-          projects: factoryProjectsStorage,
-          modelDefaults: modelDefaultsStorage,
-        }).catch(error => {
-          console.warn('[Factory Supervisor] Failed to hydrate supervisor session', {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }),
-      { blocking: true },
-    );
-
     // Blocking: `createSession` awaits the organization seed so per-invocation
     // memory settings and knowledge capture use the correct tenant immediately.
     prepared.base.controller.onSessionCreated(
@@ -1673,15 +1589,6 @@ export class MastraFactory {
     // built-ins. Never passed for the disabled/not-ready case — a worker for
     // an unavailable integration must not run.
     const integrationWorkers = [
-      ...(factoryReady
-        ? [
-            new FactorySupervisorHealthWorker({
-              projects: factoryProjectsStorage,
-              workItems: workItemsStorage,
-              boards: this.#boards,
-            }),
-          ]
-        : []),
       ...integrationRegistrations
         .filter(({ integration, ready }) => ready && integration.workers)
         .flatMap(({ integration }) =>

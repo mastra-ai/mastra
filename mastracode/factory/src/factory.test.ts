@@ -461,8 +461,8 @@ describe('MastraFactory.prepare', () => {
     const blockingCalls = controllerMock.onSessionCreated.mock.calls.filter(
       call => (call[1] as { blocking?: boolean } | undefined)?.blocking === true,
     );
-    expect(blockingCalls).toHaveLength(3);
-    const blockingCall = blockingCalls[1];
+    expect(blockingCalls).toHaveLength(2);
+    const blockingCall = blockingCalls[0];
 
     // Seed the owner's web session row and stored memory settings through the
     // same storage domains the factory registered.
@@ -1682,7 +1682,7 @@ describe('MastraFactory.prepare integrations', () => {
       integrations: [fakeIntegration({ id: 'custom', workers })],
     });
     const args = await factory.prepare();
-    expect(args.workers).toEqual([expect.objectContaining({ name: 'factory-supervisor-health' }), worker]);
+    expect(args.workers).toEqual([worker]);
     // The workers factory gets the same integration context shape as routes().
     const ctx = workers.mock.calls[0]![0];
     expect(ctx.stateSigner).toBeDefined();
@@ -1725,7 +1725,7 @@ describe('MastraFactory.prepare integrations', () => {
       integrations: [fakeIntegration({ id: 'custom' })],
     });
     const args = await factory.prepare();
-    expect(args.workers).toEqual([expect.objectContaining({ name: 'factory-supervisor-health' })]);
+    expect(args).not.toHaveProperty('workers');
   });
 
   /**
