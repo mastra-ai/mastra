@@ -9,6 +9,7 @@ Sessions boot every repository in the Factory environment instead of one linked 
 - A repository's setup command is skipped when the template already ran it, and the workspace setup command runs last.
 - A `factory-environment` state signal tells the agent which repositories are present, where, and on which branch.
 - Every repository is torn down when the session retires.
+- The agent loads each environment repository's `AGENTS.md` or `CLAUDE.md` and project skills, starting with the session's own repository. Review sessions load only the session's own repository's instructions, from its base branch.
 - The provider receives the project's stored sandbox settings when a session's sandbox is constructed. Settings saved later apply to sandboxes constructed after that.
 
 ```ts
