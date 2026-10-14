@@ -16,7 +16,7 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check, ChevronDown, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 
 import type { AvailableModelOption } from '../../../../../hooks/useAvailableModels';
 import { useAvailableModelsQuery } from '../../../../../hooks/useAvailableModels';
@@ -25,6 +25,7 @@ import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
 import { useChatModels } from '../../context/useChatModels';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { formatModelName } from '../../../settings/components/model-display-name';
+import { settingsSectionPath } from '../../../settings/settingsSections';
 import { ModelScopeFooter, useOrganizationScopedFactory } from './ModelScopeFooter';
 import { SessionThinkingControl } from './SessionThinkingControl';
 
@@ -80,6 +81,16 @@ export function ModelPicker() {
 
   const noModelsToOffer = !modelsQuery.isPending && !modelsQuery.data?.length;
   if (!switchable || noModelsToOffer) {
+    if (notConfigured && organizationScoped && factoryId) {
+      return (
+        <span className="text-destructive-foreground" title={selectedModelId}>
+          {label} ·{' '}
+          <Link to={settingsSectionPath(factoryId, 'models')} className="underline underline-offset-2">
+            needs an organization credential
+          </Link>
+        </span>
+      );
+    }
     return (
       <span
         className={notConfigured ? 'text-destructive-foreground' : 'text-muted-foreground'}

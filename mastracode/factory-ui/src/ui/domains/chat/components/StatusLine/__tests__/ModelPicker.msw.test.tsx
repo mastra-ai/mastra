@@ -64,6 +64,7 @@ function renderPicker({
   modelSwitched,
   thinkingDefaultsFail = false,
   modelScope,
+  emptyCatalog = false,
 }: {
   kind?: ChatSessionContextApi['kind'];
   modelId?: string;
@@ -75,14 +76,22 @@ function renderPicker({
   thinkingDefaultsFail?: boolean;
   /** Mount on a Factory route whose project has this model scope. */
   modelScope?: 'factory' | 'user';
+  /** The Factory's scope has no credentials, so its catalog is empty. */
+  emptyCatalog?: boolean;
 } = {}) {
   const modelSwitches: unknown[] = [];
   const stateUpdates: unknown[] = [];
   server.use(
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: defaultModelId })),
-    http.get(`${TEST_BASE_URL}/web/config/models`, async () => {
+    http.get(`${TEST_BASE_URL}/web/config/models`, async ({ request }) => {
       await catalogLoaded;
-      return HttpResponse.json({ models });
+      if (!modelScope) return HttpResponse.json({ models });
+      if (emptyCatalog) return HttpResponse.json({ models: [] });
+      // The Factory's catalog differs from the caller's full one, so a request missing the Factory is visible.
+      const factoryId = new URL(request.url).searchParams.get('factoryId');
+      return HttpResponse.json({
+        models: models.filter(model => (factoryId === 'fp-1') === (model.provider === 'openai')),
+      });
     }),
     http.get(`${TEST_BASE_URL}/web/config/thinking`, () =>
       thinkingDefaultsFail
@@ -174,10 +183,29 @@ describe('ModelPicker', () => {
 
     await user.click(await screen.findByLabelText('Session model'));
 
+    expect(screen.getByRole('option', { name: /gpt-5/i })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /claude-sonnet-4-6/i })).not.toBeInTheDocument();
     expect(await screen.findByRole('note')).toHaveTextContent(
       "Showing models this Factory's organization credentials can run.",
     );
     expect(screen.getByRole('link', { name: 'Manage' })).toHaveAttribute('href', '/factories/fp-1/settings/models');
+  });
+
+  it('points an organization-scoped Factory with no usable models at its credential settings', async () => {
+    renderPicker({ modelScope: 'factory', emptyCatalog: true });
+
+    expect(await screen.findByRole('link', { name: 'needs an organization credential' })).toHaveAttribute(
+      'href',
+      '/factories/fp-1/settings/models',
+    );
+    expect(screen.queryByLabelText('Session model')).not.toBeInTheDocument();
+  });
+
+  it('keeps the plain not-configured label for a personal-scoped Factory with no usable models', async () => {
+    renderPicker({ modelScope: 'user', emptyCatalog: true });
+
+    expect(await screen.findByLabelText(/gpt-5 is not configured/i)).toHaveTextContent('· not configured');
+    expect(screen.queryByRole('link', { name: 'needs an organization credential' })).not.toBeInTheDocument();
   });
 
   it('leaves the list unexplained when the Factory uses personal credentials', async () => {
