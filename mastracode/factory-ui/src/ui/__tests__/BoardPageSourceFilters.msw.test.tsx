@@ -42,6 +42,9 @@ function stubSources() {
         ],
       }),
     ),
+    http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+      HttpResponse.json({ enabled: true, connected: true, installations: [] }),
+    ),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: true, connected: true, workspace: null }),
     ),
@@ -122,6 +125,40 @@ async function expectPortalView() {
 }
 
 describe('Board source and Linear project filters', () => {
+  it('offers connected providers and Manual, but not unconnected sources', async () => {
+    stubSources();
+    const view = renderBoard();
+    await waitForMutationsIdle(view.client);
+    fireEvent.click(screen.getByRole('button', { name: 'Filter cards' }));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('combobox', { name: 'Add filter' }));
+    await user.type(screen.getByRole('combobox', { name: 'Add filter' }), 'Intake source');
+    await user.click(await screen.findByRole('option', { name: 'Intake source' }));
+    const options = screen.getAllByRole('option').map(option => option.textContent);
+    expect(options).toEqual(expect.arrayContaining(['GitHub', 'Linear', 'Manual']));
+    expect(options).not.toEqual(expect.arrayContaining(['GitLab', 'Jira', 'incident.io', 'Slack']));
+  });
+
+  it('offers only Manual when configured providers are disconnected', async () => {
+    stubSources();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, installations: [] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, workspace: null }),
+      ),
+    );
+    const view = renderBoard();
+    await waitForMutationsIdle(view.client);
+    fireEvent.click(screen.getByRole('button', { name: 'Filter cards' }));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('combobox', { name: 'Add filter' }));
+    await user.type(screen.getByRole('combobox', { name: 'Add filter' }), 'Intake source');
+    await user.click(await screen.findByRole('option', { name: 'Intake source' }));
+    expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['Manual']);
+  });
+
   describe('when a hosted Linear project is selected', () => {
     it('keeps matching live and stored cards across the board after saving and reloading the view', async () => {
       stubHostedSources();

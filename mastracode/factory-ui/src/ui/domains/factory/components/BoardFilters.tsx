@@ -24,6 +24,7 @@ interface BoardFilterFieldsOptions {
   availableLabels: readonly string[];
   currentUserId?: string;
   teammateSelected: boolean;
+  connectedSources?: ReadonlySet<string>;
   linearProjects?: readonly LinearProject[];
 }
 
@@ -33,6 +34,7 @@ export function boardFilterFields({
   availableLabels,
   currentUserId,
   teammateSelected,
+  connectedSources,
   linearProjects = [],
 }: BoardFilterFieldsOptions): FilterBarField[] {
   return [
@@ -42,7 +44,7 @@ export function boardFilterFields({
       icon: Inbox,
       operators: ['in'],
       strict: true,
-      suggestions: BOARD_SOURCE_OPTIONS,
+      suggestions: BOARD_SOURCE_OPTIONS.filter(option => option.value === 'manual' || connectedSources?.has(option.value)),
     },
     {
       id: BOARD_FILTER_FIELD.linearProject,
