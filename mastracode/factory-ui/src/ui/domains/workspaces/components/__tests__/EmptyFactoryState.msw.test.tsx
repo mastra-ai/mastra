@@ -194,7 +194,7 @@ describe('Draft Factory onboarding', () => {
     expect(review.getByText('team/backend')).toBeInTheDocument();
     expect(review.getByText('GitLab · develop')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Edit model' }));
-    expect(await screen.findByRole('combobox')).toHaveTextContent(model.modelId);
+    expect(await screen.findByRole('combobox')).toHaveTextContent('GPT-5.6 Sol');
     await user.click(screen.getByRole('button', { name: 'Change provider' }));
     await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
     await user.click(await screen.findByRole('button', { name: 'Continue' }));
@@ -222,7 +222,7 @@ describe('Draft Factory onboarding', () => {
     persistOnboardingDraft({ repository: otherRepo, model });
     sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model-provider');
     const view = renderOnboarding();
-    expect(await screen.findByRole('combobox')).toHaveTextContent(model.modelId);
+    expect(await screen.findByRole('combobox')).toHaveTextContent('GPT-5.6 Sol');
     view.unmount();
     sessionStorage.setItem(ONBOARDING_STEP_KEY, 'vcs');
     renderOnboarding();

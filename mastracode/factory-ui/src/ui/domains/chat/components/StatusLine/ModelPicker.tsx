@@ -24,6 +24,7 @@ import { useChatConnection } from '../../context/useChatConnection';
 import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
 import { useChatModels } from '../../context/useChatModels';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
+import { formatModelName } from '../../../settings/components/model-display-name';
 import { SessionThinkingControl } from './SessionThinkingControl';
 
 function groupByProvider(models: AvailableModelOption[]): [string, AvailableModelOption[]][] {
