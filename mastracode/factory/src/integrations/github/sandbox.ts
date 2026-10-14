@@ -937,6 +937,30 @@ async function pushAuthenticatedBranch(
   if (push.exitCode !== 0) throw classifyGitFailure(push, 'push-failed');
 }
 
+/** Whether the checkout has a local `refs/heads/<branch>`. */
+export async function hasLocalBranch(sandbox: ExecutableSandbox, workdir: string, branch: string): Promise<boolean> {
+  const ref = await execute(sandbox, 'git', ['-C', workdir, 'show-ref', '--verify', '--quiet', `refs/heads/${branch}`]);
+  if (ref.exitCode === 0) return true;
+  if (ref.exitCode === 1) return false;
+  throw classifyGitFailure(ref, 'push-failed');
+}
+
+/**
+ * Make sure the checkout has a local `<branch>`. Where it was never created,
+ * create it at `HEAD` and switch to it, so the agent's next commits land on
+ * the branch every push sends; the index and working tree carry over.
+ */
+export async function ensureLocalBranch(sandbox: ExecutableSandbox, workdir: string, branch: string): Promise<void> {
+  if (await hasLocalBranch(sandbox, workdir, branch)) return;
+  const created = await execute(sandbox, 'git', ['-C', workdir, 'switch', '-c', branch]);
+  if (created.exitCode !== 0) throw classifyGitFailure(created, 'push-failed');
+}
+
+/** Whether `workdir` is a checkout of the repository at `cloneUrl`. */
+export async function isCheckoutOf(sandbox: ExecutableSandbox, workdir: string, cloneUrl: string): Promise<boolean> {
+  return (await existingCheckoutRemote(sandbox, workdir, cloneUrl)) !== null;
+}
+
 /**
  * Push a branch back to GitHub with credentials scoped to the Git process.
  * The token never enters argv, a repository URL, or persistent configuration.

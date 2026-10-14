@@ -7,6 +7,8 @@ import {
   FactoryEnvironmentStateProcessor,
   peekSessionEnvironmentTeardown,
   recordSessionEnvironment,
+  setSessionEnvironmentNote,
+  updateSessionEnvironmentRepository,
 } from './environment-state-processor.js';
 import type { SessionEnvironmentState } from './environment-state-processor.js';
 
@@ -116,6 +118,69 @@ describe('FactoryEnvironmentStateProcessor', () => {
     };
     expect(second.mode).toBe('snapshot');
     expect(second.cacheKey).not.toBe(first.cacheKey);
+  });
+
+  it('re-emits with the pushed branch and change request after a source-control tool updates a repository', async () => {
+    recordSessionEnvironment('sess-1', environment);
+    const processor = new FactoryEnvironmentStateProcessor();
+    const first = (await processor.computeStateSignal(stateArgs(requestContext()))) as { cacheKey: string };
+    const inWindow = {
+      contextWindow: { hasSnapshot: true },
+      lastSnapshot: { metadata: { state: { cacheKey: first.cacheKey } } },
+      tracking: { currentCacheKey: first.cacheKey },
+    };
+
+    updateSessionEnvironmentRepository('sess-1', 'ACME/mastra', { branch: 'factory/issue-7' });
+    updateSessionEnvironmentRepository('sess-1', 'acme/mastra', {
+      changeRequestUrl: 'https://github.com/acme/mastra/pull/9',
+    });
+    updateSessionEnvironmentRepository('sess-1', 'acme/elsewhere', { branch: 'ignored' });
+    updateSessionEnvironmentRepository('other', 'acme/mastra', { branch: 'ignored' });
+
+    const second = (await processor.computeStateSignal(stateArgs(requestContext(), inWindow))) as {
+      cacheKey: string;
+      contents: string;
+    };
+    expect(second.cacheKey).not.toBe(first.cacheKey);
+    expect(second.contents).toContain(
+      '2. acme/mastra at /home/user/mastra on factory/issue-7 (default main, setup skipped), change request https://github.com/acme/mastra/pull/9',
+    );
+    expect(second.contents).not.toContain('elsewhere');
+    expect(second.contents).not.toContain('ignored');
+    // The first repository is untouched and the recorded state object was not mutated in place.
+    expect(second.contents).toContain(
+      '1. acme/template-docs-expert at /home/user/template-docs-expert on factory/issue-7 (default main, setup ok)\n',
+    );
+    expect(environment.repositories[1]!.branch).toBeNull();
+  });
+
+  it('renders the boot note as the last line, drops it when cleared, and changes the cache key both ways', async () => {
+    recordSessionEnvironment('sess-1', environment);
+    const processor = new FactoryEnvironmentStateProcessor();
+    const first = (await processor.computeStateSignal(stateArgs(requestContext()))) as { cacheKey: string };
+
+    setSessionEnvironmentNote(
+      'sess-1',
+      'GH_TOKEN covers acme/template-docs-expert only; use the source_control_* tools.',
+    );
+    setSessionEnvironmentNote('other', 'ignored');
+    const noted = (await processor.computeStateSignal(stateArgs(requestContext()))) as {
+      cacheKey: string;
+      contents: string;
+    };
+    expect(noted.cacheKey).not.toBe(first.cacheKey);
+    expect(
+      noted.contents.endsWith('\nGH_TOKEN covers acme/template-docs-expert only; use the source_control_* tools.'),
+    ).toBe(true);
+
+    setSessionEnvironmentNote('sess-1', null);
+    const cleared = (await processor.computeStateSignal(stateArgs(requestContext()))) as {
+      cacheKey: string;
+      contents: string;
+    };
+    expect(cleared.cacheKey).toBe(first.cacheKey);
+    expect(cleared.contents).not.toContain('GH_TOKEN');
+    expect('note' in environment).toBe(false);
   });
 
   it('never renders a token or a clone URL: the state only carries slugs, paths, branches and statuses', async () => {

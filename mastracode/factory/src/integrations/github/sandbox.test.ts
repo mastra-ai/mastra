@@ -11,6 +11,8 @@ import type {
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
 import {
+  ensureLocalBranch,
+  hasLocalBranch,
   checkoutSessionBranch,
   configureGitIdentity,
   createPullRequest,
@@ -1040,6 +1042,18 @@ describe('pushRepositoryBranch', () => {
     expect(sandbox.calls.some(call => call.includes('remote set-url'))).toBe(false);
   });
 
+  it('creates a missing local branch at HEAD and switches to it, and leaves an existing one alone', async () => {
+    const missing = new FakeSandbox(script =>
+      script.includes('show-ref') ? { exitCode: 1, stdout: '', stderr: '' } : OK,
+    );
+    await ensureLocalBranch(missing, '/workspace/hello', 'feat/x');
+    expect(missing.executions.map(entry => entry.args)).toContainEqual(['-C', '/workspace/hello', 'switch', '-c', 'feat/x']);
+
+    const existing = new FakeSandbox(() => OK);
+    await ensureLocalBranch(existing, '/workspace/hello', 'feat/x');
+    expect(existing.executions.some(entry => entry.args.includes('switch'))).toBe(false);
+  });
+
   it('keeps a failed push credential-free in argv and persistent config', async () => {
     const sandbox = new FakeSandbox(script =>
       script.includes('push -u origin') ? { exitCode: 1, stdout: '', stderr: 'rejected' } : OK,
@@ -1067,6 +1081,25 @@ describe('pushRepositoryBranch', () => {
     expect(error).toBeInstanceOf(MaterializeError);
     expect(error.code).toBe('push-failed');
     expect(sandbox.calls).toHaveLength(0);
+  });
+});
+
+describe('hasLocalBranch', () => {
+  it('answers from show-ref and fails on any other git error', async () => {
+    const exists = new FakeSandbox(() => OK);
+    await expect(hasLocalBranch(exists, '/workspace/hello', 'feat/x')).resolves.toBe(true);
+    expect(exists.executions[0]!.args).toEqual([
+      '-C',
+      '/workspace/hello',
+      'show-ref',
+      '--verify',
+      '--quiet',
+      'refs/heads/feat/x',
+    ]);
+    const missing = new FakeSandbox(() => ({ exitCode: 1, stdout: '', stderr: '' }));
+    await expect(hasLocalBranch(missing, '/workspace/hello', 'feat/x')).resolves.toBe(false);
+    const broken = new FakeSandbox(() => ({ exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' }));
+    await expect(hasLocalBranch(broken, '/workspace/hello', 'feat/x')).rejects.toThrow();
   });
 });
 

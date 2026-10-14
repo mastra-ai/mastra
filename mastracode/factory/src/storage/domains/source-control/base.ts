@@ -138,7 +138,8 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
     columns: {
       id: { type: 'uuid-pk' },
       session_id: { type: 'text' },
-      // Still written by every entry point (the position-1 link) until FACT-342.
+      // The link the session is filed under (the position-1 link by default).
+      // The PR tools, subscriptions, audit and work-item check still read it.
       project_repository_id: { type: 'text' },
       // Nullable so the column can be added to populated tables; filled by the
       // init() backfill and written by every `create` since.
@@ -327,9 +328,12 @@ export interface SourceControlSession {
   id: string;
   sessionId: string;
   /**
-   * The position-1 repository link at creation. Still populated for every
-   * session until FACT-342 moves the per-repository readers to
-   * `sessionRepositories`; nullable now so that deletion is a column change only.
+   * The repository link the session is filed under (the position-1 link by
+   * default). The PR tools default to it, and subscriptions, audit and the
+   * work-item check still read it; `sessionRepositories` records each
+   * repository the session pushed to or opened a change request in, but
+   * nothing reads those rows back yet. Moving the readers to them is a
+   * follow-up; nullable now so that deletion is a column change only.
    */
   projectRepositoryId: string | null;
   /** The factory the session belongs to. Null only on rows the backfill could not resolve. */
@@ -383,10 +387,18 @@ export interface SourceControlSessionRepository {
   updatedAt: Date;
 }
 
+/**
+ * Every optional field keeps the stored value when omitted, so a push after a
+ * change request keeps the change request and a change request recorded after
+ * a push keeps the pushed branch. `fallbackBranch` only matters on insert: the
+ * column is not nullable, so a caller that records a change request for a
+ * session with no row yet (raw `git push` + `gh pr create`) passes the head ref.
+ */
 export interface UpsertSessionRepositoryInput {
   sessionId: string;
   projectRepositoryId: string;
-  branch: string;
+  branch?: string;
+  fallbackBranch?: string;
   changeRequestId?: string | null;
   changeRequestUrl?: string | null;
   pushedAt?: Date;
@@ -1508,13 +1520,15 @@ export class SourceControlStorage extends FactoryStorageDomain {
         upsert: async input => {
           const key = { session_id: input.sessionId, project_repository_id: input.projectRepositoryId };
           const now = new Date();
-          const changes = {
-            branch: input.branch,
-            change_request_id: input.changeRequestId ?? null,
-            change_request_url: input.changeRequestUrl ?? null,
-            pushed_at: input.pushedAt ?? now,
-            updated_at: now,
-          };
+          const changes: Partial<SessionRepositoryDbRow> = { updated_at: now };
+          if (input.branch !== undefined) {
+            changes.branch = input.branch;
+            changes.pushed_at = input.pushedAt ?? now;
+          } else if (input.pushedAt) {
+            changes.pushed_at = input.pushedAt;
+          }
+          if (input.changeRequestId !== undefined) changes.change_request_id = input.changeRequestId;
+          if (input.changeRequestUrl !== undefined) changes.change_request_url = input.changeRequestUrl;
           const update = async () => {
             await db().updateMany(SESSION_REPOSITORIES, key, changes);
             const row = await db().findOne<SessionRepositoryDbRow>(SESSION_REPOSITORIES, key);
@@ -1522,11 +1536,17 @@ export class SourceControlStorage extends FactoryStorageDomain {
             return toSessionRepository(row);
           };
           if (await db().findOne<SessionRepositoryDbRow>(SESSION_REPOSITORIES, key)) return update();
+          const branch = input.branch ?? input.fallbackBranch;
+          if (!branch) throw new Error('A session repository row needs a branch when it is first recorded.');
           try {
             return toSessionRepository(
               await db().insertOne<SessionRepositoryDbRow>(SESSION_REPOSITORIES, {
                 ...key,
-                ...changes,
+                branch,
+                change_request_id: input.changeRequestId ?? null,
+                change_request_url: input.changeRequestUrl ?? null,
+                pushed_at: input.pushedAt ?? now,
+                updated_at: now,
                 created_at: now,
               }),
             );

@@ -7,6 +7,7 @@ import {
   type SourceControlSession,
   type SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
+import { resolveEnvironmentRepositories } from './environment-repositories.js';
 import { seedSessionOrg } from './org-seed.js';
 
 type FactorySession = Awaited<ReturnType<AgentController<MastraCodeState>['createSession']>>;
@@ -192,10 +193,10 @@ export type FactorySourceRepositoryResult =
  * `inEnvironment` link of the factory (decision D1); a work item that targets
  * a repository names its link through `projectRepositoryId`, which must be an
  * environment link of the same factory. Session start no longer picks a
- * repository to work in, the sandbox holds every environment repository; the
- * link keeps the PR tools, subscriptions, audit and the work item's
- * repository check on one repository until FACT-342 moves them to
- * `sessionRepositories`.
+ * repository to work in, the sandbox holds every environment repository. The
+ * PR tools default to this link, and subscriptions, audit and the work item's
+ * repository check still read it; moving them to the per-repository
+ * `sessionRepositories` rows is a follow-up.
  *
  * The owner is whichever integration owns source control, matched by the
  * handle's own `integrationId` — nothing here is provider-specific.
@@ -208,25 +209,20 @@ export async function resolvePrimaryEnvironmentRepository(args: {
 }): Promise<FactorySourceRepositoryResult> {
   const { sourceControl, orgId, factoryProjectId, projectRepositoryId } = args;
   const connections = await sourceControl.connections.list({ orgId, factoryProjectId });
-  const candidates = connections.filter(candidate => candidate.integrationId === sourceControl.integrationId);
-  if (candidates.length === 0) return { found: false, reason: 'connection' };
-  const connectionById = new Map(candidates.map(connection => [connection.id, connection]));
-
-  const links = (await sourceControl.projectRepositories.listByProject({ orgId, factoryProjectId }))
-    .filter(link => link.inEnvironment && connectionById.has(link.connectionId))
-    .filter(link => projectRepositoryId === undefined || link.id === projectRepositoryId)
-    .sort((a, b) => a.position - b.position || a.createdAt.getTime() - b.createdAt.getTime());
-  for (const link of links) {
-    const repository = await sourceControl.repositories.get({ orgId, id: link.repositoryId });
-    if (!repository) continue;
-    return {
-      found: true,
-      projectRepositoryId: link.id,
-      baseBranch: link.branch ?? repository.defaultBranch,
-      connectedByUserId: connectionById.get(link.connectionId)!.createdByUserId,
-    };
+  if (!connections.some(candidate => candidate.integrationId === sourceControl.integrationId)) {
+    return { found: false, reason: 'connection' };
   }
-  return { found: false, reason: 'repository' };
+  const repositories = await resolveEnvironmentRepositories({ sourceControl, orgId, factoryProjectId });
+  const primary = repositories.find(
+    candidate => projectRepositoryId === undefined || candidate.link.id === projectRepositoryId,
+  );
+  if (!primary) return { found: false, reason: 'repository' };
+  return {
+    found: true,
+    projectRepositoryId: primary.link.id,
+    baseBranch: primary.link.branch ?? primary.repository.defaultBranch,
+    connectedByUserId: primary.connection.createdByUserId,
+  };
 }
 
 /**
