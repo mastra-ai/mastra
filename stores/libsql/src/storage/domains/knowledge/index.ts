@@ -2184,11 +2184,14 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     details?: Record<string, unknown>,
   ): Promise<void> {
     if (importRunId) {
+      // Checked inside the mutation's transaction so a worker whose run was recovered (or otherwise ended)
+      // after it authorized a write cannot commit that write: recovery always replaces the run under a new id.
       const run = await executor.execute({
-        sql: `SELECT id FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE id=?`,
+        sql: `SELECT status FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE id=?`,
         args: [importRunId],
       });
       if (!run.rows[0]) throw new KnowledgeNotFoundError('import run', importRunId);
+      if (run.rows[0].status !== 'running') throw new Error(`Knowledge import run ${importRunId} is not active`);
     }
     await executor.execute({
       sql: `INSERT INTO "${TABLE_KNOWLEDGE_ACTIVITY}" (id,action,targetType,targetId,contextScopeId,importRunId,details,createdAt) VALUES (?,?,?,?,?,?,jsonb(?),?)`,

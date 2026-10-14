@@ -1372,9 +1372,11 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   #assertImportRunExists(importRunId?: string): void {
-    if (importRunId && !this.#db.knowledgeImportRuns.has(importRunId)) {
-      throw new KnowledgeNotFoundError('import run', importRunId);
-    }
+    if (!importRunId) return;
+    const run = this.#db.knowledgeImportRuns.get(importRunId);
+    if (!run) throw new KnowledgeNotFoundError('import run', importRunId);
+    // Mutation bodies are synchronous after this check, so a recovered run cannot interleave a write.
+    if (run.status !== 'running') throw new Error(`Knowledge import run ${importRunId} is not active`);
   }
 
   #recordActivity(

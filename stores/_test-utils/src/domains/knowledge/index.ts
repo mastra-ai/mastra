@@ -953,13 +953,22 @@ export function createKnowledgeStorageTests(
       const interrupted = await store.updateImportRun({ id: interruptedRun.id, status: 'interrupted' });
       expect(interrupted).toMatchObject({ status: 'interrupted' });
 
+      const linkedRun = await store.createImportRun({
+        id: '01K00000000000000000000004',
+        importerId: 'calendar',
+        binding: knowledgeImporterBindingKey({ source: 'google-calendar:linked', scope: 'resource:one' }),
+        importKind: 'static',
+        triggerKind: 'programmatic',
+        queuedAt: new Date(queuedAt.getTime() + 5_000),
+      });
+      await store.updateImportRun({ id: linkedRun.id, status: 'running' });
       const node = await store.createNode({
         name: 'Imported calendar event',
         scopeIds: [PROJECT_SCOPE_ID],
-        importRunId: run.id,
+        importRunId: linkedRun.id,
       });
-      expect(await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], importRunId: run.id })).toEqual([
-        expect.objectContaining({ targetId: node.id, importRunId: run.id }),
+      expect(await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], importRunId: linkedRun.id })).toEqual([
+        expect.objectContaining({ targetId: node.id, importRunId: linkedRun.id }),
       ]);
 
       const reopened = await createStore(true);
@@ -1141,6 +1150,119 @@ export function createKnowledgeStorageTests(
       await expect(stateOf('payload/recovery-successor')).resolves.not.toBeNull();
     });
 
+    it('rejects a stale worker mutation that resumes after its run was recovered', async () => {
+      const binding = knowledgeImporterBindingKey({ source: 'calendar:stale', scope: 'project:mastra' });
+      const subject = await store.createNode({ name: 'Stale-run subject', scopeIds: [PROJECT_SCOPE_ID] });
+      const write = (id: string, importRunId: string) =>
+        store.createRecord({
+          id,
+          node: subject,
+          text: `${id} evidence`,
+          source: 'calendar:stale',
+          scopeIds: [PROJECT_SCOPE_ID],
+          importRunId,
+        });
+      await store.enqueueImportRun({
+        id: 'stale-original',
+        importerId: 'stale-runner',
+        binding,
+        importKind: 'static',
+        triggerKind: 'programmatic',
+        payloadKey: 'payload/stale-original',
+        payload: '{"payload":{}}',
+        queuedAt: new Date('2020-01-01T00:00:00.000Z'),
+      });
+      await store.claimImportRun({
+        importerId: 'stale-runner',
+        binding,
+        workerId: 'old-worker',
+        leaseKey: 'lease/',
+        timestamp: new Date('2020-01-01T00:00:01.000Z'),
+      });
+
+      // Old worker: authorized while it still owns the run, then paused before its mutation reaches storage.
+      let releaseOldWorker!: () => void;
+      const oldWorkerGate = new Promise<void>(resolve => (releaseOldWorker = resolve));
+      let oldWorkerAuthorized!: () => void;
+      const authorized = new Promise<void>(resolve => (oldWorkerAuthorized = resolve));
+      const oldWorker = (async () => {
+        expect((await store.getImportRun('stale-original'))?.status).toBe('running');
+        oldWorkerAuthorized();
+        await oldWorkerGate;
+        return write('stale-write', 'stale-original');
+      })();
+      await authorized;
+
+      // Recovery: the lease is stale, the run is replaced, and a new worker claims the replacement.
+      await expect(
+        store.recoverImportRun({
+          id: 'stale-original',
+          replacementId: 'stale-replacement',
+          payloadKey: 'payload/stale-original',
+          replacementPayloadKey: 'payload/stale-replacement',
+          leaseKey: 'lease/stale-original',
+          staleBefore: new Date('2020-01-01T00:00:03.000Z'),
+        }),
+      ).resolves.toMatchObject({ id: 'stale-replacement' });
+      await expect(
+        store.claimImportRun({ importerId: 'stale-runner', binding, workerId: 'new-worker', leaseKey: 'lease/' }),
+      ).resolves.toMatchObject({ id: 'stale-replacement' });
+
+      releaseOldWorker();
+      await expect(oldWorker).rejects.toThrow('stale-original');
+      await expect(store.getRecord({ id: 'stale-write', includeDeleted: true })).resolves.toBeNull();
+
+      await write('replacement-write', 'stale-replacement');
+      const bySource = await store.listRecordsBySource({ source: 'calendar:stale', scopeIds: [PROJECT_SCOPE_ID] });
+      expect(bySource.records.map(record => record.id)).toEqual(['replacement-write']);
+      await expect(
+        store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], importRunId: 'stale-original' }),
+      ).resolves.toEqual([]);
+      expect(
+        (await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], importRunId: 'stale-replacement' })).map(
+          event => event.targetId,
+        ),
+      ).toEqual(['replacement-write']);
+    });
+
+    it('rejects every import-linked mutation once the run has stopped running', async () => {
+      const scopeIds = [ORG_SCOPE_ID, PROJECT_SCOPE_ID, OTHER_SCOPE_ID];
+      const node = await store.createNode({ name: 'Ended-run subject', scopeIds: [PROJECT_SCOPE_ID] });
+      const record = await store.createRecord({ node, text: 'Original', scopeIds: [PROJECT_SCOPE_ID] });
+      const ended = await store.createImportRun({
+        importerId: 'ended-runner',
+        binding: knowledgeImporterBindingKey({ source: 'calendar:ended', scope: 'project:mastra' }),
+        importKind: 'static',
+        triggerKind: 'cron',
+        status: 'skipped',
+      });
+      const importRunId = ended.id;
+      const snapshot = async () => ({
+        nodes: await store.listNodes({ scopeIds }),
+        records: await store.listRecords({ node, scopeIds }),
+        activity: await store.listActivity({ scopeIds }),
+      });
+      const before = await snapshot();
+      const mutations = [
+        () => store.createNode({ name: 'Late node', scopeIds: [PROJECT_SCOPE_ID], importRunId }),
+        () => store.updateNode({ id: node.id, version: node.version, name: 'Late edit', importRunId }),
+        () => store.createRecord({ node, text: 'Late record', scopeIds: [PROJECT_SCOPE_ID], importRunId }),
+        () => store.deleteRecord({ id: record.id, deletedBy: 'importer', importRunId }),
+        () =>
+          store.recordImportSkip({
+            targetType: 'record',
+            targetId: record.id,
+            contextScopeId: PROJECT_SCOPE_ID,
+            importRunId,
+            details: { reason: 'late' },
+          }),
+      ];
+      for (const mutate of mutations) {
+        await expect(mutate()).rejects.toThrow(importRunId);
+        expect(await snapshot()).toEqual(before);
+      }
+    });
+
     it('rejects malformed importer bindings', async () => {
       await expect(
         store.setImportState({ importerId: 'calendar', binding: 'ambiguous:binding', key: 'cursor', value: 'one' }),
@@ -1154,6 +1276,7 @@ export function createKnowledgeStorageTests(
         importKind: 'static',
         triggerKind: 'programmatic',
       });
+      await store.updateImportRun({ id: run.id, status: 'running' });
       const node = await store.createNode({
         name: 'Temporary',
         scopeIds: [PROJECT_SCOPE_ID],
