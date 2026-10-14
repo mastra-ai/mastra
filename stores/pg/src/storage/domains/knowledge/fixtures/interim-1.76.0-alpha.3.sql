@@ -1,5 +1,6 @@
 -- Knowledge tables created by the interim canonical-model release (main 38643beb41a, @mastra/core 1.76.0-alpha.3),
 -- captured with pg_dump --schema-only from KnowledgePG.init() and unqualified so a test can load it into any schema.
+-- The released @mastra/core 1.76.0 with @mastra/pg 1.31.0 creates exactly this layout (re-captured and diffed: identical).
 CREATE TABLE mastra_knowledge_access_state (
     id text NOT NULL,
     epoch integer NOT NULL,
