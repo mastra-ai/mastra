@@ -6598,6 +6598,7 @@ export const API_ROUTE_METADATA = {
       "sessionScope"
     ],
     "bodyParams": [
+      "files",
       "message",
       "requestContext"
     ],
@@ -6618,6 +6619,7 @@ export const API_ROUTE_METADATA = {
       "sessionScope"
     ],
     "bodyParams": [
+      "files",
       "message",
       "requestContext"
     ],

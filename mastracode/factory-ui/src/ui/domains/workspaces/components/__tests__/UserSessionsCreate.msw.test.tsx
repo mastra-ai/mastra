@@ -56,9 +56,7 @@ function stubFactoryWithRepository(sessions: FactoryUserSession[] = []) {
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
-      HttpResponse.json({ sessions }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions })),
     http.get(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, ({ params }) => {
       const session = sessions.find(candidate => candidate.sessionId === params.sessionId);
       return session
@@ -134,7 +132,7 @@ describe('User sessions creation', () => {
     expect(sessionPosts).toBe(0);
     expect(controller).toEqual({ createSession: 0, renameThread: 0 });
     expect(sessions).toEqual([]);
-    expect(client.getQueryData(queryKeys.sessions(projectRepositoryId))).toEqual({
+    expect(client.getQueryData(queryKeys.sessions('fp-1'))).toEqual({
       workspaces: [],
       userSessions: [],
     });
@@ -167,7 +165,7 @@ describe('User sessions creation', () => {
   it('says the session list failed instead of claiming there are none', async () => {
     stubFactoryWithRepository();
     server.use(
-      http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () =>
         HttpResponse.json({ message: 'Nope' }, { status: 500 }),
       ),
     );
