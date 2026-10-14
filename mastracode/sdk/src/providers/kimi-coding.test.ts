@@ -4,18 +4,9 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import { AuthStorage } from '../auth/storage.js';
-import {
-  buildKimiCodingApiKeyFetch,
-  buildKimiCodingOAuthFetch,
-  KIMI_CODING_MODELS,
-  kimiCodingProvider,
-} from './kimi-coding.js';
+import { buildKimiCodingApiKeyFetch, buildKimiCodingOAuthFetch, kimiCodingProvider } from './kimi-coding.js';
 
 describe('Kimi For Coding model provider', () => {
-  it('publishes the subscription catalog', () => {
-    expect(KIMI_CODING_MODELS).toEqual(['k3', 'k3-256k', 'kimi-for-coding', 'kimi-for-coding-highspeed']);
-  });
-
   it('reports its own provider id so history compatibility can tell Kimi turns apart from Anthropic ones', () => {
     const model = kimiCodingProvider('k3', { apiKey: 'k' }) as unknown as { provider: string; modelId: string };
 

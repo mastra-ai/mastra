@@ -896,6 +896,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/sambanova',
+          label: 'SambaNova',
+        },
+        {
+          type: 'doc',
           id: 'providers/sarvam',
           label: 'Sarvam AI',
         },

@@ -559,8 +559,11 @@ export class GithubIntegration implements FactoryIntegration {
     }));
   }
 
-  /** List repos accessible to an installation (paginated). */
-  async listInstallationRepos(installationId: number): Promise<RepoSummary[]> {
+  /**
+   * List repos accessible to an installation (paginated). Always reads
+   * GitHub directly, so `fresh` has nothing to bypass here.
+   */
+  async listInstallationRepos(installationId: number, _options?: { fresh?: boolean }): Promise<RepoSummary[]> {
     const octokit = this.getInstallationOctokit(installationId);
     const repos = await octokit.paginate(octokit.apps.listReposAccessibleToInstallation, {
       per_page: 100,

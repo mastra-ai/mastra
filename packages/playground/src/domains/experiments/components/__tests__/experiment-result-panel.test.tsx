@@ -420,6 +420,34 @@ describe('ExperimentResultPanel summary', () => {
   });
 });
 
+describe('ExperimentResultPanel score reason', () => {
+  describe('when a score has a reason', () => {
+    const scores = [{ id: 'score-1', scorerId: 'accuracy', score: 0.5, reason: 'Because **bold**' }];
+
+    it('shows an info button next to the score', () => {
+      renderPanel(makeResult(), { scores });
+
+      expect(screen.getByRole('button', { name: 'Show accuracy reason' })).toBeDefined();
+    });
+
+    it('renders the reason as markdown when the info button is focused', async () => {
+      renderPanel(makeResult(), { scores });
+
+      fireEvent.focus(screen.getByRole('button', { name: 'Show accuracy reason' }));
+
+      expect((await screen.findByText('bold')).tagName).toBe('STRONG');
+    });
+  });
+
+  describe('when a score has no reason', () => {
+    it('does not show an info button', () => {
+      renderPanel(makeResult(), { scores: [{ id: 'score-1', scorerId: 'accuracy', score: 0.5, reason: null }] });
+
+      expect(screen.queryByRole('button', { name: 'Show accuracy reason' })).toBeNull();
+    });
+  });
+});
+
 describe('ExperimentResultPanel payloads', () => {
   describe('when the result has a ground truth', () => {
     it('shows Input, Ground Truth, then Output', () => {

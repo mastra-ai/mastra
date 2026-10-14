@@ -187,6 +187,31 @@ describe('Combobox', () => {
     });
   });
 
+  it('finds an option by its keywords as well as its label', async () => {
+    render(
+      <Combobox
+        options={[
+          { label: 'Claude Haiku 4.5', value: 'anthropic/claude-haiku-4-5', keywords: ['anthropic/claude-haiku-4-5'] },
+          { label: 'GPT-5 Mini', value: 'openai/gpt-5-mini', keywords: ['openai/gpt-5-mini'] },
+        ]}
+        searchPlaceholder="Search models"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('combobox'));
+    const search = await screen.findByPlaceholderText('Search models');
+
+    fireEvent.input(search, { target: { value: 'anthropic' }, inputType: 'insertText' });
+    await waitFor(() => {
+      expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['Claude Haiku 4.5']);
+    });
+
+    fireEvent.input(search, { target: { value: 'mini' }, inputType: 'insertText' });
+    await waitFor(() => {
+      expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['GPT-5 Mini']);
+    });
+  });
+
   it('selects a custom value when custom values are allowed', async () => {
     const onValueChange = vi.fn();
     renderCombobox({ onValueChange, allowCustomValue: true });
