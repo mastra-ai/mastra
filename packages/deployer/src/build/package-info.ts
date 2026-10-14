@@ -41,7 +41,9 @@ export async function getPackageInfo(
     };
   }
 
-  if (!pkgInfo?.version && pkgInfo?.rootPath) {
+  // A nested manifest (e.g. dist/esm/package.json with only "type") has no version, so search up for the
+  // real package root. A manifest named after the package is already the root, even if it has no version.
+  if (!pkgInfo?.version && pkgInfo?.rootPath && pkgInfo.packageJson?.name !== getPackageName(packageName)) {
     return searchUpForPackageJson(dirname(pkgInfo.rootPath));
   }
 

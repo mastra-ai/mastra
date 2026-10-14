@@ -236,6 +236,7 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         value: 'a -> b -> c',
         root: 'external-workspace-root-implementation-marker',
         app: 'App value is BEFORE.',
+        versionless: 'versionless-workspace-package',
       });
     });
 
@@ -515,6 +516,7 @@ export const environmentRoute = registerApiRoute('/environment', {
             value: 'a -> b -> c',
             root: 'external-workspace-root-implementation-marker',
             app: 'App value is BEFORE.',
+            versionless: 'versionless-workspace-package',
           });
           const initialInstance = await readServerInstance();
           expect(await readServerInstance()).toBe(initialInstance);
@@ -528,6 +530,7 @@ export const environmentRoute = registerApiRoute('/environment', {
             value: 'a -> b -> c-AFTER',
             root: 'external-workspace-root-implementation-marker',
             app: 'App value is BEFORE.',
+            versionless: 'versionless-workspace-package',
           });
           // A browser reconnecting after this broadcast must still detect the restart.
           await fetch(`http://localhost:${port}/__refresh`, { method: 'POST' });
@@ -544,6 +547,7 @@ export const environmentRoute = registerApiRoute('/environment', {
             value: 'a -> b -> c-AFTER',
             root: 'external-workspace-root-implementation-marker',
             app: 'App value is AFTER.',
+            versionless: 'versionless-workspace-package',
           });
         } finally {
           // Restore fixture so subsequent build/start suites see the original sources.
@@ -1373,6 +1377,7 @@ class AliasDeployer extends Deployer {
             value: 'a -> b -> c',
             root: 'external-workspace-root-implementation-marker',
             app: 'App value is BEFORE.',
+            versionless: 'versionless-workspace-package',
           });
         } finally {
           if (proc) {
