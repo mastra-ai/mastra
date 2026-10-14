@@ -109,7 +109,7 @@ describe('Metrics storage support', () => {
       const { queryClient } = renderPage();
 
       expect(await screen.findByText(unavailableTitle)).toBeTruthy();
-      expect(screen.getByRole('button', { name: 'Last 24 hours' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Value: Last 24 hours' })).toBeTruthy();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(onMetrics).not.toHaveBeenCalled();
       expect(onDiscovery).not.toHaveBeenCalled();
@@ -140,11 +140,11 @@ describe('Metrics storage support', () => {
       const { queryClient } = renderPage();
       expect(await screen.findByText(unavailableTitle)).toBeTruthy();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Last 24 hours' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Value: Last 24 hours' }));
       fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 7 days' }));
 
       await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/metrics?period=7d'));
-      expect(screen.getByRole('button', { name: 'Last 7 days' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Value: Last 7 days' })).toBeTruthy();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(onMetrics).not.toHaveBeenCalled();
       expect(onDiscovery).not.toHaveBeenCalled();
@@ -194,8 +194,8 @@ describe('Metrics storage support', () => {
       await waitFor(() => expect(onCapabilities).toHaveBeenCalled());
       try {
         expect(screen.getByRole('status', { name: 'Loading storage capabilities' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Last 24 hours' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Add Filter' }).hasAttribute('disabled')).toBe(true);
+        expect(screen.getByRole('button', { name: 'Value: Last 24 hours' })).toBeTruthy();
+        expect(screen.getByRole('group', { name: 'Metrics filters' })).toBeTruthy();
         expect(onMetrics).not.toHaveBeenCalled();
         expect(onDiscovery).not.toHaveBeenCalled();
       } finally {
