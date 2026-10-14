@@ -151,12 +151,12 @@ export function mergeReflectionWithUnreflected(
 // ---------------------------------------------------------------------------
 
 /**
- * A buffered chunk stores `lastObservedAt = max message time + 1ms`; it is wholly covered by
- * the cursor iff `cursor >= chunk.lastObservedAt - 1ms`.
+ * A buffered chunk stores `lastObservedAt = max message time`; it is wholly covered by
+ * the cursor iff `cursor >= chunk.lastObservedAt`.
  */
 export function isChunkCoveredByCursor(chunkLastObservedAt: string, cursor: string | null | undefined): boolean {
   if (!cursor) return false;
-  return Date.parse(cursor) >= Date.parse(chunkLastObservedAt) - 1;
+  return Date.parse(cursor) >= Date.parse(chunkLastObservedAt);
 }
 
 /** The later of two ISO cursors (`null` only when both are absent). */

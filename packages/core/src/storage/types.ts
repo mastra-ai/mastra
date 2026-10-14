@@ -1348,7 +1348,7 @@ export interface ObservationalMemoryRecord {
   lastBufferedAtTokens: number;
   /**
    * Timestamp cursor for buffered messages.
-   * Set to the max message timestamp (+1ms) of the last successfully buffered chunk.
+   * Set to the max message timestamp of the last successfully buffered chunk.
    * Used to filter out already-buffered messages when starting the next buffer.
    * Reset on activation.
    */
@@ -1416,7 +1416,7 @@ export interface UpdateBufferedObservationsInput {
   id: string;
   /** The observation chunk to add to the buffer */
   chunk: BufferedObservationChunkInput;
-  /** Timestamp cursor for the last buffered message boundary. Set to max message timestamp + 1ms. */
+  /** Timestamp cursor for the last buffered message boundary. Set to max message timestamp. */
   lastBufferedAtTime?: Date;
 }
 

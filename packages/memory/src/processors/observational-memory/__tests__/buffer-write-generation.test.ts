@@ -93,7 +93,7 @@ describe('in-flight observation buffer vs reflection rollover', () => {
     const history = await storage.getObservationalMemoryHistory(threadId, resourceId);
     const retired = history.find(r => r.id === initial.id)!;
     expect(head.bufferedObservationChunks?.map(c => c.observations)).toEqual(['- late observation']);
-    expect(head.lastBufferedAtTime?.getTime()).toBeGreaterThan(late.createdAt.getTime());
+    expect(head.lastBufferedAtTime?.getTime()).toBe(late.createdAt.getTime());
     expect((retired.bufferedObservationChunks ?? []).map(c => c.observations)).not.toContain('- late observation');
 
     // The chunk is now activatable on the current generation.

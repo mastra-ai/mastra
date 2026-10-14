@@ -285,8 +285,8 @@ export function filterObservedMessages(opts: {
 
       if (lastObservedAt && msg.createdAt) {
         const msgTime = new Date(msg.createdAt).getTime();
-        // A message on the cursor millisecond is only known to be observed when its id says so;
-        // MessageList's 1ms spacing can place the next unobserved message exactly there.
+        // The cursor is the newest observed message time. When observed ids are recorded, a
+        // message sharing that millisecond is only observed if its id says so.
         const cursorTime = new Date(lastObservedAt).getTime();
         const atOrBefore = observedIds.size > 0 ? msgTime < cursorTime : msgTime <= cursorTime;
         if (atOrBefore) {

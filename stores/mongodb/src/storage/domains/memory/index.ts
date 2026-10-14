@@ -2346,9 +2346,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         extractedValues: input.chunk.extractedValues,
         extractionFailures: input.chunk.extractionFailures,
       };
-      // A chunk stores max message time + 1ms; it is wholly covered iff cursor >= that − 1ms, so
-      // it may be appended only while the stored cursor is strictly below that bound.
-      const coverBound = new Date(new Date(input.chunk.lastObservedAt).getTime() - 1);
+      // A chunk stores max message time; it is wholly covered iff cursor >= that, so it may be
+      // appended only while the stored cursor is strictly below it.
+      const coverBound = new Date(input.chunk.lastObservedAt);
       const notCovered = { $or: [{ lastObservedAt: null }, { lastObservedAt: { $lt: coverBound } }] };
       const lastBufferedAtTime = input.lastBufferedAtTime ? new Date(input.lastBufferedAtTime) : undefined;
 
