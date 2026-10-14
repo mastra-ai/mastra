@@ -756,6 +756,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async #updateNode(tx: Transaction, input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
+    if (input.name !== undefined && !input.name.trim()) throw new Error('Knowledge node names must not be blank.');
     const existing = await this.#getNode(tx, input.id);
     if (!existing) throw new KnowledgeNotFoundError('node', input.id);
     const existingScopeIds = await this.#getNodeScopeIds(tx, input.id);
@@ -1622,6 +1623,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     );
   }
   async #createNode(executor: Transaction, input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {
+    if (!input.name.trim()) throw new Error('Knowledge node names must not be blank.');
     const scopeIds = await this.#assertScopeNodes(executor, input.scopeIds);
     const existing = await this.#getNodeByName(executor, input.name, scopeIds);
     if (existing) return existing;
