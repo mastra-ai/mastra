@@ -12,32 +12,29 @@ class StrictMemory extends MockMemory {
     const [{ threadId }] = args;
     const thread = await this.getThreadById({ threadId });
     if (!thread) {
-      throw new Error(`No thread found with id ${threadId}`);
+      throw new Error(`Thread ${threadId} not found`);
     }
     return super.recall(...args);
   }
 }
 
 class DelayedThreadCreationMemory extends StrictMemory {
-  private recallStarted!: () => void;
-  private readonly recallStartedPromise = new Promise<void>(resolve => {
-    this.recallStarted = resolve;
+  private missingThreadReads = 0;
+  private allMissingThreadReadsFinished!: () => void;
+  private readonly allMissingThreadReadsFinishedPromise = new Promise<void>(resolve => {
+    this.allMissingThreadReadsFinished = resolve;
   });
 
-  override async recall(...args: Parameters<MockMemory['recall']>) {
-    const [{ threadId }] = args;
-    try {
-      return await super.recall(...args);
-    } catch (error) {
-      if (error instanceof Error && error.message === `No thread found with id ${threadId}`) {
-        this.recallStarted();
-      }
-      throw error;
+  override async getThreadById(...args: Parameters<MockMemory['getThreadById']>) {
+    const thread = await super.getThreadById(...args);
+    if (!thread && ++this.missingThreadReads === 2) {
+      this.allMissingThreadReadsFinished();
     }
+    return thread;
   }
 
   override async createThread(...args: Parameters<MockMemory['createThread']>) {
-    await this.recallStartedPromise;
+    await this.allMissingThreadReadsFinishedPromise;
     return super.createThread(...args);
   }
 }
@@ -213,6 +210,7 @@ describe('ToolSearchProcessor storage: context — resume tool rebuild', () => {
   it('propagates recall failures unrelated to a missing thread', async () => {
     const memory = new FailingRecallMemory();
     const agent = createAgent(memory);
+    await seedThread(memory, 'thread-3', 'user-1', false);
 
     await expect(
       agent.getToolsForExecution({
