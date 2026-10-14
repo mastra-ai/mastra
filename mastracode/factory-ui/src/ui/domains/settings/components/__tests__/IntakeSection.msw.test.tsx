@@ -1254,6 +1254,89 @@ describe('IntakeSection', () => {
     });
   });
 
+  describe('given Linear is connected through Platform Connect', () => {
+    const LINEAR_CONNECT_URL = `${TEST_BASE_URL}/web/integrations/platform/linear`;
+    const session = (connectionId: string) => ({
+      connectionId,
+      integrationId: 'linear',
+      connectUrl: 'https://connect.nango.dev/session-token',
+      sessionToken: 'session-token',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+
+    it('connects a Linear workspace headlessly through the Nango popup', async () => {
+      seedGithubProject();
+      useIntakeHandlers({
+        status: {
+          enabled: true,
+          connected: false,
+          workspace: null,
+          reason: 'not_connected',
+          mode: 'platform',
+          connections: [],
+        },
+      });
+      const minted: string[] = [];
+      server.use(
+        http.get(`${LINEAR_CONNECT_URL}/connections`, () =>
+          HttpResponse.json({
+            connections: [{ id: 'lin_1', integrationId: 'linear', status: 'active', accountLabel: 'Acme' }],
+          }),
+        ),
+        http.post(`${LINEAR_CONNECT_URL}/connect-session`, () => {
+          minted.push('connect');
+          return HttpResponse.json(session('lin_1'), { status: 201 });
+        }),
+      );
+
+      renderIntakeSection();
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Connect Linear' }));
+
+      await waitFor(() => expect(nangoAuthCalls).toHaveLength(1));
+      expect(minted).toEqual(['connect']);
+      expect(nangoAuthCalls[0]?.integrationId).toBe('linear');
+    });
+
+    it('offers Reconnect Linear for a legacy app install with no Connect connection', async () => {
+      seedGithubProject();
+      useIntakeHandlers({ status: { ...connectedStatus, mode: 'platform', connections: [] } });
+
+      renderIntakeSection();
+
+      expect(await screen.findByRole('button', { name: 'Reconnect Linear' })).toBeInTheDocument();
+    });
+
+    it('reconnects the Linear connection that needs reauthorization', async () => {
+      seedGithubProject();
+      useIntakeHandlers({
+        status: {
+          ...connectedStatus,
+          mode: 'platform',
+          connections: [{ id: 'lin_1', status: 'needs_reauth', accountLabel: 'Acme' }],
+        },
+      });
+      const reconnected: string[] = [];
+      server.use(
+        http.get(`${LINEAR_CONNECT_URL}/connections`, () =>
+          HttpResponse.json({
+            connections: [{ id: 'lin_1', integrationId: 'linear', status: 'active', accountLabel: 'Acme' }],
+          }),
+        ),
+        http.post(`${LINEAR_CONNECT_URL}/connections/:connectionId/reconnect-session`, ({ params }) => {
+          reconnected.push(String(params.connectionId));
+          return HttpResponse.json(session(String(params.connectionId)), { status: 201 });
+        }),
+      );
+
+      renderIntakeSection();
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Reconnect Linear' }));
+
+      await waitFor(() => expect(reconnected).toEqual(['lin_1']));
+    });
+  });
+
   describe('given the config endpoint fails', () => {
     it('shows the unavailable notice', async () => {
       server.use(
