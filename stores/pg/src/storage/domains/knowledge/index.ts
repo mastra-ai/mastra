@@ -22,6 +22,7 @@ import {
   KNOWLEDGE_RESET_GUIDANCE,
   KNOWLEDGE_TABLE_NAMES,
   knowledgeScopeIdsKey,
+  discardedKnowledgeRowsWarning,
   REPLACEABLE_KNOWLEDGE_TABLE_NAMES,
   replaceableKnowledgeLayoutIndexNames,
   RETIRED_KNOWLEDGE_TABLE_NAMES,
@@ -552,6 +553,12 @@ function isDependentObjectsError(error: unknown): boolean {
   return (error as { code?: string } | null)?.code === '2BP01';
 }
 
+type ReplacedKnowledgeLayout = {
+  tables: string[];
+  indexes: string[];
+  warning?: ReturnType<typeof discardedKnowledgeRowsWarning>;
+};
+
 export class KnowledgePG extends KnowledgeStorage {
   static readonly MANAGED_TABLES = KNOWLEDGE_TABLE_NAMES;
 
@@ -631,6 +638,7 @@ export class KnowledgePG extends KnowledgeStorage {
     let existingNames = await this.#knowledgeTableNames(snapshot);
     if (!existingNames.has(TABLE_KNOWLEDGE_SCHEMA)) {
       const dropped = await this.#initializeCanonicalSchema();
+      if (dropped.warning) this.logger?.warn?.(dropped.warning.message, dropped.warning.details);
       if (snapshot) {
         for (const table of dropped.tables) this.#db.noteTableDropped(table);
         for (const index of dropped.indexes) this.#db.noteIndexDropped(index);
@@ -697,7 +705,7 @@ export class KnowledgePG extends KnowledgeStorage {
    * rest observe the marker. Anything other than no Knowledge tables or the published v1 layout is
    * rejected without mutation.
    */
-  async #initializeCanonicalSchema(): Promise<{ tables: string[]; indexes: string[] }> {
+  async #initializeCanonicalSchema(): Promise<ReplacedKnowledgeLayout> {
     const { KnowledgeSchemaError } = await loadKnowledgeCore();
     // Only create a missing schema: CREATE SCHEMA IF NOT EXISTS needs CREATE on the database even when the
     // schema exists, which roles granted only schema privileges lack. Done outside the transaction because a
@@ -725,7 +733,7 @@ export class KnowledgePG extends KnowledgeStorage {
       });
       const names = new Set(existing.rows.map(row => String(row.tableName)));
       if (names.has(TABLE_KNOWLEDGE_SCHEMA)) return { tables: [], indexes: [] };
-      let dropped: { tables: string[]; indexes: string[] } = { tables: [], indexes: [] };
+      let dropped: ReplacedKnowledgeLayout = { tables: [], indexes: [] };
       if (names.size > 0) {
         const replaced = await this.#replacePublishedV1(tx);
         if (replaced === 'dependents') throw new KnowledgeSchemaError(KNOWLEDGE_DEPENDENTS_MESSAGE);
@@ -757,7 +765,7 @@ export class KnowledgePG extends KnowledgeStorage {
    * extra indexes all leave the database untouched. Runs inside the caller's first-boot transaction.
    * Returns `'dependents'` when other objects depend on the tables, since a reset cannot remove them either.
    */
-  async #replacePublishedV1(tx: Executor): Promise<{ tables: string[]; indexes: string[] } | 'dependents' | null> {
+  async #replacePublishedV1(tx: Executor): Promise<ReplacedKnowledgeLayout | 'dependents' | null> {
     const schema = this.#schemaName ?? null;
     const relations = await tx.execute({
       sql: `SELECT table_name, table_type FROM information_schema.tables WHERE table_schema = COALESCE(?, current_schema()) AND table_name LIKE 'mastra\\_knowledge\\_%'`,
@@ -796,6 +804,11 @@ export class KnowledgePG extends KnowledgeStorage {
       args: [schema, tables],
     });
     if (triggers.rows.length > 0) return null;
+    const rowCounts = new Map<string, number>();
+    for (const table of tables) {
+      const count = await tx.execute(`SELECT COUNT(*) AS count FROM "${table}"`);
+      rowCounts.set(table, Number(count.rows[0]?.count ?? 0));
+    }
     try {
       await tx.execute(`DROP TABLE ${tables.map(table => `"${table}"`).join(', ')}`);
     } catch (error) {
@@ -803,7 +816,11 @@ export class KnowledgePG extends KnowledgeStorage {
       if (isDependentObjectsError(error)) return 'dependents';
       throw error;
     }
-    return { tables, indexes: indexNames };
+    return {
+      tables,
+      indexes: indexNames,
+      warning: discardedKnowledgeRowsWarning(columnsByTable, rowCounts, { timestampShadows: true }),
+    };
   }
 
   override async dangerouslyReset(): Promise<void> {
@@ -1019,6 +1036,7 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   async #updateNode(tx: Executor, input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
+    if (input.name !== undefined && !input.name.trim()) throw new Error('Knowledge node names must not be blank.');
     const existing = await this.#getNode(tx, input.id);
     if (!existing) throw new KnowledgeNotFoundError('node', input.id);
     const existingScopeIds = await this.#getNodeScopeIds(tx, input.id);
@@ -2235,6 +2253,7 @@ export class KnowledgePG extends KnowledgeStorage {
     input: CreateKnowledgeNodeInput,
     { coalesceByName = true } = {},
   ): Promise<KnowledgeNode> {
+    if (!input.name.trim()) throw new Error('Knowledge node names must not be blank.');
     const scopeIds = await this.#assertScopeNodes(executor, input.scopeIds);
     await this.#lockSiblingName(executor, input.name, scopeIds);
     const existing = await this.#getNodeByName(executor, input.name, scopeIds);
