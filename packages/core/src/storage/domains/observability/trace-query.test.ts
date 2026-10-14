@@ -307,7 +307,7 @@ describe('planTraceQuery', () => {
     });
   });
 
-  it('enforces ordered and maximum time ranges', () => {
+  it('enforces ordered time ranges without a maximum width', () => {
     const reversed = validationError(() =>
       planTraceQuery(parsed({ timeRange: { from: '2026-08-02T00:00:00Z', to: '2026-08-01T00:00:00Z' } })),
     );
@@ -318,10 +318,9 @@ describe('planTraceQuery', () => {
       to: '2026-09-01T00:00:00.000Z',
     });
 
-    const tooLarge = validationError(() =>
-      planTraceQuery(parsed({ timeRange: { from: '2026-07-31T23:59:59Z', to: '2026-09-01T00:00:00Z' } })),
-    );
-    expect(tooLarge.issues[0]).toMatchObject({ code: 'time_range_too_large', path: ['timeRange'] });
+    expect(
+      planTraceQuery(parsed({ timeRange: { from: '2025-09-01T00:00:00Z', to: '2026-09-01T00:00:00Z' } })).timeRange,
+    ).toEqual({ from: '2025-09-01T00:00:00.000Z', to: '2026-09-01T00:00:00.000Z' });
   });
 
   it('plans numeric root duration predicates', () => {
@@ -1565,17 +1564,13 @@ describe('queryThreads input and planning', () => {
       to: '2026-09-01T00:00:00.000Z',
     });
 
-    const tooLarge = validationError(() =>
+    expect(
       planThreadQuery(
         parsedThreads({
-          traces: { timeRange: { from: '2026-07-31T23:59:59Z', to: '2026-09-01T00:00:00Z' } },
+          traces: { timeRange: { from: '2025-09-01T00:00:00Z', to: '2026-09-01T00:00:00Z' } },
         }),
-      ),
-    );
-    expect(tooLarge.issues[0]).toMatchObject({
-      code: 'time_range_too_large',
-      path: ['traces', 'timeRange'],
-    });
+      ).traces.timeRange,
+    ).toEqual({ from: '2025-09-01T00:00:00.000Z', to: '2026-09-01T00:00:00.000Z' });
 
     const invalidField = validationError(() =>
       planThreadQuery(

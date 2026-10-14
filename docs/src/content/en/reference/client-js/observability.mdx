@@ -70,7 +70,7 @@ It accepts the same filtering, ordering and delta-polling arguments as `listTrac
 
 ## Querying traces and threads
 
-`queryTraces()` finds completed logical traces using trace fields and conditions over related spans, scores, or feedback. Every query requires an ISO timestamp range of at most 31 days.
+`queryTraces()` finds completed logical traces using trace fields and conditions over related spans, scores, or feedback. Every query requires an ISO timestamp range.
 
 ```typescript
 const result = await mastraClient.queryTraces({
@@ -222,7 +222,7 @@ See [Advanced trace queries](/reference/observability/tracing/trace-query) for t
 
 ## Querying spans
 
-`querySpans()` returns one row per matching completed span across traces. Use it to list the spans themselves. `queryTraces()` with a `spans.some` predicate returns the traces that contain a matching span instead. Every query requires an ISO timestamp range of at most 31 days.
+`querySpans()` returns one row per matching completed span across traces. Use it to list the spans themselves. `queryTraces()` with a `spans.some` predicate returns the traces that contain a matching span instead. Every query requires an ISO timestamp range.
 
 ```typescript
 const result = await mastraClient.querySpans({

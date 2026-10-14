@@ -178,8 +178,6 @@ const traceQueryDiscoveryTimeRangeSchema = traceQueryTimeRangeSchema.superRefine
   const to = new Date(timeRange.to);
   if (from >= to) {
     context.addIssue({ code: 'custom', path: [], message: '`from` must be earlier than `to`' });
-  } else if (to.getTime() - from.getTime() > 31 * 24 * 60 * 60 * 1000) {
-    context.addIssue({ code: 'custom', path: [], message: 'The time range cannot exceed 31 days' });
   }
 });
 const traceQueryDiscoverySearchSchema = z.string().trim().max(TRACE_QUERY_DISCOVERY_MAX_SEARCH_LENGTH).optional();
@@ -1064,12 +1062,6 @@ export function planTraceQuery(
   const to = new Date(request.timeRange.to);
   if (from >= to) {
     issues.push({ code: 'invalid_time_range', path: ['timeRange'], message: '`from` must be earlier than `to`' });
-  } else if (to.getTime() - from.getTime() > 31 * 24 * 60 * 60 * 1000) {
-    issues.push({
-      code: 'time_range_too_large',
-      path: ['timeRange'],
-      message: 'The time range cannot exceed 31 days',
-    });
   }
 
   if (request.group && request.orderBy) {
@@ -1189,12 +1181,6 @@ export function planThreadQuery(
       code: 'invalid_time_range',
       path: ['traces', 'timeRange'],
       message: '`from` must be earlier than `to`',
-    });
-  } else if (to.getTime() - from.getTime() > 31 * 24 * 60 * 60 * 1000) {
-    issues.push({
-      code: 'time_range_too_large',
-      path: ['traces', 'timeRange'],
-      message: 'The time range cannot exceed 31 days',
     });
   }
 

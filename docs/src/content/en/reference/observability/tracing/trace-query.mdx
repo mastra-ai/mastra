@@ -113,7 +113,7 @@ This example uses local, unscoped storage. For a shared database, pass `{ scope:
 
 Span queries use the scalar fields and operators available inside `queryTraces()`'s `spans.some` predicate. They don't accept related-record clauses. Nested attributes require support in the shared predicate contract and each store.
 
-The `timeRange` applies to each span's `startedAt`, includes `from`, excludes `to`, and can cover at most 31 days. Sort by `startedAt` or `endedAt`, in either direction. The default is `startedAt` descending. A page contains up to 1,000 rows, with a default of 100. Pass `page.next` back as `page.after` with the same filters, time range, scope, and ordering. Cursors use scope and span identifiers to break timestamp ties. They aren't a snapshot across requests. New completions can appear when the view is refreshed.
+The `timeRange` applies to each span's `startedAt`, includes `from`, and excludes `to`. Sort by `startedAt` or `endedAt`, in either direction. The default is `startedAt` descending. A page contains up to 1,000 rows, with a default of 100. Pass `page.next` back as `page.after` with the same filters, time range, scope, and ordering. Cursors use scope and span identifiers to break timestamp ties. They aren't a snapshot across requests. New completions can appear when the view is refreshed.
 
 Each row contains span and trace identifiers, display fields, duration, status, and input/output previews of at most 256 Unicode characters. Truncation flags indicate when a preview is incomplete. Stores select the page before loading previews and cost. Full payloads remain available through the existing span detail method.
 
@@ -343,7 +343,7 @@ Value suggestions are available for these canonical fields:
 
 Each executable top-level string `metadata.<key>` field also supports value suggestions in the `trace` scope. Identifiers, timestamps, durations, numeric score or feedback values, comments, errors, and version IDs don't. The fields response still includes canonical fields with `valueSuggestions: false`. The values endpoint rejects those paths with `422 TRACE_QUERY_INVALID`.
 
-Both discovery requests require a half-open time range of at most 31 days. They use the same current-record semantics as `queryTraces()`: qualifying completed roots satisfy `from <= startedAt < to`, and related values come only from current records joined to those roots by `traceId`. Discovery doesn't accept or apply a draft `where` predicate.
+Both discovery requests require a half-open time range. They use the same current-record semantics as `queryTraces()`: qualifying completed roots satisfy `from <= startedAt < to`, and related values come only from current records joined to those roots by `traceId`. Discovery doesn't accept or apply a draft `where` predicate.
 
 `search` defaults to the empty string, is trimmed, and matches case-insensitive literal substrings. Characters such as `%` and `_` have no wildcard meaning. An empty search returns the most frequent results. `limit` defaults to 25 and has a maximum of 100. Both endpoints fetch one extra result to set their truncation flag, but don't provide a cursor. When a flag is `true`, refine `search`. It doesn't imply that a next page is available. No matches return an empty array and `false` truncation.
 
@@ -359,7 +359,7 @@ Both routes require `observability:read` and use the configured observability st
 
 | Field | Required | Description |
 | - | - | - |
-| `timeRange` | Yes | Trace start-time boundary. `from` is inclusive and `to` is exclusive. Both values must be ISO timestamps, `from` must be earlier than `to`, and the range can't exceed 31 days. |
+| `timeRange` | Yes | Trace start-time boundary. `from` is inclusive and `to` is exclusive. Both values must be ISO timestamps, and `from` must be earlier than `to`. |
 | `where` | No | Recursive trace predicate. Supports scalar conditions and `spans`, `scores`, and `feedback` `some` or `none` clauses. |
 | `group` | No | **Deprecated.** Set to `{ by: ['threadId'] }` to return distinct non-null thread IDs. Use `queryTraceThreads()` for new code. |
 | `orderBy` | No | One item ordering ungrouped results by `startedAt` or `endedAt`, in `asc` or `desc` order. Defaults to `startedAt desc`. Not accepted with `group` or in delta mode. |
@@ -385,7 +385,6 @@ The planner rejects a query before storage execution when it exceeds any of thes
 
 | Input | Maximum |
 | - | - |
-| Trace selection `timeRange` | 31 days |
 | Predicate nesting depth | 12 levels |
 | Predicate nodes | 100 |
 | Related `traces`, `spans`, `scores`, and `feedback` clauses | 8 total |
