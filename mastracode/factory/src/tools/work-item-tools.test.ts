@@ -413,6 +413,8 @@ describe('approval', () => {
         'factory_resolve_proposal',
         'factory_subscribe_work_item',
         'factory_unsubscribe_work_item',
+        'factory_signal_session',
+        'factory_message_origin',
       ].sort(),
     );
   });
