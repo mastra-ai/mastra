@@ -1,6 +1,6 @@
 ---
 title: 'Providers | Connect'
-description: 'Providers you can connect to a Mastra platform project, what each one gives your agents, and how to fix a failing provider.'
+description: 'Providers you can connect to a Mastra platform project, what each one gives your agents, and how to troubleshoot a connection.'
 packages:
   - '@mastra/connect'
 ---
@@ -57,9 +57,9 @@ These providers serve their tools from a hosted Model Context Protocol (MCP) ser
 | `robinhood-mcp` | <ProviderLogo slug="robinhood" /> Robinhood | [Agentic Trading](https://robinhood.com/us/en/support/agentic-trading) |
 | `sanity-mcp` | <ProviderLogo slug="sanity" mono /> Sanity | [Sanity MCP server](https://www.sanity.io/docs/ai/mcp-server) |
 
-## Fix a failing provider
+## Troubleshoot a connection
 
-A `proxy_error` carries the provider's response in its `status` and `detail` properties.
+Most provider call failures come from the connection's credential or configuration. A `proxy_error` carries the provider's response in its `status` and `detail` properties.
 
 - **Status `401`:** Check whether the credential has expired, been revoked, or been rotated. If it needs replacing, [reauthorize the connection](/reference/cli/mastra#replace-a-connection-that-needs-reauthorization).
 - **Status `403`:** Check the provider's response for missing scopes, resource-access restrictions, or account requirements. Grant only the access the agent needs. You can exclude unsupported operations with `allowTools`, but filtering tools doesn't change the credential's permissions.
