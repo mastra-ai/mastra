@@ -65,7 +65,11 @@ export const menuPopupClass = cn(
   'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
 );
 
-export const menuLabelClass = 'px-[.9em] pt-1.5 pb-1 text-meta tracking-wider text-muted-foreground uppercase';
+// Lines a section label up with the item text under it: an item's `.9em` side padding is
+// relative to the label text size (`.9em` here would follow the smaller meta text), plus
+// the item's 1px border.
+export const menuLabelClass =
+  'px-[calc(var(--text-label)*.9+1px)] pt-1.5 pb-1 text-meta tracking-wider text-muted-foreground uppercase';
 
 export const menuSeparatorClass = '-mx-1 my-1 h-px bg-border';
 
