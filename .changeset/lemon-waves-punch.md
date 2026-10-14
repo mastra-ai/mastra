@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Fixed two errors that could appear when starting work in a Factory. A new session no longer shows "Failed to load messages: Thread not found" while its environment is still starting up. Starting a run on a repository that was reconnected now uses the copy that is in the Factory's environment, and if a card's repository is linked but turned off in the environment, the error names the repository and explains how to turn it back on.
+Fixed runs failing with "Factory source-control repository not found." after a repository's source-control connection was reinstalled. When a card's repository is linked but turned off in the Factory's environment, the error now names the repository and says to turn it on under Settings → Environment.

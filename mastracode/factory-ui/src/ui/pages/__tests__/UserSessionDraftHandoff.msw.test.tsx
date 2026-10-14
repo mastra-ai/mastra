@@ -46,6 +46,8 @@ interface DraftRouteOptions {
   factoryProjectGate?: Promise<void>;
   failModeSwitch?: boolean;
   defaultModelId?: string | null;
+  /** Messages the session thread holds once it exists. */
+  persistedMessages?: unknown[];
 }
 
 function readSentMessage(body: unknown): string {
@@ -57,6 +59,7 @@ function stubDraftRoute({
   factoryProjectGate,
   failModeSwitch = false,
   defaultModelId = null,
+  persistedMessages = [],
 }: DraftRouteOptions = {}): DraftRoute {
   let releaseWorkspace = () => {};
   // The server creates the session's thread only once the controller session
@@ -164,7 +167,7 @@ function stubDraftRoute({
     http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [] })),
     http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/threads/:threadId/messages`, () =>
       threadExists
-        ? HttpResponse.json({ messages: [] })
+        ? HttpResponse.json({ messages: persistedMessages })
         : HttpResponse.json({ error: 'Thread not found' }, { status: 404 }),
     ),
     http.get(
@@ -232,6 +235,34 @@ describe('a user session draft on the real thread route', () => {
     route.finishWorkspace();
     await waitForMutationsIdle(client);
     expect(route.posted).toEqual(['fix the login bug']);
+  });
+
+  it('reads a session reopened before its thread exists as empty, then loads it once the session boots', async () => {
+    const route = stubDraftRoute({
+      persistedMessages: [
+        {
+          id: 'persisted-prompt',
+          role: 'user',
+          createdAt: '2026-08-07T09:00:01.000Z',
+          content: { format: 2, parts: [{ type: 'text', text: 'resume after reload' }] },
+        },
+      ],
+    });
+    // A reload lands straight on the thread route, with none of the draft handoff's client state.
+    const router = createMemoryRouter(createAppRoutes(), {
+      initialEntries: [`/factories/${FACTORY_ID}/user/threads/${DRAFT_SESSION_ID}`],
+    });
+    renderWithProviders(<RouterProvider router={router} />);
+
+    await screen.findByRole('textbox', { name: 'Message' });
+    // Give the messages read time to land: before the fix it surfaced the 404.
+    await waitFor(() => expect(screen.queryByLabelText('Loading session')).not.toBeInTheDocument());
+    await new Promise(resolve => setTimeout(resolve, 200));
+    expect(screen.queryByText(/Failed to load messages/)).not.toBeInTheDocument();
+
+    route.finishWorkspace();
+    expect(await screen.findByText('resume after reload', undefined, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.queryByText(/Failed to load messages/)).not.toBeInTheDocument();
   });
 
   it('does not switch models when the draft already uses the personal default', async () => {

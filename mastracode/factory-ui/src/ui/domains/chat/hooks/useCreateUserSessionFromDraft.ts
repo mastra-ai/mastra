@@ -3,7 +3,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
-import { markThreadProvisioning } from '../../../../hooks/useAgentControllerThreadMessages';
 import { addCachedSession } from '../../../../hooks/useWorkspaces';
 import { createUserSession } from '../../workspaces/services/user-sessions';
 import { useChatModels } from '../context/useChatModels';
@@ -49,8 +48,6 @@ export function useCreateUserSessionFromDraft() {
     onSuccess: ({ session, prompt, factoryId, activeModeId, handoffModelId, thinkingLevelOverride }) => {
       queryClient.setQueryData(queryKeys.userSession(session.sessionId), session);
       addCachedSession(queryClient, factoryId, session);
-      // The session's thread shares its id and does not exist until the controller session boots.
-      markThreadProvisioning(session.sessionId);
       queryClient.setQueryData<MastraDBMessage[]>(
         queryKeys.agentControllerThreadMessages(
           AGENT_CONTROLLER_ID,
