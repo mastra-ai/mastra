@@ -28,6 +28,7 @@ import type * as terminalCleanupModule from './rules/terminal-cleanup.js';
 import type * as transitionServiceModule from './rules/transition-service.js';
 import { DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
 import { createFactorySecretEncryption } from './secret-encryption.js';
+import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.js';
 import type { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SourceControlStorage } from './storage/domains/source-control/base.js';
@@ -302,7 +303,8 @@ describe('MastraFactory.prepare', () => {
     const requestContext = new RequestContext();
 
     const first = await inputProcessors({ requestContext });
-    expect(first).toHaveLength(1);
+    expect(first).toHaveLength(2);
+    expect(first[0]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
     expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
       observerModelId: 'openai/observer-1',
     });
@@ -330,7 +332,9 @@ describe('MastraFactory.prepare', () => {
     const inputProcessors = config.inputProcessors as (args: { requestContext: RequestContext }) => Promise<unknown[]>;
     const requestContext = new RequestContext();
 
-    await expect(inputProcessors({ requestContext })).resolves.toEqual([]);
+    const processors = await inputProcessors({ requestContext });
+    expect(processors).toHaveLength(1);
+    expect(processors[0]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
     expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
       observerModelId: 'openai/observer-1',
     });
@@ -349,7 +353,9 @@ describe('MastraFactory.prepare', () => {
     const emitEvent = vi.fn();
     requestContext.set('controller', { getState: () => ({}), emitEvent });
 
-    await expect(inputProcessors({ requestContext })).resolves.toEqual([]);
+    const processors = await inputProcessors({ requestContext });
+    expect(processors).toHaveLength(1);
+    expect(processors[0]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
     expect(requestContext.get('mastra__factoryMemorySettings')).toEqual({
       status: 'unavailable',
       reason: 'storage unavailable',

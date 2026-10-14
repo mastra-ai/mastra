@@ -9,7 +9,7 @@ import {
   hydrateFactorySession,
   resolveFactoryDefaultModelId,
   resolveFactorySourceControl,
-  resolveFactorySourceRepository,
+  resolvePrimaryEnvironmentRepository,
 } from './factory-session.js';
 
 type FactorySessionHandle = Parameters<typeof hydrateFactorySession>[0];
@@ -85,7 +85,6 @@ describe('provider-aware source-control resolution', () => {
       sourceControl: gitlab,
       orgId: 'org-1',
       factoryProjectId: project.id,
-      repositorySlug: repository.slug,
       branch: 'factory/gitlab-issue',
     });
     const sessions = createSourceControlSessionLookup([github, gitlab]);
@@ -134,7 +133,6 @@ describe('ensureFactorySourceSession', () => {
       sourceControl,
       orgId: 'org-1',
       factoryProjectId: project.id,
-      repositorySlug: repository.slug,
       branch: 'factory/issue-49',
     });
 
@@ -158,7 +156,7 @@ describe('ensureFactorySourceSession', () => {
     );
   });
 
-  it('rejects the same branch for the same user on a second link of the factory', async () => {
+  it('files every session under the position-1 environment link and still rejects a cross-link branch collision', async () => {
     const { sourceControl, project, repository, projectRepository } = await seedLinkedRepository();
     const other = await sourceControl.repositories.upsert({
       orgId: 'org-1',
@@ -169,7 +167,7 @@ describe('ensureFactorySourceSession', () => {
         defaultBranch: 'main',
       },
     });
-    await sourceControl.projectRepositories.link({
+    const otherLink = await sourceControl.projectRepositories.link({
       orgId: 'org-1',
       connectionId: projectRepository.connectionId,
       repositoryId: other.id,
@@ -181,31 +179,41 @@ describe('ensureFactorySourceSession', () => {
       sourceControl,
       orgId: 'org-1',
       factoryProjectId: project.id,
-      repositorySlug: repository.slug,
       branch: 'factory/issue-7',
     });
     expect(first.projectRepositoryId).toBe(projectRepository.id);
+    // Session start no longer picks a repository: a second session lands on
+    // the same position-1 link (D1), whatever was linked later.
+    const second = await ensureFactorySourceSession({
+      sourceControl,
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      branch: 'factory/issue-8',
+    });
+    expect(second.projectRepositoryId).toBe(projectRepository.id);
 
-    // Branches are unique per (factory, user, branch) now; the second link does not get its own session.
+    // Branches are unique per (factory, user, branch); a session on the second link cannot reuse one.
     await expect(
-      ensureFactorySourceSession({
-        sourceControl,
-        orgId: 'org-1',
+      sourceControl.sessions.create({
+        sessionId: globalThis.crypto.randomUUID(),
+        projectRepositoryId: otherLink.id,
         factoryProjectId: project.id,
-        repositorySlug: other.slug,
+        orgId: 'org-1',
+        userId: 'user-1',
         branch: 'factory/issue-7',
+        baseBranch: 'main',
+        visibility: 'org',
       }),
     ).rejects.toBeInstanceOf(UniqueViolationError);
   });
 
-  it('requires the repository target when creating a source-control session', async () => {
-    const { sourceControl, project, repository, projectRepository } = await seedLinkedRepository();
+  it('files the session under the position-1 environment link', async () => {
+    const { sourceControl, project, projectRepository } = await seedLinkedRepository();
 
     const result = await ensureFactorySourceSession({
       sourceControl,
       orgId: 'org-1',
       factoryProjectId: project.id,
-      repositorySlug: repository.slug,
       branch: 'factory/issue-1',
     });
 
@@ -219,7 +227,6 @@ describe('ensureFactorySourceSession', () => {
       sourceControl,
       orgId: 'org-1',
       factoryProjectId: project.id,
-      repositorySlug: repository.slug,
       branch: 'factory/issue-7',
     });
 
@@ -233,7 +240,6 @@ describe('ensureFactorySourceSession', () => {
       sourceControl,
       orgId: 'org-1',
       factoryProjectId: project.id,
-      repositorySlug: repository.slug,
       branch: 'factory/issue-22254',
       attributeToUserId: 'approver-1',
     });
@@ -253,22 +259,92 @@ describe('ensureFactorySourceSession', () => {
         sourceControl: otherIntegration,
         orgId: 'org-1',
         factoryProjectId: project.id,
-        repositorySlug: repository.slug,
         branch: 'factory/issue-9',
       }),
     ).rejects.toThrow('Factory source-control connection not found.');
   });
 
-  it('rejects when the requested repository slug is not linked', async () => {
-    const { sourceControl, project } = await seedLinkedRepository();
+  it('rejects when no linked repository is in the environment', async () => {
+    const { sourceControl, project, projectRepository } = await seedLinkedRepository();
+    await sourceControl.projectRepositories.update({
+      orgId: 'org-1',
+      id: projectRepository.id,
+      input: { inEnvironment: false },
+    });
 
     await expect(
       ensureFactorySourceSession({
         sourceControl,
         orgId: 'org-1',
         factoryProjectId: project.id,
-        repositorySlug: 'mastra-ai/not-linked',
         branch: 'factory/issue-9',
+      }),
+    ).rejects.toThrow('Factory source-control repository not found.');
+  });
+
+  it('files the session under the named environment link, with that repository as the base', async () => {
+    const { sourceControl, project, projectRepository, repository } = await seedLinkedRepository();
+    const other = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: {
+        installationId: repository.installationId,
+        externalId: '789',
+        slug: 'mastra-ai/other',
+        defaultBranch: 'dev',
+      },
+    });
+    const otherLink = await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: projectRepository.connectionId,
+      repositoryId: other.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/other',
+    });
+
+    const result = await ensureFactorySourceSession({
+      sourceControl,
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      projectRepositoryId: otherLink.id,
+      branch: 'factory/issue-3',
+    });
+
+    expect(result).toEqual(expect.objectContaining({ projectRepositoryId: otherLink.id, baseBranch: 'dev' }));
+  });
+
+  it('rejects a named link that is not in the environment', async () => {
+    const { sourceControl, project, projectRepository, repository } = await seedLinkedRepository();
+    const other = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: {
+        installationId: repository.installationId,
+        externalId: '789',
+        slug: 'mastra-ai/other',
+        defaultBranch: 'dev',
+      },
+    });
+    const otherLink = await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: projectRepository.connectionId,
+      repositoryId: other.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/other',
+    });
+    await sourceControl.projectRepositories.update({
+      orgId: 'org-1',
+      id: otherLink.id,
+      input: { inEnvironment: false },
+    });
+
+    await expect(
+      ensureFactorySourceSession({
+        sourceControl,
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+        projectRepositoryId: otherLink.id,
+        branch: 'factory/issue-3',
       }),
     ).rejects.toThrow('Factory source-control repository not found.');
   });
@@ -381,15 +457,14 @@ describe('resolveFactoryDefaultModelId', () => {
  * entry points and the Slack wiring, so it is tested directly against seeded
  * storage rather than through either caller.
  */
-describe('resolveFactorySourceRepository', () => {
-  it('resolves the repository linked to the owner-owned connection, defaulting the base branch to the repo default', async () => {
+describe('resolvePrimaryEnvironmentRepository', () => {
+  it('resolves the position-1 environment link of the owner-owned connection, defaulting the base branch to the repo default', async () => {
     const { sourceControl, project, projectRepository } = await seedLinkedRepository();
 
-    const result = await resolveFactorySourceRepository({
+    const result = await resolvePrimaryEnvironmentRepository({
       sourceControl,
       orgId: 'org-1',
       factoryProjectId: project.id,
-      firstLinkedRepository: true,
     });
 
     expect(result).toEqual({
@@ -403,14 +478,54 @@ describe('resolveFactorySourceRepository', () => {
   it('prefers the branch pinned on the project repository over the repository default', async () => {
     const { sourceControl, project } = await seedLinkedRepository({ pinnedBranch: 'develop' });
 
-    const result = await resolveFactorySourceRepository({
+    const result = await resolvePrimaryEnvironmentRepository({
       sourceControl,
       orgId: 'org-1',
       factoryProjectId: project.id,
-      firstLinkedRepository: true,
     });
 
     expect(result).toMatchObject({ found: true, baseBranch: 'develop' });
+  });
+
+  it('follows position order and skips links out of the environment', async () => {
+    const { sourceControl, project, repository, projectRepository } = await seedLinkedRepository();
+    const docs = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: {
+        installationId: repository.installationId,
+        externalId: '457',
+        slug: 'mastra-ai/template-docs-expert',
+        defaultBranch: 'main',
+      },
+    });
+    const docsLink = await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: projectRepository.connectionId,
+      repositoryId: docs.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/docs',
+    });
+    // The FACT-334 shape: docs-expert first, mastra second.
+    await sourceControl.projectRepositories.update({ orgId: 'org-1', id: docsLink.id, input: { position: 1 } });
+    await sourceControl.projectRepositories.update({
+      orgId: 'org-1',
+      id: projectRepository.id,
+      input: { position: 2 },
+    });
+
+    await expect(
+      resolvePrimaryEnvironmentRepository({ sourceControl, orgId: 'org-1', factoryProjectId: project.id }),
+    ).resolves.toMatchObject({ found: true, projectRepositoryId: docsLink.id });
+
+    await sourceControl.projectRepositories.update({
+      orgId: 'org-1',
+      id: docsLink.id,
+      input: { inEnvironment: false },
+    });
+    await expect(
+      resolvePrimaryEnvironmentRepository({ sourceControl, orgId: 'org-1', factoryProjectId: project.id }),
+    ).resolves.toMatchObject({ found: true, projectRepositoryId: projectRepository.id });
   });
 
   // A project can carry connections for several integrations; only the one
@@ -418,11 +533,10 @@ describe('resolveFactorySourceRepository', () => {
   it('ignores connections belonging to other integrations', async () => {
     const { seeded, project } = await seedLinkedRepository();
 
-    const result = await resolveFactorySourceRepository({
+    const result = await resolvePrimaryEnvironmentRepository({
       sourceControl: seeded.sourceControl.forIntegration('linear'),
       orgId: 'org-1',
       factoryProjectId: project.id,
-      firstLinkedRepository: true,
     });
 
     expect(result).toEqual({ found: false, reason: 'connection' });
@@ -448,20 +562,18 @@ describe('resolveFactorySourceRepository', () => {
     });
 
     await expect(
-      resolveFactorySourceRepository({
+      resolvePrimaryEnvironmentRepository({
         sourceControl,
         orgId: 'org-1',
         factoryProjectId: bareProject.id,
-        firstLinkedRepository: true,
       }),
     ).resolves.toEqual({ found: false, reason: 'repository' });
     // The seeded project still resolves, so the miss is about this project.
     await expect(
-      resolveFactorySourceRepository({
+      resolvePrimaryEnvironmentRepository({
         sourceControl,
         orgId: 'org-1',
         factoryProjectId: project.id,
-        firstLinkedRepository: true,
       }),
     ).resolves.toMatchObject({ found: true });
   });
@@ -533,13 +645,21 @@ describe('resolveFactorySourceRepository', () => {
       sandboxProvider: 'local',
       sandboxWorkdir: '/sandbox/mastra',
     });
+    // The same slug linked twice: the dedupe keeps the oldest link in the
+    // environment, so the reinstall has to put the fresh link back (the
+    // environment PATCH does). The stale link is skipped because its
+    // repository no longer resolves.
+    await sourceControl.projectRepositories.update({
+      orgId: 'org-1',
+      id: freshProjectRepository.id,
+      input: { inEnvironment: true },
+    });
 
     await expect(
-      resolveFactorySourceRepository({
+      resolvePrimaryEnvironmentRepository({
         sourceControl,
         orgId: 'org-1',
         factoryProjectId: project.id,
-        firstLinkedRepository: true,
       }),
     ).resolves.toEqual({
       found: true,
@@ -567,11 +687,10 @@ describe('resolveFactorySourceRepository', () => {
     await sourceControl.installations.delete({ orgId: 'org-1', id: installation.id });
 
     await expect(
-      resolveFactorySourceRepository({
+      resolvePrimaryEnvironmentRepository({
         sourceControl,
         orgId: 'org-1',
         factoryProjectId: project.id,
-        firstLinkedRepository: true,
       }),
     ).resolves.toEqual({ found: false, reason: 'repository' });
   });

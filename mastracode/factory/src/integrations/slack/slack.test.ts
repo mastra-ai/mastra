@@ -822,6 +822,22 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
       },
       projectRepositories: {
         list: vi.fn().mockResolvedValue(hasRepo ? [{ id: 'pr-1', repositoryId: 'repo-1', branch: null }] : []),
+        // The environment's links, position-ordered; the session is filed under position 1.
+        listByProject: vi.fn().mockResolvedValue(
+          hasRepo
+            ? [
+                {
+                  id: 'pr-1',
+                  connectionId: `conn-${integrationId}`,
+                  repositoryId: 'repo-1',
+                  branch: null,
+                  position: 1,
+                  inEnvironment: true,
+                  createdAt: new Date(0),
+                },
+              ]
+            : [],
+        ),
       },
       repositories: { get: vi.fn().mockResolvedValue({ defaultBranch: 'main', slug: 'acme/app' }) },
       sessions: {
@@ -924,7 +940,7 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     await expect(resolve(resolveArgs())).resolves.toBe('us-existing');
 
     expect(sourceControl.sessions.getForBranch).toHaveBeenCalledWith({
-      projectRepositoryId: 'pr-1',
+      factoryProjectId: 'fp-1',
       userId: 'user-1',
       branch: 'slack/1700-42',
     });
@@ -1006,11 +1022,7 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
         .mockResolvedValueOnce([{ id: 'conn-github', integrationId: 'github', createdByUserId: 'owner-1' }])
         .mockRejectedValueOnce(outage);
     }
-    if (failure === 'project repository read') {
-      sourceControl.projectRepositories.list
-        .mockResolvedValueOnce([{ id: 'pr-1', repositoryId: 'repo-1', branch: null }])
-        .mockRejectedValueOnce(outage);
-    }
+    if (failure === 'project repository read') sourceControl.projectRepositories.listByProject.mockRejectedValue(outage);
     if (failure === 'repository read') sourceControl.repositories.get.mockRejectedValue(outage);
     if (failure === 'session lookup') sourceControl.sessions.getForBranch.mockRejectedValue(outage);
     if (failure === 'session creation') sourceControl.sessions.create.mockRejectedValue(outage);
