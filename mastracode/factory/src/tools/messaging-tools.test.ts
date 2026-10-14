@@ -208,7 +208,7 @@ describe('factory_signal_session', () => {
       ).resolves.toMatchObject({ delivered: 'woken' });
     }
     await expect(run(USER, 'factory_signal_session', { sessionId: 'session-b', message: 'again' })).rejects.toThrow(
-      'Too many messages to this session; wait for a reply.',
+      'Too many messages to that session in the last 10 minutes; wait before sending more.',
     );
     const other = { ...USER, sessionId: 'session-mine-private', threadId: 'thread-session-mine-private' };
     await expect(
@@ -404,7 +404,7 @@ describe('factory_message_origin', () => {
       }
       const id = await forged(env, 'session-1');
       await expect(env.run(WORKER, 'factory_message_origin', { message: 'more', inReplyTo: id })).rejects.toThrow(
-        'Too many messages to that session; wait before answering.',
+        'Too many messages to that session in the last 10 minutes; wait before sending more.',
       );
       expect(env.sent).toHaveLength(SIGNAL_RATE_LIMIT);
     });
