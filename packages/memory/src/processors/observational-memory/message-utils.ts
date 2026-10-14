@@ -284,8 +284,12 @@ export function filterObservedMessages(opts: {
       }
 
       if (lastObservedAt && msg.createdAt) {
-        const msgDate = new Date(msg.createdAt);
-        if (msgDate <= lastObservedAt) {
+        const msgTime = new Date(msg.createdAt).getTime();
+        // A message on the cursor millisecond is only known to be observed when its id says so;
+        // MessageList's 1ms spacing can place the next unobserved message exactly there.
+        const cursorTime = new Date(lastObservedAt).getTime();
+        const atOrBefore = observedIds.size > 0 ? msgTime < cursorTime : msgTime <= cursorTime;
+        if (atOrBefore) {
           if (hasPendingPair) continue;
           messagesToRemove.push(msg.id);
         }
