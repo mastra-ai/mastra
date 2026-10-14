@@ -35,7 +35,7 @@ export interface FactoryMessaging {
 }
 
 export interface FactoryMessagingToolDependencies {
-  sessions: Pick<SourceControlSessionLookup, 'getBySessionId'>;
+  sessions: Pick<SourceControlSessionLookup, 'getBySessionId' | 'listByOrigin'>;
   workItems: Pick<
     WorkItemsStorage,
     'findActiveRunBindingForSession' | 'getForProject' | 'listSessionSubscriptions' | 'listRunBindings'
@@ -115,12 +115,14 @@ export function createFactoryMessagingTools(
     const bindings = await Promise.all(
       follows.map(follow => deps.workItems.listRunBindings(scope.orgId, scope.factoryProjectId, follow.workItemId)),
     );
-    return new Set(
-      bindings
+    const sideSessions = await deps.sessions.listByOrigin({ orgId: scope.orgId, originSessionId: scope.sessionId });
+    return new Set([
+      ...bindings
         .flat()
         .filter(binding => binding.status === 'active')
         .map(binding => binding.sessionId),
-    );
+      ...sideSessions.map(session => session.sessionId),
+    ]);
   };
 
   const workItemAttribute = async (sessionId: string, orgId: string, factoryProjectId: string) => {
@@ -140,7 +142,7 @@ export function createFactoryMessagingTools(
       'Priority `medium` (default) wakes an idle session and waits for a busy one to finish its step; use `urgent` only to make it stop and change course.',
       ...(scope.interactive
         ? []
-        : ['On this turn you can only message sessions working on items this session follows.']),
+        : ['On this turn you can only message your side sessions and sessions working on items this session follows.']),
     ].join(' '),
     inputSchema: z
       .object({
@@ -157,7 +159,7 @@ export function createFactoryMessagingTools(
       if (blocked === 'private') throw new Error(`Session ${sessionId} is private to its owner.`);
       if (!scope.interactive && !(await followedWorkers()).has(sessionId)) {
         throw new Error(
-          `On this turn you can only message sessions working on items this session follows; ${sessionId} isn't one.`,
+          `On this turn you can only message this session's side sessions and sessions working on items it follows; ${sessionId} isn't one.`,
         );
       }
 

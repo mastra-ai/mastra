@@ -150,6 +150,9 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       base_branch: { type: 'text' },
       title: { type: 'text', nullable: true },
       visibility: { type: 'text', nullable: true },
+      // The user session that started this one as a side session, if any.
+      origin_session_id: { type: 'text', nullable: true },
+      origin_thread_id: { type: 'text', nullable: true },
       sandbox_id: { type: 'text', nullable: true },
       sandbox_workdir: { type: 'text', nullable: true },
       materialized_at: { type: 'timestamp', nullable: true },
@@ -169,7 +172,10 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
         columns: ['factory_project_id', 'user_id', 'branch'],
       },
     ],
-    indexes: [{ name: 'source_control_sessions_project_idx', columns: ['factory_project_id'] }],
+    indexes: [
+      { name: 'source_control_sessions_project_idx', columns: ['factory_project_id'] },
+      { name: 'source_control_sessions_origin_idx', columns: ['origin_session_id'] },
+    ],
   },
   {
     name: SESSION_REPOSITORIES,
@@ -343,6 +349,10 @@ export interface SourceControlSession {
   branch: string;
   title: string | null;
   visibility: SourceControlSessionVisibility;
+  /** The session that started this one as a side session; null otherwise. */
+  originSessionId: string | null;
+  /** The thread of `originSessionId` that started it. */
+  originThreadId: string | null;
   baseBranch: string;
   sandboxId: string | null;
   sandboxWorkdir: string | null;
@@ -371,6 +381,8 @@ export interface CreateSourceControlSessionInput {
   title?: string | null;
   /** Defaults to 'org' when omitted, matching how NULL rows are read. */
   visibility?: SourceControlSessionVisibility;
+  /** The session and thread that started this one as a side session. */
+  origin?: { sessionId: string; threadId: string };
   baseBranch: string;
 }
 
@@ -483,6 +495,11 @@ export interface SourceControlStorageHandle {
       viewerUserId: string;
     }): Promise<SourceControlSession[]>;
     getBySessionId(sessionId: string): Promise<SourceControlSession | null>;
+    /**
+     * Sessions started as side sessions by `originSessionId`. System-level (no
+     * viewer filter); callers only pass their own session id.
+     */
+    listByOrigin(args: { orgId: string; originSessionId: string }): Promise<SourceControlSession[]>;
     /** Overwrite the session's display title. Keyed by the controller-facing `sessionId`. */
     rename(args: { sessionId: string; title: string }): Promise<void>;
     /** Keyed by the link (today's callers) or by the factory. */
@@ -589,6 +606,8 @@ interface SessionDbRow extends Record<string, unknown> {
   branch: string;
   title: string | null;
   visibility: string | null;
+  origin_session_id?: string | null;
+  origin_thread_id?: string | null;
   base_branch: string;
   sandbox_id: string | null;
   sandbox_workdir: string | null;
@@ -704,6 +723,8 @@ function toSession(row: SessionDbRow): SourceControlSession {
     branch: row.branch,
     title: row.title,
     visibility: row.visibility === 'private' ? 'private' : 'org',
+    originSessionId: row.origin_session_id ?? null,
+    originThreadId: row.origin_thread_id ?? null,
     baseBranch: row.base_branch,
     sandboxId: row.sandbox_id,
     sandboxWorkdir: row.sandbox_workdir,
@@ -1398,6 +1419,14 @@ export class SourceControlStorage extends FactoryStorageDomain {
           const row = await db().findOne<SessionDbRow>(SESSIONS, { session_id: sessionId });
           return row && (await getProjectRepositoryById(row.project_repository_id)) ? toSession(row) : null;
         },
+        listByOrigin: async ({ orgId, originSessionId }) => {
+          const rows = await db().findMany<SessionDbRow>(SESSIONS, {
+            org_id: orgId,
+            origin_session_id: originSessionId,
+          });
+          const linked = await Promise.all(rows.map(row => getProjectRepositoryById(row.project_repository_id)));
+          return rows.filter((_, index) => linked[index]).map(toSession);
+        },
         rename: async ({ sessionId, title }) => {
           await db().updateAtomic<SessionDbRow>(SESSIONS, { session_id: sessionId }, () => ({
             title,
@@ -1456,6 +1485,8 @@ export class SourceControlStorage extends FactoryStorageDomain {
               branch: input.branch,
               title: input.title ?? null,
               visibility: input.visibility ?? 'org',
+              origin_session_id: input.origin?.sessionId ?? null,
+              origin_thread_id: input.origin?.threadId ?? null,
               base_branch: input.baseBranch,
               sandbox_id: null,
               sandbox_workdir: null,

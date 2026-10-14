@@ -8,6 +8,7 @@ import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/dom
 import {
   SourceControlConnectionNotFoundError,
   type SourceControlSession,
+  type SourceControlSessionVisibility,
   type SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
 import { resolveEnvironmentRepositories } from './environment-repositories.js';
@@ -51,6 +52,8 @@ export async function resolveFactorySessionModel(args: {
 export interface SourceControlSessionLookup {
   getBySessionId(sessionId: string): Promise<SourceControlSession | null>;
   getSourceControlBySessionId(sessionId: string): Promise<SourceControlStorageHandle | null>;
+  /** Side sessions started by `originSessionId`, across every provider. */
+  listByOrigin(args: { orgId: string; originSessionId: string }): Promise<SourceControlSession[]>;
   rename(args: { sessionId: string; title: string }): Promise<void>;
   markFirstMessage(args: { sessionId: string }): Promise<void>;
   markFirstMeaningfulExec(args: { sessionId: string }): Promise<void>;
@@ -85,6 +88,8 @@ export function createSourceControlSessionLookup(
   return {
     getBySessionId: async sessionId => (await resolve(sessionId))?.session ?? null,
     getSourceControlBySessionId: async sessionId => (await resolve(sessionId))?.sourceControl ?? null,
+    listByOrigin: async args =>
+      (await Promise.all(sourceControls.map(sourceControl => sourceControl.sessions.listByOrigin(args)))).flat(),
     rename: async args => (await resolve(args.sessionId))?.sourceControl.sessions.rename(args),
     markFirstMessage: async args => (await resolve(args.sessionId))?.sourceControl.sessions.markFirstMessage(args),
     markFirstMeaningfulExec: async args =>
@@ -165,6 +170,12 @@ export interface EnsureFactorySourceSessionArgs {
    * run has an interactive user — e.g. the person who approved a proposed run.
    */
   attributeToUserId?: string;
+  /** A pre-generated session id, so a caller can name the branch after it. Defaults to a fresh UUID. */
+  sessionId?: string;
+  /** Defaults to 'org'. A side session copies its parent's visibility. */
+  visibility?: SourceControlSessionVisibility;
+  /** The session and thread that started this one as a side session. */
+  origin?: { sessionId: string; threadId: string };
 }
 
 export interface EnsuredFactorySourceSession {
@@ -274,14 +285,15 @@ export async function ensureFactorySourceSession(
 
   const userId = args.attributeToUserId ?? resolved.connectedByUserId;
   const session = await sourceControl.sessions.create({
-    sessionId: globalThis.crypto.randomUUID(),
+    sessionId: args.sessionId ?? globalThis.crypto.randomUUID(),
     projectRepositoryId: resolved.projectRepositoryId,
     factoryProjectId,
     orgId,
     userId,
     branch,
     baseBranch: resolved.baseBranch,
-    visibility: 'org',
+    visibility: args.visibility ?? 'org',
+    ...(args.origin ? { origin: args.origin } : {}),
   });
   return {
     sessionId: session.sessionId,

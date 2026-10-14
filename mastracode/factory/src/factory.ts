@@ -1278,6 +1278,7 @@ export class MastraFactory {
                             transitionService,
                             auditRecorder: auditDomain,
                             sessions: sourceControlSessions,
+                            sessionModel: { projects: factoryProjectsStorage, modelDefaults: modelDefaultsStorage },
                             messaging: async () => {
                               const controller = this.#prepared?.base.controller;
                               const notifications = await controller

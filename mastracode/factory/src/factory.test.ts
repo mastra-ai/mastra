@@ -1140,6 +1140,7 @@ describe('MastraFactory.prepare', () => {
       'factory_resolve_proposal',
       'factory_subscribe_work_item',
       'factory_unsubscribe_work_item',
+      'factory_start_session',
     ];
     const ALLOWED_TOOLS = [
       ...READ_TOOLS,
@@ -1153,6 +1154,7 @@ describe('MastraFactory.prepare', () => {
       'factory_unsubscribe_work_item',
       'factory_signal_session',
       'factory_message_origin',
+      'factory_start_session',
     ];
 
     it('gives a user session read tools on every turn, management tools only on person-started turns, and other sessions none', async () => {
