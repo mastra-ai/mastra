@@ -520,6 +520,21 @@ describe('Knowledge', () => {
       expect(await storage.getRecordScopeIds(record.id)).toEqual([project.id]);
     });
 
+    it('rejects a rescope that hides a node the record mentions from every reader', async () => {
+      const { knowledge, storage, org, other } = await setup();
+      const subject = await storage.createNode({ name: 'Shared subject', scopeIds: [org.id, other.id] });
+      await storage.createNode({ name: 'Other only', scopeIds: [other.id] });
+      const record = await knowledge.createRecord({
+        node: subject,
+        text: 'Links [[Other only]]',
+        scopeIds: [other.id],
+      });
+      await expect(
+        knowledge.setRecordScopes({ id: record.id, version: record.version, scopeIds: [org.id] }),
+      ).rejects.toBeInstanceOf(KnowledgeInvisibleRecordError);
+      expect(await storage.getRecordScopeIds(record.id)).toEqual([other.id]);
+    });
+
     it('creates and widens records that stay visible', async () => {
       const { knowledge, storage, org, project, node } = await setup();
       const record = await knowledge.createRecord({ node, text: 'Evidence', scopeIds: [project.id] });

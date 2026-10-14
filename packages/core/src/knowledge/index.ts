@@ -493,7 +493,13 @@ export class Knowledge extends MastraBase {
     const storage = await this.getStorage();
     await this.#assertImportRun(storage, input.importRunId);
     const record = await storage.getRecord({ id: input.id, includeDeleted: true });
-    if (record) await assertKnowledgeRecordScopesVisible(storage, { node: record.nodeId, scopeIds: input.scopeIds });
+    if (record) {
+      await assertKnowledgeRecordScopesVisible(storage, {
+        node: record.nodeId,
+        scopeIds: input.scopeIds,
+        ...(record.deletedAt ? {} : { recordId: record.id }),
+      });
+    }
     return storage.setRecordScopes(input);
   }
 

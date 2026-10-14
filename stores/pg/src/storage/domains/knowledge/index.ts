@@ -290,11 +290,20 @@ function scopeIdListSql(scopeIds: KnowledgeScopeIds, extraScopeSql?: string): st
  * `extraScopeSql` adds one more visible scope per row (e.g. a probed source's own session scope).
  */
 function visibleRecordSql(scopeIds: KnowledgeScopeIds, extraScopeSql?: string): { sql: string; args: string[] } {
+  const scoped = visibleRecordContentSql(scopeIds, extraScopeSql);
+  return {
+    sql: `EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" rs WHERE rs.recordId=r.id AND rs.scopeNodeId IN (${scopeIdListSql(scopeIds, extraScopeSql)})) AND ${scoped.sql}`,
+    args: [...scopeIds, ...scoped.args],
+  };
+}
+
+/** The scope-independent half of {@link visibleRecordSql}: a live, visible parent and visible mention targets. */
+function visibleRecordContentSql(scopeIds: KnowledgeScopeIds, extraScopeSql?: string): { sql: string; args: string[] } {
   const visibleNode = (alias: string) =>
     `${alias}.deletedAt IS NULL AND ${visibleNodeSql(scopeIds, alias, extraScopeSql)}`;
   return {
-    sql: `EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" rs WHERE rs.recordId=r.id AND rs.scopeNodeId IN (${scopeIdListSql(scopeIds, extraScopeSql)})) AND ${visibleNode('p')} AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" m WHERE m.recordId=r.id AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODES}" t WHERE t.id=m.targetNodeId AND ${visibleNode('t')}))`,
-    args: [...scopeIds, ...scopeIds, ...scopeIds, ...scopeIds, ...scopeIds],
+    sql: `${visibleNode('p')} AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" m WHERE m.recordId=r.id AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODES}" t WHERE t.id=m.targetNodeId AND ${visibleNode('t')}))`,
+    args: [...scopeIds, ...scopeIds, ...scopeIds, ...scopeIds],
   };
 }
 
@@ -1333,19 +1342,23 @@ export class KnowledgePG extends KnowledgeStorage {
           args: [...nodeIds, ...scopeIds, ...scopeIds],
         })
       : { rows: [] };
-    const visibleRecord = visibleRecordSql(scopeIds);
-    const visibleRecords = recordIds.length
-      ? await this.#readExecutor.execute({
-          sql: `SELECT r.id FROM "${TABLE_KNOWLEDGE_RECORDS}" r JOIN "${TABLE_KNOWLEDGE_NODES}" p ON p.id=r.nodeId WHERE r.id IN (${marks(recordIds)}) AND r.deletedAt IS NULL AND ${visibleRecord.sql}`,
-          args: [...recordIds, ...visibleRecord.args],
-        })
-      : { rows: [] };
+    // A prospective scope set replaces the stored-scope clause; the parent and mention rules still apply.
+    const prospective = input.recordScopeIds;
+    const visibleRecord = prospective ? visibleRecordContentSql(scopeIds) : visibleRecordSql(scopeIds);
+    const probeRecords = prospective ? isKnowledgeScopeVisible(prospective, scopeIds) : true;
+    const visibleRecords =
+      recordIds.length && probeRecords
+        ? await this.#readExecutor.execute({
+            sql: `SELECT r.id FROM "${TABLE_KNOWLEDGE_RECORDS}" r JOIN "${TABLE_KNOWLEDGE_NODES}" p ON p.id=r.nodeId WHERE r.id IN (${marks(recordIds)}) AND r.deletedAt IS NULL AND ${visibleRecord.sql}`,
+            args: [...recordIds, ...visibleRecord.args],
+          })
+        : { rows: [] };
     return {
       nodeIds: visibleNodes.rows.map(row => String(row.id)),
       recordIds: visibleRecords.rows.map(row => String(row.id)),
+      ...(prospective ? { recordScopeIdsApplied: true as const } : {}),
     };
   }
-
 
   async deleteRecord(input: { id: string; deletedBy: string; importRunId?: string }): Promise<KnowledgeRecord> {
     return this.#transaction(tx => this.#deleteRecord(tx, input));
