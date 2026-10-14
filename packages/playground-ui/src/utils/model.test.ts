@@ -45,6 +45,9 @@ describe('formatModelName', () => {
     ['deepseek-chat', 'DeepSeek Chat'],
     ['grok-4-fast', 'Grok 4 Fast'],
     ['amazon-bedrock/anthropic.claude-sonnet-4-5', 'Claude Sonnet 4.5'],
+    ['us.anthropic.claude-sonnet-4-5-20250929-v1:0', 'Claude Sonnet 4.5'],
+    ['amazon-bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0', 'Claude 3.5 Sonnet'],
+    ['amazon.nova-pro-v1:0', 'Nova Pro'],
   ])('%s reads as %s', (model, name) => {
     expect(formatModelName(model)).toBe(name);
   });
