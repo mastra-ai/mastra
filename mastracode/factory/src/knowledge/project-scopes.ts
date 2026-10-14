@@ -5,34 +5,6 @@ import type { FactoryStorage } from '@mastra/core/storage';
 import type { KnowledgeImporterRoutingStorage } from '../storage/domains/importer-routing/base.js';
 import type { FactoryProject, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 
-/**
- * Human name for each source's knowledge sub-scope. Falls back to a
- * capitalized integration id for providers outside the catalogue.
- */
-const SOURCE_SCOPE_NAMES: Readonly<Record<string, string>> = {
-  notion: 'Notion',
-  confluence: 'Confluence',
-  linear: 'Linear',
-  zendesk: 'Zendesk',
-  fireflies: 'Fireflies',
-};
-
-function sourceScopeName(integrationId: string, accountLabel?: string | null): string {
-  const provider = SOURCE_SCOPE_NAMES[integrationId] ?? integrationId.charAt(0).toUpperCase() + integrationId.slice(1);
-  const label = accountLabel?.trim();
-  return label ? `${provider} — ${label}` : provider;
-}
-
-/**
- * Destination sub-scope for one source account under one Factory project.
- * Addressed `project:<pid>:<provider>:<connectionId>`: the connected
- * account/workspace is identified by its stable connection id; the human
- * label lives on the scope name, not the address.
- */
-export function connectSourceScopeAddress(projectId: string, integrationId: string, connectionId: string): string {
-  return `project:${projectId}:${integrationId}:${connectionId}`;
-}
-
 export interface FactoryProjectScopesOptions {
   /**
    * Lazy handle to the Factory's Knowledge instance. The resolver and the
@@ -40,23 +12,25 @@ export interface FactoryProjectScopesOptions {
    * importer config the instance is built from), so the handle is a thunk
    * that's empty during construction and set before the first cron fire.
    *
-   * When present, each resolution materializes the destination sub-scopes —
-   * `org → project → project:<pid>:<provider>:<connectionId>` in dependency
-   * order — so imports work for projects nobody has visited yet. Without it
-   * the resolver only returns addresses and relies on the scopes existing.
+   * When present, each resolution materializes `org → project:<pid>` in
+   * dependency order, so imports work for projects nobody has visited yet.
+   * Without it the resolver only returns addresses and relies on the scopes
+   * existing.
    */
   knowledge?: () => Knowledge | undefined;
 }
 
 /**
- * Knowledge-importer scopes resolver over the Factory project inventory: one
- * `project:<projectId>:<provider>:<connectionId>` sub-scope per project per
- * source account, resolved live at each cron fire so projects created or
- * deleted after startup start/stop syncing automatically.
+ * Knowledge-importer scopes resolver over the Factory project inventory: each
+ * connection binds to `project:<projectId>` for every project it syncs to,
+ * resolved live at each cron fire so projects created or deleted after
+ * startup start/stop syncing automatically.
  *
- * Each source account gets its own sub-scope under the project, so Notion, Linear, etc. show up
- * as distinct scopes in the knowledge graph instead of flattening into the
- * project root. Two connections of the same provider get two scopes.
+ * Wave 2 reads are exact-scope: a Factory session reads `org:`, `project:<pid>`
+ * and its thread scope, never their children, so imports land on the project
+ * scope itself. Connections sharing a project stay separate by binding — each
+ * imports under its own `<provider>:<connectionId>` source, and re-syncs and
+ * removals only touch that source's records.
  *
  * Honors per-connection routing when the `importer-routing` storage domain is
  * registered: a connection routed to selected projects resolves only those
@@ -74,8 +48,8 @@ export interface FactoryProjectScopesOptions {
  * needing an org boundary should pass their own `scopes` resolver filtered
  * accordingly (or route each connection to selected projects).
  *
- * Pair with a parameterized access map so every source sub-scope is writable:
- * `{ access: { 'project:$projectId:notion:$accountId': 'owner' }, scopes: factoryProjectScopes(storage, { knowledge }) }`.
+ * Pair with a parameterized access map so every project scope is writable:
+ * `{ access: { 'project:$projectId': 'owner' }, scopes: factoryProjectScopes(storage, { knowledge }) }`.
  */
 export function factoryProjectScopes(
   storage: FactoryStorage,
@@ -99,35 +73,28 @@ export function factoryProjectScopes(
     const knowledge = options.knowledge?.();
     if (knowledge) {
       for (const project of inventory) {
-        await materializeSourceScopeChain(knowledge, project, connection);
+        await materializeProjectScopeChain(knowledge, project);
       }
     }
 
-    return inventory.map(project => connectSourceScopeAddress(project.id, connection.integrationId, connection.id));
+    return inventory.map(project => `project:${project.id}`);
   };
 }
 
 /**
- * Materialize `org → project → source` in dependency order, skipping rungs
- * that already exist. The org and project inputs are the ones Factory's
- * knowledge routes pass when a project is first viewed (same addresses, name
- * and parameters), so whichever side runs first, `materializeScope` coalesces
- * the other. The source rung carries the provider's display name — that's
- * what the graph renders on the scope node.
+ * Materialize `org → project` in dependency order, skipping rungs that already
+ * exist. The inputs are the ones Factory's knowledge routes pass when a
+ * project is first viewed (same addresses, name and parameters), so whichever
+ * side runs first, `materializeScope` coalesces the other.
  *
  * A failure here (storage blip, concurrent materialization conflict) throws
  * up to the importer runner, which falls back to the static bindings for
  * that fire and retries on the next one.
  */
-async function materializeSourceScopeChain(
-  knowledge: Knowledge,
-  project: FactoryProject,
-  connection: { id: string; integrationId: string; accountLabel?: string | null },
-): Promise<void> {
+async function materializeProjectScopeChain(knowledge: Knowledge, project: FactoryProject): Promise<void> {
   const store = await knowledge.getStorage();
   const orgAddress = `org:${project.orgId}`;
   const projectAddress = `project:${project.id}`;
-  const sourceAddress = connectSourceScopeAddress(project.id, connection.integrationId, connection.id);
 
   if (!(await store.getScopeAddress(orgAddress))) {
     await knowledge.materializeScope({
@@ -143,15 +110,6 @@ async function materializeSourceScopeChain(
       parentAddresses: [orgAddress],
       contextualScopeAddress: orgAddress,
       parameters: { orgId: project.orgId, resourceId: project.id },
-    });
-  }
-  if (!(await store.getScopeAddress(sourceAddress))) {
-    await knowledge.materializeScope({
-      address: sourceAddress,
-      name: sourceScopeName(connection.integrationId, connection.accountLabel),
-      parentAddresses: [projectAddress],
-      contextualScopeAddress: projectAddress,
-      parameters: { projectId: project.id, sourceId: connection.integrationId, accountId: connection.id },
     });
   }
 }
@@ -174,8 +132,8 @@ const KNOWLEDGE_IMPORTER_DEFAULT_ROLES: Readonly<Record<string, 'owner' | 'edit'
 /**
  * Fill in the default per-project integration config when the host didn't
  * pass one: every catalogue provider syncs each connected account into its
- * own `project:<projectId>:<provider>:<connectionId>` sub-scope per Factory
- * project via {@link factoryProjectScopes}. Host-supplied `integrations` are
+ * the `project:<projectId>` scope of each Factory project it routes to via
+ * {@link factoryProjectScopes}. Host-supplied `integrations` are
  * used verbatim — the host owns the destination topology.
  */
 export function withProjectScopedIntegrations(
@@ -188,7 +146,7 @@ export function withProjectScopedIntegrations(
   const integrations = Object.fromEntries(
     Object.entries(KNOWLEDGE_IMPORTER_DEFAULT_ROLES).map(([integrationId, role]) => [
       integrationId,
-      { access: { [`project:$projectId:${integrationId}:$accountId`]: role }, scopes },
+      { access: { 'project:$projectId': role }, scopes },
     ]),
   );
   return { ...options, integrations };

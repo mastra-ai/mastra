@@ -460,12 +460,10 @@ function invalidSandboxOptionMessage(option: unknown): string {
  *
  * When auto-constructing with `importers()` and the host didn't pass explicit
  * `importersOptions.integrations`, every catalogue provider defaults to
- * per-project, per-source destinations: dynamic scopes enumerating the
- * Factory project inventory at each cron fire, one
- * `project:<projectId>:<provider>:<connectionId>` sub-scope per project per
- * connected account (materialized on demand), with a parameterized access
- * grant (`project:$projectId:<provider>:$accountId`) so each sub-scope is
- * writable.
+ * per-project destinations: dynamic scopes enumerating the Factory project
+ * inventory at each cron fire, binding each connected account to every
+ * routed `project:<projectId>` scope (materialized on demand) with a
+ * parameterized access grant (`project:$projectId`) so it is writable.
  *
  * Any throw from `importers()` (missing project id, credential resolution, …)
  * is swallowed with a single console warning — Factory boot must survive a

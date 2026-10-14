@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { KnowledgeImporterRoutingRecord } from '../storage/domains/importer-routing/base.js';
 import type { FactoryProject } from '../storage/domains/projects/base.js';
-import { connectSourceScopeAddress, factoryProjectScopes, withProjectScopedIntegrations } from './project-scopes.js';
+import { factoryProjectScopes, withProjectScopedIntegrations } from './project-scopes.js';
 
 function scopesContext(
   connectionId = 'conn-1',
@@ -65,19 +65,17 @@ function fakeKnowledge(existing: string[] = []) {
 }
 
 describe('factoryProjectScopes', () => {
-  it('materializes the source sub-scope on a real Wave 2 Knowledge and coalesces with the project view', async () => {
+  it('materializes the project scope on a real Wave 2 Knowledge and coalesces with the project view', async () => {
     const { storage } = fakeStorageWithProjects([{ id: 'p1', orgId: 'org-9', name: 'Payments' }]);
     const knowledge = new Knowledge({ id: 'factory', storage: new InMemoryStore() });
     const scopes = factoryProjectScopes(storage, { knowledge: () => knowledge });
-    await expect(scopes(scopesContext())).resolves.toEqual(['project:p1:notion:conn-1']);
+    await expect(scopes(scopesContext())).resolves.toEqual(['project:p1']);
     // A second fire finds every rung and materializes nothing new.
-    await expect(scopes(scopesContext())).resolves.toEqual(['project:p1:notion:conn-1']);
+    await expect(scopes(scopesContext())).resolves.toEqual(['project:p1']);
 
     const store = await knowledge.getStorage();
     const project = await store.getScopeAddress('project:p1');
-    const source = await store.getScopeAddress('project:p1:notion:conn-1');
     expect(project).toBeTruthy();
-    expect(source).toBeTruthy();
     // The knowledge routes' first-visit input for the same project resolves to the same scope.
     const routePass = await knowledge.materializeScope({
       address: 'project:p1',
@@ -89,17 +87,17 @@ describe('factoryProjectScopes', () => {
     expect(routePass.scopes['project:p1']).toBe(project!.scopeNodeId);
   });
 
-  it('resolves one per-source sub-scope per Factory project', async () => {
+  it('binds the connection to every Factory project scope', async () => {
     const { storage, ensureReady } = fakeStorageWithProjects([{ id: 'p1' }, { id: 'p2' }]);
     const scopes = factoryProjectScopes(storage);
-    await expect(scopes(scopesContext())).resolves.toEqual(['project:p1:notion:conn-1', 'project:p2:notion:conn-1']);
+    await expect(scopes(scopesContext())).resolves.toEqual(['project:p1', 'project:p2']);
     expect(ensureReady).toHaveBeenCalled();
   });
 
-  it('derives the sub-scope from the resolving connection integration id', async () => {
+  it('binds connections of any provider to the project scope itself', async () => {
     const { storage } = fakeStorageWithProjects([{ id: 'p1' }]);
     const scopes = factoryProjectScopes(storage);
-    await expect(scopes(scopesContext('conn-ff', 'fireflies'))).resolves.toEqual(['project:p1:fireflies:conn-ff']);
+    await expect(scopes(scopesContext('conn-ff', 'fireflies'))).resolves.toEqual(['project:p1']);
   });
 
   it('resolves an empty list when no projects exist', async () => {
@@ -112,7 +110,7 @@ describe('factoryProjectScopes', () => {
     const scopes = factoryProjectScopes(storage);
     await scopes(scopesContext());
     listAll.mockResolvedValueOnce([seedProject({ id: 'p1' }), seedProject({ id: 'p3' })] as never);
-    await expect(scopes(scopesContext())).resolves.toEqual(['project:p1:notion:conn-1', 'project:p3:notion:conn-1']);
+    await expect(scopes(scopesContext())).resolves.toEqual(['project:p1', 'project:p3']);
   });
 
   it('throws when the projects domain is not registered yet, leaving retry to the importer runner', async () => {
@@ -126,41 +124,23 @@ describe('factoryProjectScopes', () => {
   });
 
   describe('scope materialization', () => {
-    it('materializes the org → project → source chain for a project nobody has visited', async () => {
+    it('materializes the org → project chain for a project nobody has visited', async () => {
       const { storage } = fakeStorageWithProjects([{ id: 'p1', orgId: 'org-9' }]);
       const { knowledge, materialized } = fakeKnowledge();
       const scopes = factoryProjectScopes(storage, { knowledge: () => knowledge });
-      await expect(scopes(scopesContext())).resolves.toEqual(['project:p1:notion:conn-1']);
-      expect(materialized.map(scope => scope.address)).toEqual([
-        'org:org-9',
-        'project:p1',
-        'project:p1:notion:conn-1',
-      ]);
-      // The source rung carries the provider display name and hangs off the
-      // project scope — that's what the graph renders as a separate node.
-      expect(materialized[2]).toMatchObject({ name: 'Notion', parentAddresses: ['project:p1'] });
+      await expect(scopes(scopesContext())).resolves.toEqual(['project:p1']);
+      expect(materialized.map(scope => scope.address)).toEqual(['org:org-9', 'project:p1']);
       // Org and project rungs use the knowledge routes' own inputs, so the two
       // materialization passes coalesce whichever runs first.
       expect(materialized[0]!.name).toBeUndefined();
       expect(materialized[1]).toMatchObject({ address: 'project:p1', parentAddresses: ['org:org-9'] });
     });
 
-    it('names the source scope after the connected account when a label is available', async () => {
-      const { storage } = fakeStorageWithProjects([{ id: 'p1' }]);
-      const { knowledge, materialized } = fakeKnowledge(['org:org-1', 'project:p1']);
-      await factoryProjectScopes(storage, { knowledge: () => knowledge })(
-        scopesContext('conn-acme', 'notion', 'Acme Workspace'),
-      );
-      expect(materialized).toEqual([
-        expect.objectContaining({ address: 'project:p1:notion:conn-acme', name: 'Notion — Acme Workspace' }),
-      ]);
-    });
-
-    it('only materializes the missing rungs when the project scopes already exist', async () => {
+    it('only materializes the missing rungs when the org scope already exists', async () => {
       const { storage } = fakeStorageWithProjects([{ id: 'p1', orgId: 'org-9' }]);
-      const { knowledge, materialized } = fakeKnowledge(['org:org-9', 'project:p1']);
+      const { knowledge, materialized } = fakeKnowledge(['org:org-9']);
       await factoryProjectScopes(storage, { knowledge: () => knowledge })(scopesContext());
-      expect(materialized.map(scope => scope.address)).toEqual(['project:p1:notion:conn-1']);
+      expect(materialized.map(scope => scope.address)).toEqual(['project:p1']);
     });
 
     it('materializes nothing on subsequent fires once the chain exists', async () => {
@@ -176,7 +156,7 @@ describe('factoryProjectScopes', () => {
     it('skips materialization when the knowledge thunk is empty, still resolving addresses', async () => {
       const { storage } = fakeStorageWithProjects([{ id: 'p1' }]);
       const scopes = factoryProjectScopes(storage, { knowledge: () => undefined });
-      await expect(scopes(scopesContext())).resolves.toEqual(['project:p1:notion:conn-1']);
+      await expect(scopes(scopesContext())).resolves.toEqual(['project:p1']);
     });
 
     it('propagates materialization failures so the runner falls back to static bindings for that fire', async () => {
@@ -200,7 +180,7 @@ describe('factoryProjectScopes', () => {
         routing: new Map([['conn-notion', { mode: 'selected' as const, projectIds: ['p2', 'deleted-project'] }]]),
       });
       const scopes = factoryProjectScopes(storage);
-      await expect(scopes(scopesContext('conn-notion'))).resolves.toEqual(['project:p2:notion:conn-notion']);
+      await expect(scopes(scopesContext('conn-notion'))).resolves.toEqual(['project:p2']);
       expect(routingGet).toHaveBeenCalledWith('conn-notion');
     });
 
@@ -211,12 +191,12 @@ describe('factoryProjectScopes', () => {
       });
       const scopes = factoryProjectScopes(storage);
       await expect(scopes(scopesContext('conn-all'))).resolves.toEqual([
-        'project:p1:notion:conn-all',
-        'project:p2:notion:conn-all',
+        'project:p1',
+        'project:p2',
       ]);
       await expect(scopes(scopesContext('conn-unrouted'))).resolves.toEqual([
-        'project:p1:notion:conn-unrouted',
-        'project:p2:notion:conn-unrouted',
+        'project:p1',
+        'project:p2',
       ]);
     });
 
@@ -234,9 +214,9 @@ describe('factoryProjectScopes', () => {
         projects: [{ id: 'p1' }, { id: 'p2' }],
         routing: new Map([['conn-a', { mode: 'selected' as const, projectIds: ['p1'] }]]),
       });
-      const { knowledge, materialized } = fakeKnowledge(['org:org-1', 'project:p1', 'project:p2']);
+      const { knowledge, materialized } = fakeKnowledge(['org:org-1']);
       await factoryProjectScopes(storage, { knowledge: () => knowledge })(scopesContext('conn-a'));
-      expect(materialized.map(scope => scope.address)).toEqual(['project:p1:notion:conn-a']);
+      expect(materialized.map(scope => scope.address)).toEqual(['project:p1']);
     });
 
     it('routes different connections of the same provider independently', async () => {
@@ -248,22 +228,16 @@ describe('factoryProjectScopes', () => {
         ]),
       });
       const scopes = factoryProjectScopes(storage);
-      await expect(scopes(scopesContext('conn-a'))).resolves.toEqual(['project:p1:notion:conn-a']);
-      await expect(scopes(scopesContext('conn-b'))).resolves.toEqual(['project:p2:notion:conn-b']);
+      await expect(scopes(scopesContext('conn-a'))).resolves.toEqual(['project:p1']);
+      await expect(scopes(scopesContext('conn-b'))).resolves.toEqual(['project:p2']);
     });
 
     it('ignores routing entirely when the routing domain is not registered', async () => {
       const { storage } = fakeStorageWithProjects([{ id: 'p1' }]);
       await expect(factoryProjectScopes(storage)(scopesContext('conn-any'))).resolves.toEqual([
-        'project:p1:notion:conn-any',
+        'project:p1',
       ]);
     });
-  });
-});
-
-describe('connectSourceScopeAddress', () => {
-  it('builds the per-source sub-scope address', () => {
-    expect(connectSourceScopeAddress('p1', 'linear', 'conn-9')).toBe('project:p1:linear:conn-9');
   });
 });
 
@@ -276,12 +250,12 @@ describe('withProjectScopedIntegrations', () => {
     // Document-shaped sources own their nodes (Linear Documents and Zendesk
     // Help Center articles included); transcript sources only upsert.
     for (const id of ['notion', 'confluence', 'linear', 'zendesk']) {
-      expect(integrations[id]).toMatchObject({ access: { [`project:$projectId:${id}:$accountId`]: 'owner' } });
+      expect(integrations[id]).toMatchObject({ access: { 'project:$projectId': 'owner' } });
     }
     for (const id of ['fireflies']) {
-      expect(integrations[id]).toMatchObject({ access: { [`project:$projectId:${id}:$accountId`]: 'edit' } });
+      expect(integrations[id]).toMatchObject({ access: { 'project:$projectId': 'edit' } });
     }
-    await expect(integrations.notion!.scopes!(scopesContext())).resolves.toEqual(['project:p1:notion:conn-1']);
+    await expect(integrations.notion!.scopes!(scopesContext())).resolves.toEqual(['project:p1']);
   });
 
   it('preserves other importer options while filling in default integrations', () => {

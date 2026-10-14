@@ -1922,45 +1922,48 @@ describe('KnowledgeRoutes', () => {
     await expect(replacementHistory.json()).resolves.toEqual({ runs: [] });
   });
 
-  it("shows a connection sub-scope import run in its own project's Imports view only", async () => {
+  it("shows each connection's import runs in its own project's Imports view only", async () => {
     const runtime = new Knowledge({
       id: 'mastra',
       storage: new InMemoryStore(),
-      importers: [{ id: 'connect:notion:conn-1', handler: async () => {} }],
+      importers: [
+        { id: 'connect:notion:conn-1', handler: async () => {} },
+        { id: 'connect:linear:conn-2', handler: async () => {} },
+      ],
     });
     const h = await createHarness({ knowledgeRuntime: runtime });
-    const ownRun = await runtime.createImportRun({
-      id: 'run-own-subscope',
-      importerId: 'connect:notion:conn-1',
-      binding: knowledgeImporterBindingKey({
-        source: 'notion:conn-1',
-        scope: `project:${h.projectId}:notion:conn-1`,
-      }),
-      importKind: 'static',
-      triggerKind: 'programmatic',
-    });
+    const run = (id: string, importerId: string, source: string, scope: string) =>
+      runtime.createImportRun({
+        id,
+        importerId,
+        binding: knowledgeImporterBindingKey({ source, scope }),
+        importKind: 'static',
+        triggerKind: 'programmatic',
+      });
+    const projectScope = `project:${h.projectId}`;
+    const notionRun = await run('run-own-notion', 'connect:notion:conn-1', 'notion:conn-1', projectScope);
+    const linearRun = await run('run-own-linear', 'connect:linear:conn-2', 'linear:conn-2', projectScope);
     const foreignRuns = await Promise.all(
-      ['project:00000000-0000-4000-8000-000000000099', `project:${h.projectId}0`].map((project, index) =>
-        runtime.createImportRun({
-          id: `run-foreign-subscope-${index}`,
-          importerId: 'connect:notion:conn-1',
-          binding: knowledgeImporterBindingKey({ source: 'notion:conn-1', scope: `${project}:notion:conn-1` }),
-          importKind: 'static',
-          triggerKind: 'programmatic',
-        }),
+      ['project:00000000-0000-4000-8000-000000000099', `${projectScope}0`].map((scope, index) =>
+        run(`run-foreign-${index}`, 'connect:notion:conn-1', 'notion:conn-1', scope),
       ),
     );
-    const importerPath = `/web/factory/projects/${h.projectId}/knowledge/importers/${encodeURIComponent('connect:notion:conn-1')}`;
+    const importerPath = (id: string) =>
+      `/web/factory/projects/${h.projectId}/knowledge/importers/${encodeURIComponent(id)}`;
 
-    const runs = await h.app.request(`${importerPath}/runs`);
-    expect(runs.status).toBe(200);
-    const runsBody = await runs.json();
-    expect(runsBody).toMatchObject({ runs: [{ id: ownRun.id, scope: `project:${h.projectId}:notion:conn-1` }] });
-    expect(runsBody.runs).toHaveLength(1);
-
-    expect((await h.app.request(`${importerPath}/runs/${ownRun.id}`)).status).toBe(200);
+    for (const [importerId, own] of [
+      ['connect:notion:conn-1', notionRun],
+      ['connect:linear:conn-2', linearRun],
+    ] as const) {
+      const runs = await h.app.request(`${importerPath(importerId)}/runs`);
+      expect(runs.status).toBe(200);
+      const body = await runs.json();
+      expect(body).toMatchObject({ runs: [{ id: own.id, scope: projectScope }] });
+      expect(body.runs).toHaveLength(1);
+      expect((await h.app.request(`${importerPath(importerId)}/runs/${own.id}`)).status).toBe(200);
+    }
     for (const foreign of foreignRuns) {
-      expect((await h.app.request(`${importerPath}/runs/${foreign.id}`)).status).toBe(404);
+      expect((await h.app.request(`${importerPath('connect:notion:conn-1')}/runs/${foreign.id}`)).status).toBe(404);
     }
   });
 
@@ -1972,7 +1975,7 @@ describe('KnowledgeRoutes', () => {
       importers: [
         {
           id: 'connect:notion:conn-1',
-          access: { 'project:$projectId:notion:$accountId': 'owner' },
+          access: { 'project:$projectId': 'owner' },
           triggers: {
             cron: {
               schedule: '0 * * * *',
@@ -1982,12 +1985,11 @@ describe('KnowledgeRoutes', () => {
                 resolveCount += 1;
                 if (resolveCount > 1) throw new Error('platform unavailable');
                 return [
-                  // Platform importers land in per-source sub-scopes under the
-                  // project — the view filter must accept those.
-                  { source: 'notion:conn-1', scope: `project:${h.projectId}:notion:conn-1` },
-                  { source: 'notion:conn-1', scope: 'project:00000000-0000-4000-8000-000000000099:notion:conn-1' },
+                  // Platform importers bind each connection to the project scope.
+                  { source: 'notion:conn-1', scope: `project:${h.projectId}` },
+                  { source: 'notion:conn-1', scope: 'project:00000000-0000-4000-8000-000000000099' },
                   // A project id that merely shares this one's prefix is another project.
-                  { source: 'notion:conn-1', scope: `project:${h.projectId}0:notion:conn-1` },
+                  { source: 'notion:conn-1', scope: `project:${h.projectId}0` },
                 ];
               },
             },
