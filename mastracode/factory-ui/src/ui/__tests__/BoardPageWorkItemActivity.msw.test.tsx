@@ -486,7 +486,9 @@ describe('Board work-item activity', () => {
     const { client } = renderBoard('work', '?teammate=github%3Anobody');
     await waitForMutationsIdle(client);
 
-    expect(await screen.findByText('No work items match filters')).toBeInTheDocument();
+    expect(
+      await within(screen.getByTestId('board-column-intake')).findByText('No work items match filters'),
+    ).toBeInTheDocument();
     expect(screen.queryByLabelText(/visible board tasks in Intake/)).not.toBeInTheDocument();
   });
 
@@ -565,7 +567,9 @@ describe('Board work-item activity', () => {
     const { client } = renderBoard('review', '?teammate=github%3Anobody');
     await waitForMutationsIdle(client);
 
-    expect(await screen.findByText('No change requests match filters')).toBeInTheDocument();
+    expect(
+      await within(screen.getByTestId('board-column-review')).findByText('No change requests match filters'),
+    ).toBeInTheDocument();
   });
 
   it('shows distinct draft, open, closed, and merged pull request icons', async () => {

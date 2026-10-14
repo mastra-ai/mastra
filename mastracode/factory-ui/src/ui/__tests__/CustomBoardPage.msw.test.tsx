@@ -58,16 +58,20 @@ function renderBoard(board = 'boards/release', workItems: unknown[] = []) {
 }
 
 describe('custom-only board routing', () => {
-  it('renders declaration-ordered custom columns without built-in intake or automation', async () => {
+  it('renders declaration-ordered custom groups without built-in intake or automation', async () => {
     const { intakeRequest, client } = renderBoard();
-    const columns = await screen.findByRole('group', { name: 'Board columns' });
+    const columns = await screen.findByLabelText('Board stages');
     expect(
       within(columns)
         .getAllByRole('region')
         .map(region => region.getAttribute('aria-label')),
     ).toEqual(['Queued', 'Preparing', 'Shipping', 'Shipped']);
-    expect(screen.getAllByLabelText('working phase')).toHaveLength(2);
-    expect(screen.getByLabelText('terminal phase')).toBeTruthy();
+    expect(within(columns).getByRole('button', { name: 'Collapse Preparing' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(within(columns).getByRole('button', { name: 'Collapse Shipping' })).toBeInTheDocument();
+    expect(within(columns).getByRole('button', { name: 'Collapse Shipped' })).toBeInTheDocument();
     expect(screen.queryByText('Auto-approve plans')).toBeNull();
     // Columns render before every query settles, so only judge the feeds once idle.
     await waitForMutationsIdle(client);

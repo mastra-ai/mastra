@@ -266,6 +266,7 @@ export function BoardContent({
       loading,
       taskCount,
       collapsed,
+      revealKey: composerOpen ? 'composer' : stageWorkItems.find(item => item.id === targetItemId)?.id,
       createButton: canCreate ? (
         <BoardStageCreateButton
           stage={stage}

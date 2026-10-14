@@ -18,6 +18,12 @@ Keep policy, validation, and persistence in [`@mastra/factory`](../factory/READM
 
 The first-Factory wizard keeps repository and model choices in a session-scoped draft (never credentials) until the final review. Confirming creates the Factory, links the repository, and saves its default model; a failed save keeps the pending Factory so retrying resumes it instead of creating another. Integration and provider connections are authorized as soon as they are connected. Members without shared credentials pick a personal model, which becomes both the Factory default and their own default.
 
+## Board views
+
+Boards open as a list grouped by workflow status. Click a status heading, or focus it and press Enter or Space, to collapse or expand its issues. Counts and create actions remain available when a group is collapsed; creating an issue or following an issue link reveals its group.
+
+Saved views can use either the list or Kanban layout. Existing saved views keep their selected layout.
+
 ## Board activity
 
 Cards on the **Work** and **Review** boards show the last person recorded in the work item's audit history. Hover over the person's name or profile image to open the recent event timeline for that card.

@@ -235,6 +235,8 @@ export function WorkItemCard({
           morph={morph}
           deepLinkRef={deepLinkRef}
           highlighted={highlighted}
+          activityStatus={wick}
+          relatedLinks={relatedItems.map(relatedLink)}
           locked={lockedByYou}
           busy={busy}
           dragPayload={dragPayload}

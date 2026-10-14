@@ -1,4 +1,8 @@
+import { knownExternalAuthor } from '@mastra/factory/rules/types';
+import type { ActivityStatus } from '@mastra/playground-ui/components/Activity';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { MessageSquare } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { BoardCardStatus } from '../boardCardState';
@@ -18,6 +22,8 @@ export function WorkItemListRow({
   morph,
   deepLinkRef,
   highlighted,
+  activityStatus,
+  relatedLinks,
   locked,
   busy,
   dragPayload,
@@ -31,6 +37,8 @@ export function WorkItemListRow({
   morph: CardMorph;
   deepLinkRef: (element: HTMLElement | null) => void;
   highlighted: boolean;
+  activityStatus?: ActivityStatus;
+  relatedLinks: ReactNode;
   locked: boolean;
   busy: boolean;
   dragPayload: DragPayload | undefined;
@@ -40,6 +48,7 @@ export function WorkItemListRow({
   actions: CardAction[];
   menu: ReactNode;
 }) {
+  const external = knownExternalAuthor(item);
   return (
     <BoardListRow
       testId="work-item-card"
@@ -52,6 +61,7 @@ export function WorkItemListRow({
       locked={locked}
       busy={busy}
       highlighted={highlighted}
+      activityStatus={activityStatus}
       menu={menu}
       createdAt={sourceCreatedAt(item.metadata) ?? item.createdAt}
       cells={{
@@ -62,8 +72,32 @@ export function WorkItemListRow({
             <SourceTitle source={item.source} title={item.title} />
           </Txt>
         ),
-        labels: <MetadataLabels metadata={item.metadata} />,
-        status: <CardStatus status={status} />,
+        labels: (
+          <span className="flex items-center gap-2">
+            <span className="contents" onClick={event => event.stopPropagation()}>
+              {relatedLinks}
+            </span>
+            {item.commentCount > 0 && (
+              <Txt
+                as="span"
+                variant="meta"
+                tone="faint"
+                className="flex shrink-0 items-center gap-1"
+                aria-label={`${item.commentCount} ${item.commentCount === 1 ? 'comment' : 'comments'}`}
+              >
+                <MessageSquare size={11} aria-hidden />
+                {item.commentCount}
+              </Txt>
+            )}
+            <MetadataLabels metadata={item.metadata} />
+          </span>
+        ),
+        status: (status.kind !== 'idle' || external) && (
+          <span className="flex items-center gap-2">
+            <CardStatus status={status} />
+            {external && <Badge size="xs">External</Badge>}
+          </span>
+        ),
         action: <CardActions actions={actions} />,
         activity: <WorkItemActivity activity={activity} actors={actors} showName={false} />,
       }}

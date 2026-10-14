@@ -1,4 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { ActivityWick } from '@mastra/playground-ui/components/Activity';
+import type { ActivityStatus } from '@mastra/playground-ui/components/Activity';
 import { ContextMenu } from '@mastra/playground-ui/components/ContextMenu';
 import { DataList } from '@mastra/playground-ui/components/DataList';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
@@ -35,6 +37,7 @@ export function BoardListRow({
   busy = false,
   locked = false,
   highlighted = false,
+  activityStatus,
   menu,
   createdAt,
   cells,
@@ -49,6 +52,7 @@ export function BoardListRow({
   busy?: boolean;
   locked?: boolean;
   highlighted?: boolean;
+  activityStatus?: ActivityStatus;
   menu: ReactNode;
   createdAt?: string;
   cells: BoardListRowCells;
@@ -140,7 +144,10 @@ export function BoardListRow({
   const row = (
     <DataList.RowWrapper
       ref={cardRef}
+      role="article"
+      aria-label={title}
       data-testid={testId}
+      data-highlighted={highlighted || undefined}
       data-featured={expanded || undefined}
       aria-busy={busy || locked || undefined}
       tabIndex={-1}
@@ -155,6 +162,7 @@ export function BoardListRow({
         highlighted && 'before:bg-warning-subtle',
       )}
     >
+      {activityStatus && <ActivityWick status={activityStatus} />}
       {rowCells}
     </DataList.RowWrapper>
   );

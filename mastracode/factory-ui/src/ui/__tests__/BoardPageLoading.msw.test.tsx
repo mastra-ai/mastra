@@ -99,7 +99,7 @@ function renderWorkBoard() {
 }
 
 describe('Board loading states', () => {
-  it('shows every column with its own skeleton through both loading phases, then settles', async () => {
+  it('shows every group with its own skeleton through both loading phases, then settles', async () => {
     const { workItemsGate, issuesGate } = stubBoardEndpoints();
     renderWorkBoard();
 
@@ -115,13 +115,16 @@ describe('Board loading states', () => {
     expect(screen.queryByLabelText(/visible board tasks in Planning/)).not.toBeInTheDocument();
 
     // Phase 2: work items resolved, intake/triage feeds still resolving —
-    // settled empty workflow columns collapse while intake keeps its column
-    // skeleton.
+    // settled empty workflow groups remain expandable while intake keeps loading.
     workItemsGate.resolve();
     const planning = screen.getByTestId('board-column-planning');
-    await waitFor(() => expect(planning).toHaveAccessibleName('Planning, empty'));
-    expect(within(planning).queryByRole('status')).not.toBeInTheDocument();
-    expect(within(planning).queryByText('Nothing in planning')).not.toBeInTheDocument();
+    await waitFor(() => expect(within(planning).queryByRole('status')).not.toBeInTheDocument());
+    expect(planning).toHaveAccessibleName('Planning');
+    expect(within(planning).getByRole('button', { name: 'Collapse Planning' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(within(planning).getByText('Nothing in planning')).toBeInTheDocument();
     const intake = screen.getByTestId('board-column-intake');
     within(intake).getByRole('status', { name: 'Loading Intake column' });
     const triage = screen.getByTestId('board-column-triage');

@@ -13,6 +13,7 @@ export interface BoardStageView {
   taskCount: number;
   loading: boolean;
   collapsed: boolean;
+  revealKey?: string;
   createButton?: ReactNode;
   intakeSwitch?: ReactNode;
   cards: ReactNode;
@@ -81,6 +82,7 @@ export function BoardStages({
                     phaseKind={stageView.phaseKind}
                     count={stageView.taskCount}
                     loading={stageView.loading}
+                    revealKey={stageView.revealKey}
                     action={stageView.createButton}
                     extras={stageView.intakeSwitch}
                     onDrop={onDrop}
