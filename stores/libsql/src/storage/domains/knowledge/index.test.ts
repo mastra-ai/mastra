@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { readFile, rm } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { gunzipSync } from 'node:zlib';
 import { createKnowledgeSchemaLatchTests, createKnowledgeStorageTests } from '@internal/storage-test-utils';
 import { createClient } from '@libsql/client';
 import { InMemoryStore, KnowledgeSchemaError, TABLE_KNOWLEDGE_SCHEMA } from '@mastra/core/storage';
@@ -617,6 +618,64 @@ describe('KnowledgeLibSQL interim and released 1.76.0 canonical-model layout', (
       }
     },
   );
+
+  describe('replacement warning', () => {
+    // Databases written by the published 0.0.0-knowledge-w1-20261009054256 snapshot through its own
+    // public API; fixtures/generate-snapshot-w1-dbs.mjs regenerates them.
+    async function openSnapshotW1Database(kind: 'used' | 'idle') {
+      const gz = await readFile(new URL(`./fixtures/snapshot-w1-20261009054256-${kind}.db.gz`, import.meta.url));
+      const path = join(tmpdir(), `knowledge-w1-${kind}-${randomUUID()}.db`);
+      await writeFile(path, gunzipSync(gz));
+      const client = createClient({ url: `file:${path}` });
+      fixtures.push({ client, path });
+      const warn = vi.fn();
+      const store = new KnowledgeLibSQL({ client });
+      store.__setLogger({
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn,
+        error: vi.fn(),
+        trackException: vi.fn(),
+        getLogs: vi.fn(),
+        getLogsByRunId: vi.fn(),
+      } as any);
+      return { client, store, warn };
+    }
+
+    it('warns with the replaced layout and the rows it discards', async () => {
+      const { client, store, warn } = await openSnapshotW1Database('used');
+      expect((await client.execute('SELECT text FROM mastra_knowledge_records')).rows.map(row => row.text)).toEqual([
+        'Launch is in Q4',
+      ]);
+
+      await store.init();
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(
+        'Replaced the pre-release interim Knowledge storage layout; its 6 rows were discarded, not migrated',
+        {
+          layout: 'interim',
+          discardedRows: {
+            mastra_knowledge_activity: 2,
+            mastra_knowledge_nodes: 1,
+            mastra_knowledge_records: 1,
+            mastra_knowledge_semantic_outbox: 2,
+          },
+        },
+      );
+      expect((await client.execute('SELECT id FROM mastra_knowledge_records')).rows).toEqual([]);
+    });
+
+    it('does not warn when the replaced database was initialized but never used', async () => {
+      const { client, store, warn } = await openSnapshotW1Database('idle');
+
+      await store.init();
+
+      expect(warn).not.toHaveBeenCalled();
+      const marker = await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
+      expect(marker.rows[0]?.version).toBe(1);
+    });
+  });
 
   it('replaces an early-snapshot layout that later interim builds re-initialized', async () => {
     const client = createClient({ url: ':memory:' });
