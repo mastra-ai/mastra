@@ -2112,9 +2112,7 @@ describe('KnowledgeRoutes', () => {
           triggers: {
             cron: {
               schedule: '0 * * * *',
-              resolveBindings: async () => [
-                { source: 'linear:conn-9', scope: `project:${h.projectId}` },
-              ],
+              resolveBindings: async () => [{ source: 'linear:conn-9', scope: `project:${h.projectId}` }],
             },
           },
           handler: async () => {},

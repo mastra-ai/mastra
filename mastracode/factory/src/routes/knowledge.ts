@@ -1000,10 +1000,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             }
           }
           if (runs.length === 0) return c.json({ error: 'import_trigger_failed' }, 503);
-          return c.json(
-            { runs: runs.map(run => importRunPayload(run)) },
-            202,
-          );
+          return c.json({ runs: runs.map(run => importRunPayload(run)) }, 202);
         },
       }),
       registerApiRoute('/web/factory/projects/:id/knowledge/importers/:importerId/runs', {
