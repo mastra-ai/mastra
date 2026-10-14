@@ -21,6 +21,7 @@ const mockGetLoginUrl = vi.fn((_redirectUri: string, _state: string) => 'https:/
 const mockHandleCallback = vi.fn(async () => ({ user: { email: 'a@b.com' }, cookies: ['wos_session=sealed; Path=/'] }));
 const mockGetLogoutUrl = vi.fn(async () => 'https://workos.example/logout');
 const mockGetClearSessionHeaders = vi.fn(() => ({ 'Set-Cookie': 'wos_session=; Path=/; HttpOnly; Max-Age=0' }));
+const mockGetLegacySessionClearCookie = vi.fn((): string | undefined => undefined);
 // Personal-org bootstrap (IOrganizationsProvider). The WorkOS-specific
 // bootstrap mechanics live in @mastra/auth-workos and are covered there; here
 // the mock models "no org → org_new".
@@ -37,6 +38,7 @@ vi.mock('@mastra/auth-workos', () => ({
     authorizeUser = async () => true;
     getLogoutUrl = mockGetLogoutUrl;
     getClearSessionHeaders = mockGetClearSessionHeaders;
+    getLegacySessionClearCookie = mockGetLegacySessionClearCookie;
     ensureOrganization = mockEnsureOrganization;
     isOrganizationAdmin = mockIsOrganizationAdmin;
     consumePendingResponseHeaders = mockConsumePendingResponseHeaders;
@@ -64,6 +66,7 @@ beforeEach(() => {
   mockHandleCallback.mockResolvedValue({ user: { email: 'a@b.com' }, cookies: ['wos_session=sealed; Path=/'] });
   mockGetLogoutUrl.mockResolvedValue('https://workos.example/logout');
   mockGetClearSessionHeaders.mockReturnValue({ 'Set-Cookie': 'wos_session=; Path=/; HttpOnly; Max-Age=0' });
+  mockGetLegacySessionClearCookie.mockReturnValue(undefined);
   mockEnsureOrganization.mockResolvedValue('org_new');
 });
 
@@ -658,6 +661,40 @@ describe('mountFactoryAuth /auth routes (enabled)', () => {
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe('/');
     expect(res.headers.get('set-cookie')).toContain('Max-Age=0');
+  });
+
+  // A clear aimed at the host-only cookie leaves a legacy parent-domain copy
+  // alive (a browser matches name + Domain + Path), so sign-out and sign-in both
+  // have to expire it explicitly.
+  const LEGACY_COOKIE = 'wos_session=; Path=/; HttpOnly; Max-Age=0; Domain=.mastra.cloud';
+  const setCookies = (res: Response) =>
+    res.headers.getSetCookie?.() ?? [res.headers.get('set-cookie') ?? ''];
+
+  it('logout expires a legacy parent-domain copy of the session cookie', async () => {
+    mockGetLegacySessionClearCookie.mockReturnValue(LEGACY_COOKIE);
+    const { app } = buildApp();
+    const res = await app.request('/auth/logout');
+
+    expect(setCookies(res)).toContain('wos_session=; Path=/; HttpOnly; Max-Age=0');
+    expect(setCookies(res)).toContain(LEGACY_COOKIE);
+  });
+
+  it('adds no legacy cookie when the provider reports no legacy domain', async () => {
+    const { app } = buildApp();
+    const res = await app.request('/auth/logout');
+
+    expect(setCookies(res).filter(cookie => cookie.includes('Domain='))).toEqual([]);
+  });
+
+  it('callback expires a legacy parent-domain copy of the session cookie', async () => {
+    mockGetLegacySessionClearCookie.mockReturnValue(LEGACY_COOKIE);
+    const { app } = buildApp();
+    const state = `uuid-1|${encodeURIComponent('/dashboard')}`;
+    const res = await app.request(`/auth/callback?code=ok&state=${state}`);
+
+    expect(res.status).toBe(302);
+    expect(setCookies(res)).toContain('wos_session=sealed; Path=/');
+    expect(setCookies(res)).toContain(LEGACY_COOKIE);
   });
 
   it('/auth/me reports authenticated:false when no session', async () => {

@@ -331,13 +331,25 @@ function selectRequestedOrganization(user: FactoryAuthUser, requestedOrganizatio
  * provider's (possibly partial) `ISessionProvider.getClearSessionHeaders`.
  */
 function providerClearCookies(provider: IMastraAuthProvider): string[] {
+  const cookies: string[] = [];
   const getClearSessionHeaders = (provider as Partial<ISessionProvider>).getClearSessionHeaders;
-  if (typeof getClearSessionHeaders !== 'function') return [];
-  const headers = getClearSessionHeaders.call(provider) ?? {};
-  const setCookie = headers['Set-Cookie'];
-  if (!setCookie) return [];
-  // A provider may join several clearing cookies into one header value.
-  return setCookie.split(/,(?=\s*[^;=,\s]+=)/).map(cookie => cookie.trim());
+  if (typeof getClearSessionHeaders === 'function') {
+    const headers = getClearSessionHeaders.call(provider) ?? {};
+    const setCookie = headers['Set-Cookie'];
+    if (setCookie) {
+      // A provider may join several clearing cookies into one header value.
+      cookies.push(...setCookie.split(/,(?=\s*[^;=,\s]+=)/).map(cookie => cookie.trim()));
+    }
+  }
+  // A plain clear leaves a legacy parent-domain copy behind: a browser matches
+  // on the exact (name, Domain, Path) tuple, so a cookie stamped with the shared
+  // parent domain survives it and keeps being sent to sibling hosts.
+  const getLegacySessionClearCookie = (provider as Partial<ISessionProvider>).getLegacySessionClearCookie;
+  if (typeof getLegacySessionClearCookie === 'function') {
+    const legacyCookie = getLegacySessionClearCookie.call(provider);
+    if (legacyCookie) cookies.push(legacyCookie);
+  }
+  return cookies;
 }
 
 /**
@@ -691,6 +703,15 @@ function providerAuthRoutes(provider: IMastraAuthProvider, publicUrl?: string): 
                 c.header(key, value, { append: true });
               }
             }
+
+            // Signing in also expires any legacy parent-domain copy of the cookie.
+            const legacyCookie = (
+              provider as Partial<ISessionProvider>
+            ).getLegacySessionClearCookie?.call(provider);
+            if (legacyCookie) {
+              c.header('Set-Cookie', legacyCookie, { append: true });
+            }
+
             return c.redirect(returnTo);
           } catch {
             // Code exchange failed (expired/replayed code, misconfig). Send the

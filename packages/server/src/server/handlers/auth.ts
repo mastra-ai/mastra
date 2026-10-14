@@ -195,6 +195,22 @@ function implementsInterface<T>(auth: unknown, method: keyof T): auth is T {
   return auth !== null && typeof auth === 'object' && typeof (auth as any)[method] === 'function';
 }
 
+/**
+ * Append the provider's expiring cookie for a legacy parent-domain copy of the
+ * session cookie, when it has one.
+ *
+ * A browser only deletes a cookie when `(name, Domain, Path)` all match, and it
+ * keeps sending a parent-domain copy to every sibling host until then. So every
+ * response that sets or clears the session cookie also has to expire that copy.
+ */
+function appendLegacySessionClearCookie(headers: Headers, auth: unknown) {
+  if (!implementsInterface<ISessionProvider>(auth, 'getLegacySessionClearCookie')) return;
+  const legacyCookie = auth.getLegacySessionClearCookie?.();
+  if (legacyCookie) {
+    headers.append('Set-Cookie', legacyCookie);
+  }
+}
+
 // ============================================================================
 // GET /auth/capabilities
 // ============================================================================
@@ -533,6 +549,9 @@ export const GET_SSO_CALLBACK_ROUTE = createPublicRoute({
         }
       }
 
+      // Signing in also expires any legacy parent-domain copy of the cookie.
+      appendLegacySessionClearCookie(headers, auth);
+
       return new Response(null, {
         status: 302,
         headers,
@@ -606,6 +625,10 @@ export const POST_LOGOUT_ROUTE = createPublicRoute({
         }
       }
 
+      // ...and the legacy parent-domain copy, which a plain clear leaves behind
+      // (matching name and path, different Domain).
+      appendLegacySessionClearCookie(headers, auth);
+
       return new Response(JSON.stringify({ success: true, redirectTo }), {
         status: 200,
         headers,
@@ -663,6 +686,9 @@ export const POST_REFRESH_ROUTE = createPublicRoute({
           headers.append(key, value);
         }
       }
+
+      // Refreshing re-mints the cookie; expire the legacy parent-domain copy too.
+      appendLegacySessionClearCookie(headers, auth);
 
       return new Response(JSON.stringify({ success: true }), {
         status: 200,

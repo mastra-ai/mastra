@@ -25,6 +25,15 @@ export interface ISessionProvider<TSession extends Session = Session> {
   getSessionIdFromRequest(request: Request): string | null;
   getSessionHeaders(session: TSession): Record<string, string>;
   getClearSessionHeaders(): Record<string, string>;
+  /**
+   * Expiring `Set-Cookie` for a legacy parent-domain copy of the session
+   * cookie, when the provider once stamped a shared parent `Domain=` on it.
+   * A browser only deletes a cookie whose exact `(name, Domain, Path)` matches,
+   * so callers append this alongside the cookie they are setting or clearing —
+   * otherwise a stale shared-domain copy keeps being sent to sibling hosts
+   * until it expires. Returns `undefined` when there is no such legacy domain.
+   */
+  getLegacySessionClearCookie?(): string | undefined;
 }
 
 export { MemorySessionProvider, type MemorySessionProviderOptions } from './memory';
