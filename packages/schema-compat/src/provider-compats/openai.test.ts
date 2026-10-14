@@ -51,6 +51,24 @@ describe('OpenAISchemaCompatLayer', () => {
       expect(result.properties.needed.anyOf).toEqual([{ type: 'string' }, { type: 'number' }]);
     });
 
+    it('lets an optional typeless anyOf with sibling enum/const accept null (#26703)', () => {
+      const result = compat.processToJSONSchema({
+        type: 'object',
+        properties: {
+          code: { anyOf: [{ type: 'string' }, { type: 'number' }], enum: ['a', 1] },
+          fixed: { anyOf: [{ type: 'string' }, { type: 'number' }], const: 'a' },
+        },
+        additionalProperties: false,
+      } as any) as Record<string, any>;
+
+      const validate = new Ajv({ strict: false }).compile(result);
+      expect(validate({ code: null, fixed: null })).toBe(true);
+      expect(validate({ code: 'a', fixed: 'a' })).toBe(true);
+      // Non-null values keep their constraints.
+      expect(validate({ code: 'b', fixed: null })).toBe(false);
+      expect(validate({ code: null, fixed: 1 })).toBe(false);
+    });
+
     const searchToolSchema = {
       type: 'object',
       properties: {
