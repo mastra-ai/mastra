@@ -18,12 +18,12 @@ import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import { UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorage } from '@mastra/core/storage';
+import type { FactorySandbox } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 import type { RouteAuth } from '../../routes/route.js';
 import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '../../rules/types.js';
 import { requireExec } from '../../sandbox/materialization.js';
 import type { ExecutableSandbox } from '../../sandbox/materialization.js';
-import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
 import { peekSessionSandbox } from '../../sandbox/session-sandbox.js';
 import { sanitizeSegment } from '../../sandbox/workdir.js';
 import { waitForPendingFilesystemCapture } from '../../session/filesystem-capture.js';
@@ -108,7 +108,7 @@ export interface MountGithubRoutesOptions {
    * `sandboxEnabled: false` and sandbox-backed routes respond 503. Sandboxes
    * themselves are constructed per session and started lazily elsewhere.
    */
-  sandbox?: MastraFactorySandboxConfig;
+  sandbox?: FactorySandbox;
   /** Factory storage backend used for the `appDbConfigured` diagnostic. */
   storage?: FactoryStorage;
   /**
@@ -373,6 +373,83 @@ async function ingestPolledEvents(
   // Best-effort: a rule-ingress failure must not fail the GitHub list response it piggybacks on.
   if (rejected) {
     console.warn('[Mastra Factory] Failed to ingest polled GitHub events', { error: rejected.reason });
+  }
+}
+
+const LINKED_BACKLOG_MAX_PAGES = 5;
+
+function listedIssueOf(issue: Awaited<ReturnType<GithubIntegration['intake']['listIssues']>>['issues'][number]) {
+  return {
+    number: Number(issue.id),
+    title: issue.title,
+    url: issue.url,
+    author: issue.author,
+    assignee: issue.assignee,
+    assignees: issue.assignees,
+    labels: issue.labels,
+    createdAt: issue.createdAt,
+  };
+}
+
+function listedPullRequestOf(
+  pr: Awaited<ReturnType<GithubIntegration['versionControl']['listPullRequests']>>['pullRequests'][number],
+): ListedPullRequest {
+  return {
+    number: Number(pr.id),
+    title: pr.title,
+    url: pr.url,
+    author: pr.author,
+    assignees: pr.assignees ?? [],
+    requestedReviewers: pr.requestedReviewers ?? [],
+    labels: pr.labels ?? [],
+    headBranch: pr.headBranch,
+    baseBranch: pr.baseBranch,
+    createdAt: pr.createdAt,
+  };
+}
+
+/**
+ * Feed a just-linked repository's open issues and pull requests through the
+ * same rules ingress the list routes use, so its backlog reaches the board
+ * without anyone browsing it. Rows owned by another integration don't resolve
+ * through this integration's storage handle and are skipped.
+ */
+export async function ingestLinkedRepositoryBacklog(args: {
+  github: GithubIntegration;
+  orgId: string;
+  projectRepositoryId: string;
+  ingestFactoryEvent: MountGithubRoutesOptions['ingestFactoryEvent'];
+}): Promise<void> {
+  if (!args.ingestFactoryEvent) return;
+  const project = await resolveProjectRepository(args);
+  if (!project) return;
+  const connection = { type: 'app-installation' as const, installationId: Number(project.installation.externalId) };
+  const sourceId = project.repository.slug;
+
+  for (let page = 1; page <= LINKED_BACKLOG_MAX_PAGES; page += 1) {
+    const { issues, nextCursor } = await args.github.intake.listIssues({
+      connection,
+      sourceIds: [sourceId],
+      cursor: String(page),
+    });
+    await ingestPolledEvents(
+      issues.map(issue => polledIssueEvent(project, listedIssueOf(issue))),
+      args.ingestFactoryEvent,
+    );
+    if (nextCursor === null) break;
+  }
+  for (let page = 1; page <= LINKED_BACKLOG_MAX_PAGES; page += 1) {
+    const { pullRequests, nextCursor } = await args.github.versionControl.listPullRequests({
+      connection,
+      sourceId,
+      includeDrafts: false,
+      cursor: String(page),
+    });
+    await ingestPolledEvents(
+      pullRequests.map(pr => listedPullRequestEvent(project, listedPullRequestOf(pr))),
+      args.ingestFactoryEvent,
+    );
+    if (nextCursor === null) break;
   }
 }
 
@@ -712,6 +789,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             cursor: String(page),
           });
           const responseIssues = issues.map(issue => ({
+            repositoryId: Number(loaded.project.repository.externalId),
             number: Number(issue.id),
             title: issue.title,
             url: issue.url,
@@ -803,6 +881,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             cursor: String(page),
           });
           const responsePullRequests = pullRequests.map(pr => ({
+            repositoryId: Number(loaded.project.repository.externalId),
             number: Number(pr.id),
             title: pr.title,
             url: pr.url,
@@ -1079,7 +1158,7 @@ function gitErrorResponse(c: Context, err: unknown) {
 async function loadOwnedProject(options: {
   github: GithubIntegration;
   auth: RouteAuth;
-  sandbox?: MastraFactorySandboxConfig;
+  sandbox?: FactorySandbox;
   c: RouteContext;
 }): Promise<{ orgId: string; userId: string; project: ResolvedProjectRepository } | { response: Response }> {
   const { github, auth, sandbox, c } = options;
@@ -1226,7 +1305,7 @@ function buildProjectGitRoutes({
 }: {
   github: GithubIntegration;
   auth: RouteAuth;
-  sandbox?: MastraFactorySandboxConfig;
+  sandbox?: FactorySandbox;
   users?: SessionOwnerUserProvider;
   controller?: MountedMastraCode['controller'];
   memorySettings: MountGithubRoutesOptions['memorySettings'];
@@ -1333,6 +1412,7 @@ function buildProjectGitRoutes({
           .create({
             sessionId,
             projectRepositoryId: project.id,
+            factoryProjectId: project.factoryProjectId,
             orgId,
             userId,
             branch,
@@ -1450,6 +1530,7 @@ function buildProjectGitRoutes({
         const stored = await memorySettings.get({ orgId: row.orgId, userId: row.userId });
         const requestContext = new RequestContext();
         requestContext.set('user', { workosId: row.userId, organizationId: row.orgId });
+        requestContext.set('mastra__factoryMemorySettings', stored);
 
         try {
           const title = await nameSession(sessionId, async () => {

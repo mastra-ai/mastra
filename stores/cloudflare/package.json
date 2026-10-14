@@ -1,6 +1,6 @@
 {
   "name": "@mastra/cloudflare",
-  "version": "1.7.0",
+  "version": "1.7.3",
   "description": "Cloudflare provider for Mastra - includes db storage capabilities",
   "type": "module",
   "files": [
@@ -72,7 +72,7 @@
   },
   "peerDependencies": {
     "@cloudflare/workers-types": "^4.20240919.0",
-    "@mastra/core": ">=1.53.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.76.0-0 <2.0.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

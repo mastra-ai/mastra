@@ -181,6 +181,13 @@ const editor = new MastraEditor({
       'Server-side resolver that derives the effective Composio userId from authenticated context fields. Used for invoker and caller-supplied execution. The exact connected account always comes from the stored connection pin.',
     isOptional: true,
   },
+  {
+    name: 'sharedConnections',
+    type: '{ acl?: ComposioSharedAccountAcl }',
+    description:
+      "Opt in to Composio SHARED connected accounts. When set, connections authorized with `scope: 'shared'` are created as Composio SHARED accounts. `acl` accepts `allowAllUsers`, `allowedUserIds`, and `notAllowedUserIds`. Omit `acl` to keep Composio's deny-by-default access.",
+    isOptional: true,
+  },
 ]}
 />
 
@@ -227,6 +234,23 @@ export const mastra = new Mastra({ editor })
 ```
 
 Configure the agent with an invoker connection pinned to `ca_alice_salesforce`. When Bob invokes the agent, Mastra sends `bob` as the Composio user and the pinned account ID as the exact connected account. The Memory resource stays `project_123`. Composio then checks whether the account's ACL permits Bob to execute it.
+
+### Create shared accounts
+
+Set `sharedConnections` to create Composio [SHARED accounts](https://docs.composio.dev/docs/shared-connections) for connections authorized with `scope: 'shared'`:
+
+```typescript title="src/mastra/index.ts"
+new ComposioToolProvider({
+  apiKey: process.env.COMPOSIO_API_KEY!,
+  sharedConnections: {
+    acl: { allowAllUsers: true, notAllowedUserIds: ['contractor_1'] },
+  },
+})
+```
+
+Without `sharedConnections`, shared-scope connections are Composio PRIVATE accounts under the `shared` user. Composio doesn't support SHARED accounts for toolkits that require custom connection fields, so authorization fails for those toolkits instead of creating a PRIVATE account.
+
+`listConnections()` returns the requested users' PRIVATE and SHARED accounts, plus SHARED accounts owned by other users whose ACL grants access to one of the requested users. You can pin these accounts like any other connected account.
 
 ### Map application users to Composio users
 

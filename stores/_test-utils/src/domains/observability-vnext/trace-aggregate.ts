@@ -1842,6 +1842,33 @@ export const TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES: TraceAggregateConformanceC
       truncated: false,
     },
   },
+  {
+    // A metadata dimension binds its JSON path before the usage stage's parameters; positional
+    // backends must keep both in placeholder order.
+    name: 'token and cost measures grouped by a metadata dimension, with having and orderBy',
+    request: {
+      timeRange: tokenRange,
+      groupBy: ['metadata.resumedFromSpanId'],
+      measures: ['count', 'tokens.total.sum', 'cost.sum'],
+      having: { op: 'gt', left: { path: 'tokens.total.sum' }, right: { literal: 0 } },
+      orderBy: { field: 'tokens.total.sum', direction: 'desc' },
+    },
+    expected: {
+      rows: [
+        {
+          dimensions: { 'metadata.resumedFromSpanId': null },
+          measures: { count: 11, 'tokens.total.sum': 12120, 'cost.sum': null },
+          cost: { coverage: 2 / 3, unit: 'mixed' },
+        },
+        {
+          dimensions: { 'metadata.resumedFromSpanId': 'resume-1-a' },
+          measures: { count: 1, 'tokens.total.sum': 1300, 'cost.sum': 1.25 },
+          cost: { coverage: 1, unit: 'usd' },
+        },
+      ],
+      truncated: false,
+    },
+  },
 ];
 
 const edgeRange = { from: '2026-08-21T09:00:00Z', to: '2026-08-23T00:00:00Z' };

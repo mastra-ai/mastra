@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Field, FieldLabel, Fieldset, FieldsetLegend } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
@@ -23,14 +24,14 @@ import { DynamicForm } from '@mastra/playground-ui/lib/form/dynamic-form';
 import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useDatasetMutations, useDataset, useDatasetItems } from '@mastra/react/hooks/datasets';
-import { ChevronRight } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import { DatasetCombobox } from '../dataset-combobox';
 import { DatasetVersions } from '../dataset-versions';
 import { ScorerSelector } from './scorer-selector';
-import type { TargetType } from './target-selector';
 import { TargetSelector } from './target-selector';
+import type { TargetType } from './target-selector';
+import { useExperimentTriggerForm } from './use-experiment-trigger-form';
 
 export interface ExperimentTriggerDialogProps {
   initialDatasetId?: string;
@@ -97,17 +98,18 @@ function PipelineStep({
   return (
     <li className="flex gap-4">
       <div className="flex flex-col items-center">
-        <span
+        <Txt
+          as="span"
+          variant="meta"
+          tone="muted"
           aria-hidden="true"
           className={cn(
-            'flex size-6 shrink-0 items-center justify-center rounded-full border text-meta',
-            done
-              ? 'border-success-edge bg-success-subtle text-success-subtle-foreground'
-              : 'border-border text-muted-foreground',
+            'flex size-6 shrink-0 items-center justify-center rounded-full border',
+            done ? 'border-success-edge bg-success-subtle text-success-subtle-foreground' : 'border-border',
           )}
         >
           {index}
-        </span>
+        </Txt>
         {!isLast && <span aria-hidden="true" className="mt-2 w-px flex-1 bg-border" />}
       </div>
       <div className={cn('min-w-0 flex-1 space-y-3', !isLast && 'pb-4')}>{children}</div>
@@ -128,56 +130,58 @@ export function ExperimentTriggerDialog({
   onSuccess,
 }: ExperimentTriggerDialogProps) {
   const contentRef = useRef<HTMLDivElement>(null);
-  const [name, setName] = useState(initialName ?? '');
-  const [description, setDescription] = useState(initialDescription ?? '');
-  const [datasetId, setDatasetId] = useState(initialDatasetId ?? '');
-  const [version, setVersion] = useState<number | null>(initialDatasetVersion ?? null);
-  const [targetType, setTargetType] = useState<TargetType | ''>(initialTargetType ?? '');
-  const [targetId, setTargetId] = useState<string>(initialTargetId ?? '');
-  const [selectedScorers, setSelectedScorers] = useState<string[] | null>(initialScorerIds ?? null);
-  const [requestContextValues, setRequestContextValues] = useState<Record<string, unknown>>({});
-  const [requestContextRaw, setRequestContextRaw] = useState('');
+  const { form, changeTargetName, resetForm } = useExperimentTriggerForm({
+    name: initialName,
+    description: initialDescription,
+    datasetId: initialDatasetId,
+    version: initialDatasetVersion,
+    targetType: initialTargetType,
+    targetId: initialTargetId,
+    scorerIds: initialScorerIds,
+  });
+  const { register, setValue, watch } = form;
+  const [name, datasetId, version, targetType, targetId, selectedScorers, requestContextValues, requestContextRaw] =
+    watch([
+      'name',
+      'datasetId',
+      'version',
+      'targetType',
+      'targetId',
+      'scorerIds',
+      'requestContextValues',
+      'requestContextRaw',
+    ]);
 
   const { triggerExperiment } = useDatasetMutations();
   const { data: dataset } = useDataset({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
   const { total: itemCount } = useDatasetItems({
     datasetId: datasetId,
     search: undefined,
-    version: version,
+    version,
     queryOptions: { enabled: Boolean(datasetId) },
   });
   const requestContextSchema = dataset?.requestContextSchema as Record<string, unknown> | undefined;
   const datasetDefaultScorers = dataset?.scorerIds ?? [];
-  const usesDatasetDefaults = selectedScorers === null && datasetDefaultScorers.length > 0;
+  const usesDatasetDefaults = selectedScorers === undefined && datasetDefaultScorers.length > 0;
   const effectiveScorers = selectedScorers ?? datasetDefaultScorers;
 
   const hasSchema = Boolean(requestContextSchema && Object.keys(requestContextSchema).length > 0);
 
-  const canRun = Boolean(datasetId && targetType && targetId && name.trim());
+  const runName = name.trim();
+  const canRun = Boolean(datasetId && targetType && targetId && runName);
   const isRunning = triggerExperiment.isPending;
 
-  const missing = [!name.trim() && 'name', !datasetId && 'dataset', !targetId && 'target'].filter(Boolean);
+  // The name fills in with the target, so it only counts as missing once the user clears it.
+  const missing = [!datasetId && 'dataset', !targetId && 'target', targetId && !runName && 'name'].filter(Boolean);
   const hasRequestContext = hasSchema
     ? Object.values(requestContextValues).some(v => v !== undefined && v !== '')
     : requestContextRaw.trim().length > 0;
 
   const handleDatasetChange = (nextDatasetId: string) => {
-    setDatasetId(nextDatasetId);
-    setVersion(null);
-    setSelectedScorers(initialScorerIds ?? null);
-    setRequestContextValues({});
-  };
-
-  const resetState = () => {
-    setName(initialName ?? '');
-    setDescription(initialDescription ?? '');
-    setDatasetId(initialDatasetId ?? '');
-    setVersion(initialDatasetVersion ?? null);
-    setTargetType(initialTargetType ?? '');
-    setTargetId(initialTargetId ?? '');
-    setSelectedScorers(initialScorerIds ?? null);
-    setRequestContextValues({});
-    setRequestContextRaw('');
+    setValue('datasetId', nextDatasetId);
+    setValue('version', undefined);
+    setValue('scorerIds', initialScorerIds);
+    setValue('requestContextValues', {});
   };
 
   const resolveRequestContext = (): Record<string, unknown> | undefined => {
@@ -200,8 +204,8 @@ export function ExperimentTriggerDialog({
     return undefined;
   };
 
-  const handleRun = async () => {
-    if (!datasetId || !targetType || !targetId || !name.trim()) return;
+  const handleRun = form.handleSubmit(async ({ description }) => {
+    if (!datasetId || !targetType || !targetId || !runName) return;
 
     let requestContext: Record<string, unknown> | undefined;
     try {
@@ -215,12 +219,12 @@ export function ExperimentTriggerDialog({
     try {
       const result = await triggerExperiment.mutateAsync({
         datasetId,
-        name: name.trim(),
+        name: runName,
         description: description.trim() || undefined,
         targetType,
         targetId,
         scorerIds: effectiveScorers.length > 0 ? effectiveScorers : undefined,
-        version: version ?? undefined,
+        version,
         requestContext,
       });
 
@@ -228,16 +232,16 @@ export function ExperimentTriggerDialog({
       onOpenChange(false);
       onSuccess?.(result.experimentId);
 
-      resetState();
+      resetForm();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to trigger experiment';
       toast.error(message);
     }
-  };
+  });
 
   const handleClose = () => {
     onOpenChange(false);
-    resetState();
+    resetForm();
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -260,22 +264,14 @@ export function ExperimentTriggerDialog({
         <DialogBody>
           <div className="space-y-4">
             <Field>
-              <FieldLabel required>Name</FieldLabel>
-              <Input
-                required
-                value={name}
-                onChange={e => setName(e.target.value)}
-                placeholder="Enter experiment name"
-                autoFocus
-                disabled={isRunning}
-              />
+              <FieldLabel>Name</FieldLabel>
+              <Input {...register('name')} placeholder="Enter experiment name" autoFocus disabled={isRunning} />
             </Field>
 
             <Field>
               <FieldLabel>Description</FieldLabel>
               <Textarea
-                value={description}
-                onChange={e => setDescription(e.target.value)}
+                {...register('description')}
                 placeholder="Enter experiment description (optional)"
                 disabled={isRunning}
                 rows={2}
@@ -295,8 +291,8 @@ export function ExperimentTriggerDialog({
                     <FieldLabel>Version</FieldLabel>
                     <DatasetVersions
                       datasetId={datasetId}
-                      value={version}
-                      onValueChange={setVersion}
+                      value={version ?? null}
+                      onValueChange={nextVersion => setValue('version', nextVersion ?? undefined)}
                       container={contentRef}
                     />
                   </Field>
@@ -312,9 +308,10 @@ export function ExperimentTriggerDialog({
             <PipelineStep index={2} done={Boolean(targetId)}>
               <TargetSelector
                 targetType={targetType}
-                setTargetType={setTargetType}
+                setTargetType={nextTargetType => setValue('targetType', nextTargetType)}
                 targetId={targetId}
-                setTargetId={setTargetId}
+                setTargetId={nextTargetId => setValue('targetId', nextTargetId)}
+                onTargetNameChange={changeTargetName}
                 container={contentRef}
               />
               {targetType && !targetId && (
@@ -327,7 +324,7 @@ export function ExperimentTriggerDialog({
             <PipelineStep index={3} done={effectiveScorers.length > 0} isLast>
               <ScorerSelector
                 selectedScorers={effectiveScorers}
-                setSelectedScorers={setSelectedScorers}
+                setSelectedScorers={scorerIds => setValue('scorerIds', scorerIds)}
                 disabled={isRunning}
                 container={contentRef}
                 helperText={
@@ -341,7 +338,7 @@ export function ExperimentTriggerDialog({
 
           <Collapsible>
             <CollapsibleTrigger className="flex items-center gap-2 text-caption">
-              <ChevronRight className="size-4" />
+              <DisclosureChevron direction="right" className="size-4" />
               Request Context (JSON, optional)
               {hasRequestContext && (
                 <Badge size="xs" variant="blue">
@@ -351,11 +348,14 @@ export function ExperimentTriggerDialog({
             </CollapsibleTrigger>
             <CollapsibleContent className="pt-3">
               {hasSchema ? (
-                <RequestContextForm requestContextSchema={requestContextSchema!} onChange={setRequestContextValues} />
+                <RequestContextForm
+                  requestContextSchema={requestContextSchema!}
+                  onChange={values => setValue('requestContextValues', values)}
+                />
               ) : (
                 <CodeEditor
                   value={requestContextRaw}
-                  onChange={setRequestContextRaw}
+                  onChange={raw => setValue('requestContextRaw', raw)}
                   showCopyButton={false}
                   aria-label="Request context JSON"
                   className="min-h-[160px]"

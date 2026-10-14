@@ -69,9 +69,9 @@ function TimeAxis({ domain }: { domain: TDomain }) {
       <Txt variant="meta" tone="muted" className="flex items-center self-stretch border-r border-border pl-3">
         Time
       </Txt>
-      <div className="flex justify-between px-1 py-1.5 text-meta text-muted-foreground">
+      <div className="flex justify-between px-1 py-1.5">
         {ticks.map(t => (
-          <Txt key={t} as="span" variant="meta" font="mono">
+          <Txt tone="muted" key={t} as="span" variant="meta" font="mono">
             {formatDate(tToTimestamp(t, domain), 'date-time-seconds', { timeZone: 'UTC' })}
           </Txt>
         ))}
@@ -99,10 +99,12 @@ export function FlameTooltip({
 
   if (showValue) {
     return (
-      <div className={`${overlaySurfaceStyle} flex flex-col gap-0.5 rounded px-2 py-1.5 text-meta tabular-nums`}>
+      <div className={`${overlaySurfaceStyle} flex flex-col gap-0.5 rounded px-2 py-1.5 tabular-nums`}>
         {time && (
           <div className="flex items-center justify-between gap-3">
-            <span className="text-muted-foreground">time</span>
+            <Txt as="span" variant="meta" tone="muted">
+              time
+            </Txt>
             <Txt as="span" variant="meta" font="mono" tone="ink">
               {time}
             </Txt>
@@ -110,10 +112,12 @@ export function FlameTooltip({
         )}
         {visibleEntries.map(entry => (
           <div key={entry.name} className="flex items-center justify-between gap-3">
-            <span className="text-muted-foreground">{entry.name}</span>
-            <span className="text-foreground">
+            <Txt as="span" variant="meta" tone="muted">
+              {entry.name}
+            </Txt>
+            <Txt as="span" variant="meta" tone="ink">
               {typeof entry.value === 'number' ? Math.round(entry.value).toLocaleString() : String(entry.value)}
-            </span>
+            </Txt>
           </div>
         ))}
       </div>
@@ -121,13 +125,13 @@ export function FlameTooltip({
   }
 
   return (
-    <div className={`${overlaySurfaceStyle} rounded px-2 py-1 text-meta`}>
+    <Txt as="p" variant="meta" className={`${overlaySurfaceStyle} rounded px-2 py-1`}>
       {time && (
         <Txt as="span" variant="meta" font="mono" tone="ink">
           {time}
         </Txt>
       )}
-    </div>
+    </Txt>
   );
 }
 

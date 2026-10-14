@@ -43,15 +43,28 @@ export class TenantCredentialStore implements CredentialStore {
   readonly #userId: string;
   readonly #orgFirst: boolean;
   readonly #credentials: ModelCredentialsStorage | undefined;
+  readonly #deploymentProviders: ReadonlySet<string>;
   #snapshot = new Map<string, AuthCredential>();
   #fetchedAt = 0;
   #hydrating: Promise<void> | undefined;
 
-  constructor(orgId: string, userId: string, credentials: ModelCredentialsStorage | undefined, orgFirst = false) {
+  constructor(
+    orgId: string,
+    userId: string,
+    credentials: ModelCredentialsStorage | undefined,
+    orgFirst = false,
+    deploymentProviders: ReadonlySet<string> = new Set(),
+  ) {
     this.#orgId = orgId;
     this.#userId = userId;
     this.#credentials = credentials;
     this.#orgFirst = orgFirst;
+    this.#deploymentProviders = deploymentProviders;
+  }
+
+  /** Providers the operator opted in to run on the server process's own credentials. */
+  allowsDeploymentCredentials(provider: string): boolean {
+    return this.#deploymentProviders.has(provider);
   }
 
   /** Hydrate the snapshot when stale; coalesces concurrent callers. */
@@ -159,6 +172,7 @@ export class TenantCredentialStore implements CredentialStore {
 
 const tenantStores = new Map<string, TenantCredentialStore>();
 let registeredCredentials: ModelCredentialsStorage | undefined;
+let registeredDeploymentProviders: ReadonlySet<string> = new Set();
 
 function storeFor(tenant: SdkCredentialTenant, credentials: ModelCredentialsStorage): TenantCredentialStore {
   const orgId = tenantOrgId(tenant);
@@ -170,7 +184,7 @@ function storeFor(tenant: SdkCredentialTenant, credentials: ModelCredentialsStor
       const oldest = tenantStores.keys().next().value;
       if (oldest !== undefined) tenantStores.delete(oldest);
     }
-    store = new TenantCredentialStore(orgId, tenant.userId, credentials, orgFirst);
+    store = new TenantCredentialStore(orgId, tenant.userId, credentials, orgFirst, registeredDeploymentProviders);
     tenantStores.set(key, store);
   }
   return store;
@@ -180,10 +194,17 @@ function storeFor(tenant: SdkCredentialTenant, credentials: ModelCredentialsStor
  * Register the web tenant credential store provider with the SDK. Called by
  * the factory after storage init with the `model-credentials` domain handle;
  * from then on `resolveModel` uses per-tenant credentials and the SDK skips
- * the `loadStoredApiKeysIntoEnv` env side-channel.
+ * the `loadStoredApiKeysIntoEnv` env side-channel. `deploymentProviders` are
+ * the providers the operator opted in to authenticate with the server
+ * process's own credentials (see `MastraFactoryConfig.deploymentModelProviders`).
  */
-export function registerTenantCredentialResolver(credentials: ModelCredentialsStorage): void {
+export function registerTenantCredentialResolver(
+  credentials: ModelCredentialsStorage,
+  deploymentProviders: ReadonlySet<string> = new Set(),
+): void {
   registeredCredentials = credentials;
+  registeredDeploymentProviders = deploymentProviders;
+  tenantStores.clear();
   setCredentialStoreProvider(tenant => storeFor(tenant, credentials));
 }
 
@@ -203,6 +224,7 @@ export async function primeTenantCredentialsForRequestContext(requestContext: Re
 export function resetTenantCredentialResolverForTests(): void {
   setCredentialStoreProvider(undefined);
   registeredCredentials = undefined;
+  registeredDeploymentProviders = new Set();
   tenantStores.clear();
 }
 

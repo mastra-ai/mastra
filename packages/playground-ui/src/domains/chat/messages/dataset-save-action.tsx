@@ -20,6 +20,7 @@ import {
 import { Field, FieldLabel } from '@/ds/components/Field';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/ds/components/Select';
 import { Spinner } from '@/ds/components/Spinner';
+import { Txt } from '@/ds/components/Txt';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/utils/cn';
@@ -116,7 +117,9 @@ function DatasetSaveDialog({
               </SelectTrigger>
               <SelectContent>
                 {datasets.length === 0 ? (
-                  <div className="px-2 py-4 text-center text-body text-muted-foreground">No datasets available</div>
+                  <Txt as="p" variant="body" tone="muted" className="px-2 py-4 text-center">
+                    No datasets available
+                  </Txt>
                 ) : (
                   datasets.map(dataset => (
                     <SelectItem key={dataset.id} value={dataset.id}>
@@ -254,11 +257,13 @@ function SaveFullConversationInner({ ctx }: { ctx: DatasetSaveContextValue }) {
         className={cn(
           quietTextHover,
           controlStateColorTransition,
-          'mx-auto flex cursor-pointer items-center gap-1.5 py-3 text-meta disabled:opacity-50',
+          'mx-auto flex cursor-pointer items-center gap-1.5 py-3 disabled:opacity-50',
         )}
       >
         {isFetching ? <Spinner className="size-3.5" /> : <DatabaseIcon className="size-3.5" />}
-        Save full conversation to dataset
+        <Txt as="span" variant="meta" className="block">
+          Save full conversation to dataset
+        </Txt>
       </button>
       <DatasetSaveDialog
         open={dialogOpen}

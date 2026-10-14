@@ -71,14 +71,14 @@ describe('CommitRail', () => {
   it('says so when no repository is linked, rather than loading for ever', async () => {
     renderWithProviders(<CommitRail projectRepositoryId={undefined} />);
 
-    expect(await screen.findByText('No repository linked yet')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'No repository linked yet', level: 4 })).toBeInTheDocument();
   });
 
   it('says so when the branch has no commits', async () => {
     stubCommits([]);
     renderWithProviders(<CommitRail projectRepositoryId={REPOSITORY_ID} />);
 
-    expect(await screen.findByText('No commits yet')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'No commits yet', level: 4 })).toBeInTheDocument();
   });
 
   it('reports a GitHub outage instead of an empty rail', async () => {

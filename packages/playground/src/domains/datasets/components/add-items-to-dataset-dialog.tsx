@@ -106,9 +106,9 @@ export function AddItemsToDatasetDialog({
                 </SelectTrigger>
                 <SelectContent>
                   {availableDatasets.length === 0 ? (
-                    <div className="px-2 py-4 text-center text-body text-muted-foreground">
+                    <Txt as="p" variant="body" tone="muted" className="px-2 py-4 text-center">
                       No other datasets available
-                    </div>
+                    </Txt>
                   ) : (
                     availableDatasets.map(dataset => (
                       <SelectItem key={dataset.id} value={dataset.id}>

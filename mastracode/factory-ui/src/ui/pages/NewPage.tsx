@@ -200,7 +200,7 @@ function BrandLockup() {
   return (
     <div className="text-muted-foreground inline-flex items-center gap-2">
       <LogoWithoutText aria-hidden className="h-4 w-auto" />
-      <Txt as="span" variant="column" className="tracking-widest uppercase">
+      <Txt as="span" variant="eyebrow">
         Mastra Code
       </Txt>
     </div>
@@ -216,29 +216,33 @@ function FactoryContext({ activeFactory }: { activeFactory: FactoryProject | und
   const projectPath = sessionQuery.data?.sessionId;
   const gitBranch = repository?.gitBranch;
   return (
-    <div className="text-caption text-muted-foreground flex max-w-full items-center justify-center gap-1.5">
+    <div className="text-muted-foreground flex max-w-full items-center justify-center gap-1.5">
       <div className="flex min-w-0 items-center gap-1.5">
         <FolderIcon size={13} className="text-placeholder shrink-0" />
-        <span className="shrink-0 font-medium">{activeFactory?.name ?? 'Factory'}</span>
+        <Txt as="span" variant="column" className="shrink-0">
+          {activeFactory?.name ?? 'Factory'}
+        </Txt>
         {projectPath && (
           <>
-            <span className="text-placeholder shrink-0">·</span>
-            <span className="text-placeholder min-w-0 truncate" title={projectPath}>
+            <Txt as="span" variant="caption" tone="faint" className="shrink-0">
+              ·
+            </Txt>
+            <Txt as="span" variant="caption" tone="faint" title={projectPath} className="min-w-0 truncate">
               {projectPath}
-            </span>
+            </Txt>
           </>
         )}
       </div>
       {gitBranch && (
         <>
-          <span aria-hidden className="text-placeholder shrink-0">
+          <Txt as="span" variant="caption" tone="faint" aria-hidden className="shrink-0">
             ·
-          </span>
+          </Txt>
           <div className="flex min-w-0 items-center gap-1.5">
             <GitBranch size={13} aria-hidden className="text-placeholder shrink-0" />
-            <span className="min-w-0 truncate" title={gitBranch}>
+            <Txt as="span" variant="caption" title={gitBranch} className="min-w-0 truncate">
               {gitBranch}
-            </span>
+            </Txt>
           </div>
         </>
       )}

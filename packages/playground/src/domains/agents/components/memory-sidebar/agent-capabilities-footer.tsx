@@ -1,5 +1,6 @@
 import type { GetAgentResponse, GetMemoryStatusResponse } from '@mastra/client-js';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
@@ -8,7 +9,7 @@ import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useAgent, useAgentVersions } from '@mastra/react/hooks/agents';
 import { useMemory } from '@mastra/react/hooks/memory';
-import { Bot, ChevronRight, ExternalLink, Pencil, SlidersHorizontal, WorkflowIcon, Wrench } from 'lucide-react';
+import { Bot, ExternalLink, Pencil, SlidersHorizontal, WorkflowIcon, Wrench } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
@@ -101,7 +102,7 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
       target="_blank"
       rel="noopener noreferrer"
       className={cn(
-        'group/capability-row flex min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-meta',
+        'group/capability-row flex min-w-0 items-start gap-2 rounded-md px-2 py-1.5',
         'hover:bg-fill-subtle',
         focusRing,
         quietTextHover,
@@ -119,10 +120,16 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-center gap-2">
-          <span className="min-w-0 truncate font-medium text-foreground">{label}</span>
-          <span className="shrink-0 text-muted-foreground tabular-nums">{status}</span>
+          <Txt as="span" variant="meta" tone="ink" className="min-w-0 truncate">
+            {label}
+          </Txt>
+          <Txt as="span" variant="meta" tone="muted" className="shrink-0 tabular-nums">
+            {status}
+          </Txt>
         </span>
-        <span className="mt-0.5 block text-muted-foreground">{description}</span>
+        <Txt as="span" variant="meta" tone="muted" className="mt-0.5 block">
+          {description}
+        </Txt>
       </span>
       <ExternalLink
         className={cn(
@@ -359,12 +366,7 @@ export function AgentCapabilitiesFooter({ agentId }: { agentId: string }) {
               <ProcessorsCapability agentId={agentId} view="chip" />
             </div>
             <CapabilitiesSummary agentId={agentId} />
-            <ChevronRight
-              className={cn(
-                'size-3.5 shrink-0 text-muted-foreground transition-transform duration-normal ease-out-custom',
-                isExpanded ? 'rotate-90' : undefined,
-              )}
-            />
+            <DisclosureChevron direction="right" className="size-3.5 text-muted-foreground" />
           </button>
         </CollapsibleTrigger>
 

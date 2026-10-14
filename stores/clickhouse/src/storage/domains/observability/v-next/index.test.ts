@@ -16,7 +16,12 @@ import {
   createObservabilityVNextTests,
   TRACE_AGGREGATE_CONFORMANCE_CASES,
   TRACE_AGGREGATE_FIXTURE_DATA,
+  TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES,
+  TRACE_AGGREGATE_TOKEN_EDGE_CONFORMANCE_CASES,
+  TRACE_AGGREGATE_TOKEN_EDGE_FIXTURE_DATA,
+  TRACE_AGGREGATE_TOKEN_FIXTURE_DATA,
   traceAggregateResponseMismatch,
+  writeTraceAggregateFixture,
   writeTraceQueryFixture,
 } from '@internal/storage-test-utils';
 import { coreFeatures } from '@mastra/core/features';
@@ -51,6 +56,7 @@ import {
   TABLE_DISCOVERY_VALUES,
   TABLE_FEEDBACK_EVENTS,
   TABLE_FEEDBACK_EVENTS_DELTA,
+  TABLE_METRIC_EVENTS,
   TABLE_SCORE_EVENTS,
   TABLE_SCORE_EVENTS_CURRENT,
   TABLE_SCORE_EVENTS_CURRENT_BACKFILL,
@@ -720,6 +726,45 @@ LIMIT 1`,
           planTraceQuery(parseTraceQueryRequest({ timeRange, pagination: { page: 0, perPage: 10 } })),
         );
         expect('traces' in reloaded && reloaded.traces.map(trace => trace.traceId)).toEqual(['visibility-gap']);
+      });
+    });
+
+    it('keeps a tenant trace when another tenant has a root with the same traceId', async () => {
+      await withFallbackStorage(async (isolatedStorage, client) => {
+        const startedAt = new Date();
+        const timeRange = {
+          from: new Date(startedAt.getTime() - 1_000).toISOString(),
+          to: new Date(startedAt.getTime() + 60_000).toISOString(),
+        };
+        const root = (organizationId: string, spanId: string) => ({
+          ...spanRecordToRow({
+            traceId: 'shared-trace-id',
+            spanId,
+            parentSpanId: null,
+            name: `${organizationId} root`,
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            startedAt,
+            endedAt: new Date(startedAt.getTime() + 1),
+          }),
+          organizationId,
+        });
+        // The other tenant's root has the lower dedupeKey, so it would win an unscoped dedupe.
+        await client.insert({
+          table: TABLE_TRACE_ROOTS,
+          format: 'JSONEachRow',
+          values: [root('org-b', 'a-root'), root('org-a', 'b-root')],
+        });
+
+        const scope = { organizationId: 'org-a' };
+        const traces = await isolatedStorage.queryTraces(
+          planTraceQuery(parseTraceQueryRequest({ timeRange, pagination: { page: 0, perPage: 10 } }), { scope }),
+        );
+        expect('traces' in traces && traces.traces.map(trace => trace.name)).toEqual(['org-a root']);
+        const aggregate = await isolatedStorage.aggregateTraces(
+          planTraceAggregate(parseTraceAggregateRequest({ timeRange, measures: ['count'] }), { scope }),
+        );
+        expect(aggregate.rows).toEqual([{ measures: { count: 1 } }]);
       });
     });
 
@@ -6911,5 +6956,102 @@ describe('ObservabilityStorageClickhouseVNext aggregateTraces', () => {
       );
       expect(aggregate.rows).toEqual(expected === 1 ? [{ measures: { count: 1 } }] : []);
     }
+  });
+});
+
+describe('ObservabilityStorageClickhouseVNext aggregateTraces token and cost measures', () => {
+  const connection = {
+    url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+    username: process.env.CLICKHOUSE_USERNAME || 'default',
+    password: process.env.CLICKHOUSE_PASSWORD || 'password',
+  };
+  let storage: ObservabilityStorageClickhouseVNext;
+  let client: ReturnType<typeof createClient>;
+
+  async function physicalMetricRows(metricId: string): Promise<number> {
+    const result = await client.query({
+      query: `SELECT count() AS rows FROM ${TABLE_METRIC_EVENTS} WHERE metricId = {metricId:String}`,
+      query_params: { metricId },
+      format: 'JSONEachRow',
+    });
+    const [row] = await result.json<{ rows: number | string }>();
+    return Number(row?.rows);
+  }
+
+  beforeAll(async () => {
+    storage = new ObservabilityStorageClickhouseVNext(connection);
+    await storage.init();
+    client = createClient(connection);
+    // Every assertion below runs without background merges, so duplicate metric rows stay physically present
+    // and only the query-time `LIMIT 1 BY metricId` dedupe can collapse them.
+    await client.command({ query: `SYSTEM STOP MERGES ${TABLE_METRIC_EVENTS}` });
+  });
+
+  afterAll(async () => {
+    try {
+      await storage.dangerouslyClearAll();
+    } finally {
+      await client.command({ query: `SYSTEM START MERGES ${TABLE_METRIC_EVENTS}` });
+      await client.close();
+    }
+  });
+
+  describe('fixtures', () => {
+    beforeAll(async () => {
+      await storage.dangerouslyClearAll();
+      await writeTraceAggregateFixture(
+        storage as unknown as ObservabilityStorage,
+        TRACE_AGGREGATE_TOKEN_FIXTURE_DATA,
+        'completion-only',
+      );
+    });
+
+    it('keeps the retried metric rows physically duplicated', async () => {
+      expect(await physicalMetricRows('sup-1-in')).toBe(2);
+    });
+
+    it.each(TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES.map(testCase => [testCase.name, testCase] as const))(
+      'matches the reference evaluator: %s',
+      async (_name, testCase) => {
+        const plan = planTraceAggregate(parseTraceAggregateRequest(testCase.request), { scope: testCase.scope });
+        const response = await storage.aggregateTraces(plan);
+        expect(traceAggregateResponseMismatch(response, testCase), JSON.stringify(response)).toBeNull();
+      },
+    );
+
+    it('counts the same traces as queryTraces with token measures requested', async () => {
+      const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+      const aggregate = await storage.aggregateTraces(
+        planTraceAggregate(parseTraceAggregateRequest({ timeRange, measures: ['count', 'tokens.total.sum'] })),
+      );
+      const traces = await storage.queryTraces(
+        planTraceQuery(parseTraceQueryRequest({ timeRange, pagination: { page: 0, perPage: 1 } })),
+      );
+      const total = 'pagination' in traces ? traces.pagination?.total : undefined;
+      expect(total).toBe(11);
+      expect(aggregate.rows[0]?.measures.count).toBe(total);
+    });
+  });
+
+  describe('edge cases', () => {
+    beforeAll(async () => {
+      await storage.dangerouslyClearAll();
+      await writeTraceAggregateFixture(
+        storage as unknown as ObservabilityStorage,
+        TRACE_AGGREGATE_TOKEN_EDGE_FIXTURE_DATA,
+        'completion-only',
+      );
+    });
+
+    it.each(TRACE_AGGREGATE_TOKEN_EDGE_CONFORMANCE_CASES.map(testCase => [testCase.name, testCase] as const))(
+      '%s',
+      async (_name, testCase) => {
+        // The copies differ in timestamp, so their sort keys differ and no merge would ever collapse them.
+        expect(await physicalMetricRows('edge-dup')).toBe(2);
+        const plan = planTraceAggregate(parseTraceAggregateRequest(testCase.request), { scope: testCase.scope });
+        const response = await storage.aggregateTraces(plan);
+        expect(traceAggregateResponseMismatch(response, testCase), JSON.stringify(response)).toBeNull();
+      },
+    );
   });
 });

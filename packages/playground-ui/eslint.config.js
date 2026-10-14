@@ -33,9 +33,17 @@ const restrictedTxtToneSelectors = [
 const MONO_MESSAGE =
   'Mono comes from the design system: <Txt font="mono"> for identifiers, timestamps, and durations, <InlineCode> or <CodeBlock> for code, tabular-nums for numbers.';
 const MONO_PATTERN = '(^|\\s|:|!)font-mono(?=!|\\s|$)';
+// Native inputs and compound controls keep their existing className escape hatch.
+// Only Txt needs the font prop; do not grow every component API to satisfy lint.
 const restrictedMonoSelectors = [
-  { selector: `Literal[value=/${MONO_PATTERN}/]`, message: MONO_MESSAGE },
-  { selector: `TemplateElement[value.raw=/${MONO_PATTERN}/]`, message: MONO_MESSAGE },
+  {
+    selector: `JSXOpeningElement[name.name='Txt'] > JSXAttribute[name.name='className'] Literal[value=/${MONO_PATTERN}/]`,
+    message: MONO_MESSAGE,
+  },
+  {
+    selector: `JSXOpeningElement[name.name='Txt'] > JSXAttribute[name.name='className'] TemplateElement[value.raw=/${MONO_PATTERN}/]`,
+    message: MONO_MESSAGE,
+  },
 ];
 
 /** @type {import("eslint").Linter.Config[]} */
@@ -75,7 +83,7 @@ export default [
   },
   {
     files: ['src/**/*.ts?(x)'],
-    ignores: ['src/**/*.test.*', 'src/**/*.stories.*', 'src/ee/**', 'src/ds/**'],
+    ignores: ['src/**/*.test.*', 'src/**/*.stories.*', 'src/ds/**'],
     rules: {
       'no-restricted-syntax': [
         'error',

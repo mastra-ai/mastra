@@ -337,7 +337,7 @@ export type NetworkStreamParams<OUTPUT = undefined> = {
   messages: MessageListInput;
   model?: string;
   tracingOptions?: TracingOptions;
-} & Omit<MultiPrimitiveExecutionOptions<OUTPUT>, 'model'>;
+} & Omit<MultiPrimitiveExecutionOptions<OUTPUT>, 'model' | 'scopes'>;
 
 export type GetAgentResponse = GeneratedResponse<'GET /agents/:agentId'> & {
   /** Handler-provided identifier omitted from the serialized route schema's value shape. */
@@ -420,7 +420,10 @@ export type StreamParamsBase<OUTPUT = undefined> = {
    */
   abortSignal?: AbortSignal;
 } & WithoutMethods<
-  Omit<AgentExecutionOptions<OUTPUT>, 'model' | 'requestContext' | 'clientTools' | 'options' | 'structuredOutput'>
+  Omit<
+    AgentExecutionOptions<OUTPUT>,
+    'model' | 'requestContext' | 'clientTools' | 'options' | 'structuredOutput' | 'scopes'
+  >
 >;
 export type StreamParamsBaseWithoutMessages<OUTPUT = undefined> = StreamParamsBase<OUTPUT>;
 export type StreamParams<OUTPUT = undefined> = StreamParamsBase<OUTPUT> & {
@@ -922,10 +925,11 @@ export interface StoredAgentToolConfig {
 /**
  * Per-MCP-client/integration tool configuration stored in agent snapshots.
  * Specifies which tools from an MCP client or integration provider are enabled and their overrides.
- * When `tools` is omitted, all tools from the source are included.
+ * An empty `tools` map (`{}`) includes all tools from the source.
+ * When `tools` is omitted, no tools are included.
  */
 export interface StoredMCPClientToolsConfig {
-  /** When omitted, all tools from the source are included. */
+  /** `{}` includes all tools from the source; when omitted, no tools are included. */
   tools?: Record<string, StoredAgentToolConfig>;
 }
 
@@ -2116,7 +2120,11 @@ export type ListDatasetExperimentResultsResponse = Omit<
   results: DatasetExperimentResult[];
 };
 
-export type DatasetExperimentResultRow = Omit<DatasetExperimentResult, 'scores'>;
+export type DatasetExperimentResultRow = DatasetExperimentResult extends infer R
+  ? R extends unknown
+    ? Omit<R, 'scores'>
+    : never
+  : never;
 
 export type RunExperimentItemResponse =
   GeneratedResponse<'POST /datasets/:datasetId/experiments/:experimentId/items/:itemId/run'>;
@@ -2474,7 +2482,7 @@ export type BuilderRegistryInstallResponse = GeneratedResponse<'POST /editor/bui
 // Wire shapes derive from the published route contracts, vocabulary from core.
 // Event-stream types can't derive this way (SSE routes carry no response
 // schema) and stay hand-written in `resources/agent-controller`.
-export type { PermissionPolicy, ToolCategory } from '@mastra/core/agent-controller';
+export type { AgentControllerThinkingLevel, PermissionPolicy, ToolCategory } from '@mastra/core/agent-controller';
 export type { TaskItemSnapshot as AgentControllerTaskSnapshot } from '@mastra/core/tools';
 
 export type AgentControllerInfo = GeneratedResponse<'GET /agent-controller'>['agentControllers'][number];

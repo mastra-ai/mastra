@@ -1,12 +1,14 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { buildContinuationOpts } from '../../loop/shared/stream-until-idle-helpers';
+import { buildContinuationOpts, resolveScope } from '../../loop/shared/stream-until-idle-helpers';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory';
+import { RequestContext } from '../../request-context';
 import { MockStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
+import { resolveAgentScopes } from '../scopes';
 
 /**
  * Helper: build a mock model whose streaming response is controlled by the
@@ -193,6 +195,43 @@ describe('Agent.streamUntilIdle', () => {
 
     // Only the initial turn ran — one LLM call, no continuations.
     expect(getCallCount()).toBe(1);
+  });
+
+  it('does not recurse when untilIdle comes from static defaultOptions (no bg manager)', async () => {
+    const plainMastra = new Mastra({ logger: false, storage, backgroundTasks: { enabled: false } });
+    const { model, getCallCount } = makeScriptedModel([textResponse('ok')]);
+    const agent = new Agent({ id: 'd1', name: 'd1', instructions: 'test', model, defaultOptions: { untilIdle: true } });
+    plainMastra.addAgent(agent, 'd1');
+
+    const result = await agent.stream('hi');
+    const chunks = await drain(result.fullStream as ReadableStream<any>);
+
+    expect(chunks.some(c => c?.type === 'error')).toBe(false);
+    expect(getCallCount()).toBe(1);
+  });
+
+  it('does not recurse when untilIdle comes from dynamic defaultOptions with memory and a bg manager', async () => {
+    const memory = new MockMemory();
+    const { model, getCallCount } = makeScriptedModel([textResponse('ok')]);
+    let defaultsRead = 0;
+    const agent = new Agent({
+      id: 'd2',
+      name: 'd2',
+      instructions: 'test',
+      model,
+      memory,
+      defaultOptions: () => {
+        if (++defaultsRead > 20) throw new Error('untilIdle recursively re-entered defaultOptions');
+        return { untilIdle: true };
+      },
+    });
+    mastra.addAgent(agent, 'd2');
+
+    const result = await agent.stream('hi', { memory: { thread: 'thread-d2', resource: 'user-1' } });
+    await drain(result.fullStream as ReadableStream<any>);
+
+    expect(getCallCount()).toBe(1);
+    expect(defaultsRead).toBeLessThan(5);
   });
 
   it('keeps a caller runId on the initial turn but not autonomous continuations', async () => {
@@ -579,6 +618,56 @@ describe('Agent.streamUntilIdle', () => {
     expect(getCallCount()).toBe(2);
     expect(onAbortCalled).toBe(true);
     expect(onFinishCalled).toBe(false);
+  });
+
+  it('does not recurse when resumeStream inherits untilIdle from defaultOptions', async () => {
+    const memory = new MockMemory();
+    const { model, getCallCount } = makeScriptedModel([toolCallResponse('approval'), textResponse('resumed')]);
+    let defaultsRead = 0;
+    let untilIdleDefault = false;
+    const agent = new Agent({
+      id: 'resume-default-until-idle',
+      name: 'resume-default-until-idle',
+      instructions: 'test',
+      model,
+      memory,
+      defaultOptions: () => {
+        if (untilIdleDefault && ++defaultsRead > 20) {
+          throw new Error('untilIdle recursively re-entered defaultOptions');
+        }
+        return untilIdleDefault ? { untilIdle: true } : {};
+      },
+      tools: {
+        approval: createTool({
+          id: 'approval',
+          description: 'Request approval',
+          inputSchema: z.object({}),
+          suspendSchema: z.object({ question: z.string() }),
+          resumeSchema: z.object({ approved: z.boolean() }),
+          execute: async (_, context) => {
+            if (!context?.agent?.resumeData) return context?.agent?.suspend({ question: 'Continue?' });
+            return context.agent.resumeData;
+          },
+        }),
+      },
+    });
+    mastra.addAgent(agent, 'resume-default-until-idle');
+
+    const memoryOptions = { thread: 'resume-default-thread', resource: 'user-1' };
+    const initial = await agent.stream('start', { memory: memoryOptions });
+    const initialChunks = await drain(initial.fullStream as ReadableStream<any>);
+    expect(initialChunks.some(chunk => chunk.type === 'tool-call-suspended')).toBe(true);
+
+    untilIdleDefault = true;
+    const resumed = await agent.resumeStream(
+      { approved: true },
+      { runId: initial.runId, toolCallId: 'approval', memory: memoryOptions },
+    );
+    const resumedChunks = await drain(resumed.fullStream as ReadableStream<any>);
+
+    expect(resumedChunks.some(chunk => chunk.type === 'error')).toBe(false);
+    expect(getCallCount()).toBe(2);
+    expect(defaultsRead).toBeLessThan(5);
   });
 
   it('drops the resumed runId from a plain Agent autonomous continuation', async () => {
@@ -1249,5 +1338,73 @@ describe('Agent.streamUntilIdle', () => {
     // Delayed promises from the initial turn resolve through the proxy.
     const text = await result.text;
     expect(text).toBe('hello world');
+  });
+});
+
+describe('resolveScope scope parity with resolveAgentScopes', () => {
+  const memoryAgent = (scopes?: string[]) => ({
+    getMemory: async () => new MockMemory() as any,
+    getScopes: async () => scopes,
+  });
+
+  it('matches the main resolver when only non-identity scopes plus memory identity are supplied', async () => {
+    const mergedOptions = {
+      scopes: ['org:acme'],
+      memory: { thread: 'thread-legacy', resource: 'user-legacy' },
+    };
+
+    const scope = await resolveScope(memoryAgent(), mergedOptions);
+
+    // Same inputs as Agent#resolveScopedRunOptions passes (requestContext, agentScopes, callScopes, memory).
+    const expected = resolveAgentScopes({
+      requestContext: new RequestContext(),
+      agentScopes: [],
+      callScopes: mergedOptions.scopes,
+      memory: mergedOptions.memory,
+    });
+
+    expect(scope).not.toBeNull();
+    expect(scope!.threadId).toBe(expected.threadId);
+    expect(scope!.resourceId).toBe(expected.resourceId);
+    expect(scope!.threadId).toBe('thread-legacy');
+    expect(scope!.resourceId).toBe('user-legacy');
+    expect(scope!.scopeKey).toBe(`${expected.threadId}|${expected.resourceId}`);
+  });
+
+  it('matches the main resolver when identity comes from scopes and agent config supplies org scope', async () => {
+    const mergedOptions = {
+      scopes: ['thread:t-9', 'resource:r-9'],
+      memory: undefined,
+    };
+
+    const scope = await resolveScope(memoryAgent(['org:acme']), mergedOptions);
+
+    const expected = resolveAgentScopes({
+      requestContext: new RequestContext(),
+      agentScopes: ['org:acme'],
+      callScopes: mergedOptions.scopes,
+      memory: undefined,
+    });
+
+    expect(scope).not.toBeNull();
+    expect(scope!.threadId).toBe(expected.threadId);
+    expect(scope!.resourceId).toBe(expected.resourceId);
+    expect(scope!.scopeKey).toBe('t-9|r-9');
+  });
+
+  it('ignores a top-level threadId exactly like the main resolver call shape does', async () => {
+    // Modern AgentExecutionOptions has no top-level threadId; if one leaks into
+    // mergedOptions it must not alter identity in either resolver path.
+    const mergedOptions = {
+      scopes: ['org:acme'],
+      threadId: 'rogue-top-level-thread',
+      memory: { thread: 'thread-real' },
+    };
+
+    const scope = await resolveScope(memoryAgent(), mergedOptions);
+
+    expect(scope).not.toBeNull();
+    expect(scope!.threadId).toBe('thread-real');
+    expect(scope!.scopeKey).toBe('thread-real|');
   });
 });

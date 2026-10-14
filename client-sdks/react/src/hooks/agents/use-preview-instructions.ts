@@ -22,7 +22,7 @@ function toApiBlocks(blocks: ApiInstructionBlock[]) {
     if (block.type === 'prompt_block_ref') {
       // Form-format blocks have `promptBlockId` (the storage ID) and `id` (form-internal UUID).
       // API-format blocks have `id` (the storage ID). Prefer promptBlockId when present.
-      return { type: 'prompt_block_ref' as const, id: block.promptBlockId ?? block.id };
+      return { type: 'prompt_block_ref' as const, id: block.promptBlockId ?? block.id, rules: block.rules };
     }
     return { type: block.type, content: block.content, rules: block.rules };
   });

@@ -11,7 +11,7 @@ import { renderWithProviders } from '@/test/render';
 const renderList = (props: Partial<DatasetsListProps> = {}) =>
   renderWithProviders(
     <TestLinkProvider>
-      <DatasetsList datasets={datasets} experiments={experiments} isLoading={false} {...props} />
+      <DatasetsList datasets={datasets} experiments={experiments} {...props} />
     </TestLinkProvider>,
   );
 
@@ -75,6 +75,16 @@ describe('DatasetsList', () => {
     });
   });
 
+  describe('when the caller supplies a trailing cell for a navigable row', () => {
+    it('shows that cell instead of the experiments action and keeps dataset navigation', () => {
+      renderList({ renderTrailingCell: ds => (ds.id === 'ds-a' ? <span>Summary unavailable</span> : null) });
+
+      expect(screen.getByText('Summary unavailable')).toBeTruthy();
+      expect(screen.queryByRole('link', { name: '2 (100%)' })).toBeNull();
+      expect(screen.getByRole('link', { name: /Dataset A/ }).getAttribute('href')).toBe('/datasets/ds-a');
+    });
+  });
+
   describe('when searching for a dataset with different capitalization', () => {
     it('shows only matching dataset names', () => {
       renderList({ search: 'DATASET b' });
@@ -111,6 +121,20 @@ describe('DatasetsList', () => {
     it('does not show dataset links', () => {
       renderList({ tagFilter: 'missing' });
       expect(screen.queryAllByRole('link')).toHaveLength(0);
+    });
+  });
+
+  describe('when no loaded dataset matches and more pages can still load', () => {
+    it('does not claim that no dataset matches', () => {
+      renderList({ tagFilter: 'missing', hasNextPage: true });
+      expect(screen.queryByText('No datasets match your filters')).toBeNull();
+    });
+  });
+
+  describe('when no dataset matches and every page is loaded', () => {
+    it('says that no dataset matches the filters', () => {
+      renderList({ tagFilter: 'missing', hasNextPage: false });
+      expect(screen.getByText('No datasets match your filters')).toBeTruthy();
     });
   });
 

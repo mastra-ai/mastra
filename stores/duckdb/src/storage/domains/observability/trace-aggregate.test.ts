@@ -15,6 +15,15 @@ function placeholders(sql: string): number {
   return sql.match(/\?/g)?.length ?? 0;
 }
 
+/** Inlines positional values into the SQL so tests can check each one lands at its placeholder. */
+function render(compiled: { sql: string; values: unknown[] }): string {
+  let index = 0;
+  return compiled.sql.replace(/\?/g, () => {
+    const value = compiled.values[index++];
+    return typeof value === 'string' ? `'${value}'` : String(value);
+  });
+}
+
 describe('DuckDB trace aggregate compiler', () => {
   it('selects from the same candidate population as trace queries', () => {
     const compiled = compileDuckDBTraceAggregate(
@@ -121,6 +130,100 @@ describe('DuckDB trace aggregate compiler', () => {
       compileDuckDBTraceAggregate({ ...base, measures: [{ type: 'canonical', name: 'tokens.total' as never }] }),
     ).toThrow('Unsupported trusted trace-aggregate measure');
   });
+
+  it('omits the usage join for plans without token or cost measures', () => {
+    const compiled = compileDuckDBTraceAggregate(plan({ measures: ['count', 'duration.p95'] }));
+
+    expect(compiled.sql).not.toContain('metric_events');
+    expect(compiled.sql).not.toContain('usage');
+  });
+
+  it('joins usage per trace, pruning metric rows by the lower time bound only', () => {
+    const compiled = compileDuckDBTraceAggregate(
+      planTraceAggregate(
+        parseTraceAggregateRequest({ timeRange: TIME_RANGE, measures: ['tokens.total.sum', 'cost.avg'] }),
+        { scope: { organizationId: 'org-a', resourceId: 'res-1' } },
+      ),
+    );
+
+    const sql = render(compiled);
+    const between = (from: string, to: string) => sql.slice(sql.indexOf(from), sql.indexOf(to));
+    // candidates is read once, into the narrow base_facts.
+    expect(sql.match(/FROM candidates/g)).toHaveLength(1);
+    expect(between('base_facts AS', 'usage_bounds AS')).toContain('FROM candidates r');
+    const bounds = between('usage_bounds AS', 'usage_rows AS');
+    expect(bounds).toContain('traceId IN (SELECT traceId FROM base_facts)');
+    expect(bounds).toContain(`timestamp >= CAST('${TIME_RANGE.from}' AS TIMESTAMP)`);
+    expect(bounds).toContain(`organizationId = 'org-a'`);
+    expect(bounds).toContain(`resourceId = 'res-1'`);
+    const rows = between('usage_rows AS', 'usage AS');
+    expect(rows).toContain('m.timestamp >= (SELECT minTs FROM usage_bounds)');
+    expect(rows).toContain('m.timestamp <= (SELECT maxTs FROM usage_bounds)');
+    expect(rows).toContain('m.traceId IN (SELECT traceId FROM base_facts)');
+    expect(rows).toContain(`m.organizationId = 'org-a'`);
+    expect(rows).toContain(
+      `CASE WHEN m.name IN ('mastra_model_total_input_tokens', 'mastra_model_total_output_tokens')`,
+    );
+    // No upper bound from the request: only the exact range of qualifying rows.
+    expect(between('usage_bounds AS', 'LEFT JOIN usage')).not.toContain(`'${TIME_RANGE.to}'`);
+    expect(compiled.sql).not.toContain('org-a');
+    expect(compiled.sql).not.toContain('mastra_model');
+    expect(sql).toContain('LEFT JOIN usage u ON u.traceId = b.traceId');
+    expect(sql).toContain('CAST(sum(t0 + t1) AS DOUBLE)');
+    expect(sql).toContain('CAST(count_if(covered) AS DOUBLE) / NULLIF(count_if(usageBearing), 0) AS costCoverage');
+    expect(placeholders(compiled.sql)).toBe(compiled.values.length);
+  });
+
+  it('dedupes metric rows only when metricId is not known to be unique', () => {
+    const tokensPlan = plan({ measures: ['tokens.input.sum'] });
+
+    expect(compileDuckDBTraceAggregate(tokensPlan).sql).toContain('SELECT DISTINCT ON (m.metricId) m.traceId');
+    expect(compileDuckDBTraceAggregate(tokensPlan, { metricIdsUnique: true }).sql).not.toContain('DISTINCT ON');
+  });
+
+  it('reads no cost columns for token-only plans', () => {
+    const sql = compileDuckDBTraceAggregate(plan({ measures: ['tokens.input.sum', 'tokens.output.avg'] })).sql;
+
+    for (const column of [
+      'estimatedCost',
+      'costUnit',
+      'costMetadata',
+      'json_type',
+      'costRow',
+      'traceCost',
+      'unitMin',
+    ]) {
+      expect(sql).not.toContain(column);
+    }
+  });
+
+  it('binds placeholders in text order with metadata dimensions, scope, having, and interval', () => {
+    const compiled = compileDuckDBTraceAggregate(
+      planTraceAggregate(
+        parseTraceAggregateRequest({
+          timeRange: TIME_RANGE,
+          where: { op: 'eq', left: { path: 'metadata.tenant' }, right: { literal: 'acme' } },
+          groupBy: ['metadata.region'],
+          interval: '1h',
+          measures: ['cost.sum', 'tokens.input.sum', 'countDistinct.metadata.team'],
+          having: { op: 'gt', left: { path: 'tokens.input.sum' }, right: { literal: 10 } },
+          orderBy: { field: 'cost.sum', direction: 'desc' },
+        }),
+        { scope: { organizationId: 'org-a' } },
+      ),
+    );
+
+    expect(placeholders(compiled.sql)).toBe(compiled.values.length);
+    const sql = render(compiled);
+    const baseFacts = sql.slice(sql.indexOf('base_facts AS'), sql.indexOf('usage_bounds AS'));
+    expect(baseFacts).toContain(`'$."region"'`);
+    expect(baseFacts).toContain(`'$."team"'`);
+    const usage = sql.slice(sql.indexOf('usage_bounds AS'), sql.indexOf('LEFT JOIN usage'));
+    expect(usage).toContain(`timestamp >= CAST('${TIME_RANGE.from}' AS TIMESTAMP)`);
+    expect(usage).toContain(`name = 'mastra_model_input_cache_read_tokens'`);
+    expect(usage).not.toContain(`'$."region"'`);
+    expect(compiled.values.slice(-4)).toEqual([10, 101, 100, 100]);
+  });
 });
 
 describe('DuckDB trace aggregate execution', () => {
@@ -144,6 +247,31 @@ describe('DuckDB trace aggregate execution', () => {
       rows: [{ dimensions: { entityName: 'triage' }, measures: { count: 3, errorRate: 0.5 } }],
       truncated: true,
     });
+  });
+
+  it('keeps null token and cost measures null and attaches row cost fields', async () => {
+    const { db } = mockDb([
+      { d0: 'research', m0: 2, m1: null, m2: 1500, costCoverage: 1, costUnit: 'mixed' },
+      { d0: 'scheduler', m0: 2, m1: null, m2: null, costCoverage: null, costUnit: null },
+    ]);
+
+    const response = await aggregateTraces(
+      db,
+      plan({ groupBy: ['entityName'], measures: ['count', 'cost.sum', 'tokens.input.avg'] }),
+    );
+
+    expect(response.rows).toEqual([
+      {
+        dimensions: { entityName: 'research' },
+        measures: { count: 2, 'cost.sum': null, 'tokens.input.avg': 1500 },
+        cost: { coverage: 1, unit: 'mixed' },
+      },
+      {
+        dimensions: { entityName: 'scheduler' },
+        measures: { count: 2, 'cost.sum': null, 'tokens.input.avg': null },
+        cost: { coverage: null, unit: null },
+      },
+    ]);
   });
 
   it('serializes buckets as UTC ISO strings and reads truncation from the ranked count', async () => {

@@ -73,17 +73,12 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
           <ArrowLeftIcon />
         </Button>
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div className="min-w-0 truncate text-body text-foreground" data-testid="skill-view-title">
+          <Txt as="p" variant="body" tone="ink" data-testid="skill-view-title" className="min-w-0 truncate">
             {skill.name}
-          </div>
+          </Txt>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <SkillFavoriteButton
-            skillId={skill.id}
-            isFavorited={skill.isFavorited}
-            favoriteCount={skill.favoriteCount}
-            className=""
-          />
+          <SkillFavoriteButton skillId={skill.id} isFavorited={skill.isFavorited} favoriteCount={skill.favoriteCount} />
           {canCopy && (
             <Button
               type="button"

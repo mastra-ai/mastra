@@ -39,6 +39,7 @@ import type { OutputWriter } from '../workflows';
 import { assertThreadOwnedByResource } from './memory-thread-ownership';
 import { MessageList } from './message-list';
 import type { MastraDBMessage, MessageListInput, UIMessageWithMetadata } from './message-list/index';
+import { deriveAgentRunRequestContext, parseAgentScope, resolveAgentScopes } from './scopes';
 import type {
   ZodSchema,
   AgentGenerateOptions,
@@ -86,6 +87,8 @@ export interface AgentLegacyCapabilities {
   }): AgentStreamOptions | Promise<AgentStreamOptions>;
   /** Check if agent has own memory */
   hasOwnMemory(): boolean;
+  /** Get the agent's configured scopes */
+  getScopes(options: { requestContext: RequestContext }): Promise<string[] | undefined>;
   /** Get instructions */
   getInstructions(options: { requestContext: RequestContext }): Promise<AgentInstructions>;
   /** Get the agent's LLM instance, optionally using a request-scoped model override */
@@ -811,7 +814,7 @@ export class AgentLegacyHandler {
       clientTools,
       temperature,
       toolChoice = 'auto',
-      requestContext = new RequestContext(),
+      requestContext: callerRequestContext = new RequestContext(),
       tracingOptions,
       savePerStep,
       writableStream,
@@ -823,15 +826,30 @@ export class AgentLegacyHandler {
     // Reserved keys from requestContext take precedence for security.
     // This allows middleware to securely set resourceId/threadId based on authenticated user,
     // preventing attackers from hijacking another user's memory by passing different values in the body.
-    const resourceIdFromContext = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
-    const threadIdFromContext = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+    // Scopes from the reserved `mastra__scopes` key set the identity when they carry
+    // `resource:`/`thread:` and throw on conflict (see resolveAgentScopes).
+    const resourceIdFromContext = callerRequestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+    const threadIdFromContext = callerRequestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+    const resolvedScopes = resolveAgentScopes({
+      requestContext: callerRequestContext,
+      agentScopes: await this.capabilities.getScopes({ requestContext: callerRequestContext }),
+      memory: args.memory as { resource?: string; thread?: string | { id: string } } | undefined,
+      resourceId: resourceIdFromArgs,
+      threadId: args.threadId,
+      mastra: this.capabilities.mastra,
+    });
+    const requestContext = deriveAgentRunRequestContext(callerRequestContext, resolvedScopes.scopes);
+    const hasResourceScope = resolvedScopes.scopes.some(scope => parseAgentScope(scope)?.type === 'resource');
+    const hasThreadScope = resolvedScopes.scopes.some(scope => parseAgentScope(scope)?.type === 'thread');
 
     const threadFromArgs = resolveThreadIdFromArgs({
       threadId: args.threadId,
       memory: args.memory,
-      overrideId: threadIdFromContext,
+      overrideId: hasThreadScope ? resolvedScopes.threadId : threadIdFromContext,
     });
-    const resourceId = resourceIdFromContext || (args.memory as any)?.resource || resourceIdFromArgs;
+    const resourceId = hasResourceScope
+      ? resolvedScopes.resourceId
+      : resourceIdFromContext || (args.memory as any)?.resource || resourceIdFromArgs;
     const memoryConfig = (args.memory as any)?.options || memoryConfigFromArgs;
 
     if (resourceId && threadFromArgs && !this.capabilities.hasOwnMemory()) {

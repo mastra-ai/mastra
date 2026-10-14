@@ -13,8 +13,9 @@ const DIFF_SIDES = {
   added: { sign: '+', row: 'bg-success-subtle', gutter: 'text-success-subtle-foreground' },
 } as const;
 
-function boundedLines(text: string): { lines: string[]; hidden: number } {
+function boundedLines(text: string, showFullContent: boolean): { lines: string[]; hidden: number } {
   const lines = text.split('\n');
+  if (showFullContent) return { lines, hidden: 0 };
   return { lines: lines.slice(0, DIFF_MAX_LINES), hidden: Math.max(0, lines.length - DIFF_MAX_LINES) };
 }
 
@@ -42,13 +43,13 @@ function DiffSide({ lines, side, lang }: { lines: string[]; side: keyof typeof D
   );
 }
 
-export function ToolCallEdit({ edit }: { edit: ToolEdit }) {
+export function ToolCallEdit({ edit, showFullContent = false }: { edit: ToolEdit; showFullContent?: boolean }) {
   const lang = languageForPath(edit.path);
 
   if ('content' in edit) {
     return (
       <CodeBlock
-        code={truncateString(edit.content, WRITTEN_FILE_MAX_CHARS)}
+        code={showFullContent ? edit.content : truncateString(edit.content, WRITTEN_FILE_MAX_CHARS)}
         lang={lang}
         fileName={edit.path ?? 'Change'}
         overflow="scroll"
@@ -56,13 +57,16 @@ export function ToolCallEdit({ edit }: { edit: ToolEdit }) {
     );
   }
 
-  const removed = boundedLines(edit.oldText);
-  const added = boundedLines(edit.newText);
+  const removed = boundedLines(edit.oldText, showFullContent);
+  const added = boundedLines(edit.newText, showFullContent);
   const hidden = removed.hidden + added.hidden;
 
   return (
     <div
-      className="max-w-full min-w-0 overflow-x-auto rounded-md border border-border bg-fill font-mono text-caption"
+      className={cn(
+        'max-w-full min-w-0 overflow-x-auto rounded-md border border-border bg-fill font-mono text-caption',
+        showFullContent && 'max-h-60 overflow-y-auto',
+      )}
       role="group"
       aria-label="File change"
     >

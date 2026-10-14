@@ -29,7 +29,9 @@ overrides:
   brace-expansion@>=4.0.0 <5.0.12: 5.0.12
   jose@>=4.14.0 <6.2.12: 6.2.12
   hono@<4.13.8: 4.13.8
-  better-auth: ^1.6.26
+  better-auth: ^1.7.7
+  '@better-auth/drizzle-adapter@<1.7.7': 1.7.7
+  '@modelcontextprotocol/sdk@>=1.0.0 <1.32.0': 1.32.1
   '@ai-sdk/provider-utils@>=3.0.0 <3.0.38': 3.0.38
   es-toolkit@<1.52.0: 1.52.0
   fast-copy@<4.1.1: 4.1.1
@@ -37,6 +39,7 @@ overrides:
   zod@>=4.0.0 <4.6.5: 4.6.5
   postcss@<8.5.23: 8.5.23
   nanoid@<5.1.16: 5.1.16
+  source-map-js@>=1.0.0 <1.2.2: 1.2.2
 
 importers:
 
@@ -535,8 +538,8 @@ packages:
   siginfo@2.0.0:
     resolution: {integrity: sha512-ybx0WO1/8bSBLEWXZvEd7gMW3Sn3JFlW3TvX1nREbDLRNQNaeNN8WK0meBwPdAaOI7TtRRRJn/Es1zhrrCHu7g==}
 
-  source-map-js@1.2.1:
-    resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
+  source-map-js@1.2.2:
+    resolution: {integrity: sha512-KGj/8Y43x35aZVDtt+J4mK1hoLGHULMYfSkODJNQjNDC3oW1PqPoxMwo0pLUsWM/UEGzON/NxeHywEfNXNP3Vw==}
     engines: {node: '>=0.10.0'}
 
   stackback@0.0.2:
@@ -968,7 +971,7 @@ snapshots:
     dependencies:
       nanoid: 5.1.16
       picocolors: 1.1.1
-      source-map-js: 1.2.1
+      source-map-js: 1.2.2
 
   rolldown@1.1.5:
     dependencies:
@@ -995,7 +998,7 @@ snapshots:
 
   siginfo@2.0.0: {}
 
-  source-map-js@1.2.1: {}
+  source-map-js@1.2.2: {}
 
   stackback@0.0.2: {}
 

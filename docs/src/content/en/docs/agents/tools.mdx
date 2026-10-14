@@ -155,6 +155,23 @@ You can define the tool's `inputSchema` and `outputSchema` with any library that
   </TabItem>
 </Tabs>
 
+### Handle output validation failures
+
+When a result doesn't match `outputSchema`, Mastra logs a warning and returns a validation error object instead of the result. The model then treats the call as failed and may retry it. For tools whose side effects have already happened by the time the result is produced, set `outputValidation: 'warn'`. Mastra still logs the mismatch, but it returns the real result unchanged, which keeps the model from retrying an order that was already placed.
+
+```typescript title="src/mastra/tools/place-order-tool.ts"
+export const placeOrderTool = createTool({
+  id: 'place-order',
+  description: 'Places an order and returns its id and total',
+  inputSchema: z.object({ sku: z.string(), quantity: z.number().int().positive() }),
+  outputSchema: z.object({ orderId: z.string(), total: z.number() }),
+  outputValidation: 'warn',
+  execute: async ({ sku, quantity }) => {
+    return await orders.create({ sku, quantity })
+  },
+})
+```
+
 ## Multiple tools
 
 An agent can use multiple tools to handle more complex tasks by delegating specific parts to individual tools. The agent decides which tools to use based on the user's message and the agent's instructions, plus the tool descriptions and schemas.
@@ -294,6 +311,31 @@ export const weatherTool = createTool({
 ```
 
 `toModelOutput` also works with client-side tools. For tools passed through `clientTools`, the mapping runs on the client after the tool executes, and the transformed output is sent back to the server alongside the raw result. For tools defined on the server without an `execute` function (the browser runs the tool and sends the result back on the next request), the server definition's `toModelOutput` is applied to the incoming result. The model receives the transformed content instead of the raw tool result.
+
+## Tools that run on the client
+
+A tool without an `execute` function is a client tool: the server can't run it. The agent stops at the step where the model called it. The run ends with `finishReason: 'tool-calls'`, and the model doesn't produce more text until the tool has a result. Pick the pattern that matches what the model needs back:
+
+- **The client runs the tool and the model needs its result**: Leave out `execute`. The client runs the tool, adds the result to the conversation, and sends a new request so the agent continues. With AI SDK `useChat()`, see [client tools with `useChat()`](/integrations/agentic-ui/ai-sdk-ui#client-tools-with-usechat).
+- **The client only renders the call** (for example a product card): Give the tool an `execute` that returns a short acknowledgement. The agent continues in the same run, and the client renders the tool part from its input. Return a small value instead of echoing the input so the model context and stored messages stay small.
+- **The tool needs a structured answer from the user** (for example a confirmed cart write): Call `suspend()` in `execute`, and resume with the user's answer. See [runtime suspension with `suspend()`](/docs/agents/human-in-the-loop#runtime-suspension-with-suspend).
+
+```typescript title="src/mastra/tools/show-product-tool.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const showProductTool = createTool({
+  id: 'show-product',
+  description: 'Shows a product card to the user',
+  inputSchema: z.object({
+    productId: z.string(),
+  }),
+  // highlight-next-line
+  execute: async () => ({ rendered: true }),
+})
+```
+
+Subagents can't run client tools. When a subagent calls a tool without `execute`, its run stops and the supervisor receives the unresolved calls in `subAgentPendingToolCalls` on the delegation result. Give client tools to the supervisor, or use `suspend()` in the subagent's tool. Suspension propagates through the supervisor, see [use `suspend()` in supervisor agents](/docs/agents/human-in-the-loop#use-suspend-in-supervisor-agents).
 
 ## Transform tool payloads for UI and transcripts
 

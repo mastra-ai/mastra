@@ -1,9 +1,4 @@
-/**
- * BDD coverage for the sidebar's owner scope: the work and review session lists open on the
- * viewer's own sessions, and each heading carries one icon that widens its list to every session
- * in the org and back again. Before this, a busy factory rendered everyone's sessions as one
- * undifferentiated list, and the reader had no way to cut it down to their own work.
- */
+import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -15,6 +10,7 @@ import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { WorkspacesSection } from '../WorkspacesSection';
+import { pickSessionProperty, sessionPropertiesTrigger } from './fixtures/sessionProperties';
 
 const projectRepositoryId = 'ghp-1';
 const viewerUserId = 'user-me';
@@ -39,40 +35,39 @@ function session(index: number, userId: string, branch: string): FactoryUserSess
   };
 }
 
-/** A `factory/pr-<n>` branch reads as a review session while no work item claims it. */
 const reviewSession = (index: number, userId: string) => session(index, userId, `factory/pr-${20000 + index}`);
 const workSession = (index: number, userId: string) => session(index, userId, `factory/issue-${20000 + index}`);
 
 function stubSessions(sessions: FactoryUserSession[]) {
   server.use(
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
-      HttpResponse.json({ sessions }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () => HttpResponse.json({ workItems: [] })),
   );
 }
 
-function renderSection() {
+function renderSection(defaultState: 'default' | 'collapsed' = 'default') {
   return renderWithProviders(
-    <MemoryRouter initialEntries={['/factories/fp-1']}>
-      <ChatSessionContext.Provider
-        value={{
-          resourceId: 'resource-1',
-          sessionEnabled: false,
-          resourceReady: false,
-          sandboxReady: false,
-          sandboxPreparing: false,
-          resourceEnabled: false,
-          factorySessionState: { factoryProjectId: 'fp-1', projectRepositoryId },
-          baseUrl: TEST_BASE_URL,
-          kind: 'factory',
-        }}
-      >
-        <Routes>
-          <Route path="/factories/:factoryId" element={<WorkspacesSection />} />
-        </Routes>
-      </ChatSessionContext.Provider>
-    </MemoryRouter>,
+    <Sidebar.Provider defaultState={defaultState} collapsedWidth={0} storageKey="owner-scope-test">
+      <MemoryRouter initialEntries={['/factories/fp-1']}>
+        <ChatSessionContext.Provider
+          value={{
+            resourceId: 'resource-1',
+            sessionEnabled: false,
+            resourceReady: false,
+            sandboxReady: false,
+            sandboxPreparing: false,
+            resourceEnabled: false,
+            factorySessionState: { factoryProjectId: 'fp-1', projectRepositoryId },
+            baseUrl: TEST_BASE_URL,
+            kind: 'factory',
+          }}
+        >
+          <Routes>
+            <Route path="/factories/:factoryId" element={<WorkspacesSection />} />
+          </Routes>
+        </ChatSessionContext.Provider>
+      </MemoryRouter>
+    </Sidebar.Provider>,
   );
 }
 
@@ -95,6 +90,35 @@ describe('Workspaces sidebar owner scope', () => {
     delete window.__MASTRACODE_CONFIG__;
   });
 
+  describe('when the sidebar is collapsed', () => {
+    it('keeps both Properties menus accessible and scopes their lists independently', async () => {
+      stubSessions([
+        reviewSession(1, viewerUserId),
+        reviewSession(2, 'user-grace'),
+        workSession(3, viewerUserId),
+        workSession(4, 'user-grace'),
+      ]);
+      const user = userEvent.setup();
+      const rendered = renderSection('collapsed');
+      await waitForMutationsIdle(rendered.client);
+
+      expect(sessionPropertiesTrigger('Work sessions')).toBeInTheDocument();
+      expect(sessionPropertiesTrigger('Review sessions')).toBeInTheDocument();
+
+      await pickSessionProperty(user, 'Work sessions', 'Owner', 'Everyone');
+
+      expect(await screen.findByRole('button', { name: 'factory/issue-20004' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'factory/pr-20002' })).not.toBeInTheDocument();
+      expect(sessionPropertiesTrigger('Work sessions', 1)).toBeInTheDocument();
+      expect(sessionPropertiesTrigger('Review sessions')).toBeInTheDocument();
+
+      await pickSessionProperty(user, 'Review sessions', 'Owner', 'Everyone');
+
+      expect(await screen.findByRole('button', { name: 'factory/pr-20002' })).toBeInTheDocument();
+      expect(sessionPropertiesTrigger('Review sessions', 1)).toBeInTheDocument();
+    });
+  });
+
   it('opens each sessions group on the viewer and widens it to everyone and back', async () => {
     stubSessions([reviewSession(1, viewerUserId), reviewSession(2, 'user-grace')]);
     const user = userEvent.setup();
@@ -105,29 +129,24 @@ describe('Workspaces sidebar owner scope', () => {
     const group = await screen.findByRole('region', { name: 'Review Sessions' });
     expect(await within(group).findByRole('button', { name: 'factory/pr-20001' })).toBeInTheDocument();
     expect(within(group).queryByRole('button', { name: 'factory/pr-20002' })).not.toBeInTheDocument();
-    expect(within(group).getByRole('button', { name: 'Show only my review sessions' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    expect(sessionPropertiesTrigger('Review sessions')).toBeInTheDocument();
 
-    await user.click(within(group).getByRole('button', { name: 'Show only my review sessions' }));
+    await pickSessionProperty(user, 'Review sessions', 'Owner', 'Everyone');
 
     expect(await within(group).findByRole('button', { name: 'factory/pr-20002' })).toBeInTheDocument();
     expect(within(group).getByRole('button', { name: 'factory/pr-20001' })).toBeInTheDocument();
-    expect(within(group).getByRole('button', { name: 'Show only my review sessions' })).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    );
+    expect(sessionPropertiesTrigger('Review sessions', 1)).toBeInTheDocument();
 
-    await user.click(within(group).getByRole('button', { name: 'Show only my review sessions' }));
+    await pickSessionProperty(user, 'Review sessions', 'Owner', 'Mine');
 
     await waitFor(() => {
       expect(within(group).queryByRole('button', { name: 'factory/pr-20002' })).not.toBeInTheDocument();
     });
     expect(within(group).getByRole('button', { name: 'factory/pr-20001' })).toBeInTheDocument();
+    expect(sessionPropertiesTrigger('Review sessions')).toBeInTheDocument();
   });
 
-  it('keeps the heading and its toggle when the viewer owns nothing in the group', async () => {
+  it('keeps the heading and its Properties menu when the viewer owns nothing in the group', async () => {
     stubSessions([reviewSession(1, 'user-grace')]);
     const user = userEvent.setup();
 
@@ -138,7 +157,7 @@ describe('Workspaces sidebar owner scope', () => {
     expect(await within(group).findByRole('status')).toHaveTextContent('No sessions of your own.');
     expect(within(group).queryByRole('button', { name: 'factory/pr-20001' })).not.toBeInTheDocument();
 
-    await user.click(within(group).getByRole('button', { name: 'Show only my review sessions' }));
+    await pickSessionProperty(user, 'Review sessions', 'Owner', 'Everyone');
 
     expect(await within(group).findByRole('button', { name: 'factory/pr-20001' })).toBeInTheDocument();
     expect(within(group).queryByText('No sessions of your own.')).not.toBeInTheDocument();
@@ -161,13 +180,10 @@ describe('Workspaces sidebar owner scope', () => {
     expect(await within(work).findByRole('button', { name: 'factory/issue-20003' })).toBeInTheDocument();
     expect(within(work).queryByRole('button', { name: 'factory/issue-20004' })).not.toBeInTheDocument();
 
-    await user.click(within(work).getByRole('button', { name: 'Show only my work sessions' }));
+    await pickSessionProperty(user, 'Work sessions', 'Owner', 'Everyone');
 
     expect(await within(work).findByRole('button', { name: 'factory/issue-20004' })).toBeInTheDocument();
     expect(within(review).queryByRole('button', { name: 'factory/pr-20002' })).not.toBeInTheDocument();
-    expect(within(review).getByRole('button', { name: 'Show only my review sessions' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    expect(sessionPropertiesTrigger('Review sessions')).toBeInTheDocument();
   });
 });

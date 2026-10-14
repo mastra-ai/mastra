@@ -9,6 +9,7 @@ import type { ChannelInstallationInfo, ChannelPlatformInfo } from '@mastra/react
 import { useEditPage } from '@/domains/agent-builder/contexts/edit-page-context';
 import { usePublishAndConnectChannel } from '@/domains/agent-builder/hooks/use-publish-and-connect-channel';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
+import { useReconcilePendingInstallOnFocus } from '@/domains/agents/hooks/use-reconcile-pending-install-on-focus';
 
 export interface IntegrationsProps {
   agentId: string;
@@ -114,6 +115,8 @@ const IntegrationCard = ({ platform, agentId, disabled, requiresLibrary, onSelec
     queryOptions: { enabled: Boolean(platform.id && agentId) },
   });
   const installation = installations.find(i => i.status === 'active');
+  const hasPendingInstall = installations.some(i => i.status === 'pending');
+  useReconcilePendingInstallOnFocus({ platform: platform.id, agentId, hasPendingInstall });
 
   const description = PLATFORM_DESCRIPTION[platform.id];
 

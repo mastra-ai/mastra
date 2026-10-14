@@ -24,7 +24,9 @@ const ChannelSchema = z.object({
   recipients: z.array(z.unknown()).optional(),
   icon: z.string().nullable().optional(),
   owner_id: z.string().optional(),
-  application_id: z.string().optional(),
+  // Voice channels return `application_id: null` (observed live); the field
+  // is nullable in Discord's channel object.
+  application_id: z.string().nullable().optional(),
   managed: z.boolean().optional(),
   parent_id: z.string().nullable().optional(),
   last_pin_timestamp: z.string().nullable().optional(),

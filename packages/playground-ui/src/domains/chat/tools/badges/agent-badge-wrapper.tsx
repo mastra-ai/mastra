@@ -5,7 +5,7 @@ import { AgentBadge } from './agent-badge';
 import { resolveToChildMessages } from './resolve-child-messages';
 import type { MessageMetadata } from '@/domains/chat';
 import { LoadingBadge } from '@/domains/chat/components/loading-badge';
-import type { ToolApprovalButtonsProps } from '@/domains/chat/tools/badges/tool-approval-buttons';
+import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 
 interface SubAgentToolResult {
@@ -15,7 +15,7 @@ interface SubAgentToolResult {
   args: any;
 }
 
-interface AgentBadgeWrapperProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
+interface AgentBadgeWrapperProps extends Omit<ToolApprovalRequest, 'toolCalled'> {
   agentId: string;
   result?: {
     childMessages?: AgentMessage[];

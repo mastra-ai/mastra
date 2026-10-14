@@ -49,10 +49,10 @@ export function BoardListGroup({
   const dropZone = useBoardDropZone({ stage, onDrop });
 
   return (
-    <section
+    <DataList.Group
       aria-label={label}
       data-testid={`board-column-${stage}`}
-      className="col-span-full grid grid-cols-subgrid content-start gap-y-px pb-4 [&>:not(.data-list-row)]:col-span-full"
+      className="content-start pb-4"
       {...dropZone.dropZoneProps}
     >
       <div
@@ -78,6 +78,6 @@ export function BoardListGroup({
         </div>
       </div>
       {children}
-    </section>
+    </DataList.Group>
   );
 }

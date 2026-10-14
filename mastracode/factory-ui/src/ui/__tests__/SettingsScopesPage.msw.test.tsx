@@ -9,8 +9,8 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 import {
   settingsFactory,
+  settingsDefaultModel,
   settingsMemory,
-  settingsPacks,
   settingsProviders,
   settingsSession,
   settingsThinking,
@@ -43,7 +43,7 @@ beforeEach(() => {
     ),
     http.get(PROVIDERS_URL, () => HttpResponse.json(settingsProviders)),
     http.get(`${TEST_BASE_URL}/web/config/custom-providers`, () => HttpResponse.json({ providers: [] })),
-    http.get(`${TEST_BASE_URL}/web/config/model-packs`, () => HttpResponse.json(settingsPacks)),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json(settingsDefaultModel)),
     http.get(`${TEST_BASE_URL}/web/config/thinking`, () => HttpResponse.json(settingsThinking)),
     http.get(OM_URL, () => HttpResponse.json({ config: settingsMemory })),
   );
@@ -65,7 +65,7 @@ describe('Settings ownership', () => {
     expect(screen.queryByText('Factory defaults')).not.toBeInTheDocument();
     expect(screen.queryByText('Chat defaults')).not.toBeInTheDocument();
     expect(screen.queryByText('Custom providers')).not.toBeInTheDocument();
-    expect(screen.getByText(/Creating or removing a pack changes the list for your whole org/)).toBeInTheDocument();
+    expect(screen.getByText('The model new chats start on.')).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Connect with API key' }));
     expect(await screen.findByText('Covered by org')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Add API key for OpenAI' }));
@@ -123,7 +123,7 @@ describe('Settings ownership', () => {
     );
     const user = userEvent.setup();
     renderSettings('memory');
-    const input = await screen.findByDisplayValue('1000');
+    const input = await screen.findByDisplayValue('1,000');
     expect(requestedFactoryId).toBeNull();
     await user.clear(input);
     await user.type(input, '3000');
@@ -146,9 +146,9 @@ describe('Settings ownership', () => {
     );
     const user = userEvent.setup();
     renderSettings('memory');
-    await screen.findByDisplayValue('1000');
+    await screen.findByDisplayValue('1,000');
     await user.click(screen.getByRole('link', { name: 'Factory memory' }));
-    const input = await screen.findByDisplayValue('1000');
+    const input = await screen.findByDisplayValue('1,000');
     await waitFor(() => expect(requestedFactoryIds).toContain('fp-1'));
     expect(screen.queryByRole('group', { name: 'Who these settings apply to' })).not.toBeInTheDocument();
     await user.clear(input);
@@ -157,7 +157,7 @@ describe('Settings ownership', () => {
     await waitFor(() => expect(body).toEqual({ factoryId: 'fp-1', observationThreshold: 4000 }));
   });
 
-  it('keeps old model-pack deep links working with the return location and hash', async () => {
+  it('keeps legacy model settings deep links working with the return location and hash', async () => {
     const router = createMemoryRouter(createAppRoutes(), {
       initialEntries: [
         {
@@ -172,7 +172,7 @@ describe('Settings ownership', () => {
     expect(await screen.findByText('Your defaults')).toBeInTheDocument();
     expect(router.state.location).toMatchObject({
       pathname: '/factories/fp-1/settings/personal-models',
-      hash: '#model-packs',
+      hash: '#default-model',
       search: '?from=chat',
       state: { settingsReturnTo: '/factories/fp-1/work' },
     });

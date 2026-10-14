@@ -1,11 +1,15 @@
-import type { Database } from '@google-cloud/spanner';
+import type { Database, Transaction } from '@google-cloud/spanner';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
   createStorageErrorId,
+  isRunFenceConflictError,
   MemoryStorage,
+  resolveRunFence,
+  RUN_FENCING_TABLE_SCHEMAS,
+  TABLE_MEMORY_RUN_FENCES,
   normalizePerPage,
   calculatePagination,
   validateStorageMetadataFilter,
@@ -15,7 +19,9 @@ import {
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type {
+  RunFence,
   StorageResourceType,
+  TABLE_NAMES,
   StorageListMessagesInput,
   StorageListMessagesOutput,
   StorageListThreadsInput,
@@ -25,6 +31,7 @@ import type {
 } from '@mastra/core/storage';
 import { SpannerDB, resolveSpannerConfig } from '../../db';
 import type { SpannerDomainConfig } from '../../db';
+import { assertRunFence, DB_NOW_MS, inTransaction, withRunFence } from '../../db/run-fencing';
 import { quoteIdent } from '../../db/utils';
 import { buildDateRangeFilter, transformFromSpannerRow } from '../utils';
 
@@ -90,11 +97,15 @@ export class MemorySpanner extends MemoryStorage {
     this.indexes = indexes?.filter(idx => (MemorySpanner.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
-  /** Creates the threads/messages/resources tables and any indexes. */
+  /** Creates the threads/messages/resources and run fence tables and any indexes. */
   async init(): Promise<void> {
     await this.db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
     await this.db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+    await this.db.createTable({
+      tableName: TABLE_MEMORY_RUN_FENCES as TABLE_NAMES,
+      schema: RUN_FENCING_TABLE_SCHEMAS[TABLE_MEMORY_RUN_FENCES],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -127,11 +138,92 @@ export class MemorySpanner extends MemoryStorage {
     await this.db.createIndexes(this.indexes);
   }
 
-  /** Removes every row from threads/messages/resources tables. Intended for tests. */
+  /** Removes every row from threads/messages/resources and run fence tables. Intended for tests. */
   async dangerouslyClearAll(): Promise<void> {
     await this.db.clearTable({ tableName: TABLE_MESSAGES });
     await this.db.clearTable({ tableName: TABLE_THREADS });
     await this.db.clearTable({ tableName: TABLE_RESOURCES });
+    await this.db.clearTable({ tableName: TABLE_MEMORY_RUN_FENCES as TABLE_NAMES });
+  }
+
+  override supportsRunFencing(): boolean {
+    return true;
+  }
+
+  override async raiseRunFence(fence: RunFence): Promise<boolean> {
+    const table = quoteIdent(TABLE_MEMORY_RUN_FENCES, 'table name');
+    const runIdCol = quoteIdent('runId', 'column name');
+    const ownerIdCol = quoteIdent('ownerId', 'column name');
+    const retiredAtCol = quoteIdent('retiredAt', 'column name');
+    try {
+      return await inTransaction(this.db, async tx => {
+        // The read locks the row until commit, so concurrent raises serialize.
+        const [rows] = await tx.run({
+          sql: `SELECT generation, ${ownerIdCol} AS ownerId FROM ${table} WHERE ${runIdCol} = @runId`,
+          params: { runId: fence.runId },
+          json: true,
+        });
+        const row = (rows as Array<{ generation: number | string; ownerId: string }>)[0];
+        if (!row) {
+          await tx.runUpdate({
+            sql: `INSERT INTO ${table} (${runIdCol}, generation, ${ownerIdCol}) VALUES (@runId, @generation, @ownerId)`,
+            params: { runId: fence.runId, generation: fence.generation, ownerId: fence.ownerId },
+          });
+          return true;
+        }
+        const generation = Number(row.generation);
+        const raises = generation < fence.generation;
+        const reaffirms = generation === fence.generation && String(row.ownerId) === fence.ownerId;
+        if (!raises && !reaffirms) return false;
+        // Every write un-retires the fence.
+        await tx.runUpdate({
+          sql: `UPDATE ${table} SET generation = @generation, ${ownerIdCol} = @ownerId, ${retiredAtCol} = NULL
+                WHERE ${runIdCol} = @runId`,
+          params: { runId: fence.runId, generation: fence.generation, ownerId: fence.ownerId },
+        });
+        return true;
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('SPANNER', 'RAISE_RUN_FENCE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId: fence.runId },
+        },
+        error,
+      );
+    }
+  }
+
+  override async retireRunFence(fence: RunFence): Promise<boolean> {
+    const table = quoteIdent(TABLE_MEMORY_RUN_FENCES, 'table name');
+    try {
+      return await inTransaction(this.db, async tx => {
+        const [count] = await tx.runUpdate({
+          sql: `UPDATE ${table} SET ${quoteIdent('retiredAt', 'column name')} = ${DB_NOW_MS}
+                WHERE ${quoteIdent('runId', 'column name')} = @runId AND generation = @generation
+                  AND ${quoteIdent('ownerId', 'column name')} = @ownerId`,
+          params: { runId: fence.runId, generation: fence.generation, ownerId: fence.ownerId },
+        });
+        return count === 1;
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('SPANNER', 'RETIRE_RUN_FENCE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId: fence.runId },
+        },
+        error,
+      );
+    }
+  }
+
+  /** The fence check for a write already running in a read-write transaction. */
+  async #assertFence(tx: Transaction, fence: RunFence | undefined, operation: string): Promise<void> {
+    if (fence) await assertRunFence(tx, TABLE_MEMORY_RUN_FENCES, fence, operation);
   }
 
   /**
@@ -315,21 +407,25 @@ export class MemorySpanner extends MemoryStorage {
   }
 
   /** Upserts a thread row by id (`INSERT OR UPDATE` semantics). */
-  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
+  async saveThread({ thread, fence }: { thread: StorageThreadType; fence?: RunFence }): Promise<StorageThreadType> {
     try {
-      await this.db.upsert({
-        tableName: TABLE_THREADS,
-        record: {
-          id: thread.id,
-          resourceId: thread.resourceId,
-          title: thread.title,
-          metadata: thread.metadata ?? {},
-          createdAt: thread.createdAt,
-          updatedAt: thread.updatedAt,
-        },
-      });
+      await withRunFence(this.db, TABLE_MEMORY_RUN_FENCES, resolveRunFence(this, fence), 'saveThread', tx =>
+        this.db.upsert({
+          tableName: TABLE_THREADS,
+          record: {
+            id: thread.id,
+            resourceId: thread.resourceId,
+            title: thread.title,
+            metadata: thread.metadata ?? {},
+            createdAt: thread.createdAt,
+            updatedAt: thread.updatedAt,
+          },
+          transaction: tx,
+        }),
+      );
       return thread;
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('SPANNER', 'SAVE_THREAD', 'FAILED'),
@@ -347,11 +443,14 @@ export class MemorySpanner extends MemoryStorage {
     id,
     title,
     metadata,
+    fence: explicitFence,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageThreadType> {
+    const fence = resolveRunFence(this, explicitFence);
     const tableThreads = quoteIdent(TABLE_THREADS, 'table name');
     const now = new Date();
     let merged: Record<string, unknown> = {};
@@ -363,6 +462,7 @@ export class MemorySpanner extends MemoryStorage {
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
+            await this.#assertFence(tx, fence, 'updateThread');
             const [rows] = await tx.run({
               sql: `SELECT * FROM ${tableThreads} WHERE id = @id LIMIT 1`,
               params: { id },
@@ -735,10 +835,11 @@ export class MemorySpanner extends MemoryStorage {
         types: whereTypes,
       } = this.db.prepareWhereClause(filters, TABLE_MESSAGES);
       const metadataWhere = buildSpannerMessageMetadataFilter(metadataFilter);
-      const whereSql = [preparedWhereSql, ...metadataWhere.clauses].reduce((sql, clause) => {
+      // `preparedWhereSql` already carries its own ` WHERE` when non-empty.
+      const whereSql = metadataWhere.clauses.reduce((sql, clause) => {
         if (!clause) return sql;
         return sql ? `${sql} AND ${clause}` : ` WHERE ${clause}`;
-      }, '');
+      }, preparedWhereSql);
       Object.assign(whereParams, metadataWhere.params);
 
       if (perPage === 0 && (!include || include.length === 0)) {
@@ -877,8 +978,15 @@ export class MemorySpanner extends MemoryStorage {
   }
 
   /** Upserts a batch of messages and bumps every touched thread's `updatedAt` in a single transaction. */
-  async saveMessages({ messages }: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
+  async saveMessages({
+    messages,
+    fence: explicitFence,
+  }: {
+    messages: MastraDBMessage[];
+    fence?: RunFence;
+  }): Promise<{ messages: MastraDBMessage[] }> {
     if (messages.length === 0) return { messages: [] };
+    const fence = resolveRunFence(this, explicitFence);
 
     // Collect every distinct threadId touched by this batch and verify each
     // one exists. Previously only messages[0] was validated, so a batch
@@ -919,6 +1027,7 @@ export class MemorySpanner extends MemoryStorage {
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
+            await this.#assertFence(tx, fence, 'saveMessages');
             for (const message of messages) {
               if (!message.resourceId) {
                 throw new Error('Expected to find a resourceId for message');
@@ -964,6 +1073,7 @@ export class MemorySpanner extends MemoryStorage {
       const list = new MessageList().add(messages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
       return { messages: list.get.all.db() };
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('SPANNER', 'SAVE_MESSAGES', 'FAILED'),
@@ -979,6 +1089,7 @@ export class MemorySpanner extends MemoryStorage {
   /** Merges partial updates onto existing messages and bumps affected thread `updatedAt`. */
   async updateMessages({
     messages,
+    fence: explicitFence,
   }: {
     messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
@@ -987,8 +1098,10 @@ export class MemorySpanner extends MemoryStorage {
         content?: MastraMessageContentV2['content'];
       };
     })[];
+    fence?: RunFence;
   }): Promise<MastraDBMessage[]> {
     if (!messages || messages.length === 0) return [];
+    const fence = resolveRunFence(this, explicitFence);
     const messageIds = messages.map(m => m.id);
 
     const params: Record<string, any> = {};
@@ -1013,6 +1126,7 @@ export class MemorySpanner extends MemoryStorage {
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
+            await this.#assertFence(tx, fence, 'updateMessages');
             // Re-read existing rows on every retry. Doing this *outside* the
             // retry let an aborted transaction merge stale row state on the next
             // attempt, under contention that produces lost updates.
@@ -1090,6 +1204,7 @@ export class MemorySpanner extends MemoryStorage {
         }),
       );
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('SPANNER', 'UPDATE_MESSAGES', 'FAILED'),
@@ -1116,8 +1231,9 @@ export class MemorySpanner extends MemoryStorage {
   }
 
   /** Deletes a batch of messages and bumps the affected threads' `updatedAt`. */
-  async deleteMessages(messageIds: string[]): Promise<void> {
+  async deleteMessages(messageIds: string[], options?: { fence?: RunFence }): Promise<void> {
     if (!messageIds || messageIds.length === 0) return;
+    const fence = resolveRunFence(this, options?.fence);
     try {
       const messageTableName = quoteIdent(TABLE_MESSAGES, 'table name');
       const threadTableName = quoteIdent(TABLE_THREADS, 'table name');
@@ -1140,6 +1256,7 @@ export class MemorySpanner extends MemoryStorage {
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
+            await this.#assertFence(tx, fence, 'deleteMessages');
             await tx.runUpdate({
               sql: `DELETE FROM ${messageTableName} WHERE id IN (${placeholders})`,
               params,
@@ -1162,6 +1279,7 @@ export class MemorySpanner extends MemoryStorage {
         }),
       );
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('SPANNER', 'DELETE_MESSAGES', 'FAILED'),
@@ -1230,11 +1348,14 @@ export class MemorySpanner extends MemoryStorage {
     resourceId,
     workingMemory,
     metadata,
+    fence: explicitFence,
   }: {
     resourceId: string;
     workingMemory?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageResourceType> {
+    const fence = resolveRunFence(this, explicitFence);
     const tableResources = quoteIdent(TABLE_RESOURCES, 'table name');
     const now = new Date();
     let updated: StorageResourceType | null = null;
@@ -1245,6 +1366,7 @@ export class MemorySpanner extends MemoryStorage {
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
+            await this.#assertFence(tx, fence, 'updateResource');
             const [rows] = await tx.run({
               sql: `SELECT * FROM ${tableResources} WHERE id = @id LIMIT 1`,
               params: { id: resourceId },
@@ -1311,6 +1433,7 @@ export class MemorySpanner extends MemoryStorage {
       void createdNew;
       return updated as unknown as StorageResourceType;
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       const mastraError = new MastraError(
         {
           id: createStorageErrorId('SPANNER', 'UPDATE_RESOURCE', 'FAILED'),

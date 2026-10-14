@@ -5,7 +5,12 @@ import {
   createObservabilityVNextTests,
   TRACE_AGGREGATE_CONFORMANCE_CASES,
   TRACE_AGGREGATE_FIXTURE_DATA,
+  TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES,
+  TRACE_AGGREGATE_TOKEN_EDGE_CONFORMANCE_CASES,
+  TRACE_AGGREGATE_TOKEN_EDGE_FIXTURE_DATA,
+  TRACE_AGGREGATE_TOKEN_FIXTURE_DATA,
   traceAggregateResponseMismatch,
+  writeTraceAggregateFixture,
   writeTraceQueryFixture,
 } from '@internal/storage-test-utils';
 import { coreFeatures } from '@mastra/core/features';
@@ -25,6 +30,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { DuckDBConnection } from '../../db/index';
 import { DuckDBStore } from '../../index';
 import { ALL_DDL, ALL_MIGRATIONS } from './ddl';
+import { aggregateTraces as aggregateDuckDBTraces } from './trace-aggregate';
 import type { ObservabilityStorageDuckDB } from './index';
 import { ObservabilityStorageDuckDB as ConcreteObservabilityStorageDuckDB } from './index';
 
@@ -3733,5 +3739,100 @@ describe('ObservabilityStorageDuckDB aggregateTraces', () => {
     const total = 'pagination' in traces ? traces.pagination?.total : undefined;
     expect(total).toBeGreaterThan(0);
     expect(aggregate.rows).toEqual([{ measures: { count: total } }]);
+  });
+});
+
+describe('ObservabilityStorageDuckDB aggregateTraces token and cost measures', () => {
+  let store: DuckDBStore;
+
+  beforeAll(async () => {
+    store = new DuckDBStore({ path: ':memory:' });
+    await store.init();
+    await writeTraceAggregateFixture(store.observability, TRACE_AGGREGATE_TOKEN_FIXTURE_DATA, 'event-sourced');
+  });
+
+  afterAll(async () => {
+    await store.db.close();
+  });
+
+  it.each(TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES.map(testCase => [testCase.name, testCase] as const))(
+    'matches the reference evaluator: %s',
+    async (_name, testCase) => {
+      const plan = planTraceAggregate(parseTraceAggregateRequest(testCase.request), { scope: testCase.scope });
+      const response = await store.observability.aggregateTraces(plan);
+      expect(traceAggregateResponseMismatch(response, testCase), JSON.stringify(response)).toBeNull();
+    },
+  );
+
+  it('counts the same traces as queryTraces with token measures requested', async () => {
+    const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+    const aggregate = await store.observability.aggregateTraces(
+      planTraceAggregate(parseTraceAggregateRequest({ timeRange, measures: ['count', 'tokens.total.sum'] })),
+    );
+    const traces = await store.observability.queryTraces(
+      planTraceQuery(parseTraceQueryRequest({ timeRange, pagination: { page: 0, perPage: 1 } })),
+    );
+    const total = 'pagination' in traces ? traces.pagination?.total : undefined;
+    expect(total).toBe(11);
+    expect(aggregate.rows[0]?.measures.count).toBe(total);
+  });
+});
+
+describe('ObservabilityStorageDuckDB aggregateTraces token metric edge cases', () => {
+  let store: DuckDBStore;
+
+  const copies = async (metricId: string) => {
+    const rows = await store.db.query<{ copies: number | bigint }>(
+      `SELECT count(*) AS copies FROM metric_events WHERE metricId = ?`,
+      [metricId],
+    );
+    return Number(rows[0]?.copies);
+  };
+
+  beforeAll(async () => {
+    store = new DuckDBStore({ path: ':memory:' });
+    await store.init();
+    await writeTraceAggregateFixture(store.observability, TRACE_AGGREGATE_TOKEN_EDGE_FIXTURE_DATA, 'event-sourced');
+  });
+
+  afterAll(async () => {
+    await store.db.close();
+  });
+
+  describe('with the metricId primary key', () => {
+    it.each(TRACE_AGGREGATE_TOKEN_EDGE_CONFORMANCE_CASES.map(testCase => [testCase.name, testCase] as const))(
+      '%s',
+      async (_name, testCase) => {
+        // The key rejects the retried copy, so the usage stage needs no dedupe.
+        expect(await copies('edge-dup')).toBe(1);
+        const plan = planTraceAggregate(parseTraceAggregateRequest(testCase.request), { scope: testCase.scope });
+        const response = await store.observability.aggregateTraces(plan);
+        expect(traceAggregateResponseMismatch(response, testCase), JSON.stringify(response)).toBeNull();
+      },
+    );
+  });
+
+  describe('without the metricId primary key', () => {
+    beforeAll(async () => {
+      // A table that never got the key (the store was not initialized against it) can hold a
+      // retried copy with a different timestamp. Rebuild the table without the key and insert one.
+      await store.db.execute(`CREATE TABLE metric_events_unkeyed AS SELECT * FROM metric_events`);
+      await store.db.execute(`DROP TABLE metric_events`);
+      await store.db.execute(`ALTER TABLE metric_events_unkeyed RENAME TO metric_events`);
+      await store.db.execute(
+        `INSERT INTO metric_events SELECT * REPLACE (TIMESTAMP '2026-08-21 11:00:00' AS timestamp)
+         FROM metric_events WHERE metricId = 'edge-dup'`,
+      );
+    });
+
+    it.each(TRACE_AGGREGATE_TOKEN_EDGE_CONFORMANCE_CASES.map(testCase => [testCase.name, testCase] as const))(
+      '%s',
+      async (_name, testCase) => {
+        expect(await copies('edge-dup')).toBe(2);
+        const plan = planTraceAggregate(parseTraceAggregateRequest(testCase.request), { scope: testCase.scope });
+        const response = await aggregateDuckDBTraces(store.db, plan);
+        expect(traceAggregateResponseMismatch(response, testCase), JSON.stringify(response)).toBeNull();
+      },
+    );
   });
 });

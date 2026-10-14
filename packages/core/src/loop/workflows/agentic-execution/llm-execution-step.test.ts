@@ -40,6 +40,7 @@ type IterationData = {
   processorRetryCount?: number;
   fallbackModelIndex?: number;
   processorRetryFeedback?: string;
+  backgroundTaskPending?: boolean;
 };
 
 describe('createLLMExecutionStep gateway provider tools', () => {
@@ -2108,14 +2109,19 @@ describe('createLLMExecutionStep gateway provider tools', () => {
       } as any,
     } as unknown as OuterLLMRun<{}>);
 
-    const result = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+    const result = await llmExecutionStep.execute(
+      createExecuteParams({ ...createIterationInput(), backgroundTaskPending: true }),
+    );
 
     expect(doStream).toHaveBeenCalledTimes(1);
     expect(onAbort).toHaveBeenCalledOnce();
     // Nothing streamed before the abort, so the partial text is an empty string
     // rather than undefined.
     expect(onAbort).toHaveBeenCalledWith(expect.objectContaining({ text: '' }));
-    expect(result.stepResult).toMatchObject({ reason: 'tripwire', isContinued: false });
+    expect(result).toMatchObject({
+      backgroundTaskPending: true,
+      stepResult: { reason: 'abort', isContinued: false },
+    });
   });
 
   it('hands onAbort the text streamed before the abort', async () => {
@@ -2483,8 +2489,8 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     expect(result.stepResult.reason).toBe('retry');
     expect(result.messageId).toBe('rotated-response-id');
 
-    // The rotated id only splits the transcript if the failed response was
-    // sealed; without the boundary the retry merges back under `msg-0`.
+    // The failed attempt's partial response is rolled back, so the retry neither
+    // merges into it nor replays it to the model (#26081).
     messageList.add(
       {
         id: result.messageId,
@@ -2498,7 +2504,8 @@ describe('createLLMExecutionStep gateway provider tools', () => {
       .db()
       .filter(message => message.role === 'assistant')
       .map(message => message.id);
-    expect(assistantIds).toEqual(['msg-0', 'rotated-response-id']);
+    expect(assistantIds).toEqual(['rotated-response-id']);
+    expect(JSON.stringify(messageList.get.all.db())).not.toContain('half a sentence');
   });
 
   it('passes the rotated response message id to processor custom data writers', async () => {

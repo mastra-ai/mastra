@@ -41,7 +41,7 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 import { getWorkflowInfo, WorkflowRegistry } from '../utils';
 import { handleError } from './error';
-import { getEffectiveResourceId, validateRunOwnership } from './utils';
+import { getEffectiveResourceId, getPublicWorkflowById, validateRunOwnership } from './utils';
 
 /**
  * Statuses a run cannot come back from. Streaming one of these runIds again would
@@ -125,11 +125,7 @@ async function listWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) 
   workflow = WorkflowRegistry.getWorkflow(workflowId);
 
   if (!workflow) {
-    try {
-      workflow = mastra.getWorkflowById(workflowId);
-    } catch (error) {
-      logger.debug('Error getting workflow, searching agents for workflow', error);
-    }
+    workflow = getPublicWorkflowById(mastra, workflowId);
   }
 
   if (!workflow) {
@@ -1480,11 +1476,30 @@ export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
 // Used by standalone OrchestrationWorker instances with HttpRemoteStrategy.
 // ============================================================================
 
+// Identifies the workflow a nested step runs under, up to the top-level run.
+// Nested workflows are usually reachable only from their parent's step graph.
+export type StepExecutionParentWorkflow = {
+  workflowId: string;
+  runId: string;
+  executionPath: number[];
+  parentWorkflow?: StepExecutionParentWorkflow;
+};
+
+const stepExecutionParentWorkflowSchema: z.ZodType<StepExecutionParentWorkflow> = z.lazy(() =>
+  z.object({
+    workflowId: z.string(),
+    runId: z.string(),
+    executionPath: z.array(z.number().int().nonnegative()),
+    parentWorkflow: stepExecutionParentWorkflowSchema.optional(),
+  }),
+);
+
 // `workflowId` and `runId` are taken from path params (single source of
 // truth); they are intentionally omitted from the request body schema.
 const stepExecutionBodySchema = z.object({
   stepId: z.string(),
   executionPath: z.array(z.number().int().nonnegative()),
+  parentWorkflow: stepExecutionParentWorkflowSchema.optional(),
   stepResults: z.record(z.string(), z.unknown()),
   state: z.record(z.string(), z.unknown()),
   requestContext: z.record(z.string(), z.unknown()),
@@ -1556,6 +1571,7 @@ export const EXECUTE_WORKFLOW_STEP_ROUTE = createRoute({
         runId,
         stepId: body.stepId,
         executionPath: body.executionPath,
+        parentWorkflow: body.parentWorkflow,
         stepResults: body.stepResults,
         state: body.state,
         requestContext: body.requestContext,

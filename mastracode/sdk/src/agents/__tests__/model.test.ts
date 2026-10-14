@@ -267,7 +267,7 @@ describe('resolveModel', () => {
     process.env = { ...originalEnv };
   });
 
-  it('discovers custom and Copilot providers through the MastraCode gateway', async () => {
+  it('lists only custom providers under the MastraCode gateway namespace', async () => {
     mockLoadSettings.mockReturnValue({
       customProviders: [
         {
@@ -279,8 +279,6 @@ describe('resolveModel', () => {
       ],
       memoryGateway: {},
     });
-    mockGetCopilotModelCatalog.mockResolvedValueOnce([{ id: 'gpt-4.1' }] as any);
-
     const gateway = createMastraCodeGateway({
       mastraGatewayBaseUrl: 'https://gateway-api.mastra.ai',
       routeThroughMastraGateway: false,
@@ -289,20 +287,16 @@ describe('resolveModel', () => {
     expect(gateway).toBeInstanceOf(MastraCodeGateway);
     expect(gateway.id).toBe('mastracode');
 
-    await expect(gateway.fetchProviders()).resolves.toMatchObject({
-      'acme-models': {
-        name: 'Acme Models',
-        url: 'https://llm.acme.dev/v1',
-        gateway: 'mastracode',
-        models: ['reasoner-v1'],
-      },
-      'github-copilot': {
-        name: 'GitHub Copilot',
-        gateway: 'mastracode',
-        models: ['gpt-4.1'],
-      },
+    const providers = await gateway.fetchProviders();
+    // Kimi augments models.dev `kimi-code-plan-cn`, and Copilot has its own
+    // gateway, so neither surfaces as `mastracode/<provider>/<model>`.
+    expect(Object.keys(providers)).toEqual(['acme-models']);
+    expect(providers['acme-models']).toMatchObject({
+      name: 'Acme Models',
+      url: 'https://llm.acme.dev/v1',
+      gateway: 'mastracode',
+      models: ['reasoner-v1'],
     });
-    expect(mockGetCopilotModelCatalog).toHaveBeenCalled();
   });
 
   it('claims models.dev providers authenticated by the injected credential store', () => {
@@ -641,6 +635,43 @@ describe('resolveModel', () => {
         authStorage: scopedAuthStorage(),
       });
     });
+
+    it.each([
+      { modeless: false, expected: 'high' },
+      { modeless: true, expected: 'low' },
+    ])(
+      'given a Build session without an override, when modeless is $modeless, then dynamic resolution thinks at $expected',
+      ({ modeless, expected }) => {
+        mockAuthStorageInstance.get.mockReturnValue({
+          type: 'oauth',
+          access: 'openai-oauth-access-token',
+          refresh: 'openai-oauth-refresh-token',
+          expires: Date.now() + 60_000,
+        });
+        mockLoadSettings.mockImplementation(
+          () =>
+            ({
+              customProviders: [],
+              memoryGateway: {},
+              models: { modeThinkingDefaults: { build: 'high' } },
+              preferences: { thinkingLevel: 'low' },
+            }) as any,
+        );
+        const values = new Map<string, unknown>();
+        const requestContext = {
+          get: (key: string) => values.get(key),
+          set: (key: string, value: unknown) => values.set(key, value),
+        } as any;
+        requestContext.set('controller', { session: { modelId: 'openai/gpt-5.2', modeId: 'build' }, state: {} });
+
+        getDynamicModel({ requestContext }, undefined, { modeless });
+
+        expect(openaiCodexProvider).toHaveBeenCalledWith(
+          'gpt-5.2-codex',
+          expect.objectContaining({ thinkingLevel: expected }),
+        );
+      },
+    );
   });
 
   describe('moonshotai/* models', () => {
@@ -845,6 +876,44 @@ describe('resolveModel', () => {
         'x-thread-id': 'thread-123',
         'x-resource-id': 'resource-456',
       });
+    });
+
+    function tenantRequest(allowsDeploymentCredentials?: (provider: string) => boolean) {
+      setCredentialStoreProvider(() => ({
+        allowEnvironmentFallback: false,
+        allowsDeploymentCredentials,
+        reload() {},
+        get: () => undefined,
+        getStoredApiKey: () => undefined,
+        getApiKey: async () => undefined,
+      }));
+      const requestContext = makeRequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+      return requestContext;
+    }
+
+    it('refuses Bedrock for a signed-in Factory tenant unless the deployment opted in', () => {
+      const requestContext = tenantRequest();
+
+      expect(() => resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_OPUS__, { requestContext })).toThrow(
+        ProviderAuthRequiredError,
+      );
+      expect(() => resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_OPUS__, { requestContext })).toThrow(
+        'Amazon Bedrock is not enabled for this Factory deployment.',
+      );
+      expect(createAmazonBedrock).not.toHaveBeenCalled();
+    });
+
+    it('resolves Bedrock for a signed-in Factory tenant when the deployment opted in', () => {
+      const requestContext = tenantRequest(provider => provider === 'amazon-bedrock');
+
+      const result = resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_OPUS__, { requestContext }) as Record<
+        string,
+        unknown
+      >;
+
+      expect(result.__provider).toBe('amazon-bedrock');
+      expect(result.credentialProvider).toBe(mockCredentialProvider);
     });
   });
 
@@ -1258,6 +1327,14 @@ describe('resolveRequestThinkingLevel', () => {
     const level = resolveRequestThinkingLevel({ state: {}, session: { modeId: 'plan' } } as any);
 
     expect(level).toBe('medium');
+  });
+
+  it('given a context without a session mode, when the settings have mode defaults, then the global default applies', () => {
+    mockLoadSettings.mockImplementation(() =>
+      settingsWithThinking({ modeThinkingDefaults: { build: 'high' }, thinkingLevel: 'low' }),
+    );
+
+    expect(resolveRequestThinkingLevel({ state: {} })).toBe('low');
   });
 
   it('treats a null session value as a cleared override', () => {

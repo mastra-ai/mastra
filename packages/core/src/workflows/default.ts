@@ -39,6 +39,7 @@ import type {
   EntryExecutionResult,
   ExecutionContext,
   MutableContext,
+  NestedWorkflowParent,
   OutputWriter,
   RestartExecutionParams,
   SerializedStepFlowEntry,
@@ -729,6 +730,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   async execute<TState, TInput, TOutput>(params: {
     workflowId: string;
     runId: string;
+    parentWorkflow?: NestedWorkflowParent;
     resourceId?: string;
     disableScorers?: boolean;
     graph: ExecutionGraph;
@@ -937,6 +939,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       const executionContext: ExecutionContext = {
         workflowId,
         runId,
+        parentWorkflow: params.parentWorkflow,
         executionPath: [i],
         stepExecutionPath,
         activeStepsPath: {},

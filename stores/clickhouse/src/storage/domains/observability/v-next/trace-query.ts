@@ -216,6 +216,14 @@ function compileScalarPredicate<TField extends string>(
       : `notEmpty(${field.sql}) AND NOT has(${field.sql}, ${member})`;
   }
 
+  if (predicate.type === 'text') {
+    // Same normalization as `normalizeTraceQueryText`: NFC, lowercase, words = runs of
+    // letters, marks, and digits. `lowerUTF8('İ')` is `i` plus a combining dot, so fold `İ` after NFC composes it.
+    const words = `concat(' ', replaceAll(lowerUTF8(replaceRegexpAll(replaceAll(normalizeUTF8NFC(${field.sql}), 'İ', 'i'), '[^\\\\p{L}\\\\p{M}\\\\p{N}]+', ' ')), 'ς', 'σ'), ' ')`;
+    const found = `position(${words}, ${parameters.add(` ${predicate.value} `, 'String')}) > 0`;
+    return `ifNull(${predicate.operator === 'matches' ? found : `NOT (${found})`}, 0)`;
+  }
+
   if (predicate.type === 'membership') {
     const values = predicate.values.map(value => parameters.add(value, field.parameterType)).join(', ');
     const expression = `${field.sql} ${predicate.operator === 'in' ? 'IN' : 'NOT IN'} (${values})`;
@@ -343,7 +351,7 @@ export interface CompiledClickHouseTraceQuery {
  * Tenant conditions ANDed into every root and related-signal scan. Columns are
  * `Nullable(String)`, so rows without a tenant never match a scope.
  */
-function compileTenantScope(scope: TraceQueryTenantScope | undefined, parameters: ParameterBuilder): string {
+export function compileTenantScope(scope: TraceQueryTenantScope | undefined, parameters: ParameterBuilder): string {
   if (!scope) return '';
   let sql = `\n      AND organizationId = ${parameters.add(scope.organizationId, 'String')}`;
   if (scope.resourceId !== undefined) sql += `\n      AND resourceId = ${parameters.add(scope.resourceId, 'String')}`;
@@ -366,20 +374,19 @@ function compileClickHouseTraceScope(
   // ClickHouse cannot push the time range through `LIMIT 1 BY`, so narrow the dedupe to
   // traces with a root in the range first. All roots of those traces stay in, so a
   // non-current root inside the range cannot resurrect a trace whose current root is outside it.
+  // The re-read carries the tenant scope so it reads only the tenant's rows, and another
+  // tenant's root with the same traceId cannot win the dedupe. One `LIMIT 1 BY traceId`
+  // picks the same root as deduping by dedupeKey first: the lowest dedupeKey of the trace.
   const ctes = [
     `current_roots AS (
-    SELECT * FROM (
-      SELECT *
-      FROM ${TABLE_TRACE_ROOTS}
-      WHERE traceId IN (
-        SELECT traceId
-        FROM ${TABLE_TRACE_ROOTS} r
-        WHERE startedAt >= ${from}
-          AND startedAt < ${to}${tenant}${seedFilter}
-      )
-      ORDER BY dedupeKey
-      LIMIT 1 BY dedupeKey
-    )
+    SELECT *
+    FROM ${TABLE_TRACE_ROOTS}
+    WHERE traceId IN (
+      SELECT traceId
+      FROM ${TABLE_TRACE_ROOTS} r
+      WHERE startedAt >= ${from}
+        AND startedAt < ${to}${tenant}${seedFilter}
+    )${tenant}
     ORDER BY traceId, dedupeKey
     LIMIT 1 BY traceId
   )`,

@@ -307,6 +307,7 @@ interface QueryResult {
   id: string
   score: number
   metadata: Record<string, any>
+  document?: string // Matched document content
   vector?: number[] // Only included if includeVector is true
 }
 ```

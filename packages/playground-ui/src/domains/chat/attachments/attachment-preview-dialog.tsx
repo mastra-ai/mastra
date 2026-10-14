@@ -1,35 +1,43 @@
 import { File as FileIcon, FileAudio, FileText, FileVideo } from 'lucide-react';
-import { useState } from 'react';
 import type { RefObject } from 'react';
+import { ComposerAttachmentEntry } from './composer-attachment-entry';
+import { useAttachmentPreview } from './use-attachment-preview';
+import type { AttachmentPreviewProps } from './use-attachment-preview';
 import { Button } from '@/ds/components/Button';
 import { Dialog, DialogTitle, DialogContent, DialogHeader, DialogBody } from '@/ds/components/Dialog';
+import { cn } from '@/utils/cn';
 
-interface PdfEntryProps {
+interface PdfEntryProps extends AttachmentPreviewProps {
   data: string;
   url?: string;
 }
 
-const ctaClassName = 'h-full w-full flex items-center justify-center';
+const ctaClassName =
+  'h-full w-full flex items-center justify-center rounded-[inherit] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-border-focus [&:is(button,a)]:cursor-pointer';
 const fileTypeIconClassName = 'text-badge-red-indicator';
 
-export const PdfEntry = ({ data, url }: PdfEntryProps) => {
-  const [open, setOpen] = useState(false);
+export const PdfEntry = ({ data, url, ...previewProps }: PdfEntryProps) => {
+  const { open, setOpen, triggerRef } = useAttachmentPreview(previewProps);
 
   if (url) {
     return (
       <a href={url} className={ctaClassName} target="_blank" rel="noreferrer noopener">
-        <FileText className={fileTypeIconClassName} aria-label="View PDF" />
+        <ComposerAttachmentEntry>
+          <FileText className={fileTypeIconClassName} aria-label="View PDF" />
+        </ComposerAttachmentEntry>
       </a>
     );
   }
 
   return (
     <>
-      <button onClick={() => setOpen(true)} className={ctaClassName} type="button">
-        <FileText className={fileTypeIconClassName} aria-label="View PDF" />
+      <button ref={triggerRef} onClick={() => setOpen(true)} className={ctaClassName} type="button">
+        <ComposerAttachmentEntry>
+          <FileText className={fileTypeIconClassName} aria-label="View PDF" />
+        </ComposerAttachmentEntry>
       </button>
 
-      <PdfPreviewDialog data={data} open={open} onOpenChange={setOpen} />
+      <PdfPreviewDialog data={data} open={open} onOpenChange={setOpen} returnFocusRef={triggerRef} />
     </>
   );
 };
@@ -95,37 +103,40 @@ export const FileChipEntry = ({ name, url, contentType }: FileChipEntryProps) =>
   if (url) {
     return (
       <a href={url} className={ctaClassName} target="_blank" rel="noreferrer noopener" title={name}>
-        {icon}
+        <ComposerAttachmentEntry>{icon}</ComposerAttachmentEntry>
       </a>
     );
   }
 
   return (
     <div className={ctaClassName} title={name}>
-      {icon}
+      <ComposerAttachmentEntry>{icon}</ComposerAttachmentEntry>
     </div>
   );
 };
 
-interface ImageEntryProps {
+interface ImageEntryProps extends AttachmentPreviewProps {
   src: string;
   name?: string;
 }
 
-export const ImageEntry = ({ src, name }: ImageEntryProps) => {
-  const [open, setOpen] = useState(false);
+export const ImageEntry = ({ src, name, ...previewProps }: ImageEntryProps) => {
+  const { open, setOpen, triggerRef } = useAttachmentPreview(previewProps);
 
   return (
     <>
       <button
+        ref={triggerRef}
         onClick={() => setOpen(true)}
         type="button"
         className={ctaClassName}
         aria-label={name ? `Preview ${name}` : 'Preview image'}
       >
-        <img src={src} className="aspect-ratio max-h-35 max-w-full object-cover" alt={name ?? 'Preview'} />
+        <ComposerAttachmentEntry variant="image">
+          <img src={src} className="aspect-ratio max-h-35 max-w-full object-cover" alt={name ?? 'Preview'} />
+        </ComposerAttachmentEntry>
       </button>
-      <ImagePreviewDialog src={src} open={open} onOpenChange={setOpen} />
+      <ImagePreviewDialog src={src} open={open} onOpenChange={setOpen} returnFocusRef={triggerRef} />
     </>
   );
 };
@@ -150,13 +161,13 @@ export const ImagePreviewDialog = ({ src, open, onOpenChange, returnFocusRef }: 
   );
 };
 
-interface TxtEntryProps {
+interface TxtEntryProps extends AttachmentPreviewProps {
   data: string;
   name?: string;
 }
 
-export const TxtEntry = ({ data, name }: TxtEntryProps) => {
-  const [open, setOpen] = useState(false);
+export const TxtEntry = ({ data, name, ...previewProps }: TxtEntryProps) => {
+  const { open, setOpen, triggerRef } = useAttachmentPreview(previewProps);
 
   const formattedContent =
     name === undefined ? (data.match(/^<attachment[^>]*>([\s\S]*)<\/attachment>$/)?.[1] ?? data) : data;
@@ -171,18 +182,25 @@ export const TxtEntry = ({ data, name }: TxtEntryProps) => {
 
   return (
     <>
-      <Button
+      <button
+        ref={triggerRef}
         onClick={() => setOpen(true)}
-        size="sm"
-        className="max-w-64 min-w-0 pointer-coarse:min-h-11"
+        className={cn(ctaClassName, 'min-w-0')}
         type="button"
         aria-label={filename ? `Preview ${filename}` : 'Preview text attachment'}
         title={filename}
-        icon={<FileText />}
       >
-        {filename && <span className="truncate">{filename}</span>}
-      </Button>
-      <TxtPreviewDialog data={formattedContent} title={filename} open={open} onOpenChange={setOpen} />
+        <ComposerAttachmentEntry name={filename}>
+          <FileText className={fileTypeIconClassName} aria-hidden="true" />
+        </ComposerAttachmentEntry>
+      </button>
+      <TxtPreviewDialog
+        data={formattedContent}
+        title={filename}
+        open={open}
+        onOpenChange={setOpen}
+        returnFocusRef={triggerRef}
+      />
     </>
   );
 };

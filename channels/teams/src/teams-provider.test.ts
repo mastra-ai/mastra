@@ -337,6 +337,20 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
     await expect(provider.connect('agent-1')).rejects.toThrow(/needs a baseUrl/);
   });
 
+  it('registers the messaging endpoint against MASTRA_SERVER_URL when no baseUrl is set', async () => {
+    vi.stubEnv('MASTRA_SERVER_URL', 'https://my-app.server.example.com/');
+    const storage = new InMemoryChannelsStorage();
+    const provider = new TeamsProvider({ storage, tokenResolver: makeTokenResolver(), encryptionKey: ENC_KEY });
+    const stubs = stubProvisioning();
+
+    await provider.connect('agent-1');
+
+    const record = await storage.getInstallationByAgent(PLATFORM, 'agent-1');
+    expect(String(stubs.botRegistrationBody()?.messagingEndpoint)).toBe(
+      `https://my-app.server.example.com/${PLATFORM}/events/${record?.webhookId}`,
+    );
+  });
+
   it('rolls back the Entra application when the Dev Portal registration fails', async () => {
     mockAgent
       .get(GRAPH_ORIGIN)

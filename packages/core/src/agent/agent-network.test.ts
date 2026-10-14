@@ -5,7 +5,7 @@ import { z } from 'zod/v4';
 import type { MastraError } from '../error';
 import { Mastra } from '../mastra';
 import { MockMemory } from '../memory/mock';
-import { RequestContext } from '../request-context';
+import { MASTRA_SCOPES_KEY, RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage';
 import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
@@ -4295,6 +4295,90 @@ describe('Agent - network - tool approval and suspension', () => {
       expect(mockToolExecute).not.toHaveBeenCalled();
     });
 
+    it('rejects a direct network tool call from beforeApproval without suspending (#26772)', async () => {
+      const execute = vi.fn().mockResolvedValue({ result: 'should not run' });
+      const beforeApproval = vi.fn().mockResolvedValue({ proceed: false, output: { error: 'Order not found' } });
+      const guardedTool = createTool({
+        id: 'guardedTool',
+        description: 'A tool that requires approval.',
+        inputSchema: z.object({ query: z.string(), limit: z.number().default(10) }),
+        requireApproval: true,
+        beforeApproval,
+        execute,
+      });
+
+      const mockModel = createRoutingMockModel('guardedTool', 'tool', JSON.stringify({ query: 'guarded' }));
+      const networkAgent = new Agent({
+        id: 'before-approval-network-agent',
+        name: 'Before Approval Network Agent',
+        instructions: 'Use guardedTool.',
+        model: mockModel,
+        tools: { guardedTool },
+        memory,
+      });
+      const mastra = new Mastra({ agents: { networkAgent }, storage, logger: false });
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Process the query "guarded"', {
+        memory: { thread: 'test-thread-before-approval', resource: 'test-resource-before-approval' },
+      });
+
+      const chunks: any[] = [];
+      for await (const chunk of anStream) {
+        chunks.push(chunk);
+      }
+
+      expect(beforeApproval).toHaveBeenCalledTimes(1);
+      expect(beforeApproval).toHaveBeenCalledWith({ query: 'guarded', limit: 10 }, expect.anything());
+      expect(chunks.map(chunk => chunk.type)).not.toContain('tool-execution-approval');
+      const executionEnd = chunks.find(chunk => chunk.type === 'tool-execution-end');
+      expect(executionEnd?.payload?.result).toBe(JSON.stringify({ error: 'Order not found' }));
+      expect(execute).not.toHaveBeenCalled();
+    });
+
+    it('stringifies circular or undefined beforeApproval output on the network path (#26772)', async () => {
+      const circular: Record<string, unknown> = { error: 'loop' };
+      circular.self = circular;
+      const outputs: unknown[] = [circular, undefined];
+
+      for (const [index, output] of outputs.entries()) {
+        const execute = vi.fn().mockResolvedValue({ result: 'should not run' });
+        const guardedTool = createTool({
+          id: 'guardedTool',
+          description: 'A tool that requires approval.',
+          inputSchema: z.object({ query: z.string() }),
+          requireApproval: true,
+          beforeApproval: async () => ({ proceed: false as const, output }),
+          execute,
+        });
+        const networkAgent = new Agent({
+          id: `before-approval-edge-network-agent-${index}`,
+          name: 'Before Approval Edge Network Agent',
+          instructions: 'Use guardedTool.',
+          model: createRoutingMockModel('guardedTool', 'tool', JSON.stringify({ query: 'guarded' })),
+          tools: { guardedTool },
+          memory,
+        });
+        const mastra = new Mastra({ agents: { networkAgent }, storage, logger: false });
+        const anStream = await mastra.getAgent('networkAgent').network('Process the query "guarded"', {
+          memory: {
+            thread: `test-thread-before-approval-edge-${index}`,
+            resource: 'test-resource-before-approval-edge',
+          },
+        });
+
+        const chunks: any[] = [];
+        for await (const chunk of anStream) {
+          chunks.push(chunk);
+        }
+
+        const executionEnd = chunks.find(chunk => chunk.type === 'tool-execution-end');
+        expect(typeof executionEnd?.payload?.result).toBe('string');
+        expect(chunks.map(chunk => chunk.type)).not.toContain('tool-execution-approval');
+        expect(execute).not.toHaveBeenCalled();
+      }
+    });
+
     it('should decline a nested agent tool call', async () => {
       mockToolExecute.mockClear();
 
@@ -4452,6 +4536,156 @@ describe('Agent - network - tool approval and suspension', () => {
       expect(resumeChunks[resumeChunks.length - 1].type).toBe('network-execution-event-finish');
       expect(toolResult).toBeDefined();
       expect(toolResult?.result).toContain('my additional info');
+    });
+
+    it('resumes a network run with its own scopes and rejects added scopes', async () => {
+      const networkAgent = new Agent({
+        id: 'scoped-network-agent',
+        name: 'Scoped Network Agent',
+        instructions: 'Use the suspending-tool when asked to collect info.',
+        model: createRoutingMockModel('suspendingTool', 'tool', JSON.stringify({ initialQuery: 'scoped' })),
+        tools: { suspendingTool },
+        memory,
+      });
+      const mastra = new Mastra({ agents: { networkAgent }, storage, logger: false });
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Collect information with initial query "scoped"', {
+        scopes: ['org:a', 'resource:scoped-resource', 'thread:scoped-thread'],
+      });
+      for await (const _chunk of anStream) {
+        // drain until suspension
+      }
+
+      await expect(
+        registeredAgent.resumeNetwork(
+          { userResponse: 'nope' },
+          { runId: anStream.runId, requestContext: new RequestContext([[MASTRA_SCOPES_KEY, ['org:b']]]) },
+        ),
+      ).rejects.toMatchObject({ id: 'AGENT_SCOPES_CONFLICT' });
+
+      const resumeStream = await registeredAgent.resumeNetwork(
+        { userResponse: 'scoped info' },
+        {
+          runId: anStream.runId,
+          requestContext: new RequestContext([[MASTRA_SCOPES_KEY, ['org:a', 'thread:scoped-thread']]]),
+        },
+      );
+      let toolResult: any;
+      for await (const chunk of resumeStream) {
+        if (chunk.type === 'tool-execution-end') toolResult = chunk.payload?.result;
+      }
+      expect(toolResult?.result).toContain('scoped info');
+    });
+
+    it('adopts supplied scopes when resuming a pre-upgrade network snapshot that recorded none', async () => {
+      const networkAgent = new Agent({
+        id: 'pre-upgrade-network-agent',
+        name: 'Pre-upgrade Network Agent',
+        instructions: 'Use the suspending-tool when asked to collect info.',
+        model: createRoutingMockModel('suspendingTool', 'tool', JSON.stringify({ initialQuery: 'legacy' })),
+        tools: { suspendingTool },
+        memory,
+      });
+      const mastra = new Mastra({ agents: { networkAgent }, storage, logger: false });
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Collect information with initial query "legacy"', {
+        memory: { thread: 'legacy-thread', resource: 'legacy-resource' },
+      });
+      for await (const _chunk of anStream) {
+        // drain until suspension
+      }
+
+      // Simulate a run suspended before the scopes upgrade: strip the recorded scope set.
+      const workflowsStore = await mastra.getStorage()!.getStore('workflows');
+      const snapshot: any = await workflowsStore!.loadWorkflowSnapshot({
+        workflowName: 'agent-loop-main-workflow',
+        runId: anStream.runId,
+      });
+      delete snapshot.requestContext?.[MASTRA_SCOPES_KEY];
+      await workflowsStore!.persistWorkflowSnapshot({
+        workflowName: 'agent-loop-main-workflow',
+        runId: anStream.runId,
+        snapshot,
+      });
+
+      // Previously this threw AGENT_SCOPES_CONFLICT; a pre-upgrade run adopts the scopes.
+      const resumeStream = await registeredAgent.resumeNetwork(
+        { userResponse: 'legacy info' },
+        { runId: anStream.runId, requestContext: new RequestContext([[MASTRA_SCOPES_KEY, ['org:a']]]) },
+      );
+      let toolResult: any;
+      for await (const chunk of resumeStream) {
+        if (chunk.type === 'tool-execution-end') toolResult = chunk.payload?.result;
+      }
+      expect(toolResult?.result).toContain('legacy info');
+    });
+
+    it('records an empty scope set on network runs so a scopeless resume still rejects added scopes', async () => {
+      const networkAgent = new Agent({
+        id: 'stamped-network-agent',
+        name: 'Stamped Network Agent',
+        instructions: 'Use the suspending-tool when asked to collect info.',
+        model: createRoutingMockModel('suspendingTool', 'tool', JSON.stringify({ initialQuery: 'stamped' })),
+        tools: { suspendingTool },
+        memory,
+      });
+      const mastra = new Mastra({ agents: { networkAgent }, storage, logger: false });
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Collect information with initial query "stamped"', {
+        memory: { thread: 'stamped-thread', resource: 'stamped-resource' },
+      });
+      for await (const _chunk of anStream) {
+        // drain until suspension
+      }
+
+      // The snapshot records the (empty) scope set unconditionally, so the resume can tell
+      // "held no scopes" from a pre-upgrade snapshot.
+      const workflowsStore = await mastra.getStorage()!.getStore('workflows');
+      const snapshot: any = await workflowsStore!.loadWorkflowSnapshot({
+        workflowName: 'agent-loop-main-workflow',
+        runId: anStream.runId,
+      });
+      expect(snapshot.requestContext?.[MASTRA_SCOPES_KEY]).toEqual([]);
+
+      await expect(
+        registeredAgent.resumeNetwork(
+          { userResponse: 'nope' },
+          { runId: anStream.runId, requestContext: new RequestContext([[MASTRA_SCOPES_KEY, ['org:a']]]) },
+        ),
+      ).rejects.toMatchObject({ id: 'AGENT_SCOPES_CONFLICT' });
+    });
+
+    it('keeps resume identity precedence when no scopes are involved', async () => {
+      const networkAgent = new Agent({
+        id: 'unscoped-network-agent',
+        name: 'Unscoped Network Agent',
+        instructions: 'Use the suspending-tool when asked to collect info.',
+        model: createRoutingMockModel('suspendingTool', 'tool', JSON.stringify({ initialQuery: 'plain' })),
+        tools: { suspendingTool },
+        memory,
+      });
+      const mastra = new Mastra({ agents: { networkAgent }, storage, logger: false });
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Collect information with initial query "plain"', {
+        memory: { thread: 'unscoped-thread', resource: 'unscoped-resource' },
+      });
+      for await (const _chunk of anStream) {
+        // drain until suspension
+      }
+
+      // No memory on resume: as before scopes, the resume does not pick up the snapshot thread.
+      const resumeStream = await registeredAgent.resumeNetwork(
+        { userResponse: 'plain info' },
+        { runId: anStream.runId },
+      );
+      for await (const _chunk of resumeStream) {
+        // drain
+      }
+      expect(await memory.getThreadById({ threadId: anStream.runId })).not.toBeNull();
     });
 
     it('should resume suspended nested agent tool', async () => {

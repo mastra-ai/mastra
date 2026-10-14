@@ -6,7 +6,6 @@ import { boardForWorkItem } from '../boards/index.js';
 import { hydrateFactorySession } from '../session/factory-session.js';
 import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
-import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { CreateWorkItemInput, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactoryTransitionService } from './transition-service.js';
@@ -69,21 +68,20 @@ type FactorySession = Awaited<ReturnType<FactoryController['createSession']>>;
 async function resolveSourceSession(
   storage: SourceControlStorageHandle,
   request: FactoryStartRequest,
-): Promise<SourceControlSession> {
+): Promise<SourceControlSession & { projectRepositoryId: string }> {
   const session = await storage.sessions.getBySessionId(request.sessionId);
   if (!session || session.orgId !== request.orgId || session.userId !== request.userId) {
     throw new Error('Factory session not found');
   }
-  const projectRepository = await storage.projectRepositories.get({
-    orgId: request.orgId,
-    id: session.projectRepositoryId,
-  });
+  const projectRepositoryId = session.projectRepositoryId;
+  if (!projectRepositoryId) throw new Error('Factory session repository not found');
+  const projectRepository = await storage.projectRepositories.get({ orgId: request.orgId, id: projectRepositoryId });
   if (!projectRepository) throw new Error('Factory session repository not found');
   const connection = await storage.connections.get({ orgId: request.orgId, id: projectRepository.connectionId });
   if (!connection || connection.factoryProjectId !== request.factoryProjectId) {
     throw new Error('Factory session does not belong to this project');
   }
-  return session;
+  return { ...session, projectRepositoryId };
 }
 
 async function configureThread(session: FactorySession, request: FactoryStartRequest): Promise<string> {
@@ -104,7 +102,6 @@ export class FactoryStartCoordinator {
     | ((
         request: FactoryStartRequest,
       ) => SourceControlStorageHandle | undefined | Promise<SourceControlStorageHandle | undefined>);
-  readonly #memorySettings?: MemorySettingsStorage;
   readonly #intake?: IntakeStorage;
 
   constructor(
@@ -116,14 +113,12 @@ export class FactoryStartCoordinator {
       | ((
           request: FactoryStartRequest,
         ) => SourceControlStorageHandle | undefined | Promise<SourceControlStorageHandle | undefined>),
-    memorySettings?: MemorySettingsStorage,
     intake?: IntakeStorage,
   ) {
     this.#controller = controller;
     this.#storage = storage;
     this.#transitionService = transitionService;
     this.#sourceControl = sourceControl;
-    this.#memorySettings = memorySettings;
     this.#intake = intake;
   }
 
@@ -243,14 +238,11 @@ export class FactoryStartCoordinator {
       ],
       ...(untrustedCheckout ? { untrustedCheckout: true, ...(baseRef ? { baseRef } : {}) } : {}),
     });
-    // Board runs are org-shared: hydrate with the factory's default model and
-    // the project's shared memory settings (falling back to the built-in
-    // defaults), never any individual user's stored settings.
+    // Apply the factory's main model before any model-dependent run work.
+    // Observational-memory settings are loaded per invocation by the input processor.
     await hydrateFactorySession(session, {
       orgId: request.orgId,
-      factoryProjectId: request.factoryProjectId,
       defaultModelId: request.defaultModelId,
-      memorySettings: this.#memorySettings,
     });
     // The tool is `requireApproval`, and that prompt parks the run whether or not
     // someone pressed Start — a person is reading the plan, not an approval queue.

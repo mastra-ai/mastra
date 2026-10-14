@@ -57,9 +57,12 @@ import type { StdioServerHandle } from '@modelcontextprotocol/server/stdio';
 
 import { JSON_SCHEMA_2020_12, toJsonSchema2020 } from '../shared/json-schema-dialect';
 import { withMastraToolStrictMeta } from '../shared/mastra-tool-meta';
+import { withServerTraceContext, withoutTraceContext } from '../shared/trace-context';
+import type { CallerTraceContext } from '../shared/trace-context';
 import { ServerPromptActions, ServerResourceActions, ServerToolActions } from './actions';
 import {
   INPUT_KEY,
+  callerTrace,
   hashArguments,
   principalOf,
   readContinuation,
@@ -466,10 +469,7 @@ export class MCPServer extends MCPServerBase {
   }
 
   private hasUiMetadata(): boolean {
-    return Object.values(this.convertedTools).some(tool => {
-      const meta = tool.mcp?._meta as { ui?: { resourceUri?: string } } | undefined;
-      return Boolean(meta?.ui?.resourceUri);
-    });
+    return Object.values(this.convertedTools).some(tool => Boolean(uiResourceUri(tool.mcp?._meta)));
   }
 
   // ---------------------------------------------------------------------------
@@ -546,18 +546,19 @@ export class MCPServer extends MCPServerBase {
   ): void {
     server.setRequestHandler(method, async (request, ctx) => {
       const params = request.params as Record<string, unknown> | undefined;
+      const caller = callerTrace(ctx);
       // A span can only be given its request context when it is created, so auth is
       // resolved first. A mapper that throws still leaves a failed span behind.
       let requestContext: RequestContext;
       try {
         requestContext = await toRequestContext(ctx, this.mapAuthInfoToUser);
       } catch (error) {
-        this.startRequestSpan(method, params, { server, ctx })?.error({ error: error as Error });
+        this.startRequestSpan(method, params, { server, ctx, caller })?.error({ error: error as Error });
         throw error;
       }
-      const requestSpan = this.startRequestSpan(method, params, { server, ctx, requestContext });
+      const requestSpan = this.startRequestSpan(method, params, { server, ctx, caller, requestContext });
       let reportedError: Error | undefined;
-      return this.traceRequest(
+      const result = await this.traceRequest(
         requestSpan,
         () =>
           handler(request, ctx, {
@@ -569,6 +570,10 @@ export class MCPServer extends MCPServerBase {
           }),
         () => reportedError,
       );
+      // Only `tools/call` replies name the serving span: the client reads and removes
+      // the key on that path. Added after the span recorded the result, so the span
+      // output stays the handler's own.
+      return method === 'tools/call' ? withServerTraceContext(result, requestSpan, caller !== undefined) : result;
     });
   }
 
@@ -579,7 +584,7 @@ export class MCPServer extends MCPServerBase {
   private startRequestSpan(
     method: string,
     params: Record<string, unknown> | undefined,
-    connection?: { server?: Server; ctx?: ServerContext; requestContext?: RequestContext },
+    connection?: { server?: Server; ctx?: ServerContext; caller?: CallerTraceContext; requestContext?: RequestContext },
   ): Span<SpanType.MCP_SERVER_REQUEST> | undefined {
     // A stateless HTTP request carries its own envelope; a stdio connection
     // negotiates once and the instance holds what it agreed to.
@@ -590,6 +595,7 @@ export class MCPServer extends MCPServerBase {
       | undefined;
     const target = params?.name ?? params?.uri;
     const targetName = typeof target === 'string' ? target : undefined;
+    const caller = connection?.caller;
 
     return getOrCreateSpan({
       type: SpanType.MCP_SERVER_REQUEST,
@@ -597,7 +603,7 @@ export class MCPServer extends MCPServerBase {
       entityType: EntityType.MCP_SERVER,
       entityId: this.id,
       entityName: this.name,
-      input: params,
+      input: withoutTraceContext(params),
       attributes: {
         mcpMethod: method,
         targetName,
@@ -606,8 +612,13 @@ export class MCPServer extends MCPServerBase {
         mcpProtocolVersion: typeof protocolVersion === 'string' ? protocolVersion : undefined,
         clientName: client?.name,
         clientVersion: client?.version,
+        callerTraceparent: caller?.traceparent,
+        callerTracestate: caller?.tracestate,
       },
       tracingContext: {},
+      // The request keeps its own trace and links to the caller's span, so each
+      // side keeps its own root and trace summary in every exporter.
+      links: caller && [caller.link],
       requestContext: connection?.requestContext,
       mastra: this.mastra,
     });
@@ -841,15 +852,24 @@ export class MCPServer extends MCPServerBase {
       this.logger.warn(`Tool '${name}' rejected its input.`, { error: value.message });
       return errorResult(value.message);
     }
+    // Hosts may detect an MCP App from the call result, so mirror the tool's declared app link onto it.
+    const resourceUri = uiResourceUri(tool.mcp?._meta);
+    const meta = resourceUri ? { _meta: { ui: { resourceUri }, [RESOURCE_URI_META_KEY]: resourceUri } } : {};
     if (!tool.outputSchema) {
       return {
         isError: false,
         content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value) }],
+        ...meta,
       };
     }
     // Tools with an output schema already validated `value` against it.
     const structuredContent = value as Record<string, unknown>;
-    return { isError: false, structuredContent, content: [{ type: 'text', text: JSON.stringify(structuredContent) }] };
+    return {
+      isError: false,
+      structuredContent,
+      content: [{ type: 'text', text: JSON.stringify(structuredContent) }],
+      ...meta,
+    };
   }
 
   private registerResourceHandlers(server: Server): void {
@@ -1261,9 +1281,12 @@ export class MCPServer extends MCPServerBase {
   }
 
   /** Reads an `ui://` app resource; application resources require a protocol request. */
-  async readResource(uri: string): Promise<{ contents: Array<{ uri: string; text?: string; blob?: string }> }> {
+  async readResource(uri: string): Promise<{
+    contents: Array<{ uri: string; text?: string; blob?: string; mimeType?: string; _meta?: Record<string, unknown> }>;
+  }> {
     const html = this.appResourceHtml.get(uri);
-    if (html === undefined) {
+    const resource = this.appResourceList.find(r => r.uri === uri);
+    if (html === undefined || !resource) {
       throw new MastraError({
         id: 'MCP_SERVER_RESOURCE_NOT_FOUND',
         domain: ErrorDomain.MCP,
@@ -1272,7 +1295,7 @@ export class MCPServer extends MCPServerBase {
         details: { uri },
       });
     }
-    return { contents: [{ uri, text: html }] };
+    return { contents: [this.resourceContents(resource, { text: html })] };
   }
 
   /** Lists `ui://` app resources; application resources require a protocol request. */
@@ -1290,14 +1313,18 @@ function errorResult(text: string): CallToolResult {
   return { content: [{ type: 'text', text }], isError: true };
 }
 
-/** Keeps `_meta.ui.resourceUri` and the flat MCP Apps key in sync for older hosts. */
+/** The tool's MCP App URI; the nested key wins over the flat one, as in ext-apps' `getToolUiResourceUri`. */
+function uiResourceUri(meta: Record<string, unknown> | undefined): string | undefined {
+  const ui = meta?.ui as { resourceUri?: string } | undefined;
+  return ui?.resourceUri || (meta?.[RESOURCE_URI_META_KEY] as string | undefined) || undefined;
+}
+
+/** Writes the tool's MCP App URI to both the nested and the flat key, so every host opens the same app. */
 function normalizeUiMeta(meta: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
-  if (!meta) return undefined;
-  const ui = meta.ui as { resourceUri?: string } | undefined;
-  const flat = meta[RESOURCE_URI_META_KEY] as string | undefined;
-  if (ui?.resourceUri && !flat) return { ...meta, [RESOURCE_URI_META_KEY]: ui.resourceUri };
-  if (flat && !ui?.resourceUri) return { ...meta, ui: { ...(ui ?? {}), resourceUri: flat } };
-  return meta;
+  const resourceUri = uiResourceUri(meta);
+  if (!meta || !resourceUri) return meta;
+  const ui = meta.ui as Record<string, unknown> | undefined;
+  return { ...meta, ui: { ...ui, resourceUri }, [RESOURCE_URI_META_KEY]: resourceUri };
 }
 
 export { ServerPromptActions, ServerResourceActions, ServerToolActions };

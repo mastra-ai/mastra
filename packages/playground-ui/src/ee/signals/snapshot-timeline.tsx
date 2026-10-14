@@ -64,7 +64,7 @@ export function TimelineTrack({
             as="span"
             variant="meta"
             tone="muted"
-            font="mono"
+
             key={`day-${snapshot.snapshotId}`}
             aria-hidden="true"
             className="absolute top-7 -translate-x-1/2 tabular-nums"
@@ -135,7 +135,7 @@ export function SnapshotTimeline({
             {isPlaying ? 'Pause' : 'Play'}
           </Button>
         ) : null}
-        <Txt variant="caption" tone="muted" font="mono" className="tabular-nums" data-testid="snapshot-summary">
+        <Txt variant="caption" tone="muted" className="tabular-nums" data-testid="snapshot-summary">
           {summary}
         </Txt>
       </div>

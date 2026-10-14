@@ -1,7 +1,8 @@
 /**
  * Browser-side helpers for factory user sessions — the conversations listed in
- * the sidebar. Project routes resolve the linked source-control provider;
- * individual-session routes resolve the provider from the durable session row.
+ * the sidebar. Listing is per Factory; creation goes through a repository link,
+ * which resolves its source-control provider; individual-session routes resolve
+ * the provider from the durable session row.
  */
 import { postSourceControlRepositoryOp, readJsonOrThrow } from './http';
 
@@ -37,19 +38,17 @@ function normalizeUserSession({ title, ...session }: FactoryUserSessionPayload):
   return { ...session, title: title ?? undefined };
 }
 
+/** Every session of the Factory the viewer can see, across all of its repositories and providers. */
 export async function listUserSessions(
   baseUrl: string,
-  projectRepositoryId: string,
+  factoryId: string,
   signal?: AbortSignal,
 ): Promise<FactoryUserSession[]> {
-  const res = await fetch(
-    `${baseUrl}/web/source-control/projects/${encodeURIComponent(projectRepositoryId)}/sessions`,
-    {
-      headers: { Accept: 'application/json' },
-      credentials: 'include',
-      signal,
-    },
-  );
+  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryId)}/sessions`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+    signal,
+  });
   const body = await readJsonOrThrow<{ sessions: FactoryUserSessionPayload[] }>(res, 'Failed to list sessions');
   return body.sessions.map(normalizeUserSession);
 }

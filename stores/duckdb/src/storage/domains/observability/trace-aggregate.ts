@@ -58,7 +58,18 @@ const COMPARISON_SQL = { eq: '=', ne: '<>', lt: '<', lte: '<=', gt: '>', gte: '>
  *
  * Parameters are positional, so `values` is appended in the order placeholders appear in the text.
  */
-export function compileDuckDBTraceAggregate(plan: TrustedTraceAggregatePlan): CompiledDuckDBTraceQuery {
+export interface DuckDBTraceAggregateOptions {
+  /**
+   * `metric_events` has its `metricId` primary key, so retried writes cannot be stored twice and
+   * the usage stage skips its dedupe. Defaults to `false` (dedupe) when the table was not checked.
+   */
+  metricIdsUnique?: boolean;
+}
+
+export function compileDuckDBTraceAggregate(
+  plan: TrustedTraceAggregatePlan,
+  options: DuckDBTraceAggregateOptions = {},
+): CompiledDuckDBTraceQuery {
   const { ctes, values } = compileDuckDBTraceCandidates(plan, 'r.*');
 
   const dimensionSql = (field: TraceAggregateDimension): { sql: string; values: unknown[] } => {
@@ -98,10 +109,41 @@ export function compileDuckDBTraceAggregate(plan: TrustedTraceAggregatePlan): Co
     // UTC-aligned bucket containing startedAt; may begin before timeRange.from.
     factColumns.push(`epoch_ms((epoch_ms(r.startedAt) // ${intervalMs}) * ${intervalMs}) AS bucket`);
   }
-  ctes.push(`facts AS (
+  const measureKinds = new Set(plan.measures.map(measure => measureRule(measure.name)?.kind));
+  const hasCost = measureKinds.has('cost');
+  if (!hasCost && !measureKinds.has('tokens')) {
+    ctes.push(`facts AS (
     SELECT ${factColumns.join(',\n      ')}
     FROM candidates r
   )`);
+  } else {
+    // `candidates` holds full-width root rows; read it once into narrow per-trace facts, which both
+    // the usage scan and the final join use. Its placeholders precede the usage stage's in the text.
+    ctes.push(`base_facts AS (
+    SELECT r.traceId, ${factColumns.join(',\n      ')}
+    FROM candidates r
+  )`);
+    ctes.push(...compileUsageCtes(plan, values, { hasCost, dedupe: !options.metricIdsUnique }));
+    // NULL for traces without usage; 0 for a usage-bearing trace with no row of that name.
+    const usageColumns = USAGE_METRIC_NAMES.map(
+      (_, index) => `CASE WHEN u.traceId IS NOT NULL THEN COALESCE(u.t${index}, 0) END AS t${index}`,
+    );
+    usageColumns.push(`u.traceId IS NOT NULL AS usageBearing`);
+    if (hasCost) {
+      usageColumns.push(
+        `CASE WHEN u.priced THEN u.cost END AS traceCost`,
+        `COALESCE(u.priced AND NOT u.pricingFailure, FALSE) AS covered`,
+        `u.unitMin AS unitMin`,
+        `u.unitMax AS unitMax`,
+      );
+    }
+    ctes.push(`facts AS (
+    SELECT b.*,
+      ${usageColumns.join(',\n      ')}
+    FROM base_facts b
+    LEFT JOIN usage u ON u.traceId = b.traceId
+  )`);
+  }
 
   // All measures are DOUBLE so having literals compare without integer-cast surprises.
   const measureSql = (name: TrustedTraceAggregateMeasureName, alias = ''): string => {
@@ -114,6 +156,17 @@ export function compileDuckDBTraceAggregate(plan: TrustedTraceAggregatePlan): Co
     if (name === 'duration.max') return `max(${column('durationMs')})`;
     const percentile = PERCENTILES[name];
     if (percentile !== undefined) return `quantile_cont(${column('durationMs')}, ${percentile})`;
+    const rule = measureRule(name);
+    // avg/sum skip the NULL per-trace values of traces without usage (tokens) or pricing (cost),
+    // and return NULL when no trace qualifies.
+    if (rule?.kind === 'tokens' && rule.metricNames) {
+      const value = rule.metricNames.map(metricName => column(`t${usageMetricIndex(metricName)}`)).join(' + ');
+      return `CAST(${rule.statistic === 'avg' ? 'avg' : 'sum'}(${value}) AS DOUBLE)`;
+    }
+    if (rule?.kind === 'cost') {
+      const aggregate = rule.statistic === 'avg' ? 'avg' : 'sum';
+      return `CASE WHEN ${mixedUnitsSql(alias)} THEN NULL ELSE CAST(${aggregate}(${column('traceCost')}) AS DOUBLE) END`;
+    }
     const measure = plan.measures.find(
       (candidate): candidate is Extract<TrustedTraceAggregateMeasure, { type: 'countDistinct' }> =>
         candidate.type === 'countDistinct' && candidate.name === name,
@@ -163,6 +216,7 @@ export function compileDuckDBTraceAggregate(plan: TrustedTraceAggregatePlan): Co
     const projected = [
       ...dimensionColumns,
       ...plan.measures.map((measure, index) => `${measureSql(measure.name)} AS m${index}`),
+      ...(hasCost ? costColumns('') : []),
     ];
     values.push(...havingValues, plan.limit + 1);
     return {
@@ -192,6 +246,7 @@ LIMIT ?`,
     ...dimensionColumns.map(column => `f.${column}`),
     'f.bucket',
     ...plan.measures.map((measure, index) => `${measureSql(measure.name, 'f.')} AS m${index}`),
+    ...(hasCost ? costColumns('f.') : []),
     `(SELECT count(*) FROM ranked) > ? AS truncated`,
   ];
   values.push(plan.limit, plan.limit);
@@ -207,11 +262,128 @@ ORDER BY g.rank ASC, f.bucket ASC`,
   };
 }
 
+const USAGE_METRIC_NAMES: readonly string[] = coreStorage.TRACE_AGGREGATE_USAGE_METRIC_NAMES;
+
+function measureRule(name: string): coreStorage.TraceAggregateMeasureRule | undefined {
+  return coreStorage.isTraceAggregateCanonicalMeasure(name)
+    ? coreStorage.TRACE_AGGREGATE_MEASURE_REGISTRY[name]
+    : undefined;
+}
+
+function usageMetricIndex(name: string): number {
+  const index = USAGE_METRIC_NAMES.indexOf(name);
+  if (index === -1) throw new Error(`Unsupported trusted trace-aggregate token metric: ${name}`);
+  return index;
+}
+
+/** More than one distinct priced unit in the group; NULL (treated as false) when nothing is priced. */
+function mixedUnitsSql(alias: string): string {
+  return `min(${alias}unitMin) <> max(${alias}unitMax)`;
+}
+
+/** Row cost fields, projected only for cost requests. */
+function costColumns(alias: string): string[] {
+  const mixed = coreStorage.TRACE_AGGREGATE_MIXED_COST_UNIT.replaceAll("'", "''");
+  return [
+    `CAST(count_if(${alias}covered) AS DOUBLE) / NULLIF(count_if(${alias}usageBearing), 0) AS costCoverage`,
+    `CASE WHEN ${mixedUnitsSql(alias)} THEN '${mixed}' ELSE min(${alias}unitMin) END AS costUnit`,
+  ];
+}
+
+/**
+ * Builds `usage_bounds`, `usage_rows`, and `usage`: one row per candidate trace that has at least
+ * one token metric row, holding per-name token sums (`t<i>`, indexed by
+ * `TRACE_AGGREGATE_USAGE_METRIC_NAMES`) and, for cost requests, the trace's pricing state. Metric
+ * rows are matched by traceId, usage metric name, tenant scope, and `timestamp >= from` only: a
+ * trace that starts in the window can emit metrics after `to`, and the semi-join bounds the scan.
+ *
+ * DuckDB cannot push the `traceId IN (...)` semi-join into the table scan, so `usage_bounds`
+ * first reads the exact timestamp range of the qualifying rows from narrow columns, and
+ * `usage_rows` decompresses the wide columns only inside that range.
+ *
+ * Without the `metricId` primary key, retried copies are collapsed with `DISTINCT ON`; copies are
+ * identical, so whichever survives is the same.
+ *
+ * Placeholders are bound in text order: `param` pushes each value as its placeholder is emitted.
+ */
+function compileUsageCtes(
+  plan: TrustedTraceAggregatePlan,
+  values: unknown[],
+  { hasCost, dedupe }: { hasCost: boolean; dedupe: boolean },
+): string[] {
+  const param = (value: unknown) => {
+    values.push(value);
+    return '?';
+  };
+  const list = (items: readonly unknown[]) => items.map(param).join(', ');
+  const scope = (alias: string) => {
+    if (!plan.scope) return '';
+    let sql = `\n        AND ${alias}organizationId = ${param(plan.scope.organizationId)}`;
+    if (plan.scope.resourceId !== undefined)
+      sql += `\n        AND ${alias}resourceId = ${param(plan.scope.resourceId)}`;
+    return sql;
+  };
+  const costNames = coreStorage.TRACE_AGGREGATE_COST_METRIC_NAMES;
+
+  const bounds = `usage_bounds AS (
+      SELECT min(timestamp) AS minTs, max(timestamp) AS maxTs
+      FROM metric_events
+      WHERE traceId IN (SELECT traceId FROM base_facts)
+        AND name IN (${list(USAGE_METRIC_NAMES)})
+        AND timestamp >= CAST(${param(plan.timeRange.from)} AS TIMESTAMP)${scope('')}
+    )`;
+
+  const costSelect = hasCost
+    ? `,
+        m.estimatedCost,
+        m.costUnit,
+        m.name IN (${list(costNames)}) AS costRow,
+        CASE WHEN m.name IN (${list(costNames)})
+          THEN COALESCE(json_type(m.costMetadata, '$.error'), 'NULL') <> 'NULL'
+          ELSE FALSE
+        END AS hasError`
+    : '';
+  const rows = `usage_rows AS (
+      SELECT ${dedupe ? 'DISTINCT ON (m.metricId) ' : ''}m.traceId, m.name, m.value${costSelect}
+      FROM metric_events m
+      WHERE m.timestamp >= (SELECT minTs FROM usage_bounds)
+        AND m.timestamp <= (SELECT maxTs FROM usage_bounds)
+        AND m.traceId IN (SELECT traceId FROM base_facts)
+        AND m.name IN (${list(USAGE_METRIC_NAMES)})${scope('m.')}
+    )`;
+
+  const columns = USAGE_METRIC_NAMES.map(name => `sum(value) FILTER (WHERE name = ${param(name)})`).map(
+    (sql, index) => `${sql} AS t${index}`,
+  );
+  if (hasCost) {
+    const priced = 'costRow AND estimatedCost IS NOT NULL AND costUnit IS NOT NULL AND NOT hasError';
+    columns.push(
+      `sum(estimatedCost) FILTER (WHERE ${priced}) AS cost`,
+      `bool_or(${priced}) AS priced`,
+      `bool_or(costRow AND (hasError OR (estimatedCost IS NOT NULL AND costUnit IS NULL))) AS pricingFailure`,
+      `min(costUnit) FILTER (WHERE ${priced}) AS unitMin`,
+      `max(costUnit) FILTER (WHERE ${priced}) AS unitMax`,
+    );
+  }
+  const usage = `usage AS (
+      SELECT traceId,
+        ${columns.join(',\n        ')}
+      FROM usage_rows
+      GROUP BY traceId
+    )`;
+  return [bounds, rows, usage];
+}
+
+function nullableNumber(value: unknown): number | null {
+  return value === null || value === undefined ? null : Number(value);
+}
+
 export async function aggregateTraces(
   db: DuckDBConnection,
   plan: TrustedTraceAggregatePlan,
+  options: DuckDBTraceAggregateOptions = {},
 ): Promise<TraceAggregateResponse> {
-  const compiled = compileDuckDBTraceAggregate(plan);
+  const compiled = compileDuckDBTraceAggregate(plan, options);
   let result: Record<string, unknown>[];
   try {
     result = await db.query<Record<string, unknown>>(compiled.sql, compiled.values);
@@ -234,9 +406,12 @@ export async function aggregateTraces(
     // Measures holds exactly the requested names, which the core record type cannot express.
     const shaped: TraceAggregateRow = {
       measures: Object.fromEntries(
-        plan.measures.map((measure, index) => [measure.name, Number(row[`m${index}`])]),
+        plan.measures.map((measure, index) => [measure.name, nullableNumber(row[`m${index}`])]),
       ) as TraceAggregateRow['measures'],
     };
+    if ('costCoverage' in row) {
+      shaped.cost = { coverage: nullableNumber(row.costCoverage), unit: (row.costUnit as string | null) ?? null };
+    }
     if (plan.dimensions.length > 0) {
       shaped.dimensions = Object.fromEntries(
         plan.dimensions.map((dimension, index) => {

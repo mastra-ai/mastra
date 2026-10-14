@@ -1,6 +1,12 @@
 import { z } from 'zod';
 
 import { extractProblemDetail, MastraConnectError } from './errors.js';
+import {
+  describePlatformCall,
+  endPlatformCallSpan,
+  errorPlatformCallSpan,
+  startPlatformCallSpan,
+} from './instrumentation.js';
 
 /**
  * Configuration for talking to the Mastra platform integrations service.
@@ -87,17 +93,24 @@ function redact(message: string, accessToken: string): string {
 }
 
 async function platformFetch(client: ResolvedClient, path: string, init?: RequestInit): Promise<Response> {
+  // Single choke point for outbound connect HTTP (platform API + vendor
+  // proxy), so one span here covers every external call this package makes.
+  const span = startPlatformCallSpan(describePlatformCall(init?.method ?? 'GET', path));
   try {
-    return await client.fetch(`${client.baseUrl}${path}`, {
+    const response = await client.fetch(`${client.baseUrl}${path}`, {
       ...init,
       headers: { ...client.headers, ...(init?.headers as Record<string, string> | undefined) },
     });
+    endPlatformCallSpan(span, response.status);
+    return response;
   } catch (error) {
     if (error instanceof Error && error.message.includes(client.accessToken)) {
       const redacted = new Error(redact(error.message, client.accessToken));
       redacted.name = error.name;
+      errorPlatformCallSpan(span, redacted);
       throw redacted;
     }
+    errorPlatformCallSpan(span, error);
     throw error;
   }
 }
@@ -427,7 +440,17 @@ export async function proxyRequestWithResponse(
   const queryString = search.size > 0 ? `?${search.toString()}` : '';
   const url = `/v2/connections/${encodeURIComponent(connectionId)}/proxy/${cleanPath}${queryString}`;
 
-  const headers: Record<string, string> = { ...options.headers };
+  // The platform authenticates proxy requests with the project token and
+  // injects the provider credential upstream (same invariant as the MCP
+  // transport). A caller-supplied authorization header would merge with the
+  // platform bearer under a different casing and corrupt platform auth, so it
+  // is dropped here rather than forwarded.
+  const headers: Record<string, string> = {};
+  for (const [name, value] of Object.entries(options.headers ?? {})) {
+    const lower = name.toLowerCase();
+    if (lower === 'authorization' || lower === 'proxy-authorization') continue;
+    headers[name] = value;
+  }
   if (options.baseUrlOverride !== undefined) {
     assertValidBaseUrlOverride(options.baseUrlOverride);
     headers['base-url-override'] = options.baseUrlOverride;

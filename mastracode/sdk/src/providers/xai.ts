@@ -9,7 +9,7 @@
  */
 
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import type { MastraModelConfig } from '@mastra/core/llm';
+import type { OpenAICompatibleProvider } from '@ai-sdk/openai-compatible';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
@@ -85,7 +85,7 @@ export function buildXAIOAuthFetch(opts: { authStorage?: CredentialStore } = {})
 export function xaiProvider(
   modelId: string,
   options?: { headers?: Record<string, string>; authStorage?: CredentialStore },
-): MastraModelConfig {
+): ReturnType<OpenAICompatibleProvider['chatModel']> {
   const provider = createOpenAICompatible({
     name: XAI_PROVIDER_ID,
     baseURL: XAI_BASE_URL,

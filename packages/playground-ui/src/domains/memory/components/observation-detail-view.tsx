@@ -240,17 +240,20 @@ function ObservationHistoryPanel({
             <button
               key={record.id}
               type="button"
-              className={cn(
-                'w-full cursor-pointer truncate border-l-2 border-l-transparent px-3 py-2 text-left text-caption text-muted-foreground hover:bg-fill-subtle',
-                isSelected && 'border-l-foreground bg-fill-hover text-foreground',
-              )}
               onClick={() => onSelectRecord(record.id)}
-            >
-              {record.activeObservations || (
-                <span className="text-muted-foreground italic">
-                  {record.isObserving || record.isReflecting ? 'Processing\u2026' : 'Initialized'}
-                </span>
+              className={cn(
+                'text-foreground',
+                'w-full cursor-pointer truncate border-l-2 border-l-transparent px-3 py-2 text-left hover:bg-fill-subtle',
+                isSelected && 'border-l-foreground bg-fill-hover',
               )}
+            >
+              <Txt as="span" variant="caption" className="block">
+                {record.activeObservations || (
+                  <span className="text-muted-foreground italic">
+                    {record.isObserving || record.isReflecting ? 'Processing\u2026' : 'Initialized'}
+                  </span>
+                )}
+              </Txt>
             </button>
           );
         })}

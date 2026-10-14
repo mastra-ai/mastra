@@ -5,8 +5,9 @@ import type { AvailableModelOption } from '../../../../hooks/useAvailableModels'
 import { useProviderConnectionState } from '../hooks/useProviderConnectionState';
 import { CustomProvidersSection } from './CustomProvidersSection';
 import { FactoryDefaultModelSection } from './FactoryDefaultModelSection';
+import { FactoryModelScopeSection } from './FactoryModelScopeSection';
 import { SettingsSubsection } from './SettingsSubsection';
-import { BaseThinkingSection, ModeThinkingDefaultsSection } from './ThinkingDefaultsSection';
+import { BaseThinkingSection } from './ThinkingDefaultsSection';
 import { ProviderAccessSection } from './ProviderAccessSection';
 import { ModelSettings } from './SettingsPanel.parts';
 
@@ -34,22 +35,31 @@ export function FactoryModelsSettings({ models, settings, onBehaviorChange }: Fa
       </SettingsSubsection>
     </>
   );
+  const factoryDefaultsSubsection = (
+    <SettingsSubsection
+      scope="factory"
+      title="Factory defaults"
+      description="Applied to Factory runs (triage, board work items) and channel sessions."
+    >
+      <SettingsContainer>
+        <FactoryModelScopeSection />
+        {(!providersKnown || anyConnected) && <FactoryDefaultModelSection models={models} />}
+      </SettingsContainer>
+    </SettingsSubsection>
+  );
 
   if (providersKnown && !anyConnected) {
-    return <div className="flex flex-col gap-8">{providerSubsections}</div>;
+    return (
+      <div className="flex flex-col gap-8">
+        {factoryDefaultsSubsection}
+        {providerSubsections}
+      </div>
+    );
   }
 
   return (
     <div className="flex flex-col gap-8">
-      <SettingsSubsection
-        scope="factory"
-        title="Factory defaults"
-        description="Applied to Factory runs (triage, board work items) and channel sessions."
-      >
-        <SettingsContainer>
-          <FactoryDefaultModelSection models={models} />
-        </SettingsContainer>
-      </SettingsSubsection>
+      {factoryDefaultsSubsection}
       <SettingsSubsection
         scope="deployment"
         title="Thinking defaults"
@@ -57,7 +67,6 @@ export function FactoryModelsSettings({ models, settings, onBehaviorChange }: Fa
       >
         <SettingsContainer>
           <BaseThinkingSection />
-          <ModeThinkingDefaultsSection />
         </SettingsContainer>
       </SettingsSubsection>
       <SettingsSubsection

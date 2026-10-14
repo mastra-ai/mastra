@@ -67,9 +67,7 @@ function stubThreadRoute({
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
-    http.get(`${TEST_BASE_URL}/web/config/model-packs`, () =>
-      HttpResponse.json({ packs: [], activePackId: null, sessionPackId: null }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: null })),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
     ),
@@ -94,7 +92,7 @@ function stubThreadRoute({
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: [] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [userSession] }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
@@ -139,7 +137,6 @@ function stubThreadRoute({
       await messagesGate.promise;
       return HttpResponse.json({ messages });
     }),
-    http.get(`${AC}/modes`, () => HttpResponse.json({ modes: [] })),
     // Right workspace-files panel, which appears once workspacePath resolves.
     http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>
       HttpResponse.json({ workspacePath: `/ws/${SESSION_ID}`, root: '.artifacts', rootPath: '', entries: [] }),

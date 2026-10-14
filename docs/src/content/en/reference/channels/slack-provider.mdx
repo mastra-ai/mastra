@@ -324,7 +324,7 @@ Returns: `Promise<void>`
 
 ## Default manifest
 
-When `connect()` builds a Slack app, the generated manifest requests a default set of bot scopes and event subscriptions. Override them with the `manifest` option on `connect()`.
+When `connect()` builds a Slack app, the generated manifest requests a default set of bot scopes and event subscriptions. Configuring slash commands also adds the `commands` scope. Override the defaults with the `manifest` option on `connect()`.
 
 | Default bot scopes | Default bot events |
 | - | - |

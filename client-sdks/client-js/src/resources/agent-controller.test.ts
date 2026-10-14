@@ -2,6 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 
 import { MastraClient } from '../client';
+import { MastraClientError } from '../types';
 import { agentControllerMessageText, isKnownAgentControllerEvent } from './agent-controller';
 import type { AgentControllerEvent, KnownAgentControllerEvent } from './agent-controller';
 
@@ -95,6 +96,35 @@ describe('AgentController Resource', () => {
     const [url, init] = lastCall();
     expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/messages');
     expect(JSON.parse(init.body as string)).toEqual({ message: 'see attached', files });
+  });
+
+  it('steers and follows up with file attachments', async () => {
+    const session = client.getAgentController('code').session('user-1');
+    const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
+
+    mockJson({ ok: true });
+    await session.steer({ content: 'look at this instead', files });
+    let [url, init] = lastCall();
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/steer');
+    expect(JSON.parse(init.body as string)).toEqual({ message: 'look at this instead', files });
+
+    mockJson({ ok: true });
+    await session.followUp({ content: 'also this', files });
+    [url, init] = lastCall();
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/follow-up');
+    expect(JSON.parse(init.body as string)).toEqual({ message: 'also this', files });
+  });
+
+  it('omits empty file lists from steer and follow-up bodies', async () => {
+    const session = client.getAgentController('code').session('user-1');
+
+    mockJson({ ok: true });
+    await session.steer({ content: 'focus', files: [] });
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({ message: 'focus' });
+
+    mockJson({ ok: true });
+    await session.followUp({ content: 'later', files: [] });
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({ message: 'later' });
   });
 
   it('sends requestContext in the body for run-triggering methods', async () => {
@@ -223,10 +253,18 @@ describe('AgentController Resource', () => {
     expect(JSON.parse(init.body as string)).toEqual({ modeId: 'plan' });
 
     mockJson({ ok: true });
-    await client.getAgentController('code').session('user-1').switchModel('openai/gpt-4o', { scope: 'thread' });
+    await client.getAgentController('code').session('user-1').switchModel('openai/gpt-4o');
     [url, init] = lastCall();
     expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/model');
-    expect(JSON.parse(init.body as string)).toMatchObject({ modelId: 'openai/gpt-4o', scope: 'thread' });
+    expect(JSON.parse(init.body as string)).toEqual({ modelId: 'openai/gpt-4o' });
+  });
+
+  it('switches a model and thinking level in one request', async () => {
+    mockJson({ ok: true });
+    await client.getAgentController('code').session('user-1').switchModel('openai/gpt-5.5', { thinkingLevel: 'off' });
+    const [url, init] = lastCall();
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/model');
+    expect(JSON.parse(init.body as string)).toEqual({ modelId: 'openai/gpt-5.5', thinkingLevel: 'off' });
   });
 
   it('lists modes and threads, and switches thread', async () => {
@@ -351,6 +389,26 @@ describe('AgentController Resource', () => {
     expect(lastCall()[0]).toBe(
       'http://localhost:4111/api/agent-controller/code/sessions/user-1/threads/t-1/messages?limit=1',
     );
+  });
+
+  it('recognizes thread owner changes as typed controller events', () => {
+    const event: AgentControllerEvent = {
+      type: 'thread_owner_changed',
+      threadId: 'thread-1',
+      fromOwnerId: 'owner-a',
+      toOwnerId: 'owner-b',
+    };
+
+    expect(isKnownAgentControllerEvent(event)).toBe(true);
+    if (!isKnownAgentControllerEvent(event) || event.type !== 'thread_owner_changed') {
+      throw new Error('missing thread_owner_changed');
+    }
+    expect(event).toEqual({
+      type: 'thread_owner_changed',
+      threadId: 'thread-1',
+      fromOwnerId: 'owner-a',
+      toOwnerId: 'owner-b',
+    });
   });
 
   it('hydrates message-start timestamps while preserving compact SSE lifecycle payloads', async () => {
@@ -564,6 +622,82 @@ describe('AgentController Resource', () => {
 
     expect((global.fetch as any).mock.calls).toHaveLength(3);
     expect(received).toEqual([firstEvent, secondEvent]);
+  });
+
+  it.each([401, 403])('stops reconnecting and reports the original %s error', async status => {
+    const firstEvent = { type: 'agent_start' };
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse([`data: ${JSON.stringify(firstEvent)}\n\n`]))
+      .mockResolvedValue(new Response(JSON.stringify({ error: 'denied' }), { status, statusText: 'Denied' }));
+
+    const onError = vi.fn();
+    const reported = new Promise<unknown>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('timeout')), 2000);
+      onError.mockImplementation(error => {
+        clearTimeout(timer);
+        resolve(error);
+      });
+    });
+
+    const sub = await client
+      .getAgentController('code')
+      .session('user-1')
+      .subscribe({ onEvent: () => {}, onError, reconnect: { maxRetries: Infinity, delayMs: 0 } });
+
+    const error = await reported;
+    await new Promise(r => setTimeout(r, 20));
+    sub.unsubscribe();
+
+    expect(error).toBeInstanceOf(MastraClientError);
+    expect((error as MastraClientError).status).toBe(status);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect((global.fetch as any).mock.calls).toHaveLength(2);
+  });
+
+  it.each([408, 429])('keeps reconnecting after a %s resubscribe response', async status => {
+    const firstEvent = { type: 'agent_start' };
+    const secondEvent = { type: 'agent_end' };
+    const openStream = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(secondEvent)}\n\n`));
+        },
+      }),
+      { status: 200, headers: new Headers({ 'Content-Type': 'text/event-stream' }) },
+    );
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse([`data: ${JSON.stringify(firstEvent)}\n\n`]))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: 'retry later' }), { status, statusText: 'Retry later' }),
+      )
+      .mockResolvedValueOnce(openStream);
+
+    const onError = vi.fn();
+    const events: unknown[] = [];
+    const received = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('timeout')), 2000);
+      const sub = client
+        .getAgentController('code')
+        .session('user-1')
+        .subscribe({
+          onEvent: event => {
+            events.push(event);
+            if (events.length === 2) {
+              clearTimeout(timer);
+              void sub.then(s => s.unsubscribe());
+              resolve();
+            }
+          },
+          onError,
+          reconnect: { maxRetries: 5, delayMs: 0 },
+        });
+    });
+
+    await received;
+
+    expect(events).toEqual([firstEvent, secondEvent]);
+    expect(onError).not.toHaveBeenCalled();
+    expect((global.fetch as any).mock.calls).toHaveLength(3);
   });
 
   it('does not reconnect after unsubscribe', async () => {

@@ -1,3 +1,4 @@
+import { Code } from '@mastra/playground-ui/components/Code';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -43,7 +44,7 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
   return (
     <Container className="mb-5 content-center space-y-4 text-muted-foreground">
       {/* Main Error Display */}
-      <div className={cn('grid content-center items-center justify-items-center gap-4', '[&>svg]:h-8 [&>svg]:w-8')}>
+      <div className="grid content-center items-center justify-items-center gap-4 [&>svg]:h-8 [&>svg]:w-8">
         {icon}
         <div className="space-y-2 text-center">
           <Txt variant="subheading" tone="ink">
@@ -55,19 +56,22 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
 
       {/* Validation Errors */}
       {validationErrors && validationErrors.length > 0 && (
-        <details className="text-caption">
+        <details>
           <summary className={cn(quietTextHover, 'cursor-pointer text-center select-none')}>
-            Show Validation Issues ({validationErrors.length})
+            <Txt as="span" variant="caption" className="block">
+              Show Validation Issues ({validationErrors.length})
+            </Txt>
           </summary>
-          <div className="mt-4 max-h-60 space-y-2 overflow-auto rounded bg-muted p-3 text-left text-caption">
+          <div className="mt-4 max-h-60 space-y-2 overflow-auto rounded bg-muted p-3 text-left">
             {validationErrors.map((error, index) => (
               <div key={index} className="border-l-2 border-destructive-indicator pl-2">
-                <div className="font-medium text-destructive-foreground">
+                <Txt as="p" variant="column" className="text-destructive-foreground">
                   {error.type === 'typescript' ? '🔴 TypeScript Error' : '⚠️ Lint Error'}
-                </div>
-                <pre className="mt-1 text-caption wrap-break-word whitespace-pre-wrap text-muted-foreground">
-                  {error.message}
-                </pre>
+                </Txt>
+                <Code
+                  className="mt-1 text-caption wrap-break-word whitespace-pre-wrap text-muted-foreground"
+                  code={error.message}
+                />
               </div>
             ))}
           </div>
@@ -76,10 +80,14 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
 
       {/* General Error Details */}
       {errorString && !isValidationError && (
-        <details className="text-caption">
-          <summary className={cn(quietTextHover, 'cursor-pointer text-center select-none')}>Show Details</summary>
-          <div className="mt-4 max-h-60 overflow-auto rounded bg-muted p-3 text-left text-caption">
-            <pre className="wrap-break-word whitespace-pre-wrap">{errorString}</pre>
+        <details>
+          <summary className={cn(quietTextHover, 'cursor-pointer text-center select-none')}>
+            <Txt as="span" variant="caption" className="block">
+              Show Details
+            </Txt>
+          </summary>
+          <div className="mt-4 max-h-60 overflow-auto rounded bg-muted p-3 text-left">
+            <Code className="text-caption wrap-break-word whitespace-pre-wrap" code={errorString} />
           </div>
         </details>
       )}

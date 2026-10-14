@@ -1,4 +1,6 @@
+import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import {
   Dialog,
   DialogAction,
@@ -9,12 +11,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
-import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SidebarSectionHeading } from '../../../SidebarSectionHeading';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { MessageSquare, Plus } from 'lucide-react';
+import { ArrowUpDown, CircleDashed, Clock, MessageSquare, Plus, UserRound } from 'lucide-react';
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
@@ -26,18 +26,23 @@ import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { removeCachedSession, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
+import { useSessionSort } from '../hooks/useSessionSort';
 import { deleteUserSession, regenerateSessionTitle } from '../services/user-sessions';
 import type { FactoryUserSession } from '../services/user-sessions';
 import {
+  USER_SESSION_STATUS_OPTIONS,
+  USER_SESSION_UPDATED_OPTIONS,
   activeUserSessionFilterCount,
   defaultUserSessionFilters,
   filterUserSessions,
+  userSessionOwnerOptions,
 } from '../services/sessionFilters';
 import type { UserSessionFiltersState } from '../services/sessionFilters';
+import { DEFAULT_USER_SESSION_SORT, USER_SESSION_SORT_OPTIONS, compareUserSessions } from '../services/sessionSort';
 import { getSessionOwnerDetails, getUserSessionLabel } from '../services/sessionPresentation';
+import { SessionListProperties } from './SessionListProperties';
 import { SessionNavRow } from './SessionNavRow';
 import { sessionRowStatus } from '../services/sessionStatus';
-import { UserSessionFilters } from './UserSessionFilters';
 
 export function UserSessionsSection() {
   const { baseUrl } = useApiConfig();
@@ -49,20 +54,18 @@ export function UserSessionsSection() {
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
   const [filterChanges, setFilterChanges] = useState<Partial<UserSessionFiltersState>>({});
   const { pinnedSessions, setPinned } = usePinnedSessions();
+  const [sort, setSort] = useSessionSort('user');
 
-  const repository = factoryQuery.data?.repositories[0];
-  const sessionsEnabled = Boolean(repository);
-  const sessionsQuery = useWorkspacesQuery(repository?.projectRepositoryId);
+  const sessionsEnabled = (factoryQuery.data?.repositories.length ?? 0) > 0;
+  const sessionsQuery = useWorkspacesQuery(sessionsEnabled ? factoryId : undefined);
+  const sessionsFailed = sessionsQuery.isError;
+  const sessionsLoaded = sessionsEnabled && sessionsQuery.isSuccess;
   const auth = useFactoryAuth();
   const viewerUserId = auth.data?.user?.userId;
   const defaultFilters = defaultUserSessionFilters(viewerUserId);
   const filters: UserSessionFiltersState = { ...defaultFilters, ...filterChanges };
   const isOwn = (session: FactoryUserSession) => Boolean(viewerUserId) && session.userId === viewerUserId;
-  const allSessions = [...(sessionsQuery.data?.userSessions ?? [])].sort(
-    (a, b) =>
-      Number(pinnedSessions.has(b.sessionId)) - Number(pinnedSessions.has(a.sessionId)) ||
-      Number(isOwn(b)) - Number(isOwn(a)),
-  );
+  const allSessions = (sessionsQuery.data?.userSessions ?? []).toSorted(compareUserSessions(sort, pinnedSessions));
   const runningBySessionId = useActiveRunResources({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceIds: allSessions.map(session => session.sessionId),
@@ -77,13 +80,13 @@ export function UserSessionsSection() {
         : ('idle' as const),
   }));
   const sessions = filterUserSessions(candidates, filters, viewerUserId).map(candidate => candidate.session);
-  const ownersById = new Map<string, string>();
-  for (const candidate of candidates) ownersById.set(candidate.session.userId, candidate.ownerName);
-  const owners = [...ownersById]
-    .map(([userId, name]) => ({ userId, name }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const ownerOptions = userSessionOwnerOptions(candidates, viewerUserId);
+  const changeFilters = (changes: Partial<UserSessionFiltersState>) =>
+    setFilterChanges(current => ({ ...current, ...changes }));
+  const activeFilterCount = activeUserSessionFilterCount(filters, defaultFilters);
+  const changedCount = activeFilterCount + Number(sort !== DEFAULT_USER_SESSION_SORT);
   const invalidate = () => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(repository?.projectRepositoryId) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(factoryId) });
   };
 
   const deleteSession = useMutation({
@@ -93,7 +96,7 @@ export function UserSessionsSection() {
     },
     onSuccess: session => {
       setConfirmDelete(null);
-      removeCachedSession(queryClient, repository?.projectRepositoryId, session.sessionId);
+      removeCachedSession(queryClient, factoryId, session.sessionId);
       queryClient.removeQueries({ queryKey: queryKeys.userSession(session.sessionId) });
       invalidate();
       toast('Session deleted');
@@ -129,17 +132,47 @@ export function UserSessionsSection() {
 
   return (
     <section className="flex flex-col gap-1" aria-label="User sessions">
-      <SidebarSectionHeading
+      <Sidebar.NavHeader
         icon={<MessageSquare />}
         action={
           <div className="flex items-center gap-0.5">
-            <UserSessionFilters
-              filters={filters}
-              owners={owners}
-              viewerUserId={viewerUserId}
-              onChange={changes => setFilterChanges(current => ({ ...current, ...changes }))}
-              onReset={() => setFilterChanges({})}
-            />
+            <SessionListProperties
+              label="User sessions"
+              changedCount={changedCount}
+              onReset={() => {
+                setFilterChanges({});
+                setSort(DEFAULT_USER_SESSION_SORT);
+              }}
+            >
+              <DropdownMenu.RadioSub
+                label="Sort"
+                icon={<ArrowUpDown aria-hidden />}
+                options={USER_SESSION_SORT_OPTIONS}
+                value={sort}
+                onValueChange={setSort}
+              />
+              <DropdownMenu.RadioSub
+                label="Owner"
+                icon={<UserRound aria-hidden />}
+                options={ownerOptions}
+                value={filters.owner}
+                onValueChange={owner => changeFilters({ owner })}
+              />
+              <DropdownMenu.RadioSub
+                label="Status"
+                icon={<CircleDashed aria-hidden />}
+                options={USER_SESSION_STATUS_OPTIONS}
+                value={filters.status}
+                onValueChange={status => changeFilters({ status })}
+              />
+              <DropdownMenu.RadioSub
+                label="Updated"
+                icon={<Clock aria-hidden />}
+                options={USER_SESSION_UPDATED_OPTIONS}
+                value={filters.updated}
+                onValueChange={updated => changeFilters({ updated })}
+              />
+            </SessionListProperties>
             <Button
               variant="ghost"
               size="icon-sm"
@@ -153,10 +186,10 @@ export function UserSessionsSection() {
         }
       >
         User Sessions
-      </SidebarSectionHeading>
+      </Sidebar.NavHeader>
 
       <div className="flex flex-col gap-1">
-        <MainSidebar.NavList>
+        <Sidebar.NavList>
           {sessions.map(session => {
             const name = getUserSessionLabel(session);
             const url = `/factories/${factoryId}/user/threads/${session.sessionId}`;
@@ -190,8 +223,8 @@ export function UserSessionsSection() {
               />
             );
           })}
-        </MainSidebar.NavList>
-        {sessionsQuery.isError && (
+        </Sidebar.NavList>
+        {sessionsFailed && (
           <div className="flex items-center gap-2 px-2 py-1">
             <Txt as="p" variant="meta" className="text-destructive-foreground m-0">
               Couldn’t load sessions
@@ -201,11 +234,11 @@ export function UserSessionsSection() {
             </Button>
           </div>
         )}
-        {sessionsQuery.isSuccess && sessions.length === 0 && (
+        {sessionsLoaded && sessions.length === 0 && (
           <Txt as="p" variant="meta" tone="muted" role="status" className="m-0 px-2 py-1">
             {allSessions.length === 0
               ? 'No sessions yet'
-              : activeUserSessionFilterCount(filters, defaultFilters) === 0 && viewerUserId
+              : activeFilterCount === 0 && viewerUserId
                 ? 'No sessions of your own.'
                 : 'No sessions match these filters'}
           </Txt>

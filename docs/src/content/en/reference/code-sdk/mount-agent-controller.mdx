@@ -81,8 +81,10 @@ const { controller } = await mountAgentControllerOnMastra({ mastra })
   {
     name: 'controllerId',
     type: 'string',
-    description: 'Id under which the controller is registered on the Mastra instance.',
+    description:
+      'Key the controller is registered under on the Mastra instance. Clients pass this key to `client.getAgentController()`.',
     isOptional: true,
+    defaultValue: 'controller.id',
   },
   {
     name: 'modes',

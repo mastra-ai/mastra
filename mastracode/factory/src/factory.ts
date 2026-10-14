@@ -26,23 +26,29 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
+import type { Knowledge } from '@mastra/core/knowledge';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { hasAuthInit, isUserProvider } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
-import type { WorkspaceSandbox } from '@mastra/core/workspace';
+import { describeFactorySandbox, isFactorySandbox } from '@mastra/core/workspace';
+import type { FactorySandbox, FactorySandboxDescription, WorkspaceSandbox } from '@mastra/core/workspace';
 import {
+  buildAuthDisabledRoutes,
   buildAuthRoutes,
   createFactoryAuthGate,
   createFactoryRouteAuth,
+  factoryUserOrgId,
   getFactoryAuthOrgId,
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
 } from './auth.js';
 import { createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
+import { EnvironmentBuildRunner } from './environment/build-runner.js';
+import { ENVIRONMENT_BUILD_WORKFLOW_ID } from './environment/build-workflow.js';
 import { touchFeed } from './feed-events.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
 import { reconcileGithubAcceptanceLabels } from './integrations/github/acceptance-labels.js';
@@ -63,6 +69,7 @@ import { PlatformIncidentioIntegration } from './integrations/platform/incidenti
 import { PlatformJiraIntegration } from './integrations/platform/jira/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { prepareSessionRunContext } from './integrations/subscription-session.js';
+import { resolveDeploymentModelProviders } from './routes/config.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
 import { ProjectRoutes } from './routes/projects.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
@@ -73,28 +80,31 @@ import {
   primeTenantCredentials,
   registerTenantCredentialResolver,
 } from './routes/tenant-credentials.js';
-import { resolveFactorySessionAddress } from './rules/binding-context.js';
+import { readFactorySessionScope, resolveFactorySessionAddress } from './rules/binding-context.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import type { FactoryRuleActor } from './rules/index.js';
-import { FactoryPhaseStateProcessor } from './rules/processor.js';
+import { FactoryPhaseStateProcessor, reportMemorySettingsUnavailable } from './rules/processor.js';
 import { createReviewSourceTool, resolveReviewSourceUiOrigin } from './rules/review-source-tool.js';
 import { createTerminalStageCleanup } from './rules/terminal-cleanup.js';
 import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
 import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
+import { CallbackFactorySandbox } from './sandbox/callback-factory-sandbox.js';
 import { isValidGitRef } from './sandbox/git-ref.js';
 import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
-import type { MastraFactorySandboxConfig } from './sandbox/session-sandbox.js';
+import type { MastraFactorySandboxOption } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
-import { createSourceControlSessionLookup, refreshFactorySessionMemorySettings } from './session/factory-session.js';
+import { hydrateSessionDefaultModel } from './session/default-model-hydration.js';
+import { environmentSlugs, resolveSessionRepositories } from './session/environment-repositories.js';
+import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.js';
+import { createSourceControlSessionLookup } from './session/factory-session.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
 import { LiveSessions } from './session/live-sessions.js';
-import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
-import { hydrateSessionModelPack } from './session/model-pack-hydration.js';
+import { hydrateSessionMemorySettings, layerPersonalMemorySettings } from './session/memory-settings-hydration.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
 import { createSourceControlTools } from './session/source-control-tools.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
@@ -113,13 +123,17 @@ import { CustomProvidersStorage } from './storage/domains/custom-providers/base.
 import { FilesystemStorage } from './storage/domains/filesystem/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
-import { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
-import { ModelPacksStorage } from './storage/domains/model-packs/base.js';
+import {
+  factoryMemorySettingsUserId,
+  MemorySettingsStorage,
+  type MemorySettingsRecord,
+} from './storage/domains/memory-settings/base.js';
+import { ModelDefaultsStorage } from './storage/domains/model-defaults/base.js';
 import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
-import type { WorkItemRow } from './storage/domains/work-items/base.js';
+import type { FactoryRunBindingRecord, WorkItemRow } from './storage/domains/work-items/base.js';
 import { FactorySupervisorHealthWorker } from './supervisor/health-worker.js';
 import { SUPERVISOR_INSTRUCTIONS } from './supervisor/instructions.js';
 import { createFactorySupervisorReadTools } from './supervisor/read-tools.js';
@@ -168,6 +182,11 @@ export interface MastraFactoryConfig {
    */
   vector?: MastraVector;
   /**
+   * Host-owned Knowledge runtime. Factory registers this exact instance under `key` and uses that
+   * key for its read surfaces. Omitted leaves Mastra Code's experimental default wiring in place.
+   */
+  knowledge?: { key: string; instance: Knowledge };
+  /**
    * Distributed event bus instance (e.g. `new RedisStreamsPubSub({ url })`).
    * When set, streams/workflows/signals ride it across processes and the
    * controller drops file-based thread locks in favor of pubsub-coordinated
@@ -187,8 +206,15 @@ export interface MastraFactoryConfig {
    * static host, so credentialed requests must be explicitly allowed.
    */
   allowedOrigins?: string[];
-  /** Sandbox configuration. Omitted → repository sandboxes are disabled. */
-  sandbox?: MastraFactorySandboxConfig;
+  /**
+   * The host's sandbox: a FactorySandbox instance such as
+   * `new PlatformFactorySandbox({ ... })`, which owns the session sandbox
+   * constructor, the repo template and the schema of environment settings.
+   * A bare callback is also accepted and wrapped as a `provider: 'custom'`
+   * sandbox with no settings. Omitted → repository sandboxes are
+   * disabled.
+   */
+  sandbox?: MastraFactorySandboxOption;
   /**
    * When a session's sandbox boots: on the agent's first command (`'lazy'`,
    * the default) or as soon as the session's workspace is first resolved
@@ -211,6 +237,16 @@ export interface MastraFactoryConfig {
    * plaintext compatibility with a boot-time warning.
    */
   secretEncryption?: FactorySecretEncryption;
+  /**
+   * Model providers that authenticate with the server process's own
+   * credentials instead of per-account credentials. With auth enabled, these
+   * providers are only usable when listed here; the stored-key flow is never
+   * offered for them. Supported: `'amazon-bedrock'` (AWS credential chain —
+   * `AWS_BEARER_TOKEN_BEDROCK` or access keys/profile/role plus `AWS_REGION`).
+   * Every signed-in account can then run these models on the deployment's
+   * credentials. Default: none.
+   */
+  deploymentModelProviders?: readonly string[];
   /**
    * Registered capability providers. The factory registers the pieces each
    * `FactoryIntegration` instance provides — HTTP routes, storage domains,
@@ -259,7 +295,7 @@ export interface MastraFactoryConfig {
   };
 }
 
-export type { MastraFactorySandboxConfig } from './sandbox/session-sandbox.js';
+export type { MastraFactorySandboxConfig, MastraFactorySandboxOption } from './sandbox/session-sandbox.js';
 export type { FactorySandboxStart } from './workspace.js';
 
 /**
@@ -352,13 +388,47 @@ function liveSessionsTouchingTheFeed(controller: BuildApiRoutesDeps['controller'
   return liveSessions;
 }
 
+/**
+ * The fleet-era `sandbox` options and what replaced each one. Only the keys
+ * the host actually passed are explained, so a host that never used the fleet
+ * gets the short message.
+ */
+const RETIRED_SANDBOX_OPTIONS: Record<string, string> = {
+  machine:
+    "'machine' becomes the provider instance: one sandbox per session, constructed by the FactorySandbox, instead of one template machine cloned per repository",
+  workdir:
+    "'workdir' becomes the workingDirectory of the FactorySandboxContext, which every provider passes to its sandbox; when it is absent the provider uses its own default",
+  maxSandboxes: "'maxSandboxes' is gone with the sandbox fleet: there is one sandbox per session and no pool to cap",
+};
+
+function invalidSandboxOptionMessage(option: unknown): string {
+  const lines = [
+    `MastraFactory: 'sandbox' must be a FactorySandbox instance or a callback constructing a MastraSandbox from a FactorySandboxContext:`,
+    `  sandbox: new PlatformFactorySandbox()`,
+    `  sandbox: ctx => new PlatformSandbox({ id: ctx.sessionId, sandboxId: ctx.sandboxId })`,
+  ];
+  if (typeof option === 'object' && option !== null) {
+    const retired = Object.keys(RETIRED_SANDBOX_OPTIONS).filter(key => key in option);
+    if (retired.length > 0) {
+      lines.push(`The object you passed is the retired alpha sandbox config. Its options map as follows:`);
+      for (const key of retired) lines.push(`  ${RETIRED_SANDBOX_OPTIONS[key]}.`);
+    }
+  }
+  return lines.join('\n');
+}
+
 export class MastraFactory {
   readonly #config: MastraFactoryConfig;
+  /** The normalized sandbox, set by `prepare()`. Undefined until then and when sandboxes are disabled. */
+  #sandbox: FactorySandbox | undefined;
+  #sandboxDescription: FactorySandboxDescription | undefined;
   readonly #boards: BoardRegistry;
   readonly #configVersion: string;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
   #dispatcher: FactoryDecisionDispatcher | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
+  /** Environment builds through the sandbox's `builds`; undefined when the sandbox has none. */
+  #environmentBuilds: EnvironmentBuildRunner | undefined;
   #preparing = false;
 
   constructor(config: MastraFactoryConfig) {
@@ -381,6 +451,17 @@ export class MastraFactory {
     }
     this.#configVersion = assertFactoryConfigVersion(config.configVersion ?? DEFAULT_FACTORY_CONFIG_VERSION);
     this.#config = config;
+  }
+
+  /**
+   * The host sandbox's provider, settings schema (JSON Schema) and
+   * capabilities, as the environment route reports them. Undefined before
+   * `prepare()` and when sandboxes are disabled.
+   */
+  get sandboxDescription(): FactorySandboxDescription | undefined {
+    if (!this.#sandbox) return undefined;
+    this.#sandboxDescription ??= describeFactorySandbox(this.#sandbox);
+    return this.#sandboxDescription;
   }
 
   /**
@@ -419,6 +500,7 @@ export class MastraFactory {
       );
     }
     const secretEncryption = this.#config.secretEncryption ?? createPlaintextFactorySecretEncryption();
+    const deploymentModelProviders = resolveDeploymentModelProviders(this.#config.deploymentModelProviders);
     // One RouteAuth seam per boot, closed over the resolved provider. Every
     // factory route module receives this handle — no service locator.
     const routeAuth = createFactoryRouteAuth(auth);
@@ -488,7 +570,7 @@ export class MastraFactory {
     workItemsStorage.onAttentionChanged(scope => touchFeed(eventBus, scope));
     workItemsStorage.useTerminalPhasePredicate(item => isTerminalWorkItem(this.#boards, item));
     const modelCredentialsStorage = storage.registerDomain(new ModelCredentialsStorage(secretEncryption));
-    const modelPacksStorage = storage.registerDomain(new ModelPacksStorage());
+    const modelDefaultsStorage = storage.registerDomain(new ModelDefaultsStorage());
     const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
     const customProvidersStorage = storage.registerDomain(new CustomProvidersStorage(secretEncryption));
     const queueHealthStorage = storage.registerDomain(new QueueHealthStorage());
@@ -507,7 +589,7 @@ export class MastraFactory {
     const domains = {
       intake: intakeStorage,
       modelCredentials: modelCredentialsStorage,
-      modelPacks: modelPacksStorage,
+      modelDefaults: modelDefaultsStorage,
       memorySettings: memorySettingsStorage,
       customProviders: customProvidersStorage,
       filesystem: filesystemStorage,
@@ -541,27 +623,16 @@ export class MastraFactory {
       pubsub: eventBus,
     });
 
-    // The sandbox config is a bare callback constructing a session's sandbox
-    // from intent. Shape-only validation: probing it with a synthetic ctx at
-    // boot would construct against a fake session, so only the type is
-    // checked.
-    const sandboxConfig = this.#config.sandbox;
-    if (sandboxConfig !== undefined && typeof sandboxConfig !== 'function') {
-      // An object here is almost certainly the pre-callback config, which
-      // described a fleet the factory managed itself. That fleet is gone:
-      // sandboxes are per session and the host constructs them, so say what to
-      // write instead rather than only naming the expected type.
-      if (typeof sandboxConfig === 'object' && sandboxConfig !== null) {
-        throw new Error(
-          `MastraFactory: 'sandbox' is now a callback, not an options object. It receives a FactorySandboxContext and returns a MastraSandbox, so the host chooses the provider per session:\n` +
-            `  sandbox: ctx => new E2BSandbox({ id: ctx.sessionId, sandboxId: ctx.sandboxId })\n` +
-            `The old options map three ways: 'machine' becomes the provider instance you construct inside the callback (one per session instead of one cloned template); 'workdir' is gone — remote providers clone into the VM's home directory and local providers check out under their own workingDirectory; 'maxSandboxes' is gone with the sandbox fleet — there is one sandbox per session and no pool to cap. Omit 'sandbox' entirely to disable sandboxes.`,
-        );
-      }
-      throw new Error(
-        `MastraFactory: 'sandbox' must be a function constructing a MastraSandbox from a FactorySandboxContext.`,
-      );
+    const sandboxOption = this.#config.sandbox;
+    let sandboxConfig: FactorySandbox | undefined;
+    if (sandboxOption === undefined || isFactorySandbox(sandboxOption)) {
+      sandboxConfig = sandboxOption;
+    } else if (typeof sandboxOption === 'function') {
+      sandboxConfig = new CallbackFactorySandbox(sandboxOption);
+    } else {
+      throw new Error(invalidSandboxOptionMessage(sandboxOption));
     }
+    this.#sandbox = sandboxConfig;
 
     const workspaceRegistry = new FactoryWorkspaceRegistry();
 
@@ -596,7 +667,7 @@ export class MastraFactory {
     // lets the SDK fall back to the file-backed AuthStorage (auth.json) — the
     // same store the local /login and Settings pages read and write.
     if (auth) {
-      registerTenantCredentialResolver(modelCredentialsStorage);
+      registerTenantCredentialResolver(modelCredentialsStorage, deploymentModelProviders);
     }
 
     // Custom providers: DB-backed in both modes (org rows in tenant mode, the
@@ -649,7 +720,9 @@ export class MastraFactory {
     const intakeReady =
       integrations.some(integration => integration.intake !== undefined) && storage.isDomainReady('intake');
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
-    const knowledgeEnabled = process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
+    const knowledgeEnabled =
+      this.#config.knowledge !== undefined || process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
+    const deploymentOrganizationId = process.env.MASTRACODE_DEPLOYMENT_ORGANIZATION_ID?.trim() || undefined;
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
       | GithubIntegration
       | undefined;
@@ -752,8 +825,30 @@ export class MastraFactory {
             : {}),
         })
       : undefined;
+    // Proactive environment builds exist only when the sandbox can build
+    // templates on its own; the workflow is registered on the host's Mastra
+    // and the runner reaches the booted instance through the controller.
+    this.#environmentBuilds = this.#sandbox?.builds
+      ? new EnvironmentBuildRunner(
+          {
+            sandbox: this.#sandbox,
+            projects: factoryProjectsStorage,
+            sourceControl: githubIntegration?.versionControl
+              ? {
+                  storage: sourceControlStorage.forIntegration(githubIntegration.id),
+                  versionControl: githubIntegration.versionControl,
+                }
+              : undefined,
+            logger: { info: (msg, meta) => console.info(`[Mastra Factory] ${msg}`, meta ?? {}) },
+          },
+          { getMastra: () => this.#prepared?.base.controller.getMastra() },
+        )
+      : undefined;
+    const environmentBuilds = this.#environmentBuilds;
     const projectRoutes = new ProjectRoutes({
       auth: routeAuth,
+      sandbox: this.#sandbox,
+      ...(environmentBuilds ? { environmentBuilds } : {}),
       projects: factoryProjectsStorage,
       sourceControl: sourceControlStorage,
       versionControlIntegrationIds: integrations
@@ -821,6 +916,17 @@ export class MastraFactory {
             },
           }
         : {}),
+      ...(typeof githubIntegration?.ingestLinkedRepositoryBacklog === 'function'
+        ? {
+            onProjectRepositoryLinked: ({ orgId, projectRepository }) => {
+              void githubIntegration
+                .ingestLinkedRepositoryBacklog({ orgId, projectRepositoryId: projectRepository.id })
+                .catch(error => {
+                  console.warn('[factory] Failed to import a linked repository backlog:', error);
+                });
+            },
+          }
+        : {}),
       ...(sessionRetirement ? { sessionRetirement } : {}),
       ...(workItemsReady
         ? {
@@ -832,11 +938,56 @@ export class MastraFactory {
           }
         : {}),
     });
+    const loadMemorySettings = async ({
+      requestContext,
+      binding,
+    }: {
+      requestContext: RequestContext | undefined;
+      binding: FactoryRunBindingRecord | null;
+    }) => {
+      if (!requestContext) return;
+      const scope = readFactorySessionScope(requestContext);
+      const user = getFactoryAuthUserFromContext(requestContext);
+      const callerUserId = getFactoryAuthUserId(user);
+      const callerOrgId = factoryUserOrgId(user);
+      const factoryProjectId = binding?.factoryProjectId ?? scope?.factoryProjectId;
+      // Project-scoped sessions share one row per project, addressed by the
+      // sentinel user id the settings UI picks when it passes a `factoryId`;
+      // unscoped sessions read the caller's own row. Both are rows the
+      // settings UI writes, so intent and the run agree without any session
+      // mutation.
+      const target = factoryProjectId
+        ? {
+            orgId: binding?.orgId ?? scope?.factoryOrgId ?? callerOrgId ?? 'local',
+            userId: factoryMemorySettingsUserId(factoryProjectId),
+          }
+        : callerUserId && callerOrgId
+          ? { orgId: callerOrgId, userId: callerUserId }
+          : { orgId: 'local', userId: 'local' };
+      const record = await memorySettingsStorage.get(target);
+      // A channel sender's own settings beat the project's for every knob they
+      // saved. Best-effort: a failed personal read keeps the project's row.
+      let personal: MemorySettingsRecord | null = null;
+      if (factoryProjectId && requestContext.get('channel') && callerUserId && callerOrgId) {
+        try {
+          personal = await memorySettingsStorage.get({ orgId: callerOrgId, userId: callerUserId });
+        } catch (error) {
+          console.warn("[Factory Memory Settings] Unable to read the sender's memory settings", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      requestContext.set(
+        'mastra__factoryMemorySettings',
+        layerPersonalMemorySettings(record, personal) satisfies MemorySettingsRecord | null,
+      );
+    };
     const factoryProcessor = workItemsReady
       ? new FactoryPhaseStateProcessor({
           configVersion,
           storage: workItemsStorage,
           boards: this.#boards,
+          loadMemorySettings,
           ...(transitionService ? { transitionService } : {}),
           ...(githubIntegration
             ? {
@@ -902,14 +1053,15 @@ export class MastraFactory {
         : [],
     );
 
-    // Build the real production controller (agents, modes, tools, memory, OM,
-    // MCP, providers) — identical to the terminal app. Agent state lives in
+    // Build the real production controller (agents, tools, memory, OM, MCP,
+    // providers) — the terminal app's, minus modes. Agent state lives in
     // the storage backend's Mastra store alongside the Factory app tables —
     // one shared database for all users, separated by `resourceId` scoping.
     const prepared = await timedPhase('prepare.controllerMount', () =>
       prepareAgentControllerMount({
         controllerId: CONTROLLER_ID,
         coAuthor: { name: 'mastra-platform[bot]' },
+        modes: false,
         workspace: createWorkspaceFactory({
           ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
           ...(this.#config.sandboxStart ? { sandboxStart: this.#config.sandboxStart } : {}),
@@ -1002,7 +1154,24 @@ export class MastraFactory {
         },
         storage: storage.getMastraStorage(),
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
-        ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),
+        ...(this.#config.knowledge ? { knowledge: this.#config.knowledge } : {}),
+        // The environment signal tells the agent which repositories its
+        // sandbox holds and where; the phase signal, when work items are on,
+        // comes after it.
+        inputProcessors: async ({ requestContext }: { requestContext: RequestContext }) => {
+          const environmentProcessor = new FactoryEnvironmentStateProcessor();
+          if (factoryProcessor) {
+            await factoryProcessor.prepareMemorySettings(requestContext);
+            return [environmentProcessor, factoryProcessor];
+          }
+          // Without work items there is no run binding, so the caller's row applies.
+          try {
+            await loadMemorySettings({ requestContext, binding: null });
+          } catch (error) {
+            reportMemorySettingsUnavailable(requestContext, error instanceof Error ? error.message : String(error));
+          }
+          return [environmentProcessor];
+        },
         ...(vector ? { vector } : {}),
         ...(toolIntegrations.length > 0 ||
         sourceControlToolProviders.length > 0 ||
@@ -1026,7 +1195,7 @@ export class MastraFactory {
                 if (storage.isDomainReady('source-control')) {
                   mergeTools(
                     'source-control',
-                    createSourceControlTools({
+                    await createSourceControlTools({
                       requestContext,
                       providers: sourceControlToolProviders,
                       audit: auditDomain,
@@ -1166,6 +1335,16 @@ export class MastraFactory {
             await observeAgentGitAction({
               audit: auditDomain,
               toolContext: { ...toolContext, context: requestContext },
+              resolveRepositorySlugs: async sessionId => {
+                for (const provider of sourceControlToolProviders) {
+                  const session = await provider.storage.sessions.getBySessionId(sessionId);
+                  if (!session) continue;
+                  return environmentSlugs(
+                    await resolveSessionRepositories({ sourceControl: provider.storage, session }),
+                  );
+                }
+                return [];
+              },
             });
           }
           await Promise.all(
@@ -1184,8 +1363,8 @@ export class MastraFactory {
           // Public `/auth/*` routes (login/callback/logout/me). Folded in as
           // `apiRoutes` (not plain Hono routes) because the entry can't touch the
           // Hono app the deployer generates. `requiresAuth: false`; the gate
-          // skips `/auth/*`.
-          ...(auth ? buildAuthRoutes(auth, { publicUrl: publicOrigin }) : []),
+          // skips `/auth/*`. Auth-disabled mode still answers `/auth/me` (404).
+          ...(auth ? buildAuthRoutes(auth, { publicUrl: publicOrigin }) : buildAuthDisabledRoutes()),
           ...new TelemetryRoutes({ auth: routeAuth, providerName: auth?.name, publicOrigin, allowedOrigins }).routes(),
           // Custom `/web/*` routes (fs / config / integrations / factory / audit).
           ...assembleFactoryApiRoutes({
@@ -1199,6 +1378,7 @@ export class MastraFactory {
             publicOrigin,
             stateSigner,
             sandbox: sandboxConfig,
+            ...(environmentBuilds ? { onRepositoryPush: environmentBuilds.onRepositoryPush } : {}),
             sessionRetirement,
             factoryStorage: storage,
             integrationStorage,
@@ -1209,6 +1389,9 @@ export class MastraFactory {
             intakeReady,
             factoryReady,
             knowledgeEnabled,
+            deploymentOrganizationId,
+            deploymentModelProviders,
+            knowledgeKey: this.#config.knowledge?.key,
             configVersion,
             boardRegistry: this.#boards,
             factoryTransitionService: transitionService,
@@ -1232,13 +1415,6 @@ export class MastraFactory {
                 },
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
                 prepareBinding,
-                refreshManagedMemorySettings: ({ binding, session }) =>
-                  refreshFactorySessionMemorySettings(session, {
-                    orgId: binding.orgId,
-                    factoryProjectId: binding.factoryProjectId,
-                    projects: factoryProjectsStorage,
-                    memorySettings: memorySettingsStorage,
-                  }),
                 feedReader: new FactoryFeedReader(workItemCommentsStorage),
                 ...(githubIntegration
                   ? {
@@ -1366,7 +1542,6 @@ export class MastraFactory {
       session =>
         hydrateSupervisorSession(session, {
           projects: factoryProjectsStorage,
-          memorySettings: memorySettingsStorage,
         }).catch(error => {
           console.warn('[Factory Supervisor] Failed to hydrate supervisor session', {
             error: error instanceof Error ? error.message : String(error),
@@ -1375,28 +1550,24 @@ export class MastraFactory {
       { blocking: true },
     );
 
-    // Blocking: `createSession` awaits this seed, so when hydration succeeds
-    // a session's first run starts with the owner's stored OM settings.
-    // Best-effort — failures are logged inside the helper, never thrown, and
-    // the session then falls back to its persisted/default OM configuration.
+    // Blocking: `createSession` awaits the organization seed so per-invocation
+    // memory settings and knowledge capture use the correct tenant immediately.
     prepared.base.controller.onSessionCreated(
       session =>
         hydrateSessionMemorySettings(session, {
           sourceControl: { sessions: sourceControlSessions },
-          projects: factoryProjectsStorage,
-          memorySettings: memorySettingsStorage,
         }),
       { blocking: true },
     );
 
-    // Personal model packs seed interactive user sessions only. Active Factory
+    // Personal default models seed interactive user sessions only. Active Factory
     // run bindings are excluded and continue to use the project default model.
     prepared.base.controller.onSessionCreated(
       session =>
-        hydrateSessionModelPack(session, {
+        hydrateSessionDefaultModel(session, {
           sourceControl: { sessions: sourceControlSessions },
           workItems: workItemsStorage,
-          modelPacks: modelPacksStorage,
+          modelDefaults: modelDefaultsStorage,
         }),
       { blocking: true },
     );
@@ -1530,6 +1701,7 @@ export class MastraFactory {
       // requests (`x-mastra-client-type: studio` routes to `studio.auth`).
       ...(auth ? { studio: { auth } } : {}),
       ...(integrationWorkers.length > 0 ? { workers: integrationWorkers } : {}),
+      ...(environmentBuilds ? { workflows: { [ENVIRONMENT_BUILD_WORKFLOW_ID]: environmentBuilds.workflow } } : {}),
     };
   }
 
@@ -1543,6 +1715,7 @@ export class MastraFactory {
       throw new Error('MastraFactory.finalize() called before prepare()');
     }
     await timedPhase('finalize.controller', () => this.#prepared!.finalize());
+    await this.#environmentBuilds?.probeSchedules();
     await timedPhase(
       'finalize.reconcileBoundThreads',
       () => this.#factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),

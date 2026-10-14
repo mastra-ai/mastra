@@ -59,6 +59,21 @@ reviews:
         Flag duplicated inline checks for payload shape, types, enum membership, ranges, formats, and cross-field invariants. Each finding must identify the inline validation and the schema where it belongs.
 
         Do not report checks that require runtime context or mutable/external state, including authorization, database or filesystem state, resource existence, conflicts, request context, or external-service responses; those belong in `execute`.
+    - path: 'packages/connect/src/providers/**'
+      instructions: |
+        Any new provider added under `packages/connect/src/providers/<provider>/` must ship with a smoke-test scenario at `packages/connect/scripts/smoke-test/scenarios/<provider>.ts`, registered alphabetically in `scenarios/index.ts`, covering 100% of the provider's tools (verifiable via `tsx packages/connect/scripts/smoke-test/audit-coverage.ts`).
+
+        When a PR adds or regenerates a provider under this path, check for:
+        - Scenario file exists at `packages/connect/scripts/smoke-test/scenarios/<provider>.ts` and is registered alphabetically in `scenarios/index.ts`.
+        - Every tool shipped by the provider appears in the scenario's step list, invoked through the public tools resolver (not direct SDK calls).
+        - Self-contained create/read/update/delete lifecycle — the scenario creates its own prerequisite resources tagged with the `runId` helper and deletes everything it creates.
+        - Cleanup steps are wrapped in `try/catch`. On cleanup failure the scenario calls `log.error(...)` naming the leaked record and records the step as `fail` (not `skip`).
+        - `probeTool()` from `scenario.ts` is used only for operations that genuinely cannot bootstrap prerequisites (synthetic ids, product-tier-gated endpoints, operations that touch real recipients or billable resources) and carries an inline comment explaining why.
+        - PR description includes the live pass count from `pnpm --filter @mastra/connect smoke-test --provider <id>`.
+
+        See `packages/connect/AGENTS.md` and `packages/connect/scripts/smoke-test/README.md` for the full policy.
+
+        In case of a guideline violation ALWAYS mark your comment as `potential_issue`.
   abort_on_close: true
   disable_cache: false
   auto_review:
@@ -151,7 +166,9 @@ knowledge_base:
     enabled: true
   code_guidelines:
     enabled: true
-    filePatterns: []
+    filePatterns:
+      - '**/AGENTS.md'
+      - '**/CLAUDE.md'
   learnings:
     scope: auto
   issues:
