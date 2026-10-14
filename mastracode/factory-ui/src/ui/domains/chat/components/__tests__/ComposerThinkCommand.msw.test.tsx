@@ -156,7 +156,9 @@ describe('the /think command', () => {
       );
       const input = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Message' });
       await waitFor(() => expect(input).toBeEnabled());
-      await waitFor(() => expect(client.getQueryData(queryKeys.availableModels(OVERLAY_FACTORY_ID))).toEqual([proModel]));
+      await waitFor(() =>
+        expect(client.getQueryData(queryKeys.availableModels(OVERLAY_FACTORY_ID))).toEqual([proModel]),
+      );
       return input;
     }
 
