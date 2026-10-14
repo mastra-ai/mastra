@@ -270,11 +270,18 @@ function printTrustInstructions({ pkg, refusal }) {
   console.error('');
 }
 
-function reportUnverifiable(unverifiable, what) {
+// stdout/stderr writes to a pipe are asynchronous on Linux, so process.exit()
+// straight after many lines can drop the tail of the output (the summary).
+async function exit(code) {
+  await Promise.all([process.stdout, process.stderr].map(stream => new Promise(resolve => stream.write('', resolve))));
+  process.exit(code);
+}
+
+async function reportUnverifiable(unverifiable, what) {
   console.error(
     `Could not verify ${unverifiable.length} package(s) ${what}: ${unverifiable.map(({ pkg, reason }) => `${pkg.name}${reason ? ` (${reason})` : ''}`).join(', ')}`,
   );
-  process.exit(2);
+  await exit(2);
 }
 
 const options = parseArgs(process.argv.slice(2));
@@ -314,11 +321,11 @@ if (missing.length > 0) {
   console.error(
     `${missing.length} package(s) have never been published to npm: ${missing.map(({ pkg }) => pkg.name).join(', ')}`,
   );
-  process.exit(1);
+  await exit(1);
 }
 
 if (unverifiable.length > 0) {
-  reportUnverifiable(unverifiable, `against ${options.registry} (registry errors)`);
+  await reportUnverifiable(unverifiable, `against ${options.registry} (registry errors)`);
 }
 
 console.log(`All ${packages.length} publishable package(s) exist on npm.`);
@@ -331,7 +338,7 @@ if (!options.oidc) {
       `::warning title=No trusted-publishing history::${pkg.name} exists on npm, but no version of it was published through npm trusted publishing (OIDC). Expected for a new placeholder; otherwise confirm its trusted publisher with \`npx npm@^11.10.0 trust list ${pkg.name}\` (it must be GitHub repo mastra-ai/mastra, workflow npm-publish.yml). The publish job checks this for real before publishing.`,
     );
   }
-  process.exit(0);
+  await exit(0);
 }
 
 console.log(`Checking npm trusted publishing (OIDC token exchange) for ${packages.length} package(s)...`);
@@ -358,12 +365,12 @@ if (untrusted.length > 0) {
       'Every package was refused. If they published from this workflow before, suspect the job rather than the packages: it must run from mastra-ai/mastra, workflow file npm-publish.yml.',
     );
   }
-  process.exit(1);
+  await exit(1);
 }
 
 const trustUnverifiable = trustResults.filter(result => result.trusted === undefined);
 if (trustUnverifiable.length > 0) {
-  reportUnverifiable(trustUnverifiable, 'for trusted publishing');
+  await reportUnverifiable(trustUnverifiable, 'for trusted publishing');
 }
 
 console.log(`npm trusted publishing works for all ${packages.length} package(s).`);
