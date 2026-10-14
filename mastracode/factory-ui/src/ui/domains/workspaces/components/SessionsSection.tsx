@@ -30,7 +30,7 @@ import type { SessionGroupContext } from '../services/sessionGroups';
 import type { SessionListRow } from '../services/sessionRows';
 import { DEFAULT_SESSION_SORT, SESSION_SORT_OPTIONS, compareSessionRows } from '../services/sessionSort';
 import { DeleteSessionDialog } from './DeleteSessionDialog';
-import { SessionGroupList, collapsedRows } from './SessionGroupList';
+import { SessionGroupList, collapsedRowsKeepingActive } from './SessionGroupList';
 import { SessionGroupMenu } from './SessionGroupMenu';
 import { SessionListProperties } from './SessionListProperties';
 
@@ -84,7 +84,7 @@ export function SessionsSection() {
   };
 
   const pullRequestTargets = groups
-    .flatMap(group => collapsedRows(group.rows))
+    .flatMap(group => collapsedRowsKeepingActive(group.rows))
     .flatMap(row =>
       row.origin === 'factory' && row.threadId && row.pullRequestNumber !== undefined
         ? [

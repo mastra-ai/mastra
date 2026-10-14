@@ -44,7 +44,6 @@ export interface SessionGroupContext {
 
 const USER_GROUP: SessionGroupHeading = { key: 'user', label: 'User', icon: 'user' };
 const ALL_GROUP: SessionGroupHeading = { key: 'all', label: 'All', icon: 'all' };
-const BUILTIN_BOARD_ORDER = ['work', 'review'];
 
 const STATUS_GROUPS: readonly SessionGroupHeading[] = SESSION_STATUS_OPTIONS.flatMap((option): SessionGroupHeading[] =>
   option.value === 'all' ? [] : [{ key: `status:${option.value}`, label: option.label, icon: 'status' }],
@@ -61,24 +60,20 @@ function boardHeading(boardId: string, label: string): SessionGroupHeading {
   return { key: `board:${boardId}`, label, icon: boardId === 'review' ? 'review' : 'board' };
 }
 
-function builtinBoardRank(boardId: string): number {
-  const rank = BUILTIN_BOARD_ORDER.indexOf(boardId);
-  return rank === -1 ? BUILTIN_BOARD_ORDER.length : rank;
-}
-
-/** Catalog boards in sidebar order, then boards only the rows know of (catalog pending or uninstalled), then User. */
 function boardGroupHeadings(
   rows: readonly SessionListRow[],
   boards: readonly InstalledBoardInfo[] | undefined,
 ): SessionGroupHeading[] {
   const catalog = orderedBoards(boards ?? []);
   const catalogIds = new Set(catalog.map(board => board.id));
-  const uncatalogedIds = [
-    ...new Set(rows.flatMap(row => (row.board !== undefined && !catalogIds.has(row.board) ? [row.board] : []))),
-  ].toSorted((a, b) => builtinBoardRank(a) - builtinBoardRank(b) || a.localeCompare(b));
+  const uncatalogedBoards = orderedBoards(
+    [...new Set(rows.flatMap(row => (row.board !== undefined && !catalogIds.has(row.board) ? [row.board] : [])))]
+      .toSorted()
+      .map(id => ({ id })),
+  );
   return [
     ...catalog.map(board => boardHeading(board.id, board.title)),
-    ...uncatalogedIds.map(boardId => boardHeading(boardId, boardId.charAt(0).toUpperCase() + boardId.slice(1))),
+    ...uncatalogedBoards.map(({ id }) => boardHeading(id, id.charAt(0).toUpperCase() + id.slice(1))),
     USER_GROUP,
   ];
 }
@@ -92,8 +87,7 @@ function ownerGroupHeadings(rows: readonly SessionListRow[], viewerUserId: strin
     .map(({ userId, label }) => ({ key: `owner:${userId}`, label, icon: 'owner' }));
 }
 
-/** Stored keys that still exist lead in stored order; groups the stored order never saw follow in default order. */
-export function applyGroupOrder<T extends { key: string }>(
+function applyGroupOrder<T extends { key: string }>(
   defaults: readonly T[],
   storedKeys: readonly string[] | undefined,
 ): readonly T[] {
@@ -102,7 +96,7 @@ export function applyGroupOrder<T extends { key: string }>(
   return defaults.toSorted((a, b) => (rank.get(a.key) ?? storedKeys.length) - (rank.get(b.key) ?? storedKeys.length));
 }
 
-/** Status always lists all five groups, so an empty one can still be hidden or placed. */
+// Status lists all five even when empty, so a group can be hidden or placed before it has sessions.
 function defaultGroupHeadings(
   rows: readonly SessionListRow[],
   groupBy: SessionGroupBy,
@@ -129,7 +123,6 @@ export function sessionGroupOrder(
   return applyGroupOrder(defaultGroupHeadings(rows, groupBy, context), storedOrder);
 }
 
-/** Rows keep their incoming order inside each group; hidden and empty groups are left out. */
 export function groupSessionRows(
   rows: readonly SessionListRow[],
   groupBy: SessionGroupBy,

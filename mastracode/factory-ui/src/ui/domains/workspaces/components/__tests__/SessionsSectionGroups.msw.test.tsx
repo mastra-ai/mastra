@@ -130,6 +130,8 @@ describe('Sessions sidebar groups', () => {
     renderSection();
     await screen.findByRole('button', { name: 'Release old' });
     expect(rowNamesIn('Work sessions')).toEqual(['Work old', 'Work new']);
+    expect(rowNamesIn('Review sessions')).toEqual(['Review old', 'Review new']);
+    expect(rowNamesIn('Release Preview sessions')).toEqual(['Release old', 'Release new']);
     expect(rowNamesIn('User sessions')).toEqual(['User old', 'User new']);
 
     await pickSessionProperty(user, 'Sort', 'Last created');

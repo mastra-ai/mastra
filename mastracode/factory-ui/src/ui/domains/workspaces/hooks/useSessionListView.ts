@@ -91,7 +91,6 @@ function isNonEmptyStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.length > 0 && value.every(entry => typeof entry === 'string');
 }
 
-/** Drops empty and malformed entries; undefined when none are left, so the default view stores nothing. */
 function nonEmptyGroupKeys(value: unknown): GroupKeysByGroupBy | undefined {
   if (typeof value !== 'object' || value === null) return undefined;
   const stored: Partial<Record<SessionGroupBy, unknown>> = value;
