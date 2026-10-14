@@ -548,19 +548,35 @@ describe('channels()', () => {
     }
   });
 
-  it('rejects at resolution when MASTRA_ENCRYPTION_KEY is unset for the Teams channel', async () => {
+  it('rejects at resolution when MASTRA_ENCRYPTION_KEY is unset and a Teams connection is active', async () => {
     // Defense-in-depth for the Teams install store's at-rest persistence:
     // without an encryption key, delegated provisioning would silently
-    // downgrade to plaintext. This is an environment configuration mistake,
-    // so `channels()` fails at startup instead of warn-and-skipping the
-    // channel.
+    // downgrade to plaintext. The hard failure is scoped to projects that
+    // actually use the Teams channel: construction succeeds, but resolving
+    // an active Teams connection rejects instead of warn-and-skipping.
     vi.stubEnv('MASTRA_ENCRYPTION_KEY', '');
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_teams', integrationId: 'microsoft-teams' })],
       credentials: { c_teams: { type: 'oauth2', accessToken: 'graph-token', expiresAt: null } },
     });
     const channelsFn = await importChannels();
-    await expect(channelsFn(options(fetchMock))).rejects.toThrow('MASTRA_ENCRYPTION_KEY is not set');
+    const resolver = await channelsFn(options(fetchMock));
+    await expect(resolver()).rejects.toThrow('MASTRA_ENCRYPTION_KEY is not set');
+  });
+
+  it('resolves without MASTRA_ENCRYPTION_KEY when no Teams connection is active', async () => {
+    // A project that doesn't use the Teams channel must never pay for the
+    // Teams env requirement.
+    vi.stubEnv('MASTRA_ENCRYPTION_KEY', '');
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_tg', integrationId: 'telegram' })],
+      credentials: { c_tg: { type: 'api_key', apiKey: '123456:bot-token' } },
+    });
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(options(fetchMock));
+    const providers = await resolver();
+    expect(providers['microsoft-teams']).toBeUndefined();
+    expect(providers['telegram']).toBeDefined();
   });
 
   it('builds a TeamsProvider whose tokenResolver serves Graph tokens from the platform credential', async () => {

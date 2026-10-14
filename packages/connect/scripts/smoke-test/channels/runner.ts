@@ -511,7 +511,8 @@ async function channelOutcome(
           'fail',
           id === 'microsoft-teams' && !process.env.MASTRA_ENCRYPTION_KEY
             ? 'active connection did not resolve — the Teams channel requires MASTRA_ENCRYPTION_KEY ' +
-                '(its install store persists per-agent bot secrets); without it channels() warn-and-skips the provider'
+                '(its install store persists per-agent bot secrets); with an active Teams connection ' +
+                'channels() resolution fails hard without it'
             : 'active connection did not resolve',
         ),
   );

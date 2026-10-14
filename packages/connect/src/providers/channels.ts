@@ -308,20 +308,15 @@ const discordChannel: ChannelProviderRegistration<DiscordProviderOptions> = {
  */
 const teamsChannel: ChannelProviderRegistration = {
   integrationId: 'microsoft-teams',
-  async create(options, runtime) {
-    const mod = (await import('@mastra/teams')) as {
-      TeamsProvider: new (config: Record<string, unknown>) => ChannelProvider;
-      TEAMS_DEV_PORTAL_SCOPE: string;
-    };
-    // Defense-in-depth around Teams' persistent install store: it holds the
-    // per-agent bot `appPassword` at rest, so a missing encryption key would
-    // silently downgrade delegated provisioning to plaintext persistence.
-    // `encryptionKey` is stripped from `providerOptions` (reserved) so the
-    // key can only come from `MASTRA_ENCRYPTION_KEY`. Fail fast at wrapper
-    // time if it is not set — clearer than watching a provisioning call
-    // throw deep inside `@mastra/teams`. Thrown as a config error so it
-    // fails `channels()` resolution at startup instead of being downgraded
-    // to the resolver's warn-and-skip path.
+  // Defense-in-depth around Teams' persistent install store: it holds the
+  // per-agent bot `appPassword` at rest, so a missing encryption key would
+  // silently downgrade delegated provisioning to plaintext persistence.
+  // `encryptionKey` is stripped from `providerOptions` (reserved) so the
+  // key can only come from `MASTRA_ENCRYPTION_KEY`. Checked at resolution
+  // time, once an active Teams connection is matched, so the hard failure
+  // only hits projects that actually use the Teams channel — a Slack-only
+  // project without the key keeps working.
+  assertUsable() {
     if (!process.env.MASTRA_ENCRYPTION_KEY) {
       throw new MastraConnectConfigError(
         'Microsoft Teams channel: MASTRA_ENCRYPTION_KEY is not set. ' +
@@ -329,6 +324,12 @@ const teamsChannel: ChannelProviderRegistration = {
           'encryption key (a 32-byte value, base64-encoded).',
       );
     }
+  },
+  async create(options, runtime) {
+    const mod = (await import('@mastra/teams')) as {
+      TeamsProvider: new (config: Record<string, unknown>) => ChannelProvider;
+      TEAMS_DEV_PORTAL_SCOPE: string;
+    };
     const safeOptions = stripReservedOptions('microsoft-teams', options);
     // Mirrors the Slack/Telegram pattern: fetch the current credential on
     // every call, let the platform's vendor own rotation, extract the token

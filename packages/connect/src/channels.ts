@@ -313,6 +313,11 @@ export async function channels(options: ChannelsOptions = {}): Promise<ChannelsR
       state.connectionId = connectionId;
       if (!connectionId) continue; // warned + skipped (or simply not connected)
 
+      // An active connection means the project actually uses this channel, so
+      // environment misconfiguration (e.g. Teams without MASTRA_ENCRYPTION_KEY)
+      // fails resolution loudly instead of warn-and-skipping the provider.
+      state.registration.assertUsable?.();
+
       if (state.instance.sync) {
         try {
           await state.instance.sync();
