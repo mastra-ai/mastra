@@ -352,6 +352,64 @@ export function createKnowledgeStorageTests(
       ).toEqual([second.id]);
     });
 
+    it('reports which sources hold at least one visible record, applying the record visibility rule', async () => {
+      const visible = await store.createNode({ name: 'Source probe visible', scopeIds: [PROJECT_SCOPE_ID] });
+      const hidden = await store.createNode({ name: 'Source probe hidden', scopeIds: [OTHER_SCOPE_ID] });
+      await store.createRecord({ node: visible, text: 'Live', source: 'probe-live', scopeIds: [PROJECT_SCOPE_ID] });
+      await store.createRecord({ node: hidden, text: 'Foreign', source: 'probe-foreign', scopeIds: [OTHER_SCOPE_ID] });
+      await store.createRecord({
+        node: visible,
+        text: 'Mentions [[Source probe hidden]]',
+        source: 'probe-private-mention',
+        scopeIds: [PROJECT_SCOPE_ID],
+        resolutionScopeIds: [OTHER_SCOPE_ID],
+        contextScopeId: PROJECT_SCOPE_ID,
+      });
+      const deleted = await store.createRecord({
+        node: visible,
+        text: 'Gone',
+        source: 'probe-deleted',
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
+      await store.deleteRecord({ id: deleted.id, deletedBy: 'test' });
+      await store.createRecord({ node: visible, text: 'Twice a', source: 'probe-twice', scopeIds: [PROJECT_SCOPE_ID] });
+      await store.createRecord({ node: visible, text: 'Twice b', source: 'probe-twice', scopeIds: [PROJECT_SCOPE_ID] });
+
+      const found = await store.listSourcesWithVisibleRecords({
+        sources: ['probe-live', 'probe-foreign', 'probe-private-mention', 'probe-deleted', 'probe-twice', 'probe-none'].map(
+          source => ({ source }),
+        ),
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
+      expect([...found].sort()).toEqual(['probe-live', 'probe-twice']);
+      expect(await store.listSourcesWithVisibleRecords({ sources: [], scopeIds: [PROJECT_SCOPE_ID] })).toEqual([]);
+      await expect(
+        store.listSourcesWithVisibleRecords({
+          sources: Array.from({ length: 1001 }, (_, i) => ({ source: `s-${i}` })),
+          scopeIds: [PROJECT_SCOPE_ID],
+        }),
+      ).rejects.toThrow('at most 1000');
+    });
+
+    it('applies each source only its own paired scope, never a sibling probe\'s', async () => {
+      const own = await store.createNode({ name: 'Paired own', scopeIds: [OTHER_SCOPE_ID] });
+      // `paired-b` holds a record, but only under the scope paired with `paired-a`.
+      await store.createRecord({ node: own, text: 'Filed elsewhere', source: 'paired-b', scopeIds: [OTHER_SCOPE_ID] });
+      await store.createRecord({ node: own, text: 'Filed home', source: 'paired-a', scopeIds: [OTHER_SCOPE_ID] });
+
+      const found = await store.listSourcesWithVisibleRecords({
+        sources: [{ source: 'paired-a', scopeId: OTHER_SCOPE_ID }, { source: 'paired-b' }],
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
+      expect(found).toEqual(['paired-a']);
+      expect(
+        await store.listSourcesWithVisibleRecords({
+          sources: [{ source: 'paired-b', scopeId: OTHER_SCOPE_ID }],
+          scopeIds: [PROJECT_SCOPE_ID],
+        }),
+      ).toEqual(['paired-b']);
+    });
+
     it('deduplicates concurrent node creation by canonical name and memberships', async () => {
       const [first, second] = await Promise.all([
         store.createNode({ name: 'Concurrent Topic', scopeIds: [PROJECT_SCOPE_ID] }),
@@ -1040,13 +1098,22 @@ export function createKnowledgeStorageTests(
       const interrupted = await store.updateImportRun({ id: interruptedRun.id, status: 'interrupted' });
       expect(interrupted).toMatchObject({ status: 'interrupted' });
 
+      const linkedRun = await store.createImportRun({
+        id: '01K00000000000000000000004',
+        importerId: 'calendar',
+        binding: knowledgeImporterBindingKey({ source: 'google-calendar:linked', scope: 'resource:one' }),
+        importKind: 'static',
+        triggerKind: 'programmatic',
+        queuedAt: new Date(queuedAt.getTime() + 5_000),
+      });
+      await store.updateImportRun({ id: linkedRun.id, status: 'running' });
       const node = await store.createNode({
         name: 'Imported calendar event',
         scopeIds: [PROJECT_SCOPE_ID],
-        importRunId: run.id,
+        importRunId: linkedRun.id,
       });
-      expect(await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], importRunId: run.id })).toEqual([
-        expect.objectContaining({ targetId: node.id, importRunId: run.id }),
+      expect(await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], importRunId: linkedRun.id })).toEqual([
+        expect.objectContaining({ targetId: node.id, importRunId: linkedRun.id }),
       ]);
 
       const reopened = await createStore(true);
@@ -1297,6 +1364,119 @@ export function createKnowledgeStorageTests(
       await expect(stateOf('payload/recovery-successor')).resolves.not.toBeNull();
     });
 
+    it('rejects a stale worker mutation that resumes after its run was recovered', async () => {
+      const binding = knowledgeImporterBindingKey({ source: 'calendar:stale', scope: 'project:mastra' });
+      const subject = await store.createNode({ name: 'Stale-run subject', scopeIds: [PROJECT_SCOPE_ID] });
+      const write = (id: string, importRunId: string) =>
+        store.createRecord({
+          id,
+          node: subject,
+          text: `${id} evidence`,
+          source: 'calendar:stale',
+          scopeIds: [PROJECT_SCOPE_ID],
+          importRunId,
+        });
+      await store.enqueueImportRun({
+        id: 'stale-original',
+        importerId: 'stale-runner',
+        binding,
+        importKind: 'static',
+        triggerKind: 'programmatic',
+        payloadKey: 'payload/stale-original',
+        payload: '{"payload":{}}',
+        queuedAt: new Date('2020-01-01T00:00:00.000Z'),
+      });
+      await store.claimImportRun({
+        importerId: 'stale-runner',
+        binding,
+        workerId: 'old-worker',
+        leaseKey: 'lease/',
+        timestamp: new Date('2020-01-01T00:00:01.000Z'),
+      });
+
+      // Old worker: authorized while it still owns the run, then paused before its mutation reaches storage.
+      let releaseOldWorker!: () => void;
+      const oldWorkerGate = new Promise<void>(resolve => (releaseOldWorker = resolve));
+      let oldWorkerAuthorized!: () => void;
+      const authorized = new Promise<void>(resolve => (oldWorkerAuthorized = resolve));
+      const oldWorker = (async () => {
+        expect((await store.getImportRun('stale-original'))?.status).toBe('running');
+        oldWorkerAuthorized();
+        await oldWorkerGate;
+        return write('stale-write', 'stale-original');
+      })();
+      await authorized;
+
+      // Recovery: the lease is stale, the run is replaced, and a new worker claims the replacement.
+      await expect(
+        store.recoverImportRun({
+          id: 'stale-original',
+          replacementId: 'stale-replacement',
+          payloadKey: 'payload/stale-original',
+          replacementPayloadKey: 'payload/stale-replacement',
+          leaseKey: 'lease/stale-original',
+          staleBefore: new Date('2020-01-01T00:00:03.000Z'),
+        }),
+      ).resolves.toMatchObject({ id: 'stale-replacement' });
+      await expect(
+        store.claimImportRun({ importerId: 'stale-runner', binding, workerId: 'new-worker', leaseKey: 'lease/' }),
+      ).resolves.toMatchObject({ id: 'stale-replacement' });
+
+      releaseOldWorker();
+      await expect(oldWorker).rejects.toThrow('stale-original');
+      await expect(store.getRecord({ id: 'stale-write', includeDeleted: true })).resolves.toBeNull();
+
+      await write('replacement-write', 'stale-replacement');
+      const bySource = await store.listRecordsBySource({ source: 'calendar:stale', scopeIds: [PROJECT_SCOPE_ID] });
+      expect(bySource.records.map(record => record.id)).toEqual(['replacement-write']);
+      await expect(
+        store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], importRunId: 'stale-original' }),
+      ).resolves.toEqual([]);
+      expect(
+        (await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], importRunId: 'stale-replacement' })).map(
+          event => event.targetId,
+        ),
+      ).toEqual(['replacement-write']);
+    });
+
+    it('rejects every import-linked mutation once the run has stopped running', async () => {
+      const scopeIds = [ORG_SCOPE_ID, PROJECT_SCOPE_ID, OTHER_SCOPE_ID];
+      const node = await store.createNode({ name: 'Ended-run subject', scopeIds: [PROJECT_SCOPE_ID] });
+      const record = await store.createRecord({ node, text: 'Original', scopeIds: [PROJECT_SCOPE_ID] });
+      const ended = await store.createImportRun({
+        importerId: 'ended-runner',
+        binding: knowledgeImporterBindingKey({ source: 'calendar:ended', scope: 'project:mastra' }),
+        importKind: 'static',
+        triggerKind: 'cron',
+        status: 'skipped',
+      });
+      const importRunId = ended.id;
+      const snapshot = async () => ({
+        nodes: await store.listNodes({ scopeIds }),
+        records: await store.listRecords({ node, scopeIds }),
+        activity: await store.listActivity({ scopeIds }),
+      });
+      const before = await snapshot();
+      const mutations = [
+        () => store.createNode({ name: 'Late node', scopeIds: [PROJECT_SCOPE_ID], importRunId }),
+        () => store.updateNode({ id: node.id, version: node.version, name: 'Late edit', importRunId }),
+        () => store.createRecord({ node, text: 'Late record', scopeIds: [PROJECT_SCOPE_ID], importRunId }),
+        () => store.deleteRecord({ id: record.id, deletedBy: 'importer', importRunId }),
+        () =>
+          store.recordImportSkip({
+            targetType: 'record',
+            targetId: record.id,
+            contextScopeId: PROJECT_SCOPE_ID,
+            importRunId,
+            details: { reason: 'late' },
+          }),
+      ];
+      for (const mutate of mutations) {
+        await expect(mutate()).rejects.toThrow(importRunId);
+        expect(await snapshot()).toEqual(before);
+      }
+    });
+
     it('rejects malformed importer bindings', async () => {
       await expect(
         store.setImportState({ importerId: 'calendar', binding: 'ambiguous:binding', key: 'cursor', value: 'one' }),
@@ -1310,6 +1490,7 @@ export function createKnowledgeStorageTests(
         importKind: 'static',
         triggerKind: 'programmatic',
       });
+      await store.updateImportRun({ id: run.id, status: 'running' });
       const node = await store.createNode({
         name: 'Temporary',
         scopeIds: [PROJECT_SCOPE_ID],

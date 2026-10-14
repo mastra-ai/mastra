@@ -5,6 +5,7 @@ import {
   canonicalizeKnowledgeScopeIds,
   createKnowledgeUlid,
   isKnowledgeNodeVisible,
+  assertKnowledgeSourceProbeLimit,
   isKnowledgeScopeVisible,
   knowledgeScopeIdsKey,
   knowledgeSemanticDocumentId,
@@ -44,6 +45,7 @@ import type {
   KnowledgeSemanticOutboxEntry,
   KnowledgeStructurePlan,
   KnowledgeStructureReconcileResult,
+  ListKnowledgeSourcesWithVisibleRecordsInput,
   QueryKnowledgeRecordsBySourceInput,
   QueryKnowledgeRecordsInput,
   QueryKnowledgeRecordsOutput,
@@ -782,6 +784,22 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     };
   }
 
+  async listSourcesWithVisibleRecords(input: ListKnowledgeSourcesWithVisibleRecordsInput): Promise<string[]> {
+    assertKnowledgeSourceProbeLimit(input.sources);
+    const scopesBySource = new Map<string, KnowledgeScopeIds[]>();
+    for (const probe of input.sources) {
+      const scope = canonicalizeKnowledgeScopeIds(probe.scopeId ? [...input.scopeIds, probe.scopeId] : input.scopeIds);
+      scopesBySource.set(probe.source, [...(scopesBySource.get(probe.source) ?? []), scope]);
+    }
+    const found = new Set<string>();
+    for (const record of this.#db.knowledgeRecords.values()) {
+      if (record.deletedAt || !record.source || found.has(record.source)) continue;
+      if (scopesBySource.get(record.source)?.some(scope => this.#isRecordVisible(record, scope)))
+        found.add(record.source);
+    }
+    return [...found];
+  }
+
   async deleteRecord(input: { id: string; deletedBy: string; importRunId?: string }): Promise<KnowledgeRecord> {
     this.#assertImportRunExists(input.importRunId);
     return this.#runAtomicMutation(() => this.#deleteRecord(input));
@@ -1448,9 +1466,11 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   #assertImportRunExists(importRunId?: string): void {
-    if (importRunId && !this.#db.knowledgeImportRuns.has(importRunId)) {
-      throw new KnowledgeNotFoundError('import run', importRunId);
-    }
+    if (!importRunId) return;
+    const run = this.#db.knowledgeImportRuns.get(importRunId);
+    if (!run) throw new KnowledgeNotFoundError('import run', importRunId);
+    // Mutation bodies are synchronous after this check, so a recovered run cannot interleave a write.
+    if (run.status !== 'running') throw new Error(`Knowledge import run ${importRunId} is not active`);
   }
 
   #recordActivity(
