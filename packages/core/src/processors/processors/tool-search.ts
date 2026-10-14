@@ -114,9 +114,11 @@ export interface ToolSearchProcessorOptions {
    *   prior `search_tools`/`load_tool` result naming it is still present in the
    *   conversation. Works without memory, but the loaded set then lasts only for the
    *   current process and only for requests with a real thread ID — anonymous requests
-   *   retain nothing between calls. Survives a restart only when memory with message
-   *   history is configured. De-loads automatically when the result block is no longer
-   *   present in the messages — parity with native provider tool-search.
+   *   retain nothing between calls unless the caller supplies the relevant messages.
+   *   Survives a restart whenever the thread's messages can be supplied again: Agent
+   *   memory with message history, or a caller-provided `getMessages` callback. De-loads
+   *   automatically when the result block is no longer present in the messages — parity
+   *   with native provider tool-search.
    *
    * @default 'in-memory'
    */
