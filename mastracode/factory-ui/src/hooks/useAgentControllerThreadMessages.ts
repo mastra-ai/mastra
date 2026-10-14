@@ -19,6 +19,24 @@ import { createAgentControllerClient } from '../ui/domains/chat/services/agentCo
 const DEFAULT_INITIAL_MESSAGE_LIMIT = INITIAL_THREAD_MESSAGE_LIMIT;
 const LOAD_MORE_PAGE_SIZE = INITIAL_THREAD_MESSAGE_LIMIT;
 
+/**
+ * Threads the UI has just created a session for. The server creates the
+ * session's thread only when the controller session boots, which can trail
+ * the redirect onto the thread route by as long as the environment takes to
+ * check out. Until the first successful read, a 404 for one of these threads
+ * means "not created yet" and reads as an empty history; the live stream fills
+ * the transcript in the meantime.
+ */
+const provisioningThreads = new Set<string>();
+
+export function markThreadProvisioning(threadId: string): void {
+  provisioningThreads.add(threadId);
+}
+
+function isNotFound(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as { status?: unknown }).status === 404;
+}
+
 interface UseAgentControllerThreadMessagesArgs {
   agentControllerId: string;
   resourceId: string;
@@ -70,7 +88,16 @@ export function useAgentControllerThreadMessages({
 
   const query = useQuery({
     queryKey: queryKeys.agentControllerThreadMessages(agentControllerId, resourceId, threadId, limit),
-    queryFn: () => session!.listMessages(threadId!, limit),
+    queryFn: async () => {
+      try {
+        const messages = await session!.listMessages(threadId!, limit);
+        provisioningThreads.delete(threadId!);
+        return messages;
+      } catch (error) {
+        if (isNotFound(error) && provisioningThreads.has(threadId!)) return [];
+        throw error;
+      }
+    },
     enabled: enabled && Boolean(session) && Boolean(threadId),
     refetchOnWindowFocus: false,
     // Live stream only reaches a mounted transcript — re-entering the route must

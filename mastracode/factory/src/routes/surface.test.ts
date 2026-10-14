@@ -633,6 +633,31 @@ describe('prepareFactoryRuleBinding', () => {
     ).resolves.toHaveLength(0);
   });
 
+  it("names the card's repository when it is linked but turned out of the environment", async () => {
+    const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository();
+    await sourceControl.projectRepositories.update({
+      orgId: 'org-1',
+      id: projectRepository.id,
+      input: { inEnvironment: false },
+    });
+    const prepare = vi.fn<FactoryStartCoordinator['prepare']>();
+
+    const error = await prepareFactoryRuleBinding(
+      github,
+      { prepare },
+      seeded.projects,
+      boards,
+      bindingInput(project.id),
+    ).catch(failure => failure);
+
+    expect(error).toBeInstanceOf(FactoryDispatchError);
+    expect(error).toMatchObject({ code: 'source_repository_missing' });
+    expect(error.message).toBe(
+      "Repository mastra-ai/mastra is linked but not in this Factory's environment. Turn it on under Settings → Environment, then retry.",
+    );
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
   it('classifies a missing source-control connection', async () => {
     const { seeded, github } = await seedFactoryWithRepository();
     const disconnected = await seeded.projects.create({

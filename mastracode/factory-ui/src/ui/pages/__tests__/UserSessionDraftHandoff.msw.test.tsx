@@ -59,8 +59,14 @@ function stubDraftRoute({
   defaultModelId = null,
 }: DraftRouteOptions = {}): DraftRoute {
   let releaseWorkspace = () => {};
+  // The server creates the session's thread only once the controller session
+  // boots, so until then reading its history is a 404, as in production.
+  let threadExists = false;
   const workspaceReady = new Promise<void>(resolve => {
-    releaseWorkspace = resolve;
+    releaseWorkspace = () => {
+      threadExists = true;
+      resolve();
+    };
   });
   const route: DraftRoute = {
     createBodies: [],
@@ -157,7 +163,9 @@ function stubDraftRoute({
     http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/permissions`, () => HttpResponse.json({})),
     http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [] })),
     http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/threads/:threadId/messages`, () =>
-      HttpResponse.json({ messages: [] }),
+      threadExists
+        ? HttpResponse.json({ messages: [] })
+        : HttpResponse.json({ error: 'Thread not found' }, { status: 404 }),
     ),
     http.get(
       `${AGENT_CONTROLLER_API}/sessions/:resourceId/stream`,
