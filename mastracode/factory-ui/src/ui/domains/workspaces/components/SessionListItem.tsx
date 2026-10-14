@@ -2,6 +2,7 @@ import { useLocation, useNavigate } from 'react-router';
 
 import { setSessionPinned } from '../hooks/usePinnedSessions';
 import { useRegenerateSessionTitle } from '../hooks/useRegenerateSessionTitle';
+import { useSessionVisibility } from '../hooks/useSessionVisibility';
 import { STATUS_MARKER_BY_ACTIVITY } from '../services/sessionRows';
 import type { SessionListRow } from '../services/sessionRows';
 import { SessionNavRow } from './SessionNavRow';
@@ -22,7 +23,8 @@ export function SessionListItem({
   const navigate = useNavigate();
   const location = useLocation();
   const { regenerate, regenerating } = useRegenerateSessionTitle(factoryId, row.session.sessionId);
-  const canRegenerateTitle = row.origin === 'user' && row.ownedByViewer;
+  const { changeVisibility } = useSessionVisibility(factoryId, row.session.sessionId);
+  const ownUserSession = row.origin === 'user' && row.ownedByViewer;
 
   return (
     <SessionNavRow
@@ -46,8 +48,10 @@ export function SessionListItem({
       onSelect={() => void navigate(row.openPath, row.origin === 'factory' ? { state: { from: location } } : undefined)}
       onPinChange={pinned => setSessionPinned(row.session.sessionId, pinned)}
       onDelete={row.ownedByViewer ? () => onDelete(row) : undefined}
-      onRegenerateTitle={canRegenerateTitle ? regenerate : undefined}
+      onRegenerateTitle={ownUserSession ? regenerate : undefined}
       regeneratingTitle={regenerating}
+      visibility={row.origin === 'user' ? row.session.visibility : undefined}
+      onVisibilityChange={ownUserSession ? changeVisibility : undefined}
     />
   );
 }

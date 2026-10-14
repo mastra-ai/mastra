@@ -4,7 +4,7 @@ import { HoverCard, HoverCardTrigger } from '@mastra/playground-ui/components/Ho
 import { Sidebar, useMaybeSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { MoreHorizontal, Pin, PinOff, RefreshCw, Trash2 } from 'lucide-react';
+import { Lock, MoreHorizontal, Pin, PinOff, RefreshCw, Trash2, Users } from 'lucide-react';
 import { useRef } from 'react';
 import type { RefObject } from 'react';
 
@@ -41,6 +41,8 @@ export function SessionNavRow({
   onDelete,
   onRegenerateTitle,
   regeneratingTitle,
+  visibility,
+  onVisibilityChange,
 }: {
   name: string;
   /** Hover tooltip, typically the branch name. */
@@ -64,6 +66,10 @@ export function SessionNavRow({
   /** Omitted for sessions the viewer does not own: the server only lets owners rename. */
   onRegenerateTitle?: () => void;
   regeneratingTitle?: boolean;
+  /** `org` rows are marked as shared; omit for sessions without a visibility. */
+  visibility?: 'org' | 'private';
+  /** Omitted for sessions the viewer does not own: the server only lets owners change visibility. */
+  onVisibilityChange?: (visibility: 'org' | 'private') => void;
 }) {
   const anchor = useRef<HTMLLIElement>(null);
   // Selecting a session navigates away, so the mobile nav drawer must close.
@@ -85,6 +91,9 @@ export function SessionNavRow({
       <Sidebar.NavLabel>{name}</Sidebar.NavLabel>
       {pinned && !loading ? (
         <Pin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-2 shrink-0 rotate-45" />
+      ) : null}
+      {visibility === 'org' ? (
+        <Users aria-label={`${name} shared with organization`} className="text-muted-foreground/70 size-2.5 shrink-0" />
       ) : null}
     </button>
   );
@@ -118,6 +127,8 @@ export function SessionNavRow({
             onDelete={onDelete}
             onRegenerateTitle={onRegenerateTitle}
             regeneratingTitle={regeneratingTitle}
+            visibility={visibility}
+            onVisibilityChange={onVisibilityChange}
           />
         )}
       </span>
@@ -172,6 +183,8 @@ function SessionActionsMenu({
   onDelete,
   onRegenerateTitle,
   regeneratingTitle,
+  visibility,
+  onVisibilityChange,
 }: {
   name: string;
   anchor: RefObject<HTMLElement | null>;
@@ -181,6 +194,8 @@ function SessionActionsMenu({
   onDelete?: () => void;
   onRegenerateTitle?: () => void;
   regeneratingTitle?: boolean;
+  visibility?: 'org' | 'private';
+  onVisibilityChange?: (visibility: 'org' | 'private') => void;
 }) {
   return (
     <DropdownMenu>
@@ -207,6 +222,12 @@ function SessionActionsMenu({
           <DropdownMenu.Item disabled={regeneratingTitle} onClick={onRegenerateTitle}>
             <RefreshCw className={cn(regeneratingTitle && 'animate-spin')} />
             Regenerate title
+          </DropdownMenu.Item>
+        ) : null}
+        {onVisibilityChange && visibility ? (
+          <DropdownMenu.Item onClick={() => onVisibilityChange(visibility === 'private' ? 'org' : 'private')}>
+            {visibility === 'private' ? <Users /> : <Lock />}
+            {visibility === 'private' ? 'Share with organization' : 'Make private'}
           </DropdownMenu.Item>
         ) : null}
         {onDelete ? (
