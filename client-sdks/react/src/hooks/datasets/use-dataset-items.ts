@@ -1,6 +1,12 @@
 import type { MastraClient } from '@mastra/client-js';
-import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
-import type { InfiniteData, QueryKey, UseInfiniteQueryResult, UseQueryResult } from '@tanstack/react-query';
+import { infiniteQueryOptions, useQuery, useInfiniteQuery } from '@tanstack/react-query';
+import type {
+  InfiniteData,
+  QueryKey,
+  UseInfiniteQueryOptions,
+  UseInfiniteQueryResult,
+  UseQueryResult,
+} from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
 import type { MastraInfiniteQueryOptions, MastraQueryOptions } from '../shared/query-options';
@@ -52,6 +58,49 @@ export type UseDatasetItemsResult = Omit<
 export type DatasetItemsOrderBy = NonNullable<NonNullable<Parameters<MastraClient['listDatasetItems']>[1]>['orderBy']>;
 
 /**
+ * Key, fetcher and paging of the `dataset-items` query, shared by `useDatasetItems` and prefetches
+ * (e.g. on hover) so both hit the same cache entry. The first page carries the item total.
+ */
+export const datasetItemsQueryOptions = (
+  client: MastraClient,
+  {
+    datasetId,
+    search,
+    version,
+    orderBy,
+  }: { datasetId: string; search?: string; version?: number | null; orderBy?: DatasetItemsOrderBy },
+): UseInfiniteQueryOptions<
+  ListDatasetItemsResponse,
+  Error,
+  InfiniteData<ListDatasetItemsResponse, number>,
+  QueryKey,
+  number
+> =>
+  infiniteQueryOptions({
+    queryKey: ['dataset-items', datasetId, search, version, orderBy] as QueryKey,
+    queryFn: ({ pageParam }) =>
+      client.listDatasetItems(datasetId, {
+        page: pageParam,
+        perPage: PER_PAGE,
+        search: search || undefined,
+        version: version || undefined,
+        orderBy,
+      }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage: ListDatasetItemsResponse, _: unknown, lastPageParam: number) => {
+      if (!lastPage?.items?.length) {
+        return undefined;
+      }
+      const totalFetched = (lastPageParam + 1) * PER_PAGE;
+      const total = lastPage?.pagination?.total ?? 0;
+      if (totalFetched >= total) {
+        return undefined;
+      }
+      return lastPageParam + 1;
+    },
+  });
+
+/**
  * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
  */
 export const useDatasetItems = ({
@@ -76,29 +125,7 @@ export const useDatasetItems = ({
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
 
   const query = useInfiniteQuery({
-    queryKey: ['dataset-items', datasetId, search, version, orderBy],
-    queryFn: async ({ pageParam }) => {
-      const res = await client.listDatasetItems(datasetId, {
-        page: pageParam,
-        perPage: PER_PAGE,
-        search: search || undefined,
-        version: version || undefined,
-        orderBy,
-      });
-      return res;
-    },
-    initialPageParam: 0,
-    getNextPageParam: (lastPage, _, lastPageParam) => {
-      if (!lastPage?.items?.length) {
-        return undefined;
-      }
-      const totalFetched = (lastPageParam + 1) * PER_PAGE;
-      const total = lastPage?.pagination?.total ?? 0;
-      if (totalFetched >= total) {
-        return undefined;
-      }
-      return lastPageParam + 1;
-    },
+    ...datasetItemsQueryOptions(client, { datasetId, search, version, orderBy }),
     retry: false,
     ...queryOptions,
   });
