@@ -6,6 +6,7 @@ import {
   createKnowledgeUlid,
   isKnowledgeNodeVisible,
   assertKnowledgeSourceProbeLimit,
+  assertKnowledgeVisibilityProbeLimit,
   isKnowledgeScopeVisible,
   knowledgeScopeIdsKey,
   knowledgeSemanticDocumentId,
@@ -46,6 +47,8 @@ import type {
   KnowledgeStructurePlan,
   KnowledgeStructureReconcileResult,
   ListKnowledgeSourcesWithVisibleRecordsInput,
+  ListVisibleKnowledgeIdsInput,
+  ListVisibleKnowledgeIdsOutput,
   QueryKnowledgeRecordsBySourceInput,
   QueryKnowledgeRecordsInput,
   QueryKnowledgeRecordsOutput,
@@ -801,6 +804,20 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         found.add(record.source);
     }
     return [...found];
+  }
+
+  async listVisibleKnowledgeIds(input: ListVisibleKnowledgeIdsInput): Promise<ListVisibleKnowledgeIdsOutput> {
+    assertKnowledgeVisibilityProbeLimit(input);
+    const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    const nodeIds = [...new Set(input.nodeIds)].filter(id => {
+      const node = this.#db.knowledgeNodes.get(id);
+      return Boolean(node && !node.deletedAt && isKnowledgeNodeVisible(node, this.#nodeScopeIds(id), scopeIds));
+    });
+    const recordIds = [...new Set(input.recordIds)].filter(id => {
+      const record = this.#db.knowledgeRecords.get(id);
+      return Boolean(record && !record.deletedAt && this.#isRecordVisible(record, scopeIds));
+    });
+    return { nodeIds, recordIds };
   }
 
   async deleteRecord(input: { id: string; deletedBy: string; importRunId?: string }): Promise<KnowledgeRecord> {

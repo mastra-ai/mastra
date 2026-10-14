@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Knowledge } from '@mastra/core/knowledge';
-import type { MastraCompositeStore } from '@mastra/core/storage';
+import type { KnowledgeStorage, MastraCompositeStore } from '@mastra/core/storage';
 import { InMemoryStore } from '@mastra/core/storage';
 import { LibSQLStore } from '@mastra/libsql';
 import { KnowledgeSemanticIndexCoordinator } from '@mastra/memory';
@@ -42,6 +42,44 @@ async function openStorage(adapter: Adapter): Promise<MastraCompositeStore> {
 }
 
 const INDEX = 'knowledge_documents_dimension_3';
+
+function coordinatorReturning(store: KnowledgeStorage, hits: () => unknown[]) {
+  const vector = {
+    listIndexes: async () => [INDEX],
+    createIndex: async () => {},
+    deleteVectors: async () => {},
+    upsert: async () => [],
+    query: async () => hits(),
+  } as any;
+  const embedder = {
+    specificationVersion: 'v2',
+    provider: 'test',
+    modelId: 'test-embedder',
+    maxEmbeddingsPerCall: 10,
+    supportsParallelCalls: true,
+    doEmbed: async ({ values }: { values: string[] }) => ({ embeddings: values.map(() => [0.1, 0.2, 0.3]) }),
+  } as any;
+  return new KnowledgeSemanticIndexCoordinator({ knowledge: store, vector, embedder });
+}
+
+async function scopedStore(adapter: Adapter) {
+  const storage = await openStorage(adapter);
+  await storage.init();
+  const knowledge = new Knowledge({ id: 'default', storage });
+  const store = await knowledge.getStorage();
+  for (const address of ['resource:alice', 'resource:bob']) {
+    await knowledge.materializeScope({ address, contextualScopeAddress: address });
+  }
+  const alice = (await store.getScopeAddress('resource:alice'))!.scopeNodeId;
+  const bob = (await store.getScopeAddress('resource:bob'))!.scopeNodeId;
+  return { store, alice, bob };
+}
+
+const hit = (type: 'node' | 'record', id: string, scopeIds: string[]) => ({
+  id: `knowledge:${type}:${id}`,
+  score: 1,
+  metadata: { document_type: type, record_id: id, name: 'stale', text: 'stale', scope_ids: scopeIds },
+});
 
 describe.each(adapters)('Knowledge semantic search visibility (%s)', adapter => {
   it('never surfaces a node through a stale vector whose scope_ids are wider than its current scopes', async () => {
@@ -86,5 +124,37 @@ describe.each(adapters)('Knowledge semantic search visibility (%s)', adapter => 
     expect((await coordinator.search('secret', [alice])).map((hit: { id: string }) => hit.id).sort()).toEqual(
       [`knowledge:node:${node.id}`, `knowledge:record:${record.id}`].sort(),
     );
+  });
+
+  it('hides a record whose node is visible but which mentions a node the caller cannot see', async () => {
+    const { store, alice, bob } = await scopedStore(adapter);
+    const shared = await store.createNode({ name: 'Shared Topic', kind: 'note', scopeIds: [alice, bob] });
+    await store.createNode({ name: 'Alice Private', kind: 'note', scopeIds: [alice] });
+    const record = await store.createRecord({
+      node: shared,
+      text: 'Discusses [[Alice Private]]',
+      scopeIds: [alice, bob],
+      resolutionScopeIds: [alice],
+      contextScopeId: alice,
+    });
+    const coordinator = coordinatorReturning(store, () => [hit('record', record.id, [alice, bob])]);
+    await coordinator.drain();
+
+    expect((await coordinator.search('topic', [bob])).map((h: { id: string }) => h.id)).toEqual([]);
+    expect((await coordinator.search('topic', [alice])).map((h: { id: string }) => h.id)).toEqual([
+      `knowledge:record:${record.id}`,
+    ]);
+  });
+
+  it('returns a scope node to a caller who holds that scope id', async () => {
+    const { store, alice, bob } = await scopedStore(adapter);
+    const scopeNodeScopes = await store.getNodeScopeIds(alice);
+    const coordinator = coordinatorReturning(store, () => [hit('node', alice, scopeNodeScopes)]);
+    await coordinator.drain();
+
+    expect((await coordinator.search('alice', [alice])).map((h: { id: string }) => h.id)).toEqual([
+      `knowledge:node:${alice}`,
+    ]);
+    expect((await coordinator.search('alice', [bob])).map((h: { id: string }) => h.id)).toEqual([]);
   });
 });

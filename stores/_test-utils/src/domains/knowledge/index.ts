@@ -415,6 +415,43 @@ export function createKnowledgeStorageTests(
       ).toEqual(['paired-b']);
     });
 
+    it('reports which node and record ids are visible, using the shared node and record visibility rules', async () => {
+      const visible = await store.createNode({ name: 'Visibility probe visible', scopeIds: [PROJECT_SCOPE_ID] });
+      const hidden = await store.createNode({ name: 'Visibility probe hidden', scopeIds: [OTHER_SCOPE_ID] });
+      const plain = await store.createRecord({ node: visible, text: 'Plain', scopeIds: [PROJECT_SCOPE_ID] });
+      const foreign = await store.createRecord({ node: hidden, text: 'Foreign', scopeIds: [OTHER_SCOPE_ID] });
+      // Parent visible, but it mentions a node the caller cannot see: the record must stay hidden.
+      const mentioning = await store.createRecord({
+        node: visible,
+        text: 'Mentions [[Visibility probe hidden]]',
+        scopeIds: [PROJECT_SCOPE_ID],
+        resolutionScopeIds: [OTHER_SCOPE_ID],
+        contextScopeId: PROJECT_SCOPE_ID,
+      });
+      const deleted = await store.createRecord({ node: visible, text: 'Gone', scopeIds: [PROJECT_SCOPE_ID] });
+      await store.deleteRecord({ id: deleted.id, deletedBy: 'test' });
+
+      const found = await store.listVisibleKnowledgeIds({
+        // The project scope node is visible through its own id even though its membership is the org scope.
+        nodeIds: [visible.id, hidden.id, PROJECT_SCOPE_ID, 'missing-node'],
+        recordIds: [plain.id, foreign.id, mentioning.id, deleted.id, 'missing-record'],
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
+      expect([...found.nodeIds].sort()).toEqual([visible.id, PROJECT_SCOPE_ID].sort());
+      expect(found.recordIds).toEqual([plain.id]);
+      expect(await store.listVisibleKnowledgeIds({ nodeIds: [], recordIds: [], scopeIds: [PROJECT_SCOPE_ID] })).toEqual({
+        nodeIds: [],
+        recordIds: [],
+      });
+      await expect(
+        store.listVisibleKnowledgeIds({
+          nodeIds: Array.from({ length: 1001 }, (_, i) => `n-${i}`),
+          recordIds: [],
+          scopeIds: [PROJECT_SCOPE_ID],
+        }),
+      ).rejects.toThrow('at most 1000');
+    });
+
     it('deduplicates concurrent node creation by canonical name and memberships', async () => {
       const [first, second] = await Promise.all([
         store.createNode({ name: 'Concurrent Topic', scopeIds: [PROJECT_SCOPE_ID] }),
