@@ -10,16 +10,18 @@ export type UserSessionSort = (typeof USER_SESSION_SORTS)[number];
 export const DEFAULT_WORKSPACE_SESSION_SORT: WorkspaceSessionSort = 'activity';
 export const DEFAULT_USER_SESSION_SORT: UserSessionSort = 'updated';
 
-export const WORKSPACE_SESSION_SORT_OPTIONS: readonly DropdownMenuRadioOption<WorkspaceSessionSort>[] = [
-  { value: 'activity', label: 'Activity' },
-  { value: 'updated', label: 'Last updated' },
-  { value: 'created', label: 'Last created' },
-];
+const SESSION_SORT_LABELS: Record<WorkspaceSessionSort | UserSessionSort, string> = {
+  activity: 'Activity',
+  updated: 'Last updated',
+  created: 'Last created',
+};
 
-export const USER_SESSION_SORT_OPTIONS: readonly DropdownMenuRadioOption<UserSessionSort>[] = [
-  { value: 'updated', label: 'Last updated' },
-  { value: 'created', label: 'Last created' },
-];
+export const WORKSPACE_SESSION_SORT_OPTIONS: readonly DropdownMenuRadioOption<WorkspaceSessionSort>[] =
+  WORKSPACE_SESSION_SORTS.map(value => ({ value, label: SESSION_SORT_LABELS[value] }));
+
+export const USER_SESSION_SORT_OPTIONS: readonly DropdownMenuRadioOption<UserSessionSort>[] = USER_SESSION_SORTS.map(
+  value => ({ value, label: SESSION_SORT_LABELS[value] }),
+);
 
 export function isWorkspaceSessionSort(value: unknown): value is WorkspaceSessionSort {
   return WORKSPACE_SESSION_SORTS.some(sort => sort === value);

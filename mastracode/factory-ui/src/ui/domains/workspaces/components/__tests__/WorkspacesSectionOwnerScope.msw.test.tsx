@@ -1,9 +1,3 @@
-/**
- * BDD coverage for the sidebar's owner scope: the work and review session lists open on the
- * viewer's own sessions, and each heading's Properties menu widens its list to every session
- * in the org and back again. Before this, a busy factory rendered everyone's sessions as one
- * undifferentiated list, and the reader had no way to cut it down to their own work.
- */
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -41,7 +35,6 @@ function session(index: number, userId: string, branch: string): FactoryUserSess
   };
 }
 
-/** A `factory/pr-<n>` branch reads as a review session while no work item claims it. */
 const reviewSession = (index: number, userId: string) => session(index, userId, `factory/pr-${20000 + index}`);
 const workSession = (index: number, userId: string) => session(index, userId, `factory/issue-${20000 + index}`);
 

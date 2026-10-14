@@ -326,7 +326,7 @@ function WorkspaceGroup({
         icon={kind === 'Review session' ? <GitPullRequest /> : <SquareKanban />}
         action={
           <SessionListProperties
-            label={title === 'Work Sessions' ? 'Work sessions' : 'Review sessions'}
+            label={`${kind}s`}
             changedCount={changedCount}
             onReset={() => {
               onSortChange(DEFAULT_WORKSPACE_SESSION_SORT);

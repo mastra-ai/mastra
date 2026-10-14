@@ -13,49 +13,51 @@ const CHANGE_EVENT = 'mastracode:session-sort-change';
 
 type SessionSortBySection = { work: WorkspaceSessionSort; review: WorkspaceSessionSort; user: UserSessionSort };
 export type SessionSortSection = keyof SessionSortBySection;
+type SessionSortPicks = Partial<SessionSortBySection>;
 
 const DEFAULT_SESSION_SORTS: SessionSortBySection = {
   work: DEFAULT_WORKSPACE_SESSION_SORT,
   review: DEFAULT_WORKSPACE_SESSION_SORT,
   user: DEFAULT_USER_SESSION_SORT,
 };
+const NO_PICKS: SessionSortPicks = {};
 
 let cachedValue: string | null = null;
-let cachedSorts = DEFAULT_SESSION_SORTS;
+let cachedPicks = NO_PICKS;
 let storageUnavailable = false;
 
-function parseSessionSorts(value: string | null): SessionSortBySection {
-  if (!value) return DEFAULT_SESSION_SORTS;
+function parseSessionSortPicks(value: string | null): SessionSortPicks {
+  if (!value) return NO_PICKS;
   let parsed: unknown;
   try {
     parsed = JSON.parse(value);
   } catch {
-    return DEFAULT_SESSION_SORTS;
+    return NO_PICKS;
   }
-  if (typeof parsed !== 'object' || parsed === null) return DEFAULT_SESSION_SORTS;
+  if (typeof parsed !== 'object' || parsed === null) return NO_PICKS;
   const stored: Partial<Record<SessionSortSection, unknown>> = parsed;
   return {
-    work: isWorkspaceSessionSort(stored.work) ? stored.work : DEFAULT_SESSION_SORTS.work,
-    review: isWorkspaceSessionSort(stored.review) ? stored.review : DEFAULT_SESSION_SORTS.review,
-    user: isUserSessionSort(stored.user) ? stored.user : DEFAULT_SESSION_SORTS.user,
+    ...(isWorkspaceSessionSort(stored.work) && { work: stored.work }),
+    ...(isWorkspaceSessionSort(stored.review) && { review: stored.review }),
+    ...(isUserSessionSort(stored.user) && { user: stored.user }),
   };
 }
 
-function readSessionSorts(): SessionSortBySection {
-  if (storageUnavailable) return cachedSorts;
+function readSessionSortPicks(): SessionSortPicks {
+  if (storageUnavailable) return cachedPicks;
 
   let value: string | null;
   try {
     value = localStorage.getItem(STORAGE_KEY);
   } catch {
     storageUnavailable = true;
-    return cachedSorts;
+    return cachedPicks;
   }
-  if (value === cachedValue) return cachedSorts;
+  if (value === cachedValue) return cachedPicks;
 
   cachedValue = value;
-  cachedSorts = parseSessionSorts(value);
-  return cachedSorts;
+  cachedPicks = parseSessionSortPicks(value);
+  return cachedPicks;
 }
 
 function subscribe(onStoreChange: () => void) {
@@ -67,9 +69,9 @@ function subscribe(onStoreChange: () => void) {
   };
 }
 
-function saveSessionSorts(sorts: SessionSortBySection) {
-  cachedValue = JSON.stringify(sorts);
-  cachedSorts = sorts;
+function saveSessionSortPicks(picks: SessionSortPicks) {
+  cachedValue = JSON.stringify(picks);
+  cachedPicks = picks;
   try {
     localStorage.setItem(STORAGE_KEY, cachedValue);
     storageUnavailable = false;
@@ -82,7 +84,10 @@ function saveSessionSorts(sorts: SessionSortBySection) {
 export function useSessionSort<S extends SessionSortSection>(
   section: S,
 ): readonly [SessionSortBySection[S], (sort: SessionSortBySection[S]) => void] {
-  const sorts = useSyncExternalStore(subscribe, readSessionSorts, () => DEFAULT_SESSION_SORTS);
-  const setSort = (sort: SessionSortBySection[S]) => saveSessionSorts({ ...readSessionSorts(), [section]: sort });
-  return [sorts[section], setSort];
+  const picks = useSyncExternalStore(subscribe, readSessionSortPicks, () => NO_PICKS);
+  const setSort = (sort: SessionSortBySection[S]) => {
+    const { [section]: _previous, ...otherPicks } = readSessionSortPicks();
+    saveSessionSortPicks(sort === DEFAULT_SESSION_SORTS[section] ? otherPicks : { ...otherPicks, [section]: sort });
+  };
+  return [picks[section] ?? DEFAULT_SESSION_SORTS[section], setSort];
 }

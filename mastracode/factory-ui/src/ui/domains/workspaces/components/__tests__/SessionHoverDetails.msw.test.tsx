@@ -1,8 +1,3 @@
-/**
- * BDD coverage for workspace sidebar previews. The real workspace, work-item,
- * and agent-controller reads are driven through MSW so the card exercises the
- * same joins used by the live sidebar without adding a hover-time request.
- */
 import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';

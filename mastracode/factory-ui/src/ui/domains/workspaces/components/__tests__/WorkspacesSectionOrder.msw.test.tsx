@@ -1,10 +1,3 @@
-/**
- * BDD coverage for the sidebar's session order: a session whose pull request is
- * merged sinks below the ones still open, and the rest hold their place by
- * creation. Before this, rows were ordered by card activity — merging a pull
- * request bumped `updatedAt`, so the finished session jumped to the top and
- * every poll could reshuffle the list under the reader.
- */
 import type { QueryClient } from '@tanstack/react-query';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -40,7 +33,6 @@ function reviewSession(pullRequestNumber: number, createdAt: string): FactoryUse
   };
 }
 
-/** A review card for a session; `mergedAt` both merges it and stamps the write that merged it. */
 function reviewCard(session: FactoryUserSession, pullRequestNumber: number, mergedAt?: string) {
   const merged = mergedAt !== undefined;
   return {
@@ -124,7 +116,6 @@ function renderSection(openSessionId?: string) {
   );
 }
 
-/** Rows only hold their final order once the sessions and work-items queries have both landed. */
 async function reviewRowLabels(client: QueryClient): Promise<(string | null)[]> {
   await waitForMutationsIdle(client);
   const group = await screen.findByRole('region', { name: 'Review Sessions' });
@@ -208,7 +199,6 @@ describe('Workspaces sidebar order', () => {
     );
     const { client } = renderSection(oldest.sessionId);
 
-    // Five newest, then the open one; the row it displaced stays behind "Show more".
     expect(await reviewRowLabels(client)).toEqual([
       'factory/pr-507',
       'factory/pr-506',
@@ -229,7 +219,6 @@ describe('Workspaces sidebar order', () => {
     const forward = await reviewRowLabels(rendered.client);
     rendered.unmount();
 
-    // The sessions endpoint sorts nothing, so the same rows can come back either way round.
     stubSidebar([second, first], cards);
     const reversed = renderSection();
 
@@ -268,6 +257,6 @@ describe('Workspaces sidebar order', () => {
 
     const remounted = renderSection();
     expect(await reviewRowLabels(remounted.client)).toEqual(byLastUpdate);
-    expect(JSON.parse(localStorage.getItem('mastracode.sessionSort') ?? '{}')).toMatchObject({ review: 'updated' });
+    expect(JSON.parse(localStorage.getItem('mastracode.sessionSort') ?? '{}')).toEqual({ review: 'updated' });
   });
 });

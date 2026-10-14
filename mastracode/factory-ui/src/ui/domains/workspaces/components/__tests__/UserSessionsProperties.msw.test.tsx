@@ -50,7 +50,7 @@ const sessions: FactoryUserSession[] = [
     sandboxId: 'sandbox-2',
     sandboxWorkdir: '/workspace/working',
     materializedAt: '2026-09-04T10:00:00.000Z',
-    createdAt: '2026-09-04T09:00:00.000Z',
+    createdAt: '2026-09-04T08:00:00.000Z',
     updatedAt: '2026-09-04T10:30:00.000Z',
   },
   {
@@ -67,7 +67,7 @@ const sessions: FactoryUserSession[] = [
     sandboxId: null,
     sandboxWorkdir: null,
     materializedAt: null,
-    createdAt: '2026-09-04T09:00:00.000Z',
+    createdAt: '2026-09-04T09:30:00.000Z',
     updatedAt: '2026-09-04T10:00:00.000Z',
   },
 ];
@@ -197,7 +197,6 @@ describe('User sessions properties', () => {
       }),
     );
     const user = userEvent.setup();
-    // /auth/me is held open, so the queries never go idle until it is released.
     await renderSection({ waitForIdle: false });
 
     expect(await screen.findByRole('button', { name: 'Improve compiler output' })).toBeInTheDocument();
@@ -205,7 +204,6 @@ describe('User sessions properties', () => {
 
     releaseAuth();
 
-    // Mine now applies on top of the status change: the viewer has no working session.
     expect(await screen.findByText('No sessions match these filters')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Improve compiler output' })).not.toBeInTheDocument();
     await openSessionProperties(user, 'User sessions');
@@ -245,17 +243,17 @@ describe('User sessions properties', () => {
   });
 
   it('lists sessions by last update with pinned first, and resets a chosen sort', async () => {
-    localStorage.setItem('mastracode.pinnedSessions', JSON.stringify(['session-initializing']));
+    localStorage.setItem('mastracode.pinnedSessions', JSON.stringify(['session-working']));
     const user = userEvent.setup();
     await renderSection();
 
     await pickSessionProperty(user, 'User sessions', 'Owner', 'All owners');
     await screen.findByRole('button', { name: 'Improve compiler output' });
-    expect(sessionRowLabels()).toEqual(['Prepare release', 'Fix authentication', 'Improve compiler output']);
+    expect(sessionRowLabels()).toEqual(['Improve compiler output', 'Fix authentication', 'Prepare release']);
 
     await pickSessionProperty(user, 'User sessions', 'Sort', 'Last created');
 
-    expect(sessionRowLabels()).toEqual(['Prepare release', 'Improve compiler output', 'Fix authentication']);
+    expect(sessionRowLabels()).toEqual(['Improve compiler output', 'Prepare release', 'Fix authentication']);
     expect(sessionPropertiesTrigger('User sessions', 2)).toBeInTheDocument();
 
     await openSessionProperties(user, 'User sessions');

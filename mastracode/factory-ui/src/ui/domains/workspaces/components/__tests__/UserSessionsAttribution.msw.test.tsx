@@ -75,7 +75,6 @@ function renderSection() {
   );
 }
 
-/** The list opens on the viewer's own sessions; attribution is about everyone else's. */
 async function showAllOwners() {
   await pickSessionProperty(userEvent.setup(), 'User sessions', 'Owner', 'All owners');
   expect(sessionPropertiesTrigger('User sessions', 1)).toBeInTheDocument();
@@ -131,9 +130,6 @@ describe('user session attribution', () => {
   });
 
   it('offers delete only on the viewer-owned session', async () => {
-    // The DELETE route is owner-only and 404s for non-owners, and the delete
-    // service treats 404 as an idempotent success, so a non-owned row must not
-    // offer a delete action that would fake-succeed.
     stubSessions(
       [
         userSession({ id: 'row-other', sessionId: 'sess-other', userId: 'user-owner-1', branch: 'user/alpha' }),

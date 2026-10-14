@@ -34,6 +34,17 @@ describe('useSessionSort', () => {
     expect(storedSorts()).toEqual({ work: 'activity', review: 'activity', user: 'updated' });
   });
 
+  it('stores only the lists the reader changed, and forgets a list set back to its default', () => {
+    const { result } = renderHook(() => useSessionSort('review'));
+
+    act(() => result.current[1]('updated'));
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')).toEqual({ review: 'updated' });
+
+    act(() => result.current[1]('activity'));
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')).toEqual({});
+    expect(result.current[0]).toBe('activity');
+  });
+
   it('keeps the chosen sort for the session when localStorage writes fail', () => {
     const { result } = renderHook(() => useSessionSort('review'));
     const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
