@@ -779,8 +779,8 @@ describe('OpenAISchemaCompatLayer', () => {
       ['azure.responses', 'my-gpt5-deployment'],
       ['azure.chat', 'gpt-4o'],
       ['azure.chat', 'demo1-gpt'],
-      ['azure.chat', 'proto3-chat'],
-      ['azure.responses', 'solo4'],
+      ['azure.chat', 'sales-gpt5-prod'],
+      ['azure.chat', 'chatgpt-4o-latest'],
       ['azure.chat', 'graphic-gpt'],
       ['azure.chat', 'sophia-gpt-4o'],
       ['azure.responses', 'gpt-4o-telemetry'],
@@ -793,6 +793,11 @@ describe('OpenAISchemaCompatLayer', () => {
     });
 
     it.each([
+      ['azure.responses', 'production'],
+      ['azure.chat', 'my-deployment'],
+      ['azure.chat', 'proto3-chat'],
+      ['azure.responses', 'solo4'],
+      ['azure.chat', 'gptzero-clone'],
       ['azure.responses', 'claude-sonnet-4-5'],
       ['azure.responses', 'deepseek-v3'],
       ['azure.chat', 'meta-llama-3-70b'],
@@ -813,10 +818,13 @@ describe('OpenAISchemaCompatLayer', () => {
       ['azure.chat', 'CodeLlama-34b-Instruct-hf'],
       ['azure.deepseek', 'prod-r1'],
       ['azure.deepseek', 'my-gpt-like-deployment'],
-    ])('should not apply for @ai-sdk/azure models owned by another layer (%s, %s)', (provider, modelId) => {
-      const layer = new OpenAISchemaCompatLayer({ provider, modelId, supportsStructuredOutputs: false });
-      expect(layer.shouldApply()).toBe(false);
-    });
+    ])(
+      'should not apply for @ai-sdk/azure deployments not clearly named for an OpenAI model (%s, %s)',
+      (provider, modelId) => {
+        const layer = new OpenAISchemaCompatLayer({ provider, modelId, supportsStructuredOutputs: false });
+        expect(layer.shouldApply()).toBe(false);
+      },
+    );
   });
 
   describe('@ai-sdk/azure models', () => {

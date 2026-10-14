@@ -106,14 +106,14 @@ export function isOpenAICompatibleModel(model: { provider?: string; modelId?: st
   const provider = model.provider ?? '';
   const modelId = model.modelId ?? '';
   if (provider.includes('openai') || modelId.includes('openai')) return true;
-  // @ai-sdk/azure reports `azure.responses` / `azure.chat` / `azure.completion` for OpenAI-protocol models, and
-  // deployment names rarely contain "openai". Other entry points such as `azure.deepseek` are not OpenAI models.
-  // Model families with their own layer must still reach it, since the first applicable layer wins.
-  // Azure catalog IDs are mixed case (e.g. `DeepSeek-V3`, `Phi-4`), so match case-insensitively.
-  // Family names must be whole tokens (a version digit may follow, e.g. `llama3`), so `metadata-gpt` is not excluded.
-  // Catalog names that embed a family (`Codestral`, `Ministral`, `Mixtral`, `CodeLlama`) are listed explicitly.
+  // @ai-sdk/azure reports `azure.responses` / `azure.chat` / `azure.completion` for every deployment, and the model
+  // ID is a user-chosen deployment name. Only treat it as OpenAI when the name clearly contains an OpenAI model token
+  // (`gpt`, `chatgpt`, or an o-series like `o3`); custom names such as `production` keep the default behavior.
+  // Names that also contain another family (e.g. `claude-o3-test`) are excluded, since that family's layer must win.
+  // Tokens are matched case-insensitively and must be whole (a version digit may follow, e.g. `gpt5`, `llama3`).
   return (
     /^azure\.(chat|responses|completion)$/.test(provider) &&
+    /(^|[-_./:])(gpt|chatgpt)(?=$|[-_./:]|\d)|(^|[-_./:])o[1-9](?=$|[-_.:])/i.test(modelId) &&
     !/(^|[-_./:])(claude|deepseek|meta|llama|codellama|mistral|ministral|mixtral|codestral|phi|grok|cohere)(?=$|[-_./:]|\d)/i.test(
       modelId,
     )
