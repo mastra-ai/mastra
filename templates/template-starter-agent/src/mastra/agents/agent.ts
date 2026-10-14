@@ -63,6 +63,12 @@ const localFilesNote = usePlatformFilesystem
   ? ''
   : `\n\nFor local file changes, end with a plain-text URL using ${pathToFileURL(`${workspacePath}/`).href}; avoid Markdown links, localhost, /workspace, relative paths, and static-file servers.`;
 
+/**
+ * The agent's display name in Studio and in its own replies. Mastra platform
+ * sets AGENT_NAME from the name chosen during onboarding; set it yourself
+ * elsewhere. The agent id stays 'agent', so renaming never orphans threads or
+ * channel connections.
+ */
 export const agentName = process.env.AGENT_NAME?.trim() || 'Starter Agent';
 
 export const agent = new Agent({
