@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { readFile, rm, writeFile } from 'node:fs/promises';
+import { readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { gunzipSync } from 'node:zlib';
 import { createKnowledgeSchemaLatchTests, createKnowledgeStorageTests } from '@internal/storage-test-utils';
 import { createClient } from '@libsql/client';
 import { InMemoryStore, KnowledgeSchemaError, TABLE_KNOWLEDGE_SCHEMA } from '@mastra/core/storage';
@@ -620,14 +619,12 @@ describe('KnowledgeLibSQL interim and released 1.76.0 canonical-model layout', (
   );
 
   describe('replacement warning', () => {
-    // Databases written by the published 0.0.0-knowledge-w1-20261009054256 snapshot through its own
-    // public API; fixtures/generate-snapshot-w1-dbs.mjs regenerates them.
+    // Written by the published 0.0.0-knowledge-w1-20261009054256 snapshot through its own public API;
+    // fixtures/generate-snapshot-w1-dbs.mjs regenerates them.
     async function openSnapshotW1Database(kind: 'used' | 'idle') {
-      const gz = await readFile(new URL(`./fixtures/snapshot-w1-20261009054256-${kind}.db.gz`, import.meta.url));
-      const path = join(tmpdir(), `knowledge-w1-${kind}-${randomUUID()}.db`);
-      await writeFile(path, gunzipSync(gz));
-      const client = createClient({ url: `file:${path}` });
-      fixtures.push({ client, path });
+      const client = createClient({ url: ':memory:' });
+      fixtures.push({ client, path: '' });
+      await seedPublishedKnowledgeV1(client, `snapshot-w1-20261009054256-${kind}.sql`);
       const warn = vi.fn();
       const store = new KnowledgeLibSQL({ client });
       store.__setLogger({
