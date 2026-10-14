@@ -226,7 +226,10 @@ describe('Knowledge structure reconciliation', () => {
       plan.scopes.find(scope => scope.address === address)!.grants?.filter(grant => grant.role === 'owner') ?? [];
 
     it('grants no owner on a custom scope materialized from its own address', () => {
-      const plan = materializeKnowledgeScopePlan(undefined, { address: 'team:core', contextualScopeAddress: 'team:core' });
+      const plan = materializeKnowledgeScopePlan(undefined, {
+        address: 'team:core',
+        contextualScopeAddress: 'team:core',
+      });
       expect(ownerGrants(plan, 'team:core')).toEqual([]);
     });
 

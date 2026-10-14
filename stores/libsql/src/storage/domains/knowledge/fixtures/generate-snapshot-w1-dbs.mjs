@@ -70,7 +70,9 @@ async function dump(mode, path) {
     const rows = await client.execute(`SELECT * FROM "${row.name}" ORDER BY rowid`);
     for (const values of rows.rows) {
       const cols = rows.columns.map(column => `"${column}"`).join(',');
-      lines.push(normalize(`INSERT INTO ${row.name} (${cols}) VALUES (${rows.columns.map(c => literal(values[c])).join(',')});`));
+      lines.push(
+        normalize(`INSERT INTO ${row.name} (${cols}) VALUES (${rows.columns.map(c => literal(values[c])).join(',')});`),
+      );
     }
   }
   client.close();
