@@ -14,8 +14,10 @@ const pinnedStore = createLocalStorageStore<ReadonlySet<string>>({
   toJSON: pinned => [...pinned],
 });
 
-const pinned = useLocalStorageStore(pinnedStore);
-pinnedStore.write(new Set([...pinned, 'thread-1']));
+function PinButton({ threadId }: { threadId: string }) {
+  const pinned = useLocalStorageStore(pinnedStore);
+  return <button onClick={() => pinnedStore.write(new Set([...pinned, threadId]))}>Pin</button>;
+}
 ```
 
 Added `Sidebar.NavShowMore`, a "Show N more" / "Show less" toggle for a sidebar list cut to its first rows. It hides itself when nothing is cut off or when the sidebar is collapsed to its icon rail.

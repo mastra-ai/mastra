@@ -22,7 +22,7 @@ function AgentRow({
   const ref = useRef<HTMLButtonElement>(null);
   useRegisterFluidHoverItem(registerItem, index, ref);
   return (
-    <button ref={ref} type="button" className="rounded-lg px-3 py-2 text-left text-body" onClick={() => onPick(name)}>
+    <button ref={ref} type="button" className="text-body rounded-lg px-3 py-2 text-left" onClick={() => onPick(name)}>
       {name}
     </button>
   );
@@ -37,9 +37,9 @@ function FluidHoverDemo() {
       <div
         ref={containerRef}
         {...hover.handlers}
-        className="relative isolate flex max-w-80 flex-col gap-3 rounded-xl border border-border p-3"
+        className="border-border relative isolate flex max-w-80 flex-col gap-3 rounded-xl border p-3"
       >
-        <FluidHoverHighlight hover={hover} className="-z-1 rounded-lg bg-fill" />
+        <FluidHoverHighlight hover={hover} className="bg-fill -z-1 rounded-lg" />
         {agents.map((name, index) => (
           <AgentRow key={name} name={name} index={index} registerItem={hover.registerItem} onPick={setPicked} />
         ))}

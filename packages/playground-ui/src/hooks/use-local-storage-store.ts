@@ -64,7 +64,9 @@ export function createLocalStorageStore<T>({
 
   const subscribe = (onStoreChange: () => void) => {
     const onStorage = (event: StorageEvent) => {
-      if (event.key === key || event.key === null) onStoreChange();
+      if (event.key !== key && event.key !== null) return;
+      storageUnavailable = false;
+      onStoreChange();
     };
     listeners.add(onStoreChange);
     window.addEventListener('storage', onStorage);

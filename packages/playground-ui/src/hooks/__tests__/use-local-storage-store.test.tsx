@@ -73,4 +73,22 @@ describe('useLocalStorageStore', () => {
     expect([...reader.result.current]).toEqual(['kept']);
     expect(localStorage.getItem(KEY)).toBeNull();
   });
+
+  it('reads storage again when another tab writes after a failed read', () => {
+    localStorage.setItem(KEY, '["before"]');
+    const store = tagStore();
+    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementationOnce(() => {
+      throw new Error('storage blocked');
+    });
+    const reader = renderHook(() => useLocalStorageStore(store));
+    expect(reader.result.current.size).toBe(0);
+    getItem.mockRestore();
+
+    act(() => {
+      localStorage.setItem(KEY, '["from-other-tab"]');
+      window.dispatchEvent(new StorageEvent('storage', { key: KEY }));
+    });
+
+    expect([...reader.result.current]).toEqual(['from-other-tab']);
+  });
 });

@@ -31,7 +31,7 @@ function Lane({ name, tasks, onDropTask }: { name: string; tasks: string[]; onDr
           key={task}
           draggable
           onDragStart={(event: DragEvent<HTMLDivElement>) => event.dataTransfer.setData(TASK_TYPE, task)}
-          className="cursor-grab rounded-md border border-border bg-card px-3 py-2"
+          className="border-border bg-card cursor-grab rounded-md border px-3 py-2"
         >
           <Txt>{task}</Txt>
         </div>
