@@ -1104,6 +1104,24 @@ describe('ProjectRoutes', () => {
       expect(JSON.stringify(await invalid.json())).toContain('baseImage');
     });
 
+    it('drops a stored value the schema now rejects instead of refusing every later update', async () => {
+      const { seed, project, app } = await seedEnvironment();
+      // Stored under an older, looser schema: below the current 512 minimum.
+      await seed.projects.update({
+        orgId: 'org-1',
+        id: project.id,
+        input: { sandboxSettings: { cpuCount: 4, memoryMb: 256 } },
+      });
+
+      const response = await patch(app, project.id, { settings: { cpuCount: 8 } });
+      expect(response.status).toBe(200);
+      expect((await seed.projects.getById({ id: project.id }))?.sandboxSettings).toEqual({ cpuCount: 8 });
+
+      // A patch that sets the rejected value itself is still refused.
+      const refused = await patch(app, project.id, { settings: { memoryMb: 256 } });
+      expect(refused.status).toBe(400);
+    });
+
     it('reports no sandbox and refuses settings when the factory has none configured', async () => {
       const seed = await createFactoryStorageForTests();
       const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Env' } });
