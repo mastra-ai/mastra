@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core/agent';
-import type { AgentMemoryOption, MessageList } from '@mastra/core/agent';
-import type { WidenModelId } from '@mastra/core/llm';
+import type { AgentMemoryOption, MessageList, ModelWithRetries } from '@mastra/core/agent';
+import type { WidenedMastraModelConfig, WidenModelId } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { MastraMemory } from '@mastra/core/memory';
@@ -326,7 +326,7 @@ export class ReflectorRunner {
     } else if (typeof agentModel === 'function') {
       const resolveDynamicModel = agentModel;
       agentModel = (async args => {
-        const resolvedModel = await resolveDynamicModel(args);
+        const resolvedModel: WidenedMastraModelConfig | ModelWithRetries[] = await resolveDynamicModel(args);
         return Array.isArray(resolvedModel)
           ? resolvedModel.map(fallback => ({ ...fallback, maxRetries: 0 }))
           : resolvedModel;

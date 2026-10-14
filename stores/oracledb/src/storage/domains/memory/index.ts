@@ -8,6 +8,9 @@ import { ErrorCategory, MastraError } from '@mastra/core/error';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
   MemoryStorage,
+  resolveRunFence,
+  RUN_FENCING_TABLE_SCHEMAS,
+  TABLE_MEMORY_RUN_FENCES,
   TABLE_MESSAGES,
   TABLE_OBSERVATIONAL_MEMORY,
   TABLE_RESOURCES,
@@ -18,6 +21,7 @@ import type {
   CreateReflectionGenerationInput,
   ObservationalMemoryHistoryOptions,
   ObservationalMemoryRecord,
+  RunFence,
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
   StorageListMessagesByResourceIdInput,
@@ -29,6 +33,7 @@ import type {
   SwapBufferedReflectionToActiveInput,
   SwapBufferedToActiveInput,
   SwapBufferedToActiveResult,
+  TABLE_NAMES,
   ThreadCloneMetadata,
   UpdateActiveObservationsInput,
   UpdateBufferedObservationsInput,
@@ -40,6 +45,7 @@ import { isOracleErrorCode, normalizeBatchSize } from '../../../shared/connectio
 import { normalizeIdentifier } from '../../../vector/identifiers';
 import { filterIndexesForTables, OracleDB } from '../../db';
 import type { OracleCreateIndexOptions } from '../../db';
+import { claimTransaction, DB_NOW_MS } from '../../db/run-fencing';
 import type { OracleDomainConfig } from '../../types';
 import {
   deleteMessages,
@@ -82,7 +88,7 @@ import {
   updateThread,
   updateThreadResourceId,
 } from './threads';
-import { storageError } from './utils';
+import { storageError, table } from './utils';
 import type { MemoryContext } from './utils';
 
 // Memory is the highest-traffic storage domain. It owns conversation threads,
@@ -97,12 +103,14 @@ export class MemoryOracle extends MemoryStorage {
   override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
   readonly supportsObservationalMemoryHistorySearch = true;
-  // Memory owns all tables needed for normal message history plus observational memory state.
+  // Memory owns all tables needed for normal message history plus observational
+  // memory state, and the run fences that gate writes to them.
   static readonly MANAGED_TABLES = [
     TABLE_THREADS,
     TABLE_MESSAGES,
     TABLE_RESOURCES,
     TABLE_OBSERVATIONAL_MEMORY,
+    TABLE_MEMORY_RUN_FENCES,
   ] as const;
 
   private readonly db: OracleDB;
@@ -152,6 +160,10 @@ export class MemoryOracle extends MemoryStorage {
 
   async init(): Promise<void> {
     await initMemorySchema(this.ctx);
+    await this.db.createTable({
+      tableName: TABLE_MEMORY_RUN_FENCES as TABLE_NAMES,
+      schema: RUN_FENCING_TABLE_SCHEMAS[TABLE_MEMORY_RUN_FENCES],
+    });
   }
 
   /**
@@ -166,22 +178,84 @@ export class MemoryOracle extends MemoryStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     await clearAllMemoryTables(this.ctx);
+    await this.db.clearTable(TABLE_MEMORY_RUN_FENCES);
+  }
+
+  override supportsRunFencing(): boolean {
+    return true;
+  }
+
+  override async raiseRunFence(fence: RunFence): Promise<boolean> {
+    const fences = table(this.ctx, TABLE_MEMORY_RUN_FENCES);
+    try {
+      return await claimTransaction(this.db, async client => {
+        const row = await client.oneOrNone<{ generation: number; ownerId: string }>(
+          `SELECT generation AS "generation", "ownerId" FROM ${fences} WHERE "runId" = :runId FOR UPDATE`,
+          { runId: fence.runId },
+        );
+        const binds = { runId: fence.runId, generation: fence.generation, ownerId: fence.ownerId };
+        if (!row) {
+          await client.none(
+            `INSERT INTO ${fences} ("runId", generation, "ownerId") VALUES (:runId, :generation, :ownerId)`,
+            binds,
+          );
+          return true;
+        }
+        const generation = Number(row.generation);
+        const raises = generation < fence.generation;
+        const reaffirms = generation === fence.generation && String(row.ownerId) === fence.ownerId;
+        if (!raises && !reaffirms) return false;
+        // Every write un-retires the fence.
+        await client.none(
+          `UPDATE ${fences} SET generation = :generation, "ownerId" = :ownerId, "retiredAt" = NULL WHERE "runId" = :runId`,
+          binds,
+        );
+        return true;
+      });
+    } catch (error) {
+      throw storageError('RAISE_RUN_FENCE', 'FAILED', { runId: fence.runId }, error);
+    }
+  }
+
+  override async retireRunFence(fence: RunFence): Promise<boolean> {
+    const fences = table(this.ctx, TABLE_MEMORY_RUN_FENCES);
+    try {
+      return await this.db.tx(async client => {
+        const row = await client.oneOrNone<{ generation: number; ownerId: string }>(
+          `SELECT generation AS "generation", "ownerId" FROM ${fences} WHERE "runId" = :runId FOR UPDATE`,
+          { runId: fence.runId },
+        );
+        if (!row || Number(row.generation) !== fence.generation || String(row.ownerId) !== fence.ownerId) {
+          return false;
+        }
+        await client.none(`UPDATE ${fences} SET "retiredAt" = ${DB_NOW_MS} WHERE "runId" = :runId`, {
+          runId: fence.runId,
+        });
+        return true;
+      });
+    } catch (error) {
+      throw storageError('RETIRE_RUN_FENCE', 'FAILED', { runId: fence.runId }, error);
+    }
   }
 
   async getThreadById(args: { threadId: string; resourceId?: string }): Promise<StorageThreadType | null> {
     return getThreadById(this.ctx, args);
   }
 
-  async saveThread(args: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    return saveThread(this.ctx, args);
+  async saveThread({ fence, ...args }: { thread: StorageThreadType; fence?: RunFence }): Promise<StorageThreadType> {
+    return saveThread(this.ctx, { ...args, fence: resolveRunFence(this, fence) });
   }
 
-  async updateThread(args: {
+  async updateThread({
+    fence,
+    ...args
+  }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageThreadType> {
-    return updateThread(this.ctx, args);
+    return updateThread(this.ctx, { ...args, fence: resolveRunFence(this, fence) });
   }
 
   async deleteThread(args: { threadId: string }): Promise<void> {
@@ -208,21 +282,31 @@ export class MemoryOracle extends MemoryStorage {
     return listMessagesByResourceId(this.ctx, args);
   }
 
-  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
-    return saveMessages(this.ctx, args);
+  async saveMessages({
+    fence,
+    ...args
+  }: {
+    messages: MastraDBMessage[];
+    fence?: RunFence;
+  }): Promise<{ messages: MastraDBMessage[] }> {
+    return saveMessages(this.ctx, { ...args, fence: resolveRunFence(this, fence) });
   }
 
-  async updateMessages(args: {
+  async updateMessages({
+    fence,
+    ...args
+  }: {
     messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
       content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
     })[];
+    fence?: RunFence;
   }): Promise<MastraDBMessage[]> {
-    return updateMessages(this.ctx, args);
+    return updateMessages(this.ctx, { ...args, fence: resolveRunFence(this, fence) });
   }
 
-  async deleteMessages(messageIds: string[]): Promise<void> {
-    return deleteMessages(this.ctx, messageIds);
+  async deleteMessages(messageIds: string[], options?: { fence?: RunFence }): Promise<void> {
+    return deleteMessages(this.ctx, messageIds, resolveRunFence(this, options?.fence));
   }
 
   async getResourceById(args: { resourceId: string }): Promise<StorageResourceType | null> {
@@ -233,12 +317,16 @@ export class MemoryOracle extends MemoryStorage {
     return saveResource(this.ctx, args);
   }
 
-  async updateResource(args: {
+  async updateResource({
+    fence,
+    ...args
+  }: {
     resourceId: string;
     workingMemory?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageResourceType> {
-    return updateResource(this.ctx, args);
+    return updateResource(this.ctx, { ...args, fence: resolveRunFence(this, fence) });
   }
 
   async cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput> {
@@ -385,11 +473,11 @@ export class MemoryOracle extends MemoryStorage {
   }
 
   async commitActiveObservations(input: UpdateActiveObservationsInput): Promise<UpdateActiveObservationsResult> {
-    return updateActiveObservations(this.ctx, input);
+    return updateActiveObservations(this.ctx, input, resolveRunFence(this, undefined));
   }
 
   async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
-    return createReflectionGeneration(this.ctx, input);
+    return createReflectionGeneration(this.ctx, input, resolveRunFence(this, undefined));
   }
 
   async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {
@@ -425,18 +513,18 @@ export class MemoryOracle extends MemoryStorage {
   }
 
   async appendBufferedObservations(input: UpdateBufferedObservationsInput): Promise<UpdateBufferedObservationsResult> {
-    return updateBufferedObservations(this.ctx, input);
+    return updateBufferedObservations(this.ctx, input, resolveRunFence(this, undefined));
   }
 
   async swapBufferedToActive(input: SwapBufferedToActiveInput): Promise<SwapBufferedToActiveResult> {
-    return swapBufferedToActive(this.ctx, input);
+    return swapBufferedToActive(this.ctx, input, resolveRunFence(this, undefined));
   }
 
   async updateBufferedReflection(input: UpdateBufferedReflectionInput): Promise<void> {
-    return updateBufferedReflection(this.ctx, input);
+    return updateBufferedReflection(this.ctx, input, resolveRunFence(this, undefined));
   }
 
   async swapBufferedReflectionToActive(input: SwapBufferedReflectionToActiveInput): Promise<ObservationalMemoryRecord> {
-    return swapBufferedReflectionToActive(this.ctx, input);
+    return swapBufferedReflectionToActive(this.ctx, input, resolveRunFence(this, undefined));
   }
 }
