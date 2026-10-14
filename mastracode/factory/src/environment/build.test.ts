@@ -563,7 +563,7 @@ describe('runEnvironmentBuild', () => {
     });
   });
 
-  it('never starts again on its own after an unrecorded build when the provider cannot list builds', async () => {
+  it('never starts another build after an unrecorded one when the provider cannot list builds', async () => {
     const { project } = await seedProject(seed, ['acme/api']);
     await seed.projects.update({ orgId: 'org-1', id: project.id, input: { buildOnPushEnabled: true } });
     const sandbox = new BuildingSandbox();
@@ -581,22 +581,15 @@ describe('runEnvironmentBuild', () => {
       reason: 'not_recorded',
     });
     clock = new Date(clock.getTime() + 11 * 60_000);
-    for (const trigger of ['schedule', 'push', 'schedule'] as const) {
+    // Build now included: the earlier start may still be running and can never be reconciled.
+    for (const trigger of ['schedule', 'push', 'manual', 'manual', 'schedule'] as const) {
       expect(await runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger })).toEqual({
         outcome: 'skipped',
         reason: 'unresolved',
       });
     }
     expect(sandbox.starts).toHaveLength(1);
-
-    // Build now is the user's call to build anyway; it resolves the mark.
-    await expect(
-      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'manual' }),
-    ).resolves.toMatchObject({ outcome: 'started', buildId: 'build-2' });
-    expect(
-      await runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'schedule' }),
-    ).toEqual({ outcome: 'skipped', reason: 'in_progress', buildId: 'build-2' });
-    expect(await seed.projects.getById({ id: project.id })).toMatchObject({ buildStartUncertain: false });
+    expect(await seed.projects.getById({ id: project.id })).toMatchObject({ buildStartUncertain: true });
   });
 
   it('keeps the push window open when a push finds a build already running', async () => {

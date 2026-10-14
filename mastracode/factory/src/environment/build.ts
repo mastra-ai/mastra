@@ -47,7 +47,7 @@ export interface EnvironmentBuildOutcome {
   outcome: 'started' | 'skipped' | 'unavailable' | 'failed';
   buildId?: string;
   templateId?: string;
-  /** Why nothing started: `debounced`, `starting` (another run is starting a build), `in_progress`, `unchanged`, `unresolved` (a lapsed run may have started a build the provider cannot list; Build now starts one anyway), `no_environment`, `no_builds`, `no_source_control`; why a run failed: `not_recorded`, `superseded`, or an error. */
+  /** Why nothing started: `debounced`, `starting` (another run is starting a build), `in_progress`, `unchanged`, `unresolved` (a lapsed run may have started a build the provider cannot list), `no_environment`, `no_builds`, `no_source_control`; why a run failed: `not_recorded`, `superseded`, or an error. */
   reason?: string;
   /** The heads the started build pins; the workflow stores them once the build is ready. */
   heads?: EnvironmentHeads;
@@ -159,9 +159,8 @@ const RECORD_ATTEMPTS = 5;
  * Taking over a lapsed lease leaves the start uncertain: the lapsed run may
  * have started a build it never recorded. The mark persists until resolved.
  * While it stands, a provider that lists builds is asked for a running one
- * (and every trigger skips as `in_progress` on it); a provider that cannot
- * list leaves `schedule` and `push` skipping as `unresolved` and `manual`
- * building anyway, which resolves it.
+ * (and every trigger skips as `in_progress` on it); with a provider that
+ * cannot list, every trigger skips as `unresolved`.
  *
  * The result is written as the lease is released, and only while this run
  * still holds it. A failed `builds.start` clears the last build id, so a later
@@ -251,9 +250,9 @@ export async function runEnvironmentBuild(
             return { outcome: 'skipped', reason: 'in_progress', buildId: running.buildId };
           }
           resolved = true;
-        } else if (input.trigger === 'manual') {
-          resolved = true;
         } else {
+          // Without history the earlier start can never be reconciled, so no
+          // trigger starts another build beside it.
           await release();
           return { outcome: 'skipped', reason: 'unresolved' };
         }
