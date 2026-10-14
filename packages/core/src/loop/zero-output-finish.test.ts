@@ -1,4 +1,5 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV3 } from '@internal/ai-v6/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mastra } from '../mastra';
 import type { ErrorProcessor } from '../processors';
@@ -80,7 +81,7 @@ describe('zero-output finishReason "other"', () => {
     expect(errorChunk.payload.error.message).toContain('finishReason "other"');
   });
 
-  it('terminates after output when finishReason "other" has no tool calls', async () => {
+  it.each(['other', 'unknown'] as const)('terminates after output with an unmarked %s finish', async finishReason => {
     let call = 0;
     const model: ModelManagerModelConfig = {
       id: 'other-with-output',
@@ -95,7 +96,7 @@ describe('zero-output finishReason "other"', () => {
                     { type: 'text-start', id: 'text-1' },
                     { type: 'text-delta', id: 'text-1', delta: 'partial output' },
                     { type: 'text-end', id: 'text-1' },
-                    { type: 'finish', finishReason: 'other', usage: testUsage },
+                    { type: 'finish', finishReason, usage: testUsage },
                   ]
                 : [
                     { type: 'text-start', id: 'text-2' },
@@ -115,7 +116,62 @@ describe('zero-output finishReason "other"', () => {
     expect(call).toBe(1);
     expect(chunks.some(chunk => chunk.type === 'error')).toBe(false);
     expect(chunks.some(chunk => chunk.type === 'finish')).toBe(true);
+    expect(
+      chunks
+        .filter(chunk => chunk.type === 'text-delta')
+        .map(chunk => chunk.payload.text)
+        .join(''),
+    ).toBe('partial output');
+    expect(
+      chunks.filter(chunk => chunk.type === 'step-finish').map(chunk => chunk.payload.stepResult.isContinued),
+    ).toEqual([false]);
   });
+
+  it.each([undefined, 'compaction', 'vendor-specific'])(
+    'preserves V3 continuation semantics for rawReason %s',
+    async rawReason => {
+      let calls = 0;
+      const model: ModelManagerModelConfig = {
+        id: 'other-with-raw-reason',
+        maxRetries: 0,
+        model: new MockLanguageModelV3({
+          doStream: async () => {
+            const first = ++calls === 1;
+            return {
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'text-start',
+                  id: 'text',
+                  ...(first && rawReason === 'compaction'
+                    ? { providerMetadata: { anthropic: { type: 'compaction' } } }
+                    : {}),
+                },
+                { type: 'text-delta', id: 'text', delta: first ? 'summary' : 'done' },
+                { type: 'text-end', id: 'text' },
+                {
+                  type: 'finish',
+                  finishReason: first ? { unified: 'other', raw: rawReason } : { unified: 'stop', raw: 'end_turn' },
+                  usage: {
+                    inputTokens: { total: 3, noCache: 3, cacheRead: undefined, cacheWrite: undefined },
+                    outputTokens: { total: 2, text: 2, reasoning: undefined },
+                  },
+                },
+              ]),
+            };
+          },
+        }),
+      };
+
+      const chunks = await runLoop({ models: [model] });
+      const continued = rawReason !== undefined;
+      expect(calls).toBe(continued ? 2 : 1);
+      expect(chunks.some(chunk => chunk.type === 'error')).toBe(false);
+      const steps = chunks.filter(chunk => chunk.type === 'step-finish');
+      expect(steps[0].payload.stepResult).toMatchObject({ reason: 'other', isContinued: continued });
+      expect(steps[0].payload.stepResult.rawReason).toBe(rawReason);
+      expect(steps.map(chunk => chunk.payload.stepResult.isContinued)).toEqual(continued ? [true, false] : [false]);
+    },
+  );
 
   it('routes the synthetic error through error processors for bounded retries', async () => {
     const model = zeroOutputOtherModel();

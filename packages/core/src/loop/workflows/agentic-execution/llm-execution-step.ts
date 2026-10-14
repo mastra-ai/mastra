@@ -121,6 +121,11 @@ import { endPendingProviderToolSpan } from './provider-tool-spans';
 import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
 
+/** Keep unmarked finishes terminal while preserving provider signals such as compaction. */
+function isTerminalFinishReason(reason: string, rawReason?: string): boolean {
+  return TERMINAL_FINISH_REASONS.includes(reason) || (reason === 'other' && rawReason === undefined);
+}
+
 function getRequestInputProcessors({
   inputProcessors,
   llmRequestInputProcessors,
@@ -896,7 +901,7 @@ async function processOutputStream<OUTPUT = undefined>({
             totalUsage: chunk.payload.totalUsage,
             headers: responseFromModel.rawResponse?.headers,
             messageId,
-            isContinued: !TERMINAL_FINISH_REASONS.includes(chunk.payload.stepResult.reason),
+            isContinued: !isTerminalFinishReason(chunk.payload.stepResult.reason, chunk.payload.stepResult.rawReason),
             request: responseFromModel.request,
           },
         });
@@ -940,7 +945,7 @@ async function processOutputStream<OUTPUT = undefined>({
         // so the loop would re-issue the identical request and spin until maxSteps
         // (issue #21897). When the step produced zero output, treat it as a stream error
         // via the same deferred-error path so error processors can intercept and retry
-        // boundedly. A finish with reason 'other' that DID produce output continues as usual.
+        // boundedly. With output, 'other' only continues for pending tools or a provider's raw reason.
         if (chunk.payload.stepResult.reason === 'other' && !hasStepContent && !runState.state.hasErrored) {
           const rawReason = chunk.payload.stepResult.rawReason;
           const syntheticError = new MastraError({
@@ -3179,7 +3184,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         finishReason !== 'error' &&
         finishReason !== 'length' &&
         finishReason !== 'content-filter';
-      const shouldContinue = shouldRetry || (!tripwireTriggered && hasPendingToolCalls);
+      const shouldContinue =
+        shouldRetry ||
+        (!tripwireTriggered &&
+          (hasPendingToolCalls || !isTerminalFinishReason(finishReason, runState.state.stepResult?.rawReason)));
 
       // Fail abandoned provider calls before creating snapshots so persisted history
       // cannot retain pending calls after a terminal error. Only target this step's IDs.
