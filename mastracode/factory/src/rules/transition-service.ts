@@ -77,6 +77,16 @@ export interface FactoryTransitionServiceOptions {
    * but failures are swallowed: releasing resources must never break or roll
    * back the committed transition.
    */
+  onTerminalStage?: (args: {
+    orgId: string;
+    factoryProjectId: string;
+    workItemId: string;
+    stage: FactoryRuleStage;
+    revision: number;
+    /** The actor that committed this terminal transition. Lets cleanup leave
+     * the seat that drove its own transition (an agent tool call) untouched. */
+    actor: FactoryRuleActor;
+  }) => Promise<void> | void;
   /**
    * Called after a transition commits a stage change, e.g. to tell the item's
    * followers. Not awaited, and failures are logged: a notification must never
@@ -88,16 +98,6 @@ export interface FactoryTransitionServiceOptions {
     workItemId: string;
     fromStage: string | undefined;
     toStage: string;
-  }) => Promise<void> | void;
-  onTerminalStage?: (args: {
-    orgId: string;
-    factoryProjectId: string;
-    workItemId: string;
-    stage: FactoryRuleStage;
-    revision: number;
-    /** The actor that committed this terminal transition. Lets cleanup leave
-     * the seat that drove its own transition (an agent tool call) untouched. */
-    actor: FactoryRuleActor;
   }) => Promise<void> | void;
   /** Upper bound on how long a committed transition waits for
    * `onTerminalStage` before returning (default 30s). The cleanup continues

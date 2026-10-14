@@ -99,17 +99,19 @@ function watchStartedRun(
     if (event.type !== 'agent_end') return;
     endReason = event.reason;
     close();
-    void onEnd(runOutcome(event.reason, parked?.toolName));
+    const outcome = runOutcome(event.reason, parked?.toolName);
+    if (outcome) void onEnd(outcome);
   });
   return { endReason: () => endReason, close };
 }
 
-function runOutcome(reason: RunEndReason, parkedTool: string | undefined): FactoryRunOutcome {
+/** `null` for an aborted run: someone stopped or steered it, which is not a final outcome. */
+function runOutcome(reason: RunEndReason, parkedTool: string | undefined): FactoryRunOutcome | null {
   switch (reason) {
     case 'error':
       return { status: 'failed', reason: 'the run ended in error.' };
     case 'aborted':
-      return { status: 'failed', reason: 'the run was aborted before it finished.' };
+      return null;
     case 'suspended':
       return { status: 'blocked', ...(parkedTool ? { toolName: parkedTool } : {}) };
     default:
@@ -117,11 +119,13 @@ function runOutcome(reason: RunEndReason, parkedTool: string | undefined): Facto
   }
 }
 
+function ambiguousRepository(candidates: readonly string[]): string {
+  return `This item has several repositories (${candidates.join(', ')}); v1 can't choose one.`;
+}
+
 function startErrorMessage(error: unknown): string | null {
   if (error instanceof WorkItemRepositoryError) {
-    return error.code === 'repository_ambiguous'
-      ? `This item has several repositories (${error.candidates.join(', ')}); v1 can't choose one.`
-      : error.message;
+    return error.code === 'repository_ambiguous' ? ambiguousRepository(error.candidates) : error.message;
   }
   if (error instanceof FactoryStartTransitionError) return `The start was refused: ${error.result.reason}`;
   return null;
@@ -180,6 +184,8 @@ export function createFactorySessionTools(
         branch: `${USER_SESSION_BRANCH_PREFIX}${sessionId}`,
         // Bills the caller: the credential tenant follows the row's user.
         attributeToUserId: scope.userId,
+        // Same repository as the session that started it.
+        ...(parent.projectRepositoryId ? { projectRepositoryId: parent.projectRepositoryId } : {}),
         visibility: parent.visibility,
         origin: { sessionId: scope.sessionId, threadId: scope.threadId },
       });
@@ -321,12 +327,12 @@ export function createFactorySessionTools(
     });
 
     // Follow first, so a fast run's first report already has somewhere to go.
-    const project_ = { orgId: scope.orgId, factoryProjectId: scope.factoryProjectId };
+    const followScope = { orgId: scope.orgId, factoryProjectId: scope.factoryProjectId };
     const alreadyFollowing = (
-      await deps.workItems.listSessionSubscriptions({ ...project_, sessionId: scope.sessionId })
+      await deps.workItems.listSessionSubscriptions({ ...followScope, sessionId: scope.sessionId })
     ).some(subscription => subscription.workItemId === item.id);
     await deps.workItems.subscribeToWorkItem({
-      ...project_,
+      ...followScope,
       workItemId: item.id,
       sessionId: scope.sessionId,
       threadId: scope.threadId,
@@ -456,7 +462,7 @@ export function createFactorySessionTools(
       linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject,
     });
     if (repository.status === 'ambiguous') {
-      throw new Error(`This item has several repositories (${repository.candidates.join(', ')}); v1 can't choose one.`);
+      throw new Error(ambiguousRepository(repository.candidates));
     }
     if (repository.status === 'unlinked') throw new Error(repository.hint);
     return repository.projectRepositoryId;

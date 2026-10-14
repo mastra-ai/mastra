@@ -62,6 +62,28 @@ function subscriber(workItemId: string, sessionId: string): WorkItemSubscription
 }
 
 describe('hasFinalReport', () => {
+  it('counts a reply that carries a final status', async () => {
+    const env = reporting();
+    const since = new Date(Date.now() - 1000);
+    await env.notifications.createNotification({
+      source: 'factory-session',
+      kind: 'reply',
+      priority: 'high',
+      summary: 'answered and done',
+      threadId: PARENT.threadId,
+      resourceId: PARENT.sessionId,
+      attributes: { 'from-session': SENDER.sessionId, status: 'done' },
+    });
+    await expect(
+      hasFinalReport(env.notifications, {
+        senderSessionId: SENDER.sessionId,
+        recipientThreadId: PARENT.threadId,
+        since,
+        kinds: ['done', 'failed'],
+      }),
+    ).resolves.toBe(true);
+  });
+
   it('finds a final report this sender made since the run started', async () => {
     const env = reporting();
     const since = new Date(Date.now() - 1000);
@@ -133,7 +155,7 @@ describe('sendRunEndReport', () => {
     expect(await env.notifications.listNotifications({ threadId: PARENT.threadId })).toHaveLength(1);
   });
 
-  it('still reports done after the agent’s own blocked report, but not a second blocked', async () => {
+  it('treats the agent’s own blocked report as final for blocked and done, but not for failed', async () => {
     const env = reporting();
     const since = new Date(Date.now() - 1000);
     await env.agentReport('blocked');
@@ -152,7 +174,15 @@ describe('sendRunEndReport', () => {
       outcome: { status: 'done' },
       subject: 'The side session "x"',
     });
-    expect(env.deliveries.map(entry => entry.notification.kind)).toEqual(['done']);
+    expect(env.deliveries).toHaveLength(0);
+    await sendRunEndReport(env.reporting, {
+      sender: SENDER,
+      recipients: [PARENT],
+      since,
+      outcome: { status: 'failed', reason: 'boom' },
+      subject: 'The side session "x"',
+    });
+    expect(env.deliveries.map(entry => entry.notification.kind)).toEqual(['failed']);
   });
 
   it('names the failure code and the parked tool', async () => {

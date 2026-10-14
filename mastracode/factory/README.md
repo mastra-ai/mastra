@@ -677,7 +677,7 @@ Read tools and `factory_message_origin` are available on every turn. The other t
 
 `factory_signal_session` messages any other session in the same Factory that the caller can see: a work item's role session, or a teammate's session that isn't private. The message arrives as a `factory-session` notification on that session's own thread. Factory brings an offline session back online first, and the turn it wakes runs as that session's owner, with the owner's credentials, never as the sender.
 
-How a message is delivered depends on its priority. `urgent` always delivers, even into a running turn. `high` and `medium` wake an idle session; while it is busy, `high` arrives as a summary and then in full, and `medium` waits for the current step. `low` arrives as a summary. Agents can read the full text of any notification with `notification_inbox`. A session can send at most 10 messages and replies, together, to the same session thread in 10 minutes; past that, both tools refuse until the window moves on.
+How a message is delivered depends on its priority. `urgent` always delivers, even into a running turn. `high` and `medium` wake an idle session; while it is busy, `high` arrives as a summary and then in full, and `medium` waits for the current step. `low` arrives as a summary. Agents can read the full text of any notification with `notification_inbox`. A session can send at most 10 messages, replies and reports, together, to the same session thread in 10 minutes; past that, the tools refuse until the window moves on. `progress` reports don't count, since they replace each other.
 
 `factory_message_origin` with `inReplyTo` answers a message. `inReplyTo` must name a `factory-session` message that reached the answering session's own thread, and the reply goes to the session and thread that sent it, never to an address the agent supplies. Each message can be answered once, and replies and other notifications can't be answered, so two agents can't ping-pong. Replies arrive at `high` priority and carry an `in-reply-to` attribute. Messages and replies are recorded in the audit trail as `factory.agent.signaled`.
 
@@ -685,7 +685,7 @@ How a message is delivered depends on its priority. `urgent` always delivers, ev
 
 `factory_start_session` starts another session for the caller and sends `prompt` as its first message. It has two modes:
 
-- **Side session** (no `workItem`): a standalone session with no work item, for a one-off job. Factory stores the session that started it on the new session's row (`origin_session_id`, `origin_thread_id`) and copies the parent's visibility.
+- **Side session** (no `workItem`): a standalone session with no work item, for a one-off job. It uses the same repository as the session that started it. Factory stores that session on the new session's row (`origin_session_id`, `origin_thread_id`) and copies the parent's visibility.
 - **Work-item role** (`workItem` and `role`): starts a role the item's board seats, the same way **Start** does in the Factory UI. The card does not move and no autonomy is armed. The tool refuses when the role already has a session, naming it so the agent can message it instead, and refuses an item linked to several repositories. The caller is subscribed to the item, and the run is recorded as `factory.run.started` with the caller as the person who started it.
 
 Both modes attribute the new session to the caller, so it runs with the caller's credentials (the caller's own keys under the `user` model scope, the organization's under `factory`) and keeps the Factory's default worker model. The first message runs with only the caller as its user, never the rest of the parent turn's context. The tool needs no approval but, like the other management tools, only appears on turns a signed-in person started.
@@ -704,7 +704,7 @@ A spawned session reports back with `factory_message_origin` without `inReplyTo`
 
 Progress reports from one session replace each other while unread. `done`, `failed` and `blocked` reports are never replaced, so a final report can't be overwritten by a later progress update.
 
-Every run of a spawned session ends with exactly one final report. When the run ends, Factory checks each recipient's thread for a `done` or `failed` report the session sent since the run started, and sends one itself to the recipients that lack it: `done` when the run completed, `failed` when it ended in error or was aborted (for board runs, only once no retry remains), and `blocked`, naming the tool, when the run stopped waiting for an answer. These backstop reports carry a `backstop` attribute. Runs started by the board report through the dispatcher; side sessions and work-item sessions started from a user session are watched in memory, so a restart mid-run leaves the final report to the agent.
+Every run of a spawned session ends with exactly one final report. When the run ends, Factory checks each recipient's thread for a `done` or `failed` report the session sent since the run started, and sends one itself to the recipients that lack it: `done` when the run completed, `failed` when it ended in error (for board runs, only once no retry remains), and `blocked`, naming the tool, when the run stopped waiting for an answer. A run that completes after the agent reported `blocked` is waiting for an answer, so it gets no `done`; a run someone stopped gets no report; and a reply with a final `status` counts as the final report. These backstop reports carry a `backstop` attribute. Runs started by the board report through the dispatcher; side sessions and work-item sessions started from a user session are watched in memory, so a restart mid-run leaves the final report to the agent.
 
 When a followed work item changes stage, subscribers whose session is running get a `low` priority `stage` notice. A stage change never wakes an offline session; it sees the current stage in its state signal instead.
 
@@ -717,7 +717,7 @@ A user session sees what it is waiting on without calling a tool. Once it has st
 
 Running entries come first, and the list shows at most 20 rows with a "+N more" line. Side sessions idle for more than 24 hours, and items in a finished stage for more than 24 hours, drop out. Sessions the caller only messaged never appear. When the last entry goes, the signal sends "No sub-sessions or followed work items." once and then stays silent. The signal is only resent when its content changes.
 
-Spawned sessions get a one-line signal instead: a side session sees which session started it, and a work-item session sees the item, its role, and how many sessions follow it.
+Spawned sessions get a one-line signal instead: a side session sees which session started it, and a work-item session sees the item, its role, and how many sessions follow it (nothing when nobody does).
 
 The tools take their scope as an argument rather than reading the request, so the same tool set can later be mounted elsewhere, such as an MCP server.
 

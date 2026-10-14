@@ -297,6 +297,14 @@ describe('FactorySessionsStateProcessor', () => {
     await expect(env.step({ sessionId: 'side-1', threadId: 'side-1' })).resolves.toBeUndefined();
   });
 
+  it('shows a worker nothing when nobody follows its item', async () => {
+    const env = await setup();
+    await env.createSession('worker-7');
+    const item = await env.fileItem(7);
+    await env.bind(item.id, 'worker-7');
+    await expect(env.step({ sessionId: 'worker-7', threadId: 'worker-7-thread' })).resolves.toBeUndefined();
+  });
+
   it('tells an item worker which item and role it works on and who follows it', async () => {
     const env = await setup();
     await env.createSession('worker-7');

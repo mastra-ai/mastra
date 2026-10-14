@@ -76,7 +76,8 @@ export async function hasFinalReport(
     if (record.updatedAt < since) break;
     if (
       record.attributes?.['from-session'] === senderSessionId &&
-      kinds.includes(record.kind) &&
+      // A reply carrying a final status counts like the report itself.
+      (kinds.includes(record.kind) || (record.kind === 'reply' && kinds.includes(String(record.attributes?.status)))) &&
       record.createdAt >= since
     ) {
       return true;
@@ -126,6 +127,17 @@ export async function workItemReportRecipients(
     .map(subscriber => ({ sessionId: subscriber.sessionId, threadId: subscriber.threadId }));
 }
 
+/** How reports name an item: `#n`, else its quoted title, else its id. */
+async function workItemReference(
+  workItems: Pick<WorkItemsStorage, 'getForProject'>,
+  { orgId, factoryProjectId, workItemId }: { orgId: string; factoryProjectId: string; workItemId: string },
+): Promise<{ label: string; ref: string }> {
+  const item = await workItems.getForProject(orgId, factoryProjectId, workItemId);
+  const number = item ? workItemNumber(item) : null;
+  if (number !== null) return { label: `#${number}`, ref: `#${number}` };
+  return { label: item ? `"${item.title}"` : workItemId, ref: workItemId };
+}
+
 /** Attributes that say which item and role a worker's report is about. */
 export async function workItemReportAttributes(
   workItems: Pick<WorkItemsStorage, 'getForProject'>,
@@ -136,10 +148,8 @@ export async function workItemReportAttributes(
     role,
   }: { orgId: string; factoryProjectId: string; workItemId: string; role: string },
 ): Promise<{ label: string; attributes: Record<string, string> }> {
-  const item = await workItems.getForProject(orgId, factoryProjectId, workItemId);
-  const number = item ? workItemNumber(item) : null;
-  const label = number === null ? (item ? `"${item.title}"` : workItemId) : `#${number}`;
-  return { label, attributes: { 'work-item': number === null ? workItemId : `#${number}`, role } };
+  const { label, ref } = await workItemReference(workItems, { orgId, factoryProjectId, workItemId });
+  return { label, attributes: { 'work-item': ref, role } };
 }
 
 export type FactoryRunOutcome =
@@ -172,7 +182,14 @@ export async function sendRunEndReport(
     attributes?: Record<string, string>;
   },
 ): Promise<FactoryDeliveryResult[]> {
-  const kinds = outcome.status === 'blocked' ? ['blocked'] : ['done', 'failed'];
+  // An agent that reported `blocked` and ended its turn is waiting for an answer, not finished;
+  // its own `done` comes from a later run.
+  const kinds =
+    outcome.status === 'blocked'
+      ? ['blocked']
+      : outcome.status === 'done'
+        ? ['done', 'failed', 'blocked']
+        : ['done', 'failed'];
   const message =
     outcome.status === 'done'
       ? `${subject} finished.`
@@ -281,9 +298,7 @@ export function createStageChangeNotifier({
     if (subscribers.length === 0) return;
     const resolved = await reporting();
     if (!resolved) return;
-    const item = await workItems.getForProject(change.orgId, change.factoryProjectId, change.workItemId);
-    const number = item ? workItemNumber(item) : null;
-    const label = number === null ? (item ? `"${item.title}"` : change.workItemId) : `#${number}`;
+    const { label, ref } = await workItemReference(workItems, change);
     const summary = change.fromStage
       ? `${label} moved from ${change.fromStage} to ${change.toStage}.`
       : `${label} moved to ${change.toStage}.`;
@@ -295,7 +310,7 @@ export function createStageChangeNotifier({
       sourceId: change.workItemId,
       coalesceKey: `factory-stage:${change.workItemId}`,
       attributes: {
-        'work-item': number === null ? change.workItemId : `#${number}`,
+        'work-item': ref,
         ...(change.fromStage ? { 'from-stage': change.fromStage } : {}),
         'to-stage': change.toStage,
       },

@@ -361,14 +361,43 @@ describe('the side session run-end backstop', () => {
     expect(reports).toHaveLength(0);
   });
 
-  it.each([
-    ['error', 'failed', 'urgent'],
-    ['aborted', 'failed', 'urgent'],
-  ] as const)('reports a run that ends in %s as %s', async (reason, kind, priority) => {
+  it('reports a run that ends in error as failed', async () => {
     const { session, reports } = await started();
-    session.emit({ type: 'agent_end', reason } as AgentControllerEvent);
+    session.emit({ type: 'agent_end', reason: 'error' } as AgentControllerEvent);
     await vi.waitFor(() => expect(reports).toHaveLength(1));
-    expect(reports[0]!.input).toMatchObject({ kind, priority });
+    expect(reports[0]!.input).toMatchObject({ kind: 'failed', priority: 'urgent' });
+  });
+
+  it('says nothing when the run is aborted: someone stopped or steered it', async () => {
+    const { session, reports } = await started();
+    session.emit({ type: 'agent_end', reason: 'aborted' } as AgentControllerEvent);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(reports).toHaveLength(0);
+    expect(session.listenerCount()).toBe(0);
+  });
+
+  it('does not report done when the agent reported blocked and ended its turn to wait', async () => {
+    const { session, reports, notifications, result, scope } = await started();
+    await notifications.createNotification({
+      source: 'factory-session',
+      kind: 'blocked',
+      priority: 'urgent',
+      summary: 'Which branch?',
+      threadId: scope.threadId,
+      resourceId: scope.sessionId,
+      attributes: { 'from-session': result.sessionId },
+    });
+    session.emit({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(reports).toHaveLength(0);
+  });
+
+  it('starts the side session on the parent session’s repository', async () => {
+    const env = await setup();
+    const result = (await env.start({ prompt: 'Go.' })) as { sessionId: string };
+    const parent = await env.sessions.getBySessionId(env.scope.sessionId);
+    const child = await env.sessions.getBySessionId(result.sessionId);
+    expect(child!.projectRepositoryId).toBe(parent!.projectRepositoryId);
   });
 
   it('reports blocked, naming the tool, when the run ends parked', async () => {
@@ -763,6 +792,42 @@ describe('factory_start_session in work-item mode', () => {
       summary: 'The work session for "Speed up the nightly build" finished.',
       attributes: { backstop: 'true', role: 'work', 'work-item': item.id, 'from-session': result.sessionId },
     });
+  });
+
+  it('reports a failed run to every follower and skips one that already has the agent’s report', async () => {
+    const env = await withItem();
+    const result = (await env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })) as Started;
+    const follow = (sessionId: string) =>
+      env.seed.workItems.subscribeToWorkItem({
+        orgId: 'org-1',
+        factoryProjectId: env.scope.factoryProjectId,
+        workItemId: env.item.id,
+        sessionId,
+        threadId: sessionId,
+        resourceId: sessionId,
+        userId: 'user-2',
+        reason: 'subscribed',
+      });
+    await follow('teammate');
+    await follow('reviewer');
+    await env.notifications.createNotification({
+      source: 'factory-session',
+      kind: 'failed',
+      priority: 'urgent',
+      summary: 'gave up',
+      threadId: 'reviewer',
+      resourceId: 'reviewer',
+      attributes: { 'from-session': result.sessionId },
+    });
+    const session = env.created.find(entry => entry.options.resourceId === result.sessionId)!.session;
+
+    session.emit({ type: 'agent_end', reason: 'error' } as AgentControllerEvent);
+
+    await vi.waitFor(() => expect(env.reports).toHaveLength(2));
+    expect(env.reports.map(report => report.target.threadId).sort()).toEqual([env.scope.threadId, 'teammate'].sort());
+    for (const report of env.reports) {
+      expect(report.input).toMatchObject({ kind: 'failed', priority: 'urgent', attributes: { backstop: 'true' } });
+    }
   });
 
   it('lets the spawned session report with factory_message_origin without approval', async () => {
