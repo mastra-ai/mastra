@@ -39,27 +39,36 @@ function choiceToAttachment(choice: AttachmentChoice): 'auto' | boolean {
 
 /**
  * Token count field with steppers. It stays editable while a save is in flight, since
- * disabling it would drop focus mid-edit; each save returns the full config, so the
- * last response wins.
+ * disabling it would drop focus mid-edit; each save returns the full config.
  */
 function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (value: number) => void }) {
   const [draft, setDraft] = useState<number | null>(value);
+  // The last value this field asked to save, so a draft is compared with what was sent,
+  // not with a saved value whose response may still be on its way.
+  const [sent, setSent] = useState(value);
+  const [editing, setEditing] = useState(false);
   const [syncedValue, setSyncedValue] = useState(value);
-  // Follow the saved value (e.g. after another surface changed it) without remounting,
-  // so focus stays on the field or stepper the person is using.
+  // Follow the saved value (e.g. after another surface changed it) without remounting, so
+  // focus stays put. While the person is still in the field, a save landing must not
+  // overwrite what they are typing; leaving the field saves the draft.
   if (syncedValue !== value) {
     setSyncedValue(value);
-    setDraft(value);
+    if (!editing) {
+      setDraft(value);
+      setSent(value);
+    }
   }
 
   const commit = (next: number | null) => {
     const rounded = next == null ? NaN : Math.round(next);
     if (!Number.isFinite(rounded) || rounded <= 0) {
-      setDraft(value);
+      setDraft(sent);
       return;
     }
     setDraft(rounded);
-    if (rounded !== value) onCommit(rounded);
+    if (rounded === sent) return;
+    setSent(rounded);
+    onCommit(rounded);
   };
 
   return (
@@ -76,7 +85,13 @@ function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (va
       }}
       className="sm:w-64 sm:shrink-0"
     >
-      <InputNumberGroup size="sm">
+      <InputNumberGroup
+        size="sm"
+        onFocus={() => setEditing(true)}
+        onBlur={event => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setEditing(false);
+        }}
+      >
         <InputNumberInput onBlur={() => commit(draft)} />
         <InputGroupAddon align="inline-end">
           <InputGroupText>tokens</InputGroupText>

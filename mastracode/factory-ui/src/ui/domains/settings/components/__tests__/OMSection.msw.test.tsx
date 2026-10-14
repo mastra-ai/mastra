@@ -233,6 +233,45 @@ describe('OMSection', () => {
     await waitFor(() => expect(input).toHaveValue('3,000'));
   });
 
+  it('keeps what is being typed when an earlier save lands, then saves it', async () => {
+    const requests: unknown[] = [];
+    let releaseFirstSave: () => void = () => {};
+    const firstSaveHeld = new Promise<void>(resolve => {
+      releaseFirstSave = resolve;
+    });
+    server.use(
+      http.get(OM_URL, () => HttpResponse.json({ config: baseConfig })),
+      http.put(`${OM_URL}/thresholds`, async ({ request }) => {
+        const body = (await request.json()) as { observationThreshold: number };
+        requests.push(body);
+        if (requests.length === 1) await firstSaveHeld;
+        return HttpResponse.json({ ok: true, config: { ...baseConfig, ...body } });
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderWithProviders(<OMSection models={models} />);
+
+    const input = await screen.findByRole('textbox', { name: 'Messages before observation' });
+    await user.clear(input);
+    await user.type(input, '2000');
+    await user.tab();
+    await waitFor(() => expect(requests).toEqual([{ observationThreshold: 2000 }]));
+
+    // Back in the field before the first save has answered.
+    await user.clear(input);
+    await user.type(input, '3000');
+    // The model pickers lock while any save is pending, so their unlocking marks the first save landing.
+    expect(screen.getByRole('combobox', { name: 'Observer model' })).toBeDisabled();
+    releaseFirstSave();
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Observer model' })).toBeEnabled());
+    expect(input).toHaveValue('3000');
+
+    await user.click(document.body);
+    await waitFor(() => expect(requests).toEqual([{ observationThreshold: 2000 }, { observationThreshold: 3000 }]));
+    await waitFor(() => expect(input).toHaveValue('3,000'));
+  });
+
   it('keeps the saved threshold when the field is cleared', async () => {
     let requested = false;
     server.use(
