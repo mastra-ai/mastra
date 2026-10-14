@@ -315,7 +315,7 @@ describe('Knowledge vouch hook', () => {
 
   it('gives a vouched custom scope no owner grant', () => {
     const plan = materializeKnowledgeScopePlan(undefined, {
-      address: 'project:alpha',
+      address: 'team:alpha',
       contextualScopeAddress: 'resource:caller',
       vouch: () => 'unused',
     });

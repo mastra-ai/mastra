@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
+import { setRunAgentScopes } from '../../agent/scopes';
 import { ConsoleLogger } from '../../logger';
 import { Mastra } from '../../mastra';
-import { InMemoryStore, KnowledgeInvisibleRecordError, MastraCompositeStore } from '../../storage';
-import { setRunAgentScopes } from '../../agent/scopes';
 import { MASTRA_SCOPES_KEY, RequestContext } from '../../request-context';
+import { InMemoryStore, KnowledgeInvisibleRecordError, MastraCompositeStore } from '../../storage';
 import { Knowledge } from '../index';
 
 const scopeIds = ['10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002'];
