@@ -1,6 +1,7 @@
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { ExperimentsBulkActions } from './experiments-bulk-actions';
 import type { ExperimentsBulkActionsProps } from './experiments-bulk-actions';
+import { ExperimentsComparableLegend } from './experiments-comparable-legend';
 import { ExperimentsFilterBar } from './experiments-filter-bar';
 import type { ExperimentsFilters } from './experiments-filter-bar';
 
@@ -13,6 +14,8 @@ export interface ExperimentsToolbarProps extends ExperimentsFilters {
   onFiltersChange: (next: ExperimentsFilters) => void;
   datasetOptions: ExperimentsToolbarDatasetOption[];
   selection: ExperimentsBulkActionsProps;
+  /** Dataset of the first selected experiment, explained by the legend. */
+  comparableDatasetId?: string;
 }
 
 export function ExperimentsToolbar({
@@ -24,23 +27,31 @@ export function ExperimentsToolbar({
   targetId,
   onFiltersChange,
   selection,
+  comparableDatasetId,
 }: ExperimentsToolbarProps) {
   return (
-    <ActionRow>
-      <ActionRow.Start>
-        <ExperimentsFilterBar
-          search={search}
-          statusFilter={statusFilter}
-          datasetFilter={datasetFilter}
-          datasetOptions={datasetOptions}
-          targetType={targetType}
-          targetId={targetId}
-          onChange={onFiltersChange}
-        />
-      </ActionRow.Start>
-      <ActionRow.End>
-        <ExperimentsBulkActions {...selection} />
-      </ActionRow.End>
-    </ActionRow>
+    <>
+      <ActionRow>
+        <ActionRow.Start>
+          <ExperimentsFilterBar
+            search={search}
+            statusFilter={statusFilter}
+            datasetFilter={datasetFilter}
+            datasetOptions={datasetOptions}
+            targetType={targetType}
+            targetId={targetId}
+            onChange={onFiltersChange}
+          />
+        </ActionRow.Start>
+      </ActionRow>
+      <ActionRow>
+        <ActionRow.Start>
+          <ExperimentsComparableLegend datasetId={comparableDatasetId} />
+        </ActionRow.Start>
+        <ActionRow.End>
+          <ExperimentsBulkActions {...selection} />
+        </ActionRow.End>
+      </ActionRow>
+    </>
   );
 }

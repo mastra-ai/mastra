@@ -227,14 +227,16 @@ describe('ComparisonSideHeader', () => {
       costUnit: 'usd',
       tokens: 12400,
     };
+    const summary = [{ scorerId: 'relevancy', average: 0.5, delta: null }];
 
-    it('lists the total cost, the average duration and the total tokens first', () => {
+    it('lists the total cost, the average duration, the average score and the total tokens first', () => {
       renderColumn(
         <ComparisonSideHeader
           role="baseline"
           label="Baseline"
           experiment={namedExperiment}
           metrics={metrics}
+          summary={summary}
           showUsage
         />,
       );
@@ -242,18 +244,19 @@ describe('ComparisonSideHeader', () => {
       const terms = within(summaryRegion())
         .getAllByRole('term')
         .map(term => term.textContent);
-      expect(terms.slice(0, 3)).toEqual(['Total cost', 'Avg duration', 'Total tokens']);
+      expect(terms.slice(0, 4)).toEqual(['Total cost', 'Avg duration', 'Avg score', 'Total tokens']);
       expect(within(summaryRegion()).getByText('$0.0015')).toBeDefined();
       expect(within(summaryRegion()).getByText('12,400')).toBeDefined();
     });
 
-    it('emphasizes the total cost and the average duration values with a larger, bolder font', () => {
+    it('emphasizes the total cost, the average duration and the average score values with a larger, bolder font', () => {
       renderColumn(
         <ComparisonSideHeader
           role="baseline"
           label="Baseline"
           experiment={namedExperiment}
           metrics={metrics}
+          summary={summary}
           showUsage
         />,
       );
@@ -262,7 +265,7 @@ describe('ComparisonSideHeader', () => {
         within(summaryRegion())
           .getAllByRole('term')
           .find(term => term.textContent === label)?.nextElementSibling;
-      for (const term of ['Total cost', 'Avg duration']) {
+      for (const term of ['Total cost', 'Avg duration', 'Avg score']) {
         expect(valueOf(term)?.className).toContain('text-heading');
         expect(valueOf(term)?.className).toContain('font-semibold');
       }
