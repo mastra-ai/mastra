@@ -18,7 +18,6 @@ describe('FactoryProjectsStorage', () => {
       name: 'Platform',
       description: 'Internal platform work',
       modelScope: 'factory',
-      slackWorkItemsEnabled: false,
     });
     expect(await seed.projects.get({ orgId: 'org-1', id: project.id })).toEqual(project);
     expect(await seed.projects.get({ orgId: 'other-org', id: project.id })).toBeNull();
@@ -35,13 +34,9 @@ describe('FactoryProjectsStorage', () => {
     const updated = await seed.projects.update({
       orgId: 'org-1',
       id: first.id,
-      input: { name: 'Renamed', description: 'Now documented', slackWorkItemsEnabled: true },
+      input: { name: 'Renamed', description: 'Now documented' },
     });
-    expect(updated).toMatchObject({
-      name: 'Renamed',
-      description: 'Now documented',
-      slackWorkItemsEnabled: true,
-    });
+    expect(updated).toMatchObject({ name: 'Renamed', description: 'Now documented' });
     expect(await seed.projects.update({ orgId: 'org-2', id: first.id, input: { name: 'Nope' } })).toBeNull();
 
     const scoped = await seed.projects.update({
