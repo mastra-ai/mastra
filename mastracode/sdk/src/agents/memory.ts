@@ -303,9 +303,6 @@ export function getDynamicMemory(
         orgUnresolvedRefusal = true;
         reportOrgUnresolved(controller, identity.knowledgeResourceId, identity.reason);
       }
-      if (identity.knowledgeResourceId) {
-        requestContext.set('knowledgeResourceId', identity.knowledgeResourceId);
-      }
     }
 
     const subconsciousAvailable = subconsciousEnabled && !orgUnresolvedRefusal;
