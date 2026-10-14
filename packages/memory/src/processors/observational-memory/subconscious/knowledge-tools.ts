@@ -143,41 +143,38 @@ async function serializeNode(store: KnowledgeStorage, node: KnowledgeNode) {
   };
 }
 
+// The semantic index only returns candidates storage's listVisibleKnowledgeIds admits, and a visible
+// record implies its own node is visible, so hits are shaped here without re-checking visibility.
 async function loadSemanticResult(
   store: KnowledgeStorage,
-  scopeIds: KnowledgeScopeIds,
   candidate: { id: string; score: number; metadata?: Record<string, unknown> },
 ): Promise<(SearchKnowledgeResult & { semanticScore: number }) | null> {
   const type = candidate.metadata?.document_type;
   if (type === 'node') {
     const node = await store.getNode(candidate.id.slice('knowledge:node:'.length));
     if (!node) return null;
-    const nodeScopeIds = await store.getNodeScopeIds(node.id);
-    if (!isKnowledgeScopeVisible(nodeScopeIds, scopeIds)) return null;
     return {
       type: 'node',
       id: node.id,
       recordId: node.id,
       name: node.name,
       text: `${node.name}\n${String(node.metadata?.description ?? '')}`,
-      scopeIds: nodeScopeIds,
+      scopeIds: await store.getNodeScopeIds(node.id),
       semanticScore: candidate.score,
     };
   }
   if (type === 'record') {
     const record = await store.getRecord({ id: candidate.id.slice('knowledge:record:'.length) });
     if (!record) return null;
-    const recordScopeIds = await store.getRecordScopeIds(record.id);
-    if (!isKnowledgeScopeVisible(recordScopeIds, scopeIds)) return null;
     const node = await store.getNode(record.nodeId);
-    const nodeVisible = node ? isKnowledgeScopeVisible(await store.getNodeScopeIds(node.id), scopeIds) : false;
+    if (!node) return null;
     return {
       type: 'record',
       id: record.id,
-      recordId: nodeVisible ? node!.id : record.id,
-      name: nodeVisible ? node!.name : '(private node)',
+      recordId: node.id,
+      name: node.name,
       text: record.text,
-      scopeIds: recordScopeIds,
+      scopeIds: await store.getRecordScopeIds(record.id),
       semanticScore: candidate.score,
     };
   }
@@ -237,7 +234,7 @@ export function createKnowledgeTools(
       const semanticCandidates = semanticIndex ? await semanticIndex.search(query, scopeIds, limit * 2) : [];
       const lexical = await store.search({ query, scopeIds, limit: limit * 2 });
       const semantic = (
-        await Promise.all(semanticCandidates.map(candidate => loadSemanticResult(store, scopeIds, candidate)))
+        await Promise.all(semanticCandidates.map(candidate => loadSemanticResult(store, candidate)))
       ).filter((result): result is NonNullable<typeof result> => Boolean(result));
       return { query, results: mergeHybridResults(lexical, semantic, limit) };
     },
