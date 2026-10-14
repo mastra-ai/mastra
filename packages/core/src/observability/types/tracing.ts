@@ -184,6 +184,11 @@ export interface AgentRunAttributes extends AIBaseAttributes {
     /** Additional metadata */
     metadata?: unknown;
   };
+  /**
+   * Time to first chunk in milliseconds, copied from the first
+   * MODEL_GENERATION span of this run. Absent when no model streamed a chunk.
+   */
+  timeToFirstChunkMs?: number;
 }
 
 /**
@@ -336,6 +341,11 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
    * Only applicable for streaming responses.
    */
   completionStartTime?: Date;
+  /**
+   * Time to first chunk in milliseconds. Equals the first MODEL_INFERENCE
+   * span's `timeToFirstChunkMs`. Absent when no chunk was streamed.
+   */
+  timeToFirstChunkMs?: number;
   /** Actual model used in the response (may differ from request model) */
   responseModel?: string;
   /** Unique identifier for the response */
@@ -392,6 +402,11 @@ export interface ModelInferenceAttributes extends AIBaseAttributes {
    * Only applicable for streaming responses.
    */
   completionStartTime?: Date;
+  /**
+   * Time to first chunk in milliseconds: `completionStartTime` minus the span
+   * start. Absent when no chunk was streamed.
+   */
+  timeToFirstChunkMs?: number;
   /** Result warnings */
   warnings?: Record<string, any>;
   /** Actual model used in the response (may differ from request model) */
@@ -1640,6 +1655,12 @@ export interface IModelSpanTracker {
   reportGenerationError(options: ErrorSpanOptions<SpanType.MODEL_GENERATION>): void;
   endGeneration(options?: EndGenerationOptions): void;
   updateGeneration(options: UpdateSpanOptions<SpanType.MODEL_GENERATION>): void;
+  /**
+   * Time to first chunk of the first inference seen by this tracker, in ms.
+   * Durable execution reads it per step and carries it to the final
+   * `endGeneration`, since that step uses a fresh tracker.
+   */
+  getTimeToFirstChunkMs?(): number | undefined;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
   startStep(payload?: StepStartPayload): void;
   updateStep?(payload?: StepStartPayload): void;

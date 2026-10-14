@@ -2389,4 +2389,125 @@ describe('ModelSpanTracker', () => {
       });
     });
   });
+
+  describe('time to first chunk', () => {
+    let now: number;
+
+    beforeEach(() => {
+      coreFeatures.add('model-inference-span');
+      // Fake only the clock; real timers let the stream yield between chunks.
+      vi.useFakeTimers({ toFake: ['Date'] });
+      now = Date.parse('2026-01-01T00:00:00Z');
+      vi.setSystemTime(now);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    /** Each chunk arrives `gapMs` after the previous one was processed, so spans get distinct clocks. */
+    function tickingStream<T>(chunks: T[], gapMs: number): ReadableStream<T> {
+      let index = 0;
+      return new ReadableStream<T>({
+        async pull(controller) {
+          if (index < chunks.length) {
+            await new Promise(resolve => setTimeout(resolve, 0));
+            vi.setSystemTime((now += gapMs));
+            controller.enqueue(chunks[index++]!);
+          } else {
+            controller.close();
+          }
+        },
+      });
+    }
+
+    const stepFinish = (reason: string) => ({
+      type: 'step-finish',
+      payload: { output: { usage: {} }, stepResult: { reason, warnings: [] }, metadata: {} },
+    });
+
+    it('stamps each inference with its own TTFT and copies the first one to the generation and AGENT_RUN', async () => {
+      const agentSpan = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent run' });
+      const modelSpan = agentSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'generation',
+        attributes: { model: 'gpt-test', provider: 'test', streaming: true },
+      });
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      // Inference 0: starts at step-start, first chunk one tick later, then two more ticks of text.
+      // Inference 1: starts three ticks after inference 0's first chunk; its first chunk one tick later.
+      await consumeStream(
+        tracker.wrapStream(
+          tickingStream(
+            [
+              { type: 'step-start', payload: {} },
+              { type: 'text-delta', payload: { text: 'a' } },
+              { type: 'text-delta', payload: { text: 'b' } },
+              stepFinish('tool-calls'),
+              { type: 'step-start', payload: {} },
+              { type: 'text-delta', payload: { text: 'c' } },
+              stepFinish('stop'),
+            ],
+            100,
+          ),
+        ),
+      );
+      tracker.endGeneration();
+      agentSpan.end();
+
+      const inferences = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+      expect(inferences.map(s => s.attributes?.timeToFirstChunkMs)).toEqual([100, 100]);
+      const [generation] = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+      expect(generation!.attributes?.timeToFirstChunkMs).toBe(100);
+      const [agentRun] = testExporter.getSpansByType(SpanType.AGENT_RUN);
+      expect(agentRun!.attributes?.timeToFirstChunkMs).toBe(100);
+    });
+
+    it('keeps the first generation value on AGENT_RUN when a later generation ends', async () => {
+      const agentSpan = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent run' });
+      const chunks = [
+        { type: 'step-start', payload: {} },
+        { type: 'text-delta', payload: { text: 'a' } },
+        stepFinish('stop'),
+      ];
+
+      for (const gapMs of [100, 300]) {
+        const modelSpan = agentSpan.createChildSpan({
+          type: SpanType.MODEL_GENERATION,
+          name: `generation ${gapMs}`,
+          attributes: { model: 'gpt-test', provider: 'test', streaming: true },
+        });
+        const tracker = new ModelSpanTracker(modelSpan);
+        await consumeStream(tracker.wrapStream(tickingStream(chunks, gapMs)));
+        tracker.endGeneration();
+      }
+      agentSpan.end();
+
+      const generations = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+      expect(generations.map(s => s.attributes?.timeToFirstChunkMs)).toEqual([100, 300]);
+      const [agentRun] = testExporter.getSpansByType(SpanType.AGENT_RUN);
+      expect(agentRun!.attributes?.timeToFirstChunkMs).toBe(100);
+    });
+
+    it('leaves TTFT unset everywhere when no chunk was streamed', async () => {
+      const agentSpan = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent run' });
+      const modelSpan = agentSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'generation',
+        attributes: { model: 'gpt-test', provider: 'test', streaming: true },
+      });
+      const tracker = new ModelSpanTracker(modelSpan);
+      await consumeStream(
+        tracker.wrapStream(tickingStream([{ type: 'step-start', payload: {} }, stepFinish('stop')], 100)),
+      );
+      tracker.endGeneration();
+      agentSpan.end();
+
+      for (const type of [SpanType.MODEL_INFERENCE, SpanType.MODEL_GENERATION, SpanType.AGENT_RUN]) {
+        const [span] = testExporter.getSpansByType(type);
+        expect(span!.attributes).not.toHaveProperty('timeToFirstChunkMs');
+      }
+    });
+  });
 });

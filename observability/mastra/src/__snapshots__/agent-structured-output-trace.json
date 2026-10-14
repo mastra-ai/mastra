@@ -26,7 +26,8 @@
         "entityType": "agent",
         "entityId": "test-agent",
         "attributes": {
-          "instructions": "Return a simple response"
+          "instructions": "Return a simple response",
+          "timeToFirstChunkMs": "<duration>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -63,6 +64,7 @@
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
               "completionStartTime": "<date>",
+              "timeToFirstChunkMs": "<duration>",
               "usage": {
                 "inputTokens": 15,
                 "outputTokens": 25,
@@ -288,6 +290,7 @@
                       },
                       "finishReason": "stop",
                       "completionStartTime": "<date>",
+                      "timeToFirstChunkMs": "<duration>",
                       "responseModel": "mock-model-id"
                     },
                     "metadata": {

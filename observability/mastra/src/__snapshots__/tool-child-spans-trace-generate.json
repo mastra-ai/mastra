@@ -30,7 +30,8 @@
         "entityId": "child-span-agent",
         "attributes": {
           "instructions": "You use tools that create child spans",
-          "availableTools": ["childSpanTool"]
+          "availableTools": ["childSpanTool"],
+          "timeToFirstChunkMs": "<duration>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -82,6 +83,7 @@
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
               "completionStartTime": "<date>",
+              "timeToFirstChunkMs": "<duration>",
               "usage": {
                 "inputTokens": 30,
                 "outputTokens": 35,
@@ -337,6 +339,7 @@
                       "finishReason": "tool-calls",
                       "warnings": [],
                       "completionStartTime": "<date>",
+                      "timeToFirstChunkMs": "<duration>",
                       "responseModel": "mock-model-id"
                     },
                     "metadata": {
@@ -748,6 +751,7 @@
                       "finishReason": "stop",
                       "warnings": [],
                       "completionStartTime": "<date>",
+                      "timeToFirstChunkMs": "<duration>",
                       "responseModel": "mock-model-id"
                     },
                     "metadata": {

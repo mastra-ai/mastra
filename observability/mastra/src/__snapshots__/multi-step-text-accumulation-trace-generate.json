@@ -30,7 +30,8 @@
         "entityId": "multi-step-agent",
         "attributes": {
           "instructions": "You are a helpful calculator assistant that announces what you will do before doing it.",
-          "availableTools": ["calculator"]
+          "availableTools": ["calculator"],
+          "timeToFirstChunkMs": "<duration>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -88,6 +89,7 @@
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
               "completionStartTime": "<date>",
+              "timeToFirstChunkMs": "<duration>",
               "usage": {
                 "inputTokens": 30,
                 "outputTokens": 25,
@@ -353,6 +355,7 @@
                       "finishReason": "tool-calls",
                       "warnings": [],
                       "completionStartTime": "<date>",
+                      "timeToFirstChunkMs": "<duration>",
                       "responseModel": "mock-model-id"
                     },
                     "metadata": {
@@ -792,6 +795,7 @@
                       "finishReason": "stop",
                       "warnings": [],
                       "completionStartTime": "<date>",
+                      "timeToFirstChunkMs": "<duration>",
                       "responseModel": "mock-model-id"
                     },
                     "metadata": {

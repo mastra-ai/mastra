@@ -420,6 +420,8 @@ export interface DurableLLMStepOutput {
   stepFinishPayload?: unknown;
   /** Deferred step-finish chunk carried until continuation policy resolves. */
   deferredStepFinishChunk?: unknown;
+  /** TTFT of this step's inference in ms (first one is kept for the generation) */
+  timeToFirstChunkMs?: number;
 }
 
 /**
@@ -563,6 +565,8 @@ export interface DurableAgenticExecutionOutput {
   delegationBailed?: boolean;
   /** Step-finish chunk awaiting the loop's final continuation decision */
   deferredStepFinishChunk?: unknown;
+  /** TTFT of this iteration's inference in ms */
+  timeToFirstChunkMs?: number;
 }
 
 /**

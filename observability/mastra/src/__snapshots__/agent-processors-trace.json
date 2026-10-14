@@ -37,7 +37,8 @@
         "entityType": "agent",
         "entityId": "test-agent",
         "attributes": {
-          "instructions": "You are a helpful assistant"
+          "instructions": "You are a helpful assistant",
+          "timeToFirstChunkMs": "<duration>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -114,7 +115,8 @@
                 "entityType": "agent",
                 "entityId": "validator-agent",
                 "attributes": {
-                  "instructions": "You validate input messages"
+                  "instructions": "You validate input messages",
+                  "timeToFirstChunkMs": "<duration>"
                 },
                 "metadata": {
                   "runId": "<runId-2>",
@@ -148,6 +150,7 @@
                       "responseId": "<responseId-1>",
                       "responseModel": "mock-model-id",
                       "completionStartTime": "<date>",
+                      "timeToFirstChunkMs": "<duration>",
                       "usage": {
                         "inputTokens": 15,
                         "outputTokens": 25,
@@ -368,6 +371,7 @@
                               "finishReason": "stop",
                               "warnings": [],
                               "completionStartTime": "<date>",
+                              "timeToFirstChunkMs": "<duration>",
                               "responseModel": "mock-model-id"
                             },
                             "metadata": {
@@ -446,6 +450,7 @@
               "responseId": "<responseId-2>",
               "responseModel": "mock-model-id",
               "completionStartTime": "<date>",
+              "timeToFirstChunkMs": "<duration>",
               "usage": {
                 "inputTokens": 15,
                 "outputTokens": 25,
@@ -664,6 +669,7 @@
                       },
                       "finishReason": "stop",
                       "completionStartTime": "<date>",
+                      "timeToFirstChunkMs": "<duration>",
                       "responseModel": "mock-model-id"
                     },
                     "metadata": {
@@ -785,7 +791,8 @@
                 "entityType": "agent",
                 "entityId": "summarizer-agent",
                 "attributes": {
-                  "instructions": "You summarize text concisely"
+                  "instructions": "You summarize text concisely",
+                  "timeToFirstChunkMs": "<duration>"
                 },
                 "metadata": {
                   "runId": "<runId-3>",
@@ -819,6 +826,7 @@
                       "responseId": "<responseId-3>",
                       "responseModel": "mock-model-id",
                       "completionStartTime": "<date>",
+                      "timeToFirstChunkMs": "<duration>",
                       "usage": {
                         "inputTokens": 15,
                         "outputTokens": 25,
@@ -1039,6 +1047,7 @@
                               "finishReason": "stop",
                               "warnings": [],
                               "completionStartTime": "<date>",
+                              "timeToFirstChunkMs": "<duration>",
                               "responseModel": "mock-model-id"
                             },
                             "metadata": {

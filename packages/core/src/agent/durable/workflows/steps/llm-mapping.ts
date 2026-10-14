@@ -58,6 +58,7 @@ const durableLLMMappingOutputSchema = z.object({
   processorRetryCount: z.number().optional(),
   processorRetryFeedback: z.string().optional(),
   deferredStepFinishChunk: z.any().optional(),
+  timeToFirstChunkMs: z.number().optional(),
 });
 
 /**
@@ -399,6 +400,7 @@ export function createDurableLLMMappingStep() {
         processorRetryFeedback: llmOutput.processorRetryFeedback,
         delegationBailed,
         deferredStepFinishChunk,
+        timeToFirstChunkMs: llmOutput.timeToFirstChunkMs,
       };
 
       // Close the MODEL_STEP span for tool-calling iterations: the LLM step defers it so

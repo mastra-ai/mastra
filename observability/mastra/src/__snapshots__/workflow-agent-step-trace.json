@@ -77,7 +77,8 @@
                 "entityType": "agent",
                 "entityId": "test-agent",
                 "attributes": {
-                  "instructions": "You are a test agent"
+                  "instructions": "You are a test agent",
+                  "timeToFirstChunkMs": "<duration>"
                 },
                 "metadata": {
                   "runId": "<runId-2>",
@@ -111,6 +112,7 @@
                       "responseId": "<responseId-1>",
                       "responseModel": "mock-model-id",
                       "completionStartTime": "<date>",
+                      "timeToFirstChunkMs": "<duration>",
                       "usage": {
                         "inputTokens": 15,
                         "outputTokens": 25,
@@ -329,6 +331,7 @@
                               },
                               "finishReason": "stop",
                               "completionStartTime": "<date>",
+                              "timeToFirstChunkMs": "<duration>",
                               "responseModel": "mock-model-id"
                             },
                             "metadata": {

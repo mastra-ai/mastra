@@ -224,6 +224,70 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
     expect(testExporter.getIncompleteSpans()).toHaveLength(0);
   });
 
+  it('DurableAgent tool call: generation and AGENT_RUN carry the first inference TTFT', async () => {
+    // TTFT is captured on streamed content deltas, so the tool-calling first
+    // step says a few words before it calls the tool.
+    let call = 0;
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream(
+          call++ === 0
+            ? [
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                { type: 'text-start', id: 'text-0' },
+                { type: 'text-delta', id: 'text-0', delta: 'Checking.' },
+                { type: 'text-end', id: 'text-0' },
+                {
+                  type: 'tool-call',
+                  toolCallType: 'function',
+                  toolCallId: 'call-1',
+                  toolName: 'get_weather',
+                  input: JSON.stringify({ city: 'Paris' }),
+                  providerExecuted: false,
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]
+            : [
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'It is 21C in Paris.' },
+                { type: 'text-end', id: 'text-1' },
+                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 15, outputTokens: 5, totalTokens: 20 } },
+              ],
+        ),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      }),
+    });
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'use the tool',
+      model: model as any,
+      tools: { get_weather: weatherTool },
+    });
+    const { wrapped } = buildMastra(testExporter, agent, 'durable');
+    await runToCompletion(wrapped, 'weather in paris?', testExporter);
+
+    // The final step ends the generation from a fresh tracker, so the value must
+    // survive the loop state; the rebuilt AGENT_RUN has no parent chain either.
+    const inferences = testExporter
+      .getSpansByType('model_inference' as any)
+      .sort((a: any, b: any) => +new Date(a.startTime) - +new Date(b.startTime));
+    const first = (inferences[0] as any).attributes?.timeToFirstChunkMs;
+    expect(first).toBeTypeOf('number');
+    const [generation] = testExporter.getSpansByType('model_generation' as any);
+    expect((generation as any).attributes?.timeToFirstChunkMs).toBe(first);
+    const [agentRun] = testExporter.getSpansByType('agent_run' as any);
+    expect((agentRun as any).attributes?.timeToFirstChunkMs).toBe(first);
+  });
+
   it('DurableAgent fatal model error: root, generation, step AND inference all closed (no dangling)', async () => {
     const agent = new Agent({ id: 'a', name: 'a', instructions: 'x', model: errorModel() as any });
     const { wrapped } = buildMastra(testExporter, agent, 'durable');

@@ -199,6 +199,8 @@ const durableLLMOutputSchema = z.object({
   // Deferred step-finish chunk carried until the loop predicate has resolved
   // the actual continuation decision.
   deferredStepFinishChunk: z.any().optional(),
+  // TTFT of this step's inference; the loop keeps the first one for the generation
+  timeToFirstChunkMs: z.number().optional(),
 });
 
 /**
@@ -2563,6 +2565,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               // Carry step-finish through the iteration so the loop predicate can
               // stamp and emit the actual post-policy continuation decision.
               deferredStepFinishChunk: deferredStepFinishChunk ?? undefined,
+              timeToFirstChunkMs: modelSpanTracker?.getTimeToFirstChunkMs?.(),
             };
 
             // 16. End step span only if there are NO tool calls

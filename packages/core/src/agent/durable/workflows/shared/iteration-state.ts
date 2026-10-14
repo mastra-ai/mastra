@@ -159,5 +159,7 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     // Carry span identity forward unchanged so every iteration shares one trace.
     agentSpanData: currentState.agentSpanData,
     modelSpanData: currentState.modelSpanData,
+    // First inference wins; later iterations never overwrite it.
+    timeToFirstChunkMs: currentState.timeToFirstChunkMs ?? executionOutput.timeToFirstChunkMs,
   };
 }
