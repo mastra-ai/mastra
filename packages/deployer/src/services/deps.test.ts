@@ -577,6 +577,29 @@ describe('Deps.pack', () => {
     expect(await readFile(manifestPath, 'utf-8')).toBe(original);
   });
 
+  it('serializes concurrent packs of the same versionless package', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mastra-deps-pack-'));
+    tempDirs.push(root);
+    await writeFile(join(root, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n", 'utf-8');
+    const manifestPath = join(root, 'package.json');
+    const original = '{"name":"@inner/versionless"}';
+    await writeFile(manifestPath, original, 'utf-8');
+
+    const versionsDuringPack: unknown[] = [];
+    runChildProcess.mockImplementation(async () => {
+      versionsDuringPack.push(JSON.parse(await readFile(manifestPath, 'utf-8')).version);
+      await new Promise(resolve => setTimeout(resolve, 10));
+      return { success: true, stdout: '', stderr: '' };
+    });
+
+    const service = new DepsService(root);
+    const args = { dir: root, destination, sanitizedName: 'inner-versionless', version: '0.0.0' };
+    await Promise.all([service.pack(args), service.pack(args)]);
+
+    expect(versionsDuringPack).toEqual(['0.0.0', '0.0.0']);
+    expect(await readFile(manifestPath, 'utf-8')).toBe(original);
+  });
+
   it('does not rewrite a manifest that already has a version', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mastra-deps-pack-'));
     tempDirs.push(root);

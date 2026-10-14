@@ -15,6 +15,22 @@ type PackageManager = 'npm' | 'yarn' | 'pnpm' | 'bun';
 /** Version used to pack private workspace packages whose package.json has no `version`. */
 export const WORKSPACE_PLACEHOLDER_VERSION = '0.0.0';
 
+// Serializes the temporary manifest rewrite so concurrent packs of the same
+// package never read or restore each other's injected version.
+const manifestLocks = new Map<string, Promise<unknown>>();
+
+function withManifestLock<T>(manifestPath: string, operation: () => Promise<T>): Promise<T> {
+  const key = path.resolve(manifestPath);
+  const previous = manifestLocks.get(key) ?? Promise.resolve();
+  const current = previous.catch(() => {}).then(operation);
+  const tail = current.catch(() => {});
+  manifestLocks.set(key, tail);
+  void tail.then(() => {
+    if (manifestLocks.get(key) === tail) manifestLocks.delete(key);
+  });
+  return current;
+}
+
 interface LockFileInfo {
   path: string;
   filename: string;
@@ -332,33 +348,35 @@ export class Deps extends MastraBase {
     // Package managers refuse to pack a manifest without a version, so give
     // versionless private workspace packages one for the duration of the pack.
     const manifestPath = path.join(dir, 'package.json');
-    const originalManifest = await fsPromises.readFile(manifestPath, 'utf-8').catch(() => undefined);
-    if (originalManifest === undefined) {
-      return runPack();
-    }
-    const manifest = JSON.parse(originalManifest) as PackageJson;
-    if (manifest.version) {
-      return runPack();
-    }
-
-    // Write via temp file + rename so an interrupted write never leaves a truncated manifest.
-    const writeManifestAtomically = async (contents: string) => {
-      const tmpPath = `${manifestPath}.${process.pid}.${Date.now()}.tmp`;
-      try {
-        await fsPromises.writeFile(tmpPath, contents);
-        await fsPromises.rename(tmpPath, manifestPath);
-      } catch (error) {
-        await fsPromises.rm(tmpPath, { force: true });
-        throw error;
+    return withManifestLock(manifestPath, async () => {
+      const originalManifest = await fsPromises.readFile(manifestPath, 'utf-8').catch(() => undefined);
+      if (originalManifest === undefined) {
+        return runPack();
       }
-    };
+      const manifest = JSON.parse(originalManifest) as PackageJson;
+      if (manifest.version) {
+        return runPack();
+      }
 
-    await writeManifestAtomically(JSON.stringify({ ...manifest, version }, null, 2) + '\n');
-    try {
-      return await runPack();
-    } finally {
-      await writeManifestAtomically(originalManifest);
-    }
+      // Write via temp file + rename so an interrupted write never leaves a truncated manifest.
+      const writeManifestAtomically = async (contents: string) => {
+        const tmpPath = `${manifestPath}.${process.pid}.${Date.now()}.tmp`;
+        try {
+          await fsPromises.writeFile(tmpPath, contents);
+          await fsPromises.rename(tmpPath, manifestPath);
+        } catch (error) {
+          await fsPromises.rm(tmpPath, { force: true });
+          throw error;
+        }
+      };
+
+      await writeManifestAtomically(JSON.stringify({ ...manifest, version }, null, 2) + '\n');
+      try {
+        return await runPack();
+      } finally {
+        await writeManifestAtomically(originalManifest);
+      }
+    });
   }
 
   private findPnpmWorkspaceFile(dir: string): string | null {
