@@ -1,12 +1,14 @@
 import { useLocation, useParams } from 'react-router';
 
 import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useParkedSessions, useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { allSessionRows, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { itemAwaitsPerson } from '../../factory/boardCardState';
+import { itemBoard } from '../../factory/boardStages';
 import { useItemDecisions } from '../../factory/hooks/useBoardDecisions';
 import { buildFactorySessionRow, buildUserSessionRow } from '../services/sessionRows';
 import type { SessionListRow } from '../services/sessionRows';
@@ -27,6 +29,7 @@ export function useSessionListRows(factoryId: string | undefined): {
   const workItems = useWorkItemsQuery(factoryId);
   const parkedSessions = useParkedSessions(factoryId);
   const { proposalByItem, effectByItem } = useItemDecisions(factoryId);
+  const catalog = useBoardCatalog(factoryId);
   const viewer = useFactoryAuth().data?.user;
   const { pinnedSessions } = usePinnedSessions();
   const runningById = useActiveRunResources({
@@ -57,6 +60,7 @@ export function useSessionListRows(factoryId: string | undefined): {
       buildFactorySessionRow({
         session,
         item: workItem?.item,
+        boardDefinition: workItem && catalog.data?.find(board => board.id === itemBoard(workItem.item)),
         threadId: workItem?.threadId,
         pullRequest: workItem?.pullRequest,
         factoryId,

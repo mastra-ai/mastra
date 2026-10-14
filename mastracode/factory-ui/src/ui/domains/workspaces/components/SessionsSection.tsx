@@ -19,15 +19,10 @@ import {
   filterSessionRows,
   sessionOwnerOptions,
 } from '../services/sessionFilters';
-import {
-  DEFAULT_SESSION_GROUP_BY,
-  collapsedRowsKeepingActive,
-  groupSessionRows,
-  sessionGroupOrder,
-} from '../services/sessionGroups';
+import { collapsedRowsKeepingActive, groupSessionRows, sessionGroupOrder } from '../services/sessionGroups';
 import type { SessionGroupContext } from '../services/sessionGroups';
 import { pullRequestMergeTargets } from '../services/sessionRows';
-import { DEFAULT_SESSION_SORT, SESSION_SORT_OPTIONS, compareSessionRows } from '../services/sessionSort';
+import { SESSION_SORT_OPTIONS, compareSessionRows } from '../services/sessionSort';
 import { DeleteSessionDialog } from './DeleteSessionDialog';
 import { SessionGroupList } from './SessionGroupList';
 import { SessionGroupMenu } from './SessionGroupMenu';
@@ -40,19 +35,13 @@ export function SessionsSection() {
   const navigate = useNavigate();
   const { rows, hasRepositories, loaded, loadFailed, retry } = useSessionListRows(factoryId);
   const catalog = useBoardCatalog(factoryId);
-  const { view, updateView, resetView } = useSessionListView();
+  const { view, changedSettingCount, updateView, resetView } = useSessionListView();
   const viewerUserId = useFactoryAuth().data?.user?.userId;
   const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters(viewerUserId);
   const deletion = useSessionDeletion(factoryId, resourceId);
 
   const hiddenGroupKeys = view.hiddenGroups[view.groupBy] ?? [];
   const storedGroupOrder = view.groupOrder[view.groupBy];
-  const changedCount =
-    Number(view.sort !== DEFAULT_SESSION_SORT) +
-    Number(view.groupBy !== DEFAULT_SESSION_GROUP_BY) +
-    Number(hiddenGroupKeys.length > 0) +
-    Number((storedGroupOrder?.length ?? 0) > 0) +
-    activeFilterCount;
 
   const sortedRows = rows.toSorted(compareSessionRows(view.sort));
   const filteredRows = filterSessionRows(sortedRows, filters, viewerUserId);
@@ -100,7 +89,7 @@ export function SessionsSection() {
               </Button>
             )}
             <SessionListProperties
-              changedCount={changedCount}
+              changedCount={changedSettingCount + activeFilterCount}
               onReset={() => {
                 resetView();
                 resetFilters();
