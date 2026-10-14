@@ -824,12 +824,9 @@ export type AgentControllerThinkingLevel = 'off' | 'low' | 'medium' | 'high' | '
  *
  * A logical message emits one `message_start` containing its initial
  * `MastraDBMessage`, zero or more compact id-addressed `message_update` deltas,
- * and one `message_end` after terminal metadata has been applied. `message_end`
- * carries the message's final `metadata` whenever it has any; prefer it over the
- * `message_start` metadata, which names the first model even when a fallback or a
- * later step finished the reply. Consumers reconstruct streamed text, reasoning,
- * and non-text message parts from ordered deltas, then use `message_end` to
- * finalize the matching entry.
+ * and one id-only `message_end` after terminal metadata has been applied.
+ * Consumers reconstruct streamed text, reasoning, and non-text message parts
+ * from ordered deltas, then use the id-only end to finalize the matching entry.
  */
 export type AgentControllerEvent =
   | { type: 'mode_changed'; modeId: string; previousModeId: string }
@@ -858,7 +855,7 @@ export type AgentControllerEvent =
         | { type: 'reasoning-delta'; index: number; delta: string }
         | { type: 'part'; index: number; part: MastraMessagePart };
     }
-  | { type: 'message_end'; id: string; metadata?: MastraDBMessage['content']['metadata'] }
+  | { type: 'message_end'; id: string }
   | ({ threadId?: string } & (
       | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown; title?: string }
       | { type: 'tool_approval_required'; toolCallId: string; toolName: string; args: unknown }

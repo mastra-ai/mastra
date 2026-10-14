@@ -157,11 +157,7 @@ function liveAssistantMetadata(events: AgentControllerEvent[], messageId: string
     (event): event is Extract<AgentControllerEvent, { type: 'message_start' }> =>
       event.type === 'message_start' && event.message.id === messageId,
   );
-  const end = events.find(
-    (event): event is Extract<AgentControllerEvent, { type: 'message_end' }> =>
-      event.type === 'message_end' && event.id === messageId,
-  );
-  return end?.metadata ?? start?.message.content.metadata;
+  return start?.message.content.metadata;
 }
 
 describe('stream ↔ persisted message identity', () => {
@@ -188,39 +184,6 @@ describe('stream ↔ persisted message identity', () => {
       expect(streamedStart?.message.content.metadata).toMatchObject({
         modelId: persistedMetadata?.modelId,
         provider: persistedMetadata?.provider,
-      });
-    },
-    30000,
-  );
-
-  it.each<Engine>(['default', 'durable'])(
-    'names the model that closed the reply when a later step runs on another model (%s engine)',
-    async engine => {
-      const second = createTextStreamModel('Found it.', { provider: 'second-provider', modelId: 'second-model' });
-      const { events, persistedAssistant } = await sendOneMessage(
-        {
-          model: createToolCallModel({ provider: 'first-provider', modelId: 'first-model' }),
-          tools: {
-            lookup: createTool({
-              id: 'lookup',
-              description: 'Looks something up',
-              inputSchema: z.object({}),
-              execute: async () => ({ found: true }),
-            }),
-          },
-          inputProcessors: [
-            { id: 'swap-model', processInputStep: ({ stepNumber }) => (stepNumber >= 1 ? { model: second } : {}) },
-          ],
-        },
-        engine,
-      );
-
-      expect(persistedAssistant).toHaveLength(1);
-      const reply = persistedAssistant[0]!;
-      expect(reply.content.metadata).toMatchObject({ modelId: 'second-model', provider: 'second-provider' });
-      expect(liveAssistantMetadata(events, reply.id)).toMatchObject({
-        modelId: 'second-model',
-        provider: 'second-provider',
       });
     },
     30000,

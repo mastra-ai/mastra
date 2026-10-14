@@ -27,7 +27,6 @@ describe('agent-controller message shape contract', () => {
     expectTypeOf<Extract<AgentControllerEvent, { type: 'message_end' }>>().toEqualTypeOf<{
       type: 'message_end';
       id: string;
-      metadata?: MastraDBMessage['content']['metadata'];
     }>();
   });
 });

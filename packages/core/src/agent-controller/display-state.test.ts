@@ -254,16 +254,6 @@ describe('message streaming', () => {
     emit(session, { type: 'message_end', id: 'm1' });
     expect(session.displayState.get().currentMessage).toEqual(msg1);
   });
-
-  it('takes the final metadata a message ends with, but not one for another message', () => {
-    emit(session, { type: 'message_start', message: msg1 as any });
-    emit(session, { type: 'message_end', id: 'other', metadata: { modelId: 'ignored-model' } });
-    emit(session, { type: 'message_end', id: 'm1', metadata: { modelId: 'fallback-model', stopReason: 'complete' } });
-    expect(session.displayState.get().currentMessage?.content.metadata).toEqual({
-      modelId: 'fallback-model',
-      stopReason: 'complete',
-    });
-  });
 });
 
 // ===========================================================================

@@ -3538,12 +3538,6 @@ export class SessionDisplayState {
       }
 
       case 'message_end':
-        if (event.metadata && ds.currentMessage?.id === event.id) {
-          ds.currentMessage = {
-            ...ds.currentMessage,
-            content: { ...ds.currentMessage.content, metadata: event.metadata },
-          };
-        }
         break;
 
       // ── Tool lifecycle ─────────────────────────────────────────────────
