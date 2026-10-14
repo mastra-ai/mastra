@@ -1198,18 +1198,15 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
         expect(result.steps['no-step']).toBeUndefined();
       });
 
-      it.skipIf(skipTests.loopConditionStepResult)(
-        'sees the latest iteration in dowhile and dountil conditions',
-        async () => {
-          if (!useRegistry) return;
-          const { workflow } = registry!['var-step-result-async-loops']!;
-          const result = await execute(workflow, { count: 0 });
+      it('sees the latest iteration in dowhile and dountil conditions', async () => {
+        if (!useRegistry) return;
+        const { workflow } = registry!['var-step-result-async-loops']!;
+        const result = await execute(workflow, { count: 0 });
 
-          expect(result.status).toBe('success');
-          expect(result.steps['increment-a']).toMatchObject({ status: 'success', output: { count: 3 } });
-          expect(result.steps['increment-b']).toMatchObject({ status: 'success', output: { count: 6 } });
-        },
-      );
+        expect(result.status).toBe('success');
+        expect(result.steps['increment-a']).toMatchObject({ status: 'success', output: { count: 3 } });
+        expect(result.steps['increment-b']).toMatchObject({ status: 'success', output: { count: 6 } });
+      });
 
       it('is available in sleep and sleepUntil fns', async () => {
         if (!useRegistry) return;
