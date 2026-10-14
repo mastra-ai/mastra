@@ -178,16 +178,20 @@ describe('stream ↔ persisted message identity', () => {
     expect(streamedStart!.message.id).toBe(persistedAssistant[0]!.id);
   }, 30000);
 
-  it('names the model on the live assistant message the way its persisted copy does', async () => {
-    const { streamedStart, persistedAssistant } = await sendOneMessage();
+  it.each<Engine>(['default', 'durable'])(
+    'names the model on the live assistant message the way its persisted copy does (%s engine)',
+    async engine => {
+      const { streamedStart, persistedAssistant } = await sendOneMessage({}, engine);
 
-    const persistedMetadata = persistedAssistant[0]?.content.metadata;
-    expect(persistedMetadata).toMatchObject({ modelId: 'mock-model-id', provider: 'mock-provider' });
-    expect(streamedStart?.message.content.metadata).toMatchObject({
-      modelId: persistedMetadata?.modelId,
-      provider: persistedMetadata?.provider,
-    });
-  }, 30000);
+      const persistedMetadata = persistedAssistant[0]?.content.metadata;
+      expect(persistedMetadata).toMatchObject({ modelId: 'mock-model-id', provider: 'mock-provider' });
+      expect(streamedStart?.message.content.metadata).toMatchObject({
+        modelId: persistedMetadata?.modelId,
+        provider: persistedMetadata?.provider,
+      });
+    },
+    30000,
+  );
 
   it.each<Engine>(['default', 'durable'])(
     'names the model that closed the reply when a later step runs on another model (%s engine)',
