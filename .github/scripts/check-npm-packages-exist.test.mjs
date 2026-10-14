@@ -331,3 +331,58 @@ test('without --oidc, a package published by trusted publishing does not warn', 
   assert.doesNotMatch(result.stdout, /::warning/);
   assert.ok(!oidc.requests.some(request => request.url.includes('oidc') || request.url.includes('idtoken')));
 });
+
+// Timing: the --retry-404 window is shared, so a failing run takes about one
+// window however many packages fail. Before, each package polled for the full
+// window, CONCURRENCY at a time (163 packages: ~105 minutes on a 5-minute window).
+const manyPackages = count => Array.from({ length: count }, (_, i) => ({ name: `@mastra/pkg-${i}` }));
+
+test('--oidc fails at once when every package is refused, without waiting out --retry-404', async t => {
+  const packages = manyPackages(24);
+  const cwd = makeWorkspace(t, packages);
+  const exchange = Object.fromEntries(packages.map(({ name }) => [name.replace('/', '%2f'), 401]));
+  const oidc = await startOidc(t, { exchange });
+  const started = Date.now();
+  const result = await run(t, cwd, oidc.url, ['--oidc', '--retry-404', '60000'], oidc.env);
+  const elapsed = Date.now() - started;
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /24 package\(s\) cannot publish through npm trusted publishing/);
+  assert.match(result.stderr, /Every package was refused/);
+  assert.ok(elapsed < 10_000, `took ${elapsed}ms with a 60s retry window`);
+  // One exchange per package: no polling.
+  assert.equal(oidc.requests.filter(request => request.method === 'POST').length, 24);
+});
+
+test('--oidc re-checks only refused packages, against one shared deadline', async t => {
+  const packages = manyPackages(32);
+  const cwd = makeWorkspace(t, packages);
+  // 8 trusted, 24 refused for good: three batches of 8 under per-package windows.
+  const exchange = Object.fromEntries(packages.map(({ name }, i) => [name.replace('/', '%2f'), i < 8 ? 200 : 404]));
+  const oidc = await startOidc(t, { exchange });
+  const started = Date.now();
+  const result = await run(t, cwd, oidc.url, ['--oidc', '--retry-404', '3000'], oidc.env);
+  const elapsed = Date.now() - started;
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /24 package\(s\) cannot publish through npm trusted publishing/);
+  assert.doesNotMatch(result.stderr, /Every package was refused/);
+  // Per-package windows took one window per batch of 8 refused packages (~9s); shared, about one.
+  assert.ok(elapsed < 6000, `took ${elapsed}ms with a 3s retry window`);
+  const posts = oidc.requests.filter(request => request.method === 'POST').map(request => request.url);
+  for (let i = 0; i < 8; i++) {
+    assert.equal(posts.filter(url => url.endsWith(`/@mastra%2fpkg-${i}`)).length, 1, `trusted pkg-${i} re-checked`);
+  }
+  assert.ok(posts.filter(url => url.endsWith('/@mastra%2fpkg-23')).length > 1, 'refused package was not re-checked');
+});
+
+test('--retry-404 shares one deadline across missing packages too', async t => {
+  const packages = manyPackages(24);
+  const cwd = makeWorkspace(t, packages);
+  const registry = await startRegistry(t, {});
+  const started = Date.now();
+  const result = await run(t, cwd, registry, ['--retry-404', '3000']);
+  const elapsed = Date.now() - started;
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /24 package\(s\) have never been published/);
+  // Per-package windows: three batches of 8 (~9s); shared: about one window.
+  assert.ok(elapsed < 6000, `took ${elapsed}ms with a 3s retry window`);
+});

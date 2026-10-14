@@ -135,25 +135,33 @@ async function fetchPackument(registry, name) {
   return { status: undefined };
 }
 
-// Polls a check while it reports a definite "no" (`retryable`), until the
-// --retry-404 deadline: an npm admin may have fixed the package minutes ago.
-async function pollUntilDeadline(retryMs, check) {
+// Checks every package once, then re-checks only the definite "no"s
+// (`retryable`) together until one shared --retry-404 deadline: an npm admin
+// may have fixed them minutes ago. The deadline is shared, so a failing run
+// takes about one retry window however many packages fail. With
+// `failFastIfAllRetryable`, a first pass where every package (of several) is
+// a "no" ends at once: that is a problem with the job, not the packages.
+async function checkAll(packages, retryMs, check, { failFastIfAllRetryable = false } = {}) {
   const deadline = Date.now() + retryMs;
   const pollMs = Math.min(RETRY_404_POLL_MS, Math.max(100, Math.floor(retryMs / 5)));
-  for (;;) {
-    const result = await check();
-    if (!result.retryable || Date.now() + pollMs > deadline) return result;
+  const results = new Map();
+  let pending = packages;
+  for (let pass = 1; ; pass++) {
+    const passResults = await mapWithConcurrency(pending, CONCURRENCY, async pkg => ({ pkg, ...(await check(pkg)) }));
+    for (const result of passResults) results.set(result.pkg, result);
+    pending = passResults.filter(result => result.retryable).map(result => result.pkg);
+    if (pending.length === 0 || Date.now() + pollMs > deadline) break;
+    if (failFastIfAllRetryable && pass === 1 && packages.length > 1 && pending.length === packages.length) break;
     await sleep(pollMs);
   }
+  return packages.map(pkg => results.get(pkg));
 }
 
-async function packageExists(registry, name, retry404Ms) {
-  return pollUntilDeadline(retry404Ms, async () => {
-    const { status, everTrustedPublished } = await fetchPackument(registry, name);
-    if (status === 200) return { exists: true, everTrustedPublished };
-    if (status === 404) return { exists: false, retryable: true };
-    return { exists: undefined };
-  });
+async function packageExists(registry, name) {
+  const { status, everTrustedPublished } = await fetchPackument(registry, name);
+  if (status === 200) return { exists: true, everTrustedPublished };
+  if (status === 404) return { exists: false, retryable: true };
+  return { exists: undefined };
 }
 
 // GitHub's OIDC token endpoint, exactly as pnpm and npm call it before a
@@ -204,15 +212,12 @@ async function exchangeIdToken(registry, name, idToken) {
   return { trusted: undefined, reason: 'npm token exchange endpoint errors' };
 }
 
-async function trustedPublishingWorks(registry, name, retry404Ms) {
-  const audience = `npm:${new URL(registry).hostname}`;
-  return pollUntilDeadline(retry404Ms, async () => {
-    // A fresh GitHub token per attempt, as pnpm does per package.
-    const idToken = await githubIdToken(audience);
-    if (!idToken) return { trusted: undefined, reason: 'GitHub OIDC token endpoint errors' };
-    const result = await exchangeIdToken(registry, name, idToken);
-    return { ...result, retryable: result.trusted === false };
-  });
+async function trustedPublishingWorks(registry, name) {
+  // A fresh GitHub token per attempt, as pnpm does per package.
+  const idToken = await githubIdToken(`npm:${new URL(registry).hostname}`);
+  if (!idToken) return { trusted: undefined, reason: 'GitHub OIDC token endpoint errors' };
+  const result = await exchangeIdToken(registry, name, idToken);
+  return { ...result, retryable: result.trusted === false };
 }
 
 async function mapWithConcurrency(items, limit, fn) {
@@ -296,10 +301,7 @@ if (packages.length === 0) {
 
 console.log(`Checking ${packages.length} publishable package(s) against ${options.registry}...`);
 
-const results = await mapWithConcurrency(packages, CONCURRENCY, async pkg => ({
-  pkg,
-  ...(await packageExists(options.registry, pkg.name, options.retry404)),
-}));
+const results = await checkAll(packages, options.retry404, pkg => packageExists(options.registry, pkg.name));
 
 const missing = results.filter(result => result.exists === false);
 const unverifiable = results.filter(result => result.exists === undefined);
@@ -334,10 +336,14 @@ if (!options.oidc) {
 
 console.log(`Checking npm trusted publishing (OIDC token exchange) for ${packages.length} package(s)...`);
 
-const trustResults = await mapWithConcurrency(packages, CONCURRENCY, async pkg => ({
-  pkg,
-  ...(await trustedPublishingWorks(options.registry, pkg.name, options.retry404)),
-}));
+const trustResults = await checkAll(
+  packages,
+  options.retry404,
+  pkg => trustedPublishingWorks(options.registry, pkg.name),
+  {
+    failFastIfAllRetryable: true,
+  },
+);
 
 const untrusted = trustResults.filter(result => result.trusted === false);
 for (const result of untrusted) {
