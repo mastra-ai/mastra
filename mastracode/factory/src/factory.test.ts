@@ -455,6 +455,27 @@ describe('MastraFactory.prepare', () => {
       };
     }
 
+    it('boots model-free with platform env and registers the knowledge importer and connect routes', async () => {
+      const restore = withEnv({ MASTRA_PLATFORM_ACCESS_TOKEN: 'test-token', MASTRA_PROJECT_ID: 'proj-42' });
+      try {
+        const config = await prepareFactory({ storage: fakeStorage() });
+        expect(config.knowledge?.instance).toBeInstanceOf(Knowledge);
+        const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+        const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+        expect(paths).toEqual(
+          expect.arrayContaining([
+            '/web/factory/projects/:id/knowledge/importers',
+            '/web/integrations/platform/catalog',
+            '/web/integrations/platform/:provider/connections',
+            '/web/integrations/platform/:provider/connect-session',
+            '/web/integrations/platform/:provider/connections/:connectionId/routing',
+          ]),
+        );
+      } finally {
+        restore();
+      }
+    });
+
     it('auto-constructs a Knowledge instance when the host passes an explicit importers array', async () => {
       const restore = withEnv({});
       try {
