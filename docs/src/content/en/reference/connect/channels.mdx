@@ -23,7 +23,7 @@ Returns: `Promise<ChannelsResolver>`. See [The resolver](#the-resolver).
 
 The [documented channel setup](/docs/mastra-platform/connect/channels#connect-a-provider) covers Slack, Telegram, Discord, and Microsoft Teams. Their implementations come from `@mastra/slack`, `@mastra/telegram`, `@mastra/discord`, and `@mastra/teams`, loaded on demand. Use those packages directly to configure a channel outside the platform connection flow.
 
-The Teams provider requires `MASTRA_ENCRYPTION_KEY`, a base64-encoded 32-byte value for protecting stored bot secrets. When a Teams connection is active and the key is missing, resolution fails with a configuration error; projects without a Teams connection are unaffected.
+The Teams provider requires `MASTRA_ENCRYPTION_KEY`, a base64-encoded 32-byte value for protecting stored bot secrets. When a Teams connection is active and the key is missing, resolution fails with a configuration error. Projects without a Teams connection are unaffected.
 
 ## Parameters
 
