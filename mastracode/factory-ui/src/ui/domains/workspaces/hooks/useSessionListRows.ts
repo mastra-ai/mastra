@@ -50,7 +50,7 @@ export function useSessionListRows(factoryId: string | undefined): {
     const workItem = workItemBySessionId.get(session.sessionId);
     const running = runningById[session.sessionId] === true;
     const active = session.sessionId === routeSessionId;
-    const boardStillUnknown = !workItem && !workItems.isFetched;
+    const boardStillUnknown = workItem ? !catalog.isFetched : !workItems.isFetched;
     if (boardStillUnknown && !active && !running) return [];
     const attention =
       parkedSessions.has(session.sessionId) ||

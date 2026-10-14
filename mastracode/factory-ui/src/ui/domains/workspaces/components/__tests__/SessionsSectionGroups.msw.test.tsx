@@ -230,4 +230,28 @@ describe('Sessions sidebar groups', () => {
 
     await waitFor(() => expect(groupRegions()).toEqual(['Release Preview sessions']));
   });
+
+  it("never lists a custom board's terminal-phase session as Idle while the board catalog loads", async () => {
+    let releaseCatalog = () => {};
+    const catalogLoaded = new Promise<void>(resolve => (releaseCatalog = resolve));
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items`, () =>
+        HttpResponse.json({ workItems: [{ ...releaseItem, stages: ['shipped'] }] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/boards`, async () => {
+        await catalogLoaded;
+        return HttpResponse.json({
+          boards: [...builtinBoardCatalog.boards, releaseBoard],
+        } satisfies BoardCatalogResponse);
+      }),
+    );
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByRole('button', { name: 'Work old' });
+
+    await pickSessionProperty(user, 'Status', 'Idle');
+
+    expect(screen.queryByRole('button', { name: 'Release new' })).not.toBeInTheDocument();
+    releaseCatalog();
+  });
 });

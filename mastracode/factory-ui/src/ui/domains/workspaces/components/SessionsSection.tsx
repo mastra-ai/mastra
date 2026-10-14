@@ -61,7 +61,7 @@ export function SessionsSection() {
     enabled: chatSessionOpen,
   });
 
-  if (!factoryId || (!hasRepositories && rows.length === 0)) return null;
+  if (!factoryId || (!hasRepositories && rows.length === 0 && !loadFailed)) return null;
 
   return (
     <section className="flex flex-col gap-2" aria-label="Sessions">
