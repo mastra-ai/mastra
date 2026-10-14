@@ -16,6 +16,7 @@ import {
 import { storageWithoutMetrics } from '@/domains/configuration/hooks/__tests__/fixtures/observability-storage-capabilities';
 import { buildDataset } from '@/domains/datasets/components/__tests__/fixtures/datasets';
 import { buildListExperimentsResponse } from '@/domains/experiments/components/__tests__/fixtures/experiments';
+import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
 
@@ -53,10 +54,10 @@ function LocationProbe() {
 
 function renderPage(query: string) {
   return renderWithProviders(
-    <>
+    <TestLinkProvider>
       <LocationProbe />
       <CompareExperimentsPage />
-    </>,
+    </TestLinkProvider>,
     { router: { initialEntries: [`/experiments/compare${query}`] } },
   );
 }
@@ -83,6 +84,15 @@ describe('CompareExperimentsPage', () => {
 
       const link = await within(breadcrumb()).findByRole('link', { name: 'Support tickets' });
       expect(link.getAttribute('href')).toBe('/datasets/dataset-1');
+    });
+
+    it('completes the comparison crumb instead of adding a crumb of its own', async () => {
+      renderPage('?dataset=dataset-1&baseline=exp-a&contender=exp-b');
+
+      const link = await within(breadcrumb()).findByRole('link', { name: 'Support tickets' });
+      const comparisonCrumb = within(breadcrumb()).getByText('Comparing 2 experiments').closest('li');
+      expect(comparisonCrumb?.contains(link)).toBe(true);
+      expect(link.closest('li')?.textContent).toMatch(/Comparing 2 experiments.*on\s*Support tickets/);
     });
   });
 
