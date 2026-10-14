@@ -30,6 +30,8 @@ Some scenarios probe side-effecting endpoints by default and only perform the re
 | `MASTRA_SMOKE_TWITTER_ALLOW_POST` | `=1` lets the twitter-v2 scenario publish (and then delete) a real tweet.                                                                                                                                                                                                   |
 | `MASTRA_SMOKE_TWITTER_USER_ID`    | Numeric user id for authenticated twitter-v2 operations.                                                                                                                                                                                                                    |
 | `MASTRA_SMOKE_GA_PROPERTY_ID`     | Real GA4 property (`properties/123456`) for google-analytics report reads instead of synthetic-id probes.                                                                                                                                                                   |
+| `MASTRA_SMOKE_SHAREPOINT_SITE_ID` | Graph site id (`<host>,<site-guid>,<web-guid>`) of a test site. The sharepoint-online scenario writes only to this site and skips entirely when unset.                                                                                                                      |
+| `MASTRA_SMOKE_SHAREPOINT_GRANTEE` | Email of a test-tenant user. sharepoint-online grants, re-roles, and removes a real permission for them (`sendInvitation: false`, so no email) instead of probing add/update with synthetic ids.                                                                            |
 
 ## What the output means
 
