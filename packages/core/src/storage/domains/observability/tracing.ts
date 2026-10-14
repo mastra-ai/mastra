@@ -476,12 +476,12 @@ const errorPreviewField = z.string().describe('Short text preview of the span er
 
 type PreviewMessage = { role?: unknown; content?: unknown };
 
-function truncatePreview(text: string): string | null {
+function truncatePreview(text: string, maxLength = PREVIEW_MAX_LENGTH): string | null {
   const trimmed = text.trim();
   if (!trimmed) return null;
-  if (trimmed.length <= PREVIEW_MAX_LENGTH) return trimmed;
+  if (trimmed.length <= maxLength) return trimmed;
   // Never end on half of a surrogate pair.
-  const end = /[\uD800-\uDBFF]/.test(trimmed[PREVIEW_MAX_LENGTH - 1]!) ? PREVIEW_MAX_LENGTH - 1 : PREVIEW_MAX_LENGTH;
+  const end = maxLength > 0 && /[\uD800-\uDBFF]/.test(trimmed[maxLength - 1]!) ? maxLength - 1 : maxLength;
   return `${trimmed.slice(0, end)}…`;
 }
 
@@ -548,22 +548,26 @@ function textField(value: object): string | null {
  * stored JSON column call {@link buildPreviewFromJson}, so both produce the same preview.
  */
 export function buildPreview(value: unknown, serialized?: string | null): string | null {
+  return previewOf(value, serialized, PREVIEW_MAX_LENGTH);
+}
+
+function previewOf(value: unknown, serialized: string | null | undefined, maxLength: number): string | null {
   if (value == null) return null;
-  if (typeof value === 'string') return truncatePreview(value);
+  if (typeof value === 'string') return truncatePreview(value, maxLength);
 
   const messages = extractMessages(value);
   if (messages) {
     const text =
       lastMessageText(messages, role => role === 'user') ?? lastMessageText(messages, role => role !== 'system');
-    return text == null ? null : truncatePreview(text);
+    return text == null ? null : truncatePreview(text, maxLength);
   }
 
   if (typeof value === 'object' && !Array.isArray(value)) {
     const text = textField(value);
-    if (text != null) return truncatePreview(text);
+    if (text != null) return truncatePreview(text, maxLength);
   }
 
-  return truncatePreview(serialized ?? JSON.stringify(value) ?? '');
+  return truncatePreview(serialized ?? JSON.stringify(value) ?? '', maxLength);
 }
 
 /**
@@ -571,6 +575,10 @@ export function buildPreview(value: unknown, serialized?: string | null): string
  * parse previews as blank rather than as a guess at a sliced document.
  */
 export function buildPreviewFromJson(json: string | null | undefined): string | null {
+  return previewOfJson(json, PREVIEW_MAX_LENGTH);
+}
+
+function previewOfJson(json: string | null | undefined, maxLength: number): string | null {
   if (json == null || !json.trim()) return null;
   let value: unknown;
   try {
@@ -578,7 +586,7 @@ export function buildPreviewFromJson(json: string | null | undefined): string | 
   } catch {
     return null;
   }
-  return buildPreview(value, json);
+  return previewOf(value, json, maxLength);
 }
 
 /**
@@ -615,21 +623,22 @@ export function isPreviewTruncated(preview: string | null | undefined): boolean 
  *
  * Accepts a decoded value or a JSON string. A string that looks like a JSON document or a
  * JSON-encoded scalar is parsed first; an unparseable JSON document previews as empty.
+ * `maxLength` caps the preview at that many characters plus `…`, as before.
  */
-export function buildInputPreview(input: unknown, _maxLength = PREVIEW_MAX_LENGTH): string | undefined {
+export function buildInputPreview(input: unknown, maxLength = PREVIEW_MAX_LENGTH): string | undefined {
   if (input == null) return undefined;
   if (typeof input === 'string') {
     const trimmed = input.trim();
-    if (trimmed.startsWith('{') || trimmed.startsWith('[')) return buildPreviewFromJson(trimmed) ?? undefined;
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) return previewOfJson(trimmed, maxLength) ?? undefined;
     if (trimmed.startsWith('"')) {
       try {
-        return buildPreview(JSON.parse(trimmed)) ?? undefined;
+        return previewOf(JSON.parse(trimmed), undefined, maxLength) ?? undefined;
       } catch {
         // Not valid JSON — treat as plain text below.
       }
     }
   }
-  return buildPreview(input) ?? undefined;
+  return previewOf(input, undefined, maxLength) ?? undefined;
 }
 
 /** Stored preview when the record carries one (`''` means none), else one built from the value. */

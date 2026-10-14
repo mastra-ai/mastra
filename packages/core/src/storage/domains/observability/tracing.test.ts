@@ -447,6 +447,16 @@ describe('buildInputPreview (deprecated)', () => {
     expect(buildInputPreview('   ')).toBeUndefined();
     expect(buildInputPreview('{"messages": [{"role"')).toBeUndefined();
   });
+
+  it('caps the preview at maxLength', () => {
+    expect(buildInputPreview('abcdefghij', 5)).toBe('abcde…');
+    expect(buildInputPreview('abcde', 5)).toBe('abcde');
+    expect(buildInputPreview({ messages: [{ role: 'user', content: 'abcdefghij' }] }, 5)).toBe('abcde…');
+    expect(buildInputPreview(JSON.stringify({ text: 'abcdefghij' }), 5)).toBe('abcde…');
+    expect(buildInputPreview('"abcdefghij"', 5)).toBe('abcde…');
+    expect(buildInputPreview('x'.repeat(150), 120)).toBe(`${'x'.repeat(120)}…`);
+    expect(buildInputPreview('x'.repeat(150))).toBe(`${'x'.repeat(100)}…`);
+  });
 });
 
 describe('toLightSpanRecord', () => {

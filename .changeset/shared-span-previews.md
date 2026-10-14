@@ -21,4 +21,4 @@ buildPreview({ message: 'Tool failed' }); // 'Tool failed'
 - For a message list, previews now show the last user message instead of every user message joined with ` | `.
 - `querySpans()` previews are now at most 100 characters of readable text plus an ellipsis instead of the first 256 characters of raw JSON.
 
-`buildInputPreview()` and `INPUT_PREVIEW_MAX_LENGTH` are deprecated. Use `buildPreview()` and `PREVIEW_MAX_LENGTH`.
+`buildInputPreview()` and `INPUT_PREVIEW_MAX_LENGTH` are deprecated. Use `buildPreview()` and `PREVIEW_MAX_LENGTH`. `buildInputPreview(input, maxLength)` still caps its preview at `maxLength`.
