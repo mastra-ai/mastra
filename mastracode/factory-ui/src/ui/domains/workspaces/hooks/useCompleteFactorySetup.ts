@@ -51,7 +51,10 @@ export function useCompleteFactorySetup() {
 
       const pendingId = readOnboardingFactory();
       const existing = pendingId ? await findPendingFactory(baseUrl, pendingId) : undefined;
-      const factory = existing ?? (await createFactoryProject(baseUrl, repo.name));
+      // Without an organization model, Factory runs would have nothing to run on in the default hybrid scope, so a
+      // personal-only setup keeps both sessions and runs on the creator's own credentials.
+      const modelScope = draft.model?.modelId ? undefined : 'user';
+      const factory = existing ?? (await createFactoryProject(baseUrl, repo.name, undefined, modelScope));
       // Linking refetches the Factory list; the marker keeps the root guard from leaving onboarding.
       persistOnboardingFactory(factory.id);
       if (existing && existing.name !== repo.name) await renameFactoryProject(baseUrl, factory.id, repo.name);

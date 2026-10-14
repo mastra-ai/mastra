@@ -8,6 +8,7 @@ import {
   updateFactoryDefaultModel,
   updateFactoryModelScope,
 } from '../ui/domains/workspaces/services/github';
+import type { FactoryModelScope } from '../ui/domains/workspaces/services/github';
 
 /**
  * The Factory's org-wide default model. Factory runs (issue triage, board
@@ -40,7 +41,7 @@ export function useSetFactoryModelScopeMutation(factoryProjectId: string | undef
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (modelScope: 'factory' | 'user') => updateFactoryModelScope(baseUrl, factoryProjectId!, modelScope),
+    mutationFn: (modelScope: FactoryModelScope) => updateFactoryModelScope(baseUrl, factoryProjectId!, modelScope),
     onSuccess: project => {
       queryClient.setQueryData(queryKeys.factoryProject(factoryProjectId), project);
       // The scope picks which credentials serve this Factory's models.

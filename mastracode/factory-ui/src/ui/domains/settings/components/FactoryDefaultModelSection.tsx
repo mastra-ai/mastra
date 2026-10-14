@@ -65,8 +65,9 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
         description={
           <>
             <span>
-              Factory runs (triage, board work items) start on this model and use the Factory memory settings. Your
-              personal defaults don&apos;t apply to them.
+              {projectQuery.data?.modelScope === 'hybrid'
+                ? "Work items (triage, board runs) start on this model and run on organization credentials. Interactive sessions start on each owner's personal default instead."
+                : "Factory runs (triage, board work items) start on this model and use the Factory memory settings. Your personal defaults don't apply to them."}
             </span>
             {error && (
               <Txt as="span" variant="meta" className="text-destructive-foreground">

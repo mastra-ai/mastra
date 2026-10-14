@@ -467,6 +467,8 @@ describe('Personal Factory model', () => {
     expect(review.getByText('API key · Factory + your default')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Create factory' }));
     await screen.findByRole('heading', { name: 'Factory ready' });
+    // Without an organization model, Factory runs couldn't run in hybrid scope, so the Factory stays on personal credentials.
+    expect(writes.find(item => item.path === 'create')?.body).toEqual({ name: repo.name, modelScope: 'user' });
     expect(writes.find(item => item.path === 'model')?.body).toEqual({ defaultModelId: 'anthropic/claude-fable-5' });
     expect(writes.find(item => item.path === 'personal-model')?.body).toEqual({
       modelId: 'anthropic/claude-fable-5',
