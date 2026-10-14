@@ -70,6 +70,124 @@ describe('TemporalRun', () => {
     expect(handleResult).toHaveBeenCalledOnce();
   });
 
+  it('defaults keyless resume to the only suspended step before signaling', async () => {
+    const suspended = {
+      status: 'suspended',
+      input: { value: 1 },
+      state: {},
+      steps: {},
+      suspended: [['approval']],
+    };
+    const signal = vi.fn().mockResolvedValue(undefined);
+    const handleResult = vi
+      .fn()
+      .mockResolvedValue({ status: 'success', input: { value: 1 }, result: {}, state: {}, steps: {} });
+    const query = vi.fn().mockResolvedValue(suspended);
+    const getHandle = vi.fn().mockReturnValue({ signal, result: handleResult, query });
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: z.object({ value: z.number() }), outputSchema: z.unknown() },
+      { client: { workflow: { getHandle } } as unknown as Client, taskQueue: 'test-queue' },
+    );
+    const run = await workflow.createRun({ runId: 'test-run' });
+
+    await run.resume({ resumeData: { approved: true } });
+
+    expect(query).toHaveBeenCalledWith('mastra.status');
+    expect(signal).toHaveBeenCalledWith('mastra.resume', { step: 'approval', resumeData: { approved: true } });
+  });
+
+  it('ignores the pre-signal suspension and returns a fresh suspension from resume', async () => {
+    const suspended = (reason: string, suspendedAt: number) => ({
+      status: 'suspended',
+      input: { value: 1 },
+      state: {},
+      steps: {
+        approval: {
+          __temporalStepResult: true,
+          status: 'suspended',
+          payload: { value: 1 },
+          suspendPayload: { reason },
+          suspendedAt,
+        },
+      },
+      suspended: [['approval']],
+      suspendPayload: { approval: { reason } },
+    });
+    const signal = vi.fn().mockResolvedValue(undefined);
+    const result = vi.fn(() => new Promise(() => {}));
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce(suspended('first review', 1))
+      .mockResolvedValueOnce(suspended('first review', 1))
+      .mockResolvedValue(suspended('second review', 2));
+    const getHandle = vi.fn().mockReturnValue({ signal, result, query });
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: z.object({ value: z.number() }), outputSchema: z.unknown() },
+      { client: { workflow: { getHandle } } as unknown as Client, taskQueue: 'test-queue' },
+    );
+    const run = await workflow.createRun({ runId: 'test-run' });
+
+    await expect(run.resume({ step: 'approval', resumeData: { approved: true } })).resolves.toMatchObject({
+      status: 'suspended',
+      suspended: [['approval']],
+      suspendPayload: { approval: { reason: 'second review' } },
+    });
+    expect(query).toHaveBeenCalledTimes(3);
+  });
+
+  it('validates label-only resume data against the labeled step schema', async () => {
+    const signal = vi.fn().mockResolvedValue(undefined);
+    const query = vi.fn().mockResolvedValue({
+      status: 'suspended',
+      steps: {
+        approval: {
+          status: 'suspended',
+          suspendedAt: 1,
+        },
+      },
+      suspended: [['approval']],
+      resumeLabels: { approveOrder: { stepId: 'approval' } },
+    });
+    const getHandle = vi.fn().mockReturnValue({ signal, query, result: vi.fn(() => new Promise(() => {})) });
+    const approval = createStep({
+      id: 'approval',
+      inputSchema: z.unknown(),
+      outputSchema: z.unknown(),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async ({ inputData }) => inputData,
+    });
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: z.unknown(), outputSchema: z.unknown() },
+      { client: { workflow: { getHandle } } as unknown as Client, taskQueue: 'test-queue' },
+    )
+      .then(approval)
+      .commit();
+    const run = await workflow.createRun({ runId: 'test-run' });
+
+    await expect(run.resume({ label: 'approveOrder', resumeData: { approved: 'yes' } })).rejects.toThrow();
+    expect(signal).not.toHaveBeenCalled();
+  });
+
+  it('rejects inactive explicit resume targets before signaling', async () => {
+    const signal = vi.fn().mockResolvedValue(undefined);
+    const query = vi.fn().mockResolvedValue({
+      status: 'suspended',
+      steps: { review: { status: 'suspended', suspendedAt: 1 } },
+      suspended: [['review']],
+    });
+    const getHandle = vi.fn().mockReturnValue({ signal, query });
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: z.unknown(), outputSchema: z.unknown() },
+      { client: { workflow: { getHandle } } as unknown as Client, taskQueue: 'test-queue' },
+    );
+    const run = await workflow.createRun({ runId: 'test-run' });
+
+    await expect(run.resumeAsync({ step: 'approval', resumeData: { approved: true } })).rejects.toThrow(
+      'Temporal workflow is not suspended at step "approval".',
+    );
+    expect(signal).not.toHaveBeenCalled();
+  });
+
   it('returns suspended from start when the Temporal workflow stays open waiting for resume', async () => {
     const suspended = {
       status: 'suspended',

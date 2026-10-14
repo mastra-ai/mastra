@@ -103,7 +103,7 @@ describe('activity transform', () => {
     `);
 
     expect(output).toMatch(
-      /executeTemporalStep\(args, \{[\s\S]*\.\.\.withRequestContext\(params\),[\s\S]*mastra[\s\S]*\}\)/,
+      /executeTemporalStep\(args, \{[\s\S]*\.\.\.withRequestContext\(params, args\),[\s\S]*mastra[\s\S]*\}\)/,
     );
     expect(output).not.toMatch(/await import\(/);
     expect(output).toContain('const fetchWeather = createStep({');
@@ -261,7 +261,7 @@ describe('activity transform', () => {
     expect(output).toContain('const mastra =');
     expect(output).not.toMatch(/export\s+(const|\{)\s*mastra/);
     expect(output).toMatch(
-      /executeTemporalStep\(args, \{[\s\S]*\.\.\.withRequestContext\(params\),[\s\S]*mastra[\s\S]*\}\)/,
+      /executeTemporalStep\(args, \{[\s\S]*\.\.\.withRequestContext\(params, args\),[\s\S]*mastra[\s\S]*\}\)/,
     );
   });
 });

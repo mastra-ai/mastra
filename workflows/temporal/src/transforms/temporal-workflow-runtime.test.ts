@@ -214,6 +214,91 @@ describe('temporal workflow runtime helper module', () => {
     expect(review).toHaveBeenNthCalledWith(2, expect.objectContaining({ resumeData: { reviewed: true } }));
   });
 
+  it('routes keyless and labeled resume signals to active suspended steps', async () => {
+    const approval = vi
+      .fn()
+      .mockResolvedValueOnce({
+        __temporalSuspension: true,
+        suspendPayload: { reason: 'approval' },
+        resumeLabels: { approveOrder: { stepId: 'approval' } },
+      })
+      .mockResolvedValueOnce({ first: true })
+      .mockResolvedValueOnce({
+        __temporalSuspension: true,
+        suspendPayload: { reason: 'second approval' },
+        resumeLabels: { approveOrder: { stepId: 'approval' } },
+      })
+      .mockResolvedValueOnce({ second: true });
+    proxyActivities.mockReturnValue({ approval });
+
+    const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
+    const workflow = createWorkflow('approval-workflow').then('approval').commit();
+
+    const firstRun = workflow({ inputData: { orderId: 'order-1' } });
+    await vi.waitFor(() => expect(condition).toHaveBeenCalledTimes(1));
+    signalHandlers.get('mastra.resume')?.({ resumeData: { first: true } });
+    await expect(firstRun).resolves.toMatchObject({ result: { first: true } });
+
+    const secondRun = workflow({ inputData: { orderId: 'order-2' } });
+    await vi.waitFor(() => expect(condition).toHaveBeenCalledTimes(2));
+    signalHandlers.get('mastra.resume')?.({ label: 'approveOrder', resumeData: { second: true } });
+    await expect(secondRun).resolves.toMatchObject({ result: { second: true } });
+  });
+
+  it('reports all currently suspended parallel steps in status queries', async () => {
+    const approval = vi
+      .fn()
+      .mockResolvedValueOnce({ __temporalSuspension: true, suspendPayload: { reason: 'approval' } })
+      .mockResolvedValueOnce({ approved: true });
+    const review = vi
+      .fn()
+      .mockResolvedValueOnce({ __temporalSuspension: true, suspendPayload: { reason: 'review' } })
+      .mockResolvedValueOnce({ reviewed: true });
+    proxyActivities.mockReturnValue({ approval, review });
+
+    const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
+    const workflow = createWorkflow('approval-workflow')
+      .parallel([
+        { type: 'step', step: { id: 'approval' } },
+        { type: 'step', step: { id: 'review' } },
+      ])
+      .commit();
+    const run = workflow({ inputData: { orderId: 'order-1' } });
+
+    await vi.waitFor(() => expect(condition).toHaveBeenCalledTimes(2));
+    expect(signalHandlers.get('mastra.status')?.()).toMatchObject({
+      status: 'suspended',
+      suspended: expect.arrayContaining([['approval'], ['review']]),
+      suspendPayload: {
+        approval: { reason: 'approval' },
+        review: { reason: 'review' },
+      },
+    });
+
+    signalHandlers.get('mastra.resume')?.({ step: 'approval', resumeData: { approved: true } });
+    await vi.waitFor(() => expect(approval).toHaveBeenCalledTimes(2));
+    expect(signalHandlers.get('mastra.status')?.()).toMatchObject({
+      status: 'suspended',
+      suspended: [['review']],
+      suspendPayload: { review: { reason: 'review' } },
+    });
+
+    signalHandlers.get('mastra.resume')?.({ step: 'review', resumeData: { reviewed: true } });
+    await expect(run).resolves.toMatchObject({ status: 'success' });
+  });
+
+  it('fails loudly when a foreach item suspends', async () => {
+    const approveItem = vi.fn().mockResolvedValue({ __temporalSuspension: true, suspendPayload: { reason: 'item' } });
+    proxyActivities.mockReturnValue({ approveItem });
+
+    const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
+    const workflow = createWorkflow('approval-workflow').foreach('approveItem').commit();
+
+    await expect(workflow({ inputData: [{ id: 1 }] })).rejects.toThrow(
+      'Temporal workflows do not support suspending inside foreach steps yet.',
+    );
+  });
+
   it('executes mapping entries through proxy activities', async () => {
     const mappingId = 'mapping_mapped-workflow_0';
     const mapping = vi.fn(async ({ inputData, initData }) => ({

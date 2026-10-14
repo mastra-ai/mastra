@@ -7,6 +7,7 @@ class TemporalExecutionEngine {
   activityHandle;
   resumePayloads = new Map();
   suspendedSteps = new Set();
+  resumeLabels = new Map();
   currentResult;
   initData;
   initialState;
@@ -19,7 +20,7 @@ class TemporalExecutionEngine {
       })
     });
     setHandler(resumeSignal, payload => {
-      const id = [...this.suspendedSteps].find(stepId => payload?.step === stepId || payload?.label === stepId);
+      const id = this.resumeTarget(payload);
       if (id !== undefined && !this.resumePayloads.has(id)) {
         this.resumePayloads.set(id, payload);
       }
@@ -61,6 +62,38 @@ class TemporalExecutionEngine {
     };
     return this.currentResult;
   }
+  resumeTarget(payload) {
+    if (payload?.step !== undefined) {
+      return this.suspendedSteps.has(payload.step) ? payload.step : undefined;
+    }
+    if (payload?.label !== undefined) {
+      const labeledStep = this.resumeLabels.get(payload.label);
+      return labeledStep !== undefined && this.suspendedSteps.has(labeledStep) ? labeledStep : undefined;
+    }
+    return this.suspendedSteps.size === 1 ? [...this.suspendedSteps][0] : undefined;
+  }
+  updateSuspendedResult(stepResults) {
+    const suspended = [...this.suspendedSteps].map(id => [id]);
+    this.currentResult = {
+      status: 'suspended',
+      input: this.initData,
+      state: this.initialState,
+      steps: stepResults,
+      suspended,
+      suspendPayload: Object.fromEntries(suspended.map(([id]) => [id, stepResults[id]?.suspendPayload])),
+      resumeLabels: Object.fromEntries([...this.resumeLabels].map(([label, stepId]) => [label, {
+        stepId
+      }]))
+    };
+  }
+  updateRunningResult(stepResults) {
+    this.currentResult = {
+      status: 'running',
+      input: this.initData,
+      state: this.initialState,
+      steps: stepResults
+    };
+  }
 
   // Record steps in the core StepResult shape ({ status, payload, output, startedAt, endedAt }).
   async recordStep(stepResults, id, payload, run) {
@@ -77,30 +110,30 @@ class TemporalExecutionEngine {
         suspendPayload,
         suspendedAt: Date.now()
       };
-      this.currentResult = {
-        status: 'suspended',
-        input: this.initData,
-        state: this.initialState,
-        steps: stepResults,
-        suspended: [[id]],
-        suspendPayload: {
-          [id]: suspendPayload
+      for (const [label, target] of Object.entries(output.resumeLabels ?? {})) {
+        if (target?.stepId === id) {
+          this.resumeLabels.set(label, id);
         }
-      };
+      }
       this.suspendedSteps.add(id);
+      this.updateSuspendedResult(stepResults);
       try {
         await condition(() => this.resumePayloads.has(id));
         resumeData = this.resumePayloads.get(id)?.resumeData;
         this.resumePayloads.delete(id);
       } finally {
         this.suspendedSteps.delete(id);
+        for (const [label, stepId] of this.resumeLabels.entries()) {
+          if (stepId === id) {
+            this.resumeLabels.delete(label);
+          }
+        }
       }
-      this.currentResult = {
-        status: 'running',
-        input: this.initData,
-        state: this.initialState,
-        steps: stepResults
-      };
+      if (this.suspendedSteps.size > 0) {
+        this.updateSuspendedResult(stepResults);
+      } else {
+        this.updateRunningResult(stepResults);
+      }
       output = await run(resumeData);
     }
     stepResults[id] = {
@@ -117,12 +150,11 @@ class TemporalExecutionEngine {
       startedAt,
       endedAt: Date.now()
     };
-    this.currentResult = {
-      status: 'running',
-      input: this.initData,
-      state: this.initialState,
-      steps: stepResults
-    };
+    if (this.suspendedSteps.size > 0) {
+      this.updateSuspendedResult(stepResults);
+    } else {
+      this.updateRunningResult(stepResults);
+    }
     return output;
   }
   activityParams(inputData, extra = {}) {
@@ -158,6 +190,9 @@ class TemporalExecutionEngine {
                 ...this.executionContext
               }]
             });
+            if (childResult?.status === 'suspended' || childResult?.__temporalSuspension === true) {
+              throw new Error('Temporal workflows do not support suspending inside child workflows yet.');
+            }
             return childResult?.result ?? childResult;
           });
         }
@@ -270,9 +305,13 @@ class TemporalExecutionEngine {
               if (i >= items.length) {
                 break;
               }
-              results[i] = await this.activityHandle[entry.step.id](this.activityParams(items[i], {
+              const itemResult = await this.activityHandle[entry.step.id](this.activityParams(items[i], {
                 initData: this.initData
               }));
+              if (itemResult?.__temporalSuspension === true) {
+                throw new Error('Temporal workflows do not support suspending inside foreach steps yet.');
+              }
+              results[i] = itemResult;
             }
           });
           await Promise.all(workers);
