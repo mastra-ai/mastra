@@ -5,6 +5,7 @@ import {
   canonicalizeKnowledgeScopeIds,
   createKnowledgeUlid,
   isKnowledgeNodeVisible,
+  assertKnowledgeSourceProbeLimit,
   isKnowledgeScopeVisible,
   knowledgeScopeIdsKey,
   knowledgeSemanticDocumentId,
@@ -44,6 +45,7 @@ import type {
   KnowledgeSemanticOutboxEntry,
   KnowledgeStructurePlan,
   KnowledgeStructureReconcileResult,
+  ListKnowledgeSourcesWithVisibleRecordsInput,
   QueryKnowledgeRecordsBySourceInput,
   QueryKnowledgeRecordsInput,
   QueryKnowledgeRecordsOutput,
@@ -780,6 +782,22 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       records: records.slice(0, limit).map(cloneRecord),
       nextCursor: records.length > limit ? records[limit - 1]?.id : undefined,
     };
+  }
+
+  async listSourcesWithVisibleRecords(input: ListKnowledgeSourcesWithVisibleRecordsInput): Promise<string[]> {
+    assertKnowledgeSourceProbeLimit(input.sources);
+    const scopesBySource = new Map<string, KnowledgeScopeIds[]>();
+    for (const probe of input.sources) {
+      const scope = canonicalizeKnowledgeScopeIds(probe.scopeId ? [...input.scopeIds, probe.scopeId] : input.scopeIds);
+      scopesBySource.set(probe.source, [...(scopesBySource.get(probe.source) ?? []), scope]);
+    }
+    const found = new Set<string>();
+    for (const record of this.#db.knowledgeRecords.values()) {
+      if (record.deletedAt || !record.source || found.has(record.source)) continue;
+      if (scopesBySource.get(record.source)?.some(scope => this.#isRecordVisible(record, scope)))
+        found.add(record.source);
+    }
+    return [...found];
   }
 
   async deleteRecord(input: { id: string; deletedBy: string; importRunId?: string }): Promise<KnowledgeRecord> {
