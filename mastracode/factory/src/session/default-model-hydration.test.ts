@@ -72,11 +72,12 @@ function createDependencies(
     projects: {
       getById: vi.fn().mockResolvedValue({
         id: 'factory-1',
+        orgId: 'org-1',
         modelScope,
         defaultModelId: 'openai/factory-model',
       }),
     },
-    workItems: { findActiveRunBindingByThread: vi.fn().mockResolvedValue(null) },
+    workItems: { findRunBindingByThread: vi.fn().mockResolvedValue(null) },
     modelDefaults: { get: vi.fn().mockResolvedValue(record) },
   };
 }
@@ -233,11 +234,11 @@ describe('hydrateSessionDefaultModel', () => {
   it('does not apply a user default to active Factory run bindings before state is seeded', async () => {
     const session = createSession();
     const dependencies = createDependencies();
-    vi.mocked(dependencies.workItems.findActiveRunBindingByThread).mockResolvedValue({} as never);
+    vi.mocked(dependencies.workItems.findRunBindingByThread).mockResolvedValue({} as never);
 
     await hydrateSessionDefaultModel(session, dependencies);
 
-    expect(dependencies.workItems.findActiveRunBindingByThread).toHaveBeenCalledExactlyOnceWith({
+    expect(dependencies.workItems.findRunBindingByThread).toHaveBeenCalledExactlyOnceWith({
       orgId: 'org-1',
       threadId: 'session-1',
       resourceId: 'session-1',
@@ -267,7 +268,7 @@ describe('hydrateSessionDefaultModel', () => {
     primeTenant.mockClear();
     const session = createSession();
     const dependencies = createDependencies(modelDefault(), 'hybrid');
-    vi.mocked(dependencies.workItems.findActiveRunBindingByThread).mockResolvedValue({} as never);
+    vi.mocked(dependencies.workItems.findRunBindingByThread).mockResolvedValue({} as never);
 
     await hydrateSessionDefaultModel(session, dependencies);
 

@@ -34,7 +34,7 @@ async function applyDefaultModel(session: DefaultModelApplicableSession, modelId
 export interface DefaultModelHydrationDependencies {
   sourceControl: Pick<SourceControlSessionLookup, 'getBySessionId'>;
   projects: Pick<FactoryProjectsStorage, 'getById'>;
-  workItems: Pick<WorkItemsStorage, 'findActiveRunBindingByThread'>;
+  workItems: Pick<WorkItemsStorage, 'findRunBindingByThread'>;
   modelDefaults: Pick<ModelDefaultsStorage, 'get'>;
 }
 
@@ -62,17 +62,10 @@ export async function hydrateSessionDefaultModel(
       await clearFactoryIdentity();
       return;
     }
-    const project = await projects.getById({ id: sourceSession.factoryProjectId });
-    if (!project) {
-      await clearFactoryIdentity();
-      return;
-    }
-
-    // The run binding decides the context first: a hybrid Factory primes the Factory's scope for a
-    // work-item run and the owner's for an interactive session, matching the credential policy.
+    // Historical thread membership keeps completed work items on Factory billing in hybrid scope.
     const threadId = session.thread.getId();
     const binding = threadId
-      ? await workItems.findActiveRunBindingByThread({
+      ? await workItems.findRunBindingByThread({
           orgId: sourceSession.orgId,
           threadId,
           resourceId,
@@ -80,6 +73,11 @@ export async function hydrateSessionDefaultModel(
           rejectAmbiguous: true,
         })
       : null;
+    const project = await projects.getById({ id: binding?.factoryProjectId ?? sourceSession.factoryProjectId });
+    if (!project || project.orgId !== sourceSession.orgId) {
+      await clearFactoryIdentity();
+      return;
+    }
     const modelScope = effectiveModelScope(project.modelScope, binding ? 'run' : 'session');
     await session.state.set({
       factoryOrgId: sourceSession.orgId,

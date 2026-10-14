@@ -7,6 +7,7 @@ import { useLinkRepositoryMutation } from '../../../../hooks/useFactories';
 import { useSetDefaultModel } from '../../../../hooks/use-default-model';
 import {
   createFactoryProject,
+  deleteFactoryProject,
   fetchFactoryProject,
   renameFactoryProject,
   unlinkRepository,
@@ -50,10 +51,15 @@ export function useCompleteFactorySetup() {
       if (unavailableModel) throw new Error(`${unavailableModel} is no longer available. Choose another model.`);
 
       const pendingId = readOnboardingFactory();
-      const existing = pendingId ? await findPendingFactory(baseUrl, pendingId) : undefined;
+      let existing = pendingId ? await findPendingFactory(baseUrl, pendingId) : undefined;
       // Without an organization model, Factory runs would have nothing to run on in the default hybrid scope, so a
       // personal-only setup keeps both sessions and runs on the creator's own credentials.
       const modelScope = draft.model?.modelId ? undefined : 'user';
+      if (existing && existing.modelScope !== (modelScope ?? 'hybrid')) {
+        // Recreate the unfinished project rather than bypassing the admin gate on scope changes.
+        await deleteFactoryProject(baseUrl, existing.id);
+        existing = undefined;
+      }
       const factory = existing ?? (await createFactoryProject(baseUrl, repo.name, undefined, modelScope));
       // Linking refetches the Factory list; the marker keeps the root guard from leaving onboarding.
       persistOnboardingFactory(factory.id);

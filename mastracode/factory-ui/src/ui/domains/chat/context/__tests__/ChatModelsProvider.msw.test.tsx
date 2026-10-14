@@ -63,13 +63,33 @@ describe('ChatModelsProvider', () => {
         http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1`, () =>
           HttpResponse.json({ project: { id: 'factory-1', modelScope, defaultModelId: 'deepseek/deepseek-flash' } }),
         ),
-        http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-          HttpResponse.json({ modelId: 'anthropic/claude-opus-4-1' }),
-        ),
+        http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: 'openai/gpt-5.5' })),
+      );
+
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/models`, ({ request }) => {
+          const params = new URL(request.url).searchParams;
+          expect(params.get('resourceId')).toBe('session-1');
+          expect(params.get('threadId')).toBe('thread-1');
+          return HttpResponse.json({
+            models: [],
+            modelScope: expected === 'deepseek/deepseek-flash' ? 'factory' : 'user',
+            defaultModelId: expected,
+          });
+        }),
       );
 
       renderWithProviders(
-        <ChatSessionContext.Provider value={{ ...draftSession, kind, draftSessionId: undefined }}>
+        <ChatSessionContext.Provider
+          value={{
+            ...draftSession,
+            resourceId: 'session-1',
+            sessionThreadId: 'thread-1',
+            resourceReady: true,
+            kind,
+            draftSessionId: undefined,
+          }}
+        >
           <ChatConnectionContext.Provider
             value={{
               status: 'ready',

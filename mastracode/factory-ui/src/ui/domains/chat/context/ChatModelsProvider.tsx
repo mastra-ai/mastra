@@ -47,10 +47,14 @@ function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
 function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
   const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
   const { state } = useChatConnection();
-  const { projectQuery, modelScope } = useChatModelScope();
+  const { projectQuery, modelScope, sessionModelsQuery } = useChatModelScope();
   const defaultModelQuery = useDefaultModelQuery();
-  const defaultModelId =
-    (modelScope === 'factory' ? projectQuery.data?.defaultModelId : defaultModelQuery.data?.modelId) ?? undefined;
+  const localDefaultModelId =
+    modelScope === 'factory' ? projectQuery.data?.defaultModelId : defaultModelQuery.data?.modelId;
+  const defaultModelId = sessionModelsQuery.isSuccess
+    ? (('defaultModelId' in sessionModelsQuery.data ? sessionModelsQuery.data.defaultModelId : localDefaultModelId) ??
+      undefined)
+    : undefined;
   const { mutateAsync: switchModel } = useSwitchAgentControllerModelMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -61,8 +65,8 @@ function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
   const value: ChatModelsApi = {
     activeModelId: state?.modelId,
     defaultModelId,
-    isLoading: false,
-    error: undefined,
+    isLoading: sessionModelsQuery.isPending,
+    error: sessionModelsQuery.error ?? undefined,
     setModel: modelId => switchModel({ modelId }),
   };
 

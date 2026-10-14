@@ -66,6 +66,7 @@ function renderPicker({
   modelScope,
   factoryDefaultModelId,
   emptyCatalog = false,
+  sessionPolicy,
 }: {
   kind?: ChatSessionContextApi['kind'];
   modelId?: string;
@@ -78,6 +79,7 @@ function renderPicker({
   /** Mount on a Factory route whose project has this model scope. */
   modelScope?: 'factory' | 'user' | 'hybrid';
   factoryDefaultModelId?: string;
+  sessionPolicy?: { modelScope: 'factory' | 'user'; defaultModelId: string | null };
   /** The Factory's scope has no credentials, so its catalog is empty. */
   emptyCatalog?: boolean;
 } = {}) {
@@ -88,9 +90,25 @@ function renderPicker({
     http.get(`${TEST_BASE_URL}/web/config/models`, async ({ request }) => {
       await catalogLoaded;
       if (!modelScope) return HttpResponse.json({ models });
-      if (emptyCatalog) return HttpResponse.json({ models: [] });
-      // The Factory's catalog differs from the caller's full one, so a request missing the Factory is visible.
       const params = new URL(request.url).searchParams;
+      if (params.has('resourceId')) {
+        expect(params.get('resourceId')).toBe('session-1');
+        expect(params.get('threadId')).toBe('session-1');
+        const effectiveScope = sessionPolicy?.modelScope ?? (modelScope === 'hybrid' ? kind : modelScope);
+        return HttpResponse.json({
+          modelScope: effectiveScope,
+          defaultModelId: sessionPolicy
+            ? sessionPolicy.defaultModelId
+            : effectiveScope === 'factory'
+              ? (factoryDefaultModelId ?? null)
+              : defaultModelId,
+          models: emptyCatalog
+            ? []
+            : models.filter(model => model.provider === (effectiveScope === 'factory' ? 'openai' : 'anthropic')),
+        });
+      }
+      if (emptyCatalog) return HttpResponse.json({ models: [] });
+      // Settings requests stay independent of the session owner's catalog.
       const factoryId = params.get('factoryId');
       if (params.get('scope') === 'user') {
         return HttpResponse.json({ models: models.filter(model => model.provider === 'anthropic') });
@@ -185,6 +203,43 @@ afterEach(() => {
 });
 
 describe('ModelPicker', () => {
+  it.each(['user', 'hybrid'] as const)(
+    'shows the thread owner catalog and default to a collaborator in %s scope',
+    async modelScope => {
+      const user = userEvent.setup();
+      renderPicker({
+        modelScope,
+        kind: 'user',
+        modelId: 'anthropic/claude-sonnet-4-6',
+        defaultModelId: 'openai/gpt-5',
+        sessionPolicy: { modelScope: 'user', defaultModelId: 'anthropic/claude-sonnet-4-6' },
+      });
+
+      await user.click(await screen.findByLabelText('Session model'));
+      const ownerOption = await screen.findByRole('option', { name: /claude-sonnet-4-6/ });
+      expect(within(ownerOption).getByText('Default')).toBeVisible();
+      expect(screen.queryByRole('option', { name: /gpt-5/ })).not.toBeInTheDocument();
+      expect(screen.queryByText(/not configured/)).not.toBeInTheDocument();
+    },
+  );
+
+  it('keeps a completed hybrid work-item thread on the server-resolved Factory catalog on a personal route', async () => {
+    const user = userEvent.setup();
+    renderPicker({
+      modelScope: 'hybrid',
+      kind: 'user',
+      sessionPolicy: { modelScope: 'factory', defaultModelId: 'openai/gpt-5' },
+    });
+
+    await user.click(await screen.findByLabelText('Session model'));
+    const factoryOption = await screen.findByRole('option', { name: /gpt-5/ });
+    expect(within(factoryOption).getByText('Default')).toBeVisible();
+    expect(screen.queryByRole('option', { name: /claude-sonnet-4-6/ })).not.toBeInTheDocument();
+    expect(await screen.findByRole('note')).toHaveTextContent(
+      "Showing models this Factory's organization credentials can run.",
+    );
+  });
+
   it('uses personal credentials to show a hybrid user session model as configured', async () => {
     const user = userEvent.setup();
     renderPicker({
@@ -259,7 +314,7 @@ describe('ModelPicker', () => {
     await projectLoaded;
     await new Promise(resolve => setTimeout(resolve, 0));
 
-    expect(screen.getByRole('option', { name: /gpt-5/i })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /claude-sonnet-4-6/i })).toBeInTheDocument();
     expect(screen.queryByRole('note')).not.toBeInTheDocument();
   });
 

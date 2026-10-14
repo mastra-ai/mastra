@@ -521,8 +521,19 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
     if (!sourceControl) return;
     const sourceSession = await sourceControl.sessions.getBySessionId(thread.resourceId);
     if (!sourceSession?.factoryProjectId) return;
+    const threadId = session.thread.getId();
+    const binding =
+      threadId && deps.workItems
+        ? await deps.workItems.findRunBindingByThread({
+            orgId: sourceSession.orgId,
+            resourceId: thread.resourceId,
+            sessionId: thread.resourceId,
+            threadId,
+            rejectAmbiguous: true,
+          })
+        : null;
     const owner = {
-      factoryProjectId: sourceSession.factoryProjectId,
+      factoryProjectId: binding?.factoryProjectId ?? sourceSession.factoryProjectId,
       orgId: sourceSession.orgId,
       userId: sourceSession.userId,
     };
@@ -533,8 +544,7 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
       factoryProjectId: owner.factoryProjectId,
       orgId: owner.orgId,
       ownerUserId: owner.userId,
-      // A Slack conversation is an interactive session, so a hybrid Factory uses the owner's scope.
-      context: 'session',
+      context: binding ? 'run' : 'session',
     });
 
     // Repo-backed Slack sessions use the source-control row's durable owner,
@@ -560,8 +570,7 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
       getMetadata: async () =>
         activeThreadId
           ? (((await session.thread.getById({ threadId: activeThreadId }))?.metadata as
-              | Record<string, unknown>
-              | undefined) ?? {})
+              Record<string, unknown> | undefined) ?? {})
           : {},
       modeId,
       set: (key: string, value: unknown) =>

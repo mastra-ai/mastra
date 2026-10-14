@@ -157,9 +157,15 @@ describe('the /think command', () => {
       const input = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Message' });
       await waitFor(() => expect(input).toBeEnabled());
       await waitFor(() =>
-        expect(client.getQueryData(queryKeys.availableModels({ factoryProjectId: OVERLAY_FACTORY_ID }))).toEqual([
-          proModel,
-        ]),
+        expect(
+          client.getQueryData(
+            queryKeys.availableModels({
+              factoryProjectId: OVERLAY_FACTORY_ID,
+              resourceId: 'session-overlay',
+              threadId: 'thread-test',
+            }),
+          ),
+        ).toEqual({ models: [proModel] }),
       );
       return input;
     }

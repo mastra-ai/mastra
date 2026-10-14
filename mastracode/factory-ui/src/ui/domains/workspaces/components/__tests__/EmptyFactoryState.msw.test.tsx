@@ -105,8 +105,14 @@ function registerSetup(failure?: 'connection' | 'intake' | 'model') {
     http.post(`${TEST_BASE_URL}/web/factory/projects`, async ({ request }) => {
       const body = await request.json();
       writes.push({ path: 'create', body });
-      project = { id: 'fp-1', name: 'hello' };
+      const input = z.object({ modelScope: z.enum(['factory', 'user', 'hybrid']).optional() }).parse(body);
+      project = { id: 'fp-1', name: 'hello', modelScope: input.modelScope ?? 'hybrid' };
       return HttpResponse.json({ project });
+    }),
+    http.delete(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () => {
+      writes.push({ path: 'delete', body: { id: 'fp-1' } });
+      project = undefined;
+      return new HttpResponse(null, { status: 204 });
     }),
     http.post(`${TEST_BASE_URL}/web/gitlab/projects/registration`, async ({ request }) => {
       writes.push({ path: 'registration', body: await request.json() });
@@ -262,6 +268,41 @@ describe('Draft Factory onboarding', () => {
       await user.click(await screen.findByRole('button', { name: 'Create factory' }));
       expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
       await waitFor(() => expect(writes.filter(item => item.path === 'create')).toHaveLength(1));
+    },
+  );
+
+  it.each(['user', 'hybrid'] as const)(
+    'recreates a pending Factory when a failed setup is retried in %s scope',
+    async desiredScope => {
+      const writes = registerSetup('model');
+      persistOnboardingDraft({
+        repository: repo,
+        ...(desiredScope === 'user' ? { model } : { personal: model }),
+      });
+      sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
+      const user = userEvent.setup();
+      const view = renderOnboarding();
+      await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('502');
+      expect(sessionStorage.getItem(ONBOARDING_FACTORY_KEY)).toBe('fp-1');
+      view.unmount();
+      persistOnboardingDraft({
+        repository: repo,
+        ...(desiredScope === 'user' ? { personal: model } : { model }),
+      });
+      renderOnboarding();
+      await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+      expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
+      expect(writes.filter(item => item.path === 'delete')).toEqual([{ path: 'delete', body: { id: 'fp-1' } }]);
+      expect(writes.filter(item => item.path === 'create')).toEqual([
+        { path: 'create', body: { name: 'hello', ...(desiredScope === 'hybrid' ? { modelScope: 'user' } : {}) } },
+        { path: 'create', body: { name: 'hello', ...(desiredScope === 'user' ? { modelScope: 'user' } : {}) } },
+      ]);
+      expect(
+        writes
+          .filter(item => item.path === 'model')
+          .every(item => !z.object({ modelScope: z.unknown().optional() }).parse(item.body).modelScope),
+      ).toBe(true);
     },
   );
 

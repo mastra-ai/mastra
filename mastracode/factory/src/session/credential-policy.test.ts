@@ -321,6 +321,51 @@ describe('trusted Factory credential policy', () => {
       await expect(resolveCredentialStore(ctx)?.getApiKey('openai-codex')).resolves.toBe('org-key');
     });
 
+    it.each(['hybrid', 'user'] as const)(
+      'keeps %s billing on a completed work-item thread without restoring authority',
+      async modelScope => {
+        const { seed, project, sourceSession, context, deps } = await setup();
+        await seed.projects.update({ orgId: ORG, id: project.id, input: { modelScope } });
+        await bindRun(seed, sourceSession, project.id);
+        const address = {
+          orgId: ORG,
+          factoryProjectId: project.id,
+          resourceId: sourceSession.sessionId,
+          sessionId: sourceSession.sessionId,
+          threadId: sourceSession.sessionId,
+        };
+        const binding = await seed.workItems.findActiveRunBinding(address);
+        await seed.workItems.revokeRunBinding({
+          orgId: ORG,
+          factoryProjectId: project.id,
+          bindingId: binding!.id,
+          revokedAt: new Date(),
+        });
+        await expect(seed.workItems.findActiveRunBinding(address)).resolves.toBeNull();
+
+        const ctx = context();
+        await prepareCredentialTenant(ctx);
+        const expectedScope = modelScope === 'hybrid' ? 'factory' : 'user';
+        expect(resolveTenantFromRequestContext(ctx)).toEqual({
+          orgId: ORG,
+          userId: OWNER,
+          credentialScope: expectedScope,
+        });
+        await expect(resolveCredentialStore(ctx)?.getApiKey('openai-codex')).resolves.toBe(
+          modelScope === 'hybrid' ? 'org-key' : 'owner-key',
+        );
+
+        const { session, state } = recordingSession(sourceSession.sessionId);
+        await hydrateSessionDefaultModel(session, { ...deps, modelDefaults: seed.modelDefaults });
+        expect(state.factoryModelScope).toBe(expectedScope);
+        expect(session.model.switch).not.toHaveBeenCalled();
+
+        ctx.set('controller', { resourceId: sourceSession.sessionId, threadId: 'unrelated-chat-thread', state: {} });
+        await prepareCredentialTenant(ctx);
+        expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: ORG, userId: OWNER, credentialScope: 'user' });
+      },
+    );
+
     it('resolves the same session as a session again on a thread the run binding does not cover', async () => {
       const { seed, project, sourceSession, context } = await setup();
       await seed.projects.update({ orgId: ORG, id: project.id, input: { modelScope: 'hybrid' } });

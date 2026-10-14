@@ -33,6 +33,7 @@ export function useSetFactoryDefaultModelMutation(factoryProjectId: string | und
       updateFactoryDefaultModel(baseUrl, factoryProjectId!, defaultModelId),
     onSuccess: project => {
       queryClient.setQueryData(queryKeys.factoryProject(factoryProjectId), project);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.availableModels({ factoryProjectId }) });
     },
   });
 }

@@ -14,11 +14,13 @@ import type { CustomProviderSetting, ThinkingLevelSetting } from '@mastra/code-s
 import { AMAZON_BEDROCK_GATEWAY_ID } from '@mastra/code-sdk/providers/amazon-bedrock-gateway';
 import { MASTRA_GATEWAY_PREFIX } from '@mastra/code-sdk/providers/model-ids';
 import { getModelReasoningOptions } from '@mastra/core/llm';
+import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 
 import type { Context } from 'hono';
 import { z } from 'zod';
+import { resolveFactoryModelPolicy } from '../session/credential-policy.js';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
 import type {
   CredentialRecord,
@@ -35,6 +37,7 @@ import type {
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import {
   getAuthProviderId,
   listTenantCredentialsForRequest,
@@ -600,6 +603,8 @@ export interface ConfigRoutesDeps extends RouteDependencies {
   modelDefaults?: ModelDefaultsStorage;
   /** Source-control sessions available to config route integrations. */
   sourceControlSessions?: Pick<SourceControlStorageHandle['sessions'], 'getBySessionId'>;
+  /** Thread membership used to resolve the same model policy as an invocation. */
+  workItems?: WorkItemsStorage;
   /** Tenant memory-settings domain handle; absent in local (no-DB) mode. */
   memorySettings?: MemorySettingsStorage;
   /** Factory projects domain, used to derive OM fallbacks from a factory's default model. */
@@ -953,14 +958,57 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               auth,
               credentials: options.modelCredentials,
             });
-            // A Factory's model scope is exclusive at run time, so a picker for
-            // that Factory must only offer models its scope's credentials serve.
-            // `scope=user` serves personal defaults, which only apply in
-            // personal-scope Factories and so only run on the caller's own credentials.
             const factoryProjectId = c.req.query('factoryId') || undefined;
             const tenant = auth.tenant(c);
             let tenantCredentials = allTenantCredentials;
-            if (allTenantCredentials && c.req.query('scope') === 'user') {
+            let sessionPolicy: { modelScope: 'factory' | 'user'; defaultModelId: string | null } | undefined;
+            const resourceId = c.req.query('resourceId');
+            const threadId = c.req.query('threadId');
+            if (resourceId !== undefined || threadId !== undefined) {
+              const address = z
+                .object({ resourceId: z.string().trim().min(1), threadId: z.string().trim().min(1) })
+                .safeParse({ resourceId, threadId });
+              if (!address.success) return c.json({ error: 'invalid_session_context' }, 400);
+              if (!tenant && auth.enabled()) return c.json({ error: 'unauthorized' }, 401);
+              if (tenant) {
+                if (
+                  !options.factoryProjects ||
+                  !options.sourceControlSessions ||
+                  !options.workItems ||
+                  !options.modelCredentials
+                )
+                  return c.json({ error: 'session_model_policy_unavailable' }, 503);
+                const requestContext = new RequestContext();
+                requestContext.set('user', { id: tenant.userId, organizationId: tenantOrgId(tenant) });
+                requestContext.set('controller', address.data);
+                let policy;
+                try {
+                  policy = await resolveFactoryModelPolicy(requestContext, {
+                    projects: options.factoryProjects,
+                    sourceControl: options.sourceControlSessions,
+                    workItems: options.workItems,
+                  });
+                } catch {
+                  return c.json({ error: 'session_model_policy_unavailable' }, 403);
+                }
+                if (!policy) return c.json({ error: 'unauthorized' }, 401);
+                const orgId = policy.tenant.orgId ?? tenantOrgId(tenant);
+                const modelScope = policy.tenant.credentialScope ?? 'user';
+                const storageScope = modelScope === 'factory' ? 'org' : 'user';
+                tenantCredentials = (
+                  await options.modelCredentials.listCredentials(orgId, policy.tenant.userId)
+                ).filter(record => record.scope === storageScope);
+                let defaultModelId = policy.factoryDefaultModelId ?? null;
+                if (modelScope === 'user') {
+                  if (!options.modelDefaults) return c.json({ error: 'model_defaults_unavailable' }, 503);
+                  await options.modelDefaults.ensureReady();
+                  defaultModelId =
+                    (await options.modelDefaults.get({ orgId, userId: policy.tenant.userId }))?.modelId ?? null;
+                }
+                sessionPolicy = { modelScope, defaultModelId };
+              }
+            } else if (allTenantCredentials && c.req.query('scope') === 'user') {
+              // Settings still list the caller's own models; live threads resolve their owner above.
               tenantCredentials = allTenantCredentials.filter(record => record.scope === 'user');
             } else if (allTenantCredentials && factoryProjectId && tenant) {
               if (!options.factoryProjects) return c.json({ error: 'factory_unavailable' }, 503);
@@ -1017,6 +1065,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               }
             }
             return c.json({
+              ...sessionPolicy,
               models: catalog.sort((a, b) =>
                 a.provider === b.provider ? a.id.localeCompare(b.id) : a.provider.localeCompare(b.provider),
               ),
