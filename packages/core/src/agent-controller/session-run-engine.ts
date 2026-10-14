@@ -247,7 +247,6 @@ type StreamState = {
   /** Response ids offered by `step-start` — an id binds to at most one display message. */
   offeredResponseIds: Set<string>;
   completedToolPrelude: boolean;
-  modelChangedAfterStart: boolean;
   /**
    * Set when a stream ends on a non-success finish reason (e.g. `content-filter`,
    * `error`, `length`). Carries the user-facing message so the run finalizes
@@ -337,14 +336,11 @@ export class SessionRunEngine {
     message.content.metadata.errorMessage = errorMessage;
   }
 
-  private stampResponseModel(state: StreamState, stepStart: StreamChunkPayload): void {
+  private stampResponseModel(message: MastraDBMessage, stepStart: StreamChunkPayload): void {
     const modelId = getString(stepStart.modelId);
     if (!modelId) return;
     const provider = getString(stepStart.provider);
-    const metadata = state.currentMessage.content.metadata;
-    if (metadata?.modelId === modelId && metadata.provider === provider) return;
-    state.currentMessage.content.metadata = { ...metadata, modelId, ...(provider ? { provider } : {}) };
-    if (state.messageStarted) state.modelChangedAfterStart = true;
+    message.content.metadata = { ...message.content.metadata, modelId, ...(provider ? { provider } : {}) };
   }
 
   private startCurrentMessage(state: StreamState): boolean {
@@ -384,14 +380,13 @@ export class SessionRunEngine {
 
   private finishCurrentMessage(state: StreamState): void {
     if (!state.messageStarted) return;
-    const metadata = state.modelChangedAfterStart ? state.currentMessage.content.metadata : undefined;
+    const { id, content } = state.currentMessage;
     this.#session.emit({
       type: 'message_end',
-      id: state.currentMessage.id,
-      ...(metadata ? { metadata: structuredClone(metadata) } : {}),
+      id,
+      ...(content.metadata ? { metadata: structuredClone(content.metadata) } : {}),
     });
     state.messageStarted = false;
-    state.modelChangedAfterStart = false;
   }
 
   private finishCurrentMessageAndRotate(state: StreamState): void {
@@ -422,7 +417,6 @@ export class SessionRunEngine {
       announcedTextSpans: new Set(),
       announcedReasoningSpans: new Set(),
       messageIdObserved: false,
-      modelChangedAfterStart: false,
       toolPartById: new Map<string, number>(),
       offeredResponseIds: new Set<string>(),
       completedToolPrelude: false,
@@ -693,7 +687,7 @@ export class SessionRunEngine {
         const messageId = getString(payload.messageId);
         if (!messageId) break;
         if (state.offeredResponseIds.has(messageId)) {
-          if (messageId === state.currentMessage.id) this.stampResponseModel(state, payload);
+          if (messageId === state.currentMessage.id) this.stampResponseModel(state.currentMessage, payload);
           break;
         }
         // A resumed tool can finish before the first model step starts. Seal
@@ -712,7 +706,7 @@ export class SessionRunEngine {
         if (!this.isCurrentMessageObserved(state)) {
           state.currentMessage.id = messageId;
         }
-        this.stampResponseModel(state, payload);
+        this.stampResponseModel(state.currentMessage, payload);
         break;
       }
 

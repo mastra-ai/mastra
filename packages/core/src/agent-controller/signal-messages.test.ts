@@ -1280,7 +1280,7 @@ describe('AgentController signal messages', () => {
       event: { type: 'text-delta', delta: 'Hello' },
     });
     expect(events).toContainEqual({ type: 'message_end', id: signalStart!.message.id });
-    expect(events).toContainEqual({ type: 'message_end', id: assistantStart!.message.id });
+    expect(events).toContainEqual(expect.objectContaining({ type: 'message_end', id: assistantStart!.message.id }));
   });
 
   it('does not carry a stale abort reason into a later idle signal run', async () => {

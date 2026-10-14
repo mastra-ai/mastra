@@ -147,7 +147,7 @@ describe('stream ↔ persisted message identity', () => {
       (event): event is Extract<AgentControllerEvent, { type: 'message_end' }> =>
         event.type === 'message_end' && event.id === streamedStart!.message.id,
     );
-    expect(streamedEnd).toEqual({ type: 'message_end', id: streamedStart!.message.id });
+    expect(streamedEnd).toMatchObject({ type: 'message_end', id: streamedStart!.message.id });
     expect(persistedAssistant).toHaveLength(1);
     expect(streamedStart!.message.id).toBe(persistedAssistant[0]!.id);
   }, 30000);

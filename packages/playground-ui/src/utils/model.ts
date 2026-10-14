@@ -41,6 +41,7 @@ const WORD_NAMES = new Map([
 const DATE_SUFFIX = /(-\d{8}|-\d{4}-\d{2}-\d{2}|-\d{2}-\d{4}|-\d{4})$/;
 const BEDROCK_VENDOR_PREFIXES = /^(?:[a-z]+\.)+/i;
 const BEDROCK_API_VERSION = /-v\d+:0$/;
+const WORD_WITH_MAJOR_VERSION = /^([a-z]{2,})(\d+)$/;
 
 const titleCase = (word: string) => WORD_NAMES.get(word) ?? word.charAt(0).toUpperCase() + word.slice(1);
 
@@ -61,8 +62,11 @@ export function formatModelName(model: string): string {
   const words: string[] = [];
   for (const token of tokens) {
     const previous = words[words.length - 1];
+    const wordWithMajor = previous?.match(WORD_WITH_MAJOR_VERSION);
     if (previous && /^\d+$/.test(previous) && /^\d$/.test(token)) {
       words[words.length - 1] = `${previous}.${token}`;
+    } else if (wordWithMajor?.[1] && wordWithMajor[2] && /^\d$/.test(token)) {
+      words.splice(-1, 1, wordWithMajor[1], `${wordWithMajor[2]}.${token}`);
     } else {
       words.push(token);
     }
