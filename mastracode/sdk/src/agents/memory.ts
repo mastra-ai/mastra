@@ -1,7 +1,7 @@
+import { setRunAgentScopes } from '@mastra/core/agent';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { Knowledge } from '@mastra/core/knowledge';
 import type { GatewayLanguageModel } from '@mastra/core/llm';
-import { setRunAgentScopes } from '@mastra/core/agent';
 import { MASTRA_SCOPES_KEY } from '@mastra/core/request-context';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
@@ -68,7 +68,10 @@ interface FactoryMemorySettings {
 }
 
 type FactoryMemorySettingsContext =
-  FactoryMemorySettings | null | { status: 'unavailable'; reason: string } | undefined;
+  | FactoryMemorySettings
+  | null
+  | { status: 'unavailable'; reason: string }
+  | undefined;
 
 function getFactoryMemorySettingsContext(requestContext: RequestContext): FactoryMemorySettingsContext {
   return requestContext.get('mastra__factoryMemorySettings') as FactoryMemorySettingsContext;
