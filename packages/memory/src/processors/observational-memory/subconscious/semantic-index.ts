@@ -1,11 +1,10 @@
+import type { IMastraLogger } from '@mastra/core/logger';
 import type {
   KnowledgeScopeIds,
   KnowledgeSemanticDocumentType,
   KnowledgeSemanticOutboxEntry,
   KnowledgeStorage,
-  SearchKnowledgeResult,
 } from '@mastra/core/storage';
-import type { IMastraLogger } from '@mastra/core/logger';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '@mastra/core/vector';
 
 const DEFAULT_BATCH_SIZE = 50;
@@ -28,11 +27,6 @@ export class StaleKnowledgeSemanticIndexError extends Error {
   }
 }
 
-/** A semantic hit in the lexical `search()` shape, so both kinds join on `type` + `id`. */
-export interface KnowledgeSemanticSearchResult extends SearchKnowledgeResult {
-  score: number;
-}
-
 export interface KnowledgeSemanticIndexCoordinatorConfig {
   knowledge: KnowledgeStorage;
   vector: MastraVector;
@@ -48,12 +42,20 @@ export interface KnowledgeSemanticIndexCoordinatorConfig {
 
 // Drain outcomes another worker or a long backlog can cause. Searches serve the current index for these,
 // because storage confirms every hit's visibility; only freshness is lost.
-const servableStaleness = new WeakSet<StaleKnowledgeSemanticIndexError>();
+type ServableStaleness =
+  | { cause: 'held-by-another-worker'; pendingVisible: boolean; processingVisible: boolean; heldBy?: string }
+  | { cause: 'backlog-exceeded-drain'; batchesDrained: number; operationsApplied: number };
 
-function servable(message: string): StaleKnowledgeSemanticIndexError {
+const servableStaleness = new WeakMap<StaleKnowledgeSemanticIndexError, ServableStaleness>();
+
+function servable(message: string, details: ServableStaleness): StaleKnowledgeSemanticIndexError {
   const error = new StaleKnowledgeSemanticIndexError(message);
-  servableStaleness.add(error);
+  servableStaleness.set(error, details);
   return error;
+}
+
+function drainKey(scopeIds?: KnowledgeScopeIds): string {
+  return scopeIds?.join('\u001f') ?? '*';
 }
 
 interface KnowledgeSemanticDocument {
@@ -74,6 +76,8 @@ export class KnowledgeSemanticIndexCoordinator {
   readonly #claimTimeoutMs: number | undefined;
   readonly #draining = new Map<string, Promise<number>>();
   readonly #getLogger: () => IMastraLogger | undefined;
+  // Scope keys whose current stale period has already been warned about; cleared once a drain completes.
+  readonly #warnedStale = new Set<string>();
 
   constructor(config: KnowledgeSemanticIndexCoordinatorConfig) {
     this.#knowledge = config.knowledge;
@@ -87,7 +91,7 @@ export class KnowledgeSemanticIndexCoordinator {
   }
 
   async drain(scopeIds?: KnowledgeScopeIds): Promise<number> {
-    const key = scopeIds?.join('\u001f') ?? '*';
+    const key = drainKey(scopeIds);
     const active = this.#draining.get(key);
     if (active) return active;
     const draining = this.#drain(scopeIds).finally(() => {
@@ -97,14 +101,22 @@ export class KnowledgeSemanticIndexCoordinator {
     return draining;
   }
 
-  async search(query: string, scopeIds: KnowledgeScopeIds, limit = 10): Promise<KnowledgeSemanticSearchResult[]> {
+  async search(query: string, scopeIds: KnowledgeScopeIds, limit = 10) {
+    const key = drainKey(scopeIds);
     try {
       await this.drain(scopeIds);
+      this.#warnedStale.delete(key);
     } catch (error) {
-      if (!(error instanceof StaleKnowledgeSemanticIndexError) || !servableStaleness.has(error)) throw error;
-      this.#getLogger()?.warn('Knowledge semantic search served a stale index; recent changes may be missing', {
-        reason: error.message,
-      });
+      const details = error instanceof StaleKnowledgeSemanticIndexError ? servableStaleness.get(error) : undefined;
+      if (!details) throw error;
+      if (!this.#warnedStale.has(key)) {
+        this.#warnedStale.add(key);
+        this.#getLogger()?.warn('Knowledge semantic search served a stale index; recent changes may be missing', {
+          ...details,
+          workerId: this.#workerId,
+          scopeCount: scopeIds.length,
+        });
+      }
     }
     const result = await this.#embedder.doEmbed({
       values: [query],
@@ -129,47 +141,10 @@ export class KnowledgeSemanticIndexCoordinator {
     // Vector metadata can be stale (written before a rescope, or by a worker whose outbox claim expired),
     // so visibility comes from storage, which applies the same node and record rules as every other read.
     const visible = await this.#visibleDocumentIds([...deduped.keys()], scopeIds);
-    const ranked = [...deduped.values()]
+    return [...deduped.values()]
       .filter(candidate => visible.has(candidate.id))
       .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id))
       .slice(0, limit);
-    const results = await Promise.all(ranked.map(candidate => this.#toSearchResult(candidate.id, candidate.score)));
-    return results.filter((result): result is KnowledgeSemanticSearchResult => result !== null);
-  }
-
-  // Storage has already admitted these ids, and a visible record implies its node is visible, so
-  // recordId is the record's node, exactly as lexical search reports it. A row deleted since is dropped.
-  async #toSearchResult(documentId: string, score: number): Promise<KnowledgeSemanticSearchResult | null> {
-    if (documentId.startsWith(NODE_PREFIX)) {
-      const node = await this.#knowledge.getNode(documentId.slice(NODE_PREFIX.length));
-      if (!node) return null;
-      const description = typeof node.metadata?.description === 'string' ? node.metadata.description : undefined;
-      return {
-        type: 'node',
-        id: node.id,
-        recordId: node.id,
-        name: node.name,
-        text: description ? `${node.name}\n${description}` : node.name,
-        scopeIds: await this.#knowledge.getNodeScopeIds(node.id),
-        score,
-      };
-    }
-    if (documentId.startsWith(RECORD_PREFIX)) {
-      const record = await this.#knowledge.getRecord({ id: documentId.slice(RECORD_PREFIX.length) });
-      if (!record) return null;
-      const node = await this.#knowledge.getNode(record.nodeId);
-      if (!node) return null;
-      return {
-        type: 'record',
-        id: record.id,
-        recordId: node.id,
-        name: node.name,
-        text: record.text,
-        scopeIds: await this.#knowledge.getRecordScopeIds(record.id),
-        score,
-      };
-    }
-    return null;
   }
 
   async #visibleDocumentIds(documentIds: string[], scopeIds: KnowledgeScopeIds): Promise<Set<string>> {
@@ -202,6 +177,12 @@ export class KnowledgeSemanticIndexCoordinator {
         if (pending.length > 0 || processing.length > 0) {
           throw servable(
             'Knowledge semantic index is stale: a visible operation is pending or being processed by another worker.',
+            {
+              cause: 'held-by-another-worker',
+              pendingVisible: pending.length > 0,
+              processingVisible: processing.length > 0,
+              ...(processing[0]?.claimedBy ? { heldBy: processing[0].claimedBy } : {}),
+            },
           );
         }
         return processed;
@@ -230,9 +211,11 @@ export class KnowledgeSemanticIndexCoordinator {
         }
       }
     }
-    throw servable(
-      `Knowledge semantic index remained stale after ${MAX_DRAIN_BATCHES} processing batches.`,
-    );
+    throw servable(`Knowledge semantic index remained stale after ${MAX_DRAIN_BATCHES} processing batches.`, {
+      cause: 'backlog-exceeded-drain',
+      batchesDrained: MAX_DRAIN_BATCHES,
+      operationsApplied: processed,
+    });
   }
 
   async #apply(entry: KnowledgeSemanticOutboxEntry): Promise<void> {

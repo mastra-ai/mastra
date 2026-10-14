@@ -266,6 +266,7 @@ describe('knowledge semantic search when this caller cannot fully drain', () => 
       vector,
       embedder,
       batchSize: 1,
+      workerId: 'worker-b',
       getLogger: () => logger,
     });
     return { coordinator, warnings, vector };
@@ -285,7 +286,27 @@ describe('knowledge semantic search when this caller cannot fully drain', () => 
     const hits = await coordinator.search('indexed', scopeIds);
     expect(hits.map(hit => hit.id)).toEqual([`knowledge:node:${indexed.id}`]);
     expect(warnings).toHaveLength(1);
-    expect(warnings[0]!.message).toMatch(/stale/i);
+    expect(warnings[0]!.meta).toEqual({
+      cause: 'held-by-another-worker',
+      pendingVisible: false,
+      processingVisible: true,
+      heldBy: 'worker-a',
+      workerId: 'worker-b',
+      scopeCount: scopeIds.length,
+    });
+
+    // A second search in the same stale period does not warn again.
+    await coordinator.search('indexed', scopeIds);
+    expect(warnings).toHaveLength(1);
+
+    // Once worker A finishes, the period ends; the next stale period warns again.
+    await store.completeSemanticOutbox({ ids: held.map((entry: { id: string }) => entry.id), workerId: 'worker-a' });
+    await coordinator.search('indexed', scopeIds);
+    expect(warnings).toHaveLength(1);
+    await store.createNode({ name: 'Held again', kind: 'project', scopeIds });
+    await store.claimSemanticOutbox({ workerId: 'worker-a', scopeIds });
+    await coordinator.search('indexed', scopeIds);
+    expect(warnings).toHaveLength(2);
   });
 
   it('still throws when this caller fails to apply its own claimed operation', async () => {
@@ -311,6 +332,12 @@ describe('knowledge semantic search when this caller cannot fully drain', () => 
     const hits = await coordinator.search('indexed', scopeIds);
     expect(hits.map(hit => hit.id)).toEqual([`knowledge:node:${indexed.id}`]);
     expect(warnings).toHaveLength(1);
-    expect(warnings[0]!.message).toMatch(/stale/i);
+    expect(warnings[0]!.meta).toEqual({
+      cause: 'backlog-exceeded-drain',
+      batchesDrained: 100,
+      operationsApplied: 100,
+      workerId: 'worker-b',
+      scopeCount: scopeIds.length,
+    });
   });
 });
