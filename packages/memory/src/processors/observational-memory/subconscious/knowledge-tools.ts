@@ -12,7 +12,7 @@ import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 
 import { resolveKnowledgeResourceId } from './scope';
-import type { KnowledgeSemanticIndexCoordinator } from './semantic-index';
+import type { KnowledgeSemanticIndexCoordinator, KnowledgeSemanticSearchResult } from './semantic-index';
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
@@ -143,47 +143,9 @@ async function serializeNode(store: KnowledgeStorage, node: KnowledgeNode) {
   };
 }
 
-// The semantic index only returns candidates storage's listVisibleKnowledgeIds admits, and a visible
-// record implies its own node is visible, so hits are shaped here without re-checking visibility.
-async function loadSemanticResult(
-  store: KnowledgeStorage,
-  candidate: { id: string; score: number; metadata?: Record<string, unknown> },
-): Promise<(SearchKnowledgeResult & { semanticScore: number }) | null> {
-  const type = candidate.metadata?.document_type;
-  if (type === 'node') {
-    const node = await store.getNode(candidate.id.slice('knowledge:node:'.length));
-    if (!node) return null;
-    return {
-      type: 'node',
-      id: node.id,
-      recordId: node.id,
-      name: node.name,
-      text: `${node.name}\n${String(node.metadata?.description ?? '')}`,
-      scopeIds: await store.getNodeScopeIds(node.id),
-      semanticScore: candidate.score,
-    };
-  }
-  if (type === 'record') {
-    const record = await store.getRecord({ id: candidate.id.slice('knowledge:record:'.length) });
-    if (!record) return null;
-    const node = await store.getNode(record.nodeId);
-    if (!node) return null;
-    return {
-      type: 'record',
-      id: record.id,
-      recordId: node.id,
-      name: node.name,
-      text: record.text,
-      scopeIds: await store.getRecordScopeIds(record.id),
-      semanticScore: candidate.score,
-    };
-  }
-  return null;
-}
-
 function mergeHybridResults(
   lexical: SearchKnowledgeResult[],
-  semantic: Array<SearchKnowledgeResult & { semanticScore: number }>,
+  semantic: KnowledgeSemanticSearchResult[],
   limit: number,
 ) {
   const ranked = new Map<
@@ -193,14 +155,14 @@ function mergeHybridResults(
   lexical.forEach((result, index) =>
     ranked.set(`${result.type}:${result.id}`, { ...result, score: 1 / (61 + index), sources: ['lexical'] }),
   );
-  semantic.forEach((result, index) => {
+  semantic.forEach(({ score: semanticScore, ...result }, index) => {
     const key = `${result.type}:${result.id}`;
     const existing = ranked.get(key);
     ranked.set(key, {
       ...result,
       score: (existing?.score ?? 0) + 1 / (61 + index),
       sources: existing ? ['lexical', 'semantic'] : ['semantic'],
-      semanticScore: result.semanticScore,
+      semanticScore,
     });
   });
   return [...ranked.values()]
@@ -231,11 +193,8 @@ export function createKnowledgeTools(
       const limit = normalizeLimit(requestedLimit);
       const store = await getKnowledgeStore(memory);
       const semanticIndex = await memory.getKnowledgeSemanticIndex();
-      const semanticCandidates = semanticIndex ? await semanticIndex.search(query, scopeIds, limit * 2) : [];
+      const semantic = semanticIndex ? await semanticIndex.search(query, scopeIds, limit * 2) : [];
       const lexical = await store.search({ query, scopeIds, limit: limit * 2 });
-      const semantic = (
-        await Promise.all(semanticCandidates.map(candidate => loadSemanticResult(store, candidate)))
-      ).filter((result): result is NonNullable<typeof result> => Boolean(result));
       return { query, results: mergeHybridResults(lexical, semantic, limit) };
     },
   });
