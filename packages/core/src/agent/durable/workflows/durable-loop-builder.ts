@@ -71,12 +71,12 @@ const COLLECT_TOOL_RESULTS_STEP_ID = 'collect-tool-results';
  * A spread would invoke the lazy `writer` getter (see `defineLazyWriter`) and
  * allocate a ToolStream the step never uses.
  */
-function withParams<T extends object>(params: T, overrides: Record<string, unknown>): T {
+function withParams<T extends object, O extends object>(params: T, overrides: O): Omit<T, keyof O> & O {
   const descriptors: PropertyDescriptorMap = Object.getOwnPropertyDescriptors(params);
   for (const [key, value] of Object.entries(overrides)) {
     descriptors[key] = { value, enumerable: true, configurable: true, writable: true };
   }
-  return Object.defineProperties({}, descriptors) as T;
+  return Object.defineProperties({}, descriptors) as Omit<T, keyof O> & O;
 }
 
 export const MAP_FINAL_OUTPUT_STEP_ID = 'map-final-output';
