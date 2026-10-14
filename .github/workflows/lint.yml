@@ -79,6 +79,8 @@ jobs:
         with:
           # Changesets resolves the merge-base with main.
           fetch-depth: 0
+          # Partial clone: full history without every historical file version.
+          filter: blob:none
           persist-credentials: false
 
       - name: Setup pnpm and Node.js
@@ -264,6 +266,8 @@ jobs:
           # Fetch entire git history so Changesets can generate changelogs
           # with the correct commits
           fetch-depth: 0
+          # Partial clone: full history without every historical file version.
+          filter: blob:none
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
