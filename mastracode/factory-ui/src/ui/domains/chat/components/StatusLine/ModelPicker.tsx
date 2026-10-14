@@ -25,6 +25,7 @@ import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
 import { useChatModels } from '../../context/useChatModels';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { formatModelName } from '../../../settings/components/model-display-name';
+import { ModelScopeFooter, useOrganizationScopedFactory } from './ModelScopeFooter';
 import { SessionThinkingControl } from './SessionThinkingControl';
 
 function groupByProvider(models: AvailableModelOption[]): [string, AvailableModelOption[]][] {
@@ -48,6 +49,7 @@ export function ModelPicker() {
   const { activeModelId, defaultModelId, setModel, isLoading, error } = useChatModels();
   const { factoryId } = useParams<{ factoryId: string }>();
   const modelsQuery = useAvailableModelsQuery(factoryId);
+  const organizationScoped = useOrganizationScopedFactory(factoryId);
   const [open, setOpen] = useState(false);
   const [pendingModelId, setPendingModelId] = useState<string>();
 
@@ -173,6 +175,7 @@ export function ModelPicker() {
                 </CommandGroup>
               ) : null}
             </CommandList>
+            {organizationScoped && factoryId ? <ModelScopeFooter factoryId={factoryId} /> : null}
           </Command>
         </PopoverContent>
       </Popover>
