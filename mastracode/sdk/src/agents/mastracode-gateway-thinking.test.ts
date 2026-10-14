@@ -185,6 +185,10 @@ describe('MastraCodeGateway thinking level forwarding', () => {
     },
   );
 
+  it("turns Grok 4.3 thinking off in the xAI request's own reasoning field", async () => {
+    expect((await requestBody(resolve('off', 'xai', 'grok-4.3'))).reasoning).toEqual({ effort: 'none' });
+  });
+
   it('switches DeepSeek and Alibaba thinking off, since both reason by default', async () => {
     const deepseek = await requestBody(resolve('off', 'deepseek', 'deepseek-v4-pro'));
     expect(deepseek.thinking).toEqual({ type: 'disabled' });
