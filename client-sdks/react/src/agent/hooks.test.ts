@@ -1243,6 +1243,30 @@ describe('useChat forwards clientTools', () => {
 
     expect((sendError as Error | undefined)?.message).toBe('network down');
     expect(result.current.isRunning).toBe(false);
+    // The optimistic pending bubble is dropped since the server never accepted it (#26831).
+    expect(result.current.messages.filter(m => m.role === 'user')).toEqual([]);
+  });
+
+  it('keeps earlier messages and allows a clean retry after a failed signal send', async () => {
+    sendMessageMock.mockRejectedValueOnce(new Error('network down'));
+
+    const { result } = renderHook(
+      () =>
+        useChat({ agentId: 'test-agent', resourceId: 'resource-1', threadId: 'thread-1', enableThreadSignals: true }),
+      { wrapper },
+    );
+    await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'stream', message: 'retry me', threadId: 'thread-1' }).catch(() => {});
+    });
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'stream', message: 'retry me', threadId: 'thread-1' });
+    });
+
+    const users = result.current.messages.filter(m => m.role === 'user');
+    expect(users).toHaveLength(1);
+    expect(users[0]!.content.metadata?.status).toBe('pending');
   });
 
   it('uses the legacy stream path when thread signals are explicitly disabled', async () => {

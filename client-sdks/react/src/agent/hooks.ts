@@ -1398,6 +1398,11 @@ export const useChat = ({
       // A failed send (subscription setup, request, or stream) must not leave
       // the chat stranded in a "running" state until reload (issue #18768).
       setIsRunning(false);
+      // The server never accepted this turn, so drop the optimistic bubble
+      // instead of leaving it pending until reload (issue #26831).
+      if (signalId) {
+        setMessages(s => s.filter(m => !(m.id === signalId && m.content.metadata?.status === 'pending')));
+      }
       throw error;
     }
   };
