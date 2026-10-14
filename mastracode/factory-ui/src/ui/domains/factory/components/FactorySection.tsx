@@ -1,5 +1,5 @@
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
-import { Brain, GitPullRequest, House, Logs, ShieldCheck, SquareKanban, Timeline } from 'lucide-react';
+import { Brain, GitPullRequest, House, Logs, SquareKanban, Timeline } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { NavLink, useLocation, useParams, useResolvedPath } from 'react-router';
 
@@ -20,7 +20,6 @@ export function FactorySection() {
     <nav className="flex flex-col gap-2" aria-label="Factory">
       <Sidebar.NavList>
         <FactoryLink to={`/factories/${factoryId}/overview`} icon={House} label="Overview" />
-        <FactoryLink to={`/factories/${factoryId}/supervisor`} icon={ShieldCheck} label="Supervisor" />
         <FactoryLink to={`/factories/${factoryId}/activity`} icon={Timeline} label="Activity" />
         <FactoryLink to={`/factories/${factoryId}/audit`} icon={Logs} label="Audit log" />
         {features.data?.knowledge ? (

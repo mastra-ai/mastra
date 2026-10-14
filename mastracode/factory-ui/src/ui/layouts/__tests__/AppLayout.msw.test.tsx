@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, Link, RouterProvider } from 'react-router';
@@ -23,9 +23,6 @@ function stubFactory() {
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: [] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/supervisor/health`, () =>
-      HttpResponse.json({ checkedAt: new Date().toISOString(), findings: [], counts: {} }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
     http.get(`${TEST_BASE_URL}/web/user-sessions`, () => HttpResponse.json({ sessions: [] })),
@@ -95,6 +92,20 @@ describe('AppLayout', () => {
     expect(screen.queryByRole('heading', { name: 'Page A' })).not.toBeInTheDocument();
     // Same DOM node: the sidebar was not remounted by the navigation.
     expect(screen.getByRole('complementary', { name: 'Main sidebar' })).toBe(sidebar);
+  });
+
+  it('lists exactly the Factory pages in the Factory nav', async () => {
+    stubFactory();
+    renderApp();
+
+    const nav = await screen.findByRole('navigation', { name: 'Factory' });
+    const [pages] = within(nav).getAllByRole('list');
+    if (!pages) throw new Error('Expected the Factory page list');
+    expect(
+      within(pages)
+        .getAllByRole('link')
+        .map(link => link.textContent),
+    ).toEqual(['Overview', 'Activity', 'Audit log']);
   });
 
   it('keeps the shell mounted when switching between draft sessions', async () => {
