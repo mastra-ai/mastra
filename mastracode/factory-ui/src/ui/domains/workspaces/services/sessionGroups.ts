@@ -92,8 +92,18 @@ function ownerGroupHeadings(rows: readonly SessionListRow[], viewerUserId: strin
     .map(({ userId, label }) => ({ key: `owner:${userId}`, label, icon: 'owner' }));
 }
 
-/** Default group order for these rows; Status always lists all five, so an empty one can still be hidden. */
-export function sessionGroupOrder(
+/** Stored keys that still exist lead in stored order; groups the stored order never saw follow in default order. */
+export function applyGroupOrder<T extends { key: string }>(
+  defaults: readonly T[],
+  storedKeys: readonly string[] | undefined,
+): readonly T[] {
+  if (!storedKeys || storedKeys.length === 0) return defaults;
+  const rank = new Map(storedKeys.map((key, index) => [key, index]));
+  return defaults.toSorted((a, b) => (rank.get(a.key) ?? storedKeys.length) - (rank.get(b.key) ?? storedKeys.length));
+}
+
+/** Status always lists all five groups, so an empty one can still be hidden or placed. */
+function defaultGroupHeadings(
   rows: readonly SessionListRow[],
   groupBy: SessionGroupBy,
   context: SessionGroupContext,
@@ -110,15 +120,25 @@ export function sessionGroupOrder(
   }
 }
 
+export function sessionGroupOrder(
+  rows: readonly SessionListRow[],
+  groupBy: SessionGroupBy,
+  context: SessionGroupContext,
+  storedOrder: readonly string[] | undefined,
+): readonly SessionGroupHeading[] {
+  return applyGroupOrder(defaultGroupHeadings(rows, groupBy, context), storedOrder);
+}
+
 /** Rows keep their incoming order inside each group; hidden and empty groups are left out. */
 export function groupSessionRows(
   rows: readonly SessionListRow[],
   groupBy: SessionGroupBy,
   context: SessionGroupContext,
   hiddenKeys: readonly string[],
+  storedOrder: readonly string[] | undefined,
 ): SessionGroup[] {
   const groupKeyOf = GROUP_KEY_OF_ROW[groupBy];
-  return sessionGroupOrder(rows, groupBy, context).flatMap(heading => {
+  return sessionGroupOrder(rows, groupBy, context, storedOrder).flatMap(heading => {
     if (hiddenKeys.includes(heading.key)) return [];
     const groupRows = rows.filter(row => groupKeyOf(row) === heading.key);
     return groupRows.length > 0 ? [{ ...heading, rows: groupRows }] : [];

@@ -28,6 +28,7 @@ describe('groupSessionRows by board', () => {
       'board',
       { boards: [reviewBoard, releaseBoard, workBoard], viewerUserId: undefined },
       [],
+      undefined,
     );
 
     expect(groupSummary(groups)).toEqual([
@@ -44,6 +45,7 @@ describe('groupSessionRows by board', () => {
       'board',
       { boards: [workBoard, releaseBoard], viewerUserId: undefined },
       [],
+      undefined,
     );
 
     expect(groupSummary(groups).map(group => group.label)).toEqual(['Release Preview', 'Ops', 'User']);
@@ -52,18 +54,33 @@ describe('groupSessionRows by board', () => {
   it('keeps the incoming row order inside a group and leaves out empty groups', () => {
     const secondWorkRow = factoryRow(testSession('work-2', { branch: 'factory/issue-2' }));
 
-    const groups = groupSessionRows([secondWorkRow, workRow], 'board', builtinContext, []);
+    const groups = groupSessionRows([secondWorkRow, workRow], 'board', builtinContext, [], undefined);
 
     expect(groupSummary(groups)).toEqual([{ label: 'Work', sessionIds: ['work-2', 'work-1'] }]);
   });
 
   it('leaves out hidden groups and ignores hidden keys no group has', () => {
-    const groups = groupSessionRows([workRow, reviewRow, userRow('user-1')], 'board', builtinContext, [
-      'board:review',
-      'board:gone',
-    ]);
+    const groups = groupSessionRows(
+      [workRow, reviewRow, userRow('user-1')],
+      'board',
+      builtinContext,
+      ['board:review', 'board:gone'],
+      undefined,
+    );
 
     expect(groupSummary(groups).map(group => group.label)).toEqual(['Work', 'User']);
+  });
+
+  it('puts stored groups first in stored order, appends unseen groups in default order, and skips stale keys', () => {
+    const groups = groupSessionRows(
+      [workRow, reviewRow, releaseRow, userRow('user-1')],
+      'board',
+      { boards: [...builtinBoardCatalog.boards, releaseBoard], viewerUserId: undefined },
+      [],
+      ['user', 'board:gone', 'board:review'],
+    );
+
+    expect(groupSummary(groups).map(group => group.label)).toEqual(['User', 'Review', 'Work', 'Release Preview']);
   });
 });
 
@@ -79,6 +96,7 @@ describe('groupSessionRows by status', () => {
       'status',
       builtinContext,
       [],
+      undefined,
     );
 
     expect(groupSummary(groups)).toEqual([
@@ -97,6 +115,7 @@ describe('groupSessionRows by owner', () => {
       'owner',
       builtinContext,
       [],
+      undefined,
     );
 
     expect(groupSummary(groups)).toEqual([
@@ -109,7 +128,7 @@ describe('groupSessionRows by owner', () => {
 
 describe('groupSessionRows with no grouping', () => {
   it('puts every row in one group', () => {
-    const groups = groupSessionRows([workRow, userRow('user-1'), reviewRow], 'none', builtinContext, []);
+    const groups = groupSessionRows([workRow, userRow('user-1'), reviewRow], 'none', builtinContext, [], undefined);
 
     expect(groupSummary(groups)).toEqual([{ label: 'All', sessionIds: ['work-1', 'user-1', 'review-1'] }]);
   });

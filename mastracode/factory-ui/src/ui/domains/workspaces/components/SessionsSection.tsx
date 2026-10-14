@@ -55,10 +55,12 @@ export function SessionsSection() {
   const filters: SessionFiltersState = { ...defaultFilters, ...filterChanges };
   const activeFilterCount = activeSessionFilterCount(filters, defaultFilters);
   const hiddenGroupKeys = view.hiddenGroups[view.groupBy] ?? [];
+  const storedGroupOrder = view.groupOrder[view.groupBy];
   const changedCount =
     Number(view.sort !== DEFAULT_SESSION_SORT) +
     Number(view.groupBy !== DEFAULT_SESSION_GROUP_BY) +
     Number(hiddenGroupKeys.length > 0) +
+    Number((storedGroupOrder?.length ?? 0) > 0) +
     activeFilterCount;
   const changeFilters = (changes: Partial<SessionFiltersState>) =>
     setFilterChanges(current => ({ ...current, ...changes }));
@@ -66,7 +68,8 @@ export function SessionsSection() {
   const sortedRows = rows.toSorted(compareSessionRows(view.sort));
   const filteredRows = filterSessionRows(sortedRows, filters, viewerUserId);
   const groupContext: SessionGroupContext = { boards: catalog.data, viewerUserId };
-  const groups = groupSessionRows(filteredRows, view.groupBy, groupContext, hiddenGroupKeys);
+  const groups = groupSessionRows(filteredRows, view.groupBy, groupContext, hiddenGroupKeys, storedGroupOrder);
+  const menuGroups = sessionGroupOrder(sortedRows, view.groupBy, groupContext, storedGroupOrder);
   const changeGroupVisibility = (key: string, visible: boolean) =>
     updateView({
       hiddenGroups: {
@@ -74,6 +77,11 @@ export function SessionsSection() {
         [view.groupBy]: visible ? hiddenGroupKeys.filter(hidden => hidden !== key) : [...hiddenGroupKeys, key],
       },
     });
+  const changeGroupOrder = (keys: string[]) => {
+    const defaultKeys = sessionGroupOrder(sortedRows, view.groupBy, groupContext, undefined).map(group => group.key);
+    const isDefaultOrder = keys.every((key, index) => key === defaultKeys[index]);
+    updateView({ groupOrder: { ...view.groupOrder, [view.groupBy]: isDefaultOrder ? [] : keys } });
+  };
 
   const pullRequestTargets = groups
     .flatMap(group => collapsedRows(group.rows))
@@ -157,9 +165,10 @@ export function SessionsSection() {
               <SessionGroupMenu
                 groupBy={view.groupBy}
                 onGroupByChange={groupBy => updateView({ groupBy })}
-                groups={sessionGroupOrder(sortedRows, view.groupBy, groupContext)}
+                groups={menuGroups}
                 hiddenKeys={hiddenGroupKeys}
                 onVisibilityChange={changeGroupVisibility}
+                onOrderChange={changeGroupOrder}
               />
             </SessionListProperties>
             {hasRepositories && (

@@ -55,6 +55,19 @@ describe('useSessionListView', () => {
     expect(storedView()).toEqual({ groupBy: 'status' });
   });
 
+  it('keeps a group order per grouping and forgets it once cleared', () => {
+    const { result } = renderHook(() => useSessionListView());
+
+    act(() => result.current.updateView({ groupOrder: { board: ['user', 'board:work'] } }));
+    expect(storedView()).toEqual({ groupOrder: { board: ['user', 'board:work'] } });
+    expect(renderHook(() => useSessionListView()).result.current.view.groupOrder).toEqual({
+      board: ['user', 'board:work'],
+    });
+
+    act(() => result.current.updateView({ groupOrder: { board: [] } }));
+    expect(storedView()).toEqual({});
+  });
+
   it('stores only what differs from the default, and forgets a choice set back to it', () => {
     const { result } = renderHook(() => useSessionListView());
 
