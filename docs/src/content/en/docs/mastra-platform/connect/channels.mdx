@@ -82,8 +82,8 @@ Teams uses a Microsoft work or school account authorized with OAuth. The same `m
 Set `MASTRA_ENCRYPTION_KEY` before connecting an agent. The bot credential is stored encrypted at rest, and `channels()` fails at startup when the key is missing and a Teams connection is active.
 
 1. Run `mastra connect add microsoft-teams` and sign in with a Microsoft work or school account. Some of the requested permissions require admin consent, so the first connection in a tenant needs a Microsoft Entra administrator.
-1. Connect the channel to an agent in Studio. Mastra creates a single-tenant bot registration for the agent and returns an installation link.
-1. Open the installation link and add the agent's app to Teams.
+1. Connect the channel to an agent in Studio. Mastra creates a single-tenant bot registration for the agent and returns a link to the [Teams Developer Portal](https://dev.teams.microsoft.com/bots).
+1. Open the link, package the bot into a Teams app in the Developer Portal, and add the app to Teams.
 
 Disconnecting the agent deletes the bot registration and its Entra application.
 
