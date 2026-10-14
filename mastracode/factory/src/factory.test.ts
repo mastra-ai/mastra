@@ -459,8 +459,9 @@ describe('MastraFactory.prepare', () => {
       const restore = withEnv({});
       try {
         const config = await prepareFactory({ storage: fakeStorage(), importers: [] });
-        expect(config.knowledge).toBeInstanceOf(Knowledge);
-        expect((config.knowledge as Knowledge).id).toBe('factory');
+        expect(config.knowledge).toMatchObject({ key: 'factory' });
+        expect(config.knowledge?.instance).toBeInstanceOf(Knowledge);
+        expect(config.knowledge?.instance.id).toBe('factory');
       } finally {
         restore();
       }
@@ -471,7 +472,8 @@ describe('MastraFactory.prepare', () => {
       try {
         const resolver = async () => [];
         const config = await prepareFactory({ storage: fakeStorage(), importers: resolver });
-        expect(config.knowledge).toBeInstanceOf(Knowledge);
+        expect(config.knowledge).toMatchObject({ key: 'factory' });
+        expect(config.knowledge?.instance).toBeInstanceOf(Knowledge);
       } finally {
         restore();
       }
@@ -481,7 +483,8 @@ describe('MastraFactory.prepare', () => {
       const restore = withEnv({ MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS: '1' });
       try {
         const config = await prepareFactory({ storage: fakeStorage() });
-        expect(config.knowledge).toBeInstanceOf(Knowledge);
+        expect(config.knowledge).toMatchObject({ key: 'factory' });
+        expect(config.knowledge?.instance).toBeInstanceOf(Knowledge);
       } finally {
         restore();
       }
@@ -511,7 +514,8 @@ describe('MastraFactory.prepare', () => {
             // The `importers()` call itself just captures options.
           },
         });
-        expect(config.knowledge).toBeInstanceOf(Knowledge);
+        expect(config.knowledge).toMatchObject({ key: 'factory' });
+        expect(config.knowledge?.instance).toBeInstanceOf(Knowledge);
       } finally {
         restore();
       }
