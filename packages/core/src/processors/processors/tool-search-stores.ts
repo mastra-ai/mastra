@@ -27,9 +27,9 @@ export interface LoadedToolStoreContext {
  * - {@link ContextLoadedToolStore} ('context' mode, opt-in) derives loaded state
  *   from the conversation messages. Works without memory, and survives a restart
  *   whenever the thread's messages can be supplied again (Agent memory with message
- *   history, or a caller-provided `getMessages`); de-loads automatically when a
- *   result block is no longer present in the messages — parity with native provider
- *   tool-search.
+ *   history, or a caller-provided `getMessages`); de-loads a tool once its result
+ *   block has been observed and then leaves the messages — parity with native
+ *   provider tool-search.
  */
 export interface LoadedToolStore {
   /** Resolve the set of currently-loaded tool names for this context. */
@@ -111,9 +111,11 @@ export function deriveLoadedNamesFromMessages(args: Pick<ProcessInputStepArgs, '
  *   history, or a caller-provided `getMessages` (for example a workflow that persists
  *   and returns its own history). Without either, nothing is restored and the loaded
  *   set lasts only for the current process.
- * - De-loads automatically when the result block leaves the messages (native parity):
- *   the supplemental set is intersected with what the messages can still confirm
- *   once messages are available.
+ * - De-loads automatically once the result block has been observed and then leaves the
+ *   messages (native parity): a name becomes message-owned as soon as it appears in the
+ *   messages and is pruned from the supplemental set, so a later omission is what
+ *   de-loads it. A name not yet visible in the messages (just activated) stays loaded
+ *   until the messages catch up, so omission alone does not remove it.
  * - No `'default'` thread-ID leak: the supplemental set is keyed by real thread IDs
  *   only and is never populated for anonymous requests.
  * - Works without memory configuration, but the same-process carry-over comes from the
