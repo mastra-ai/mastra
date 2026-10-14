@@ -39,9 +39,7 @@ const transcriptSchema = z.object({
   date: z.union([z.string(), z.number()]).nullish(),
   participants: z.array(z.string()).nullish(),
   organizer_email: z.string().nullish(),
-  meeting_attendees: z
-    .array(z.object({ displayName: z.string().nullish(), email: z.string().nullish() }))
-    .nullish(),
+  meeting_attendees: z.array(z.object({ displayName: z.string().nullish(), email: z.string().nullish() })).nullish(),
   summary: summarySchema,
 });
 
@@ -229,13 +227,12 @@ function createFirefliesImporter(ctx: ImporterProviderContext) {
             const personName = attendee.displayName ?? attendee.email;
             const personNode = await importer.upsertNode(personAddress, {
               name: personName,
-              kind: 'connect:fireflies:person',
               metadata: nodeSelfMetadata(personAddress),
             });
             const personRecordId = contentRecordId({ address: personAddress, name: personName });
-            const personRecords = await personNode.listRecords();
+            const personRecords = await personNode.listKnowledge();
             if (!personRecords.some(r => r.id === personRecordId)) {
-              await personNode.appendRecord({
+              await personNode.appendKnowledge({
                 id: personRecordId,
                 text: neutralizeWikilinks(personName),
                 metadata: { email: attendee.email },
@@ -243,7 +240,7 @@ function createFirefliesImporter(ctx: ImporterProviderContext) {
             }
             if (canRemove) {
               for (const previous of personRecords) {
-                if (previous.id !== personRecordId) await personNode.removeRecord(previous.id);
+                if (previous.id !== personRecordId) await personNode.removeKnowledge(previous.id);
               }
             }
           }
@@ -258,13 +255,12 @@ function createFirefliesImporter(ctx: ImporterProviderContext) {
             const seriesName = transcript.title!.trim();
             const seriesNode = await importer.upsertNode(seriesAddress, {
               name: seriesName,
-              kind: 'connect:fireflies:series',
               metadata: nodeSelfMetadata(seriesAddress),
             });
             const seriesRecordId = contentRecordId({ address: seriesAddress, name: seriesName });
-            const seriesRecords = await seriesNode.listRecords();
+            const seriesRecords = await seriesNode.listKnowledge();
             if (!seriesRecords.some(r => r.id === seriesRecordId)) {
-              await seriesNode.appendRecord({
+              await seriesNode.appendKnowledge({
                 id: seriesRecordId,
                 text: neutralizeWikilinks(seriesName),
                 metadata: { slug },
@@ -272,7 +268,7 @@ function createFirefliesImporter(ctx: ImporterProviderContext) {
             }
             if (canRemove) {
               for (const previous of seriesRecords) {
-                if (previous.id !== seriesRecordId) await seriesNode.removeRecord(previous.id);
+                if (previous.id !== seriesRecordId) await seriesNode.removeKnowledge(previous.id);
               }
             }
           }
@@ -282,10 +278,9 @@ function createFirefliesImporter(ctx: ImporterProviderContext) {
 
         const node = await importer.upsertNode(address, {
           name: title,
-          kind: 'connect:fireflies:transcript',
           metadata: nodeSelfMetadata(address),
         });
-        const existingRecords = await node.listRecords();
+        const existingRecords = await node.listKnowledge();
         const existingIds = new Set(existingRecords.map(r => r.id));
         const facets = extractFacets(transcript);
         const kept = new Set<string>();
@@ -294,7 +289,7 @@ function createFirefliesImporter(ctx: ImporterProviderContext) {
           const recordId = contentRecordId(recordPayload);
           kept.add(recordId);
           if (!existingIds.has(recordId)) {
-            await node.appendRecord({
+            await node.appendKnowledge({
               id: recordId,
               text: boundText(neutralizeWikilinks(`${title} — ${facet.facet}\n\n${facet.text}`)),
               metadata: { ...metadata, facet: facet.facet, ...linkMeta },
@@ -303,7 +298,7 @@ function createFirefliesImporter(ctx: ImporterProviderContext) {
         }
         if (canRemove) {
           for (const previous of existingRecords) {
-            if (!kept.has(previous.id)) await node.removeRecord(previous.id);
+            if (!kept.has(previous.id)) await node.removeKnowledge(previous.id);
           }
         }
         if (date && (!lastProcessed || date > lastProcessed)) lastProcessed = date;

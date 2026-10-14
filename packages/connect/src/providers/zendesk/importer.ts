@@ -176,8 +176,8 @@ function createZendeskImporter(ctx: ImporterProviderContext) {
           if (!canRemove) continue;
           const existing = await importer.getNode(address);
           if (!existing) continue;
-          const records = await existing.listRecords();
-          for (const record of records) await existing.removeRecord(record.id);
+          const records = await existing.listKnowledge();
+          for (const record of records) await existing.removeKnowledge(record.id);
           continue;
         }
         const title = article.title ?? `Article #${article.id}`;
@@ -192,13 +192,12 @@ function createZendeskImporter(ctx: ImporterProviderContext) {
             upsertedSections.add(sectionAddress);
             const sectionNode = await importer.upsertNode(sectionAddress, {
               name: sectionName,
-              kind: 'connect:zendesk:section',
               metadata: nodeSelfMetadata(sectionAddress),
             });
             const sectionRecordId = contentRecordId({ address: sectionAddress, name: sectionName });
-            const sectionRecords = await sectionNode.listRecords();
+            const sectionRecords = await sectionNode.listKnowledge();
             if (!sectionRecords.some(r => r.id === sectionRecordId)) {
-              await sectionNode.appendRecord({
+              await sectionNode.appendKnowledge({
                 id: sectionRecordId,
                 text: neutralizeWikilinks(sectionName),
                 metadata: { sectionId },
@@ -206,7 +205,7 @@ function createZendeskImporter(ctx: ImporterProviderContext) {
             }
             if (canRemove) {
               for (const previous of sectionRecords) {
-                if (previous.id !== sectionRecordId) await sectionNode.removeRecord(previous.id);
+                if (previous.id !== sectionRecordId) await sectionNode.removeKnowledge(previous.id);
               }
             }
           }
@@ -224,17 +223,16 @@ function createZendeskImporter(ctx: ImporterProviderContext) {
         const recordId = contentRecordId(recordPayload);
         const node = await importer.upsertNode(address, {
           name: title,
-          kind: 'connect:zendesk:article',
           metadata: nodeSelfMetadata(address),
         });
-        const existingRecords = await node.listRecords();
+        const existingRecords = await node.listKnowledge();
         // Sections fetch failed and this article belongs to a section: its
         // computed record is missing the `in` link. Never replace an existing
         // good record with the degraded one — keep what we have; the article
         // re-records on its next edit or a later run with sections available.
         if (sectionNames === undefined && sectionId && existingRecords.length > 0) continue;
         if (!existingRecords.some(r => r.id === recordId)) {
-          await node.appendRecord({
+          await node.appendKnowledge({
             id: recordId,
             text: boundText(neutralizeWikilinks(body ? `${title}\n\n${body}` : title)),
             metadata: {
@@ -247,7 +245,7 @@ function createZendeskImporter(ctx: ImporterProviderContext) {
         }
         if (canRemove) {
           for (const previous of existingRecords) {
-            if (previous.id !== recordId) await node.removeRecord(previous.id);
+            if (previous.id !== recordId) await node.removeKnowledge(previous.id);
           }
         }
       }

@@ -136,8 +136,8 @@ function createConfluenceImporter(ctx: ImporterProviderContext) {
           if (!canRemove) continue;
           const existing = await importer.getNode(address);
           if (!existing) continue;
-          const records = await existing.listRecords();
-          for (const record of records) await existing.removeRecord(record.id);
+          const records = await existing.listKnowledge();
+          for (const record of records) await existing.removeKnowledge(record.id);
           continue;
         }
         const storage = result.body?.storage?.value ?? '';
@@ -160,12 +160,11 @@ function createConfluenceImporter(ctx: ImporterProviderContext) {
         const recordId = contentRecordId(recordPayload);
         const node = await importer.upsertNode(address, {
           name: title,
-          kind: 'connect:confluence:page',
           metadata: nodeSelfMetadata(address),
         });
-        const existingRecords = await node.listRecords();
+        const existingRecords = await node.listKnowledge();
         if (!existingRecords.some(r => r.id === recordId)) {
-          await node.appendRecord({
+          await node.appendKnowledge({
             id: recordId,
             text: boundText(neutralizeWikilinks(bodyText ? `${title}\n\n${bodyText}` : title)),
             metadata: {
@@ -178,7 +177,7 @@ function createConfluenceImporter(ctx: ImporterProviderContext) {
         }
         if (canRemove) {
           for (const previous of existingRecords) {
-            if (previous.id !== recordId) await node.removeRecord(previous.id);
+            if (previous.id !== recordId) await node.removeKnowledge(previous.id);
           }
         }
         if (lastModified && (!latestSeen || lastModified > latestSeen)) latestSeen = lastModified;

@@ -29,9 +29,7 @@ function documentNode(fixture: LinearDocumentFixture) {
     archivedAt: fixture.archivedAt ?? null,
     trashed: fixture.trashed === undefined ? false : fixture.trashed,
     project:
-      fixture.project || fixture.projectId
-        ? { id: fixture.projectId ?? null, name: fixture.project ?? null }
-        : null,
+      fixture.project || fixture.projectId ? { id: fixture.projectId ?? null, name: fixture.project ?? null } : null,
     initiative: fixture.initiative ? { name: fixture.initiative } : null,
   };
 }
@@ -84,7 +82,6 @@ describe('linear importer', () => {
 
     expect(importer.nodes.get('linear:document:d1')?.input).toMatchObject({
       name: 'Auth design',
-      kind: 'connect:linear:document',
     });
     expect(importer.nodes.get('linear:document:d2')?.records.size).toBe(1);
     expect(await state.get('linear:documents:watermark')).toBe(JSON.stringify({ watermark: '2026-09-02T00:00:00Z' }));
@@ -281,7 +278,6 @@ describe('linear importer', () => {
     const project = importer.nodes.get('linear:project:p1')!;
     expect(project.input).toMatchObject({
       name: 'Payments',
-      kind: 'connect:linear:project',
       metadata: { address: 'linear:project:p1' },
     });
     expect(project.records.size).toBe(1);

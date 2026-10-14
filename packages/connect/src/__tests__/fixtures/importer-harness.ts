@@ -35,15 +35,15 @@ export function createFakeImporter(role: 'owner' | 'edit' = 'owner'): FakeImport
   const makeHandle = (node: FakeNode): StaticKnowledgeNodeHandle => ({
     node: {} as never,
     id: node.address,
-    async appendRecord(input: StaticKnowledgeRecordInput) {
+    async appendKnowledge(input: StaticKnowledgeRecordInput) {
       const id = input.id ?? `auto-${node.records.size}`;
       node.records.set(id, { id, text: input.text, metadata: input.metadata });
       return { id, text: input.text } as never;
     },
-    async listRecords() {
+    async listKnowledge() {
       return [...node.records.values()].map(r => ({ id: r.id, text: r.text, metadata: r.metadata }) as never);
     },
-    async removeRecord(id: string) {
+    async removeKnowledge(id: string) {
       const record = node.records.get(id);
       if (!record) return null;
       node.records.delete(id);

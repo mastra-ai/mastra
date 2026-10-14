@@ -162,8 +162,8 @@ function createLinearImporter(ctx: ImporterProviderContext) {
           if (canRemove) {
             const existing = await importer.getNode(address);
             if (existing) {
-              const records = await existing.listRecords();
-              for (const record of records) await existing.removeRecord(record.id);
+              const records = await existing.listKnowledge();
+              for (const record of records) await existing.removeKnowledge(record.id);
             }
           }
           lastProcessed = document.updatedAt;
@@ -183,13 +183,12 @@ function createLinearImporter(ctx: ImporterProviderContext) {
             const projectName = document.project?.name || projectId;
             const projectNode = await importer.upsertNode(projectAddress, {
               name: projectName,
-              kind: 'connect:linear:project',
               metadata: nodeSelfMetadata(projectAddress),
             });
             const projectRecordId = contentRecordId({ address: projectAddress, name: projectName });
-            const projectRecords = await projectNode.listRecords();
+            const projectRecords = await projectNode.listKnowledge();
             if (!projectRecords.some(r => r.id === projectRecordId)) {
-              await projectNode.appendRecord({
+              await projectNode.appendKnowledge({
                 id: projectRecordId,
                 text: neutralizeWikilinks(projectName),
                 metadata: { projectId },
@@ -197,7 +196,7 @@ function createLinearImporter(ctx: ImporterProviderContext) {
             }
             if (canRemove) {
               for (const previous of projectRecords) {
-                if (previous.id !== projectRecordId) await projectNode.removeRecord(previous.id);
+                if (previous.id !== projectRecordId) await projectNode.removeKnowledge(previous.id);
               }
             }
           }
@@ -216,12 +215,11 @@ function createLinearImporter(ctx: ImporterProviderContext) {
         const recordId = contentRecordId(recordPayload);
         const node = await importer.upsertNode(address, {
           name: title,
-          kind: 'connect:linear:document',
           metadata: nodeSelfMetadata(address, selfAlias ? [selfAlias] : undefined),
         });
-        const existingRecords = await node.listRecords();
+        const existingRecords = await node.listKnowledge();
         if (!existingRecords.some(r => r.id === recordId)) {
-          await node.appendRecord({
+          await node.appendKnowledge({
             id: recordId,
             text: boundText(neutralizeWikilinks(content ? `${title}\n\n${content}` : title)),
             metadata: {
@@ -234,7 +232,7 @@ function createLinearImporter(ctx: ImporterProviderContext) {
         }
         if (canRemove) {
           for (const previous of existingRecords) {
-            if (previous.id !== recordId) await node.removeRecord(previous.id);
+            if (previous.id !== recordId) await node.removeKnowledge(previous.id);
           }
         }
         lastProcessed = document.updatedAt;

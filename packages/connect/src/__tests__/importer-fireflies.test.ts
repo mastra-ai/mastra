@@ -268,13 +268,12 @@ describe('fireflies importer', () => {
     const alice = importer.nodes.get('fireflies:person:alice@acme.com')!;
     expect(alice.input).toMatchObject({
       name: 'Alice',
-      kind: 'connect:fireflies:person',
       metadata: { address: 'fireflies:person:alice@acme.com' },
     });
     const bob = importer.nodes.get('fireflies:person:bob@acme.com')!;
     expect(bob.input.name).toBe('bob@acme.com');
     const series = importer.nodes.get('fireflies:series:weekly-sync')!;
-    expect(series.input).toMatchObject({ name: 'Weekly Sync', kind: 'connect:fireflies:series' });
+    expect(series.input).toMatchObject({ name: 'Weekly Sync' });
 
     const transcript = importer.nodes.get('fireflies:transcript:t1')!;
     expect(transcript.input.metadata).toEqual({ address: 'fireflies:transcript:t1' });
@@ -319,9 +318,7 @@ describe('fireflies importer', () => {
 
   it('a transcript with no title produces no series link', async () => {
     const { ctx, request, importer, state } = makeContext();
-    request.mockResolvedValueOnce(
-      transcriptsResponse([{ id: 't1', date: '2026-09-01T00:00:00Z', overview: 'x' }]),
-    );
+    request.mockResolvedValueOnce(transcriptsResponse([{ id: 't1', date: '2026-09-01T00:00:00Z', overview: 'x' }]));
     await runImporter(firefliesImporterRegistration.createImporter(ctx), { importer, state });
 
     const seriesNodes = [...importer.nodes.keys()].filter(a => a.startsWith('fireflies:series:'));

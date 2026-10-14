@@ -79,7 +79,6 @@ describe('zendesk importer', () => {
     await runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state });
     expect(importer.nodes.get('zendesk:article:1')?.input).toMatchObject({
       name: 'Getting started',
-      kind: 'connect:zendesk:article',
     });
     expect(importer.nodes.get('zendesk:article:2')?.records.size).toBe(1);
     const call = request.mock.calls[0]![0]! as { method: string; path: string; query: Record<string, unknown> };
@@ -229,9 +228,12 @@ describe('zendesk importer', () => {
   it('upserts a section container node and links the article into it', async () => {
     const { ctx, request, importer, state } = makeContext();
     request.mockResolvedValueOnce(
-      incrementalResponse([{ id: 1, title: 'A', body: '<p>x</p>', section_id: 10, updated_at: '2026-09-01T00:00:00Z' }], {
-        end_time: 100,
-      }),
+      incrementalResponse(
+        [{ id: 1, title: 'A', body: '<p>x</p>', section_id: 10, updated_at: '2026-09-01T00:00:00Z' }],
+        {
+          end_time: 100,
+        },
+      ),
     );
     request.mockResolvedValueOnce(sectionsResponse([{ id: 10, name: 'Guides' }]));
     await runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state });
@@ -239,7 +241,6 @@ describe('zendesk importer', () => {
     const section = importer.nodes.get('zendesk:section:10')!;
     expect(section.input).toMatchObject({
       name: 'Guides',
-      kind: 'connect:zendesk:section',
       metadata: { address: 'zendesk:section:10' },
     });
     expect(section.records.size).toBe(1);
@@ -278,9 +279,12 @@ describe('zendesk importer', () => {
   it('sections fetch failure still imports articles — no containers, no in links that run', async () => {
     const { ctx, request, importer, state } = makeContext();
     request.mockResolvedValueOnce(
-      incrementalResponse([{ id: 1, title: 'A', body: '<p>x</p>', section_id: 10, updated_at: '2026-09-01T00:00:00Z' }], {
-        end_time: 100,
-      }),
+      incrementalResponse(
+        [{ id: 1, title: 'A', body: '<p>x</p>', section_id: 10, updated_at: '2026-09-01T00:00:00Z' }],
+        {
+          end_time: 100,
+        },
+      ),
     );
     request.mockRejectedValueOnce(new Error('sections down'));
     await runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state });
@@ -297,9 +301,12 @@ describe('zendesk importer', () => {
     const { ctx, request, importer, state } = makeContext();
     // Run 1: sections available — article gets its `in` link.
     request.mockResolvedValueOnce(
-      incrementalResponse([{ id: 1, title: 'A', body: '<p>x</p>', section_id: 10, updated_at: '2026-09-01T00:00:00Z' }], {
-        end_time: 100,
-      }),
+      incrementalResponse(
+        [{ id: 1, title: 'A', body: '<p>x</p>', section_id: 10, updated_at: '2026-09-01T00:00:00Z' }],
+        {
+          end_time: 100,
+        },
+      ),
     );
     request.mockResolvedValueOnce(sectionsResponse([{ id: 10, name: 'Guides' }]));
     await runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state });
@@ -310,9 +317,12 @@ describe('zendesk importer', () => {
     // record (with its `in` link) must survive — replacing it would durably
     // strip containment because the watermark advances past this window.
     request.mockResolvedValueOnce(
-      incrementalResponse([{ id: 1, title: 'A', body: '<p>y</p>', section_id: 10, updated_at: '2026-09-02T00:00:00Z' }], {
-        end_time: 200,
-      }),
+      incrementalResponse(
+        [{ id: 1, title: 'A', body: '<p>y</p>', section_id: 10, updated_at: '2026-09-02T00:00:00Z' }],
+        {
+          end_time: 200,
+        },
+      ),
     );
     request.mockRejectedValueOnce(new Error('sections down'));
     await runImporter(zendeskImporterRegistration.createImporter(ctx), { importer, state });
@@ -327,9 +337,12 @@ describe('zendesk importer', () => {
   it('section pagination stops at the page cap', async () => {
     const { ctx, request, importer, state } = makeContext();
     request.mockResolvedValueOnce(
-      incrementalResponse([{ id: 1, title: 'A', body: '<p>x</p>', section_id: 10, updated_at: '2026-09-01T00:00:00Z' }], {
-        end_time: 100,
-      }),
+      incrementalResponse(
+        [{ id: 1, title: 'A', body: '<p>x</p>', section_id: 10, updated_at: '2026-09-01T00:00:00Z' }],
+        {
+          end_time: 100,
+        },
+      ),
     );
     // Every sections page claims more — the cap must break the loop.
     request.mockResolvedValue(sectionsResponse([{ id: 10, name: 'Guides' }], { has_more: true, after_cursor: 'c' }));

@@ -121,10 +121,6 @@ function nodeAddress(result: NotionSearchResult): string {
   return `notion:${result.object}:${result.id}`;
 }
 
-function nodeKind(result: NotionSearchResult): 'connect:notion:page' | 'connect:notion:database' {
-  return result.object === 'page' ? 'connect:notion:page' : 'connect:notion:database';
-}
-
 const blockRichTextItemSchema = z
   .object({
     plain_text: z.string().default(''),
@@ -363,8 +359,8 @@ function createNotionImporter(ctx: ImporterProviderContext) {
           if (canRemove) {
             const existing = await importer.getNode(address);
             if (existing) {
-              const records = await existing.listRecords();
-              for (const record of records) await existing.removeRecord(record.id);
+              const records = await existing.listKnowledge();
+              for (const record of records) await existing.removeKnowledge(record.id);
             }
           }
           lastProcessed = result.last_edited_time;
@@ -395,10 +391,9 @@ function createNotionImporter(ctx: ImporterProviderContext) {
         const linkMeta = linksMetadata(links.filter(link => link.address !== address));
         const node = await importer.upsertNode(address, {
           name: title,
-          kind: nodeKind(result),
           metadata: nodeSelfMetadata(address),
         });
-        const existingRecords = await node.listRecords();
+        const existingRecords = await node.listKnowledge();
         if (blockFetchFailed && existingRecords.length > 0) {
           // Keep the existing good record rather than replace it with a degraded
           // title-only one — the page is revisited on its next edit.
@@ -418,7 +413,7 @@ function createNotionImporter(ctx: ImporterProviderContext) {
           const bodyParts = [title];
           if (propertyText) bodyParts.push(propertyText);
           if (blockText) bodyParts.push(blockText);
-          await node.appendRecord({
+          await node.appendKnowledge({
             id: recordId,
             text: boundText(neutralizeWikilinks(bodyParts.join('\n\n'))),
             metadata: { url: result.url, lastEditedTime: result.last_edited_time, ...linkMeta },
@@ -427,7 +422,7 @@ function createNotionImporter(ctx: ImporterProviderContext) {
         // Remove stale records the importer previously owned for this node.
         if (canRemove) {
           for (const previous of existingRecords) {
-            if (previous.id !== recordId) await node.removeRecord(previous.id);
+            if (previous.id !== recordId) await node.removeKnowledge(previous.id);
           }
         }
         lastProcessed = result.last_edited_time;
