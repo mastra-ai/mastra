@@ -863,7 +863,11 @@ describe('MastraFactory.prepare', () => {
     context.set('controller', {
       resourceId: 'user-session-1',
       threadId: 'user-session-1',
-      getState: () => ({}),
+      getState: () => ({
+        factoryProjectId: '11111111-2222-4333-8444-555555555555',
+        factoryOrgId: 'org-1',
+        projectRepositoryId: 'repo-1',
+      }),
       setState: async () => {},
     });
     const hostInstructions = config.hostInstructions as (input: { requestContext: RequestContext }) => Promise<unknown>;
