@@ -679,7 +679,7 @@ Read tools and `factory_message_origin` are available on every turn. The other t
 
 How a message is delivered depends on its priority. `urgent` always delivers, even into a running turn. `high` and `medium` wake an idle session; while it is busy, `high` arrives as a summary and then in full, and `medium` waits for the current step. `low` arrives as a summary. Agents can read the full text of any notification with `notification_inbox`. A session can send at most 10 messages, replies and reports, together, to the same session thread in 10 minutes; past that, the tools refuse until the window moves on. `progress` reports don't count, since they replace each other.
 
-`factory_message_origin` with `inReplyTo` answers a message. `inReplyTo` must name a `factory-session` message that reached the answering session's own thread, and the reply goes to the session and thread that sent it, never to an address the agent supplies. Each message can be answered once, and replies and other notifications can't be answered, so two agents can't ping-pong. Replies arrive at `high` priority and carry an `in-reply-to` attribute. Messages and replies are recorded in the audit trail as `factory.agent.signaled`.
+`factory_message_origin` with `inReplyTo` answers a message. `inReplyTo` must name a `factory-session` message that reached the answering session's own thread, and the reply goes to the session and thread that sent it, never to an address the agent supplies. Each message can be answered once, and replies, reports and other notifications can't be answered, so two agents can't ping-pong. Replies arrive at `high` priority and carry an `in-reply-to` attribute. Messages and replies are recorded in the audit trail as `factory.agent.signaled`.
 
 #### Sub-sessions
 
@@ -700,7 +700,7 @@ A spawned session reports back with `factory_message_origin` without `inReplyTo`
 | `blocked`  | `blocked`         | `urgent` |
 | `done`     | `done`            | `high`   |
 | `progress` | `progress`        | `low`    |
-| none       | `message`         | `high`   |
+| none       | `report`          | `high`   |
 
 Progress reports from one session replace each other while unread. `done`, `failed` and `blocked` reports are never replaced, so a final report can't be overwritten by a later progress update.
 
