@@ -32,7 +32,9 @@ afterEach(async () => {
 
 afterAll(() => server.close());
 
-if (!globalThis.localStorage) {
+// Node 25+ defines a global `localStorage` that lacks the Storage methods unless
+// --localstorage-file is set, so check for a working store, not just presence.
+if (typeof globalThis.localStorage?.clear !== 'function') {
   const store = new Map<string, string>();
   globalThis.localStorage = {
     get length() {
