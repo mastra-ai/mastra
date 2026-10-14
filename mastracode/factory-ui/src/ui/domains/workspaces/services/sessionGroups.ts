@@ -68,7 +68,7 @@ function boardGroupHeadings(
   const catalogIds = new Set(catalog.map(board => board.id));
   const uncatalogedBoards = orderedBoards(
     [...new Set(rows.flatMap(row => (row.board !== undefined && !catalogIds.has(row.board) ? [row.board] : [])))]
-      .toSorted()
+      .toSorted((a, b) => a.localeCompare(b))
       .map(id => ({ id })),
   );
   return [
