@@ -386,11 +386,11 @@ Enforcement of the claim depends on the workflows store. When the store supports
 - `@mastra/convex`
 - `@mastra/mongodb`, on a replica set or sharded cluster
 - `@mastra/dynamodb`
-
-On Convex, run fencing runs in the Mastra server functions you deploy. Redeploy your Convex functions after upgrading `@mastra/convex`. Until you do, durable agent runs fail with an error asking you to redeploy, while other writes keep working.
 - `@mastra/redis`
 - `@mastra/upstash`
 - `@mastra/valkey`
+
+On Convex, run fencing runs in the Mastra server functions you deploy. Redeploy your Convex functions after upgrading `@mastra/convex`. Until you do, durable agent runs fail with an error asking you to redeploy, while other writes keep working.
 
 Stores that support run fencing keep one claim record per run, plus one memory fence record per run with memory. Stores with retention support prune them with the `workflows.runOwnership` and `memory.runFences` [retention keys](/reference/storage/retention#retention-eligible-tables). Redis, Upstash, and Valkey expire them on their own instead: a claim 7 days after its last renewal or release, and a fence 7 days after it's retired. A run's first generation comes from the store's clock, so a run that reuses a `runId` after its records were pruned still outranks the fences and stream events of its earlier executions.
 
