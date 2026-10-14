@@ -25,11 +25,13 @@ import {
   sessionOwnerOptions,
 } from '../services/sessionFilters';
 import type { SessionFiltersState } from '../services/sessionFilters';
-import { groupSessionRowsByBoard } from '../services/sessionGroups';
+import { DEFAULT_SESSION_GROUP_BY, groupSessionRows, sessionGroupOrder } from '../services/sessionGroups';
+import type { SessionGroupContext } from '../services/sessionGroups';
 import type { SessionListRow } from '../services/sessionRows';
 import { DEFAULT_SESSION_SORT, SESSION_SORT_OPTIONS, compareSessionRows } from '../services/sessionSort';
 import { DeleteSessionDialog } from './DeleteSessionDialog';
 import { SessionGroupList, collapsedRows } from './SessionGroupList';
+import { SessionGroupMenu } from './SessionGroupMenu';
 import { SessionListProperties } from './SessionListProperties';
 
 export function SessionsSection() {
@@ -52,13 +54,26 @@ export function SessionsSection() {
   const defaultFilters = defaultSessionFilters(viewerUserId);
   const filters: SessionFiltersState = { ...defaultFilters, ...filterChanges };
   const activeFilterCount = activeSessionFilterCount(filters, defaultFilters);
-  const changedCount = Number(view.sort !== DEFAULT_SESSION_SORT) + activeFilterCount;
+  const hiddenGroupKeys = view.hiddenGroups[view.groupBy] ?? [];
+  const changedCount =
+    Number(view.sort !== DEFAULT_SESSION_SORT) +
+    Number(view.groupBy !== DEFAULT_SESSION_GROUP_BY) +
+    Number(hiddenGroupKeys.length > 0) +
+    activeFilterCount;
   const changeFilters = (changes: Partial<SessionFiltersState>) =>
     setFilterChanges(current => ({ ...current, ...changes }));
 
   const sortedRows = rows.toSorted(compareSessionRows(view.sort));
   const filteredRows = filterSessionRows(sortedRows, filters, viewerUserId);
-  const groups = groupSessionRowsByBoard(filteredRows, catalog.data);
+  const groupContext: SessionGroupContext = { boards: catalog.data, viewerUserId };
+  const groups = groupSessionRows(filteredRows, view.groupBy, groupContext, hiddenGroupKeys);
+  const changeGroupVisibility = (key: string, visible: boolean) =>
+    updateView({
+      hiddenGroups: {
+        ...view.hiddenGroups,
+        [view.groupBy]: visible ? hiddenGroupKeys.filter(hidden => hidden !== key) : [...hiddenGroupKeys, key],
+      },
+    });
 
   const pullRequestTargets = groups
     .flatMap(group => collapsedRows(group.rows))
@@ -139,6 +154,13 @@ export function SessionsSection() {
                 value={filters.updated}
                 onValueChange={updated => changeFilters({ updated })}
               />
+              <SessionGroupMenu
+                groupBy={view.groupBy}
+                onGroupByChange={groupBy => updateView({ groupBy })}
+                groups={sessionGroupOrder(sortedRows, view.groupBy, groupContext)}
+                hiddenKeys={hiddenGroupKeys}
+                onVisibilityChange={changeGroupVisibility}
+              />
             </SessionListProperties>
             {hasRepositories && (
               <Button
@@ -162,7 +184,7 @@ export function SessionsSection() {
           <SessionGroupList
             key={group.key}
             group={group}
-            showHeader
+            showHeader={view.groupBy !== 'none'}
             pending={pending}
             mergedByPath={mergedByPath}
             viewerUserId={viewerUserId}
@@ -189,6 +211,11 @@ export function SessionsSection() {
       {loaded && filteredRows.length === 0 && (
         <Txt as="p" variant="meta" tone="muted" role="status" className="m-0 px-2 py-1">
           {emptyListMessage({ rowCount: rows.length, activeFilterCount, viewerKnown: Boolean(viewerUserId) })}
+        </Txt>
+      )}
+      {loaded && filteredRows.length > 0 && groups.length === 0 && (
+        <Txt as="p" variant="meta" tone="muted" role="status" className="m-0 px-2 py-1">
+          All groups with sessions are hidden
         </Txt>
       )}
 

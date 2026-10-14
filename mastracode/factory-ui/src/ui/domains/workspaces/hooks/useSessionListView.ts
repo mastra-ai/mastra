@@ -1,16 +1,26 @@
 import { useSyncExternalStore } from 'react';
 
+import { DEFAULT_SESSION_GROUP_BY, SESSION_GROUP_BYS, isSessionGroupBy } from '../services/sessionGroups';
+import type { SessionGroupBy } from '../services/sessionGroups';
 import { DEFAULT_SESSION_SORT, isSessionSort } from '../services/sessionSort';
 import type { SessionSort } from '../services/sessionSort';
 
 const STORAGE_KEY = 'mastracode.sessionListView';
 const CHANGE_EVENT = 'mastracode:session-list-view-change';
 
+type HiddenSessionGroups = Partial<Record<SessionGroupBy, string[]>>;
+
 export interface SessionListView {
   sort: SessionSort;
+  groupBy: SessionGroupBy;
+  hiddenGroups: HiddenSessionGroups;
 }
 
-export const DEFAULT_SESSION_LIST_VIEW: SessionListView = { sort: DEFAULT_SESSION_SORT };
+export const DEFAULT_SESSION_LIST_VIEW: SessionListView = {
+  sort: DEFAULT_SESSION_SORT,
+  groupBy: DEFAULT_SESSION_GROUP_BY,
+  hiddenGroups: {},
+};
 
 type SessionListViewChanges = Partial<SessionListView>;
 const NO_CHANGES: SessionListViewChanges = {};
@@ -29,7 +39,15 @@ function parseViewChanges(value: string | null): SessionListViewChanges {
   }
   if (typeof parsed !== 'object' || parsed === null) return NO_CHANGES;
   const stored: Partial<Record<keyof SessionListView, unknown>> = parsed;
-  return { ...(isSessionSort(stored.sort) && { sort: stored.sort }) };
+  const hiddenGroups =
+    typeof stored.hiddenGroups === 'object' && stored.hiddenGroups !== null
+      ? nonEmptyHiddenGroups(stored.hiddenGroups)
+      : undefined;
+  return {
+    ...(isSessionSort(stored.sort) && { sort: stored.sort }),
+    ...(isSessionGroupBy(stored.groupBy) && { groupBy: stored.groupBy }),
+    ...(hiddenGroups && { hiddenGroups }),
+  };
 }
 
 function readViewChanges(): SessionListViewChanges {
@@ -70,8 +88,26 @@ function saveViewChanges(changes: SessionListViewChanges) {
   window.dispatchEvent(new Event(CHANGE_EVENT));
 }
 
+function isNonEmptyStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.length > 0 && value.every(entry => typeof entry === 'string');
+}
+
+/** Drops empty and malformed entries; undefined when nothing is hidden, so the default view stores nothing. */
+function nonEmptyHiddenGroups(hiddenGroups: Partial<Record<SessionGroupBy, unknown>>): HiddenSessionGroups | undefined {
+  const entries = SESSION_GROUP_BYS.flatMap((groupBy): [SessionGroupBy, string[]][] => {
+    const keys = hiddenGroups[groupBy];
+    return isNonEmptyStringArray(keys) ? [[groupBy, keys]] : [];
+  });
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
 function changesFromDefault(view: SessionListView): SessionListViewChanges {
-  return { ...(view.sort !== DEFAULT_SESSION_LIST_VIEW.sort && { sort: view.sort }) };
+  const hiddenGroups = nonEmptyHiddenGroups(view.hiddenGroups);
+  return {
+    ...(view.sort !== DEFAULT_SESSION_LIST_VIEW.sort && { sort: view.sort }),
+    ...(view.groupBy !== DEFAULT_SESSION_LIST_VIEW.groupBy && { groupBy: view.groupBy }),
+    ...(hiddenGroups && { hiddenGroups }),
+  };
 }
 
 export function useSessionListView(): {

@@ -28,6 +28,33 @@ describe('useSessionListView', () => {
     expect(renderHook(() => useSessionListView()).result.current.view).toEqual(DEFAULT_SESSION_LIST_VIEW);
   });
 
+  it('opens on the default grouping when the stored grouping is unknown', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ groupBy: 'project' }));
+
+    expect(renderHook(() => useSessionListView()).result.current.view.groupBy).toBe('board');
+  });
+
+  it('keeps hidden groups that are string lists and drops the malformed ones', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ hiddenGroups: { board: ['board:review'], status: [1, 'status:done'], owner: [], tag: ['x'] } }),
+    );
+
+    expect(renderHook(() => useSessionListView()).result.current.view.hiddenGroups).toEqual({
+      board: ['board:review'],
+    });
+  });
+
+  it('forgets hidden groups once every group is shown again', () => {
+    const { result } = renderHook(() => useSessionListView());
+
+    act(() => result.current.updateView({ groupBy: 'status', hiddenGroups: { status: ['status:done'] } }));
+    expect(storedView()).toEqual({ groupBy: 'status', hiddenGroups: { status: ['status:done'] } });
+
+    act(() => result.current.updateView({ hiddenGroups: { status: [] } }));
+    expect(storedView()).toEqual({ groupBy: 'status' });
+  });
+
   it('stores only what differs from the default, and forgets a choice set back to it', () => {
     const { result } = renderHook(() => useSessionListView());
 

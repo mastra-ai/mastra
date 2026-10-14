@@ -1,7 +1,7 @@
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { GitPullRequest, MessageSquare, SquareKanban } from 'lucide-react';
+import { CircleDashed, GitPullRequest, MessageSquare, SquareKanban, UserRound } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
@@ -18,6 +18,9 @@ const GROUP_ICONS: Record<SessionGroupIcon, ReactNode> = {
   board: <SquareKanban />,
   review: <GitPullRequest />,
   user: <MessageSquare />,
+  status: <CircleDashed />,
+  owner: <UserRound />,
+  all: null,
 };
 
 /** The first rows of a group, plus the open session when it sorts past the cut so it never vanishes. */
