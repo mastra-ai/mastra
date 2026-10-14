@@ -104,3 +104,17 @@ jobs:
           git fetch origin "${GITHUB_REF_NAME}"
           git rebase "origin/${GITHUB_REF_NAME}"
           git push origin HEAD:"${GITHUB_REF_NAME}"
+
+      # The changesets consumed above are also versioned on the release PR branch, which now
+      # conflicts with main. Deleting the branch closes the PR; version-packages.yml recreates
+      # it from main on the next push that adds a changeset.
+      - name: Close stale release PR
+        if: steps.ensure-prerelease.outputs.restored != 'true' && steps.check-changes.outputs.has_changes == 'true'
+        env:
+          RELEASE_BRANCH: changeset-release/${{ github.ref_name }}
+        run: |
+          if git ls-remote --exit-code --heads origin "${RELEASE_BRANCH}" > /dev/null; then
+            git push origin --delete "${RELEASE_BRANCH}"
+          else
+            echo "No ${RELEASE_BRANCH} branch to delete"
+          fi
