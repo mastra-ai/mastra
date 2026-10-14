@@ -946,13 +946,13 @@ export async function hasLocalBranch(sandbox: ExecutableSandbox, workdir: string
 }
 
 /**
- * Make sure the checkout has a local `<branch>`, creating it at `HEAD` (without
- * switching to it) when it was never created there, so every push sends that
- * branch and never whatever happens to be checked out later.
+ * Make sure the checkout has a local `<branch>`. Where it was never created,
+ * create it at `HEAD` and switch to it, so the agent's next commits land on
+ * the branch every push sends; the index and working tree carry over.
  */
 export async function ensureLocalBranch(sandbox: ExecutableSandbox, workdir: string, branch: string): Promise<void> {
   if (await hasLocalBranch(sandbox, workdir, branch)) return;
-  const created = await execute(sandbox, 'git', ['-C', workdir, 'branch', branch]);
+  const created = await execute(sandbox, 'git', ['-C', workdir, 'switch', '-c', branch]);
   if (created.exitCode !== 0) throw classifyGitFailure(created, 'push-failed');
 }
 
