@@ -78,14 +78,19 @@ mastra api --url http://localhost:4111 trace query '{
 
 The explicit `--url` targets a local Mastra server. Without it, observability commands default to `https://observability.mastra.ai`, even when a local server is running. See [CLI target resolution](/reference/cli/mastra#target-resolution) for authentication and regional endpoints. The target server and configured store must support the requested query capabilities.
 
-Inspect the command and the target server's request and response schemas with:
+Inspect the command with:
 
 ```bash
 mastra api trace query --help
+```
+
+For a local Mastra server, inspect its request and response schemas with:
+
+```bash
 mastra api --url http://localhost:4111 trace query --schema
 ```
 
-`--schema` describes the request structure. Use [Fields and operators](#fields-and-operators) for the supported predicate paths and operators.
+Mastra Platform doesn't currently expose the schema endpoint used by `--schema`. Use [Request fields](#request-fields) and [Fields and operators](#fields-and-operators) to construct queries for either target. To find fields and values recorded in your project, use [field and value discovery](#discover-fields-and-values).
 
 ## Send an HTTP request
 
