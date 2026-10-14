@@ -3950,6 +3950,75 @@ describe('factory environment sandbox context', () => {
       warn.mockRestore();
     });
 
+    it('keeps the recorded setup failure when a later start skips the command that failed', async () => {
+      const { resolver, github } = environmentFixture({
+        links: [twoLinks[0]!, { ...twoLinks[1]!, setupCommand: 'pnpm docs' }],
+      });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      mocks.runSetupCommand.mockImplementation(async (_sandbox: unknown, _dir: string, command: string) => {
+        if (command === 'pnpm docs')
+          throw new SetupCommandError('Setup command failed (exit 1): no lockfile', 'setup-failed');
+        // A failed workspace command makes the next start boot again, like a reconnect.
+        if (command === 'touch .workspace-ready')
+          throw new SetupCommandError('Setup command failed (exit 1)', 'setup-failed');
+      });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const setBuildStatus = (github.sourceControlStorage.projectRepositories as any).setBuildStatus;
+
+      await expect(boot(resolver)).rejects.toThrow(/Setup command failed/);
+      expect(setBuildStatus).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'link-2',
+          status: 'failed',
+          error: 'Setup command failed (exit 1): no lockfile',
+        }),
+      );
+
+      setBuildStatus.mockClear();
+      await expect(boot(resolver)).resolves.toBeDefined();
+
+      expect(mocks.runSetupCommand.mock.calls.filter(call => call[2] === 'pnpm docs')).toHaveLength(1);
+      expect(setBuildStatus.mock.calls.map((call: [{ id: string }]) => call[0].id)).not.toContain('link-2');
+      expect(peekSessionEnvironment('session-a')?.repositories[1]).toMatchObject({
+        slug: 'octocat/docs',
+        setupStatus: 'failed',
+      });
+      warn.mockRestore();
+      mocks.runSetupCommand.mockReset();
+    });
+
+    it("keeps the primary repository's recorded setup failure when a later start skips it", async () => {
+      const { resolver, github } = environmentFixture({ links: twoLinks });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      mocks.runSetupCommand.mockImplementation(async (_sandbox: unknown, _dir: string, command: string) => {
+        if (command === 'pnpm i')
+          throw new SetupCommandError('Setup command failed (exit 1): no lockfile', 'setup-failed');
+      });
+      const setBuildStatus = (github.sourceControlStorage.projectRepositories as any).setBuildStatus;
+
+      await expect(boot(resolver)).rejects.toThrow(/Setup command failed/);
+      expect(setBuildStatus).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'project-1',
+          status: 'failed',
+          error: expect.stringMatching(/^Setup command failed \(exit 1\): no lockfile/),
+        }),
+      );
+
+      setBuildStatus.mockClear();
+      await boot(resolver).catch(() => undefined);
+
+      expect(mocks.runSetupCommand.mock.calls.filter(call => call[2] === 'pnpm i')).toHaveLength(1);
+      expect(setBuildStatus.mock.calls.map((call: [{ id: string }]) => call[0].id)).not.toContain('project-1');
+      expect(peekSessionEnvironment('session-a')?.repositories[0]).toMatchObject({
+        slug: 'octocat/hello',
+        setupStatus: 'failed',
+      });
+      mocks.runSetupCommand.mockReset();
+    });
+
     it('leaves a repository whose setup was interrupted unrecorded instead of configured', async () => {
       const { resolver, github } = environmentFixture({
         links: [twoLinks[0]!, { ...twoLinks[1]!, setupCommand: 'pnpm docs' }],
