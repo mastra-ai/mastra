@@ -269,11 +269,40 @@ export class Knowledge extends MastraBase {
     return this.#reconcilePromise;
   }
 
+  /**
+   * The planner is synchronous, so an async vouch hook is resolved in two passes: the first
+   * collects which parameters the plan needs vouched, the second plans with the resolved values.
+   */
+  async #planScope(input: MaterializeKnowledgeScopeInput): Promise<KnowledgeStructurePlan> {
+    const hook = this.#vouch;
+    if (!hook) return materializeKnowledgeScopePlan(this.#scopeTypes, input);
+    const requested = new Set<string>();
+    try {
+      materializeKnowledgeScopePlan(this.#scopeTypes, {
+        ...input,
+        vouch: ({ parameter }) => {
+          requested.add(parameter);
+          return 'pending';
+        },
+      });
+    } catch {
+      // The second pass reports any real planning error.
+    }
+    const resolved = new Map<string, string | undefined>();
+    for (const parameter of requested) {
+      resolved.set(parameter, await hook({ address: input.address, parameter }));
+    }
+    return materializeKnowledgeScopePlan(this.#scopeTypes, {
+      ...input,
+      vouch: ({ parameter }) => resolved.get(parameter),
+    });
+  }
+
   async materializeScope(input: MaterializeKnowledgeScopeInput): Promise<KnowledgeStructureReconcileResult> {
     // The vouch hook is host configuration, never per-call input.
     const { vouch: _ignored, ...rest } = input;
     const snapshot = structuredClone(rest);
-    const plan = materializeKnowledgeScopePlan(this.#scopeTypes, { ...snapshot, vouch: this.#vouch });
+    const plan = await this.#planScope(snapshot);
     const existing = this.#materializePromises.get(snapshot.address);
     if (existing) {
       if (JSON.stringify(existing.plan) !== JSON.stringify(plan)) {

@@ -295,6 +295,24 @@ describe('Knowledge vouch hook', () => {
     expect(plan.scopes[0]!.grants[0]!.scopeRefAddress).toBe('team:explicit');
   });
 
+  it('gives a matched scope type no owner grant when one of its parameters was vouched', () => {
+    const owned = {
+      'agent:$agentId:public': {
+        access: [
+          { principal: 'self', role: 'owner' as const },
+          { principal: 'team:$orgId', role: 'readonly' as const },
+        ],
+      },
+    };
+    const input = { address: 'agent:weather:public', contextualScopeAddress: 'resource:weather' };
+    const explicit = materializeKnowledgeScopePlan(owned, { ...input, parameters: { orgId: 'acme' } });
+    expect(explicit.scopes[0]!.grants.filter(grant => grant.role === 'owner')).toHaveLength(1);
+
+    const vouched = materializeKnowledgeScopePlan(owned, { ...input, vouch: () => 'acme' });
+    expect(vouched.scopes[0]!.grants.filter(grant => grant.role === 'owner')).toEqual([]);
+    expect(vouched.scopes[0]!.grants.map(grant => grant.scopeRefAddress)).toContain('team:acme');
+  });
+
   it('gives a vouched custom scope no owner grant', () => {
     const plan = materializeKnowledgeScopePlan(undefined, {
       address: 'project:alpha',

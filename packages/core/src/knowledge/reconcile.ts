@@ -50,6 +50,12 @@ export interface MaterializeKnowledgeScopeInput {
 
 export type KnowledgeScopeVouch = (request: { address: string; parameter: string }) => string | undefined;
 
+/** Host-configured vouch hook. May resolve asynchronously; `Knowledge` resolves it before planning. */
+export type KnowledgeScopeVouchHook = (request: {
+  address: string;
+  parameter: string;
+}) => string | undefined | Promise<string | undefined>;
+
 const BUILT_IN_SCOPE_TYPES: KnowledgeScopeTypesConfig = {
   'org:$orgId': { access: [{ principal: 'self', role: 'owner' }] },
   'resource:$resourceId': { access: [{ principal: 'self', role: 'owner' }] },

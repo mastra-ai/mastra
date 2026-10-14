@@ -98,8 +98,9 @@ describe('Knowledge', () => {
       storage: new InMemoryStore({ id: 'vouched' }),
       structure: { scopes: [{ address: 'team:acme', name: 'Acme team' }] },
       scopes,
-      vouch: request => {
+      vouch: async request => {
         seen.push(request);
+        await Promise.resolve();
         return request.parameter === 'orgId' ? 'acme' : undefined;
       },
     });
