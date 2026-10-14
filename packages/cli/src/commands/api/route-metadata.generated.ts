@@ -941,6 +941,7 @@ export const API_ROUTE_METADATA = {
       "foreachIdx",
       "format",
       "input",
+      "parentWorkflow",
       "perStep",
       "requestContext",
       "resumeData",
@@ -6597,6 +6598,7 @@ export const API_ROUTE_METADATA = {
       "sessionScope"
     ],
     "bodyParams": [
+      "files",
       "message",
       "requestContext"
     ],
@@ -6617,6 +6619,7 @@ export const API_ROUTE_METADATA = {
       "sessionScope"
     ],
     "bodyParams": [
+      "files",
       "message",
       "requestContext"
     ],

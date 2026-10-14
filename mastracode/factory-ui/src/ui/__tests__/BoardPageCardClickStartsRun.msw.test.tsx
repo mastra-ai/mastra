@@ -213,9 +213,7 @@ function stubBoardEndpoints({
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/prs/:number`, () =>
       HttpResponse.json({ error: 'pull_request_not_found' }, { status: 404 }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/:projectRepositoryId/sessions`, () =>
-      HttpResponse.json({ sessions: [] }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
     http.get(`${TEST_BASE_URL}/web/incidentio/status`, () => HttpResponse.json({ enabled: false, configured: false })),
     http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async ({ request }) => {
       const body = (await request.json()) as Record<string, unknown>;

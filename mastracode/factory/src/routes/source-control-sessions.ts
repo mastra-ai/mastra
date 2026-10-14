@@ -12,6 +12,7 @@ import type { SessionRetirementCoordinator } from '../sandbox/session-retirement
 import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import { normalizeSessionTitle } from '../session/session-title.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
+import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type {
   ProjectRepository,
   SourceControlSession,
@@ -43,6 +44,7 @@ type SessionOwnerUserProvider = Pick<IUserProvider, 'getUser'> & Partial<Pick<IU
 export interface SourceControlSessionRoutesOptions {
   auth: RouteAuth;
   sourceControls: readonly SourceControlStorageHandle[];
+  projects: Pick<FactoryProjectsStorage, 'get'>;
   users?: SessionOwnerUserProvider;
   controller?: MountedMastraCode['controller'];
   memorySettings: Pick<MemorySettingsStorage, 'get'>;
@@ -53,6 +55,7 @@ export interface SourceControlSessionRoutesOptions {
 interface ResolvedProjectRepository {
   sourceControl: SourceControlStorageHandle;
   project: ProjectRepository;
+  factoryProjectId: string;
   defaultBranch: string;
 }
 
@@ -89,9 +92,12 @@ async function resolveProjectRepository(
         if (!project) return null;
         const repository = await sourceControl.repositories.get({ orgId, id: project.repositoryId });
         if (!repository) return null;
+        const connection = await sourceControl.connections.get({ orgId, id: project.connectionId });
+        if (!connection) return null;
         return {
           sourceControl,
           project,
+          factoryProjectId: connection.factoryProjectId,
           defaultBranch: project.branch ?? repository.defaultBranch,
         };
       }),
@@ -296,6 +302,7 @@ function projectSessionRoutes(
           .create({
             sessionId,
             projectRepositoryId: project.project.id,
+            factoryProjectId: project.factoryProjectId,
             orgId,
             userId,
             branch,
@@ -329,6 +336,33 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
   const nameSession = createSessionNaming();
   const resolveOwnerProfiles = createSessionOwnerProfileResolver(options.users);
   return [
+    registerApiRoute('/web/factory/projects/:id/sessions', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), options.auth);
+        if ('response' in resolved) return resolved.response;
+        const { orgId, userId } = resolved.tenant;
+        const factoryProjectId = c.req.param('id');
+        const project = factoryProjectId ? await options.projects.get({ orgId, id: factoryProjectId }) : null;
+        if (!project) return c.json({ error: 'Factory not found' }, 404);
+        // Storage is partitioned per provider; a Factory's sessions can live in any of them.
+        const sessions = (
+          await Promise.all(
+            options.sourceControls.map(sourceControl =>
+              sourceControl.sessions.listByProject({ orgId, factoryProjectId: project.id, viewerUserId: userId }),
+            ),
+          )
+        ).flat();
+        const owners = await resolveOwnerProfiles(sessions.map(session => session.userId));
+        return c.json({
+          sessions: sessions.map(session => {
+            const owner = owners.get(session.userId);
+            return { ...session, ...(owner ? { owner } : {}) };
+          }),
+        });
+      },
+    }),
     ...projectSessionRoutes('/web/source-control/projects/:id/sessions', options, resolveOwnerProfiles),
     // Compatibility for existing clients; new code uses the provider-neutral path.
     ...projectSessionRoutes('/web/github/projects/:id/sessions', options, resolveOwnerProfiles),
