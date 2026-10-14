@@ -160,6 +160,10 @@
     max-width: none;
     width: 100%;
   }
+  .onboarding-form[data-step='project-management'] {
+    display: flex;
+    overflow: visible;
+  }
   .onboarding-preview {
     grid-area: visual;
     container-type: size;

@@ -17,8 +17,8 @@ export function ProjectManagementFactoryStep({
 }: ProjectManagementFactoryStepProps) {
   const anyConnected = Object.values(useWorkSourceConnections()).some(Boolean);
   return (
-    <div className="w-full">
-      <section aria-label="Project management connections" className="space-y-1">
+    <div className="flex min-h-0 w-full flex-col">
+      <section aria-label="Project management connections" className="min-h-0 space-y-1 overflow-y-auto">
         <div onMouseEnter={() => onPreviewSource?.('linear')} onFocus={() => onPreviewSource?.('linear')}>
           <OnboardingLinearConnection onConnect={onConnect} />
         </div>
@@ -29,7 +29,7 @@ export function ProjectManagementFactoryStep({
           <OnboardingPlatformConnection provider="incident-io" />
         </div>
       </section>
-      <div className="mt-8 flex items-center gap-2">
+      <div className="mt-8 flex shrink-0 items-center gap-2">
         <Button variant={anyConnected ? 'primary' : 'ghost'} size="lg" onClick={onContinue}>
           {anyConnected ? 'Continue' : 'Skip for now'}
         </Button>
