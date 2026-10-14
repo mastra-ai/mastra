@@ -7,7 +7,11 @@ import type { SourceControlSessionLookup } from '../session/factory-session.js';
  * `mcp` category, whose default policy is `ask`, so each of these needs an
  * explicit per-session `allow`. Approval-gated tools never appear here.
  */
-export const FACTORY_TOOLS_WITHOUT_APPROVAL: readonly string[] = [];
+export const FACTORY_TOOLS_WITHOUT_APPROVAL: readonly string[] = [
+  'factory_list_work_items',
+  'factory_inspect_work_item',
+  'factory_list_attention',
+];
 
 export interface FactoryToolPermissionsSession {
   readonly identity: { getResourceId(): string };

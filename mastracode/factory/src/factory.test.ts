@@ -4,13 +4,22 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type * as authStudioModule from '@mastra/auth-studio';
 import { getDynamicInstructions } from '@mastra/code-sdk/agents/instructions';
+import { Agent } from '@mastra/core/agent';
+import { AgentController } from '@mastra/core/agent-controller';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import type { AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
+import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraWorker } from '@mastra/core/worker';
 
-import { FactorySandbox, FACTORY_SANDBOX_BRAND, isFactorySandbox, LocalSandbox } from '@mastra/core/workspace';
+import {
+  FactorySandbox,
+  FACTORY_SANDBOX_BRAND,
+  isFactorySandbox,
+  LocalSandbox,
+  Workspace,
+} from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector } from '@mastra/pg';
@@ -1069,6 +1078,137 @@ describe('MastraFactory.prepare', () => {
     await expect(extraTools({ requestContext })).resolves.toHaveProperty('factory_transition_work_item');
     lookup.mockResolvedValue(null);
     await expect(extraTools({ requestContext })).resolves.toEqual({});
+  });
+
+  describe('Factory tools in user sessions', () => {
+    async function seedUserSession(storage: ReturnType<typeof fakeStorage>) {
+      await storage.init();
+      const sourceControl = storage.getDomain<SourceControlStorage>('source-control').forIntegration('github');
+      const project = await storage
+        .getDomain<FactoryProjectsStorage>('projects')
+        .create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Mastra' } });
+      const installation = await sourceControl.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: '123',
+      });
+      const repository = await sourceControl.repositories.upsert({
+        orgId: 'org-1',
+        input: { installationId: installation.id, externalId: '456', slug: 'mastra-ai/mastra', defaultBranch: 'main' },
+      });
+      const connection = await sourceControl.connections.create({
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+        installationId: installation.id,
+        createdByUserId: 'user-1',
+      });
+      const projectRepository = await sourceControl.projectRepositories.link({
+        orgId: 'org-1',
+        connectionId: connection.id,
+        repositoryId: repository.id,
+        createdByUserId: 'user-1',
+        sandboxProvider: 'local',
+        sandboxWorkdir: '/sandbox/mastra',
+      });
+      await sourceControl.sessions.create({
+        sessionId: 'session-1',
+        projectRepositoryId: projectRepository.id,
+        factoryProjectId: project.id,
+        orgId: 'org-1',
+        userId: 'user-1',
+        branch: 'user/session-1',
+        baseBranch: 'main',
+      });
+      return project;
+    }
+
+    function sessionContext(interactive: boolean) {
+      const requestContext = new RequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+      if (interactive) requestContext.set('factoryInteractive', true);
+      requestContext.set('controller', { resourceId: 'session-1', threadId: 'thread-1', getState: () => ({}) });
+      return requestContext;
+    }
+
+    const READ_TOOLS = ['factory_list_work_items', 'factory_inspect_work_item', 'factory_list_attention'];
+
+    it('gives interactive and non-interactive turns of a user session the read tools, and other sessions none', async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      await seedUserSession(storage);
+      const extraTools = config.extraTools as (args: {
+        requestContext: RequestContext;
+      }) => Promise<Record<string, unknown>>;
+
+      const interactive = await extraTools({ requestContext: sessionContext(true) });
+      const woken = await extraTools({ requestContext: sessionContext(false) });
+      expect(Object.keys(interactive)).toEqual(expect.arrayContaining(READ_TOOLS));
+      expect(Object.keys(woken)).toEqual(expect.arrayContaining(READ_TOOLS));
+
+      const stranger = new RequestContext();
+      stranger.set('user', { workosId: 'user-2', organizationId: 'org-2' });
+      stranger.set('controller', { resourceId: 'session-1', threadId: 'thread-1', getState: () => ({}) });
+      const none = await extraTools({ requestContext: stranger });
+      for (const name of READ_TOOLS) expect(none).not.toHaveProperty(name);
+    });
+
+    it('persists allow for the read tools on a new session, so listing work items runs without asking', async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      const project = await seedUserSession(storage);
+      const blockingCalls = controllerMock.onSessionCreated.mock.calls.filter(
+        call => (call[1] as { blocking?: boolean } | undefined)?.blocking === true,
+      );
+      const applyPermissions = blockingCalls[2]![0] as (session: unknown) => Promise<void>;
+
+      const controller = new AgentController({
+        workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
+        id: 'code',
+        storage: new InMemoryStore({ id: 'factory-tools-permissions' }),
+        stateSchema: undefined,
+        modes: [
+          {
+            id: 'build',
+            name: 'Build',
+            default: true,
+            defaultModelId: 'openai/gpt-5.5',
+            agent: new Agent({
+              id: 'test-agent',
+              name: 'test-agent',
+              instructions: 'Test.',
+              model: { id: 'openai/gpt-4o' },
+            }),
+          },
+        ],
+      });
+      await controller.init();
+      // Factory tools fall in the SDK's mcp category, which asks by default.
+      controller.onSessionCreated(session => session.setCategoryResolver(() => 'mcp'), { blocking: true });
+      controller.onSessionCreated(applyPermissions, { blocking: true });
+      const session = await controller.createSession({ resourceId: 'session-1', ownerId: 'user-1' });
+
+      expect(
+        (session.state.get() as { permissionRules?: { tools: Record<string, string> } }).permissionRules?.tools,
+      ).toEqual(Object.fromEntries(READ_TOOLS.map(name => [name, 'allow'])));
+      // The same policy core consults before parking a tool call for approval.
+      for (const name of READ_TOOLS) expect(session.resolveToolApproval(name)).toBe('allow');
+      expect(session.resolveToolApproval('factory_some_other_tool')).toBe('ask');
+
+      const extraTools = config.extraTools as (args: {
+        requestContext: RequestContext;
+      }) => Promise<Record<string, unknown>>;
+      const tools = await extraTools({ requestContext: sessionContext(false) });
+      const listWorkItems = tools.factory_list_work_items as {
+        execute: (input: unknown, context: unknown) => Promise<{ counts: { total: number } }>;
+      };
+      await storage.getDomain<WorkItemsStorage>('work-items').upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: { title: 'Fix the login redirect', stages: ['intake'] },
+      });
+      await expect(listWorkItems.execute({}, {})).resolves.toMatchObject({ counts: { total: 1 } });
+    });
   });
 
   it('serves the not-registered /web/channel-accounts stub when no slack integration is registered', async () => {

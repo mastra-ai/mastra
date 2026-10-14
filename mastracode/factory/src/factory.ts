@@ -1264,7 +1264,20 @@ export class MastraFactory {
                       projects: factoryProjectsStorage,
                       workItems: workItemsStorage,
                     });
-                    if (scope) mergeTools('factory-tools', createFactoryTools({ scope, deps: {} }));
+                    if (scope) {
+                      mergeTools(
+                        'factory-tools',
+                        createFactoryTools({
+                          scope,
+                          deps: {
+                            workItems: workItemsStorage,
+                            comments: workItemCommentsStorage,
+                            audit: auditStorage,
+                            boards: this.#boards,
+                          },
+                        }),
+                      );
+                    }
                   }
                 }
                 for (const { integration, ready, ensureReady } of toolIntegrations) {
