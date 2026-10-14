@@ -7,7 +7,7 @@ description: "Browse Prime Inference model IDs, capabilities, context windows, a
 
 # <img src="https://models.dev/logos/prime.svg" alt="Prime Inference logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Prime Inference
 
-Access 60 Prime Inference models through Mastra's model router. Authentication is handled automatically using the `PRIME_API_KEY` environment variable.
+Access 64 Prime Inference models through Mastra's model router. Authentication is handled automatically using the `PRIME_API_KEY` environment variable.
 
 Learn more in the [Prime Inference documentation](https://docs.primeintellect.ai).
 
@@ -161,7 +161,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 943718,
+    "maxOutput": 943717,
     "inputCost": 0.44,
     "outputCost": 1.32
   },
@@ -191,7 +191,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "prime/deepseek/deepseek-v4.1-flash",
-    "imageInput": false,
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
@@ -293,7 +293,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 131072,
-    "maxOutput": 16384,
+    "maxOutput": 32768,
     "inputCost": 1.04,
     "outputCost": 2.253
   },
@@ -332,6 +332,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 209715,
     "inputCost": 0.165,
     "outputCost": 0.66
+  },
+  {
+    "model": "prime/mistralai/mixtral-8x22b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 65536,
+    "maxOutput": 52428,
+    "inputCost": 2.2,
+    "outputCost": 6.6
   },
   {
     "model": "prime/moonshotai/kimi-k2-0905",
@@ -574,6 +586,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
+    "model": "prime/openai/gpt-5.6-luna-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 1,
+    "outputCost": 6
+  },
+  {
     "model": "prime/openai/gpt-5.6-sol",
     "imageInput": true,
     "audioInput": false,
@@ -586,7 +610,31 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 30
   },
   {
+    "model": "prime/openai/gpt-5.6-sol-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 5,
+    "outputCost": 30
+  },
+  {
     "model": "prime/openai/gpt-5.6-terra",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 2.5,
+    "outputCost": 15
+  },
+  {
+    "model": "prime/openai/gpt-5.6-terra-pro",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,

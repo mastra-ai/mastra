@@ -11,7 +11,7 @@ import type { MastraBrowser } from '../browser/browser';
 import { AgentControllerChannels } from '../channels/agent-controller-channels';
 import { GatewayManager } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/gateways/defaults';
-import type { MastraModelConfig } from '../llm/model/shared.types';
+import type { MastraModelConfig, WidenedMastraModelConfig } from '../llm/model/shared.types';
 import { AGENTIC_EXECUTION_WORKFLOW_ID, AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
 import { Mastra } from '../mastra';
 import { createRunScopeKey } from '../mastra/run-scope';
@@ -1502,12 +1502,14 @@ export class AgentController<TState = {}> {
       : (callerContext ?? new RequestContext());
     const configured = (await agent.getMemory({ requestContext }))?.getMergedThreadConfig().generateTitle;
     const titleConfig = typeof configured === 'object' ? configured : undefined;
+    const overrideModel: DynamicArgument<WidenedMastraModelConfig> | undefined = model;
+    const configuredModel: DynamicArgument<WidenedMastraModelConfig> | undefined = titleConfig?.model;
 
     const title = (
       await agent.generateTitleFromUserMessage({
         messages,
         requestContext,
-        model: model ?? titleConfig?.model,
+        model: overrideModel ?? configuredModel,
         instructions: titleConfig?.instructions,
       })
     )?.trim();

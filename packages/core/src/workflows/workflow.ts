@@ -125,6 +125,7 @@ import type {
   WorkflowRunStartOptions,
   ForeachOptions,
   StepFlowEntryOptions,
+  InferWorkflowRequestContext,
 } from './types';
 import {
   cleanStepResult,
@@ -383,7 +384,7 @@ export function createStep<
   TResumeSchema extends PublicSchema ? InferPublicSchema<TResumeSchema> : unknown,
   TSuspendSchema extends PublicSchema ? InferPublicSchema<TSuspendSchema> : unknown,
   DefaultEngineType,
-  TRequestContextSchema extends PublicSchema ? InferPublicSchema<TRequestContextSchema> : unknown
+  InferWorkflowRequestContext<TRequestContextSchema>
 >;
 
 /**
@@ -493,7 +494,7 @@ export function createStep<
   TResumeSchema extends PublicSchema ? InferPublicSchema<TResumeSchema> : unknown,
   TSuspendSchema extends PublicSchema ? InferPublicSchema<TSuspendSchema> : unknown,
   DefaultEngineType,
-  TRequestContextSchema extends PublicSchema ? InferPublicSchema<TRequestContextSchema> : unknown
+  InferWorkflowRequestContext<TRequestContextSchema>
 >;
 
 // ============================================

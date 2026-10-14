@@ -684,7 +684,7 @@ No Mastra exporters are required when using the bridge. Traces are sent via your
 
 #### Forwarding logs (optional)
 
-The bridge also forwards Mastra log events to the globally registered OTEL `LoggerProvider`. To wire up logs alongside traces, register a `logRecordProcessor` on `NodeSDK`:
+The bridge also forwards Mastra log events to the globally registered OTEL `LoggerProvider`. To wire up logs alongside traces, register a log record processor on `NodeSDK`:
 
 ```typescript title="instrumentation.ts"
 import { NodeSDK } from '@opentelemetry/sdk-node'
@@ -693,11 +693,13 @@ import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs'
 
 const sdk = new NodeSDK({
   // ...trace config as usual
-  logRecordProcessor: new BatchLogRecordProcessor(
-    new OTLPLogExporter({
-      url: process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || 'http://localhost:4318/v1/logs',
+  logRecordProcessors: [
+    new BatchLogRecordProcessor({
+      exporter: new OTLPLogExporter({
+        url: process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || 'http://localhost:4318/v1/logs',
+      }),
     }),
-  ),
+  ],
 })
 ```
 
@@ -712,6 +714,10 @@ Use the `--import` flag to ensure instrumentation loads before your application:
 ```bash
 tsx --import ./instrumentation.ts ./src/index.ts
 ```
+
+#### Flushing before exit
+
+Mastra's `flush()` and `shutdown()` ask the registered OTEL providers to flush, but a `BatchSpanProcessor` can still hold a batch it has already started exporting. In serverless or short-lived processes, also `await sdk.shutdown()` after Mastra's flush, so no spans are left in your OTEL SDK when the process exits. The provider's own `forceFlush()` is not enough: it does not wait for a batch the exporter is already sending.
 
 ### Semantic conventions
 

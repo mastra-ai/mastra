@@ -1,10 +1,5 @@
-/**
- * BDD coverage for workspace sidebar previews. The real workspace, work-item,
- * and agent-controller reads are driven through MSW so the card exercises the
- * same joins used by the live sidebar without adding a hover-time request.
- */
 import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -25,6 +20,7 @@ import {
   workName,
   workSessionId,
 } from './fixtures/sessionHoverDetails';
+import { sessionPropertiesTrigger } from './fixtures/sessionProperties';
 
 function stubSessionDetails(updatedAt: string, { includeSessionTitles = true, slackWorkSession = false } = {}) {
   const fixtures = createSessionHoverDetailsFixtures(updatedAt);
@@ -38,7 +34,7 @@ function stubSessionDetails(updatedAt: string, { includeSessionTitles = true, sl
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/source-control-connections`, () =>
       HttpResponse.json(fixtures.connectionsResponse),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () =>
       HttpResponse.json(fixtures.sessionsResponse),
     ),
     http.get(`${TEST_BASE_URL}/web/user-sessions/${workSessionId}`, () =>
@@ -151,8 +147,7 @@ describe('Workspace session hover details', () => {
     it('shows the related review metadata', async () => {
       const { user, reviewRow } = await setupSessionRows();
 
-      await user.tab();
-      await user.tab();
+      act(() => sessionPropertiesTrigger('Review sessions').focus());
       await user.tab();
 
       expect(reviewRow).toHaveFocus();
@@ -170,8 +165,7 @@ describe('Workspace session hover details', () => {
 
     it('closes the details when focus moves away', async () => {
       const { user, reviewRow } = await setupSessionRows();
-      await user.tab();
-      await user.tab();
+      act(() => sessionPropertiesTrigger('Review sessions').focus());
       await user.tab();
       expect(reviewRow).toHaveFocus();
       expect(await screen.findByLabelText(`${reviewName} session details`)).toBeInTheDocument();

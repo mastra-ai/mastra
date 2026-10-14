@@ -131,7 +131,7 @@ describe('Composer on a lazy user-session draft', () => {
     preparation.finishWorkspace();
     await waitForMutationsIdle(client);
     await waitFor(() => expect(preparation.delivered).toEqual(['use my model']));
-    expect(preparation.operations).toEqual(['mode:build', 'model:openai/gpt-5.4-mini', 'message']);
+    expect(preparation.operations).toEqual(['model:openai/gpt-5.4-mini', 'message']);
   });
 
   it('still dispatches the first prompt when the draft model switch fails', async () => {
@@ -160,7 +160,7 @@ describe('Composer on a lazy user-session draft', () => {
     preparation.finishWorkspace();
     await waitForMutationsIdle(client);
     await waitFor(() => expect(preparation.delivered).toEqual(['keep my prompt']));
-    expect(preparation.operations).toEqual(['mode:build', 'message']);
+    expect(preparation.operations).toEqual(['message']);
   });
 
   it('restores the exact prompt after failure and retries with the same route UUID', async () => {
