@@ -1,5 +1,5 @@
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
-import { GitPullRequest, MessageSquare, SquareKanban } from 'lucide-react';
+import { CircleDashed, GitPullRequest, MessageSquare, SquareKanban, UserRound } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Fragment, useState } from 'react';
 
@@ -11,6 +11,9 @@ const GROUP_ICONS: Record<SessionGroupIcon, ReactNode> = {
   board: <SquareKanban />,
   review: <GitPullRequest />,
   user: <MessageSquare />,
+  status: <CircleDashed />,
+  owner: <UserRound />,
+  all: null,
 };
 
 export function SessionGroupList({

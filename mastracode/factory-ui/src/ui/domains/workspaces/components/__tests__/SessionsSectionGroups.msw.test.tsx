@@ -11,7 +11,14 @@ import type { BoardCatalogResponse } from '../../../../../api/types';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { SessionsSection } from '../SessionsSection';
-import { pickSessionProperty } from './fixtures/sessionProperties';
+import {
+  closeSessionProperties,
+  openNestedSessionProperty,
+  openSessionProperties,
+  openSessionProperty,
+  pickSessionProperty,
+  sessionPropertiesTrigger,
+} from './fixtures/sessionProperties';
 import { stubSessionsFactory, testChatSession } from './fixtures/sessionsSection';
 
 const factoryId = 'fp-1';
@@ -101,7 +108,7 @@ function renderSection() {
 
 const groupRegions = () =>
   within(screen.getByRole('region', { name: 'Sessions' }))
-    .getAllByRole('region')
+    .queryAllByRole('region')
     .map(region => region.getAttribute('aria-label'));
 
 const rowNamesIn = (groupLabel: string) =>
@@ -133,6 +140,85 @@ describe('Sessions sidebar groups', () => {
     expect(rowNamesIn('Review sessions')).toEqual(['Review new', 'Review old']);
     expect(rowNamesIn('Release Preview sessions')).toEqual(['Release new', 'Release old']);
     expect(rowNamesIn('User sessions')).toEqual(['User new', 'User old']);
+  });
+
+  it('regroups the list by status and remembers the choice', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderSection();
+    await screen.findByRole('button', { name: 'Release old' });
+
+    await openNestedSessionProperty(user, 'Group', 'Group by');
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Status' }));
+    await closeSessionProperties(user);
+
+    await waitFor(() => expect(groupRegions()).toEqual(['Initializing sessions', 'Idle sessions']));
+    expect(rowNamesIn('Idle sessions').toSorted()).toEqual(['Release new', 'Review new', 'User new', 'Work new']);
+    expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
+
+    unmount();
+    renderSection();
+    await screen.findByRole('button', { name: 'Release old' });
+
+    expect(groupRegions()).toEqual(['Initializing sessions', 'Idle sessions']);
+  });
+
+  it('drops the headers when grouping is None', async () => {
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByRole('button', { name: 'Release old' });
+
+    await openNestedSessionProperty(user, 'Group', 'Group by');
+    await user.click(await screen.findByRole('menuitemradio', { name: 'None' }));
+    await closeSessionProperties(user);
+
+    await waitFor(() => expect(groupRegions()).toEqual(['All sessions']));
+    expect(screen.queryByText('Work')).toBeNull();
+  });
+
+  it('hides a group from the menu until reset', async () => {
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByRole('button', { name: 'Release old' });
+
+    await openSessionProperty(user, 'Group');
+    await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Review' }));
+    expect(screen.getByRole('menuitemcheckbox', { name: 'Review' })).not.toBeChecked();
+    await closeSessionProperties(user);
+
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Review sessions' })).toBeNull());
+    expect(groupRegions()).toEqual(['Work sessions', 'Release Preview sessions', 'User sessions']);
+    expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
+
+    await openSessionProperties(user);
+    await user.click(screen.getByRole('menuitem', { name: 'Reset to default' }));
+
+    await waitFor(() =>
+      expect(groupRegions()).toEqual(['Work sessions', 'Review sessions', 'Release Preview sessions', 'User sessions']),
+    );
+  });
+
+  it('says so when every group that has sessions is hidden', async () => {
+    localStorage.setItem(
+      'mastracode.sessionListView',
+      JSON.stringify({ groupBy: 'status', hiddenGroups: { status: ['status:initializing', 'status:idle'] } }),
+    );
+    renderSection();
+
+    expect(await screen.findByRole('status')).toHaveTextContent('All groups with sessions are hidden');
+    expect(groupRegions()).toEqual([]);
+  });
+
+  it('offers Reset for groups hidden under another grouping', async () => {
+    localStorage.setItem('mastracode.sessionListView', JSON.stringify({ hiddenGroups: { status: ['status:idle'] } }));
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByRole('button', { name: 'Release old' });
+    expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
+
+    await openSessionProperties(user);
+    await user.click(screen.getByRole('menuitem', { name: 'Reset to default' }));
+
+    await waitFor(() => expect(sessionPropertiesTrigger()).toBeInTheDocument());
   });
 
   it("lists sessions in a custom board's terminal phase under Done", async () => {

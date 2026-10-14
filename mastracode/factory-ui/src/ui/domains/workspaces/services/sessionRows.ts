@@ -30,6 +30,18 @@ function isSessionActivityStatus(value: string): value is SessionActivityStatus 
 export const SESSION_ACTIVITY_STATUSES: readonly SessionActivityStatus[] =
   Object.keys(SESSION_STATUS_LABELS).filter(isSessionActivityStatus);
 
+export interface SessionOwner {
+  userId: string;
+  name: string;
+}
+
+export function sessionOwners(rows: readonly SessionListRow[]): SessionOwner[] {
+  const nameByUserId = new Map(rows.map(row => [row.session.userId, row.owner.name]));
+  return Array.from(nameByUserId, ([userId, name]) => ({ userId, name })).toSorted((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+}
+
 export interface SessionPullRequest {
   number?: number;
   provider: ChangeRequestProvider;

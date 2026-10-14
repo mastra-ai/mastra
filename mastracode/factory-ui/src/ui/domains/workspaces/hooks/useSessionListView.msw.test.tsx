@@ -22,6 +22,51 @@ describe('useSessionListView', () => {
     expect(renderHook(() => useSessionListView()).result.current.view).toEqual(DEFAULT_SESSION_LIST_VIEW);
   });
 
+  it('opens on the default view when the stored value is not JSON', () => {
+    localStorage.setItem(STORAGE_KEY, '{not json');
+
+    expect(renderHook(() => useSessionListView()).result.current.view).toEqual(DEFAULT_SESSION_LIST_VIEW);
+  });
+
+  it('opens on the default grouping when the stored grouping is unknown', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ groupBy: 'project' }));
+
+    expect(renderHook(() => useSessionListView()).result.current.view.groupBy).toBe('board');
+  });
+
+  it('keeps hidden groups that are string lists and drops the malformed ones', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ hiddenGroups: { board: ['board:review'], status: [1, 'status:done'], owner: [], tag: ['x'] } }),
+    );
+
+    expect(renderHook(() => useSessionListView()).result.current.view.hiddenGroups).toEqual({
+      board: ['board:review'],
+    });
+  });
+
+  it('forgets hidden groups once every group is shown again', () => {
+    const { result } = renderHook(() => useSessionListView());
+
+    act(() => result.current.updateView({ groupBy: 'status' }));
+    act(() => result.current.changeGroupVisibility('status:done', false));
+    expect(storedView()).toEqual({ groupBy: 'status', hiddenGroups: { status: ['status:done'] } });
+    expect(result.current.hiddenGroupKeys).toEqual(['status:done']);
+
+    act(() => result.current.changeGroupVisibility('status:done', true));
+    expect(storedView()).toEqual({ groupBy: 'status' });
+    expect(result.current.hiddenGroupKeys).toEqual([]);
+  });
+
+  it('does not count a stored setting that equals the default as a change', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ sort: 'activity', groupBy: 'board', hiddenGroups: { status: [] } }),
+    );
+
+    expect(renderHook(() => useSessionListView()).result.current.changedSettingCount).toBe(0);
+  });
+
   it('stores only what differs from the default, and forgets a choice set back to it', () => {
     const { result } = renderHook(() => useSessionListView());
 

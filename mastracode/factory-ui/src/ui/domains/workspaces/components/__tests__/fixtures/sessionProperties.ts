@@ -15,11 +15,20 @@ export async function openSessionProperties(user: UserEvent) {
 
 export async function openSessionProperty(user: UserEvent, property: string) {
   await openSessionProperties(user);
-  const propertyRow = await screen.findByRole('menuitem', { name: new RegExp(`^${property}`) });
+  await openSubmenu(user, property, 2);
+}
+
+export async function openNestedSessionProperty(user: UserEvent, property: string, nested: string) {
+  await openSessionProperty(user, property);
+  await openSubmenu(user, nested, 3);
+}
+
+async function openSubmenu(user: UserEvent, itemName: string, expectedMenus: number) {
+  const submenuTrigger = await screen.findByRole('menuitem', { name: new RegExp(`^${itemName}`) });
   // jsdom has no geometry: pointer travel into a submenu leaves Base UI's safe polygon and closes it.
-  act(() => propertyRow.focus());
+  act(() => submenuTrigger.focus());
   await user.keyboard('{ArrowRight}');
-  await waitFor(() => expect(screen.getAllByRole('menu')).toHaveLength(2));
+  await waitFor(() => expect(screen.getAllByRole('menu')).toHaveLength(expectedMenus));
 }
 
 export async function closeSessionProperties(user: UserEvent) {

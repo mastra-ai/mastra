@@ -19,11 +19,13 @@ import {
   filterSessionRows,
   sessionOwnerOptions,
 } from '../services/sessionFilters';
-import { collapsedRowsKeepingActive, groupSessionRowsByBoard } from '../services/sessionGroups';
+import { collapsedRowsKeepingActive, groupSessionRows, sessionGroupHeadings } from '../services/sessionGroups';
+import type { SessionGroupContext } from '../services/sessionGroups';
 import { pullRequestMergeTargets } from '../services/sessionRows';
 import { SESSION_SORT_OPTIONS, compareSessionRows } from '../services/sessionSort';
 import { DeleteSessionDialog } from './DeleteSessionDialog';
 import { SessionGroupList } from './SessionGroupList';
+import { SessionGroupMenu } from './SessionGroupMenu';
 import { SessionListItem } from './SessionListItem';
 import { SessionListProperties } from './SessionListProperties';
 
@@ -33,20 +35,30 @@ export function SessionsSection() {
   const navigate = useNavigate();
   const { rows, hasRepositories, loaded, loadFailed, retry } = useSessionListRows(factoryId);
   const catalog = useBoardCatalog(factoryId);
-  const { view, changedSettingCount, updateView, resetView } = useSessionListView();
+  const { view, hiddenGroupKeys, changedSettingCount, updateView, changeGroupVisibility, resetView } =
+    useSessionListView();
   const viewerUserId = useFactoryAuth().data?.user?.userId;
   const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters(viewerUserId);
   const deletion = useSessionDeletion(factoryId, resourceId);
 
   const sortedRows = rows.toSorted(compareSessionRows(view.sort));
   const filteredRows = filterSessionRows(sortedRows, filters, viewerUserId);
-  const groups = groupSessionRowsByBoard(filteredRows, catalog.data);
+  const groupContext: SessionGroupContext = { boards: catalog.data, viewerUserId };
+  const groups = groupSessionRows(filteredRows, view.groupBy, groupContext, hiddenGroupKeys);
   const chatSessionOpen = sessionEnabled && Boolean(routeSessionId) && Boolean(resourceId);
   const mergedBySessionId = useWorkspacePullRequestMerges({
     baseUrl,
     resourceId,
     targets: pullRequestMergeTargets(groups.flatMap(group => collapsedRowsKeepingActive(group.rows))),
     enabled: chatSessionOpen,
+  });
+
+  const emptyMessage = emptyListMessage({
+    rowCount: rows.length,
+    filteredCount: filteredRows.length,
+    groupCount: groups.length,
+    activeFilterCount,
+    viewerKnown: Boolean(viewerUserId),
   });
 
   const nothingToList = !hasRepositories && rows.length === 0 && !loadFailed;
@@ -104,6 +116,13 @@ export function SessionsSection() {
                 value={filters.updated}
                 onValueChange={updated => changeFilters({ updated })}
               />
+              <SessionGroupMenu
+                groupBy={view.groupBy}
+                onGroupByChange={groupBy => updateView({ groupBy })}
+                groups={sessionGroupHeadings(sortedRows, view.groupBy, groupContext)}
+                hiddenKeys={hiddenGroupKeys}
+                onVisibilityChange={changeGroupVisibility}
+              />
             </SessionListProperties>
           </div>
         }
@@ -116,7 +135,7 @@ export function SessionsSection() {
           <SessionGroupList
             key={group.key}
             group={group}
-            showHeader
+            showHeader={view.groupBy !== 'none'}
             renderRow={row => (
               <SessionListItem
                 factoryId={factoryId}
@@ -140,9 +159,9 @@ export function SessionsSection() {
           </Button>
         </div>
       )}
-      {loaded && filteredRows.length === 0 && (
+      {loaded && emptyMessage !== undefined && (
         <Txt as="p" variant="meta" tone="muted" role="status" className="m-0 px-2 py-1">
-          {emptyListMessage({ rowCount: rows.length, activeFilterCount, viewerKnown: Boolean(viewerUserId) })}
+          {emptyMessage}
         </Txt>
       )}
 
@@ -160,13 +179,18 @@ export function SessionsSection() {
 
 function emptyListMessage({
   rowCount,
+  filteredCount,
+  groupCount,
   activeFilterCount,
   viewerKnown,
 }: {
   rowCount: number;
+  filteredCount: number;
+  groupCount: number;
   activeFilterCount: number;
   viewerKnown: boolean;
-}): string {
+}): string | undefined {
+  if (filteredCount > 0) return groupCount === 0 ? 'All groups with sessions are hidden' : undefined;
   if (rowCount === 0) return 'No sessions yet';
   if (activeFilterCount === 0 && viewerKnown) return 'No sessions of your own.';
   return 'No sessions match these filters';
