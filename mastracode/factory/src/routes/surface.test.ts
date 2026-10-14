@@ -131,9 +131,10 @@ describe('prepareFactoryRuleBinding', () => {
   });
 
   it('refuses to start a run when the project policy is unavailable', async () => {
-    const { seeded, project, github } = await seedFactoryWithRepository();
+    const { seeded, sourceControl, project, github } = await seedFactoryWithRepository();
     const prepare = vi.fn(async () => ({}) as never);
     vi.spyOn(seeded.projects, 'getById').mockResolvedValueOnce(null);
+    const createSession = vi.spyOn(sourceControl.sessions, 'create');
 
     await expect(
       prepareFactoryRuleBinding(
@@ -145,6 +146,7 @@ describe('prepareFactoryRuleBinding', () => {
       ),
     ).rejects.toMatchObject({ code: 'session_unavailable', message: expect.stringContaining('policy is unavailable') });
     expect(prepare).not.toHaveBeenCalled();
+    expect(createSession).not.toHaveBeenCalled();
   });
 
   it('creates the source-control session the coordinator requires', async () => {

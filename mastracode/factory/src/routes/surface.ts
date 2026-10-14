@@ -303,6 +303,13 @@ export async function prepareFactoryRuleBinding(
     if (!connections.some(connection => connection.integrationId === sourceControl.integrationId)) {
       throw new FactoryDispatchError('source_control_missing', 'Factory source-control connection not found.');
     }
+    const project = await projects.getById({ id: input.record.factoryProjectId });
+    if (!project || project.orgId !== input.record.orgId) {
+      throw new FactoryDispatchError(
+        'session_unavailable',
+        `Factory model policy is unavailable for project ${input.record.factoryProjectId}.`,
+      );
+    }
     // A retry may already own a role session. Check it before treating a
     // repository-less card as ambiguous, but never override an explicit signal.
     const boundSession = await reuseBoundSession(sourceControl, input);
@@ -375,13 +382,6 @@ export async function prepareFactoryRuleBinding(
         );
       }));
 
-    const project = await projects.getById({ id: input.record.factoryProjectId });
-    if (!project || project.orgId !== input.record.orgId) {
-      throw new FactoryDispatchError(
-        'session_unavailable',
-        `Factory model policy is unavailable for project ${input.record.factoryProjectId}.`,
-      );
-    }
     const modelScope = project.modelScope;
     await coordinator.prepare({
       orgId: input.record.orgId,
