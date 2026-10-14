@@ -9,6 +9,7 @@
  * - Wildcard (*) permissions grant access to all routes
  */
 
+import { registerApiRoute } from '@mastra/core/server';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { createDefaultTestContext } from '@mastra/server-adapters-test-suite';
 import type { AdapterTestContext } from '@mastra/server-adapters-test-suite';
@@ -166,13 +167,38 @@ describe('RBAC when the permission checker cannot load', () => {
     }
   });
 
-  it('denies a protected route when RBAC is configured', async () => {
+  it('denies a protected route when RBAC is configured (module-level checker load)', async () => {
     const setup = await setupAuthAdapter(context);
     app = setup.app;
     const { adapter } = setup;
     await adapter.registerRoute(app, createProtectedRoute('agents:read'), { prefix: '' });
     const address = await app.listen({ port: 0 });
     const { status, data } = await makeRequest(address, '/api/test/agents-read', {
+      headers: { Authorization: 'Bearer admin' },
+    });
+    expect(status).toBe(403);
+    expect(data).toEqual({ error: 'Forbidden', message: 'Missing required permission: agents:read' });
+  });
+
+  it('denies a protected custom API route when RBAC is configured (per-request checker load)', async () => {
+    const setup = await setupAuthAdapter(context);
+    app = setup.app;
+    const { adapter } = setup;
+    const withRbac = context.mastra.getServer;
+    context.mastra.getServer = () =>
+      ({
+        ...withRbac(),
+        apiRoutes: [
+          registerApiRoute('/custom/secure', {
+            method: 'GET',
+            requiresPermission: 'agents:read',
+            handler: async c => c.json({ success: true }),
+          }),
+        ],
+      }) as any;
+    await adapter.registerCustomApiRoutes();
+    const address = await app.listen({ port: 0 });
+    const { status, data } = await makeRequest(address, '/custom/secure', {
       headers: { Authorization: 'Bearer admin' },
     });
     expect(status).toBe(403);
