@@ -130,6 +130,23 @@ describe('prepareFactoryRuleBinding', () => {
     expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ modelScope: 'user', defaultModelId: undefined }));
   });
 
+  it('refuses to start a run when the project policy is unavailable', async () => {
+    const { seeded, project, github } = await seedFactoryWithRepository();
+    const prepare = vi.fn(async () => ({}) as never);
+    vi.spyOn(seeded.projects, 'getById').mockResolvedValueOnce(null);
+
+    await expect(
+      prepareFactoryRuleBinding(
+        github,
+        { prepare } as unknown as FactoryStartCoordinator,
+        seeded.projects,
+        boards,
+        bindingInput(project.id),
+      ),
+    ).rejects.toMatchObject({ code: 'session_unavailable', message: expect.stringContaining('policy is unavailable') });
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
   it('creates the source-control session the coordinator requires', async () => {
     const { seeded, sourceControl, project, github } = await seedFactoryWithRepository();
     const prepare = vi.fn(async () => ({}) as never);

@@ -2,4 +2,8 @@
 'mastra': patch
 ---
 
-Added the Factory model scope setting to the bundled settings interface and generated project-update command metadata.
+Factory settings now let you choose whether a Factory's sessions use the organization's models and credentials or each session owner's own. The setting is also available from the CLI:
+
+```bash
+mastra api factory project update <project-id> '{"modelScope":"user"}'
+```

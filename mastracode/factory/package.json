@@ -76,6 +76,7 @@
     "@internal/lint": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/pg": "workspace:*",
+    "@mastra/server": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@internal/workspace": "workspace:*",
     "@types/node": "22.20.1",

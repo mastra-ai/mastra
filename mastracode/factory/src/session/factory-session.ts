@@ -34,7 +34,12 @@ export async function resolveFactorySessionModel(args: {
   try {
     const userDefault = await args.modelDefaults?.get({ orgId: args.orgId, userId: args.ownerUserId });
     return { modelScope: 'user', ...(userDefault?.modelId ? { modelId: userDefault.modelId } : {}) };
-  } catch {
+  } catch (error) {
+    console.warn('[Factory] Owner default model lookup failed; using the mode default model', {
+      orgId: args.orgId,
+      ownerUserId: args.ownerUserId,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return { modelScope: 'user' };
   }
 }

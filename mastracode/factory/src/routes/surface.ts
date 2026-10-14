@@ -376,14 +376,20 @@ export async function prepareFactoryRuleBinding(
       }));
 
     const project = await projects.getById({ id: input.record.factoryProjectId });
-    const modelScope = project?.modelScope ?? 'factory';
+    if (!project || project.orgId !== input.record.orgId) {
+      throw new FactoryDispatchError(
+        'session_unavailable',
+        `Factory model policy is unavailable for project ${input.record.factoryProjectId}.`,
+      );
+    }
+    const modelScope = project.modelScope;
     await coordinator.prepare({
       orgId: input.record.orgId,
       userId: preparedSession.userId,
       factoryProjectId: input.record.factoryProjectId,
       sessionId: preparedSession.sessionId,
       modelScope,
-      defaultModelId: modelScope === 'factory' ? (project?.defaultModelId ?? undefined) : undefined,
+      defaultModelId: modelScope === 'factory' ? (project.defaultModelId ?? undefined) : undefined,
       threadTitle: workItemThreadTitle({ source, title: input.item.title, metadata: input.item.metadata }),
       kickoffKey: input.record.id,
       destinationStage,

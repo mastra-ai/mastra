@@ -71,7 +71,7 @@ describe('FactoryModelScopeSection', () => {
     expect(combobox).toHaveTextContent("Each user's model and credentials");
     expect(
       screen.getByText(
-        "Factory: all sessions use only organization credentials and the Factory default model. User: each session uses only its owner's credentials and default model.",
+        "Factory: sessions use only organization credentials and start on the Factory default model. User: each session uses only its owner's credentials and starts on the owner's default model. Changing the scope never replaces a model a thread already selected.",
       ),
     ).toBeInTheDocument();
   });

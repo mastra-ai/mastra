@@ -33,8 +33,9 @@ export function FactoryModelScopeSection() {
       description={
         <>
           <span>
-            Factory: all sessions use only organization credentials and the Factory default model. User: each session
-            uses only its owner's credentials and default model.
+            Factory: sessions use only organization credentials and start on the Factory default model. User: each
+            session uses only its owner's credentials and starts on the owner's default model. Changing the scope never
+            replaces a model a thread already selected.
           </span>
           {error && (
             <Txt as="span" variant="meta" className="text-destructive-foreground">

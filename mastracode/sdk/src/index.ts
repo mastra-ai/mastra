@@ -807,21 +807,25 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       ? new Knowledge({ id: 'mastracode', name: 'MastraCode Knowledge', storage })
       : undefined);
   const knowledgeKey = configuredKnowledgeKey ?? 'default';
+  const dynamicMemory =
+    config?.memory === undefined
+      ? getDynamicMemory(
+          storage,
+          vector,
+          config?.settingsPath,
+          {
+            disableSettingsOmSeed: config?.disableSettingsOmSeed,
+          },
+          knowledge,
+        )
+      : undefined;
   const memory =
     config?.memory === false
       ? undefined
       : (config?.memory ??
-        withCredentialTenantPreparation(
-          getDynamicMemory(
-            storage,
-            vector,
-            config?.settingsPath,
-            {
-              disableSettingsOmSeed: config?.disableSettingsOmSeed,
-            },
-            knowledge,
-          ),
-        ));
+        // Keep settled() so shutdown still drains background memory work.
+        (dynamicMemory &&
+          Object.assign(withCredentialTenantPreparation(dynamicMemory), { settled: dynamicMemory.settled })));
   // Only the default memory wiring registers the subconscious tools; a
   // caller-supplied memory is opaque here, so its prompt must not advertise them.
   const hasSubconscious =

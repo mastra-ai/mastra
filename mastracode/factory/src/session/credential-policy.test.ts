@@ -11,11 +11,11 @@ import { AgentController } from '@mastra/core/agent-controller';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
+import { SET_AGENT_CONTROLLER_SESSION_STATE_ROUTE } from '@mastra/server/handlers/agent-controller';
 import { Hono } from 'hono';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { SET_AGENT_CONTROLLER_SESSION_STATE_ROUTE } from '../../../../packages/server/src/server/handlers/agent-controller.js';
 import { prepareSessionRunContext } from '../integrations/subscription-session.js';
 import {
   registerTenantCredentialResolver,
