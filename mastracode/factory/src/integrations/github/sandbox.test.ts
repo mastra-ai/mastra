@@ -11,6 +11,7 @@ import type {
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
 import {
+  ensureLocalBranch,
   hasLocalBranch,
   checkoutSessionBranch,
   configureGitIdentity,
@@ -1041,14 +1042,16 @@ describe('pushRepositoryBranch', () => {
     expect(sandbox.calls.some(call => call.includes('remote set-url'))).toBe(false);
   });
 
-  it('pushes HEAD to the named branch when asked, without setting upstream', async () => {
-    const sandbox = new FakeSandbox();
-    await pushRepositoryBranch(sandbox, '/workspace/hello', 'feat/gitlab', access, 'acme/hello', { fromHead: true });
+  it('creates a missing local branch at HEAD without switching, and leaves an existing one alone', async () => {
+    const missing = new FakeSandbox(script =>
+      script.includes('show-ref') ? { exitCode: 1, stdout: '', stderr: '' } : OK,
+    );
+    await ensureLocalBranch(missing, '/workspace/hello', 'feat/x');
+    expect(missing.executions.map(entry => entry.args)).toContainEqual(['-C', '/workspace/hello', 'branch', 'feat/x']);
 
-    const push = sandbox.executions.find(entry => entry.command === 'git' && entry.args.includes('push'))!;
-    expect(push.args).toEqual(['-C', '/workspace/hello', 'push', 'origin', 'HEAD:refs/heads/feat/gitlab']);
-    expect(push.options?.env?.GIT_CONFIG_VALUE_0).toMatch(/^Authorization: Basic /);
-    expect(sandbox.calls.join('\n')).not.toContain('glpat-secret');
+    const existing = new FakeSandbox(() => OK);
+    await ensureLocalBranch(existing, '/workspace/hello', 'feat/x');
+    expect(existing.executions.some(entry => entry.args.includes('branch'))).toBe(false);
   });
 
   it('keeps a failed push credential-free in argv and persistent config', async () => {
