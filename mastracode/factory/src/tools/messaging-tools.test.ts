@@ -260,6 +260,20 @@ describe('factory_signal_session', () => {
     ).resolves.toMatchObject({ delivered: 'woken' });
   });
 
+  it('audits a turn nobody signed in started as the thread agent, not the person', async () => {
+    const { run, auditRecorder } = setup({
+      subscriptions: [follow('item-7')],
+      bindings: [binding('item-7', 'session-worker')],
+    });
+    await run({ ...USER, interactive: false }, 'factory_signal_session', {
+      sessionId: 'session-worker',
+      message: 'hi',
+    });
+    expect(auditRecorder.record).toHaveBeenCalledWith(
+      expect.objectContaining({ actorId: 'agent:thread-session-1', actorType: 'agent' }),
+    );
+  });
+
   it('does not reach a revoked worker of a followed item on a non-interactive turn', async () => {
     const { run } = setup({
       subscriptions: [follow('item-7')],

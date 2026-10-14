@@ -72,10 +72,10 @@ export function createFactoryMessagingTools(
   const audit = (input: { targetSessionId: string; priority: NotificationPriority; kind: string; delivery: string }) =>
     deps.auditRecorder.record({
       orgId: scope.orgId,
-      // A worker answers as its thread's agent (the trail's `agent:<threadId>`
-      // convention); a user session acts as its person.
-      actorId: scope.kind === 'worker' ? `agent:${scope.threadId}` : scope.userId,
-      actorType: scope.kind === 'worker' ? 'agent' : 'human',
+      // Only a turn the person started is the person's act. Workers and turns
+      // nobody signed in started (wakes, webhooks) act as the thread's agent.
+      actorId: scope.interactive ? scope.userId : `agent:${scope.threadId}`,
+      actorType: scope.interactive ? 'human' : 'agent',
       action: 'factory.agent.signaled',
       factoryProjectId: scope.factoryProjectId,
       targets: [{ type: 'session', id: input.targetSessionId }],
