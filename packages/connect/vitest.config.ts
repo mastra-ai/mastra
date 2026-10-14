@@ -2,8 +2,25 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    name: 'unit:packages/connect',
-    environment: 'node',
-    include: ['src/**/*.test.ts'],
+    projects: [
+      {
+        test: {
+          name: 'unit:packages/connect',
+          environment: 'node',
+          include: ['src/**/*.test.ts'],
+        },
+      },
+      {
+        test: {
+          name: 'typecheck:packages/connect',
+          environment: 'node',
+          include: [],
+          typecheck: {
+            enabled: true,
+            include: ['type-tests/**/*.test-d.ts'],
+          },
+        },
+      },
+    ],
   },
 });
