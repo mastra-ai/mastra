@@ -25,8 +25,15 @@ class DelayedThreadCreationMemory extends StrictMemory {
   });
 
   override async recall(...args: Parameters<MockMemory['recall']>) {
-    this.recallStarted();
-    return super.recall(...args);
+    const [{ threadId }] = args;
+    try {
+      return await super.recall(...args);
+    } catch (error) {
+      if (error instanceof Error && error.message === `No thread found with id ${threadId}`) {
+        this.recallStarted();
+      }
+      throw error;
+    }
   }
 
   override async createThread(...args: Parameters<MockMemory['createThread']>) {
@@ -164,6 +171,43 @@ describe('ToolSearchProcessor storage: context — resume tool rebuild', () => {
 
     await expect(response.text).resolves.toBe('Dummy response');
     await expect(memory.getThreadById({ threadId: 'new-thread' })).resolves.toBeDefined();
+  });
+
+  it('preserves tools loaded in runMessages when the thread does not exist', async () => {
+    const memory = new StrictMemory();
+    const agent = createAgent(memory);
+
+    const tools = await agent.getToolsForExecution({
+      threadId: 'new-thread',
+      resourceId: 'user-1',
+      requestContext: new RequestContext(),
+      runMessages: [
+        {
+          id: 'a1',
+          threadId: 'new-thread',
+          resourceId: 'user-1',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call-1',
+                  toolName: 'load_tool',
+                  args: { toolName: 'weather' },
+                  result: { success: true, toolName: 'weather' },
+                },
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    expect(tools.weather).toBeDefined();
   });
 
   it('propagates recall failures unrelated to a missing thread', async () => {
