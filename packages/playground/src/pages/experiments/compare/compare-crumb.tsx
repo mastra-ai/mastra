@@ -29,8 +29,9 @@ export function CompareCrumbDataset() {
   });
   if (!datasetId || isLoading) return null;
 
+  // `ml-3` mirrors the label's end padding, so the chevron sits evenly between the label and this text.
   return (
-    <Txt as="span" variant="caption" tone="muted" className="ml-1 flex min-w-0 items-center gap-1 whitespace-nowrap">
+    <Txt as="span" variant="caption" tone="muted" className="ml-3 flex min-w-0 items-center gap-1 whitespace-nowrap">
       on
       {/* Positioned so it sits above the switcher, whose hit area covers the whole current crumb. */}
       <Link
