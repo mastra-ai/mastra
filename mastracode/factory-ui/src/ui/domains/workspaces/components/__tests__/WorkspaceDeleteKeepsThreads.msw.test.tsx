@@ -16,7 +16,7 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import type { FactoryUserSession } from '../../services/user-sessions';
-import { WorkspacesSection } from '../WorkspacesSection';
+import { SessionsSection } from '../SessionsSection';
 
 const projectRepositoryId = 'ghp-1';
 const sessionId = 'sess-1';
@@ -54,7 +54,7 @@ function renderSection() {
         }}
       >
         <Routes>
-          <Route path="/factories/:factoryId" element={<WorkspacesSection />} />
+          <Route path="/factories/:factoryId" element={<SessionsSection />} />
         </Routes>
       </ChatSessionContext.Provider>
     </MemoryRouter>,
@@ -87,7 +87,7 @@ describe('Deleting a workspace', () => {
     const user = userEvent.setup();
     const { client } = renderSection();
 
-    const group = await screen.findByRole('region', { name: 'Review Sessions' });
+    const group = await screen.findByRole('region', { name: 'Review sessions' });
     await user.click(within(group).getByRole('button', { name: 'Session actions for factory/pr-20474' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Delete' }));
 

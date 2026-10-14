@@ -10,7 +10,7 @@ import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../../../fac
 import type { PullRequestSubscription } from '../../../factory/services/githubSubscriptions';
 import type { WorkItemSessionRef } from '../../../factory/services/workItems';
 import type { FactoryUserSession } from '../../services/user-sessions';
-import { WorkspacesSection } from '../WorkspacesSection';
+import { SessionsSection } from '../SessionsSection';
 
 const factoryProjectId = 'factory-project-1';
 const projectRepositoryId = 'github-project-1';
@@ -231,7 +231,7 @@ function renderSection() {
         }}
       >
         <Routes>
-          <Route path="/factories/:factoryId/workspaces/:sessionId" element={<WorkspacesSection />} />
+          <Route path="/factories/:factoryId/workspaces/:sessionId" element={<SessionsSection />} />
         </Routes>
       </ChatSessionContext.Provider>
     </MemoryRouter>,

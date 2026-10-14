@@ -7,7 +7,7 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import type { FactoryUserSession } from '../../services/user-sessions';
-import { WorkspacesSection } from '../WorkspacesSection';
+import { SessionsSection } from '../SessionsSection';
 
 const factoryProjectId = 'factory-project-1';
 const projectRepositoryId = 'github-project-1';
@@ -64,7 +64,7 @@ function renderSection() {
         }}
       >
         <Routes>
-          <Route path="/factories/:factoryId/workspaces/:sessionId" element={<WorkspacesSection />} />
+          <Route path="/factories/:factoryId/workspaces/:sessionId" element={<SessionsSection />} />
         </Routes>
       </ChatSessionContext.Provider>
     </MemoryRouter>,

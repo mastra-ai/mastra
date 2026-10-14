@@ -2,21 +2,19 @@ import { act, screen, waitFor } from '@testing-library/react';
 import type { UserEvent } from '@testing-library/user-event';
 import { expect } from 'vitest';
 
-type SessionList = 'Work sessions' | 'Review sessions' | 'User sessions';
-
-export function sessionPropertiesTrigger(list: SessionList, changedCount = 0): HTMLElement {
+export function sessionPropertiesTrigger(changedCount = 0): HTMLElement {
   return screen.getByRole('button', {
-    name: changedCount === 0 ? `${list} properties` : `${list} properties, ${changedCount} changed`,
+    name: changedCount === 0 ? 'Sessions properties' : `Sessions properties, ${changedCount} changed`,
   });
 }
 
-export async function openSessionProperties(user: UserEvent, list: SessionList) {
-  await user.click(screen.getByRole('button', { name: new RegExp(`^${list} properties`) }));
+export async function openSessionProperties(user: UserEvent) {
+  await user.click(screen.getByRole('button', { name: /^Sessions properties/ }));
   return screen.findByRole('menu');
 }
 
-export async function openSessionProperty(user: UserEvent, list: SessionList, property: string) {
-  await openSessionProperties(user, list);
+export async function openSessionProperty(user: UserEvent, property: string) {
+  await openSessionProperties(user);
   const propertyRow = await screen.findByRole('menuitem', { name: new RegExp(`^${property}`) });
   // jsdom has no geometry: pointer travel into a submenu leaves Base UI's safe polygon and closes it.
   act(() => propertyRow.focus());
@@ -32,8 +30,8 @@ export async function closeSessionProperties(user: UserEvent) {
   }
 }
 
-export async function pickSessionProperty(user: UserEvent, list: SessionList, property: string, option: string) {
-  await openSessionProperty(user, list, property);
+export async function pickSessionProperty(user: UserEvent, property: string, option: string) {
+  await openSessionProperty(user, property);
   await user.click(await screen.findByRole('menuitemradio', { name: option }));
   await closeSessionProperties(user);
 }

@@ -12,8 +12,7 @@ import { SettingsNavigation } from './domains/settings/components/SettingsNaviga
 import { useCloseSettings } from './domains/settings/hooks/useCloseSettings';
 import { settingsSectionPath } from './domains/settings/settingsSections';
 import { FactorySwitcher } from './domains/workspaces/components/FactorySwitcher';
-import { UserSessionsSection } from './domains/workspaces/components/UserSessionsSection';
-import { WorkspacesSection } from './domains/workspaces/components/WorkspacesSection';
+import { SessionsSection } from './domains/workspaces/components/SessionsSection';
 
 function useSettingsOpen() {
   const { pathname } = useLocation();
@@ -77,10 +76,8 @@ export function AppSidebar() {
               <FactorySwitcher />
             </section>
             <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label="Navigation">
-              <FactorySection>
-                <WorkspacesSection />
-              </FactorySection>
-              <UserSessionsSection />
+              <FactorySection />
+              <SessionsSection />
             </section>
           </div>
         )}
