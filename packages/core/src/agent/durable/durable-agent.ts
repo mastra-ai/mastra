@@ -95,6 +95,7 @@ const localRecoveryClaims = new Map<string, string>();
 const RECOVER_ALREADY_IN_PROGRESS_ERROR_ID = 'DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS';
 const RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID = 'DURABLE_AGENT_RECOVER_SNAPSHOT_NOT_FOUND';
 const RECOVER_RUN_SUSPENDED_ERROR_ID = 'DURABLE_AGENT_RECOVER_RUN_SUSPENDED';
+const OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS = 5_000;
 /** Stores already reported as unable to fence run writes, so each is warned about once per process. */
 const unfencedStoresWarned = new WeakSet<WorkflowsStorage | MemoryStorage>();
 
@@ -4869,7 +4870,7 @@ export class DurableAgent<
       returnScorerData = workflowInput.options?.returnScorerData;
     }
 
-    const refreshObservedMessageList = async () => {
+    const refreshObservedMessageList = async (isExpired: () => boolean) => {
       const targetMessageList = messageList;
       const snapshot = workflowInputSnapshot ?? loopSnapshot;
       if (!workflowsStore || !snapshot || !targetMessageList) return;
@@ -4877,7 +4878,7 @@ export class DurableAgent<
       try {
         const inputMessages = targetMessageList.get.input.db();
         const latestState = await this.#loadLatestMessageListState(workflowsStore, runId, snapshot);
-        if (latestState) {
+        if (latestState && !isExpired()) {
           targetMessageList.deserialize(latestState);
           if (targetMessageList.get.input.db().length === 0 && inputMessages.length > 0) {
             targetMessageList.add(inputMessages, 'input');
@@ -4888,13 +4889,41 @@ export class DurableAgent<
       }
     };
 
+    const refreshObservedMessageListWithTimeout = async () => {
+      const refreshTimeoutMs = Math.min(
+        options?.idleTimeoutMs && options.idleTimeoutMs > 0
+          ? options.idleTimeoutMs
+          : OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS,
+        OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS,
+      );
+      let expired = false;
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const timedOut = new Promise<boolean>(resolve => {
+        timeout = setTimeout(() => {
+          expired = true;
+          resolve(true);
+        }, refreshTimeoutMs);
+      });
+
+      try {
+        const didTimeOut = await Promise.race([refreshObservedMessageList(() => expired).then(() => false), timedOut]);
+        if (didTimeOut) {
+          this.#mastra
+            ?.getLogger?.()
+            ?.warn?.(`[DurableAgent] observe(${runId}) messageList refresh timed out after ${refreshTimeoutMs}ms`);
+        }
+      } finally {
+        if (timeout) clearTimeout(timeout);
+      }
+    };
+
     let observedResponseText = '';
     const handleObservedChunk = async (chunk: ChunkType<TOutput>) => {
       if (chunk.type === 'text-delta' && typeof chunk.payload.text === 'string') {
         observedResponseText += chunk.payload.text;
       }
       if (chunk.type === 'step-finish') {
-        await refreshObservedMessageList();
+        await refreshObservedMessageListWithTimeout();
         if (messageList && messageList.get.response.db().length === 0 && observedResponseText) {
           messageList.add({ role: 'assistant', content: observedResponseText }, 'response');
         }
