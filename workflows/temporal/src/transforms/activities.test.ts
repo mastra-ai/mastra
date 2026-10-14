@@ -102,7 +102,9 @@ describe('activity transform', () => {
       export const fetchWeather = createStep({ id: 'fetch-weather', execute: async () => ({ ok: true }) });
     `);
 
-    expect(output).toMatch(/args\.execute\(\{[\s\S]*\.\.\.withRequestContext\(params\),[\s\S]*mastra[\s\S]*\}\)/);
+    expect(output).toMatch(
+      /executeTemporalStep\(args, \{[\s\S]*\.\.\.withRequestContext\(params\),[\s\S]*mastra[\s\S]*\}\)/,
+    );
     expect(output).not.toMatch(/await import\(/);
     expect(output).toContain('const fetchWeather = createStep({');
   });
@@ -258,6 +260,8 @@ describe('activity transform', () => {
 
     expect(output).toContain('const mastra =');
     expect(output).not.toMatch(/export\s+(const|\{)\s*mastra/);
-    expect(output).toMatch(/args\.execute\(\{[\s\S]*\.\.\.withRequestContext\(params\),[\s\S]*mastra[\s\S]*\}\)/);
+    expect(output).toMatch(
+      /executeTemporalStep\(args, \{[\s\S]*\.\.\.withRequestContext\(params\),[\s\S]*mastra[\s\S]*\}\)/,
+    );
   });
 });

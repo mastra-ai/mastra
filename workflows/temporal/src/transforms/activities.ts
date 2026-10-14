@@ -359,11 +359,21 @@ function createTemporalActivitiesHelperStatements(
   const helperSource = `
     function withRequestContext(params) {
       const { requestContext, initData, ...rest } = params;
+      let suspended;
       return {
         ...rest,
         requestContext: new ${requestContextClassName}(requestContext),
         getInitData: () => initData,
+        suspend: async (suspendPayload) => {
+          suspended = { __temporalSuspension: true, suspendPayload };
+        },
+        __getTemporalSuspension: () => suspended,
       };
+    }
+
+    async function executeTemporalStep(args, context) {
+      const result = await args.execute(context);
+      return context.__getTemporalSuspension() ?? result;
     }
 
     ${
@@ -372,7 +382,7 @@ function createTemporalActivitiesHelperStatements(
           function createStep(args) {
             return async (params) => {
               const { mastra } = await import(${JSON.stringify(mastraImportPath)});
-              return args.execute({ ...withRequestContext(params), mastra });
+              return executeTemporalStep(args, { ...withRequestContext(params), mastra });
             };
           }
         `
@@ -380,14 +390,14 @@ function createTemporalActivitiesHelperStatements(
           ? `
             function createStep(args) {
               return async (params) => {
-                return args.execute({ ...withRequestContext(params), mastra });
+                return executeTemporalStep(args, { ...withRequestContext(params), mastra });
               };
             }
           `
           : `
             function createStep(args) {
               return async (params) => {
-                return args.execute(withRequestContext(params));
+                return executeTemporalStep(args, withRequestContext(params));
               };
             }
           `

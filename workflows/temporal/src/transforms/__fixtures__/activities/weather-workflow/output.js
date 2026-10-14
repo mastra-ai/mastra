@@ -7,15 +7,27 @@ function withRequestContext(params) {
     initData,
     ...rest
   } = params;
+  let suspended;
   return {
     ...rest,
     requestContext: new RequestContext(requestContext),
-    getInitData: () => initData
+    getInitData: () => initData,
+    suspend: async suspendPayload => {
+      suspended = {
+        __temporalSuspension: true,
+        suspendPayload
+      };
+    },
+    __getTemporalSuspension: () => suspended
   };
+}
+async function executeTemporalStep(args, context) {
+  const result = await args.execute(context);
+  return context.__getTemporalSuspension() ?? result;
 }
 function createStep(args) {
   return async params => {
-    return args.execute({
+    return executeTemporalStep(args, {
       ...withRequestContext(params),
       mastra
     });

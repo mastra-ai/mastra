@@ -1,3 +1,4 @@
+import { RequestContext } from '@mastra/core/di';
 import { createStep } from '@mastra/core/workflows';
 import type { Client } from '@temporalio/client';
 import { describe, expect, it, vi } from 'vitest';
@@ -30,24 +31,105 @@ describe('TemporalRun', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it.each([
-    'streamLegacy',
-    'resumeStream',
-    'resume',
-    'resumeAsync',
-    'restart',
-    'timeTravel',
-    'timeTravelStream',
-  ] as const)('rejects unsupported %s calls instead of using the local workflow engine', async method => {
+  it.each(['streamLegacy', 'resumeStream', 'restart', 'timeTravel', 'timeTravelStream'] as const)(
+    'rejects unsupported %s calls instead of using the local workflow engine',
+    async method => {
+      const workflow = createWorkflow(
+        { id: 'test-workflow', inputSchema: z.unknown(), outputSchema: z.unknown() },
+        { client: { workflow: {} } as unknown as Client, taskQueue: 'test-queue' },
+      );
+      const run = await workflow.createRun({ runId: 'test-run' });
+
+      expect(() => (run[method] as (...args: unknown[]) => unknown)()).toThrow(
+        `@mastra/temporal does not support ${method}() yet. Use start() or startAsync() instead.`,
+      );
+    },
+  );
+
+  it('signals the matching Temporal workflow when resuming and waits for the result', async () => {
+    const result = {
+      status: 'success',
+      input: { value: 1 },
+      result: { approved: true },
+      state: {},
+      steps: {},
+    };
+    const signal = vi.fn().mockResolvedValue(undefined);
+    const handleResult = vi.fn().mockResolvedValue(result);
+    const getHandle = vi.fn().mockReturnValue({ signal, result: handleResult });
     const workflow = createWorkflow(
-      { id: 'test-workflow', inputSchema: z.unknown(), outputSchema: z.unknown() },
-      { client: { workflow: {} } as unknown as Client, taskQueue: 'test-queue' },
+      { id: 'test-workflow', inputSchema: z.object({ value: z.number() }), outputSchema: z.unknown() },
+      { client: { workflow: { getHandle } } as unknown as Client, taskQueue: 'test-queue' },
     );
     const run = await workflow.createRun({ runId: 'test-run' });
 
-    expect(() => (run[method] as (...args: unknown[]) => unknown)()).toThrow(
-      `@mastra/temporal does not support ${method}() yet. Use start() or startAsync() instead.`,
+    await expect(run.resume({ step: 'approval', resumeData: { approved: true } })).resolves.toEqual(result);
+
+    expect(getHandle).toHaveBeenCalledWith('test-run');
+    expect(signal).toHaveBeenCalledWith('mastra.resume', { step: 'approval', resumeData: { approved: true } });
+    expect(handleResult).toHaveBeenCalledOnce();
+  });
+
+  it('returns suspended from start when the Temporal workflow stays open waiting for resume', async () => {
+    const suspended = {
+      status: 'suspended',
+      input: { value: 1 },
+      state: {},
+      steps: {
+        approval: {
+          __temporalStepResult: true,
+          status: 'suspended',
+          payload: { value: 1 },
+          suspendPayload: { reason: 'needs approval' },
+          suspendedAt: 1,
+        },
+      },
+      suspended: [['approval']],
+      suspendPayload: { approval: { reason: 'needs approval' } },
+    };
+    const result = vi.fn(() => new Promise(() => {}));
+    const query = vi.fn().mockResolvedValue(suspended);
+    const start = vi.fn().mockResolvedValue({ result, query });
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: z.object({ value: z.number() }), outputSchema: z.unknown() },
+      { client: { workflow: { start } } as unknown as Client, taskQueue: 'test-queue' },
     );
+    const run = await workflow.createRun({ runId: 'test-run' });
+
+    await expect(run.start({ inputData: { value: 1 } })).resolves.toEqual({
+      status: 'suspended',
+      input: { value: 1 },
+      state: {},
+      steps: {
+        approval: {
+          status: 'suspended',
+          payload: { value: 1 },
+          suspendPayload: { reason: 'needs approval' },
+          suspendedAt: 1,
+        },
+      },
+      suspended: [['approval']],
+      suspendPayload: { approval: { reason: 'needs approval' } },
+    });
+
+    expect(query).toHaveBeenCalledWith('mastra.status');
+  });
+
+  it('signals the matching Temporal workflow when resuming asynchronously', async () => {
+    const signal = vi.fn().mockResolvedValue(undefined);
+    const getHandle = vi.fn().mockReturnValue({ signal });
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: z.object({ value: z.number() }), outputSchema: z.unknown() },
+      { client: { workflow: { getHandle } } as unknown as Client, taskQueue: 'test-queue' },
+    );
+    const run = await workflow.createRun({ runId: 'test-run' });
+
+    await expect(run.resumeAsync({ step: 'approval', resumeData: { approved: true } })).resolves.toEqual({
+      runId: 'test-run',
+    });
+
+    expect(getHandle).toHaveBeenCalledWith('test-run');
+    expect(signal).toHaveBeenCalledWith('mastra.resume', { step: 'approval', resumeData: { approved: true } });
   });
 
   it('cancels the matching Temporal workflow before updating local state', async () => {
