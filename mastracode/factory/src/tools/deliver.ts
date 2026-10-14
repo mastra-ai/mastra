@@ -25,7 +25,7 @@ export type FactoryDeliveryResult =
   | {
       delivered: 'skipped';
       notificationId?: string;
-      reason: 'thread-not-found' | 'session-not-found' | 'offline' | 'discarded';
+      reason: 'thread-not-found' | 'thread-not-owned' | 'session-not-found' | 'offline' | 'discarded';
     };
 
 /**
@@ -57,7 +57,12 @@ export async function deliverFactorySessionNotification({
 }): Promise<FactoryDeliveryResult> {
   const thread = await controller.queryThreadById({ threadId: target.threadId });
   if (!thread) return { delivered: 'skipped', reason: 'thread-not-found' };
-  const ownerResourceId = thread.resourceId || target.sessionId;
+  // A Factory session's threads live under its session id. A thread owned by
+  // anything else is not this session's, whatever the caller paired it with.
+  if (thread.resourceId && thread.resourceId !== target.sessionId) {
+    return { delivered: 'skipped', reason: 'thread-not-owned' };
+  }
+  const ownerResourceId = target.sessionId;
 
   // No request context: without a user the controller's access check is a no-op,
   // and this is a server-side lookup on the target's behalf, not the sender's.
@@ -128,6 +133,6 @@ export async function resolveSessionThread({
   const current = live?.thread.getId();
   if (current) return current;
   const threads = await controller.queryThreads({ resourceId: sessionId });
-  const newest = threads.sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())[0];
+  const newest = [...threads].sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())[0];
   return newest?.id ?? null;
 }

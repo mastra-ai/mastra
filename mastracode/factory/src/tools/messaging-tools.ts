@@ -70,8 +70,9 @@ export function createFactoryMessagingTools(
   const audit = (input: { targetSessionId: string; priority: NotificationPriority; kind: string; delivery: string }) =>
     deps.auditRecorder.record({
       orgId: scope.orgId,
-      // A worker answers as its session's agent; a user session acts as its person.
-      actorId: scope.kind === 'worker' ? `agent:${scope.sessionId}` : scope.userId,
+      // A worker answers as its thread's agent (the trail's `agent:<threadId>`
+      // convention); a user session acts as its person.
+      actorId: scope.kind === 'worker' ? `agent:${scope.threadId}` : scope.userId,
       actorType: scope.kind === 'worker' ? 'agent' : 'human',
       action: 'factory.agent.signaled',
       factoryProjectId: scope.factoryProjectId,
@@ -149,7 +150,7 @@ export function createFactoryMessagingTools(
         workItems: deps.workItems,
         sessionId,
       });
-      if (!threadId) throw new Error('The session is not available (no thread).');
+      if (!threadId) throw new Error('The session is not available (thread-not-found).');
 
       const since = Date.now() - SIGNAL_RATE_WINDOW_MS;
       const sent = (await recent(messaging.notifications, threadId)).filter(
@@ -217,8 +218,17 @@ export function createFactoryMessagingTools(
       }
       const fromSession = original.attributes?.['from-session'];
       const fromThread = original.attributes?.['from-thread'];
-      if (typeof fromSession !== 'string' || typeof fromThread !== 'string') {
+      if (typeof fromSession !== 'string' || typeof fromThread !== 'string' || original.sourceId !== fromSession) {
         throw new Error(`Message ${inReplyTo} doesn't say which session sent it.`);
+      }
+      // Notification records can be written outside these tools, so the
+      // sender they name gets the same checks a message to it would.
+      const sender = await deps.sessions.getBySessionId(fromSession);
+      if (!sender || sender.orgId !== scope.orgId || sender.factoryProjectId !== scope.factoryProjectId) {
+        throw new Error(`Message ${inReplyTo} didn't come from a session in this Factory.`);
+      }
+      if (sender.visibility === 'private' && sender.userId !== scope.userId) {
+        throw new Error(`Message ${inReplyTo} came from a private session this session can't answer.`);
       }
       const answered = (await recent(messaging.notifications, fromThread)).some(
         record =>

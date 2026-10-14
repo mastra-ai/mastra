@@ -85,13 +85,15 @@ describe('deliverFactorySessionNotification', () => {
     expect(controller.createSession).not.toHaveBeenCalled();
   });
 
-  it("uses the thread row's owning resource over the session id", async () => {
-    const { agent, deliver } = setup({ thread: { id: 'thread-stored', resourceId: 'resource-owner' } });
-    await deliver();
-    expect(agent.sendNotificationSignal).toHaveBeenCalledWith(expect.anything(), {
-      resourceId: 'resource-owner',
-      threadId: 'thread-stored',
+  it('refuses a thread that belongs to another resource, without looking up, creating or sending', async () => {
+    const { agent, controller, deliver } = setup({
+      offline: true,
+      thread: { id: 'thread-stored', resourceId: 'session-victim' },
     });
+    await expect(deliver()).resolves.toEqual({ delivered: 'skipped', reason: 'thread-not-owned' });
+    expect(controller.getSessionByResource).not.toHaveBeenCalled();
+    expect(controller.createSession).not.toHaveBeenCalled();
+    expect(agent.sendNotificationSignal).not.toHaveBeenCalled();
   });
 
   it('creates an offline target as its row owner on the stored thread before sending', async () => {
