@@ -2751,6 +2751,8 @@ export class WorkflowEventProcessor extends EventProcessor {
       const originalPayload = existingStepResult?.payload;
 
       let newResult = prevResult;
+      // An earlier iteration of this foreach already failed and failed the run.
+      let priorFailure: any;
       if (currentIdx !== undefined) {
         // Check for bail - short circuit foreach execution
         // @ts-expect-error - bailed status not in type
@@ -2804,6 +2806,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         const existingSuspendPayload = existingStepResult?.suspendPayload as any;
         const iterationSuspendPayload = prevResult.suspendPayload as any;
         const foreachOutput = [...(existingSuspendPayload?.__workflow_meta?.foreachOutput ?? [])];
+        priorFailure = foreachOutput.find((r: any, i: number) => i !== currentIdx && r?.status === 'failed');
         // Drop `payload`: it holds the whole foreach input array, which is already stored once on the step.
         const { payload: _payload, ...iterationRecord } = prevResult as any;
         foreachOutput[currentIdx] =
@@ -2832,10 +2835,10 @@ export class WorkflowEventProcessor extends EventProcessor {
             resumePayload: (prevResult as any).resumePayload ?? existingStepResult?.resumePayload,
             resumedAt: (prevResult as any).resumedAt ?? existingStepResult?.resumedAt,
           } as any;
-          // A sibling finishing after another iteration failed must not flip the foreach back to success.
-          const failedIteration = foreachOutput.find((r: any) => r?.status === 'failed');
-          if (prevResult.status !== 'failed' && failedIteration) {
-            newResult = { ...newResult, status: 'failed', error: failedIteration.error } as any;
+          // A sibling finishing after another iteration failed must not flip the foreach back to
+          // success or replace the first failure's error.
+          if (priorFailure) {
+            newResult = { ...newResult, status: 'failed', error: priorFailure.error } as any;
           }
         } else {
           newResult = { ...prevResult, output: [iterationResult], payload: originalPayload, suspendPayload } as any;
@@ -2911,8 +2914,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           });
         }
 
-        // A failed iteration fails the whole foreach, like a failed regular step.
-        if (prevResult.status === 'failed') {
+        // A failed iteration fails the whole foreach, like a failed regular step. Only the first
+        // failure fails the run; a later failing sibling stops here like any other late sibling.
+        if (prevResult.status === 'failed' && !priorFailure) {
           await this.mastra.pubsub.publish('workflows', {
             type: 'workflow.fail',
             runId,
