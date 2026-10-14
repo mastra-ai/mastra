@@ -220,6 +220,11 @@ export class KnowledgeImporterRegistry {
     const organizationId = normalizeOrganizationId(id, definition.organizationId);
     const access = normalizeAccess(definition.access);
     const triggers = normalizeTriggers(definition.triggers);
+    if (triggers.cron?.resolveBindings && access === undefined) {
+      throw new Error(
+        `Knowledge importer ${id} cron resolveBindings requires an access map: resolved bindings are confined to the scopes it covers`,
+      );
+    }
     const agentic = normalizeAgentic(definition.agentic);
     const citations = normalizeCitations(definition.citations);
     const normalized: KnowledgeImporterDefinition<TPayload> = Object.freeze({
