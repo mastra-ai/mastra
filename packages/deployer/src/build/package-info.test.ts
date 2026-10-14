@@ -86,6 +86,31 @@ describe('getPackageRootPath', () => {
     await expect(getPackageRootPath('@repro/versionless', appDir)).resolves.toBe(packageDir);
   });
 
+  it('stops at a versionless package root when the entry sits behind a nested module manifest (#26321)', async () => {
+    const tempRoot = join(process.cwd(), '.tmp');
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await mkdtemp(join(tempRoot, 'versionless-nested-'));
+    tempDirs.push(tempDir);
+
+    const appDir = join(tempDir, 'apps', 'app');
+    const packageDir = join(appDir, 'node_modules', '@repro', 'versionless');
+    const esmDir = join(packageDir, 'dist', 'esm');
+    await mkdir(esmDir, { recursive: true });
+    await writeFile(join(appDir, 'package.json'), JSON.stringify({ name: '@repro/app', version: '1.0.0' }));
+    await writeFile(
+      join(packageDir, 'package.json'),
+      JSON.stringify({
+        name: '@repro/versionless',
+        private: true,
+        exports: { '.': './dist/esm/index.js' },
+      }),
+    );
+    await writeFile(join(esmDir, 'package.json'), JSON.stringify({ type: 'module' }));
+    await writeFile(join(esmDir, 'index.js'), 'export const value = 1;');
+
+    await expect(getPackageRootPath('@repro/versionless', appDir)).resolves.toBe(packageDir);
+  });
+
   it('returns an absolute path when parentPath is not absolute', async () => {
     const { packageDir, chunkFile } = await createTempPackage();
     const relativeChunkFile = relative(process.cwd(), chunkFile);

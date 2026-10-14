@@ -28,7 +28,7 @@ export async function getPackageInfo(
 
     const pkgJson = await readJson(path);
 
-    if (!pkgJson.version) {
+    if (!pkgJson.version && pkgJson.name !== getPackageName(packageName)) {
       return searchUpForPackageJson(dirname(rootPath));
     }
 
