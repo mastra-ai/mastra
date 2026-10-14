@@ -442,6 +442,8 @@ export interface DurableToolCallInput {
   output?: unknown;
   /** Tool names enabled for the step that produced this call, or null if a processor cleared the restriction */
   activeTools?: string[] | null;
+  /** First-chunk clock of the step that produced this call, applied when spans end on suspend */
+  completionStartTime?: Date;
   /**
    * Serialized from the step's *effective* tool set at emission time (processors may add
    * tools that never appear in the run-start `toolsMetadata`). Persisted with the call so
@@ -817,6 +819,8 @@ export interface RunRegistryEntry {
   /** Exported forms of the resume spans, read by the workflow steps (same process). */
   resumeAgentSpanData?: unknown;
   resumeModelSpanData?: unknown;
+  /** First-chunk clock of the resumed segment's spans; the originals' clock lives in the loop state. */
+  resumeCompletionStartTime?: Date;
   /**
    * Loop stop-condition predicate(s). Non-serializable (a closure), so the
    * durable workflow reads this from the in-process registry rather than from

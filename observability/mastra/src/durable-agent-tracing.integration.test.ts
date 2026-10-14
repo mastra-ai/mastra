@@ -262,6 +262,56 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
     }
   });
 
+  it('DurableAgent suspend and resume: originals keep their clock, resumed spans capture their own', async () => {
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'use the tool',
+      model: toolThenTextModel('get_weather', { city: 'Paris' }, 'It is 21C in Paris.') as any,
+      tools: {
+        get_weather: createTool({
+          id: 'get_weather',
+          description: 'Get the weather',
+          inputSchema: z.object({ city: z.string() }),
+          requireApproval: true,
+          execute: async ({ city }) => ({ forecast: `Sunny in ${city}` }),
+        }),
+      },
+    });
+    const { wrapped } = buildMastra(testExporter, agent, 'durable');
+    const res = await wrapped.stream('weather in paris?');
+    for await (const chunk of res.fullStream) {
+      if (chunk.type === 'tool-call-approval') break;
+    }
+    await settle(testExporter);
+    const resumed = await wrapped.approveToolCall({ runId: res.runId });
+    for await (const _chunk of resumed.fullStream) {
+      // Drain the resumed segment.
+    }
+    await settle(testExporter);
+
+    // The originals end as `suspended`; the resumed segment opens fresh spans with
+    // a later start, so each pair must carry the clock of its own first inference.
+    const runs = byStart(testExporter.getSpansByType('agent_run' as any));
+    const generations = byStart(testExporter.getSpansByType('model_generation' as any));
+    const inferences = byStart(testExporter.getSpansByType('model_inference' as any));
+    expect(runs).toHaveLength(2);
+    expect(generations).toHaveLength(2);
+    expect(inferences).toHaveLength(2);
+    expect((runs[1] as any).name).toContain('(resumed)');
+    const [originalClock, resumedClock] = inferences.map(clockOf);
+    expect(originalClock).toBeTypeOf('number');
+    expect(resumedClock).toBeGreaterThan(originalClock!);
+    expect(resumedClock).toBeGreaterThanOrEqual(+new Date((runs[1] as any).startTime));
+    expect([runs[0], generations[0]].map(clockOf)).toEqual([originalClock, originalClock]);
+    expect([runs[1], generations[1]].map(clockOf)).toEqual([resumedClock, resumedClock]);
+    for (const span of [...runs, ...generations]) {
+      const { events } = testExporter.getBySpanId(idOf(span));
+      const clocks = events.map(e => clockOf((e as any).exportedSpan)).filter(c => c !== undefined);
+      expect(new Set(clocks)).toEqual(new Set([clockOf(span)]));
+    }
+  });
+
   it('DurableAgent simple run: generation and AGENT_RUN carry the inference clock', async () => {
     const agent = new Agent({ id: 'a', name: 'a', instructions: 'x', model: textModel('Hello') as any });
     const { wrapped } = buildMastra(testExporter, agent, 'durable');

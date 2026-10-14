@@ -691,13 +691,24 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               inputData.modelSpanData) as ExportedSpan<SpanType.MODEL_GENERATION> | undefined;
             // Rebuilt spans come from the run-start snapshot, so re-apply the carried
             // first-chunk clock before the tracker sees them; otherwise a later step's
-            // chunk would overwrite it mid-run.
+            // chunk would overwrite it mid-run. The loop state carries the originals'
+            // clock; a resumed segment has fresh spans, so its clock lives on the
+            // registry beside them.
+            const resumeRegistry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
+            const carriedClock = resumeRegistry?.resumeModelSpanData
+              ? resumeRegistry.resumeCompletionStartTime
+              : inputData.completionStartTime;
             const withCarriedClock = <T extends ExportedSpan<SpanType.MODEL_GENERATION | SpanType.AGENT_RUN>>(
               data: T,
             ): T =>
-              inputData.completionStartTime && !data.attributes?.completionStartTime
-                ? { ...data, attributes: { ...data.attributes, completionStartTime: inputData.completionStartTime } }
+              carriedClock && !data.attributes?.completionStartTime
+                ? { ...data, attributes: { ...data.attributes, completionStartTime: carriedClock } }
                 : data;
+            const recordCompletionStartTime = () => {
+              const clock = modelSpanTracker?.getCompletionStartTime?.();
+              if (resumeRegistry?.resumeModelSpanData && clock) resumeRegistry.resumeCompletionStartTime ??= clock;
+              return clock;
+            };
             const modelSpan = inputModelSpanData
               ? (observability?.rebuildSpan(withCarriedClock(inputModelSpanData)) as AIModelGenerationSpan | undefined)
               : undefined;
@@ -2578,7 +2589,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               // Carry step-finish through the iteration so the loop predicate can
               // stamp and emit the actual post-policy continuation decision.
               deferredStepFinishChunk: deferredStepFinishChunk ?? undefined,
-              completionStartTime: modelSpanTracker?.getCompletionStartTime?.(),
+              completionStartTime: recordCompletionStartTime(),
             };
 
             // 16. End step span only if there are NO tool calls

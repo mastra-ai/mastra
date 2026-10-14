@@ -550,6 +550,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             return (llmOutput.toolCalls ?? []).map(toolCall => ({
               ...toolCall,
               stepSpanData: llmOutput.stepSpanData,
+              completionStartTime: llmOutput.completionStartTime,
             })) as DurableToolCallInput[];
           },
           { id: 'extract-tool-calls' },
@@ -1068,8 +1069,10 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               const modelSpanData = reg?.resumeModelSpanData ?? initData.modelSpanData;
               const agentSpanData = reg?.resumeAgentSpanData ?? initData.agentSpanData;
               // Rebuilt spans end from snapshots taken at run start, so the clock the
-              // steps carried through the loop state is applied here.
-              const completionStartTime = state.completionStartTime ? new Date(state.completionStartTime) : undefined;
+              // steps carried is applied here: the loop state's for the originals, the
+              // registry's for a resumed segment's fresh spans.
+              const clock = reg?.resumeModelSpanData ? reg.resumeCompletionStartTime : state.completionStartTime;
+              const completionStartTime = clock ? new Date(clock) : undefined;
               if (observability) {
                 if (modelSpanData) {
                   const modelSpan = observability.rebuildSpan(
