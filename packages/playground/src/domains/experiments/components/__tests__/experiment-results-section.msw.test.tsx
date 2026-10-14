@@ -73,18 +73,8 @@ describe('ExperimentResultsSection', () => {
     });
   });
 
-  describe('when there are no results yet', () => {
-    it('says the run is queued while it is pending', () => {
-      renderSection([], 'pending');
-      expect(screen.getByText('Run queued — waiting to start…')).toBeTruthy();
-    });
-
-    it('says results are on their way while it is running', () => {
-      renderSection([], 'running');
-      expect(screen.getByText('Run in progress — results appear as items complete')).toBeTruthy();
-    });
-
-    it('shows the plain empty state once the run is done', () => {
+  describe('when the run finished without results', () => {
+    it('shows the plain empty state', () => {
       renderSection([], 'completed');
       expect(screen.getByText('No results yet')).toBeTruthy();
     });

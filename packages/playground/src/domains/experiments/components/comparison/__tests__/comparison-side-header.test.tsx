@@ -46,19 +46,28 @@ describe('ComparisonSideHeader', () => {
     });
   });
 
+  describe('when the experiment ran on a dataset version', () => {
+    it('links the version to the dataset at that version', () => {
+      renderColumn(<ComparisonSideHeader role="baseline" label="Baseline" experiment={namedExperiment} />);
+
+      const link = screen.getByRole('link', { name: 'Open dataset v3' });
+      expect(link.getAttribute('href')).toBe('/datasets/dataset-1?version=3');
+    });
+  });
+
   describe('when the two experiments used different dataset versions', () => {
     it('flags the dataset version inline instead of leaving it neutral', () => {
       renderColumn(
         <ComparisonSideHeader role="baseline" label="Baseline" experiment={namedExperiment} versionMismatch />,
       );
 
-      expect(screen.getByText(/different dataset version/)).toBeDefined();
+      expect(screen.getByText(/differs from baseline/)).toBeDefined();
     });
 
     it('leaves the version unflagged when both sides agree', () => {
       renderColumn(<ComparisonSideHeader role="baseline" label="Baseline" experiment={namedExperiment} />);
 
-      expect(screen.queryByText(/different dataset version/)).toBeNull();
+      expect(screen.queryByText(/differs from baseline/)).toBeNull();
     });
   });
 

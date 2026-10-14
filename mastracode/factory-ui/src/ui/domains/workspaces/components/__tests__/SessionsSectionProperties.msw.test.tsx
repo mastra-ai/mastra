@@ -7,7 +7,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { FactoryUserSession } from '../../services/user-sessions';
-import { UserSessionsSection } from '../UserSessionsSection';
+import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
+import { SessionsSection } from '../SessionsSection';
+import { testChatSession } from './fixtures/sessionsSection';
 import {
   closeSessionProperties,
   openSessionProperties,
@@ -122,9 +124,11 @@ afterEach(() => {
 async function renderSection({ waitForIdle = true } = {}) {
   const { client } = renderWithProviders(
     <MemoryRouter initialEntries={['/factories/factory-1']}>
-      <Routes>
-        <Route path="/factories/:factoryId" element={<UserSessionsSection />} />
-      </Routes>
+      <ChatSessionContext.Provider value={testChatSession('factory-1', projectRepositoryId)}>
+        <Routes>
+          <Route path="/factories/:factoryId" element={<SessionsSection />} />
+        </Routes>
+      </ChatSessionContext.Provider>
     </MemoryRouter>,
   );
   if (waitForIdle) await waitForMutationsIdle(client);
@@ -135,33 +139,33 @@ const sessionRowLabels = () =>
     .getAllByRole('button', { name: /^(Fix authentication|Improve compiler output|Prepare release)$/ })
     .map(row => row.getAttribute('aria-label'));
 
-describe('User sessions properties', () => {
+describe('Sessions properties', () => {
   it("opens on the viewer's own sessions without reading as changed", async () => {
     const user = userEvent.setup();
     await renderSection();
 
     expect(await screen.findByRole('button', { name: 'Fix authentication' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Improve compiler output' })).not.toBeInTheDocument();
-    expect(sessionPropertiesTrigger('User sessions')).toBeInTheDocument();
+    expect(sessionPropertiesTrigger()).toBeInTheDocument();
 
-    await openSessionProperties(user, 'User sessions');
+    await openSessionProperties(user);
     expect(screen.getByRole('menuitem', { name: /^Owner\s*Mine$/ })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: 'Reset to default' })).toHaveAttribute('aria-disabled', 'true');
     await closeSessionProperties(user);
 
-    await pickSessionProperty(user, 'User sessions', 'Owner', 'All owners');
+    await pickSessionProperty(user, 'Owner', 'All owners');
 
     expect(await screen.findByRole('button', { name: 'Improve compiler output' })).toBeInTheDocument();
-    expect(sessionPropertiesTrigger('User sessions', 1)).toBeInTheDocument();
+    expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
 
-    await openSessionProperties(user, 'User sessions');
+    await openSessionProperties(user);
     await user.click(screen.getByRole('menuitem', { name: 'Reset to default' }));
 
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: 'Improve compiler output' })).not.toBeInTheDocument();
     });
     expect(screen.getByRole('button', { name: 'Fix authentication' })).toBeInTheDocument();
-    expect(sessionPropertiesTrigger('User sessions')).toBeInTheDocument();
+    expect(sessionPropertiesTrigger()).toBeInTheDocument();
   });
 
   it('says so when the viewer owns no sessions yet', async () => {
@@ -175,7 +179,7 @@ describe('User sessions properties', () => {
 
     expect(await screen.findByText('No sessions of your own.')).toHaveAttribute('role', 'status');
 
-    await pickSessionProperty(user, 'User sessions', 'Owner', 'All owners');
+    await pickSessionProperty(user, 'Owner', 'All owners');
 
     expect(await screen.findByRole('button', { name: 'Improve compiler output' })).toBeInTheDocument();
     expect(screen.queryByText('No sessions of your own.')).not.toBeInTheDocument();
@@ -200,14 +204,14 @@ describe('User sessions properties', () => {
     await renderSection({ waitForIdle: false });
 
     expect(await screen.findByRole('button', { name: 'Improve compiler output' })).toBeInTheDocument();
-    await pickSessionProperty(user, 'User sessions', 'Status', 'Working');
+    await pickSessionProperty(user, 'Status', 'Working');
 
     releaseAuth();
 
     expect(await screen.findByText('No sessions match these filters')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Improve compiler output' })).not.toBeInTheDocument();
-    await openSessionProperties(user, 'User sessions');
-    expect(screen.getByRole('button', { name: 'User sessions properties, 1 changed' })).toBeInTheDocument();
+    await openSessionProperties(user);
+    expect(screen.getByRole('button', { name: 'Sessions properties, 1 changed' })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /^Owner\s*Mine$/ })).toBeInTheDocument();
   });
 
@@ -215,14 +219,14 @@ describe('User sessions properties', () => {
     const user = userEvent.setup();
     await renderSection();
 
-    await pickSessionProperty(user, 'User sessions', 'Owner', 'Grace Hopper');
+    await pickSessionProperty(user, 'Owner', 'Grace Hopper');
 
     expect(await screen.findByRole('button', { name: 'Improve compiler output' })).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: 'Fix authentication' })).not.toBeInTheDocument();
     });
 
-    await openSessionProperty(user, 'User sessions', 'Owner');
+    await openSessionProperty(user, 'Owner');
     expect(screen.getAllByRole('menuitemradio', { name: 'Grace Hopper' })).toHaveLength(1);
     await closeSessionProperties(user);
   });
@@ -231,35 +235,35 @@ describe('User sessions properties', () => {
     const user = userEvent.setup();
     await renderSection();
 
-    await pickSessionProperty(user, 'User sessions', 'Owner', 'All owners');
-    await pickSessionProperty(user, 'User sessions', 'Status', 'Initializing');
+    await pickSessionProperty(user, 'Owner', 'All owners');
+    await pickSessionProperty(user, 'Status', 'Initializing');
 
     expect(await screen.findByRole('button', { name: 'Prepare release' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Improve compiler output' })).not.toBeInTheDocument();
 
-    await pickSessionProperty(user, 'User sessions', 'Owner', 'Mine');
+    await pickSessionProperty(user, 'Owner', 'Mine');
 
     expect(await screen.findByText('No sessions match these filters')).toHaveAttribute('role', 'status');
   });
 
-  it('lists sessions by last update with pinned first, and resets a chosen sort', async () => {
+  it('lists sessions by activity with pinned first, and resets a chosen sort', async () => {
     localStorage.setItem('mastracode.pinnedSessions', JSON.stringify(['session-working']));
     const user = userEvent.setup();
     await renderSection();
 
-    await pickSessionProperty(user, 'User sessions', 'Owner', 'All owners');
+    await pickSessionProperty(user, 'Owner', 'All owners');
     await screen.findByRole('button', { name: 'Improve compiler output' });
-    expect(sessionRowLabels()).toEqual(['Improve compiler output', 'Fix authentication', 'Prepare release']);
-
-    await pickSessionProperty(user, 'User sessions', 'Sort', 'Last created');
-
     expect(sessionRowLabels()).toEqual(['Improve compiler output', 'Prepare release', 'Fix authentication']);
-    expect(sessionPropertiesTrigger('User sessions', 2)).toBeInTheDocument();
 
-    await openSessionProperties(user, 'User sessions');
+    await pickSessionProperty(user, 'Sort', 'Last updated');
+
+    expect(sessionRowLabels()).toEqual(['Improve compiler output', 'Fix authentication', 'Prepare release']);
+    expect(sessionPropertiesTrigger(2)).toBeInTheDocument();
+
+    await openSessionProperties(user);
     await user.click(screen.getByRole('menuitem', { name: 'Reset to default' }));
 
-    await waitFor(() => expect(sessionPropertiesTrigger('User sessions')).toBeInTheDocument());
+    await waitFor(() => expect(sessionPropertiesTrigger()).toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'Fix authentication' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Improve compiler output' })).not.toBeInTheDocument();
   });

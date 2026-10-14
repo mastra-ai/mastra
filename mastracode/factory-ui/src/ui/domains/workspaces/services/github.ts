@@ -206,9 +206,20 @@ export async function deleteGithubPat(baseUrl: string, kind: GithubPatKind = 'de
   if (!res.ok) throw new Error(`Failed to remove GitHub token (${res.status})`);
 }
 
-/** List repos across the user's installations, optionally filtered by query. */
-export async function listGithubRepos(baseUrl: string, query?: string): Promise<GithubRepo[]> {
-  const url = query ? `${baseUrl}/web/github/repos?q=${encodeURIComponent(query)}` : `${baseUrl}/web/github/repos`;
+/**
+ * List repos across the user's installations, optionally filtered by query.
+ * `refresh` bypasses the server's short-lived repository cache.
+ */
+export async function listGithubRepos(
+  baseUrl: string,
+  query?: string,
+  options?: { refresh?: boolean },
+): Promise<GithubRepo[]> {
+  const params = new URLSearchParams();
+  if (query) params.set('q', query);
+  if (options?.refresh) params.set('refresh', '1');
+  const search = params.toString();
+  const url = `${baseUrl}/web/github/repos${search ? `?${search}` : ''}`;
   const res = await fetch(url, { headers: { Accept: 'application/json' }, credentials: 'include' });
   if (!res.ok) throw new Error(`Failed to list repos (${res.status})`);
   const body = (await res.json()) as { repos: GithubRepo[] };
@@ -226,8 +237,6 @@ export interface FactoryProjectPayload {
   defaultModelId?: string | null;
   /** Whether sessions use the Factory's model and credentials or the current user's. */
   modelScope?: 'factory' | 'user';
-  /** Whether new Slack sessions create Work-board items for this Factory. */
-  slackWorkItemsEnabled?: boolean;
   /** Whether Factory rules may start agent runs without someone asking for them. */
   autoRunEnabled?: boolean;
   /** Whether the Factory answers a run's plan itself instead of waiting for a person. */
@@ -438,25 +447,6 @@ export async function updateFactoryAutomation(
     body: JSON.stringify(patch),
   });
   const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to update automation');
-  return project;
-}
-
-/** Enable or disable Work-board item creation for new Slack sessions. */
-export async function updateFactorySlackWorkItems(
-  baseUrl: string,
-  factoryProjectId: string,
-  slackWorkItemsEnabled: boolean,
-): Promise<FactoryProjectPayload> {
-  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
-    method: 'PATCH',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ slackWorkItemsEnabled }),
-  });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
-    res,
-    'Failed to update Slack work-item setting',
-  );
   return project;
 }
 

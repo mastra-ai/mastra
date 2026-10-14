@@ -20,6 +20,7 @@ import {
   NoExperimentsInfo,
 } from '@/domains/experiments';
 import { MAX_COMPARED_EXPERIMENTS } from '@/domains/experiments/components/comparison/constants';
+import { ExperimentsComparableLegend } from '@/domains/experiments/components/experiments-comparable-legend';
 import type { ExperimentsFilters } from '@/domains/experiments/components/experiments-filter-bar';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { buildReviewByExperimentMap } from '@/domains/review/review-maps';
@@ -121,11 +122,13 @@ export default function Experiments() {
     const ids = selectedExperimentIds.filter(id => datasetByExperimentId.has(id));
     return { selectedIds: ids, selectedDatasetIds: new Set(ids.map(id => datasetByExperimentId.get(id))) };
   }, [experiments, selectedExperimentIds]);
+  // The first pick is the baseline, so its dataset decides which experiments can join the comparison.
+  const comparableDatasetId = experiments.find(exp => exp.id === selectedIds[0])?.datasetId ?? undefined;
   const compareDisabledReason =
     selectedIds.length < 2
       ? 'Select at least two experiments to compare'
       : selectedDatasetIds.size !== 1
-        ? 'Select experiments from the same dataset to compare'
+        ? 'Only experiments from the same dataset, highlighted in the list, can be compared'
         : undefined;
 
   const executeCompare = () => {
@@ -213,21 +216,24 @@ export default function Experiments() {
         </Button>
       }
       actionRow={
-        <ExperimentsToolbar
-          search={search}
-          statusFilter={statusFilter}
-          datasetFilter={datasetFilter}
-          datasetOptions={experimentDatasetOptions}
-          targetType={targetType}
-          targetId={targetId}
-          onFiltersChange={handleFiltersChange}
-          selection={{
-            selectedCount: selectedIds.length,
-            onClearSelection: () => setSelectedExperimentIds([]),
-            onCompare: executeCompare,
-            compareDisabledReason,
-          }}
-        />
+        <>
+          <ExperimentsToolbar
+            search={search}
+            statusFilter={statusFilter}
+            datasetFilter={datasetFilter}
+            datasetOptions={experimentDatasetOptions}
+            targetType={targetType}
+            targetId={targetId}
+            onFiltersChange={handleFiltersChange}
+            selection={{
+              selectedCount: selectedIds.length,
+              onClearSelection: () => setSelectedExperimentIds([]),
+              onCompare: executeCompare,
+              compareDisabledReason,
+            }}
+          />
+          <ExperimentsComparableLegend datasetId={comparableDatasetId} />
+        </>
       }
     >
       <h1 className="sr-only">Experiments</h1>
@@ -248,6 +254,7 @@ export default function Experiments() {
           selectedExperimentIds: selectedIds,
           onToggleSelection: toggleExperimentSelection,
           onToggleAll: toggleAllExperiments,
+          comparableDatasetId,
         }}
       />
 

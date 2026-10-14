@@ -7,9 +7,10 @@
  * runtime behavior across both execution engines.
  */
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../agent';
+import { createDurableAgent } from '../../agent/durable/create-durable-agent';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
@@ -333,6 +334,28 @@ describe.each(ENGINES)('declarative step runtime ($name engine)', ({ evented }) 
     }
   });
 
+  it('createStep() executes a durable agent and returns { text }', async () => {
+    const durableAgent = createDurableAgent({
+      agent: textAgent('rt-durable-agent', 'durable response'),
+      cleanupTimeoutMs: 0,
+    });
+    const wf = createWorkflow({
+      id: 'rt-durable-agent-wf',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.any(),
+    })
+      .then(createStep(durableAgent))
+      .commit();
+    bind(wf, { agents: { 'rt-durable-agent': durableAgent } });
+
+    const run = await wf.createRun();
+    const result = await run.start({ inputData: { prompt: 'say hi' } });
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect((result.steps['rt-durable-agent'] as any).output).toEqual({ text: 'durable response' });
+    }
+  });
+
   it('resolves a string-id agent from the Mastra registry at execution', async () => {
     const agent = textAgent('registered-agent', 'from registry');
     const wf = createWorkflow({ id: 'rt-strid', inputSchema: z.object({ prompt: z.string() }), outputSchema: z.any() })
@@ -551,6 +574,37 @@ describe('evented engine - declarative entries', () => {
     expect(seen).toContain('workflow.step.run');
     expect(seen).toContain('workflow.end');
     expect(endResult?.output?.text).toBe('hi');
+  });
+
+  it('executes and cleans up a durable agent evented createStep', async () => {
+    const durableAgent = createDurableAgent({
+      agent: textAgent('ev-durable-agent', 'durable response'),
+      cleanupTimeoutMs: 0,
+    });
+    const originalStream = durableAgent.stream.bind(durableAgent);
+    let cleanup: ReturnType<typeof vi.fn> | undefined;
+    vi.spyOn(durableAgent, 'stream').mockImplementation((async (...args: any[]) => {
+      const result = await (originalStream as any)(...args);
+      cleanup = vi.fn(result.cleanup);
+      return { ...result, cleanup };
+    }) as any);
+    const wf = createWorkflow({
+      id: 'ev-durable-agent-wf',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.any(),
+    })
+      .then(createEventedStep(durableAgent))
+      .commit();
+    const mastra = bindEvented(wf, { agents: { 'ev-durable-agent': durableAgent } });
+
+    const { seen, endResult } = await driveEvented(mastra, 'ev-durable-agent-wf', 'run-durable-agent', {
+      prompt: 'say hi',
+    });
+
+    expect(seen).toContain('workflow.step.run');
+    expect(seen).toContain('workflow.end');
+    expect(endResult?.output).toEqual({ text: 'durable response' });
+    expect(cleanup).toHaveBeenCalledOnce();
   });
 
   it('executes a .tool() step through the generic workflow.step.run event', async () => {

@@ -17,11 +17,12 @@ import {
   CoinsIcon,
   GaugeIcon,
   HashIcon,
-  LayersIcon,
+  HistoryIcon,
   TargetIcon,
   StarIcon,
 } from 'lucide-react';
 import type { ComparisonRole } from './build-comparison-rows';
+import { ComparisonDatasetVersion } from './comparison-dataset-version';
 import {
   costDeltaFormatter,
   diff,
@@ -117,13 +118,19 @@ export function ComparisonSideHeader({
               },
             ]
           : []),
-        ...(versionMismatch
+        ...(experiment.datasetId && experiment.datasetVersion != null
           ? [
               {
                 id: 'dataset-version',
-                icon: <LayersIcon />,
-                label: 'Dataset',
-                value: <span className="text-warning-foreground">different dataset version</span>,
+                icon: <HistoryIcon />,
+                label: 'Dataset version',
+                value: (
+                  <ComparisonDatasetVersion
+                    datasetId={experiment.datasetId}
+                    version={experiment.datasetVersion}
+                    differsFromBaseline={versionMismatch}
+                  />
+                ),
                 delta: null,
               },
             ]
