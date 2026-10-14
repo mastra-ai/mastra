@@ -25,7 +25,7 @@ export function PersonalModelsSettings() {
         >
           <SettingsContainer>
             <div className="p-4">
-              <DefaultModelSection models={models} />
+              <DefaultModelSection models={models} modelsLoaded={modelsQuery.isSuccess} />
             </div>
           </SettingsContainer>
         </SettingsSubsection>

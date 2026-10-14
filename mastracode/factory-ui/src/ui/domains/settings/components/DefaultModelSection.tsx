@@ -8,7 +8,13 @@ import type { AvailableModelOption } from '../../../../hooks/useAvailableModels'
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { ModelCombobox } from './ModelCombobox';
 
-export function DefaultModelSection({ models }: { models: AvailableModelOption[] }) {
+export function DefaultModelSection({
+  models,
+  modelsLoaded,
+}: {
+  models: AvailableModelOption[];
+  modelsLoaded: boolean;
+}) {
   const defaultModelQuery = useDefaultModelQuery();
 
   if (defaultModelQuery.isPending) {
@@ -27,6 +33,7 @@ export function DefaultModelSection({ models }: { models: AvailableModelOption[]
     <DefaultModelEditor
       key={defaultModelQuery.data.modelId ?? 'no-default'}
       models={models}
+      modelsLoaded={modelsLoaded}
       defaultModelId={defaultModelQuery.data.modelId ?? undefined}
     />
   );
@@ -34,9 +41,11 @@ export function DefaultModelSection({ models }: { models: AvailableModelOption[]
 
 function DefaultModelEditor({
   models,
+  modelsLoaded,
   defaultModelId,
 }: {
   models: AvailableModelOption[];
+  modelsLoaded: boolean;
   defaultModelId: string | undefined;
 }) {
   const setDefaultModel = useSetDefaultModel();
@@ -45,7 +54,7 @@ function DefaultModelEditor({
   const [error, setError] = useState<string>();
   const busy = setDefaultModel.isPending || clearDefaultModel.isPending;
   const defaultUnavailable =
-    Boolean(defaultModelId) && models.length > 0 && !models.some(model => model.id === defaultModelId);
+    Boolean(defaultModelId) && modelsLoaded && !models.some(model => model.id === defaultModelId);
 
   const save = async () => {
     if (!modelId) return;
