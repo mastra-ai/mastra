@@ -795,16 +795,16 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       }
     }
     // One bounded storage query per KNOWLEDGE_SOURCE_PROBE_LIMIT sessions answers which threads hold a visible
-    // record, so the work no longer grows with one probe per session. Every candidate is an own-project session the
-    // viewer may already see, so their scope ids widen visibility only within the project.
+    // record, so the work no longer grows with one probe per session. Each thread is paired with its own session
+    // scope, so a record filed under a sibling session never makes another session look live.
     for (let index = 0; index < sessions.length; index += KNOWLEDGE_SOURCE_PROBE_LIMIT) {
       const batch = sessions.slice(index, index + KNOWLEDGE_SOURCE_PROBE_LIMIT);
       let live: Set<string>;
       try {
         live = new Set(
           await view.store.listSourcesWithVisibleRecords({
-            sources: batch.map(session => session.threadId),
-            scopeIds: [view.orgScopeId, view.resourceScopeId, ...batch.map(session => session.id)],
+            sources: batch.map(session => ({ source: session.threadId, scopeId: session.id })),
+            scopeIds: [view.orgScopeId, view.resourceScopeId],
           }),
         );
       } catch (error) {
