@@ -30,7 +30,7 @@ import type {
 import {
   canonicalizeKnowledgeScope,
   isKnowledgeScopeVisible,
-  KnowledgeUnsupportedCapabilityError,
+  KnowledgeUnsupportedError,
   knowledgeScopeKey,
   parseKnowledgeWikilinks,
 } from '@mastra/core/storage';
@@ -682,7 +682,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       existing = new Set(scopes.map(node => node.address));
     } catch (error) {
       // Adapters without structural scope nodes have no tree to vouch into.
-      if (error instanceof KnowledgeUnsupportedCapabilityError) return;
+      if (error instanceof KnowledgeUnsupportedError) return;
       throw error;
     }
     for (const link of chain) {
@@ -929,7 +929,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               ...(sessionNames.has(node.id) ? { name: sessionNames.get(node.id)! } : {}),
             }));
           } catch (error) {
-            if (!(error instanceof KnowledgeUnsupportedCapabilityError)) throw error;
+            if (!(error instanceof KnowledgeUnsupportedError)) throw error;
             scopeNodes = undefined;
           }
           // Deduplicate: when a reconciled scope node owns an identity rung's
@@ -1004,7 +1004,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                 node.name.toLocaleLowerCase().includes(query),
             );
           } catch (error) {
-            if (!(error instanceof KnowledgeUnsupportedCapabilityError)) throw error;
+            if (!(error instanceof KnowledgeUnsupportedError)) throw error;
           }
 
           const scopeSessionNames = await this.#sessionNames(structuralScopes);
@@ -1088,7 +1088,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               storedRoot = await findOrgScopeNode(store, resolved.orgId, scopeNodeId);
             } catch (error) {
               // Adapters without the structural read have no lenses to serve.
-              if (error instanceof KnowledgeUnsupportedCapabilityError) {
+              if (error instanceof KnowledgeUnsupportedError) {
                 return c.json({ error: 'scope_not_found' }, 404);
               }
               throw error;
@@ -1516,7 +1516,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             try {
               scopeNode = await findOrgScopeNode(resolved.store, resolved.orgId, scopeNodeId);
             } catch (error) {
-              if (error instanceof KnowledgeUnsupportedCapabilityError) {
+              if (error instanceof KnowledgeUnsupportedError) {
                 return c.json({ error: 'scope_not_found' }, 404);
               }
               throw error;
