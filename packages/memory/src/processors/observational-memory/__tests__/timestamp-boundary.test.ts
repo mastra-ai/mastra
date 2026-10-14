@@ -1,7 +1,9 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
+import { InMemoryDB, InMemoryMemory } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { filterObservedMessages } from '../message-utils';
+import { ObservationalMemory } from '../observational-memory';
 
 const THREAD_ID = 'thread-1';
 const RESOURCE_ID = 'resource-1';
@@ -72,5 +74,54 @@ describe('filterObservedMessages at the lastObservedAt boundary', () => {
     filterObservedMessages({ messageList: list, record: { lastObservedAt, observedMessageIds: [] } as never });
 
     expect(ids(list)).toEqual([]);
+  });
+});
+
+describe('ObservationalMemory unobserved messages at the lastObservedAt boundary', () => {
+  const T = new Date('2026-10-14T00:00:00.000Z').getTime();
+  const at = (id: string, ms: number, role: 'user' | 'assistant' = 'user') => ({
+    ...msg(id, role),
+    createdAt: new Date(T + ms),
+  });
+
+  async function setup(observedMessageIds: string[], lastObservedAtMs: number) {
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      observation: { model: 'openai/gpt-4o-mini', messageTokens: 1_000, bufferTokens: false },
+      reflection: { model: 'openai/gpt-4o-mini', observationTokens: 2_000 },
+    });
+    await storage.saveThread({
+      thread: { id: THREAD_ID, resourceId: RESOURCE_ID, title: 't', createdAt: new Date(T), updatedAt: new Date(T) },
+    });
+    const messages = [at('u1', 0), at('a1', 1, 'assistant'), at('a2', 2)];
+    await storage.saveMessages({ messages });
+    const initial = await om.getOrCreateRecord(THREAD_ID, RESOURCE_ID);
+    await storage.updateActiveObservations({
+      id: initial.id,
+      observations: '- seen',
+      tokenCount: 10,
+      lastObservedAt: new Date(T + lastObservedAtMs),
+      observedMessageIds,
+    });
+    const record = (await storage.getObservationalMemory(THREAD_ID, RESOURCE_ID))!;
+    return { om, messages, record };
+  }
+
+  it('getUnobservedMessages keeps an unobserved message on the cursor millisecond', async () => {
+    const { om, messages, record } = await setup(['u1', 'a1'], 2);
+    expect(om.getUnobservedMessages(messages, record).map(m => m.id)).toEqual(['a2']);
+  });
+
+  it('loadUnobservedMessages loads an unobserved message on the cursor millisecond from storage', async () => {
+    const { om } = await setup(['u1', 'a1'], 2);
+    const loaded = await om.loadUnobservedMessages({ threadId: THREAD_ID, resourceId: RESOURCE_ID });
+    expect(loaded.map(m => m.id)).toEqual(['a2']);
+  });
+
+  it('still excludes the cursor millisecond for records without observed ids', async () => {
+    const { om, messages, record } = await setup([], 2);
+    expect(om.getUnobservedMessages(messages, record).map(m => m.id)).toEqual([]);
   });
 });

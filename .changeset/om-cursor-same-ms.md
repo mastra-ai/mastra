@@ -2,4 +2,4 @@
 '@mastra/memory': patch
 ---
 
-Fixed Observational Memory occasionally hiding a message from the agent before it was observed. When messages arrived within the same millisecond, the next message could land exactly on the observation cursor and be pruned from context even though the observer never saw it.
+Fixed Observational Memory occasionally skipping a message that was created in the same millisecond as the observation cursor. Such a message could be pruned from the agent's context, left out of async buffering, or not counted toward the observation threshold, even though the observer never saw it. Messages already covered by an observation or buffered chunk are still excluded by id.

@@ -381,6 +381,24 @@ type InvocationModelResolution<TModel> = {
 };
 
 /**
+ * Whether a message falls after an OM timestamp cursor. Cursors are millisecond timestamps
+ * (sync observation stores the newest observed message's time, buffering stores it + 1ms), and
+ * MessageList spaces messages 1ms apart, so an unobserved message can land exactly on the cursor.
+ * When the record tracks observed/buffered ids, those ids exclude covered messages and the cursor
+ * millisecond itself is kept; legacy records without ids keep the exclusive comparison.
+ */
+function isAfterCursor(createdAt: Date | string, cursor: Date | string, idsKnown: boolean): boolean {
+  const msgTime = new Date(createdAt).getTime();
+  const cursorTime = new Date(cursor).getTime();
+  return idsKnown ? msgTime >= cursorTime : msgTime > cursorTime;
+}
+
+function cursorIdsKnownFor(record: ObservationalMemoryRecord): boolean {
+  if (Array.isArray(record.observedMessageIds) && record.observedMessageIds.length > 0) return true;
+  return getBufferedChunks(record).some(chunk => Array.isArray(chunk.messageIds) && chunk.messageIds.length > 0);
+}
+
+/**
  * ObservationalMemory - A three-agent memory system for long conversations.
  *
  * This processor:
@@ -1764,6 +1782,7 @@ export class ObservationalMemory {
     const observedMessageIds = new Set<string>(
       Array.isArray(record.observedMessageIds) ? record.observedMessageIds : [],
     );
+    const cursorIdsKnown = observedMessageIds.size > 0;
 
     // Only exclude buffered chunk message IDs when called from the buffering path.
     // The main agent context should still see buffered messages until activation.
@@ -1812,10 +1831,8 @@ export class ObservationalMemory {
           // Also include messages when there's no lastObservedAt timestamp
           result.push(msg);
         } else {
-          const msgDate = new Date(msg.createdAt);
-          if (msgDate > lastObservedAt) {
+          if (isAfterCursor(msg.createdAt, lastObservedAt, cursorIdsKnown)) {
             result.push(msg);
-          } else {
           }
         }
       }
@@ -2193,9 +2210,9 @@ export class ObservationalMemory {
     resourceId: string | undefined,
     lastObservedAt?: Date,
   ): Promise<MastraDBMessage[]> {
-    // Add 1ms to lastObservedAt to make the filter exclusive (since dateRange.start is inclusive)
-    // This prevents re-loading the same messages that were already observed
-    const startDate = lastObservedAt ? new Date(lastObservedAt.getTime() + 1) : undefined;
+    // Inclusive of the cursor millisecond: an unobserved message can share it (MessageList spaces
+    // messages 1ms apart). Callers drop already-observed ones by id via getUnobservedMessages.
+    const startDate = lastObservedAt;
 
     let result: { messages: MastraDBMessage[] };
 
@@ -2557,9 +2574,10 @@ ${formattedMessages}
     });
     const preFilterCount = candidateMessages.length;
     if (bufferCursor) {
+      const idsKnown = cursorIdsKnownFor(freshRecord);
       candidateMessages = candidateMessages.filter(msg => {
         if (!msg.createdAt) return true; // include messages without timestamps
-        return new Date(msg.createdAt) > bufferCursor;
+        return isAfterCursor(msg.createdAt, bufferCursor, idsKnown);
       });
     }
 
@@ -3615,9 +3633,10 @@ ${formattedMessages}
         }
 
         if (bufferCursor) {
+          const idsKnown = cursorIdsKnownFor(record);
           candidateMessages = candidateMessages.filter(msg => {
             if (!msg.createdAt) return true;
-            return new Date(msg.createdAt) > bufferCursor;
+            return isAfterCursor(msg.createdAt, bufferCursor, idsKnown);
           });
         }
       }
@@ -4214,10 +4233,13 @@ ${formattedMessages}
 
         const unobservedMessages = messages
           ? this.getUnobservedMessages(messages, freshRecord)
-          : await this.loadMessagesFromStorage(
-              threadId,
-              resourceId,
-              freshRecord.lastObservedAt ? new Date(freshRecord.lastObservedAt) : undefined,
+          : this.getUnobservedMessages(
+              await this.loadMessagesFromStorage(
+                threadId,
+                resourceId,
+                freshRecord.lastObservedAt ? new Date(freshRecord.lastObservedAt) : undefined,
+              ),
+              freshRecord,
             );
 
         if (
