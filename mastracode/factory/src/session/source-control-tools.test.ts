@@ -519,7 +519,7 @@ describe('createSourceControlTools', () => {
       );
     });
 
-    it('pushes HEAD to the session branch in another environment repository that never created it', async () => {
+    it('creates the session branch at HEAD in another repository that never had it, then pushes that branch', async () => {
       const setup = await fixture();
       const built = await tools(setup);
       const { sandbox, pushes, executions } = fakeSandbox({ missingBranch: ['/home/user/other'] });
@@ -530,13 +530,13 @@ describe('createSourceControlTools', () => {
       );
 
       expect(result).toEqual({ pushed: true, branch: 'factory/issue-1', repository: 'acme/other' });
-      expect(pushes()[0]!.args).toEqual([
+      expect(executions.map(entry => entry.args)).toContainEqual([
         '-C',
         '/home/user/other',
-        'push',
-        'origin',
-        'HEAD:refs/heads/factory/issue-1',
+        'branch',
+        'factory/issue-1',
       ]);
+      expect(pushes()[0]!.args).toEqual(['-C', '/home/user/other', 'push', '-u', 'origin', 'factory/issue-1']);
       expect(setup.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repo-2' });
       expect(JSON.stringify(executions)).not.toContain('glpat-secret');
       await expect(setup.storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).resolves.toMatchObject([

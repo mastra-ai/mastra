@@ -924,15 +924,6 @@ export async function configureGitIdentity(
   }
 }
 
-export interface PushBranchOptions {
-  /**
-   * Push the checkout's `HEAD` to `refs/heads/<branch>` instead of the local
-   * branch of that name: the checkout of another environment repository may
-   * sit on a different branch, or detached, when the session branch is pushed.
-   */
-  fromHead?: boolean;
-}
-
 async function pushAuthenticatedBranch(
   sandbox: ExecutableSandbox,
   workdir: string,
@@ -940,13 +931,9 @@ async function pushAuthenticatedBranch(
   cloneUrl: string,
   token: string,
   username: string,
-  options: PushBranchOptions = {},
 ): Promise<void> {
   const env = gitAuthenticationEnvironment(cloneUrl, token, username, 'push-failed');
-  const args = options.fromHead
-    ? ['-C', workdir, 'push', 'origin', `HEAD:refs/heads/${branch}`]
-    : ['-C', workdir, 'push', '-u', 'origin', branch];
-  const push = await execute(sandbox, 'git', args, { env });
+  const push = await execute(sandbox, 'git', ['-C', workdir, 'push', '-u', 'origin', branch], { env });
   if (push.exitCode !== 0) throw classifyGitFailure(push, 'push-failed');
 }
 
@@ -956,6 +943,17 @@ export async function hasLocalBranch(sandbox: ExecutableSandbox, workdir: string
   if (ref.exitCode === 0) return true;
   if (ref.exitCode === 1) return false;
   throw classifyGitFailure(ref, 'push-failed');
+}
+
+/**
+ * Make sure the checkout has a local `<branch>`, creating it at `HEAD` (without
+ * switching to it) when it was never created there, so every push sends that
+ * branch and never whatever happens to be checked out later.
+ */
+export async function ensureLocalBranch(sandbox: ExecutableSandbox, workdir: string, branch: string): Promise<void> {
+  if (await hasLocalBranch(sandbox, workdir, branch)) return;
+  const created = await execute(sandbox, 'git', ['-C', workdir, 'branch', branch]);
+  if (created.exitCode !== 0) throw classifyGitFailure(created, 'push-failed');
 }
 
 /** Whether `workdir` is a checkout of the repository at `cloneUrl`. */
@@ -993,7 +991,6 @@ export async function pushRepositoryBranch(
   branch: string,
   access: RepositoryAccess,
   repoFullName: string,
-  options: PushBranchOptions = {},
 ): Promise<void> {
   if (!isValidGitRef(branch)) {
     throw new MaterializeError(`Refusing to push: invalid branch name '${branch}'.`, 'push-failed');
@@ -1012,7 +1009,6 @@ export async function pushRepositoryBranch(
     access.cloneUrl,
     authorization.token,
     authorization.username ?? 'x-access-token',
-    options,
   );
 }
 
