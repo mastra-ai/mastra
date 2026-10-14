@@ -182,7 +182,7 @@ export function ExperimentsComparison({
             <Txt as="span" variant="caption" tone="muted" className="block uppercase">
               Items
             </Txt>
-            <ComparisonDatasetHeader datasetId={datasetId} version={baselineExperiment?.datasetVersion ?? undefined} />
+            <ComparisonDatasetHeader datasetId={datasetId} />
           </div>
           {experimentIds.map((experimentId, index) => {
             const experiment = experimentsById[experimentId] ?? undefined;

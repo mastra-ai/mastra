@@ -351,19 +351,20 @@ describe('experiments comparison table', () => {
   });
 
   describe('when the dataset loads', () => {
-    it('names the dataset in the Items header, linking to the version the baseline ran on', async () => {
+    it('names the dataset in the Items header, linking to it', async () => {
       renderComparison();
 
       const items = await screen.findByRole('columnheader', { name: 'Items' });
       const link = await within(items).findByRole('link', { name: 'Open dataset Support tickets' });
-      expect(link.getAttribute('href')).toBe(`/datasets/${DATASET_ID}?version=1`);
+      expect(link.getAttribute('href')).toBe(`/datasets/${DATASET_ID}`);
     });
 
-    it('shows the dataset version the baseline ran on', async () => {
+    it('leaves the dataset version out of the Items header, since each experiment may run on its own', async () => {
       renderComparison();
 
       const items = await screen.findByRole('columnheader', { name: 'Items' });
-      expect(await within(items).findByText('v1')).toBeTruthy();
+      await within(items).findByRole('link', { name: 'Open dataset Support tickets' });
+      expect(within(items).queryByText(/^v\d+$/)).toBeNull();
     });
   });
 
@@ -378,12 +379,27 @@ describe('experiments comparison table', () => {
 
       const items = await screen.findByRole('columnheader', { name: 'Items' });
       const link = await within(items).findByRole('link', { name: `Open dataset ${DATASET_ID}` });
-      expect(link.getAttribute('href')).toBe(`/datasets/${DATASET_ID}?version=1`);
+      expect(link.getAttribute('href')).toBe(`/datasets/${DATASET_ID}`);
     });
   });
 
-  describe('when the baseline has no dataset version', () => {
-    it('links to the dataset without a version and shows none', async () => {
+  describe('when the experiments ran on different dataset versions', () => {
+    it('shows each experiment the version it ran on, linked to the dataset at that version', async () => {
+      renderComparison();
+
+      const baseline = await screen.findByRole('columnheader', { name: 'Baseline' });
+      const contender = screen.getByRole('columnheader', { name: 'Contender 1' });
+      expect(within(baseline).getByRole('link', { name: 'Open dataset v1' }).getAttribute('href')).toBe(
+        `/datasets/${DATASET_ID}?version=1`,
+      );
+      expect(within(contender).getByRole('link', { name: 'Open dataset v2' }).getAttribute('href')).toBe(
+        `/datasets/${DATASET_ID}?version=2`,
+      );
+    });
+  });
+
+  describe('when an experiment has no dataset version', () => {
+    it('shows no dataset version on its header', async () => {
       server.use(
         http.get(`${experimentsBase}/${BASELINE_ID}`, () =>
           HttpResponse.json({ ...makeExperiment(BASELINE_ID, 1), datasetVersion: null }),
@@ -391,10 +407,8 @@ describe('experiments comparison table', () => {
       );
       renderComparison();
 
-      const items = await screen.findByRole('columnheader', { name: 'Items' });
-      const link = await within(items).findByRole('link', { name: 'Open dataset Support tickets' });
-      expect(link.getAttribute('href')).toBe(`/datasets/${DATASET_ID}`);
-      expect(within(items).queryByText(/^v\d+$/)).toBeNull();
+      const baseline = await screen.findByRole('columnheader', { name: 'Baseline' });
+      expect(within(baseline).queryByRole('link', { name: /^Open dataset v/ })).toBeNull();
     });
   });
 
@@ -405,13 +419,13 @@ describe('experiments comparison table', () => {
 
       const contender = await screen.findByRole('columnheader', { name: 'Contender 1' });
       await waitFor(() => {
-        expect(within(contender).getByText(/different dataset version/)).toBeTruthy();
+        expect(within(contender).getByText(/differs from baseline/)).toBeTruthy();
       });
       expect(
-        within(screen.getByRole('columnheader', { name: 'Baseline' })).queryByText(/different dataset version/),
+        within(screen.getByRole('columnheader', { name: 'Baseline' })).queryByText(/differs from baseline/),
       ).toBeNull();
       expect(
-        within(screen.getByRole('columnheader', { name: 'Contender 2' })).queryByText(/different dataset version/),
+        within(screen.getByRole('columnheader', { name: 'Contender 2' })).queryByText(/differs from baseline/),
       ).toBeNull();
     });
   });
