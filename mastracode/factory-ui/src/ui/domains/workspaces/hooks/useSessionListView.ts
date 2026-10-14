@@ -92,7 +92,6 @@ function isNonEmptyStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.length > 0 && value.every(entry => typeof entry === 'string');
 }
 
-/** Drops empty and malformed entries; undefined when nothing is hidden, so the default view stores nothing. */
 function nonEmptyHiddenGroups(hiddenGroups: Partial<Record<SessionGroupBy, unknown>>): HiddenSessionGroups | undefined {
   const entries = SESSION_GROUP_BYS.flatMap((groupBy): [SessionGroupBy, string[]][] => {
     const keys = hiddenGroups[groupBy];

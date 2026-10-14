@@ -7,6 +7,7 @@ import { isTerminalStage } from '../../factory/stages';
 import type { SessionPreviewDetails } from '../components/SessionPreviewCard';
 import { getFactorySessionKind, getSessionOwnerDetails, getUserSessionLabel } from './sessionPresentation';
 import type { SessionViewerProfile } from './sessionPresentation';
+import { sessionRowStatus } from './sessionStatus';
 import type { FactoryUserSession } from './user-sessions';
 
 export type SessionActivityStatus = 'waiting' | 'working' | 'initializing' | 'idle' | 'done';
@@ -14,7 +15,6 @@ export type SessionActivityStatus = 'waiting' | 'working' | 'initializing' | 'id
 export interface SessionListRow {
   session: FactoryUserSession;
   origin: 'factory' | 'user';
-  /** Undefined for user sessions: they belong to no board. */
   board: string | undefined;
   kind: SessionPreviewDetails['kind'];
   name: string;
@@ -38,21 +38,17 @@ export interface SessionListRow {
   updatedAt: string;
 }
 
-/** Same precedence as `sessionRowStatus`, extended with the quiet states a filter or group can name. */
 export function sessionActivityStatus(row: {
   initializing: boolean;
   running: boolean;
   attention: boolean;
   settled: boolean;
 }): SessionActivityStatus {
-  if (row.initializing) return 'initializing';
-  if (row.running) return 'working';
-  if (row.attention) return 'waiting';
-  if (row.settled) return 'done';
-  return 'idle';
+  const marker = sessionRowStatus(row);
+  if (marker === 'ready') return 'waiting';
+  return marker ?? (row.settled ? 'done' : 'idle');
 }
 
-/** A linked work item knows its board; only an orphan session falls back to reading its branch. */
 export function sessionBoard(session: FactoryUserSession, item: WorkItem | undefined): string {
   return item ? itemBoard(item) : getFactorySessionKind(session, undefined);
 }
