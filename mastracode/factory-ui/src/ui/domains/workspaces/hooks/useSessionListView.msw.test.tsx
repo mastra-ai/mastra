@@ -48,11 +48,23 @@ describe('useSessionListView', () => {
   it('forgets hidden groups once every group is shown again', () => {
     const { result } = renderHook(() => useSessionListView());
 
-    act(() => result.current.updateView({ groupBy: 'status', hiddenGroups: { status: ['status:done'] } }));
+    act(() => result.current.updateView({ groupBy: 'status' }));
+    act(() => result.current.changeGroupVisibility('status:done', false));
     expect(storedView()).toEqual({ groupBy: 'status', hiddenGroups: { status: ['status:done'] } });
+    expect(result.current.hiddenGroupKeys).toEqual(['status:done']);
 
-    act(() => result.current.updateView({ hiddenGroups: { status: [] } }));
+    act(() => result.current.changeGroupVisibility('status:done', true));
     expect(storedView()).toEqual({ groupBy: 'status' });
+    expect(result.current.hiddenGroupKeys).toEqual([]);
+  });
+
+  it('does not count a stored setting that equals the default as a change', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ sort: 'activity', groupBy: 'board', hiddenGroups: { status: [] } }),
+    );
+
+    expect(renderHook(() => useSessionListView()).result.current.changedSettingCount).toBe(0);
   });
 
   it('stores only what differs from the default, and forgets a choice set back to it', () => {

@@ -46,6 +46,12 @@ function parseViewChanges(stored: unknown): SessionListViewChanges {
   return changes;
 }
 
+function withGroupVisibility(hidden: readonly string[], key: string, visible: boolean): string[] {
+  if (visible) return hidden.filter(hiddenKey => hiddenKey !== key);
+  if (hidden.includes(key)) return [...hidden];
+  return [...hidden, key];
+}
+
 function hasHiddenGroups(hiddenGroups: HiddenSessionGroups): boolean {
   return Object.values(hiddenGroups).some(keys => keys.length > 0);
 }
@@ -64,20 +70,39 @@ const sessionListViewStore = createLocalStorageStore<SessionListViewChanges>({
   parse: parseViewChanges,
 });
 
+function currentView(): SessionListView {
+  return { ...DEFAULT_SESSION_LIST_VIEW, ...sessionListViewStore.read() };
+}
+
+function writeView(view: SessionListView): void {
+  sessionListViewStore.write(changesFromDefault(view));
+}
+
+function changeGroupVisibility(key: string, visible: boolean): void {
+  const view = currentView();
+  const hiddenGroups: HiddenSessionGroups = { ...view.hiddenGroups };
+  const hiddenKeys = withGroupVisibility(hiddenGroups[view.groupBy] ?? [], key, visible);
+  if (hiddenKeys.length > 0) hiddenGroups[view.groupBy] = hiddenKeys;
+  else delete hiddenGroups[view.groupBy];
+  writeView({ ...view, hiddenGroups });
+}
+
 export function useSessionListView(): {
   view: SessionListView;
+  hiddenGroupKeys: readonly string[];
   changedSettingCount: number;
-  updateView: (changes: Partial<SessionListView>) => void;
+  updateView: (changes: Partial<Pick<SessionListView, 'sort' | 'groupBy'>>) => void;
+  changeGroupVisibility: (key: string, visible: boolean) => void;
   resetView: () => void;
 } {
   const changes = useLocalStorageStore(sessionListViewStore);
+  const view = { ...DEFAULT_SESSION_LIST_VIEW, ...changes };
   return {
-    view: { ...DEFAULT_SESSION_LIST_VIEW, ...changes },
-    changedSettingCount: Object.keys(changes).length,
-    updateView: next =>
-      sessionListViewStore.write(
-        changesFromDefault({ ...DEFAULT_SESSION_LIST_VIEW, ...sessionListViewStore.read(), ...next }),
-      ),
+    view,
+    hiddenGroupKeys: view.hiddenGroups[view.groupBy] ?? [],
+    changedSettingCount: Object.keys(changesFromDefault(view)).length,
+    updateView: next => writeView({ ...currentView(), ...next }),
+    changeGroupVisibility,
     resetView: () => sessionListViewStore.write(NO_CHANGES),
   };
 }

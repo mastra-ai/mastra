@@ -1,7 +1,7 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { LayoutGrid } from 'lucide-react';
 
-import { SESSION_GROUP_BY_OPTIONS } from '../services/sessionGroups';
+import { SESSION_GROUP_BY_LABELS, SESSION_GROUP_BY_OPTIONS } from '../services/sessionGroups';
 import type { SessionGroupBy, SessionGroupHeading } from '../services/sessionGroups';
 
 export function SessionGroupMenu({
@@ -17,10 +17,9 @@ export function SessionGroupMenu({
   hiddenKeys: readonly string[];
   onVisibilityChange: (key: string, visible: boolean) => void;
 }) {
-  const groupByLabel = SESSION_GROUP_BY_OPTIONS.find(option => option.value === groupBy)?.label;
   return (
     <DropdownMenu.Sub>
-      <DropdownMenu.SubTrigger hint={groupByLabel}>
+      <DropdownMenu.SubTrigger hint={SESSION_GROUP_BY_LABELS[groupBy]}>
         <LayoutGrid aria-hidden />
         <span>Group</span>
       </DropdownMenu.SubTrigger>

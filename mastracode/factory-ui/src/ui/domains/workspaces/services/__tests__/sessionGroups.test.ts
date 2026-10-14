@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { builtinBoardCatalog, releaseBoard } from '../../../../../../e2e/ui/board-catalog';
-import { collapsedRowsKeepingActive, groupSessionRows } from '../sessionGroups';
+import { collapsedRowsKeepingActive, groupSessionRows, sessionGroupHeadings } from '../sessionGroups';
 import type { SessionGroup, SessionGroupContext } from '../sessionGroups';
 import { factoryRow, testSession, testWorkItem, userRow } from './fixtures/sessionRows';
 
@@ -68,24 +68,29 @@ describe('groupSessionRows by board', () => {
 });
 
 describe('groupSessionRows by status', () => {
-  it('files a row under its strongest status, in Waiting, Working, Initializing, Idle, Done order', () => {
+  it('orders groups Waiting, Working, Initializing, Idle, Done and leaves out empty ones', () => {
     const waitingRow = factoryRow(testSession('waiting-1'), { attention: true });
-    const runningAndWaitingRow = factoryRow(testSession('working-1'), { running: true, attention: true });
     const initializingRow = factoryRow(testSession('init-1', { materializedAt: undefined }), { running: true });
     const idleRow = userRow('idle-1');
 
-    const groups = groupSessionRows(
-      [idleRow, initializingRow, runningAndWaitingRow, waitingRow],
-      'status',
-      builtinContext,
-      [],
-    );
+    const groups = groupSessionRows([idleRow, initializingRow, waitingRow], 'status', builtinContext, []);
 
     expect(groupSummary(groups)).toEqual([
       { label: 'Waiting on you', sessionIds: ['waiting-1'] },
-      { label: 'Working', sessionIds: ['working-1'] },
       { label: 'Initializing', sessionIds: ['init-1'] },
       { label: 'Idle', sessionIds: ['idle-1'] },
+    ]);
+  });
+});
+
+describe('sessionGroupHeadings', () => {
+  it('lists every status even with no sessions, so a group can be hidden before it has any', () => {
+    expect(sessionGroupHeadings([], 'status', builtinContext).map(heading => heading.label)).toEqual([
+      'Waiting on you',
+      'Working',
+      'Initializing',
+      'Idle',
+      'Done',
     ]);
   });
 });

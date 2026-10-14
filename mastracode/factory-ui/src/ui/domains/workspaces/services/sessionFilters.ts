@@ -1,6 +1,6 @@
 import type { DropdownMenuRadioOption } from '@mastra/playground-ui/components/DropdownMenu';
 
-import { SESSION_ACTIVITY_STATUSES, SESSION_STATUS_LABELS } from './sessionRows';
+import { SESSION_ACTIVITY_STATUSES, SESSION_STATUS_LABELS, sessionOwners } from './sessionRows';
 import type { SessionActivityStatus, SessionListRow } from './sessionRows';
 
 export type SessionStatusFilter = 'all' | SessionActivityStatus;
@@ -91,11 +91,10 @@ export function sessionOwnerOptions(
   rows: readonly SessionListRow[],
   viewerUserId: string | undefined,
 ): DropdownMenuRadioOption<string>[] {
-  const ownerNameById = new Map(rows.map(row => [row.session.userId, row.owner.name]));
   const viewerOption = viewerUserId ? [{ value: MY_SESSIONS, label: 'Mine' }] : [];
-  const namedOptions = Array.from(ownerNameById, ([userId, name]) => ({
+  const namedOptions = sessionOwners(rows).map(({ userId, name }) => ({
     value: sessionOwnerFilterValue(userId),
     label: name,
-  })).toSorted((a, b) => a.label.localeCompare(b.label));
+  }));
   return [{ value: ALL_SESSION_OWNERS, label: 'All owners' }, ...viewerOption, ...namedOptions];
 }

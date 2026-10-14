@@ -144,7 +144,7 @@ describe('Sessions sidebar groups', () => {
 
   it('regroups the list by status and remembers the choice', async () => {
     const user = userEvent.setup();
-    renderSection();
+    const { unmount } = renderSection();
     await screen.findByRole('button', { name: 'Release old' });
 
     await openNestedSessionProperty(user, 'Group', 'Group by');
@@ -153,8 +153,13 @@ describe('Sessions sidebar groups', () => {
 
     await waitFor(() => expect(groupRegions()).toEqual(['Initializing sessions', 'Idle sessions']));
     expect(rowNamesIn('Idle sessions').toSorted()).toEqual(['Release new', 'Review new', 'User new', 'Work new']);
-    expect(JSON.parse(localStorage.getItem('mastracode.sessionListView') ?? 'null')).toEqual({ groupBy: 'status' });
     expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
+
+    unmount();
+    renderSection();
+    await screen.findByRole('button', { name: 'Release old' });
+
+    expect(groupRegions()).toEqual(['Initializing sessions', 'Idle sessions']);
   });
 
   it('drops the headers when grouping is None', async () => {
