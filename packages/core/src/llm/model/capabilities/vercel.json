@@ -19,12 +19,10 @@
     "amazon/nova-2-lite",
     "amazon/nova-lite",
     "amazon/nova-pro",
-    "anthropic/claude-3-haiku",
     "anthropic/claude-fable-5",
     "anthropic/claude-fable-5.1",
     "anthropic/claude-haiku-4.5",
     "anthropic/claude-haiku-5.5",
-    "anthropic/claude-opus-4",
     "anthropic/claude-opus-4.5",
     "anthropic/claude-opus-4.6",
     "anthropic/claude-opus-4.7",
@@ -46,6 +44,7 @@
     "callstack/apex",
     "deepseek/deepseek-v4-flash-vision-exp",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-fast",
     "fireworks/ember-1",
     "google/gemini-2.5-flash",
     "google/gemini-2.5-flash-lite",
@@ -61,6 +60,7 @@
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
+    "google/gemini-4-argon",
     "google/gemini-nano-banana-2.1",
     "google/gemini-omni-flash-preview",
     "google/gemma-4-26b-a4b-it",
@@ -77,6 +77,7 @@
     "meta/muse-spark-1.2-contributor",
     "meta/muse-spark-1.3",
     "meta/muse-spark-1.3-contributor",
+    "meta/muse-wonder-1.0",
     "minimax/minimax-h3",
     "minimax/minimax-h3-max",
     "minimax/minimax-m2.7",
@@ -228,9 +229,7 @@
     "amazon/nova-micro",
     "amazon/nova-pro",
     "amazon/titan-embed-text-v2",
-    "anthropic/claude-3-haiku",
     "anthropic/claude-haiku-4.5",
-    "anthropic/claude-opus-4",
     "anthropic/claude-opus-4.5",
     "anthropic/claude-opus-4.6",
     "anthropic/claude-opus-4.7",
@@ -276,6 +275,7 @@
     "deepseek/deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0813",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-fast",
     "google/gemini-2.5-flash",
     "google/gemini-2.5-flash-image",
     "google/gemini-2.5-flash-lite",
@@ -323,6 +323,7 @@
     "meta/muse-spark-1.1",
     "meta/muse-spark-1.2",
     "meta/muse-spark-1.3",
+    "meta/muse-wonder-1.0",
     "minimax/minimax-m2",
     "minimax/minimax-m2.1",
     "minimax/minimax-m2.1-lightning",
@@ -350,6 +351,7 @@
     "nvidia/nemotron-3-super-120b-a12b",
     "nvidia/nemotron-3-ultra-550b-a55b",
     "nvidia/nemotron-3.5-lightning",
+    "nvidia/nemotron-3.5-lightning-free",
     "nvidia/nemotron-nano-12b-v2-vl",
     "nvidia/nemotron-nano-9b-v2",
     "openai/gpt-3.5-turbo",
@@ -480,6 +482,7 @@
     "alibaba/qwen3.8-omni-flash",
     "anthropic/claude-haiku-5.5",
     "anthropic/claude-sonnet-4.5",
+    "cohere/command-a",
     "deepseek/deepseek-v3.2",
     "deepseek/deepseek-v4-flash",
     "deepseek/deepseek-v4-flash-0731",
@@ -487,6 +490,7 @@
     "deepseek/deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0813",
     "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-fast",
     "google/gemini-2.5-flash",
     "google/gemini-2.5-flash-lite",
     "google/gemini-2.5-pro",
@@ -497,12 +501,14 @@
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
+    "google/gemini-4-argon",
     "google/gemma-4-26b-a4b-it",
     "google/gemma-4-31b-it",
     "meta/muse-glimmer-30b",
     "meta/muse-spark-1.1",
     "meta/muse-spark-1.2",
     "meta/muse-spark-1.3",
+    "meta/muse-wonder-1.0",
     "moonshotai/kimi-k2.5",
     "moonshotai/kimi-k2.6",
     "moonshotai/kimi-k2.7-code",
@@ -510,6 +516,7 @@
     "moonshotai/kimi-k3",
     "moonshotai/kimi-k3-fast",
     "nvidia/nemotron-3.5-lightning",
+    "nvidia/nemotron-3.5-lightning-free",
     "openai/gpt-4.1",
     "openai/gpt-4.1-fast",
     "openai/gpt-4.1-mini",
@@ -568,7 +575,9 @@
     "openai/o3-pro",
     "openai/o4-mini",
     "openai/o4-mini-fast",
+    "sakana/fugu-max",
     "sakana/fugu-ultra",
+    "sakana/fugu-ultra-v2",
     "spacexai/grok-4.1-fast-reasoning",
     "spacexai/grok-4.3",
     "spacexai/grok-4.5",
@@ -900,15 +909,6 @@
         "type": "budget_tokens"
       }
     ],
-    "anthropic/claude-opus-4": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1024
-      }
-    ],
     "anthropic/claude-sonnet-4.5": [
       {
         "type": "budget_tokens",
@@ -940,6 +940,12 @@
       }
     ],
     "deepseek/deepseek-v3.2-thinking": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "deepseek/deepseek-v4.1-flash-fast": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
@@ -1007,7 +1013,7 @@
     "meta/muse-spark-1.3": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "meta/muse-glimmer-30b": [
@@ -1034,10 +1040,16 @@
         "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ],
+    "meta/muse-wonder-1.0": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "meta/muse-spark-1.3-contributor": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "arcee-ai/trinity-large-thinking": [
@@ -1251,6 +1263,12 @@
         "type": "toggle"
       }
     ],
+    "liquid/lfm2.5-24b-a2b": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "google/gemini-omni-flash-preview": [
       {
         "type": "effort",
@@ -1338,6 +1356,12 @@
         "values": ["minimal", "medium", "high"]
       }
     ],
+    "google/gemini-4-argon": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "google/gemini-3.1-flash-lite": [
       {
         "type": "effort",
@@ -1402,12 +1426,6 @@
       {
         "type": "effort",
         "values": ["high", "xhigh"]
-      }
-    ],
-    "inclusionai/ling-3.1-flash-free": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
       }
     ],
     "inclusionai/ling-3.0-flash": [
@@ -1501,6 +1519,12 @@
       {
         "type": "effort",
         "values": ["none", "medium", "high"]
+      }
+    ],
+    "nvidia/nemotron-3.5-lightning-free": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "nvidia/nemotron-nano-12b-v2-vl": [

@@ -10,8 +10,6 @@ const PROVIDER_ID = 'kimi-for-coding';
 // versioned Anthropic base URL and appends /messages itself.
 const BASE_URL = 'https://api.kimi.com/coding/v1';
 
-export const KIMI_CODING_MODELS = ['k3', 'k3-256k', 'kimi-for-coding', 'kimi-for-coding-highspeed'] as const;
-
 let authStorageInstance: AuthStorage | null = null;
 
 export function setAuthStorage(storage: AuthStorage | undefined): void {

@@ -337,10 +337,11 @@ export interface StorageToolConfig {
 /**
  * Per-MCP-client tool configuration stored in agent snapshots.
  * Specifies which tools from an MCP client are enabled and their overrides.
- * When `tools` is omitted, all tools from the MCP client/server are included.
+ * An empty `tools` map (`{}`) includes all tools from the MCP client/server.
+ * When `tools` is omitted, no tools are included.
  */
 export interface StorageMCPClientToolsConfig {
-  /** When omitted, all tools from the source are included. */
+  /** `{}` includes all tools from the source; when omitted, no tools are included. */
   tools?: Record<string, StorageToolConfig>;
 }
 
@@ -2340,6 +2341,8 @@ export interface UpdateWorkflowStateOptions {
     spanId?: string;
     parentSpanId?: string;
   };
+  /** When an agent resume claimed this suspended run. See `WorkflowRunState.resumeClaimedAt`. */
+  resumeClaimedAt?: number;
   /**
    * Optional compare-and-set guard. When provided, the update is applied only if the
    * persisted snapshot's status matches one of these values. Otherwise the update is a

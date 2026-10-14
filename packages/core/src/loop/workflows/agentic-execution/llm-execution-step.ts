@@ -115,6 +115,7 @@ import {
   isEagerlyExecutableToolCall,
 } from './eager-tool-execution';
 import type { EagerToolBailout, EagerToolExecutionCoordinator } from './eager-tool-execution';
+import { getToolResultInvocationState } from './provider-tool-result-state';
 import type { PendingProviderToolCall } from './provider-tool-spans';
 import { endPendingProviderToolSpan } from './provider-tool-spans';
 import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
@@ -230,7 +231,7 @@ function readToolResultFromMessageList(messageList: MessageList, toolCallId: str
       if (
         part?.type === 'tool-invocation' &&
         part.toolInvocation?.toolCallId === toolCallId &&
-        part.toolInvocation?.state === 'result'
+        (part.toolInvocation?.state === 'result' || part.toolInvocation?.state === 'output-error')
       ) {
         return part.toolInvocation.result;
       }
@@ -1077,11 +1078,10 @@ async function processOutputStream<OUTPUT = undefined>({
           messageList.updateToolInvocation({
             type: 'tool-invocation',
             toolInvocation: {
-              state: 'result',
               toolCallId: chunk.payload.toolCallId,
               toolName: chunk.payload.toolName,
               args: chunk.payload.args,
-              result: chunk.payload.result,
+              ...getToolResultInvocationState(chunk.payload),
             },
             providerMetadata: withToolPayloadTransformProviderMetadata(chunk.payload.providerMetadata, chunk.metadata),
             providerExecuted: inferredProviderExecuted,
@@ -1808,6 +1808,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                         : undefined,
                       memory: readScoped(scopeCtx, MEMORY_KEY, 'memory'),
                       agentName: agentId,
+                      agentId,
                       requestContext: requestContext || new RequestContext(),
                       outputWriter,
                       workspace: currentStep.workspace,

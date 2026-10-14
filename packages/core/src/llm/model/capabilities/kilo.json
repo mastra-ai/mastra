@@ -52,6 +52,7 @@
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
+    "google/gemini-4-argon",
     "google/gemini-nano-banana-2.1",
     "google/gemma-3-12b-it",
     "google/gemma-3-27b-it",
@@ -74,6 +75,7 @@
     "meta/muse-spark-1.2-contributor",
     "meta/muse-spark-1.3",
     "meta/muse-spark-1.3-contributor",
+    "meta/muse-wonder",
     "minimax/minimax-01",
     "minimax/minimax-m3",
     "mistralai/codestral-2508",
@@ -203,6 +205,8 @@
     "sakana/fugu-ultra",
     "sakana/fugu-ultra-v2",
     "sakana/sakana-namazu",
+    "scaledown/extract",
+    "scaledown/summarize",
     "stealth/claude-opus-4.6",
     "stealth/claude-opus-4.7",
     "stealth/claude-opus-4.8",
@@ -214,8 +218,8 @@
     "thinkingmachines/inkling",
     "thinkingmachines/inkling-small",
     "thinkingmachines/inkling-small:free",
-    "unbiased/pareto",
     "unbiased/pareto-26.10-preview",
+    "unbiased/pareto-26.9",
     "x-ai/grok-4.20",
     "x-ai/grok-4.20-multi-agent",
     "x-ai/grok-4.3",
@@ -245,6 +249,7 @@
     "~openai/gpt-mini-latest",
     "~openai/gpt-sol-latest",
     "~openai/gpt-terra-latest",
+    "~unbiased/pareto-latest",
     "~x-ai/grok-latest",
     "~z-ai/glm-flash-latest"
   ],
@@ -319,6 +324,7 @@
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
+    "google/gemini-4-argon",
     "google/gemini-nano-banana-2.1",
     "google/gemma-2-27b-it",
     "google/gemma-3-12b-it",
@@ -334,8 +340,6 @@
     "inception/mercury-2",
     "inception/mercury-2.5",
     "inclusionai/ling-3.0-flash",
-    "inclusionai/ling-3.0-flash-fin",
-    "inclusionai/ling-3.0-flash-sante",
     "inclusionai/ling-3.0-flash-vl",
     "inclusionai/ling-3.1-flash",
     "inference-net/schematron-v2-small",
@@ -346,6 +350,7 @@
     "kilo-auto/frontier",
     "kilo-auto/small",
     "liquid/lfm-2.5-2.6b:free",
+    "liquid/lfm-2.5-24b-a2b",
     "mancer/weaver",
     "meituan/longcat-2.0",
     "meta-llama/llama-3.1-70b-instruct",
@@ -362,6 +367,7 @@
     "meta/muse-spark-1.2-contributor",
     "meta/muse-spark-1.3",
     "meta/muse-spark-1.3-contributor",
+    "meta/muse-wonder",
     "microsoft/phi-4",
     "microsoft/wizardlm-2-8x22b",
     "minimax/minimax-01",
@@ -523,8 +529,8 @@
     "thinkingmachines/inkling",
     "thinkingmachines/inkling-small",
     "thinkingmachines/inkling-small:free",
-    "unbiased/pareto",
     "unbiased/pareto-26.10-preview",
+    "unbiased/pareto-26.9",
     "undi95/remm-slerp-l2-13b",
     "upstage/solar-mini4",
     "upstage/solar-pro-3",
@@ -564,6 +570,7 @@
     "~google/gemini-flash-latest",
     "~google/gemini-pro-latest",
     "~moonshotai/kimi-latest",
+    "~unbiased/pareto-latest",
     "~x-ai/grok-latest",
     "~z-ai/glm-flash-latest",
     "~z-ai/glm-latest"
@@ -630,6 +637,7 @@
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
+    "google/gemini-4-argon",
     "google/gemini-nano-banana-2.1",
     "google/gemma-2-27b-it",
     "google/gemma-3-12b-it",
@@ -645,6 +653,7 @@
     "inference-net/schematron-v2-small",
     "inference-net/schematron-v2-turbo",
     "liquid/lfm-2.5-2.6b:free",
+    "liquid/lfm-2.5-24b-a2b",
     "meta-llama/llama-3.1-70b-instruct",
     "meta-llama/llama-3.1-8b-instruct",
     "meta-llama/llama-3.2-3b-instruct",
@@ -657,6 +666,7 @@
     "meta/muse-spark-1.2-contributor",
     "meta/muse-spark-1.3",
     "meta/muse-spark-1.3-contributor",
+    "meta/muse-wonder",
     "microsoft/phi-4",
     "minimax/minimax-m2",
     "minimax/minimax-m2.5",
@@ -1366,6 +1376,12 @@
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
+    "meta/muse-wonder": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "meta/muse-spark-1.1": [
       {
         "type": "effort",
@@ -1558,6 +1574,12 @@
         "values": ["high"]
       }
     ],
+    "liquid/lfm-2.5-24b-a2b": [
+      {
+        "type": "effort",
+        "values": ["high"]
+      }
+    ],
     "google/gemma-4-31b-it": [
       {
         "type": "effort",
@@ -1684,6 +1706,12 @@
         "values": ["none", "minimal", "high"]
       }
     ],
+    "google/gemini-4-argon": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "google/gemini-3.1-flash-lite": [
       {
         "type": "effort",
@@ -1756,19 +1784,7 @@
         "values": ["none", "high"]
       }
     ],
-    "inclusionai/ling-3.0-flash-sante": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
     "inclusionai/ling-3.0-flash-vl": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "inclusionai/ling-3.0-flash-fin": [
       {
         "type": "effort",
         "values": ["none", "high"]

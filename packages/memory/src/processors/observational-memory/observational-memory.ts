@@ -1,7 +1,7 @@
-import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
+import type { MastraDBMessage, MessageList, ModelWithRetries } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
-import type { MastraModelConfig } from '@mastra/core/llm';
+import type { MastraModelConfig, WidenModelId } from '@mastra/core/llm';
 import { modelSupportsTemperature, resolveModelConfig } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
@@ -144,6 +144,11 @@ export function getLastActivityFromMessages(messages?: MastraDBMessage[]): numbe
   }
 
   return undefined;
+}
+
+function firstFallbackModel(fallbacks: ModelWithRetries[]): WidenModelId<ModelWithRetries['model']> {
+  const model: WidenModelId<ModelWithRetries['model']> | undefined = fallbacks[0]?.model;
+  return model ?? 'unknown';
 }
 
 function formatModelContext(provider?: string, modelId?: string): string | undefined {
@@ -944,14 +949,14 @@ export class ObservationalMemory {
     const concreteModel = this.getConcreteModel(model, inputTokens);
 
     if (Array.isArray(concreteModel)) {
-      return (concreteModel[0]?.model ?? 'unknown') as Parameters<typeof resolveModelConfig>[0];
+      return firstFallbackModel(concreteModel);
     }
     if (typeof concreteModel === 'function') {
       // Wrap to handle functions that may return ModelWithRetries[]
       return async (ctx: any) => {
         const result = await concreteModel(ctx);
         if (Array.isArray(result)) {
-          return (result[0]?.model ?? 'unknown') as MastraModelConfig;
+          return firstFallbackModel(result) as MastraModelConfig;
         }
         return result as MastraModelConfig;
       };
@@ -2863,7 +2868,7 @@ ${formattedMessages}
 
       if (messageList) {
         if (idsToRemoveList.length > 0) {
-          messageList.removeByIds(idsToRemoveList);
+          messageList.removeByIds(idsToRemoveList, { pruned: true });
         }
         return messageList.get.all.db();
       }
@@ -2901,7 +2906,7 @@ ${formattedMessages}
 
       if (messageList) {
         if (idsToRemove.length > 0) {
-          messageList.removeByIds(idsToRemove);
+          messageList.removeByIds(idsToRemove, { pruned: true });
         }
 
         if (messagesToSave.length > 0) {

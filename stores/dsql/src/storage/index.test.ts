@@ -18,7 +18,7 @@ vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 // Run integration tests only when DSQL_HOST is set and DSQL_INTEGRATION=true
 if (canRunDSQLTests()) {
-  createTestSuite(new DSQLStore(TEST_CONFIG));
+  createTestSuite(new DSQLStore(TEST_CONFIG), { workflowResultsNoopWhenRunMissing: false });
 
   // Pre-configured client acceptance tests
   createClientAcceptanceTests({

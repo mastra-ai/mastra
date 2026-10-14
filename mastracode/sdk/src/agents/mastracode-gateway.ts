@@ -28,10 +28,13 @@ import {
   createPromptCacheMiddleware,
   opencodeClaudeMaxProvider,
 } from '../providers/claude-max.js';
-import { getCopilotModelCatalog, githubCopilotProvider } from '../providers/github-copilot.js';
+import { githubCopilotProvider } from '../providers/github-copilot.js';
 import { createGoogleThinkingMiddleware } from '../providers/google-thinking.js';
-import { KIMI_CODING_MODELS, kimiCodingProvider } from '../providers/kimi-coding.js';
+import { kimiCodingProvider } from '../providers/kimi-coding.js';
 import {
+  getCredentialProviderId,
+  KIMI_CODING_CREDENTIAL_ID,
+  KIMI_CODING_PROVIDER_ID,
   normalizeAnthropicModelId,
   OPENAI_PREFIX,
   remapOpenAIModelForCodexOAuth,
@@ -178,23 +181,23 @@ function openaiApiKeyProvider(
   });
 }
 
-function getAuthProviderId(providerId: string): string {
-  return providerId === 'openai' ? 'openai-codex' : providerId;
-}
-
 function getProviderAuthKey(
   providerId: string,
   credentials: CredentialStore = getGlobalAuthStorage(),
 ): string | undefined {
-  const authProviderId = getAuthProviderId(providerId);
+  const authProviderId = getCredentialProviderId(providerId);
   const storedCred = credentials.get(authProviderId);
   if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
     return storedCred.key.trim();
   }
   const dedicatedKey = credentials.getStoredApiKey(authProviderId)?.trim();
   if (dedicatedKey) return dedicatedKey;
+  // `/api-keys` stores keys under the catalog provider id (`kimi-code-plan-cn`),
+  // which can differ from the credential id.
+  const catalogKey = authProviderId !== providerId ? credentials.getStoredApiKey(providerId)?.trim() : undefined;
+  if (catalogKey) return catalogKey;
   if (credentials.allowEnvironmentFallback === false) return undefined;
-  return authProviderId === 'kimi-for-coding' ? process.env.KIMI_API_KEY?.trim() || undefined : undefined;
+  return authProviderId === KIMI_CODING_CREDENTIAL_ID ? process.env.KIMI_API_KEY?.trim() || undefined : undefined;
 }
 
 export function resolveAuth(request: GatewayAuthRequest, mastraGatewayApiKey?: string): GatewayAuthResult | undefined {
@@ -361,7 +364,7 @@ export class MastraCodeGateway extends MastraModelGateway {
       return { apiKey: mastraGatewayApiKey, source: 'gateway' };
     }
 
-    const authProviderId = getAuthProviderId(request.providerId);
+    const authProviderId = getCredentialProviderId(request.providerId);
     const storedCred = credentials.get(authProviderId);
     if (storedCred?.type === 'oauth') {
       return { bearerToken: 'oauth', source: 'gateway' };
@@ -414,6 +417,10 @@ export class MastraCodeGateway extends MastraModelGateway {
   }
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
+    // Catalog auth (`handlesModel`, `resolveAuth`) reads this store, while
+    // `/api-keys` and logins write through other AuthStorage instances. Pick
+    // up their changes on every catalog refresh.
+    this.#credentials.reload();
     const providers: Record<string, ProviderConfig> = {};
     for (const provider of this.#getCustomProviders()) {
       const models = provider.models ?? [];
@@ -428,27 +435,10 @@ export class MastraCodeGateway extends MastraModelGateway {
       };
     }
 
-    providers['kimi-for-coding'] = {
-      name: 'Kimi For Coding',
-      apiKeyEnvVar: 'KIMI_API_KEY',
-      apiKeyHeader: 'Authorization',
-      gateway: this.id,
-      models: [...KIMI_CODING_MODELS],
-    };
-
-    try {
-      const copilotModels = await getCopilotModelCatalog({ authStorage: this.#credentials });
-      providers['github-copilot'] = {
-        name: 'GitHub Copilot',
-        apiKeyEnvVar: '',
-        apiKeyHeader: 'Authorization',
-        gateway: this.id,
-        models: copilotModels.map(model => model.id),
-      };
-    } catch (error) {
-      console.warn('Failed to load GitHub Copilot model catalog:', error);
-    }
-
+    // Subscription providers are not listed here: catalog ids from this gateway
+    // are namespaced (`mastracode/<provider>/...`). Kimi augments the models.dev
+    // `kimi-code-plan-cn` provider (claimed via `handlesModel`), and Copilot,
+    // which models.dev excludes, has its own `github-copilot` gateway.
     return providers;
   }
 
@@ -552,7 +542,7 @@ export class MastraCodeGateway extends MastraModelGateway {
       return this.#resolveGoogleModel(args);
     }
 
-    if (args.providerId === 'kimi-for-coding') {
+    if (args.providerId === KIMI_CODING_PROVIDER_ID || args.providerId === KIMI_CODING_CREDENTIAL_ID) {
       return kimiCodingProvider(args.modelId, {
         apiKey: args.apiKey,
         headers: args.headers,

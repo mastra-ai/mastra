@@ -822,6 +822,22 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
       },
       projectRepositories: {
         list: vi.fn().mockResolvedValue(hasRepo ? [{ id: 'pr-1', repositoryId: 'repo-1', branch: null }] : []),
+        // The environment's links, position-ordered; the session is filed under position 1.
+        listByProject: vi.fn().mockResolvedValue(
+          hasRepo
+            ? [
+                {
+                  id: 'pr-1',
+                  connectionId: `conn-${integrationId}`,
+                  repositoryId: 'repo-1',
+                  branch: null,
+                  position: 1,
+                  inEnvironment: true,
+                  createdAt: new Date(0),
+                },
+              ]
+            : [],
+        ),
       },
       repositories: { get: vi.fn().mockResolvedValue({ defaultBranch: 'main', slug: 'acme/app' }) },
       sessions: {
@@ -868,6 +884,7 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     expect(deps.sourceControl.sessions.create).toHaveBeenCalledWith({
       sessionId: expect.any(String),
       projectRepositoryId: 'pr-1',
+      factoryProjectId: 'fp-1',
       orgId: 'org-1',
       userId: 'user-1',
       branch: 'slack/1700-42',
@@ -923,7 +940,7 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     await expect(resolve(resolveArgs())).resolves.toBe('us-existing');
 
     expect(sourceControl.sessions.getForBranch).toHaveBeenCalledWith({
-      projectRepositoryId: 'pr-1',
+      factoryProjectId: 'fp-1',
       userId: 'user-1',
       branch: 'slack/1700-42',
     });
@@ -1005,11 +1022,7 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
         .mockResolvedValueOnce([{ id: 'conn-github', integrationId: 'github', createdByUserId: 'owner-1' }])
         .mockRejectedValueOnce(outage);
     }
-    if (failure === 'project repository read') {
-      sourceControl.projectRepositories.list
-        .mockResolvedValueOnce([{ id: 'pr-1', repositoryId: 'repo-1', branch: null }])
-        .mockRejectedValueOnce(outage);
-    }
+    if (failure === 'project repository read') sourceControl.projectRepositories.listByProject.mockRejectedValue(outage);
     if (failure === 'repository read') sourceControl.repositories.get.mockRejectedValue(outage);
     if (failure === 'session lookup') sourceControl.sessions.getForBranch.mockRejectedValue(outage);
     if (failure === 'session creation') sourceControl.sessions.create.mockRejectedValue(outage);
@@ -1083,10 +1096,10 @@ describe('channel session creation context (resolveSession)', () => {
   it('seeds Factory ownership before the controller session is created', async () => {
     const sourceControl = {
       sessions: {
-        getBySessionId: vi.fn().mockResolvedValue({ orgId: 'org-1', userId: 'user-1', projectRepositoryId: 'pr-1' }),
+        getBySessionId: vi
+          .fn()
+          .mockResolvedValue({ orgId: 'org-1', userId: 'user-1', projectRepositoryId: 'pr-1', factoryProjectId: 'fp-1' }),
       },
-      projectRepositories: { get: vi.fn().mockResolvedValue({ connectionId: 'conn-1' }) },
-      connections: { get: vi.fn().mockResolvedValue({ factoryProjectId: 'fp-1' }) },
     };
     const controller = { id: 'code', createSession: vi.fn().mockResolvedValue({ identity: 'session' }) };
     const requestContext = new RequestContext();
@@ -1105,6 +1118,24 @@ describe('channel session creation context (resolveSession)', () => {
       requestContext,
       tags: { factoryProjectId: 'fp-1' },
     });
+  });
+
+  it('leaves ownership off a session row whose factory the backfill could not resolve', async () => {
+    const sourceControl = {
+      sessions: {
+        getBySessionId: vi
+          .fn()
+          .mockResolvedValue({ orgId: 'org-1', userId: 'user-1', projectRepositoryId: 'pr-1', factoryProjectId: null }),
+      },
+    };
+    const controller = { id: 'code', createSession: vi.fn().mockResolvedValue({}) };
+
+    await createChannelSessionResolver({ sourceControl } as any)({
+      controller,
+      thread: { id: 'session-1', resourceId: 'session-1' },
+    } as any);
+
+    expect(controller.createSession.mock.calls[0]?.[0].tags).toBeUndefined();
   });
 
   it('keeps chat-only sessions free of Factory ownership', async () => {
@@ -1499,7 +1530,10 @@ describe('session start (onSessionStart)', () => {
 
   function makeStartDeps({
     defaultModelId = 'anthropic/claude-opus-5' as string | null,
-    session = { orgId: 'org-1', userId: 'user-1', projectRepositoryId: 'pr-1' } as Record<string, string> | null,
+    session = { orgId: 'org-1', userId: 'user-1', projectRepositoryId: 'pr-1', factoryProjectId: 'fp-1' } as Record<
+      string,
+      string
+    > | null,
     memoryRecord = null as Record<string, unknown> | null,
     personalMemoryRecord = null as Record<string, unknown> | null,
     personalMemoryLookupError = null as Error | null,
@@ -1510,8 +1544,6 @@ describe('session start (onSessionStart)', () => {
       projects: { getById: vi.fn(async () => ({ id: 'fp-1', defaultModelId })) } as any,
       sourceControl: {
         sessions: { getBySessionId: vi.fn(async () => session) },
-        projectRepositories: { get: vi.fn(async () => ({ id: 'pr-1', connectionId: 'conn-gh' })) },
-        connections: { get: vi.fn(async () => ({ id: 'conn-gh', factoryProjectId: 'fp-1' })) },
       } as any,
       memorySettings: {
         // Two rows share this table: the project's (a `factory-project:` sentinel

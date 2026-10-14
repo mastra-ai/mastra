@@ -1,4 +1,4 @@
-import { DurableAgentDefaults } from '@mastra/core/agent/durable';
+import { DurableAgentDefaults, globalRunRegistry } from '@mastra/core/agent/durable';
 
 import { MessageList } from '@mastra/core/agent/message-list';
 import { Mastra } from '@mastra/core/mastra';
@@ -148,6 +148,33 @@ describe('createInngestDurableAgenticWorkflow step-finish emission', () => {
       type: 'step-finish',
       payload: { stepResult: { reason: 'tool-calls', isContinued: true } },
     });
+  });
+
+  it("never calls another Mastra instance's stopWhen for a reused runId", async () => {
+    const runId = 'run-stop-when-foreign';
+    const foreignStopWhen = vi.fn(() => true);
+    globalRunRegistry.set(runId, { mastra: new Mastra({ logger: false }), stopWhen: foreignStopWhen } as any);
+
+    try {
+      const published: any[] = [];
+      const result = await conditionFor(5)({
+        inputData: {
+          runId,
+          iterationCount: 1,
+          options: {},
+          accumulatedSteps: [{ text: 'mine', toolCalls: [], toolResults: [] }],
+          lastStepResult: { reason: 'tool-calls', isContinued: true, warnings: [] },
+        },
+        mastra: new Mastra({ logger: false }),
+        engine: { step: { run: async (_id: string, fn: () => Promise<boolean>) => fn() } },
+        [PUBSUB_SYMBOL]: { publish: vi.fn(async (_topic: string, event: any) => void published.push(event)) },
+      });
+
+      expect(foreignStopWhen).not.toHaveBeenCalled();
+      expect(result).toBe(true);
+    } finally {
+      globalRunRegistry.delete(runId);
+    }
   });
 
   it('emits the completed step-finish before a stopWhen decision error propagates', async () => {

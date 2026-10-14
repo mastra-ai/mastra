@@ -4,7 +4,7 @@ import type { AgentBackgroundConfig } from '../../../background-tasks/types';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
 import { hydrateSuspendedStreamState } from '../../../loop/suspended-stream-state';
-import type { ToolCallConcurrency } from '../../../loop/types';
+import type { AgentLoopResumeClaim, ToolCallConcurrency } from '../../../loop/types';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfigInternal } from '../../../memory/types';
 import { resolveObservabilityContext } from '../../../observability';
@@ -30,9 +30,11 @@ interface StreamStepOptions<OUTPUT = undefined> {
   resumeContext?: {
     resumeData: any;
     snapshot: any;
+    claim?: AgentLoopResumeClaim;
   };
   agentId: string;
   agentVersionId?: string;
+  resolvedScopes?: string[];
   agentName?: string;
   toolCallId?: string;
   methodType: AgentMethodType;
@@ -66,6 +68,7 @@ export function createStreamStep<OUTPUT = undefined>({
   resumeContext,
   agentId,
   agentVersionId,
+  resolvedScopes,
   agentName,
   toolCallId,
   methodType,
@@ -87,7 +90,7 @@ export function createStreamStep<OUTPUT = undefined>({
     id: 'stream-text-step',
     inputSchema: z.any(),
     outputSchema: z.instanceof(MastraModelOutput<OUTPUT>),
-    execute: async ({ ...observabilityContext }) => {
+    execute: async ({ tracing, tracingContext, loggerVNext, metrics }) => {
       // `loopOptions` carries class instances (MessageList, Tools) and closures
       // (onStepFinish, onFinish, ...) — none of which survive the evented engine's
       // JSON round-trip in step inputs. map-results-step parked it on runScope.
@@ -118,7 +121,7 @@ export function createStreamStep<OUTPUT = undefined>({
         ...loopOptions,
         outputProcessors: processors,
         returnScorerData,
-        ...resolveObservabilityContext(observabilityContext),
+        ...resolveObservabilityContext({ tracing, tracingContext, loggerVNext, metrics }),
         requireToolApproval,
         toolCallConcurrency,
         eagerToolExecution,
@@ -142,6 +145,7 @@ export function createStreamStep<OUTPUT = undefined>({
         },
         agentId,
         agentVersionId,
+        resolvedScopes,
         agentName,
         toolCallId,
         methodType: modelMethodType,
