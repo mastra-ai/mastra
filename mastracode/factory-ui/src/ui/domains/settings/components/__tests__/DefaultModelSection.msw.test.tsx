@@ -64,4 +64,21 @@ describe('DefaultModelSection', () => {
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled());
   });
+
+  it('flags a saved default none of the connected accounts can run', async () => {
+    server.use(http.get(URL, () => HttpResponse.json({ modelId: 'deepseek/deepseek-flash' })));
+    renderWithProviders(<DefaultModelSection models={models} />);
+
+    expect(
+      await screen.findByText(/None of your connected accounts can run deepseek\/deepseek-flash/),
+    ).toBeInTheDocument();
+  });
+
+  it('does not flag a saved default the catalog offers', async () => {
+    server.use(http.get(URL, () => HttpResponse.json({ modelId: 'openai/gpt-5' })));
+    renderWithProviders(<DefaultModelSection models={models} />);
+
+    await screen.findByRole('combobox', { name: 'Default model' });
+    expect(screen.queryByText(/None of your connected accounts/)).not.toBeInTheDocument();
+  });
 });

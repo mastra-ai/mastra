@@ -44,6 +44,8 @@ function DefaultModelEditor({
   const [modelId, setModelId] = useState(defaultModelId ?? '');
   const [error, setError] = useState<string>();
   const busy = setDefaultModel.isPending || clearDefaultModel.isPending;
+  const defaultUnavailable =
+    Boolean(defaultModelId) && models.length > 0 && !models.some(model => model.id === defaultModelId);
 
   const save = async () => {
     if (!modelId) return;
@@ -70,6 +72,11 @@ function DefaultModelEditor({
         <FieldLabel>Default model</FieldLabel>
         <ModelCombobox models={models} value={modelId} onValueChange={setModelId} disabled={busy} />
       </Field>
+      {defaultUnavailable ? (
+        <Txt as="p" variant="caption" className="text-destructive-foreground">
+          None of your connected accounts can run {defaultModelId}. Choose another model or connect its provider.
+        </Txt>
+      ) : null}
       {error ? (
         <Txt as="p" variant="caption" className="text-destructive-foreground">
           {error}

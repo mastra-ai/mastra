@@ -955,10 +955,14 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             });
             // A Factory's model scope is exclusive at run time, so a picker for
             // that Factory must only offer models its scope's credentials serve.
+            // `scope=user` serves personal defaults, which only apply in
+            // personal-scope Factories and so only run on the caller's own credentials.
             const factoryProjectId = c.req.query('factoryId') || undefined;
             const tenant = auth.tenant(c);
             let tenantCredentials = allTenantCredentials;
-            if (allTenantCredentials && factoryProjectId && tenant) {
+            if (allTenantCredentials && c.req.query('scope') === 'user') {
+              tenantCredentials = allTenantCredentials.filter(record => record.scope === 'user');
+            } else if (allTenantCredentials && factoryProjectId && tenant) {
               if (!options.factoryProjects) return c.json({ error: 'factory_unavailable' }, 503);
               await options.factoryProjects.ensureReady();
               const project = await options.factoryProjects.get({ orgId: tenantOrgId(tenant), id: factoryProjectId });

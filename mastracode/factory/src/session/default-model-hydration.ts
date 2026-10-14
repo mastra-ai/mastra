@@ -11,6 +11,7 @@ export interface DefaultModelApplicableSession {
 
 export interface DefaultModelHydrationSession extends DefaultModelApplicableSession {
   readonly identity: { getResourceId(): string };
+  model: DefaultModelApplicableSession['model'] & { setDefault(args: { modelId: string }): void };
   state: {
     get(): Record<string, unknown> | undefined;
     set(updates: Record<string, unknown>): Promise<unknown>;
@@ -93,13 +94,16 @@ export async function hydrateSessionDefaultModel(
     }
     if (threadId && (await session.thread.firstUserMessage({ threadId }))) return;
 
-    if (modelScope === 'factory') {
-      if (project.defaultModelId) await applyDefaultModel(session, project.defaultModelId);
-      return;
-    }
-
-    const modelDefault = await modelDefaults.get({ orgId: sourceSession.orgId, userId: sourceSession.userId });
-    if (modelDefault) await applyDefaultModel(session, modelDefault.modelId);
+    const scopedModelId =
+      modelScope === 'factory'
+        ? project.defaultModelId
+        : (await modelDefaults.get({ orgId: sourceSession.orgId, userId: sourceSession.userId }))?.modelId;
+    if (!scopedModelId) return;
+    // A thread the session creates later (the UI binding its conventional
+    // thread after a thread-agnostic request opened the session) starts from
+    // the session default, not from the thread hydrated here.
+    session.model.setDefault({ modelId: scopedModelId });
+    await applyDefaultModel(session, scopedModelId);
   } catch (error) {
     if (!identityResolved && !hadFactoryIdentity) {
       try {

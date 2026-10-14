@@ -1,14 +1,17 @@
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 
-import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
+import { usePersonalAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
 import { useProviderConnectionState } from '../hooks/useProviderConnectionState';
 import { DefaultModelSection } from './DefaultModelSection';
 import { FactoryModelScopeNotice } from './FactoryModelScopeNotice';
 import { ProviderAccessSection } from './ProviderAccessSection';
 import { SettingsSubsection } from './SettingsSubsection';
 
-export function PersonalModelsSettings({ models }: { models: AvailableModelOption[] }) {
+export function PersonalModelsSettings() {
   const { anyConnected, providersKnown } = useProviderConnectionState();
+  // Personal defaults run only in user-scope Factories, on the caller's own credentials.
+  const modelsQuery = usePersonalAvailableModelsQuery();
+  const models = modelsQuery.data ?? [];
 
   return (
     <div className="flex flex-col gap-8">

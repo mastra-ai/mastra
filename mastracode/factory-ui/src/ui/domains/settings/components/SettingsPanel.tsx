@@ -90,7 +90,7 @@ export function SettingsPanel() {
       {section === 'models' && (
         <FactoryModelsSettings models={models} settings={settings} onBehaviorChange={onBehaviorChange} />
       )}
-      {section === 'personal-models' && <PersonalModelsSettings models={models} />}
+      {section === 'personal-models' && <PersonalModelsSettings />}
       {(section === 'memory' || section === 'factory-memory') && (
         <MemorySettings
           key={section}
