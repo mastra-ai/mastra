@@ -57,6 +57,17 @@ export function SessionsSection() {
         icon={<MessagesSquare />}
         action={
           <div className="flex items-center gap-0.5">
+            {hasRepositories && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="New user session"
+                onClick={() => void navigate(`/factories/${factoryId}/user/new/${crypto.randomUUID()}`)}
+                disabled={deletion.deleting}
+              >
+                <Plus size={15} />
+              </Button>
+            )}
             <SessionListProperties
               changedCount={Number(view.sort !== DEFAULT_SESSION_SORT) + activeFilterCount}
               onReset={() => {
@@ -93,17 +104,6 @@ export function SessionsSection() {
                 onValueChange={updated => changeFilters({ updated })}
               />
             </SessionListProperties>
-            {hasRepositories && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label="New user session"
-                onClick={() => void navigate(`/factories/${factoryId}/user/new/${crypto.randomUUID()}`)}
-                disabled={deletion.deleting}
-              >
-                <Plus size={15} />
-              </Button>
-            )}
           </div>
         }
       >
