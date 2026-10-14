@@ -256,17 +256,18 @@ function printTrustInstructions({ pkg, refusal }) {
   console.error('');
   console.error('  npm only hands this job a publish token when the package has a trusted');
   console.error('  publisher for GitHub repo mastra-ai/mastra, workflow npm-publish.yml.');
-  console.error('  This package has none, or one for another repo or workflow, so its');
-  console.error('  publish would fail mid-release (ERR_PNPM_AUTH_TOKEN_EXCHANGE).');
+  console.error('  This package has none, one for another repo or workflow, or one limited');
+  console.error('  to staged publishing or to a GitHub environment, so its publish would');
+  console.error('  fail mid-release (ERR_PNPM_AUTH_TOKEN_EXCHANGE).');
   console.error('');
   console.error('  An npm org admin must configure it. After `npm login`, from a checkout of');
   console.error('  mastra-ai/mastra (publishes nothing for a package that already exists):');
   console.error(`    node scripts/npm-placeholder-publish.mjs ${pkg.name}`);
   console.error('  or directly:');
   console.error(
-    `    npx npm@^11.10.0 trust github ${pkg.name} --file npm-publish.yml --repo mastra-ai/mastra --allow-publish`,
+    `    npx npm@^11.15.0 trust github ${pkg.name} --file npm-publish.yml --repo mastra-ai/mastra --allow-publish`,
   );
-  console.error(`  Check what is configured now with: npx npm@^11.10.0 trust list ${pkg.name}`);
+  console.error(`  Check what is configured now with: npx npm@^11.15.0 trust list ${pkg.name}`);
   console.error('');
 }
 
@@ -335,7 +336,7 @@ if (!options.oidc) {
   // freshly reserved placeholder has no trusted-publishing history yet.
   for (const { pkg } of results.filter(result => !result.everTrustedPublished)) {
     console.log(
-      `::warning title=No trusted-publishing history::${pkg.name} exists on npm, but no version of it was published through npm trusted publishing (OIDC). Expected for a new placeholder; otherwise confirm its trusted publisher with \`npx npm@^11.10.0 trust list ${pkg.name}\` (it must be GitHub repo mastra-ai/mastra, workflow npm-publish.yml). The publish job checks this for real before publishing.`,
+      `::warning title=No trusted-publishing history::${pkg.name} exists on npm, but no version of it was published through npm trusted publishing (OIDC). Expected for a new placeholder; otherwise confirm its trusted publisher with \`npx npm@^11.15.0 trust list ${pkg.name}\` (it must be GitHub repo mastra-ai/mastra, workflow npm-publish.yml). The publish job checks this for real before publishing.`,
     );
   }
   await exit(0);

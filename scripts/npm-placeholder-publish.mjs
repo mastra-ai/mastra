@@ -25,8 +25,9 @@ import path from 'node:path';
 
 const DEFAULT_REGISTRY = 'https://registry.npmjs.org';
 const PLACEHOLDER_VERSION = '0.0.0';
-// `npm trust` first shipped in npm 11.10.0.
-const NPM_WITH_TRUST = 'npm@^11.10.0';
+// `npm trust` shipped in npm 11.10.0, but `--allow-publish` only in 11.15.0;
+// older versions reject it with `EUSAGE: Unknown flag`.
+const NPM_WITH_TRUST = 'npm@^11.15.0';
 const TRUST_REPO = 'mastra-ai/mastra';
 const TRUST_FILE = 'npm-publish.yml';
 const TRUST_ARGS = ['--file', TRUST_FILE, '--repo', TRUST_REPO, '--allow-publish'];
@@ -118,10 +119,48 @@ function readTrust(options) {
 const isPublishWorkflowTrust = config =>
   config.type === 'github' && config.repository === TRUST_REPO && config.file === TRUST_FILE;
 
+// Why a trusted publisher for this repo and workflow still can't publish, or
+// undefined when it can. The publish jobs declare no GitHub environment, so
+// their OIDC token has no environment claim. Settings made before npm had
+// permissions carry no `permissions` field and allow publishing.
+function trustProblem(config) {
+  if (config.environment) {
+    return `it is restricted to GitHub environment "${config.environment}", but the publish jobs in ${TRUST_FILE} run without one`;
+  }
+  if (Array.isArray(config.permissions) && !config.permissions.includes('createPackage')) {
+    return `it allows only ${config.permissions.join(', ') || 'no permissions'}, not publishing (createPackage)`;
+  }
+  return undefined;
+}
+
+const isUsablePublishWorkflowTrust = config => isPublishWorkflowTrust(config) && !trustProblem(config);
+
+function failUnusableTrust(configs) {
+  const unusable = configs.filter(config => isPublishWorkflowTrust(config) && trustProblem(config));
+  if (unusable.length === 0) return;
+  const lines = unusable.map(config => `  - ${config.id ?? '(no id)'}: ${trustProblem(config)}`);
+  fail(
+    [
+      `${options.name} has a trusted publisher for ${TRUST_REPO} ${TRUST_FILE} that cannot publish, so the publish job would still fail:`,
+      ...lines,
+      'Remove it, then re-run this script to configure one that can:',
+      ...unusable.map(
+        config =>
+          `    npx ${NPM_WITH_TRUST} trust revoke ${options.name} --id ${config.id ?? '<id from npm trust list>'}`,
+      ),
+    ].join('\n'),
+  );
+}
+
 const describeTrust = configs =>
   configs.length === 0
     ? 'none'
-    : configs.map(config => `${config.type} ${config.repository ?? '?'} ${config.file ?? '?'}`).join('; ');
+    : configs
+        .map(config => {
+          const problem = isPublishWorkflowTrust(config) && trustProblem(config);
+          return `${config.type} ${config.repository ?? '?'} ${config.file ?? '?'}${problem ? ` (unusable: ${problem})` : ''}`;
+        })
+        .join('; ');
 
 function publishPlaceholder(manifest, options) {
   if (!options.dryRun) {
@@ -170,9 +209,10 @@ if (options.dryRun || options.skipTrust) {
   console.log(`  npx ${trustArgs.join(' ')}`);
 } else {
   const before = readTrust(options);
-  if (before?.some(isPublishWorkflowTrust)) {
+  if (before?.some(isUsablePublishWorkflowTrust)) {
     console.log(`Trusted publishing for ${TRUST_REPO} ${TRUST_FILE} is already configured for ${options.name}.`);
   } else {
+    if (before) failUnusableTrust(before);
     if (before?.length) {
       console.log(`${options.name} currently trusts: ${describeTrust(before)}.`);
       console.log(
@@ -184,7 +224,7 @@ if (options.dryRun || options.skipTrust) {
     const after = readTrust(options);
     if (!after)
       fail(`Configured trusted publishing, but could not read it back with \`npm trust list ${options.name}\`.`);
-    if (!after.some(isPublishWorkflowTrust)) {
+    if (!after.some(isUsablePublishWorkflowTrust)) {
       fail(
         `npm reports no trusted publisher for ${TRUST_REPO} ${TRUST_FILE} on ${options.name} after configuring it (found: ${describeTrust(after)}).`,
       );

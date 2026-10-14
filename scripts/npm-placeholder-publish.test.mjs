@@ -150,7 +150,7 @@ test('--dry-run packs the placeholder and prints the trust command without publi
   assert.match(result.output, /total files:\s+2/);
   assert.match(
     result.stdout,
-    /npx --yes npm@\^11\.10\.0 trust github @mastra\/sprites --file npm-publish\.yml --repo mastra-ai\/mastra --allow-publish/,
+    /npx --yes npm@\^11\.15\.0 trust github @mastra\/sprites --file npm-publish\.yml --repo mastra-ai\/mastra --allow-publish/,
   );
   assert.deepEqual(puts(registry), []);
 });
@@ -253,4 +253,44 @@ test('an existing package trusting another workflow gets npm-publish.yml added a
   assert.match(result.stdout, /currently trusts: github mastra-ai\/mastra old-release\.yml/);
   assert.match(result.stdout, /verified mastra-ai\/mastra npm-publish\.yml/);
   assert.deepEqual(puts(registry), []);
+});
+
+async function runWithExistingTrust(t, config) {
+  const registry = await startRegistry(t, {
+    packages: { '/@mastra%2fsprites': 200 },
+    trust: { '/-/package/@mastra%2fsprites/trust': [{ id: 'cfg-0', ...config }] },
+  });
+  return { registry, result: await run(t, makeWorkspace(t), registry.url, ['@mastra/sprites'], 'y\n') };
+}
+
+test('a stage-only trusted publisher for npm-publish.yml is reported as unable to publish', async t => {
+  const { registry, result } = await runWithExistingTrust(t, {
+    ...publishWorkflowTrust,
+    permissions: ['createStagedPackage'],
+  });
+  assert.equal(result.status, 1, result.output);
+  assert.doesNotMatch(result.stdout, /already configured/);
+  assert.match(result.stderr, /cfg-0: it allows only createStagedPackage, not publishing \(createPackage\)/);
+  assert.match(result.stderr, /npx npm@\^11\.15\.0 trust revoke @mastra\/sprites --id cfg-0/);
+  assert.ok(!registry.requests.some(request => request.method === 'POST'));
+});
+
+test('a trusted publisher restricted to a GitHub environment is reported as unable to publish', async t => {
+  const { registry, result } = await runWithExistingTrust(t, {
+    ...publishWorkflowTrust,
+    claims: { ...publishWorkflowTrust.claims, environment: 'production' },
+  });
+  assert.equal(result.status, 1, result.output);
+  assert.doesNotMatch(result.stdout, /already configured/);
+  assert.match(result.stderr, /cfg-0: it is restricted to GitHub environment "production"/);
+  assert.match(result.stderr, /trust revoke @mastra\/sprites --id cfg-0/);
+  assert.ok(!registry.requests.some(request => request.method === 'POST'));
+});
+
+test('a trusted publisher from before npm had permissions is accepted', async t => {
+  const { permissions, ...legacy } = publishWorkflowTrust;
+  const { registry, result } = await runWithExistingTrust(t, legacy);
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.stdout, /already configured for @mastra\/sprites/);
+  assert.ok(!registry.requests.some(request => request.method === 'POST'));
 });
