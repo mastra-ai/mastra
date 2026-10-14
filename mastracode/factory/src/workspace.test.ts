@@ -2,6 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadSessionInstructions } from '@mastra/code-sdk/agents/prompts/agent-instructions';
 import { RequestContext } from '@mastra/core/request-context';
 import { FactorySandbox, LocalSandbox } from '@mastra/core/workspace';
 import type { FactorySandboxContext, LocalFilesystem } from '@mastra/core/workspace';
@@ -3405,17 +3406,58 @@ describe('factory environment sandbox context', () => {
     if (reopen) expect(state?.repositories.map(repo => repo.slug)).toEqual(['octocat/hello']);
   });
 
-  it('looks for project skills inside the primary checkout of an environment session', async () => {
+  it('looks for project skills inside every checkout of an environment session, its own first', async () => {
     const { resolver } = environmentFixture({ links: twoLinks });
     addProject({ setupCommand: 'pnpm i' });
     addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
 
     const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
-    // The filesystem root is the workspace root; `hello` is the primary checkout under it.
+    // The filesystem root is the workspace root; `hello` (the session's own)
+    // and `docs` are checkouts under it, `legacy` is outside the environment.
     const skills = (workspace as any)._config.skills as string[];
-    expect(skills).toEqual(expect.arrayContaining(['hello/.claude/skills', 'hello/.agents/skills']));
+    expect(skills.filter(skill => skill.endsWith('/.claude/skills'))).toEqual([
+      'hello/.claude/skills',
+      'docs/.claude/skills',
+    ]);
+    expect(skills).toEqual(expect.arrayContaining(['hello/.agents/skills', 'docs/.agents/skills']));
     expect(skills).not.toContain('.claude/skills');
+    expect(skills.some(skill => skill.startsWith('legacy/'))).toBe(false);
+  });
+
+  it("loads every checkout's AGENTS.md into the session prompt, its own first", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'factory-env-instructions-'));
+    tempDirs.push(root);
+    for (const [dir, text] of [
+      ['hello', 'HELLO: run pnpm test'],
+      ['docs', 'DOCS: keep headings sentence case'],
+    ] as const) {
+      await fs.mkdir(path.join(root, dir), { recursive: true });
+      await fs.writeFile(path.join(root, dir, 'AGENTS.md'), text);
+    }
+    const { resolver } = environmentFixture({ links: twoLinks });
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    // A remote workdir is known once the sandbox starts; the next resolution pins it.
+    const workspace = await resolver({ requestContext });
+    await workspace!.sandbox!.getInfo!();
+    await resolver({ requestContext });
+
+    const state = (requestContext.get('controller') as { getState: () => Record<string, any> }).getState();
+    expect(state.instructionRoots).toEqual(['hello', 'docs']);
+    // The same call the SDK system prompt makes with this state, against a
+    // workspace root laid out the way the sandbox lays it out.
+    const sources = loadSessionInstructions({
+      workingDir: root,
+      instructionRoots: state.instructionRoots,
+      skipGlobal: true,
+    });
+    expect(sources.map(source => source.content)).toEqual([
+      'HELLO: run pnpm test',
+      'DOCS: keep headings sentence case',
+    ]);
   });
 
   it('builds the list-form context from every inEnvironment link in position order', async () => {

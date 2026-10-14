@@ -866,12 +866,27 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       checkout === undefined ? undefined : environment ? path.posix.dirname(checkout) : checkout;
     const workdir = sessionWorkdir(sessionEntry.workdir);
     const isLocalSandbox = sessionEntry.sandbox.provider === 'local';
+    // Checkout directories under an environment session's workspace root, the
+    // session's own first: each one's AGENTS.md/CLAUDE.md and project skills load.
+    const checkoutDirs = environment
+      ? [
+          repositoryDirectoryName(repoFullName),
+          ...environment.repos
+            .filter(repo => repo.slug.toLowerCase() !== repoFullName.toLowerCase())
+            .map(repo => repositoryDirectoryName(repo.slug)),
+        ]
+      : undefined;
     // The SDK system prompt uses `state.projectPath` without falling back to
     // the server cwd. Pin the session workdir once known so the prompt and
     // workspace tools describe the same checkout. A remote workdir resolves at
     // the sandbox's first start, so the pin self-heals on the next resolution.
-    if (ctx && workdir && ctx.getState()?.projectPath !== workdir) {
-      await ctx.setState({ projectPath: workdir, projectName: repoFullName });
+    if (
+      ctx &&
+      workdir &&
+      (ctx.getState()?.projectPath !== workdir ||
+        ctx.getState()?.instructionRoots?.join('\n') !== checkoutDirs?.join('\n'))
+    ) {
+      await ctx.setState({ projectPath: workdir, projectName: repoFullName, instructionRoots: checkoutDirs });
     }
 
     // Keyed by the session, not the request's thread: a workspace built for a
@@ -1444,10 +1459,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       },
     });
     // Relative to the filesystem root. An environment session's root is the
-    // workspace root, so its project skills live under the primary checkout.
-    const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'].map(skillPath =>
-      environment ? path.posix.join(repositoryDirectoryName(repoFullName), skillPath) : skillPath,
-    );
+    // workspace root, so its project skills live under each checkout, the
+    // session's own first.
+    const skillRoots = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];
+    const projectSkillPaths = checkoutDirs
+      ? checkoutDirs.flatMap(dir => skillRoots.map(skillPath => path.posix.join(dir, skillPath)))
+      : skillRoots;
     const guardedSkillFallback = new UnmaterializedAwareSkillSource(
       filesystem,
       () => sessionEntry.sandbox.status === 'running',
