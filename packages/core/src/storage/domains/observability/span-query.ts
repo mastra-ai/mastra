@@ -33,8 +33,8 @@ const identifier = z.string().min(1).max(512);
 
 const timeRangeSchema = traceQueryTimeRangeSchema.superRefine((range, context) => {
   const duration = Date.parse(range.to) - Date.parse(range.from);
-  if (duration <= 0 || duration > 31 * 24 * 60 * 60 * 1000) {
-    context.addIssue({ code: 'custom', message: 'The time range must be positive and at most 31 days' });
+  if (duration <= 0) {
+    context.addIssue({ code: 'custom', message: 'The time range must be positive' });
   }
 });
 
