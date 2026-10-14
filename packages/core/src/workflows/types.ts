@@ -609,6 +609,20 @@ export interface WorkflowOptions {
   pruneSnapshot?: (params: { snapshot: WorkflowRunState; workflowStatus: WorkflowRunStatus }) => WorkflowRunState;
 
   /**
+   * How runs of this workflow are stored. `1` (default) rewrites one snapshot
+   * per run on every write. `2` stores a run header plus per-step entries, and
+   * each write sends only what changed.
+   *
+   * Version 2 requires the default execution engine and a storage adapter that
+   * supports it, and can't be combined with `pruneSnapshot`. Runs keep the
+   * version they were created with: resuming a run after changing this option
+   * throws.
+   *
+   * @experimental
+   */
+  storageVersion?: 1 | 2;
+
+  /**
    * Called before a workflow run starts executing, and awaited.
    * This callback is invoked server-side without requiring client-side .watch().
    *

@@ -250,5 +250,7 @@ export abstract class ExecutionEngine extends MastraBase {
       includeResumeLabels?: boolean;
     };
     perStep?: boolean;
+    /** How the run is stored. Engines that don't support version 2 ignore it. @experimental */
+    storageVersion?: 1 | 2;
   }): Promise<TOutput>;
 }

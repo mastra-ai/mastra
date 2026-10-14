@@ -764,6 +764,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       includeResumeLabels?: boolean;
     };
     perStep?: boolean;
+    /** @experimental */
+    storageVersion?: 1 | 2;
     /** Trace IDs for creating child spans in durable execution */
     tracingIds?: {
       traceId: string;
