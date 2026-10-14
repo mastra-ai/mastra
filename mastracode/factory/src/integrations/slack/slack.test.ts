@@ -1287,6 +1287,15 @@ describe('Slack threads create no work items', () => {
     return { accountLinks, projects, mastra, workItems: { upsert } as any, upsert };
   }
 
+  function expectSessionCard(thread: any, url: string) {
+    expect(thread.post).toHaveBeenCalledTimes(1);
+    const card = thread.post.mock.calls[0][0];
+    expect(card.title).toBe('New session started');
+    const button = card.children.find((c: any) => c.type === 'actions').children[0];
+    expect(button.label).toBe('View session');
+    expect(button.url).toBe(url);
+  }
+
   function makeWorkItemThread() {
     const thread = makeThread();
     thread.id = 'slack:C-1:1700.42';
@@ -1304,7 +1313,7 @@ describe('Slack threads create no work items', () => {
     await createHandlers(deps as any).onDirectMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(deps.mastra));
 
     expect(defaultHandler).toHaveBeenCalledTimes(1);
-    expect(thread.post).toHaveBeenCalledTimes(1);
+    expectSessionCard(thread, 'https://mc.example.com/factories/fp-1/workspaces/us-42/threads/uuid-thread-1');
     expect(deps.upsert).not.toHaveBeenCalled();
   });
 
@@ -1317,7 +1326,7 @@ describe('Slack threads create no work items', () => {
     await createHandlers(deps as any).onMention!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(deps.mastra));
 
     expect(defaultHandler).toHaveBeenCalledTimes(1);
-    expect(thread.post).toHaveBeenCalledTimes(1);
+    expectSessionCard(thread, 'https://mc.example.com/factories/fp-1/workspaces/us-42/threads/uuid-thread-1');
     expect(deps.upsert).not.toHaveBeenCalled();
   });
 
@@ -1330,7 +1339,7 @@ describe('Slack threads create no work items', () => {
     await createHandlers(deps as any).onDirectMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(deps.mastra));
 
     expect(defaultHandler).toHaveBeenCalledTimes(1);
-    expect(thread.post).toHaveBeenCalledTimes(1);
+    expectSessionCard(thread, 'https://mc.example.com/factories/fp-1/workspaces/channel/threads/uuid-thread-1?resourceId=channel%3Aslack%3AC-1%3A1700.42');
     expect(deps.upsert).not.toHaveBeenCalled();
   });
 });
