@@ -258,7 +258,30 @@ function LinearIntakeSection({
         ? 'Linear authorization expired. Reconnect to keep syncing issues.'
         : "Active issues from the selected projects and teams feed every member's board. Selecting a whole team also covers its projectless issues.";
 
-  const action = !serverConfigured ? undefined : !connected ? (
+  const platformManaged = status?.mode === 'platform';
+  const platformConnections = status?.connections ?? [];
+  const reconnectTarget = platformConnections.find(c => c.status === 'needs_reauth');
+  const action = !serverConfigured ? undefined : platformManaged ? (
+    reconnectTarget ? (
+      <ProviderConnectControl
+        provider="linear"
+        reconnectConnectionId={reconnectTarget.id}
+        label="Reconnect Linear"
+        size="sm"
+      />
+    ) : platformConnections.length === 0 ? (
+      <ProviderConnectControl provider="linear" label={connected ? 'Reconnect Linear' : 'Connect Linear'} size="sm" />
+    ) : (
+      <span className="flex items-center gap-2">
+        <Txt tone="muted" as="span" variant="caption">
+          {platformConnections.length === 1
+            ? `Connected to ${platformConnections[0]?.accountLabel ?? status?.workspace?.name ?? 'a Linear workspace'}`
+            : `${platformConnections.length} Linear workspaces connected`}
+        </Txt>
+        <ProviderConnectControl provider="linear" label="Connect another" size="sm" variant="ghost" />
+      </span>
+    )
+  ) : !connected ? (
     <Button size="sm" onClick={() => connectLinear(baseUrl)}>
       Connect Linear
     </Button>

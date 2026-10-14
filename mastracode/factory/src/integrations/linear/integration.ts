@@ -157,6 +157,14 @@ export interface LinearCreatedComment {
   url: string;
 }
 
+/** The issue created by {@link LinearIntegration.createIssue}. */
+export interface LinearCreatedIssue {
+  id: string;
+  identifier: string;
+  title: string;
+  url: string;
+}
+
 const LINEAR_ISSUES_PAGE_SIZE = 30;
 const ISSUE_COMMENTS_PAGE_SIZE = 50;
 const LINEAR_TEAMS_PAGE_SIZE = 100;
@@ -184,6 +192,8 @@ export interface LinearConnectionCheck {
   connected: boolean;
   /** Whether the granted OAuth scope allows posting issue comments. */
   canComment: boolean;
+  /** Whether the granted OAuth scope allows creating issues. */
+  canCreateIssues: boolean;
   checkedAt: number;
 }
 
@@ -251,14 +261,39 @@ interface CommentCreateMutationData {
   commentCreate: { success: boolean; comment: { id: string; url: string } | null };
 }
 
-/** POST a GraphQL query to Linear with the given OAuth access token. */
-async function linearGraphql<T>(accessToken: string, query: string, variables?: Record<string, unknown>): Promise<T> {
-  const res = await fetch(LINEAR_GRAPHQL_URL, {
+interface IssueCreateMutationData {
+  issueCreate: { success: boolean; issue: LinearCreatedIssue | null };
+}
+
+/**
+ * Where Linear GraphQL requests go. Self-hosted passes the OAuth access token
+ * (sent to `api.linear.app`); Platform passes a transport that targets the
+ * Connect proxy with its own credentials.
+ */
+export interface LinearTransport {
+  endpoint: string;
+  headers?: Record<string, string>;
+  fetchImpl?: typeof fetch;
+}
+
+export type LinearCredential = string | LinearTransport;
+
+/** POST a GraphQL query to Linear through the given credential. */
+export async function linearGraphql<T>(
+  credential: LinearCredential,
+  query: string,
+  variables?: Record<string, unknown>,
+): Promise<T> {
+  const transport: LinearTransport =
+    typeof credential === 'string'
+      ? { endpoint: LINEAR_GRAPHQL_URL, headers: { authorization: `Bearer ${credential}` } }
+      : credential;
+  const res = await (transport.fetchImpl ?? fetch)(transport.endpoint, {
     method: 'POST',
     signal: AbortSignal.timeout(15_000),
     headers: {
       'content-type': 'application/json',
-      authorization: `Bearer ${accessToken}`,
+      ...transport.headers,
     },
     body: JSON.stringify({ query, variables }),
   });
@@ -394,6 +429,15 @@ export class LinearIntegration implements FactoryIntegration {
   }
 
   /**
+   * Whether the connection's token can create issues. Connections made before
+   * `issues:create` was requested can't until the org reconnects Linear.
+   */
+  canCreateIssues(connection: LinearConnectionRow): boolean {
+    const scopes = (connection.scope ?? '').split(/[\s,]+/).filter(Boolean);
+    return scopes.some(scope => scope === 'issues:create' || scope === 'write' || scope === 'admin');
+  }
+
+  /**
    * In-flight refreshes keyed by org. Linear rotates refresh tokens, so two
    * concurrent refreshes with the same token would invalidate each other —
    * single-flight ensures one exchange per org and shares the result.
@@ -469,6 +513,7 @@ export class LinearIntegration implements FactoryIntegration {
     const check: LinearConnectionCheck = {
       connected: connection !== null,
       canComment: connection !== null && this.canPostComments(connection),
+      canCreateIssues: connection !== null && this.canCreateIssues(connection),
       checkedAt: Date.now(),
     };
     this.#connectionChecks.set(orgId, check);
@@ -640,9 +685,10 @@ export class LinearIntegration implements FactoryIntegration {
     url.searchParams.set('client_id', this.#clientId);
     url.searchParams.set('redirect_uri', redirectUri);
     url.searchParams.set('response_type', 'code');
-    // `comments:create` lets the agent's linear_create_comment tool post
-    // comments; everything else the integration does is read-only.
-    url.searchParams.set('scope', 'read,comments:create');
+    // `comments:create` and `issues:create` let the agent's
+    // linear_create_comment / linear_create_issue tools write; everything
+    // else the integration does is read-only.
+    url.searchParams.set('scope', 'read,comments:create,issues:create');
     url.searchParams.set('state', state);
     url.searchParams.set('prompt', 'consent');
     return url.toString();
@@ -700,7 +746,7 @@ export class LinearIntegration implements FactoryIntegration {
   // ── GraphQL reads/writes ─────────────────────────────────────────────────
 
   /** Fetch the workspace (organization) the access token is scoped to. */
-  async fetchWorkspace(accessToken: string): Promise<LinearWorkspace> {
+  async fetchWorkspace(accessToken: LinearCredential): Promise<LinearWorkspace> {
     const data = await linearGraphql<{ organization: { name: string; urlKey: string } }>(
       accessToken,
       `query { organization { name urlKey } }`,
@@ -820,7 +866,7 @@ export class LinearIntegration implements FactoryIntegration {
   }
 
   async #listTeamWorkflowStates(
-    accessToken: string,
+    accessToken: LinearCredential,
     teamKey: string,
   ): Promise<Array<{ id: string; name: string; type: string }>> {
     const data = await linearGraphql<{
@@ -836,7 +882,7 @@ export class LinearIntegration implements FactoryIntegration {
   }
 
   /** List the workspace's projects (for the Settings intake-source picker). */
-  async listProjects(accessToken: string): Promise<LinearProject[]> {
+  async listProjects(accessToken: LinearCredential): Promise<LinearProject[]> {
     const data = await linearGraphql<{
       projects: {
         nodes: Array<{
@@ -859,7 +905,7 @@ export class LinearIntegration implements FactoryIntegration {
   }
 
   /** List the workspace's teams (for the Settings intake-source picker). */
-  async listTeams(accessToken: string): Promise<LinearTeam[]> {
+  async listTeams(accessToken: LinearCredential): Promise<LinearTeam[]> {
     const teams: Array<{ id: string; key: string; name: string }> = [];
     let after: string | undefined;
     for (let page = 0; page < LINEAR_TEAMS_MAX_PAGES; page += 1) {
@@ -908,7 +954,7 @@ export class LinearIntegration implements FactoryIntegration {
    * AND-ed together.
    */
   async listActiveIssues(
-    accessToken: string,
+    accessToken: LinearCredential,
     after?: string,
     projectIds?: string[],
     labels?: string[],
@@ -981,7 +1027,7 @@ export class LinearIntegration implements FactoryIntegration {
 
   /** Follow `comments.pageInfo` until exhausted so long discussions aren't truncated. */
   async #fetchRemainingIssueComments(
-    accessToken: string,
+    accessToken: LinearCredential,
     issueId: string,
     firstPage: IssueCommentsPage,
   ): Promise<IssueCommentNode[]> {
@@ -1016,7 +1062,7 @@ export class LinearIntegration implements FactoryIntegration {
    * found" error).
    */
   async fetchIssueDetail(
-    accessToken: string,
+    accessToken: LinearCredential,
     idOrIdentifier: string,
     _sourceIds?: string[],
     _routedSourceIds?: string[],
@@ -1092,7 +1138,7 @@ export class LinearIntegration implements FactoryIntegration {
    * issue doesn't exist.
    */
   async createIssueComment(
-    accessToken: string,
+    accessToken: LinearCredential,
     idOrIdentifier: string,
     body: string,
   ): Promise<LinearCreatedComment | null> {
@@ -1120,6 +1166,24 @@ export class LinearIntegration implements FactoryIntegration {
       throw new Error('Linear did not accept the comment.');
     }
     return data.commentCreate.comment;
+  }
+
+  /** Create an issue in a team (by team UUID). */
+  async createIssue(
+    accessToken: LinearCredential,
+    input: { teamId: string; title: string; description?: string; priority?: number },
+  ): Promise<LinearCreatedIssue> {
+    const data = await linearGraphql<IssueCreateMutationData>(
+      accessToken,
+      `mutation IssueCreate($input: IssueCreateInput!) {
+        issueCreate(input: $input) { success issue { id identifier title url } }
+      }`,
+      { input },
+    );
+    if (!data.issueCreate.success || !data.issueCreate.issue) {
+      throw new Error('Linear did not accept the issue.');
+    }
+    return data.issueCreate.issue;
   }
 
   // ── FactoryIntegration surface ───────────────────────────────────────────
@@ -1158,7 +1222,7 @@ export class LinearIntegration implements FactoryIntegration {
   }
 
   /**
-   * Org-scoped agent tools: issue detail + comment tools for sessions whose
+   * Org-scoped agent tools: issue detail, comment, and create-issue tools for sessions whose
    * project belongs to an org with an active Linear connection.
    */
   async agentTools(args: { requestContext: RequestContext }): Promise<IntegrationTools> {

@@ -94,6 +94,82 @@ function createLinearCommentTool(linear: LinearIntegration, orgId: string) {
   });
 }
 
+function createLinearCreateIssueTool(linear: LinearIntegration, orgId: string) {
+  return createTool({
+    id: 'linear_create_issue',
+    description:
+      'Create a new Linear issue (e.g. to file a bug or follow-up found while working). The issue is created as the connected Linear integration. If the workspace has more than one team, pass `team`; an error lists the available team keys.',
+    inputSchema: z.object({
+      title: z.string().trim().min(1).describe('The issue title.'),
+      description: z.string().optional().describe('The issue description, as Linear-flavored markdown.'),
+      team: z
+        .string()
+        .trim()
+        .min(1)
+        .optional()
+        .describe('Team key (e.g. "ENG"), name, or UUID. Optional when the workspace has a single team.'),
+      priority: z
+        .number()
+        .int()
+        .min(0)
+        .max(4)
+        .optional()
+        .describe('0 = none, 1 = urgent, 2 = high, 3 = medium, 4 = low.'),
+    }),
+    execute: async ({
+      title,
+      description,
+      team,
+      priority,
+    }: {
+      title: string;
+      description?: string;
+      team?: string;
+      priority?: number;
+    }) => {
+      const connection = await linear.loadConnection(orgId);
+      if (!connection) {
+        return { error: 'Linear is not connected for this repository. Connect Linear in Settings to create issues.' };
+      }
+      if (!linear.canCreateIssues(connection)) {
+        return {
+          error: 'The Linear connection does not have issue permissions. Reconnect Linear in Settings to grant them.',
+        };
+      }
+      try {
+        const accessToken = await linear.getFreshAccessToken(connection);
+        const teams = await linear.listTeams(accessToken);
+        const wanted = team?.toLowerCase();
+        const selected = wanted
+          ? teams.find(t => t.id === team || t.key.toLowerCase() === wanted || t.name.toLowerCase() === wanted)
+          : teams.length === 1
+            ? teams[0]
+            : undefined;
+        if (!selected) {
+          const available = teams.map(t => `${t.key} (${t.name})`).join(', ') || 'none';
+          return {
+            error: team
+              ? `Linear team "${team}" was not found. Available teams: ${available}.`
+              : `Specify a Linear team. Available teams: ${available}.`,
+          };
+        }
+        const issue = await linear.createIssue(accessToken, {
+          teamId: selected.id,
+          title,
+          ...(description ? { description } : {}),
+          ...(priority !== undefined ? { priority } : {}),
+        });
+        return { created: true, identifier: issue.identifier, url: issue.url };
+      } catch (err) {
+        if (err instanceof LinearReauthRequiredError) {
+          return { error: err.message };
+        }
+        return { error: `Failed to create Linear issue: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    },
+  });
+}
+
 /**
  * Async `extraTools` provider: expose Linear tools only when the session's
  * project belongs to an org with an active Linear connection.
@@ -105,7 +181,14 @@ export async function buildLinearAgentTools({
   requestContext: RequestContext;
   /** The integration instance providing the Linear API client. */
   linear: LinearIntegration;
-}): Promise<Record<string, ReturnType<typeof createLinearGetIssueTool> | ReturnType<typeof createLinearCommentTool>>> {
+}): Promise<
+  Record<
+    string,
+    | ReturnType<typeof createLinearGetIssueTool>
+    | ReturnType<typeof createLinearCommentTool>
+    | ReturnType<typeof createLinearCreateIssueTool>
+  >
+> {
   if (!linear.authEnabled) return {};
 
   const ctx = requestContext.get('controller') as
@@ -128,5 +211,7 @@ export async function buildLinearAgentTools({
     // connections made before `comments:create` was requested are read-only
     // until the org reconnects Linear.
     ...(check.canComment ? { linear_create_comment: createLinearCommentTool(linear, orgId) } : {}),
+    // Likewise gated on `issues:create`, which older connections lack.
+    ...(check.canCreateIssues ? { linear_create_issue: createLinearCreateIssueTool(linear, orgId) } : {}),
   };
 }

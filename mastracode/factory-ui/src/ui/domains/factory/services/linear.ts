@@ -21,6 +21,10 @@ export interface LinearStatus {
   connected: boolean;
   workspace: { name: string | null; urlKey: string | null } | null;
   reason?: LinearStatusReason;
+  /** `platform` when Linear accounts are connected through Mastra Platform Connect. */
+  mode?: 'oauth' | 'platform';
+  /** Platform Connect accounts; present only in platform mode. */
+  connections?: { id: string; status: 'active' | 'needs_reauth'; accountLabel: string | null }[];
 }
 
 export interface LinearIssue {

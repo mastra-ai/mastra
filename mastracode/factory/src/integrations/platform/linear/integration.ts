@@ -390,6 +390,8 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     return {
       connected: connection !== null,
       canComment: connection !== null && this.canPostComments(connection),
+      // Platform-managed connections don't proxy issue creation yet.
+      canCreateIssues: false,
       checkedAt: Date.now(),
     };
   }
