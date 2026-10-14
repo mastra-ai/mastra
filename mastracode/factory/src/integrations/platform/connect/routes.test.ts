@@ -235,6 +235,8 @@ describe('platform connect routes', () => {
       'https://integrations.example.com/v2/integrations/gitlab/connect-sessions',
       expect.objectContaining({ method: 'POST' }),
     );
+  });
+
   describe('per-connection routing', () => {
     const listWithNotion = async () => json({ connections: [connection('conn-notion', 'notion')] });
 
@@ -404,7 +406,7 @@ describe('platform connect routes', () => {
       // One row per registered SPA provider, including the ones the Platform
       // doesn't yet know about (fireflies, zendesk, etc. — logoUrl: null).
       expect(new Set(rows.map(r => r.provider))).toEqual(
-        new Set(['jira', 'incident-io', 'notion', 'confluence', 'linear', 'zendesk', 'fireflies']),
+        new Set(['jira', 'incident-io', 'gitlab', 'notion', 'confluence', 'linear', 'zendesk', 'fireflies']),
       );
       expect(rows.find(r => r.provider === 'notion')).toMatchObject({
         integrationId: 'notion',
