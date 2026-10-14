@@ -542,6 +542,57 @@ describe('Deps.pack', () => {
     );
   });
 
+  it('packs a versionless workspace package under the given version and restores its manifest', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mastra-deps-pack-'));
+    tempDirs.push(root);
+    await writeFile(join(root, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n", 'utf-8');
+    const manifestPath = join(root, 'package.json');
+    const original = '{\n    "name": "@inner/versionless",\n    "private": true\n}';
+    await writeFile(manifestPath, original, 'utf-8');
+
+    let manifestDuringPack: Record<string, unknown> | undefined;
+    runChildProcess.mockImplementation(async () => {
+      manifestDuringPack = JSON.parse(await readFile(manifestPath, 'utf-8'));
+      return { success: true, stdout: '', stderr: '' };
+    });
+
+    await new DepsService(root).pack({ dir: root, destination, sanitizedName: 'inner-versionless', version: '0.0.0' });
+
+    expect(manifestDuringPack).toEqual({ name: '@inner/versionless', private: true, version: '0.0.0' });
+    expect(await readFile(manifestPath, 'utf-8')).toBe(original);
+  });
+
+  it('restores a versionless manifest when packing fails', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mastra-deps-pack-'));
+    tempDirs.push(root);
+    await writeFile(join(root, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n", 'utf-8');
+    const manifestPath = join(root, 'package.json');
+    const original = '{"name":"@inner/versionless"}';
+    await writeFile(manifestPath, original, 'utf-8');
+    runChildProcess.mockRejectedValue(new Error('pack failed'));
+
+    await expect(
+      new DepsService(root).pack({ dir: root, destination, sanitizedName: 'inner-versionless', version: '0.0.0' }),
+    ).rejects.toThrow('pack failed');
+    expect(await readFile(manifestPath, 'utf-8')).toBe(original);
+  });
+
+  it('does not rewrite a manifest that already has a version', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mastra-deps-pack-'));
+    tempDirs.push(root);
+    await writeFile(join(root, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n", 'utf-8');
+    const manifestPath = join(root, 'package.json');
+    const original = '{"name":"pkg","version":"1.2.3"}';
+    await writeFile(manifestPath, original, 'utf-8');
+    const writeSpy = vi.spyOn(fs.promises, 'writeFile');
+
+    await new DepsService(root).pack({ dir: root, destination, sanitizedName: 'pkg', version: '1.2.3' });
+
+    expect(writeSpy).not.toHaveBeenCalledWith(manifestPath, expect.anything());
+    writeSpy.mockRestore();
+    expect(await readFile(manifestPath, 'utf-8')).toBe(original);
+  });
+
   it('uses pm pack --destination for bun', async () => {
     expect(await packWith('bun.lock', '{}')).toBe(`bun pm pack --destination ${destination}`);
   });

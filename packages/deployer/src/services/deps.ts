@@ -12,6 +12,9 @@ import { createChildProcessLogger } from '../deploy/log.js';
 
 type PackageManager = 'npm' | 'yarn' | 'pnpm' | 'bun';
 
+/** Version used to pack private workspace packages whose package.json has no `version`. */
+export const WORKSPACE_PLACEHOLDER_VERSION = '0.0.0';
+
 interface LockFileInfo {
   path: string;
   filename: string;
@@ -317,13 +320,33 @@ export class Deps extends MastraBase {
       destinationFlag = `--destination ${destination}`;
     }
 
-    return cpLogger({
-      cmd: `${this.packageManager} ${packCmd} ${destinationFlag}`,
-      args: [],
-      env: {
-        PATH: process.env.PATH!,
-      },
-    });
+    const runPack = () =>
+      cpLogger({
+        cmd: `${this.packageManager} ${packCmd} ${destinationFlag}`,
+        args: [],
+        env: {
+          PATH: process.env.PATH!,
+        },
+      });
+
+    // Package managers refuse to pack a manifest without a version, so give
+    // versionless private workspace packages one for the duration of the pack.
+    const manifestPath = path.join(dir, 'package.json');
+    const originalManifest = await fsPromises.readFile(manifestPath, 'utf-8').catch(() => undefined);
+    if (originalManifest === undefined) {
+      return runPack();
+    }
+    const manifest = JSON.parse(originalManifest) as PackageJson;
+    if (manifest.version) {
+      return runPack();
+    }
+
+    await fsPromises.writeFile(manifestPath, JSON.stringify({ ...manifest, version }, null, 2) + '\n');
+    try {
+      return await runPack();
+    } finally {
+      await fsPromises.writeFile(manifestPath, originalManifest);
+    }
   }
 
   private findPnpmWorkspaceFile(dir: string): string | null {

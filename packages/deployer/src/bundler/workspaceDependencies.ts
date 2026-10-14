@@ -5,6 +5,7 @@ import { findWorkspaces, findWorkspacesRoot, createWorkspacesCache } from 'find-
 import { ensureDir } from 'fs-extra';
 import { slash } from '../build/utils';
 import { DepsService } from '../services';
+import { WORKSPACE_PLACEHOLDER_VERSION } from '../services/deps';
 
 export type WorkspacePackageInfo = {
   location: string;
@@ -136,7 +137,7 @@ export const collectTransitiveWorkspaceDependencies = async ({
 
       const tgzPath = depsService.getWorkspaceDependencyPath({
         pkgName: sanitizedName,
-        version: dep.version!,
+        version: dep.version ?? WORKSPACE_PLACEHOLDER_VERSION,
       });
       resolutions[pkgName] = tgzPath;
       usedWorkspacePackages.add(pkgName);
@@ -200,7 +201,7 @@ export const packWorkspaceDependencies = async ({
             dir: dep.location,
             destination: workspaceDirPath,
             sanitizedName,
-            version: dep.version!,
+            version: dep.version ?? WORKSPACE_PLACEHOLDER_VERSION,
           });
         }),
       );
