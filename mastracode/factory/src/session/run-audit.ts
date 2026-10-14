@@ -1,7 +1,6 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { z } from 'zod';
 
-import { auditAgentName } from '../storage/domains/audit/base.js';
 import type { AuditActorType } from '../storage/domains/audit/base.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 
@@ -19,7 +18,6 @@ const factoryOpenRunSchema = z.object({
   sessionId: z.string(),
   threadId: z.string(),
   branch: z.string(),
-  agentName: z.string(),
   /**
    * Which dispatcher process is watching this run, and when it last said so
    * (epoch ms). The ledger is a thread setting shared by every replica, so a
@@ -50,7 +48,6 @@ export interface RunEndCaptureSession {
     getSetting(args: { key: string }): Promise<unknown>;
     setSetting(args: { key: string; value: unknown }): Promise<void>;
   };
-  readonly mode: { get(): string };
   subscribe(listener: (event: AgentControllerEvent) => void): () => void;
 }
 
@@ -125,19 +122,18 @@ export function recordSessionRunStart(
     observedEnd,
   }: {
     audit: AuditRecorder;
-    run: Omit<FactoryOpenRun, 'agentName'>;
+    run: FactoryOpenRun;
     actorType: AuditActorType;
     observedEnd: () => RunEndReason;
   },
 ): Promise<void> {
-  const openRun = { ...run, agentName: auditAgentName(session.mode.get()) };
   return serializeRunAudit(session, async () => {
     const runs = await listSessionOpenRuns(session);
     if (!runs.some(existing => existing.kickoffId === run.kickoffId)) {
-      await session.thread.setSetting({ key: FACTORY_OPEN_RUNS_SETTING, value: [...runs, openRun] });
+      await session.thread.setSetting({ key: FACTORY_OPEN_RUNS_SETTING, value: [...runs, run] });
     }
     await audit.record({
-      ...runAuditInput(openRun),
+      ...runAuditInput(run),
       actorId: run.startedBy,
       actorType,
       action: 'factory.run.started',

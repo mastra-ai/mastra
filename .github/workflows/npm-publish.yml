@@ -55,6 +55,8 @@ jobs:
         timeout-minutes: 20
         with:
           fetch-depth: 0
+          # Partial clone: full history without every historical file version.
+          filter: blob:none
           persist-credentials: false
 
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
@@ -451,6 +453,8 @@ jobs:
         with:
           token: ${{ steps.app-auth.outputs.token }}
           fetch-depth: 0
+          # Partial clone: full history without every historical file version.
+          filter: blob:none
           persist-credentials: true
 
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
@@ -512,6 +516,8 @@ jobs:
         timeout-minutes: 20
         with:
           fetch-depth: 0
+          # Partial clone: full history without every historical file version.
+          filter: blob:none
           persist-credentials: false
 
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
@@ -627,6 +633,8 @@ jobs:
         with:
           token: ${{ steps.app-auth.outputs.token }}
           fetch-depth: 0
+          # Partial clone: full history without every historical file version.
+          filter: blob:none
           persist-credentials: true
 
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271

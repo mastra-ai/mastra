@@ -72,7 +72,6 @@
     "azure-anthropic/claude-sonnet-5-5",
     "azure/gpt-4.1",
     "azure/gpt-4.1-mini",
-    "azure/gpt-4.1-nano",
     "azure/gpt-4o",
     "azure/gpt-5",
     "azure/gpt-5-mini",
@@ -268,7 +267,6 @@
     "xai/grok-4-6",
     "xai/grok-4-7",
     "xai/grok-build-0-1",
-    "xiaomi/mimo-v2.5",
     "xiaomi/mimo-v2.6-flash",
     "xiaomi/mimo-v2.6-pro",
     "zai/glm-4.5v",
@@ -328,7 +326,6 @@
     "azure-anthropic/claude-opus-4-6",
     "azure/gpt-4.1",
     "azure/gpt-4.1-mini",
-    "azure/gpt-4.1-nano",
     "azure/gpt-4o",
     "azure/gpt-5.1",
     "azure/gpt-5.2",
@@ -374,6 +371,7 @@
     "consensusprotocol/gemma-4-31b-it",
     "consensusprotocol/glm-5.3-flash",
     "consensusprotocol/gpt-oss-20b",
+    "consensusprotocol/mimo-v2.6-flash",
     "deepinfra/deepseek-v3.2",
     "deepinfra/deepseek-v4-flash",
     "deepinfra/deepseek-v4-pro",
@@ -611,8 +609,6 @@
     "xai/grok-4-6",
     "xai/grok-4-7",
     "xai/grok-build-0-1",
-    "xiaomi/mimo-v2.5",
-    "xiaomi/mimo-v2.5-pro",
     "xiaomi/mimo-v2.6-flash",
     "xiaomi/mimo-v2.6-pro",
     "zai/glm-4-32b-0414-128k",
@@ -678,7 +674,6 @@
     "azure-anthropic/claude-sonnet-5-5",
     "azure/gpt-4.1",
     "azure/gpt-4.1-mini",
-    "azure/gpt-4.1-nano",
     "azure/gpt-5",
     "azure/gpt-5-mini",
     "azure/gpt-5-nano",
@@ -699,6 +694,7 @@
     "bytedance/seed-2-0-lite-260428",
     "bytedance/seed-2-0-mini-260428",
     "bytedance/seed-2-0-pro-260328",
+    "consensusprotocol/mimo-v2.6-flash",
     "deepinfra/deepseek-v4.1-flash",
     "deepinfra/ling-3.0-flash-vl",
     "deepinfra/mimo-v2.6-flash",
@@ -863,6 +859,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "consensusprotocol/mimo-v2.6-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "consensusprotocol/deepseek-v4-flash": [
@@ -2503,18 +2505,6 @@
       }
     ],
     "xiaomi/mimo-v2.6-pro": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "xiaomi/mimo-v2.5": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "xiaomi/mimo-v2.5-pro": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
