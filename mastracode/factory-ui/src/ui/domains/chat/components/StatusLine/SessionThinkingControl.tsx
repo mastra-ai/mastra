@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ThinkingLevelPicker, ThinkingLevelUnavailable } from '@mastra/playground-ui/components/ThinkingLevel';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useParams } from 'react-router';
+import { useChatModelScope } from '../../context/useChatModelScope';
 
 import { useAvailableModelsQuery, useModelReasoningOptions } from '../../../../../hooks/useAvailableModels';
 import type { ChatThinkingApi } from '../../context/ChatThinkingContext';
@@ -43,9 +43,9 @@ function originLabel(origin: ThinkingLevelOrigin) {
 
 export function SessionThinkingControl({ modelId, switchingModel }: SessionThinkingControlProps) {
   const thinking = useChatThinking();
-  const { factoryId } = useParams<{ factoryId: string }>();
-  const catalog = useAvailableModelsQuery({ factoryProjectId: factoryId });
-  const reasoningOptions = useModelReasoningOptions(modelId, { factoryProjectId: factoryId });
+  const { catalogTarget } = useChatModelScope();
+  const catalog = useAvailableModelsQuery(catalogTarget);
+  const reasoningOptions = useModelReasoningOptions(modelId, catalogTarget);
   const options = thinkingLevelOptionsForModel(modelId, reasoningOptions);
   const state = thinkingControlState({ catalog, thinking, switchingModel });
 

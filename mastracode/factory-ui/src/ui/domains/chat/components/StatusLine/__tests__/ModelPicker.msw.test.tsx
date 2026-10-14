@@ -64,6 +64,7 @@ function renderPicker({
   modelSwitched,
   thinkingDefaultsFail = false,
   modelScope,
+  factoryDefaultModelId,
   emptyCatalog = false,
 }: {
   kind?: ChatSessionContextApi['kind'];
@@ -75,7 +76,8 @@ function renderPicker({
   modelSwitched?: Promise<void>;
   thinkingDefaultsFail?: boolean;
   /** Mount on a Factory route whose project has this model scope. */
-  modelScope?: 'factory' | 'user';
+  modelScope?: 'factory' | 'user' | 'hybrid';
+  factoryDefaultModelId?: string;
   /** The Factory's scope has no credentials, so its catalog is empty. */
   emptyCatalog?: boolean;
 } = {}) {
@@ -88,7 +90,11 @@ function renderPicker({
       if (!modelScope) return HttpResponse.json({ models });
       if (emptyCatalog) return HttpResponse.json({ models: [] });
       // The Factory's catalog differs from the caller's full one, so a request missing the Factory is visible.
-      const factoryId = new URL(request.url).searchParams.get('factoryId');
+      const params = new URL(request.url).searchParams;
+      const factoryId = params.get('factoryId');
+      if (params.get('scope') === 'user') {
+        return HttpResponse.json({ models: models.filter(model => model.provider === 'anthropic') });
+      }
       return HttpResponse.json({
         models: models.filter(model => (factoryId === 'fp-1') === (model.provider === 'openai')),
       });
@@ -135,7 +141,9 @@ function renderPicker({
         HttpResponse.json({ authenticated: true, user: { id: 'user-1', organizationId: 'org-1' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
-        HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', modelScope } }),
+        HttpResponse.json({
+          project: { id: 'fp-1', name: 'Mastra', modelScope, defaultModelId: factoryDefaultModelId },
+        }),
       ),
     );
   }
@@ -177,6 +185,36 @@ afterEach(() => {
 });
 
 describe('ModelPicker', () => {
+  it('uses personal credentials to show a hybrid user session model as configured', async () => {
+    const user = userEvent.setup();
+    renderPicker({
+      modelScope: 'hybrid',
+      kind: 'user',
+      modelId: 'anthropic/claude-sonnet-4-6',
+      factoryDefaultModelId: 'openai/gpt-5',
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Session model' }));
+    const personalOption = await screen.findByRole('option', { name: /claude-sonnet-4-6/ });
+    expect(within(personalOption).getByText('Default')).toBeVisible();
+    expect(screen.queryByRole('option', { name: /gpt-5/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/not configured/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Showing models this Factory/)).not.toBeInTheDocument();
+  });
+
+  it.each(['factory', 'hybrid'] as const)(
+    'marks the Factory default rather than the personal default in a %s work-item session',
+    async modelScope => {
+      const user = userEvent.setup();
+      renderPicker({ kind: 'factory', modelScope, factoryDefaultModelId: 'openai/gpt-5' });
+
+      await user.click(await screen.findByLabelText('Session model'));
+      const option = await screen.findByRole('option', { name: /gpt-5/ });
+      expect(within(option).getByText('Default')).toBeVisible();
+      expect(screen.queryByRole('option', { name: /Reset to your default/ })).not.toBeInTheDocument();
+    },
+  );
+
   it('says the list is limited to organization credentials in an organization-scoped Factory', async () => {
     const user = userEvent.setup();
     renderPicker({ modelScope: 'factory' });

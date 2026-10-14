@@ -21,6 +21,7 @@ import { Link, useParams } from 'react-router';
 import type { AvailableModelOption } from '../../../../../hooks/useAvailableModels';
 import { useAvailableModelsQuery } from '../../../../../hooks/useAvailableModels';
 import { useChatConnection } from '../../context/useChatConnection';
+import { useChatModelScope } from '../../context/useChatModelScope';
 import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
 import { useChatModels } from '../../context/useChatModels';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
@@ -49,8 +50,9 @@ export function ModelPicker() {
   const { status } = useChatConnection();
   const { activeModelId, defaultModelId, setModel, isLoading, error } = useChatModels();
   const { factoryId } = useParams<{ factoryId: string }>();
-  const modelsQuery = useAvailableModelsQuery({ factoryProjectId: factoryId });
-  const organizationScoped = useOrganizationScopedFactory(factoryId);
+  const { catalogTarget } = useChatModelScope();
+  const modelsQuery = useAvailableModelsQuery(catalogTarget);
+  const organizationScoped = useOrganizationScopedFactory();
   const [open, setOpen] = useState(false);
   const [pendingModelId, setPendingModelId] = useState<string>();
 
