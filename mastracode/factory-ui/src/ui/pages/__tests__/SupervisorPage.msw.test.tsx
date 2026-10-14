@@ -71,7 +71,6 @@ function stubSupervisorRoute(health: FactoryHealthReport) {
     http.get(`${AC}/sessions/:resourceId/permissions`, () => HttpResponse.json({})),
     http.get(`${AC}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [{ id: SUPERVISOR_ID }] })),
     http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
-    http.get(`${AC}/modes`, () => HttpResponse.json({ modes: [] })),
   );
   return { sessionCreates };
 }

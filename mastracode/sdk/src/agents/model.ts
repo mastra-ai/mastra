@@ -271,14 +271,14 @@ export interface ThinkingRequestContext {
  * Precedence:
  *   1. Session override (`state.thinkingLevel`, set via /think or the session
  *      settings panel).
- *   2. Per-mode default from settings (`models.modeThinkingDefaults[mode]`).
+ *   2. Per-mode default from settings (`models.modeThinkingDefaults[mode]`),
+ *      only when the context carries a session mode.
  *   3. Global default (`preferences.thinkingLevel`).
  *
  * Resolved per-request (not seeded at session start) so configuration changes
  * apply to the next request of every session — including automated
  * (rule-driven) Factory runs that nobody ever opens interactively.
  */
-
 export function resolveRequestThinkingLevel(
   agentControllerContext: ThinkingRequestContext | undefined,
   settingsPath?: string,
@@ -298,6 +298,7 @@ export function resolveRequestThinkingLevel(
 export function getDynamicModel(
   { requestContext }: { requestContext: RequestContext },
   settingsPath?: string,
+  { modeless = false }: { modeless?: boolean } = {},
 ): IdentifiedModelConfig | ModelWithRetries[] {
   const controller = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
   const state = controller?.getState?.() as
@@ -329,7 +330,7 @@ export function getDynamicModel(
     throw new Error('No model selected. Use /models to select a model first.');
   }
 
-  const thinkingLevel = resolveRequestThinkingLevel(controller, settingsPath);
+  const thinkingLevel = resolveRequestThinkingLevel(modeless ? { state: controller?.state } : controller, settingsPath);
   const resolveOptions = { thinkingLevel, remapForCodexOAuth: true, requestContext } as const;
   // Label each resolved model with its full ID: the resolved gateway model only
   // knows its bare provider model, and Memory's `'auto'` reads this label.

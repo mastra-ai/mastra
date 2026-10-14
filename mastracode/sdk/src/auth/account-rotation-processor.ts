@@ -589,6 +589,8 @@ export class AccountRotationProcessor implements Processor {
       credentialStore: RotationCredentialStore;
       maxProcessorRetries: number;
       settingsPath?: string;
+      /** The host has no modes, so per-mode thinking defaults never apply. */
+      modeless?: boolean;
     },
   ) {}
 
@@ -761,7 +763,9 @@ export class AccountRotationProcessor implements Processor {
     const thinkingLevel = resolveRequestThinkingLevel(
       {
         state: { thinkingLevel: state?.thinkingLevel },
-        session: { modeId: typeof controller?.session?.modeId === 'string' ? controller.session.modeId : 'build' },
+        ...(!this.options.modeless && {
+          session: { modeId: typeof controller?.session?.modeId === 'string' ? controller.session.modeId : 'build' },
+        }),
       },
       this.options.settingsPath,
     );

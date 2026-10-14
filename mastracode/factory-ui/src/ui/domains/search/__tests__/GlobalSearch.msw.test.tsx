@@ -227,7 +227,6 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
         settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
       }),
     ),
-    http.get(`${AGENT_CONTROLLER_API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
     http.get(`${AGENT_CONTROLLER_API}/models`, () =>
       HttpResponse.json({
         models: [

@@ -53,7 +53,7 @@ export function ModelSettings({ settings, onBehaviorChange }: ModelSettingsProps
         ariaLabel="Thinking level"
         value={settings?.thinkingLevel ?? 'off'}
         disabled={!settings}
-        onChange={level => onBehaviorChange({ thinkingLevel: level ?? 'off' })}
+        onChange={level => onBehaviorChange({ thinkingLevel: level })}
       />
     </SettingsRow>
   );
