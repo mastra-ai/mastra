@@ -25,6 +25,7 @@ import type {
 import type { KnowledgeScopeIds, KnowledgeStorage } from '@mastra/core/storage';
 
 import { resolveKnowledgeScopeIds } from './knowledge-tools';
+import { resolveKnowledgeOrgId } from './scope';
 import { listPinnedKnowledge, PINNED_DELTA_TAG, PINNED_SNAPSHOT_TAG, SUBCONSCIOUS_PINS_STATE_ID } from './pinned';
 
 export interface PinEntry {
@@ -141,9 +142,13 @@ export class PinnedStateProcessor implements Processor<typeof SUBCONSCIOUS_PINS_
   // visible context (visibility is subset containment), never a level-narrowed
   // write scope.
   private async resolveScope(args: ComputeStateSignalArgs): Promise<KnowledgeScopeIds | undefined> {
-    const organizationId = args.requestContext?.get?.('organizationId');
-    if (typeof organizationId !== 'string' || !organizationId.trim() || !args.resourceId || !args.threadId)
-      return undefined;
+    let organizationId: string | undefined;
+    try {
+      organizationId = resolveKnowledgeOrgId(args.requestContext);
+    } catch {
+      return undefined; // an ambiguous org shows no pins rather than the wrong org's
+    }
+    if (!organizationId || !args.resourceId || !args.threadId) return undefined;
     return resolveKnowledgeScopeIds(
       {
         getKnowledgeInstance: () => this.deps.getKnowledgeInstance(),
@@ -168,8 +173,7 @@ export class PinnedStateProcessor implements Processor<typeof SUBCONSCIOUS_PINS_
     const stepNumber = typeof args.stepNumber === 'number' ? args.stepNumber : 0;
     const scopeKey = scope.join('/');
     const memo = args.requestContext?.get?.(MEMO_KEY) as
-      | { atStep: number; scopeKey: string; entries: PinEntry[] }
-      | undefined;
+      { atStep: number; scopeKey: string; entries: PinEntry[] } | undefined;
     // A request context can be shared across turns and even across threads, so
     // the memo is only trusted for later steps of the same turn AND the same
     // resolved scope.

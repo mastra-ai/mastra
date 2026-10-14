@@ -10,7 +10,7 @@ import { createKnowledgeTools, resolveKnowledgeScopeIds } from './knowledge-tool
 import { createKnowledgeWriteTools } from './knowledge-write-tools';
 import { resolveSubconsciousAgentModel } from './model';
 import { createPinnedTools } from './pinned';
-import { resolveKnowledgeResourceId } from './scope';
+import { resolveKnowledgeOrgId, resolveKnowledgeResourceId } from './scope';
 import type { ResolvedSubconsciousAgent, ResolvedSubconsciousConfig } from './types';
 
 export const CURATION_AGENT = 'curate';
@@ -192,8 +192,9 @@ async function reportCuratorError(
 }
 
 function curatorScopeAddresses(context: CuratorContext): string[] {
-  const organizationId = context.requestContext?.get('organizationId');
-  if (typeof organizationId !== 'string' || !organizationId.trim()) return [];
+  // Same resolution as the Knowledge tools, so curator descriptions and writes agree.
+  const organizationId = resolveKnowledgeOrgId(context.requestContext);
+  if (!organizationId) return [];
   const resourceId = resolveKnowledgeResourceId(context.requestContext, context.resourceId) ?? context.threadId;
   return [`org:${organizationId}`, `resource:${resourceId}`, `resource:${resourceId}:thread:${context.threadId}`];
 }

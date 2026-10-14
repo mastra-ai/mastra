@@ -11,7 +11,7 @@ import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 
-import { resolveKnowledgeResourceId } from './scope';
+import { MISSING_ORG_MESSAGE, resolveKnowledgeOrgId, resolveKnowledgeResourceId } from './scope';
 import type { KnowledgeSemanticIndexCoordinator, KnowledgeSemanticSearchResult } from './semantic-index';
 
 const DEFAULT_LIMIT = 10;
@@ -53,11 +53,11 @@ export async function resolveKnowledgeScopeIds(
   memory: KnowledgeStoreMemory,
   context: KnowledgeToolContext | undefined,
 ): Promise<KnowledgeScopeIds> {
-  const organizationId = context?.requestContext?.get('organizationId');
+  const organizationId = resolveKnowledgeOrgId(context?.requestContext);
   const resourceId = resolveKnowledgeResourceId(context?.requestContext, context?.agent?.resourceId);
   const threadId = context?.agent?.threadId;
   if (typeof organizationId !== 'string' || !organizationId.trim()) {
-    throw new Error('Knowledge tools require requestContext.organizationId.');
+    throw new Error(MISSING_ORG_MESSAGE);
   }
   if (!resourceId) throw new Error('Knowledge tools require an active resourceId.');
   if (!threadId) throw new Error('Knowledge tools require an active threadId.');

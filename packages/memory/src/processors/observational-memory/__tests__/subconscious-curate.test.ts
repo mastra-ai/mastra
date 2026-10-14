@@ -516,7 +516,7 @@ describe('Subconscious observation curator', () => {
     await vi.waitFor(() =>
       expect(writer.custom).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ error: expect.stringContaining('require requestContext.organizationId') }),
+          data: expect.objectContaining({ error: expect.stringContaining('Knowledge needs an org:<id> agent scope') }),
         }),
       ),
     );
