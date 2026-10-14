@@ -88,6 +88,17 @@ export function SessionsSection() {
         icon={<MessagesSquare />}
         action={
           <div className="flex items-center gap-0.5">
+            {hasRepositories && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="New user session"
+                onClick={() => void navigate(`/factories/${factoryId}/user/new/${crypto.randomUUID()}`)}
+                disabled={deletion.deleting}
+              >
+                <Plus size={15} />
+              </Button>
+            )}
             <SessionListProperties
               changedCount={changedCount}
               onReset={() => {
@@ -132,17 +143,6 @@ export function SessionsSection() {
                 onOrderChange={changeGroupOrder}
               />
             </SessionListProperties>
-            {hasRepositories && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label="New user session"
-                onClick={() => void navigate(`/factories/${factoryId}/user/new/${crypto.randomUUID()}`)}
-                disabled={deletion.deleting}
-              >
-                <Plus size={15} />
-              </Button>
-            )}
           </div>
         }
       >
