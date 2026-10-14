@@ -29,6 +29,14 @@ type KnowledgeToolsMemory = KnowledgeStoreMemory & {
   getKnowledgeSemanticIndex(): Promise<KnowledgeSemanticIndexCoordinator | undefined>;
 };
 
+/** Record writes go through Knowledge, which rejects placements no reader could see; bare storage has no Knowledge. */
+export function knowledgeRecordWriter(
+  memory: { getKnowledgeInstance?: () => Pick<KnowledgeStorage, 'createRecord' | 'setRecordScopes'> | undefined },
+  store: KnowledgeStorage,
+): Pick<KnowledgeStorage, 'createRecord' | 'setRecordScopes'> {
+  return memory.getKnowledgeInstance?.() ?? store;
+}
+
 export type KnowledgeToolContext = {
   agent?: { threadId?: string; resourceId?: string };
   requestContext?: { get(key: string): unknown };

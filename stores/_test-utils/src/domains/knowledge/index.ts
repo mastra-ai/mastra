@@ -3,7 +3,9 @@ import {
   knowledgeImporterBindingKey,
   knowledgeSemanticDocumentId,
   knowledgeSemanticIdempotencyKey,
+  assertKnowledgeRecordScopesVisible,
   KnowledgeConflictError,
+  KnowledgeInvisibleRecordError,
 } from '@mastra/core/storage';
 import type { KnowledgeStorage } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -552,6 +554,66 @@ export function createKnowledgeStorageTests(
       }).toEqual(before);
     });
 
+    describe('record placement visibility', () => {
+      it('rejects creating a record whose scopes hide it from every viewer of its subject', async () => {
+        const node = await store.createNode({ name: 'Project subject', scopeIds: [PROJECT_SCOPE_ID] });
+        await expect(
+          assertKnowledgeRecordScopesVisible(store, { node, scopeIds: [OTHER_SCOPE_ID] }),
+        ).rejects.toBeInstanceOf(KnowledgeInvisibleRecordError);
+      });
+
+      it('rejects a rescope that leaves the record invisible, even when it widens', async () => {
+        const node = await store.createNode({ name: 'Rescoped subject', scopeIds: [PROJECT_SCOPE_ID] });
+        const record = await store.createRecord({ node, text: 'Project evidence', scopeIds: [PROJECT_SCOPE_ID] });
+        await expect(
+          assertKnowledgeRecordScopesVisible(store, { node: record.nodeId, scopeIds: [OTHER_SCOPE_ID] }),
+        ).rejects.toBeInstanceOf(KnowledgeInvisibleRecordError);
+      });
+
+      it('rejects a rescope that hides a node the record mentions from every reader', async () => {
+        const subject = await store.createNode({ name: 'Shared subject', scopeIds: [ORG_SCOPE_ID, OTHER_SCOPE_ID] });
+        await store.createNode({ name: 'Other only', scopeIds: [OTHER_SCOPE_ID] });
+        const record = await store.createRecord({
+          node: subject,
+          text: 'Links [[Other only]]',
+          scopeIds: [OTHER_SCOPE_ID],
+        });
+        // Org and project readers cannot see the mentioned node; other readers would lose the record scope.
+        await expect(
+          assertKnowledgeRecordScopesVisible(store, { node: subject, scopeIds: [ORG_SCOPE_ID], recordId: record.id }),
+        ).rejects.toBeInstanceOf(KnowledgeInvisibleRecordError);
+      });
+
+      it('accepts a rescope a reader of the mentioned node can still see', async () => {
+        const subject = await store.createNode({ name: 'Org subject', scopeIds: [ORG_SCOPE_ID] });
+        await store.createNode({ name: 'Project only', scopeIds: [PROJECT_SCOPE_ID] });
+        const record = await store.createRecord({
+          node: subject,
+          text: 'Links [[Project only]]',
+          scopeIds: [PROJECT_SCOPE_ID],
+        });
+        // A project reader also holds the org scope, so it still sees the record and the node it mentions.
+        await assertKnowledgeRecordScopesVisible(store, {
+          node: subject,
+          scopeIds: [ORG_SCOPE_ID],
+          recordId: record.id,
+        });
+      });
+
+      it('accepts placements a viewer of the record scope or its ancestors can see', async () => {
+        const project = await store.createNode({ name: 'Project node', scopeIds: [PROJECT_SCOPE_ID] });
+        const org = await store.createNode({ name: 'Org node', scopeIds: [ORG_SCOPE_ID] });
+        // A project viewer also holds its org ancestor, so an org-wide record about a project node stays visible.
+        await assertKnowledgeRecordScopesVisible(store, { node: project, scopeIds: [ORG_SCOPE_ID] });
+        await assertKnowledgeRecordScopesVisible(store, { node: org, scopeIds: [PROJECT_SCOPE_ID] });
+        await assertKnowledgeRecordScopesVisible(store, {
+          node: project,
+          scopeIds: [OTHER_SCOPE_ID, PROJECT_SCOPE_ID],
+        });
+        await assertKnowledgeRecordScopesVisible(store, { node: PROJECT_SCOPE_ID, scopeIds: [PROJECT_SCOPE_ID] });
+      });
+    });
+
     it('accepts memberships only to live scope nodes', async () => {
       const ordinary = await store.createNode({ name: 'Ordinary', scopeIds: [PROJECT_SCOPE_ID] });
       const member = await store.createNode({ name: 'Member', scopeIds: [PROJECT_SCOPE_ID] });
@@ -627,6 +689,23 @@ export function createKnowledgeStorageTests(
       expect((await store.listRecords({ node, scopeIds: [PROJECT_SCOPE_ID] })).records.map(item => item.id)).toEqual([
         record.id,
       ]);
+    });
+
+    it('rejects blank node names on create and rename without writing', async () => {
+      const before = await store.listNodes({ scopeIds: [PROJECT_SCOPE_ID] });
+      for (const name of ['', '   ', '\t\n']) {
+        await expect(store.createNode({ name, scopeIds: [PROJECT_SCOPE_ID] })).rejects.toThrow(
+          'Knowledge node names must not be blank.',
+        );
+      }
+      expect(await store.listNodes({ scopeIds: [PROJECT_SCOPE_ID] })).toEqual(before);
+
+      const node = await store.createNode({ name: 'Named subject', scopeIds: [PROJECT_SCOPE_ID] });
+      await expect(store.updateNode({ id: node.id, version: node.version, name: '  ' })).rejects.toThrow(
+        'Knowledge node names must not be blank.',
+      );
+      expect(await store.getNode(node.id)).toEqual(node);
+      expect(await store.getNodeByName({ name: 'Named subject', scopeIds: [PROJECT_SCOPE_ID] })).toEqual(node);
     });
 
     it('rejects creating a record with no scopes', async () => {
