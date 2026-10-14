@@ -484,6 +484,8 @@ describe('expectEngineParity', () => {
     expect(staleKnownDifferences('durable', matchedOnPlain, observe(results.durable!))).toEqual([
       "durable: turns[0] step-start payload 'stepId' no longer differs from plain; " +
         'remove it from KNOWN_CHUNK_DIFFERENCES (COR-1390)',
+      'durable: the declared step-start chunk difference no longer reproduces; ' +
+        'remove it from KNOWN_CHUNK_DIFFERENCES (COR-1390)',
     ]);
 
     // A declared path absent from both engines does not apply to this chunk pair.
@@ -509,8 +511,8 @@ describe('expectEngineParity', () => {
     }
     expect(staleKnownDifferences('durable', matchingUntypedError[0]!, matchingUntypedError[1]!)).toEqual([]);
 
-    // Each newly declared step-finish path is ignored while it differs, but an
-    // occurrence that converges is still reported once that path is applicable.
+    // Once one field makes a chunk pair applicable, every other populated
+    // declared field in that same pair remains subject to the stale check.
     const setPath = (payload: Record<string, unknown>, path: string, value: unknown) => {
       const parts = path.split('.');
       let cursor = payload;
@@ -520,26 +522,38 @@ describe('expectEngineParity', () => {
       cursor[parts.at(-1)!] = value;
     };
     for (const path of ['metadata.modelProvider', 'metadata.modelVersion', 'output.object']) {
-      const [plainStepFinishes, wrappedStepFinishes] = [observe(results.plain!), observe(results.durable!)];
-      plainStepFinishes.turns[0]!.chunkTypes = ['step-finish'];
-      plainStepFinishes.turns[0]!.chunkPayloads = [{}];
-      wrappedStepFinishes.turns[0]!.chunkTypes = ['step-finish'];
-      wrappedStepFinishes.turns[0]!.chunkPayloads = [{}];
-      setPath(plainStepFinishes.turns[0]!.chunkPayloads[0] as Record<string, unknown>, path, 'plain');
-      setPath(wrappedStepFinishes.turns[0]!.chunkPayloads[0] as Record<string, unknown>, path, 'wrapped');
-      expect(staleKnownDifferences('durable', plainStepFinishes, wrappedStepFinishes)).toEqual([]);
-
-      plainStepFinishes.turns[0]!.chunkTypes.push('step-finish');
-      plainStepFinishes.turns[0]!.chunkPayloads.push({});
-      wrappedStepFinishes.turns[0]!.chunkTypes.push('step-finish');
-      wrappedStepFinishes.turns[0]!.chunkPayloads.push({});
-      setPath(plainStepFinishes.turns[0]!.chunkPayloads[1] as Record<string, unknown>, path, 'same');
-      setPath(wrappedStepFinishes.turns[0]!.chunkPayloads[1] as Record<string, unknown>, path, 'same');
-      expect(staleKnownDifferences('durable', plainStepFinishes, wrappedStepFinishes)).toContain(
+      const [plainStepFinish, wrappedStepFinish] = [observe(results.plain!), observe(results.durable!)];
+      plainStepFinish.turns[0]!.chunkTypes = ['step-finish'];
+      plainStepFinish.turns[0]!.chunkPayloads = [{ processorRetryCount: 0 }];
+      wrappedStepFinish.turns[0]!.chunkTypes = ['step-finish'];
+      wrappedStepFinish.turns[0]!.chunkPayloads = [{ processorRetryCount: 1 }];
+      setPath(plainStepFinish.turns[0]!.chunkPayloads[0] as Record<string, unknown>, path, 'same');
+      setPath(wrappedStepFinish.turns[0]!.chunkPayloads[0] as Record<string, unknown>, path, 'same');
+      expect(staleKnownDifferences('durable', plainStepFinish, wrappedStepFinish)).toContain(
         `durable: turns[0] step-finish payload '${path}' no longer differs from plain; ` +
           'remove it from KNOWN_CHUNK_DIFFERENCES (COR-1390)',
       );
     }
+
+    // A fully converged, populated declaration is stale even though there is no
+    // remaining difference to establish applicability.
+    const [plainStepFinish, wrappedStepFinish] = [observe(results.plain!), observe(results.durable!)];
+    const convergedPayload = {
+      type: 'step-finish',
+      _durableStepContent: 'content',
+      processorRetryCount: 1,
+      metadata: { modelMetadata: { key: 'value' }, modelProvider: 'provider', modelVersion: 'version' },
+      messages: { all: ['all'], user: ['user'], nonUser: ['assistant'] },
+      output: { object: { ok: true }, text: 'text', steps: ['step'], toolCalls: ['call'] },
+    };
+    for (const observation of [plainStepFinish, wrappedStepFinish]) {
+      observation.turns[0]!.chunkTypes = ['step-finish'];
+      observation.turns[0]!.chunkPayloads = [structuredClone(convergedPayload)];
+    }
+    expect(staleKnownDifferences('durable', plainStepFinish, wrappedStepFinish)).toContain(
+      'durable: the declared step-finish chunk difference no longer reproduces; ' +
+        'remove it from KNOWN_CHUNK_DIFFERENCES (COR-1390)',
+    );
   });
 
   it('preserves the approved tool call in every engine’s resumed output', async () => {

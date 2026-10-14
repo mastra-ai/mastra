@@ -26,10 +26,10 @@ import { describe, it, expect } from 'vitest';
 import { MockMemory } from '../../../memory/mock';
 import { Agent } from '../../agent';
 import {
-  type EngineDifference,
   type EngineParityScenario,
   type EngineParityResults,
   type ModelScript,
+  FAILED_STEP_WARNINGS_DIFFERENCE,
   PARITY_ENGINES,
   expectEngineParity,
 } from './parity-harness';
@@ -55,21 +55,6 @@ const STREAM_CUT: ModelScript = {
   ],
 };
 
-const MODEL_4XX_DIFFERENCE: EngineDifference = {
-  reason: "COR-1390: wrapped engines omit the failed step's warnings from the step-finish payload.",
-  expect: plain => {
-    const expected = structuredClone(plain);
-    for (const turn of expected.turns) {
-      turn.chunkTypes.forEach((type, index) => {
-        if (type !== 'step-finish') return;
-        const payload = turn.chunkPayloads[index] as { stepResult?: { warnings?: unknown } };
-        if (payload.stepResult) delete payload.stepResult.warnings;
-      });
-    }
-    return expected;
-  },
-};
-
 /** One turn of `input` on every engine. */
 function scenario(model: ModelScript): EngineParityScenario {
   return {
@@ -86,7 +71,14 @@ function scenario(model: ModelScript): EngineParityScenario {
       }),
     input: 'Go.',
     options: { memory: { thread: THREAD, resource: RESOURCE } },
-    ...(model === MODEL_4XX ? { differences: { durable: MODEL_4XX_DIFFERENCE, evented: MODEL_4XX_DIFFERENCE } } : {}),
+    ...(model === MODEL_4XX
+      ? {
+          differences: {
+            durable: FAILED_STEP_WARNINGS_DIFFERENCE,
+            evented: FAILED_STEP_WARNINGS_DIFFERENCE,
+          },
+        }
+      : {}),
   };
 }
 

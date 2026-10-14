@@ -46,9 +46,9 @@ import { Agent } from '../../agent';
 import {
   chunksOfType,
   createRecordingModel,
+  FAILED_STEP_WARNINGS_DIFFERENCE,
   expectEngineParity,
   textOnlyTape,
-  type EngineDifference,
   type EngineObservation,
   type EngineParityResults,
   type ModelScript,
@@ -114,21 +114,6 @@ function labelledModel(model: LanguageModelV2, modelId: string, onCall: (id: str
   return clone;
 }
 
-const retryZeroDifference: EngineDifference = {
-  reason: "COR-1390: wrapped engines omit the failed step's warnings from the step-finish payload.",
-  expect: plain => {
-    const expected = structuredClone(plain);
-    for (const turn of expected.turns) {
-      turn.chunkTypes.forEach((type, index) => {
-        if (type !== 'step-finish') return;
-        const payload = turn.chunkPayloads[index] as { stepResult?: { warnings?: unknown } };
-        if (payload.stepResult) delete payload.stepResult.warnings;
-      });
-    }
-    return expected;
-  },
-};
-
 async function runRetryZero() {
   const served = new Map<ParityEngine, string[]>();
   const results = await expectEngineParity({
@@ -153,7 +138,10 @@ async function runRetryZero() {
         memory: { thread: 't27-thread-retry-zero', resource: 't27-resource-retry-zero' },
       });
     },
-    differences: { durable: retryZeroDifference, evented: retryZeroDifference },
+    differences: {
+      durable: FAILED_STEP_WARNINGS_DIFFERENCE,
+      evented: FAILED_STEP_WARNINGS_DIFFERENCE,
+    },
   });
   return { results, served };
 }

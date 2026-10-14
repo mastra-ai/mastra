@@ -31,7 +31,6 @@ import { Agent } from '../../agent';
 import type { Deferred } from './abort-parity-support';
 import { aborted, deferred, toolResultCount } from './abort-parity-support';
 import type {
-  EngineDifference,
   EngineHandle,
   EngineParityResults,
   EngineParityScenario,
@@ -40,7 +39,7 @@ import type {
   ParityEngine,
   ParitySnapshot,
 } from './parity-harness';
-import { expectEngineParity, textOnlyTape, toolCallTape } from './parity-harness';
+import { FAILED_STEP_WARNINGS_DIFFERENCE, expectEngineParity, textOnlyTape, toolCallTape } from './parity-harness';
 
 const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
 const AGENT_ID = 't36-agent';
@@ -60,21 +59,6 @@ const script: ModelScript = {
     const done = toolResultCount(request);
     if (done < STEP_COUNT) return toolCallTape(STEP_TOOL, { n: done + 1 }, `step-${done + 1}`);
     return textOnlyTape(`finished ${done} steps`);
-  },
-};
-
-const ERROR_DIFFERENCE: EngineDifference = {
-  reason: "COR-1390: wrapped engines omit the failed step's warnings from the step-finish payload.",
-  expect: plain => {
-    const expected = structuredClone(plain);
-    for (const turn of expected.turns) {
-      for (let index = 0; index < turn.chunkTypes.length; index++) {
-        if (turn.chunkTypes[index] !== 'step-finish') continue;
-        const payload = turn.chunkPayloads[index] as { stepResult?: Record<string, unknown> };
-        if (payload.stepResult?.reason === 'error') delete payload.stepResult.warnings;
-      }
-    }
-    return expected;
   },
 };
 
@@ -177,7 +161,10 @@ async function runT36(variant: StreamedVariant): Promise<{
         memory,
       });
     },
-    differences: variant === 'error' ? { durable: ERROR_DIFFERENCE, evented: ERROR_DIFFERENCE } : undefined,
+    differences:
+      variant === 'error'
+        ? { durable: FAILED_STEP_WARNINGS_DIFFERENCE, evented: FAILED_STEP_WARNINGS_DIFFERENCE }
+        : undefined,
     run: async (handle: EngineHandle) => {
       const state = states.get(handle.engine)!;
       const controller = new AbortController();

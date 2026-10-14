@@ -760,6 +760,21 @@ export interface EngineDifference {
   expect?: (plain: EngineObservation) => EngineObservation;
 }
 
+export const FAILED_STEP_WARNINGS_DIFFERENCE: EngineDifference = {
+  reason: "COR-1390: wrapped engines omit the failed step's warnings from the step-finish payload.",
+  expect: plain => {
+    const expected = structuredClone(plain);
+    for (const turn of expected.turns) {
+      turn.chunkTypes.forEach((type, index) => {
+        if (type !== 'step-finish') return;
+        const payload = turn.chunkPayloads[index] as { stepResult?: { reason?: unknown; warnings?: unknown } };
+        if (payload.stepResult?.reason === 'error') delete payload.stepResult.warnings;
+      });
+    }
+    return expected;
+  },
+};
+
 export interface EngineHandle {
   engine: ParityEngine;
   /** The plain Agent this engine wraps (or runs, for `plain`). */
@@ -1068,20 +1083,29 @@ interface KnownChunkDifference {
    * of the finish chunk's compared key list. Only the `finish` entry has them.
    */
   missingKeys?: readonly string[];
+  /** Whether this declaration applies to this plain chunk occurrence. */
+  appliesTo?: (plainPayload: unknown) => boolean;
 }
 
 const KNOWN_CHUNK_DIFFERENCES: readonly KnownChunkDifference[] = [
   {
     ticket: 'COR-1390',
     reason:
-      'Durable and evented omit the finish envelope keys plain emits, and structure `output`/`stepResult` differently ' +
+      'Durable and evented omit the finish envelope keys plain emits, and structure `output` differently ' +
       '(plain keeps `steps[].content`/`response`; they emit slimmer steps plus `warnings`/`totalUsage`).',
     chunkType: 'finish',
     // Which of these plain emits depends on the scenario (`response` and
     // `messageId` only appear with memory), so the check below only requires
     // plain to emit some of them and a wrapped engine to emit none.
     missingKeys: ['messageId', 'messages', 'metadata', 'processorRetryCount', 'response'],
-    paths: ['messageId', 'messages', 'metadata', 'processorRetryCount', 'response', 'output', 'stepResult'],
+    paths: ['messageId', 'messages', 'metadata', 'processorRetryCount', 'response', 'output'],
+  },
+  {
+    ticket: 'COR-1390',
+    reason: 'Durable and evented structure the successful finish step result differently from plain.',
+    chunkType: 'finish',
+    paths: ['stepResult'],
+    appliesTo: plainPayload => getAtPath(plainPayload, 'stepResult.reason') !== 'error',
   },
   {
     ticket: 'COR-1390',
@@ -1270,6 +1294,7 @@ export function staleKnownDifferences(engine: string, plain: EngineObservation, 
         if (wrappedIndex === undefined) return;
         const plainPayload = turn.chunkPayloads[plainIndex];
         const wrappedPayload = wrapped.chunkPayloads[wrappedIndex];
+        if (declared.appliesTo && !declared.appliesTo(plainPayload)) return;
         pairs.push({
           turn: i,
           plainPayload,
@@ -1282,36 +1307,68 @@ export function staleKnownDifferences(engine: string, plain: EngineObservation, 
       });
     });
 
-    const pathsObservedDiffering = new Set(
-      declared.paths.filter(path =>
-        pairs.some(
-          pair => !isDeepStrictEqual(getAtPath(pair.plainPayload, path), getAtPath(pair.wrappedPayload, path)),
-        ),
-      ),
-    );
-    const singlePathDeclaration = declared.paths.length === 1 && declared.missingKeys === undefined;
-
     for (const pair of pairs) {
-      for (const path of declared.paths) {
-        const plainValue = getAtPath(pair.plainPayload, path);
-        const wrappedValue = getAtPath(pair.wrappedPayload, path);
+      const pathValues = declared.paths.map(path => ({
+        path,
+        plain: getAtPath(pair.plainPayload, path),
+        wrapped: getAtPath(pair.wrappedPayload, path),
+      }));
+      const missingKeys = (declared.missingKeys ?? []).map(key => {
+        const plainRecord =
+          pair.plainPayload !== null && typeof pair.plainPayload === 'object'
+            ? (pair.plainPayload as Record<string, unknown>)
+            : undefined;
+        return {
+          key,
+          plainHas: plainRecord ? key in plainRecord : false,
+          plainValue: plainRecord?.[key],
+          wrappedHas: pair.wrappedRecord ? key in pair.wrappedRecord : false,
+        };
+      });
+      const hasObservedDifference =
+        pathValues.some(
+          values =>
+            !isDeepStrictEqual(values.plain, values.wrapped) &&
+            (!isEmptyValue(values.plain) || !isEmptyValue(values.wrapped)),
+        ) ||
+        missingKeys.some(
+          values => values.wrappedHas || (values.plainHas && !isEmptyValue(values.plainValue) && !values.wrappedHas),
+        );
+      const hasFullyPopulatedDeclaration =
+        pathValues.length > 0 &&
+        pathValues.every(
+          values =>
+            isDeepStrictEqual(values.plain, values.wrapped) &&
+            !isEmptyValue(values.plain) &&
+            !isEmptyValue(values.wrapped),
+        );
+      const applicable =
+        hasObservedDifference || hasFullyPopulatedDeclaration || missingKeys.some(values => values.wrappedHas);
+      if (!applicable) continue;
+
+      for (const { path, plain: plainValue, wrapped: wrappedValue } of pathValues) {
         if (!isDeepStrictEqual(plainValue, wrappedValue)) continue;
         if (isEmptyValue(plainValue) || isEmptyValue(wrappedValue)) continue;
-        if (!singlePathDeclaration && !pathsObservedDiffering.has(path)) continue;
         failures.push(
           `${engine}: turns[${pair.turn}] ${declared.chunkType} payload '${path}' no longer differs from plain; ` +
             `remove it from KNOWN_CHUNK_DIFFERENCES (${declared.ticket})`,
         );
       }
 
-      for (const key of declared.missingKeys ?? []) {
-        const wrappedHas = pair.wrappedRecord ? key in pair.wrappedRecord : false;
+      for (const { key, wrappedHas } of missingKeys) {
         if (wrappedHas) {
           failures.push(
             `${engine}: turns[${pair.turn}] ${declared.chunkType} payload now includes '${key}'; ` +
               `remove it from KNOWN_CHUNK_DIFFERENCES (${declared.ticket})`,
           );
         }
+      }
+
+      if (!hasObservedDifference) {
+        failures.push(
+          `${engine}: the declared ${declared.chunkType} chunk difference no longer reproduces; ` +
+            `remove it from KNOWN_CHUNK_DIFFERENCES (${declared.ticket})`,
+        );
       }
     }
   }
