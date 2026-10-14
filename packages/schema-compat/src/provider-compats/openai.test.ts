@@ -1,6 +1,7 @@
 import Ajv from 'ajv';
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
+import { applyOpenAICompatTransforms } from '../standard-schema-compat';
 import type { ModelInformation } from '../types';
 import { isZodType } from '../utils';
 import { zodToJsonSchema } from '../zod-to-json';
@@ -772,6 +773,107 @@ describe('OpenAISchemaCompatLayer', () => {
 
       const layer = new OpenAISchemaCompatLayer(modelInfo);
       expect(layer.shouldApply()).toBe(false);
+    });
+
+    it.each([
+      ['azure.responses', 'my-gpt5-deployment'],
+      ['azure.chat', 'gpt-4o'],
+      ['azure.chat', 'demo1-gpt'],
+      ['azure.chat', 'sales-gpt5-prod'],
+      ['azure.chat', 'chatgpt-4o-latest'],
+      ['azure.chat', 'graphic-gpt'],
+      ['azure.chat', 'sophia-gpt-4o'],
+      ['azure.responses', 'gpt-4o-telemetry'],
+      ['azure.chat', 'metadata-gpt'],
+      ['azure.chat', 'grokking-gpt-4o'],
+      ['azure.completion', 'gpt-35-turbo-instruct'],
+    ])('should apply for @ai-sdk/azure models (%s, %s)', (provider, modelId) => {
+      const layer = new OpenAISchemaCompatLayer({ provider, modelId, supportsStructuredOutputs: false });
+      expect(layer.shouldApply()).toBe(true);
+    });
+
+    it.each([
+      ['azure.responses', 'production'],
+      ['azure.chat', 'my-deployment'],
+      ['azure.chat', 'proto3-chat'],
+      ['azure.responses', 'solo4'],
+      ['azure.chat', 'gptzero-clone'],
+      ['azure.responses', 'claude-sonnet-4-5'],
+      ['azure.responses', 'deepseek-v3'],
+      ['azure.chat', 'meta-llama-3-70b'],
+      ['azure.responses', 'o3-mini'],
+      ['azure.chat', 'DeepSeek-V3'],
+      ['azure.chat', 'Meta-Llama-3.1-405B-Instruct'],
+      ['azure.chat', 'Llama-3.3-70B-Instruct'],
+      ['azure.chat', 'Mistral-Large-2411'],
+      ['azure.chat', 'Phi-4'],
+      ['azure.chat', 'grok-3'],
+      ['azure.chat', 'Cohere-command-r-plus'],
+      ['azure.responses', 'prod-claude-sonnet'],
+      ['azure.chat', 'llama3-70b'],
+      ['azure.chat', 'phi4-prod'],
+      ['azure.chat', 'Codestral-2501'],
+      ['azure.chat', 'Ministral-3B'],
+      ['azure.chat', 'Mixtral-8x7B-Instruct'],
+      ['azure.chat', 'CodeLlama-34b-Instruct-hf'],
+      ['azure.deepseek', 'prod-r1'],
+      ['azure.deepseek', 'my-gpt-like-deployment'],
+    ])(
+      'should not apply for @ai-sdk/azure deployments not clearly named for an OpenAI model (%s, %s)',
+      (provider, modelId) => {
+        const layer = new OpenAISchemaCompatLayer({ provider, modelId, supportsStructuredOutputs: false });
+        expect(layer.shouldApply()).toBe(false);
+      },
+    );
+  });
+
+  describe('@ai-sdk/azure models', () => {
+    const azureCompat = new OpenAISchemaCompatLayer({
+      provider: 'azure.responses',
+      modelId: 'my-gpt5-deployment',
+      supportsStructuredOutputs: false,
+    });
+    const schema = z.object({
+      query: z.string(),
+      outcome: z.enum(['WON', 'LOST', 'OPEN']).optional(),
+      maxDealAmount: z.number().optional(),
+    });
+
+    it('offers optional properties as required and nullable', () => {
+      const json = azureCompat.processToJSONSchema(schema) as Record<string, any>;
+      expect(allPropsRequired(json)).toEqual({ valid: true, missing: [] });
+      const validate = new Ajv({ strict: false }).compile(json);
+      expect(validate({ query: 'Acme', outcome: null, maxDealAmount: null })).toBe(true);
+    });
+
+    it('maps null back to undefined before the tool runs', async () => {
+      const compatSchema = azureCompat.processToCompatSchema(schema);
+      const result: any = await compatSchema['~standard'].validate({
+        query: 'Acme',
+        outcome: null,
+        maxDealAmount: null,
+      });
+      expect(result).not.toHaveProperty('issues');
+      expect(result.value.outcome).toBeUndefined();
+      expect(result.value.maxDealAmount).toBeUndefined();
+    });
+
+    it('is transformed by applyOpenAICompatTransforms', () => {
+      const processed = applyOpenAICompatTransforms(schema, {
+        provider: 'azure.chat',
+        modelId: 'gpt-4o',
+        supportsStructuredOutputs: false,
+      });
+      expect(processed).not.toBe(schema);
+    });
+
+    it('is transformed by applyOpenAICompatTransforms for prefixed reasoning deployments', () => {
+      const processed = applyOpenAICompatTransforms(schema, {
+        provider: 'azure.responses',
+        modelId: 'my-o3-deployment',
+        supportsStructuredOutputs: false,
+      });
+      expect(processed).not.toBe(schema);
     });
   });
 
