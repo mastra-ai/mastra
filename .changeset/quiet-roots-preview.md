@@ -2,7 +2,7 @@
 '@mastra/clickhouse': patch
 ---
 
-Trace and span lists use less memory. Every span now stores short previews of its input, output and error when it is written, so `queryTraces()`, `listTracesLight()` and `querySpans()` read those previews instead of each span's full payloads. Trace and span lists now also return `outputPreview` and `errorPreview`. Spans written before this change still show previews, built from their payloads.
+Trace and span lists use less memory. Every span now stores short previews of its input, output and error when it is written, so `queryTraces()`, `listTracesLight()` and `querySpans()` read those previews instead of each span's full payloads. Trace and span lists now also return `outputPreview` and `errorPreview`. Spans written before this change still show previews, built from their own payloads, even when another tenant has a root span with the same trace and span IDs.
 
 The store adds `inputPreview`, `outputPreview` and `errorPreview` columns to `mastra_span_events`, `mastra_trace_roots` and `mastra_trace_branches` when it starts. No manual migration is needed.
 

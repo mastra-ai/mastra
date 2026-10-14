@@ -21,7 +21,7 @@ import { CH_SETTINGS, rowToLightSpanRecord, rowToSpanRecord } from './helpers';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { appendWhere, assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
 import { needsPreviewPayloads } from './previews';
-import { compileClickHouseTraceRootPayloads } from './trace-query';
+import { compileClickHouseTraceRootPayloads, toTraceRootRowKey, traceRootRowKey } from './trace-query';
 
 // ---------------------------------------------------------------------------
 // getRootSpan
@@ -82,6 +82,7 @@ const LIGHT_TRACE_ROOT_FIELDS = [
   'entityId',
   'entityName',
   'threadId',
+  'organizationId',
   'resourceId',
   'error',
   'metadataRaw',
@@ -99,7 +100,8 @@ const FULL_PROJECTION: TraceRootProjection = {
 const LIGHT_PROJECTION: TraceRootProjection = {
   // `LIMIT 1 BY dedupeKey` runs after projection, so the inner select must keep dedupeKey.
   innerSelect: ['dedupeKey', ...LIGHT_TRACE_ROOT_FIELDS].join(', '),
-  outerSelect: LIGHT_TRACE_ROOT_FIELDS.join(', '),
+  // dedupeKey identifies the row for the legacy preview payload lookup (withPreviewPayloads).
+  outerSelect: ['dedupeKey', ...LIGHT_TRACE_ROOT_FIELDS].join(', '),
   // startedAt/traceId are re-selected by the delta join itself.
   deltaSelect: LIGHT_TRACE_ROOT_FIELDS.filter(field => field !== 'startedAt' && field !== 'traceId')
     .map(field => `r.${field}`)
@@ -268,25 +270,16 @@ export async function listTraces(
 
 /**
  * Adds `input` / `output` / `error` to the rows written before previews were stored, read from
- * the same root row version (same `endedAt`) the list kept.
+ * the same root row version (same `endedAt`) the list kept. A page can hold several tenants' rows,
+ * so each row is looked up by its own identity, tenant included, not by one shared scope.
  */
 async function withPreviewPayloads(client: ClickHouseClient, rows: Record<string, any>[]) {
   const missing = rows.filter(needsPreviewPayloads);
   if (missing.length === 0) return rows;
-  const rootKey = (row: Record<string, any>) => `${row.traceId}\u0000${row.spanId ?? row.rootSpanId}`;
-  const compiled = compileClickHouseTraceRootPayloads(
-    missing.map(row => ({
-      traceId: String(row.traceId),
-      rootSpanId: String(row.spanId),
-      startedAt: new Date(row.startedAt).toISOString(),
-      endedAt: new Date(row.endedAt).toISOString(),
-    })),
-    undefined,
-    'previewPayloads',
-  );
+  const compiled = compileClickHouseTraceRootPayloads(missing.map(toTraceRootRowKey), undefined, 'previewPayloads');
   const result = await client.query({ ...compiled, format: 'JSONEachRow', clickhouse_settings: CH_SETTINGS });
-  const payloads = new Map(((await result.json()) as Record<string, any>[]).map(row => [rootKey(row), row]));
-  return rows.map(row => (needsPreviewPayloads(row) ? { ...row, ...payloads.get(rootKey(row)) } : row));
+  const payloads = new Map(((await result.json()) as Record<string, any>[]).map(row => [traceRootRowKey(row), row]));
+  return rows.map(row => (needsPreviewPayloads(row) ? { ...row, ...payloads.get(traceRootRowKey(row)) } : row));
 }
 
 /**

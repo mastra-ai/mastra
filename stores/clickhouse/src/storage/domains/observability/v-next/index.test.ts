@@ -68,7 +68,26 @@ import {
 import { feedbackRecordToRow, scoreRecordToRow, spanRecordToRow } from './helpers';
 import { isReplacingMergeTreeEngine } from './migration';
 import { backfillCurrentScores } from './score-current';
-import { compileClickHouseTraceQuery, runWithClickHouseTraceQueryTimeout } from './trace-query';
+import {
+  compileClickHouseTraceQuery,
+  compileClickHouseTraceQueryKeys,
+  compileClickHouseTraceRowsByKey,
+  runWithClickHouseTraceQueryTimeout,
+} from './trace-query';
+import type { ClickHouseTraceRootKey } from './trace-query';
+
+function rootKeys(rows: Record<string, unknown>[]): ClickHouseTraceRootKey[] {
+  const iso = (value: unknown) => {
+    const text = String(value);
+    return new Date(text.includes('T') ? text : `${text.replace(' ', 'T')}Z`).toISOString();
+  };
+  return rows.map(row => ({
+    traceId: String(row.traceId),
+    dedupeKey: String(row.dedupeKey),
+    sortValue: iso(row.sortValue),
+    rootStartedAt: iso(row.rootStartedAt),
+  }));
+}
 import { ObservabilityStorageClickhouseVNext } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -309,18 +328,32 @@ describe('ObservabilityStorageClickhouseVNext', () => {
             ...request,
           }),
         );
-        const compiled = compileClickHouseTraceQuery(plan);
-        const explainResult = await client.query({
-          query: `EXPLAIN indexes = 1 ${compiled.query}`,
-          query_params: compiled.query_params,
-          format: 'TabSeparatedRaw',
-        });
-        const explain = await explainResult.text();
-        if (expectPrimaryKey) expect(explain).toContain('PrimaryKey');
-        if (expectedIndex) expect(explain).toContain(expectedIndex);
+        const explain = async (compiled: { query: string; query_params: Record<string, unknown> }) => {
+          const result = await client.query({
+            query: `EXPLAIN indexes = 1 ${compiled.query}`,
+            query_params: compiled.query_params,
+            format: 'TabSeparatedRaw',
+          });
+          return result.text();
+        };
+        // Keyset lists run as a keys statement and a read of those roots by key; grouped lists
+        // still compile as one statement.
+        const compiled =
+          plan.result === 'traces' && plan.paginationMode !== 'delta'
+            ? compileClickHouseTraceQueryKeys(plan)
+            : compileClickHouseTraceQuery(plan);
+        const plainExplain = await explain(compiled);
+        if (expectPrimaryKey) expect(plainExplain).toContain('PrimaryKey');
+        if (expectedIndex) expect(plainExplain).toContain(expectedIndex);
 
         const queryId = `trace-query-perf-${randomUUID()}`;
-        await runWithClickHouseTraceQueryTimeout(client, { timeoutMs: 15_000 }, compiled, queryId);
+        const keyRows = await runWithClickHouseTraceQueryTimeout(client, { timeoutMs: 15_000 }, compiled, queryId);
+        if (plan.result === 'traces' && plan.paginationMode !== 'delta') {
+          const keys = rootKeys(keyRows);
+          expect(keys.map(key => key.traceId)).toEqual(['candidate-trace']);
+          // The rows-by-key read narrows mastra_trace_roots by its sort key.
+          expect(await explain(compileClickHouseTraceRowsByKey(plan, keys))).toContain('PrimaryKey');
+        }
         await client.command({ query: 'SYSTEM FLUSH LOGS' });
         const logResult = await client.query({
           // Subqueries used for index analysis are built during planning, so EXPLAIN may not name
@@ -447,28 +480,40 @@ LIMIT 1`,
           },
         }),
       );
-      const queryId = `trace-query-range-${randomUUID()}`;
+      const keysQueryId = `trace-query-range-${randomUUID()}`;
+      const keys = rootKeys(
+        await runWithClickHouseTraceQueryTimeout(
+          client,
+          { timeoutMs: 15_000 },
+          compileClickHouseTraceQueryKeys(plan),
+          keysQueryId,
+        ),
+      );
+      const rowsQueryId = `trace-query-range-${randomUUID()}`;
       const rows = await runWithClickHouseTraceQueryTimeout(
         client,
         { timeoutMs: 15_000 },
-        compileClickHouseTraceQuery(plan),
-        queryId,
+        compileClickHouseTraceRowsByKey(plan, keys),
+        rowsQueryId,
       );
       expect(rows.map(row => row.traceId)).toEqual(['in-range-trace']);
 
       await client.command({ query: 'SYSTEM FLUSH LOGS' });
-      const logResult = await client.query({
-        query: `SELECT read_bytes AS readBytes
+      for (const queryId of [keysQueryId, rowsQueryId]) {
+        const logResult = await client.query({
+          query: `SELECT read_bytes AS readBytes
 FROM system.query_log
 WHERE query_id = {queryId:String} AND type = 'QueryFinish'
 ORDER BY event_time_microseconds DESC
 LIMIT 1`,
-        query_params: { queryId },
-        format: 'JSONEachRow',
-      });
-      const [log] = await logResult.json<{ readBytes: number }>();
-      // Deduping the whole table would read every outside root's input and output.
-      expect(Number(log?.readBytes)).toBeLessThan(outsideRoots * payload.length);
+          query_params: { queryId },
+          format: 'JSONEachRow',
+        });
+        const [log] = await logResult.json<{ readBytes: number }>();
+        // Deduping the whole table would read every outside root's input and output.
+        expect(Number(log?.readBytes)).toBeGreaterThan(0);
+        expect(Number(log?.readBytes)).toBeLessThan(outsideRoots * payload.length);
+      }
     } finally {
       await client.close();
     }
@@ -869,6 +914,55 @@ LIMIT 1`,
           planTraceAggregate(parseTraceAggregateRequest({ timeRange, measures: ['count'] }), { scope }),
         );
         expect(aggregate.rows).toEqual([{ measures: { count: 1 } }]);
+      });
+    });
+
+    it("builds a legacy root's preview from its own tenant's payload when another tenant shares its identity", async () => {
+      await withFallbackStorage(async (isolatedStorage, client) => {
+        const startedAt = new Date();
+        const timeRange = {
+          from: new Date(startedAt.getTime() - 1_000).toISOString(),
+          to: new Date(startedAt.getTime() + 60_000).toISOString(),
+        };
+        // Same traceId, spanId, startedAt and endedAt in both tenants, written before previews
+        // were stored, so listing reads the preview from the payload.
+        const root = (organizationId: string) => ({
+          ...spanRecordToRow({
+            traceId: 'shared-legacy-trace',
+            spanId: 'shared-legacy-root',
+            parentSpanId: null,
+            name: `${organizationId} root`,
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            input: `${organizationId} input`,
+            output: `${organizationId} output`,
+            startedAt,
+            endedAt: new Date(startedAt.getTime() + 1),
+          }),
+          organizationId,
+          inputPreview: null,
+          outputPreview: null,
+          errorPreview: null,
+        });
+        for (const organizationId of ['org-b', 'org-a']) {
+          await client.insert({ table: TABLE_TRACE_ROOTS, format: 'JSONEachRow', values: [root(organizationId)] });
+        }
+
+        for (const organizationId of ['org-a', 'org-b']) {
+          const traces = await isolatedStorage.queryTraces(
+            planTraceQuery(parseTraceQueryRequest({ timeRange }), { scope: { organizationId } }),
+          );
+          expect('traces' in traces && traces.traces.map(trace => [trace.inputPreview, trace.outputPreview])).toEqual([
+            [`${organizationId} input`, `${organizationId} output`],
+          ]);
+          const { spans } = await isolatedStorage.listTracesLight({
+            filters: { organizationId },
+            pagination: { page: 0, perPage: 10 },
+          });
+          expect(spans.map(span => [span.inputPreview, span.outputPreview])).toEqual([
+            [`${organizationId} input`, `${organizationId} output`],
+          ]);
+        }
       });
     });
 
