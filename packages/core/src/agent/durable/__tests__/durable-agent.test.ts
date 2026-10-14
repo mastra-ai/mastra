@@ -3,6 +3,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import type { EventCallback } from '../../../events/types';
 import { RequestContext } from '../../../request-context';
 import { createTool } from '../../../tools';
 import type { MCPToolExecutionContext } from '../../../tools';
@@ -768,6 +769,63 @@ describe('createDurableAgentStream', () => {
     releaseCallback();
     await delivery;
     expect(settled).toBe(true);
+    cleanup();
+  });
+
+  it('should wait for the full CHUNK delivery before processing FINISH', async () => {
+    const { createDurableAgentStream } = await import('../stream-adapter');
+    let subscribedCallback!: EventCallback;
+    vi.spyOn(pubsub, 'subscribeWithReplay').mockImplementation(async (_topic, callback) => {
+      subscribedCallback = callback;
+    });
+
+    let releaseAck!: () => void;
+    const ackBlocked = new Promise<void>(resolve => {
+      releaseAck = resolve;
+    });
+    const onChunk = vi.fn();
+    const onFinish = vi.fn();
+    const runId = 'test-finish-chunk-delivery';
+    const { output, cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId,
+      messageId: 'msg-finish-chunk-delivery',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      onChunk,
+      onFinish,
+    });
+
+    await ready;
+    const chunkDelivery = subscribedCallback(
+      {
+        type: AgentStreamEventTypes.CHUNK,
+        runId,
+        data: { type: 'text-delta', payload: { text: 'test' } },
+      },
+      async () => {
+        await ackBlocked;
+      },
+    );
+    await vi.waitFor(() => expect(onChunk).toHaveBeenCalledOnce());
+
+    const finishDelivery = subscribedCallback({
+      type: AgentStreamEventTypes.FINISH,
+      runId,
+      data: {
+        output: { text: 'done', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
+        stepResult: { reason: 'stop', warnings: [], isContinued: false },
+      },
+    });
+    await Promise.resolve();
+    expect(onFinish).not.toHaveBeenCalled();
+
+    releaseAck();
+    await chunkDelivery;
+    await finishDelivery;
+    for await (const _chunk of output.fullStream) {
+      // Drain the stream after FINISH completes.
+    }
+    expect(onFinish).toHaveBeenCalledOnce();
     cleanup();
   });
 

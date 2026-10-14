@@ -4775,6 +4775,16 @@ export class DurableAgent<
       }
     }
 
+    if (!localEntry && workflowInput && workflowInput.agentId !== this.id) {
+      throw new MastraError({
+        id: 'DURABLE_AGENT_OBSERVE_AGENT_MISMATCH',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `DurableAgent "${this.name}" observe(${runId}): persisted run belongs to agent "${workflowInput.agentId}", not "${this.id}".`,
+        details: { agentName: this.name, runId, ownerAgentId: workflowInput.agentId },
+      });
+    }
+
     if (!structuredOutput && workflowInput) {
       const persistedStructuredOutput = workflowInput.options?.structuredOutput;
       if (persistedStructuredOutput?.schema) {

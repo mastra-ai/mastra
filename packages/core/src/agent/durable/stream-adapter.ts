@@ -448,6 +448,12 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
   const keepGeneration = createRunGenerationFilter({ minGeneration, rereadMinGeneration });
   let onChunkDelivery = Promise.resolve();
+  const inFlightChunkDeliveries = new Set<Promise<void>>();
+  const waitForChunkDelivery = async () => {
+    while (inFlightChunkDeliveries.size > 0) {
+      await Promise.allSettled([...inFlightChunkDeliveries]);
+    }
+  };
 
   const handleEvent = async (event: Event) => {
     // After a terminal event the stream is closed and its callbacks have fired.
@@ -510,7 +516,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
         case AgentStreamEventTypes.FINISH: {
           clearIdleTimer();
-          await onChunkDelivery;
+          await waitForChunkDelivery();
           if (!controller || terminated) return;
           const data = streamEvent.data as AgentFinishEventData;
           const finishReason = data.stepResult?.reason;
@@ -738,7 +744,15 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   const subscribedCallback: EventCallback = (event, ack, nack) => {
     const delivery = Promise.resolve(ackingHandleEvent(event, ack, nack));
     inFlightDeliveries.add(delivery);
-    void delivery.finally(() => inFlightDeliveries.delete(delivery)).catch(() => {});
+    if ((event as unknown as AgentStreamEvent).type === AgentStreamEventTypes.CHUNK) {
+      inFlightChunkDeliveries.add(delivery);
+    }
+    void delivery
+      .finally(() => {
+        inFlightDeliveries.delete(delivery);
+        inFlightChunkDeliveries.delete(delivery);
+      })
+      .catch(() => {});
     return delivery;
   };
   const waitForEventDelivery = async () => {

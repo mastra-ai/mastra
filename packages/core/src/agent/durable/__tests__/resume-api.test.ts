@@ -1281,6 +1281,31 @@ describe('Observe API', () => {
     expect(typeof durableAgent.observe).toBe('function');
   });
 
+  it('rejects a persisted run owned by another agent', async () => {
+    const runId = 'observe-foreign-agent-run';
+    const store = new InMemoryStore();
+    const baseAgent = new Agent({
+      id: 'observing-agent',
+      name: 'Observing Agent',
+      instructions: 'Test observer ownership',
+      model: createTextModel('unused') as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub: cachingPubsub });
+    new Mastra({ agents: { observingAgent: durableAgent }, storage: store, logger: false });
+    await seedSuspendedRun(
+      store,
+      runId,
+      'foreign-agent',
+      { threadId: 'observe-foreign-thread', resourceId: 'observe-foreign-resource' },
+      'running',
+    );
+
+    await expect(durableAgent.observe(runId)).rejects.toMatchObject({
+      id: 'DURABLE_AGENT_OBSERVE_AGENT_MISMATCH',
+      details: { runId, ownerAgentId: 'foreign-agent' },
+    });
+  });
+
   it('does not insert a global registry entry when observing an unknown run', async () => {
     const runId = 'observe-missing-global-entry';
     const baseAgent = new Agent({
