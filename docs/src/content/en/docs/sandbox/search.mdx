@@ -140,6 +140,32 @@ const workspace = new Workspace({
 
 `Object.assign()` adds `batch` and `maxBatchSize` as properties on the function. Mastra reads them as metadata and doesn't pass them to the provider. Single-text embedders with the `(text: string) => Promise<number[]>` signature remain supported.
 
+### Server-side embeddings
+
+Some vector stores generate the embeddings themselves. With one of those, leave `embedder` out: Mastra sends the file text, and the database embeds it on write and embeds the search string on query.
+
+MongoDB does this through [Automated Embedding](/reference/vectors/mongodb#automated-embedding). Name a Voyage AI model on the vector store:
+
+```typescript title="src/mastra/workspaces.ts"
+import { LocalFilesystem, Workspace } from '@mastra/core/workspace'
+import { MongoDBVector } from '@mastra/mongodb'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  vectorStore: new MongoDBVector({
+    id: 'workspace-search',
+    uri: process.env.MONGODB_URI!,
+    dbName: process.env.MONGODB_DB_NAME!,
+    // highlight-next-line
+    autoEmbed: { model: 'voyage-4' },
+  }),
+})
+```
+
+MongoDB embeds new documents in the background, so content indexed moments ago may not show up in search results yet. See the [MongoDB reference](/reference/vectors/mongodb#automated-embedding) for what Automated Embedding requires.
+
+Every other store expects your application to supply the vectors and keeps requiring an `embedder`.
+
 ### Hybrid search
 
 Configure both BM25 and vector search to combine keyword and semantic results:
@@ -155,7 +181,7 @@ const workspace = new Workspace({
 
 ### Custom index name
 
-The vector index name defaults to a sanitized version of the workspace ID followed by `_search`. Set `searchIndexName` when you need a stable or shared name:
+The vector index name defaults to a sanitized version of the workspace ID followed by `_search`, or `_search_selfembed` when the vector store generates the embeddings. Set `searchIndexName` when you need a stable or shared name:
 
 ```typescript title="src/mastra/workspaces.ts"
 const workspace = new Workspace({
