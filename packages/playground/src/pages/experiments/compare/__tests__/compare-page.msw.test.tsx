@@ -23,9 +23,9 @@ const allExperiments = [sameDatasetA, sameDatasetB, otherDataset, ...moreSameDat
 
 beforeEach(() => {
   server.use(
-    // The dataset header is covered by the comparison layout test.
+    // Named in the breadcrumb.
     http.get(`${TEST_BASE_URL}/api/datasets/:datasetId`, ({ params }) =>
-      HttpResponse.json(buildDataset({ id: String(params.datasetId) })),
+      HttpResponse.json(buildDataset({ id: String(params.datasetId), name: 'Support tickets' })),
     ),
     // The comparison itself is covered by its own layout test; keep it inert here.
     http.post(`${TEST_BASE_URL}/api/datasets/:datasetId/compare`, () => HttpResponse.json(emptyComparison)),
@@ -74,7 +74,32 @@ function useEchoComparison() {
   return requests;
 }
 
+const breadcrumb = () => screen.getByRole('navigation', { name: 'Breadcrumb' });
+
 describe('CompareExperimentsPage', () => {
+  describe('when the dataset loads', () => {
+    it('names the compared dataset in the breadcrumb, linking to it', async () => {
+      renderPage('?dataset=dataset-1&baseline=exp-a&contender=exp-b');
+
+      const link = await within(breadcrumb()).findByRole('link', { name: 'Support tickets' });
+      expect(link.getAttribute('href')).toBe('/datasets/dataset-1');
+    });
+  });
+
+  describe('when the dataset cannot be loaded', () => {
+    it('names the dataset by its id in the breadcrumb', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/datasets/:datasetId`, () =>
+          HttpResponse.json({ error: 'Forbidden' }, { status: 403 }),
+        ),
+      );
+      renderPage('?dataset=dataset-1&baseline=exp-a&contender=exp-b');
+
+      const link = await within(breadcrumb()).findByRole('link', { name: 'dataset-1' });
+      expect(link.getAttribute('href')).toBe('/datasets/dataset-1');
+    });
+  });
+
   describe('when both experiments belong to the dataset', () => {
     it('renders the comparison for two experiments of the dataset', async () => {
       renderPage('?dataset=dataset-1&baseline=exp-a&contender=exp-b');

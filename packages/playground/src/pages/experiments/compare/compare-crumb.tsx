@@ -1,7 +1,8 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { CrumbSkeleton } from '@mastra/playground-ui/components/Breadcrumb';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
-import { useDatasetExperimentsQueries } from '@mastra/react/hooks/datasets';
+import { useDataset, useDatasetExperimentsQueries } from '@mastra/react/hooks/datasets';
 import { ChevronDown, StarIcon } from 'lucide-react';
 import { ExperimentIdLink } from './experiment-id-link';
 import { useComparedExperimentIds } from './use-compared-experiment-ids';
@@ -10,6 +11,13 @@ function useExperimentIds() {
   const { datasetId, baselineId, contenderIds } = useComparedExperimentIds();
   const isComplete = Boolean(datasetId && baselineId && contenderIds.length > 0);
   return { datasetId, experimentIds: isComplete && baselineId ? [baselineId, ...contenderIds] : [] };
+}
+
+/** The compared dataset, by name. Falls back to its id when it cannot be loaded. */
+export function CompareDatasetCrumb({ datasetId }: { datasetId: string }) {
+  const { data: dataset, isLoading } = useDataset({ datasetId });
+  if (isLoading) return <CrumbSkeleton />;
+  return dataset?.name || datasetId;
 }
 
 export function CompareCrumb() {

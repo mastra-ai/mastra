@@ -23,7 +23,6 @@ import {
   renamedPostgresWithMetrics,
   storageWithoutMetrics,
 } from '@/domains/configuration/hooks/__tests__/fixtures/observability-storage-capabilities';
-import { buildDataset } from '@/domains/datasets/components/__tests__/fixtures/datasets';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '@/test/render';
@@ -60,9 +59,6 @@ const experimentsBase = `${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments
 
 beforeEach(() => {
   server.use(
-    http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}`, () =>
-      HttpResponse.json(buildDataset({ id: DATASET_ID, name: 'Support tickets', version: 2 })),
-    ),
     http.post(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/compare`, () => HttpResponse.json(comparisonResponse)),
     http.get(`${experimentsBase}/${BASELINE_ID}`, () => HttpResponse.json(makeExperiment(BASELINE_ID, 1))),
     http.get(`${experimentsBase}/${CONTENDER_ID}`, () => HttpResponse.json(makeExperiment(CONTENDER_ID, 2))),
@@ -347,39 +343,6 @@ describe('experiments comparison table', () => {
       renderComparison();
 
       await waitFor(() => expect(requestedExperimentIds.sort()).toEqual([BASELINE_ID, CONTENDER_ID].sort()));
-    });
-  });
-
-  describe('when the dataset loads', () => {
-    it('names the dataset in the Items header, linking to it', async () => {
-      renderComparison();
-
-      const items = await screen.findByRole('columnheader', { name: 'Items' });
-      const link = await within(items).findByRole('link', { name: 'Open dataset Support tickets' });
-      expect(link.getAttribute('href')).toBe(`/datasets/${DATASET_ID}`);
-    });
-
-    it('leaves the dataset version out of the Items header, since each experiment may run on its own', async () => {
-      renderComparison();
-
-      const items = await screen.findByRole('columnheader', { name: 'Items' });
-      await within(items).findByRole('link', { name: 'Open dataset Support tickets' });
-      expect(within(items).queryByText(/^v\d+$/)).toBeNull();
-    });
-  });
-
-  describe('when the dataset cannot be loaded', () => {
-    it('still links to the dataset, named by its id', async () => {
-      server.use(
-        http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}`, () =>
-          HttpResponse.json({ error: 'Forbidden' }, { status: 403 }),
-        ),
-      );
-      renderComparison();
-
-      const items = await screen.findByRole('columnheader', { name: 'Items' });
-      const link = await within(items).findByRole('link', { name: `Open dataset ${DATASET_ID}` });
-      expect(link.getAttribute('href')).toBe(`/datasets/${DATASET_ID}`);
     });
   });
 

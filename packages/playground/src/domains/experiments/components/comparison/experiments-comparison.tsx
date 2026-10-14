@@ -14,7 +14,6 @@ import { useMemo } from 'react';
 import type { CSSProperties } from 'react';
 import { buildComparisonRows, sideDurationMs } from './build-comparison-rows';
 import type { ComparisonRow } from './build-comparison-rows';
-import { ComparisonDatasetHeader } from './comparison-dataset-header';
 import { ComparisonItemPayload } from './comparison-item-payload';
 import { totalTokens } from './comparison-metric-format';
 import { sectionStackClass } from './comparison-section';
@@ -178,11 +177,10 @@ export function ExperimentsComparison({
         style={{ '--compare-cols': experimentIds.length } as CSSProperties}
       >
         <div role="row" className={cn(gridRow, 'border-b')}>
-          <div role="columnheader" aria-label="Items" className={cn(cell, 'grid content-start gap-2')}>
-            <Txt as="span" variant="caption" tone="muted" className="block uppercase">
+          <div role="columnheader" aria-label="Items" className={cn('text-muted-foreground', `${cell} uppercase`)}>
+            <Txt as="span" variant="caption" className="block">
               Items
             </Txt>
-            <ComparisonDatasetHeader datasetId={datasetId} />
           </div>
           {experimentIds.map((experimentId, index) => {
             const experiment = experimentsById[experimentId] ?? undefined;
