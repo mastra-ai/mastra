@@ -535,7 +535,9 @@ export interface ListVisibleKnowledgeIdsOutput {
   /** Set by adapters that honour `recordScopeIds`. */
   recordScopeIdsApplied?: true;
 }
-export function assertKnowledgeVisibilityProbeLimit(input: Pick<ListVisibleKnowledgeIdsInput, 'nodeIds' | 'recordIds'>): void {
+export function assertKnowledgeVisibilityProbeLimit(
+  input: Pick<ListVisibleKnowledgeIdsInput, 'nodeIds' | 'recordIds'>,
+): void {
   if (input.nodeIds.length + input.recordIds.length > KNOWLEDGE_VISIBILITY_PROBE_LIMIT)
     throw new Error(`listVisibleKnowledgeIds accepts at most ${KNOWLEDGE_VISIBILITY_PROBE_LIMIT} ids`);
 }

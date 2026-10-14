@@ -441,10 +441,12 @@ export function createKnowledgeStorageTests(
       });
       expect([...found.nodeIds].sort()).toEqual([visible.id, PROJECT_SCOPE_ID].sort());
       expect(found.recordIds).toEqual([plain.id]);
-      expect(await store.listVisibleKnowledgeIds({ nodeIds: [], recordIds: [], scopeIds: [PROJECT_SCOPE_ID] })).toEqual({
-        nodeIds: [],
-        recordIds: [],
-      });
+      expect(await store.listVisibleKnowledgeIds({ nodeIds: [], recordIds: [], scopeIds: [PROJECT_SCOPE_ID] })).toEqual(
+        {
+          nodeIds: [],
+          recordIds: [],
+        },
+      );
       await expect(
         store.listVisibleKnowledgeIds({
           nodeIds: Array.from({ length: 1001 }, (_, i) => `n-${i}`),
