@@ -1257,6 +1257,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // Setup failures by slug: a template build cannot observe a setup
       // command's result, so the boot that finds one records it on the link.
       const failures = new Map<string, string>();
+      // Repositories whose setup was skipped because it already failed this
+      // session: the boot that ran it recorded the real error on the link.
+      const repeated = new Set<string>();
       let primaryError: unknown;
       // Failed setup still publishes usable state, but a retired boot must
       // never restore cleared state or overwrite its replacement.
@@ -1295,7 +1298,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               state.branch = session.branch;
               if (repo.setupCommand && hasFailedSetupCommand(session.id, repo.setupCommand)) {
                 state.setupStatus = 'failed';
-                failures.set(repo.slug, 'The setup command failed earlier in this session.');
+                repeated.add(repo.slug);
               }
             } catch (error) {
               if (!(error instanceof SetupCommandError)) throw error;
@@ -1352,7 +1355,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           if (!repo.setupCommand || entry.gate.setupDone) continue;
           if (hasFailedSetupCommand(session.id, `${repo.slug}:${repo.setupCommand}`)) {
             state.setupStatus = 'failed';
-            failures.set(repo.slug, 'The setup command failed earlier in this session.');
+            repeated.add(repo.slug);
             continue;
           }
           try {
@@ -1402,25 +1405,28 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         }
       } finally {
         record();
-        await recordSetupResults(repos, states, failures, inFlight);
+        await recordSetupResults(repos, states, failures, inFlight, repeated);
       }
       if (primaryError) throw primaryError;
     };
     // Best effort: the per-link status is informational and never fails a
     // boot. A repository whose setup ran is `configured`; one whose setup or
     // sync failed is `failed` with the redacted message; one with no setup
-    // command, or whose setup was interrupted, is left as it was.
+    // command, whose setup was interrupted, or whose already-failed command
+    // was skipped is left as it was.
     const recordSetupResults = async (
       repos: SessionEnvironmentRepo[],
       states: SessionEnvironmentRepositoryState[],
       failures: Map<string, string>,
       inFlight: string | undefined,
+      repeated: Set<string>,
     ) => {
       const builtAt = new Date();
       try {
         for (const state of states) {
           if (state.setupStatus === 'skipped') continue;
           if (state.slug === inFlight && state.setupStatus !== 'failed') continue;
+          if (repeated.has(state.slug)) continue;
           const repo = repos.find(candidate => candidate.slug === state.slug);
           if (!repo) continue;
           const error = failures.get(state.slug);
