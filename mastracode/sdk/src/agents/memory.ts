@@ -1,6 +1,8 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { Knowledge } from '@mastra/core/knowledge';
 import type { GatewayLanguageModel } from '@mastra/core/llm';
+import { setRunAgentScopes } from '@mastra/core/agent';
+import { MASTRA_SCOPES_KEY } from '@mastra/core/request-context';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
@@ -66,10 +68,7 @@ interface FactoryMemorySettings {
 }
 
 type FactoryMemorySettingsContext =
-  | FactoryMemorySettings
-  | null
-  | { status: 'unavailable'; reason: string }
-  | undefined;
+  FactoryMemorySettings | null | { status: 'unavailable'; reason: string } | undefined;
 
 function getFactoryMemorySettingsContext(requestContext: RequestContext): FactoryMemorySettingsContext {
   return requestContext.get('mastra__factoryMemorySettings') as FactoryMemorySettingsContext;
@@ -291,6 +290,12 @@ export function getDynamicMemory(
       const identity = resolveKnowledgeScopeIdentity(state);
       if (identity.resolved) {
         requestContext.set('organizationId', identity.organizationId);
+        // Knowledge identity also travels as agent scopes (org:, project:), merged with any scopes the
+        // run already carries. setRunAgentScopes marks them as run-derived: an unmarked context array
+        // reads as caller-supplied and trips AGENT_SCOPES_SERVER_OUTDATED behind an older server.
+        const existing = requestContext.get(MASTRA_SCOPES_KEY);
+        const current = Array.isArray(existing) ? (existing as string[]) : [];
+        setRunAgentScopes(requestContext, [...current, ...identity.scopes.filter(scope => !current.includes(scope))]);
       } else {
         orgUnresolvedRefusal = true;
         reportOrgUnresolved(controller, identity.knowledgeResourceId, identity.reason);

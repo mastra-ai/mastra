@@ -1,3 +1,4 @@
+import { MASTRA_SCOPES_KEY } from '@mastra/core/request-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LOCAL_KNOWLEDGE_ORG_ID } from '../knowledge-scope.js';
@@ -468,6 +469,31 @@ describe('getDynamicMemory', () => {
       { vector: true },
     );
     expect(requestContext.set).toHaveBeenCalledWith('knowledgeResourceId', 'project-1');
+    expect(requestContext.get('knowledgeResourceId')).toBe('project-1');
+  });
+
+  it('marks injected knowledge scopes as run-derived and stays idempotent on a reused context', async () => {
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    const { getDynamicMemory } = await import('./memory.js');
+    // Same module graph as memory.js: earlier tests reset modules, and the run-scope mark is per Core instance.
+    const { getRunAgentScopes } = await import('@mastra/core/agent');
+    const requestContext = createRequestContext({
+      projectPath: '/tmp/project',
+      factoryProjectId: 'project-1',
+      factoryOrgId: 'org-real',
+    });
+    const resolve = getDynamicMemory({ storage: true } as never, { vector: true } as never);
+
+    resolve({ requestContext: requestContext as never });
+    const first = requestContext.get(MASTRA_SCOPES_KEY) as string[];
+    resolve({ requestContext: requestContext as never });
+    const second = requestContext.get(MASTRA_SCOPES_KEY) as string[];
+
+    expect(second).toEqual(['org:org-real', 'project:project-1']);
+    expect(first).toEqual(second);
+    // Core-marked, so a downstream trust-checked reader sees them.
+    expect(getRunAgentScopes(requestContext as never)).toEqual(second);
+    // The legacy override stays set for Subconscious readers that still use it.
     expect(requestContext.get('knowledgeResourceId')).toBe('project-1');
   });
 
