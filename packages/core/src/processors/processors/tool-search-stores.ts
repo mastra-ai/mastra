@@ -25,9 +25,10 @@ export interface LoadedToolStoreContext {
  * - {@link LegacyMapLoadedToolStore} (default) keeps loaded state in an in-memory
  *   map with TTL cleanup. This preserves the original processor behavior.
  * - {@link ContextLoadedToolStore} ('context' mode, opt-in) derives loaded state
- *   from the conversation messages. Restart-safe, requires no memory, and de-loads
- *   automatically when a result block is no longer present in the messages — parity
- *   with native provider tool-search.
+ *   from the conversation messages. Works without memory, but survives a restart
+ *   only when memory with message history is configured; de-loads automatically
+ *   when a result block is no longer present in the messages — parity with native
+ *   provider tool-search.
  */
 export interface LoadedToolStore {
   /** Resolve the set of currently-loaded tool names for this context. */
@@ -105,14 +106,16 @@ export function deriveLoadedNamesFromMessages(args: Pick<ProcessInputStepArgs, '
  * set and is never the durable record, so:
  *
  * - Restart-safe only with memory: after a restart the persisted thread messages yield
- *   the loaded set. Without memory there are no persisted messages to read, so only
- *   the same-process supplemental set applies and nothing is restored.
+ *   the loaded set. Without memory there are no persisted messages to read, so nothing
+ *   is restored and the loaded set lasts only for the current process.
  * - De-loads automatically when the result block leaves the messages (native parity):
  *   the supplemental set is intersected with what the messages can still confirm
  *   once messages are available.
  * - No `'default'` thread-ID leak: the supplemental set is keyed by real thread IDs
  *   only and is never populated for anonymous requests.
- * - Works without memory configuration (same-process only, see above).
+ * - Works without memory configuration, but the same-process carry-over comes from the
+ *   supplemental set, which is only populated for requests with a real thread ID.
+ *   Without one, nothing is retained between calls beyond the messages already in the run.
  */
 export class ContextLoadedToolStore implements LoadedToolStore {
   /** Same-process supplemental set, keyed by real thread ID. Additive only. */
