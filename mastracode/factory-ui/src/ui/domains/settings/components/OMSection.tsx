@@ -93,10 +93,10 @@ function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (va
         }}
       >
         <InputNumberInput onBlur={() => commit(draft)} />
-        <InputGroupAddon align="inline-end">
-          <InputGroupText>tokens</InputGroupText>
-          <InputNumberDecrement />
-          <InputNumberIncrement />
+        <InputGroupAddon align="inline-end" className="gap-0 has-[>button]:pr-0">
+          <InputGroupText className="mr-2">tokens</InputGroupText>
+          <InputNumberDecrement className="mx-0" />
+          <InputNumberIncrement className="mx-0" />
         </InputGroupAddon>
       </InputNumberGroup>
     </InputNumber>
