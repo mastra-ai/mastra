@@ -1261,9 +1261,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             // project's session out even when it reuses the open thread's id.
             structuralScopes = orgScopes.scopes.filter(scope => {
               const threadId = sessionThreadId(scope.address);
-              return (
-                (!threadId || scope.id === view.threadScopeId) && scope.name.toLocaleLowerCase().includes(query)
-              );
+              return (!threadId || scope.id === view.threadScopeId) && scope.name.toLocaleLowerCase().includes(query);
             });
           } catch (error) {
             if (!(error instanceof KnowledgeUnsupportedError)) throw error;

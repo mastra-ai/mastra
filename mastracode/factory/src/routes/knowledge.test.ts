@@ -624,12 +624,10 @@ describe('KnowledgeRoutes', () => {
     expect(page2Ids.some(id => firstChildIds.includes(id))).toBe(false);
 
     // Unknown parents and malformed cursors are rejected.
-    expect(
-      (await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes?parentId=nope`)).status,
-    ).toBe(404);
-    expect(
-      (await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes?cursor=nope`)).status,
-    ).toBe(400);
+    expect((await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes?parentId=nope`)).status).toBe(
+      404,
+    );
+    expect((await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes?cursor=nope`)).status).toBe(400);
     expect(
       (
         await h.app.request(

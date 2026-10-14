@@ -376,9 +376,14 @@ export function createKnowledgeStorageTests(
       await store.createRecord({ node: visible, text: 'Twice b', source: 'probe-twice', scopeIds: [PROJECT_SCOPE_ID] });
 
       const found = await store.listSourcesWithVisibleRecords({
-        sources: ['probe-live', 'probe-foreign', 'probe-private-mention', 'probe-deleted', 'probe-twice', 'probe-none'].map(
-          source => ({ source }),
-        ),
+        sources: [
+          'probe-live',
+          'probe-foreign',
+          'probe-private-mention',
+          'probe-deleted',
+          'probe-twice',
+          'probe-none',
+        ].map(source => ({ source })),
         scopeIds: [PROJECT_SCOPE_ID],
       });
       expect([...found].sort()).toEqual(['probe-live', 'probe-twice']);
@@ -391,7 +396,7 @@ export function createKnowledgeStorageTests(
       ).rejects.toThrow('at most 1000');
     });
 
-    it('applies each source only its own paired scope, never a sibling probe\'s', async () => {
+    it("applies each source only its own paired scope, never a sibling probe's", async () => {
       const own = await store.createNode({ name: 'Paired own', scopeIds: [OTHER_SCOPE_ID] });
       // `paired-b` holds a record, but only under the scope paired with `paired-a`.
       await store.createRecord({ node: own, text: 'Filed elsewhere', source: 'paired-b', scopeIds: [OTHER_SCOPE_ID] });
