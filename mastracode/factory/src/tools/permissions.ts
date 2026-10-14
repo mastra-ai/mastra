@@ -11,6 +11,9 @@ export const FACTORY_TOOLS_WITHOUT_APPROVAL: readonly string[] = [
   'factory_list_work_items',
   'factory_inspect_work_item',
   'factory_list_attention',
+  'factory_create_work_item',
+  'factory_subscribe_work_item',
+  'factory_unsubscribe_work_item',
 ];
 
 export interface FactoryToolPermissionsSession {

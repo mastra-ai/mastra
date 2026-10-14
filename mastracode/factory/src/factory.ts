@@ -1274,6 +1274,8 @@ export class MastraFactory {
                             comments: workItemCommentsStorage,
                             audit: auditStorage,
                             boards: this.#boards,
+                            transitionService,
+                            auditRecorder: auditDomain,
                           },
                         }),
                       );

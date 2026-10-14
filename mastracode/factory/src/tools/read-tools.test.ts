@@ -7,6 +7,7 @@ import type {
   FactoryDeferredDecisionRecord,
   FactoryRunBindingRecord,
   WorkItemRow,
+  WorkItemSubscription,
 } from '../storage/domains/work-items/base.js';
 import { MAX_ERROR, MAX_TEXT, createFactoryReadTools } from './read-tools.js';
 import type { FactoryReadToolDependencies } from './read-tools.js';
@@ -106,12 +107,14 @@ function setup({
   decisions = [],
   audit = [],
   comments = [],
+  subscriptions = [],
 }: {
   items?: WorkItemRow[];
   bindings?: FactoryRunBindingRecord[];
   decisions?: FactoryDeferredDecisionRecord[];
   audit?: AuditEventRow[];
   comments?: WorkItemCommentRow[];
+  subscriptions?: WorkItemSubscription[];
 }) {
   const deps: FactoryReadToolDependencies = {
     workItems: {
@@ -132,6 +135,12 @@ function setup({
       ),
       listByIds: vi.fn(async ({ ids }) => items.filter(row => ids.includes(row.id))),
       listDecisionsForEvaluations: vi.fn(async () => []),
+      listWorkItemSubscribers: vi.fn(async ({ workItemId }) =>
+        subscriptions.filter(row => row.workItemId === workItemId),
+      ),
+      listSessionSubscriptions: vi.fn(async ({ factoryProjectId, sessionId }) =>
+        subscriptions.filter(row => row.factoryProjectId === factoryProjectId && row.sessionId === sessionId),
+      ),
     },
     comments: { listRecent: vi.fn(async () => comments) },
     audit: { list: vi.fn(async () => ({ events: audit })) },
@@ -150,6 +159,21 @@ type ListResult = {
   items: Array<{ id: string; number: number | null; activeWorker: { role: string; sessionId: string } | null }>;
   truncated: boolean;
 };
+
+function follow(workItemId: string, sessionId: string, reason: WorkItemSubscription['reason']): WorkItemSubscription {
+  return {
+    id: `sub-${workItemId}-${sessionId}`,
+    orgId: 'org-1',
+    factoryProjectId: 'project-1',
+    workItemId,
+    sessionId,
+    threadId: `${sessionId}-thread`,
+    resourceId: sessionId,
+    userId: 'user-1',
+    reason,
+    createdAt: new Date('2026-10-01T00:00:00Z'),
+  };
+}
 
 describe('factory_list_work_items', () => {
   const rows = [
@@ -184,6 +208,16 @@ describe('factory_list_work_items', () => {
     expect(await ids({ active: true })).toEqual(['b']);
     expect(await ids({ active: false })).toEqual(['c', 'a']);
     expect(await ids({ requestedBy: 'me' })).toEqual(['b']);
+  });
+
+  it('filters by what this session follows', async () => {
+    const { run } = setup({
+      items: rows,
+      subscriptions: [follow('a', 'session-1', 'created'), follow('c', 'session-other', 'subscribed')],
+    });
+    const ids = async (input: object) => (await run<ListResult>('factory_list_work_items', input)).items.map(r => r.id);
+    expect(await ids({ subscribed: true })).toEqual(['a']);
+    expect(await ids({ subscribed: false })).toEqual(['c', 'b']);
   });
 
   it('reports the active worker and the card number', async () => {
@@ -266,6 +300,18 @@ describe('factory_inspect_work_item', () => {
     const decisions = byId.decisions as Array<{ error: string }>;
     expect(decisions[0]!.error).toHaveLength(MAX_ERROR);
     expect((byId.feed as Array<{ body: string }>)[0]!.body).toHaveLength(MAX_TEXT);
+  });
+
+  it('lists the sessions following the item and marks the caller', async () => {
+    const { run } = setup({
+      items: [target],
+      subscriptions: [follow('target', 'session-1', 'created'), follow('target', 'session-2', 'subscribed')],
+    });
+    const result = await run<{ subscribers: unknown[] }>('factory_inspect_work_item', { workItem: 'target' });
+    expect(result.subscribers).toEqual([
+      { sessionId: 'session-1', reason: 'created', isCaller: true },
+      { sessionId: 'session-2', reason: 'subscribed', isCaller: false },
+    ]);
   });
 
   it('refuses an item from another Factory', async () => {
