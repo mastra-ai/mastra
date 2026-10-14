@@ -70,6 +70,21 @@ function isRetryableModelError(error: unknown): boolean {
   return true;
 }
 
+/**
+ * Whether a JSON schema has an object with free-form keys (e.g. `z.record()`), which OpenAI
+ * strict mode cannot express: it requires every object to list fixed keys with
+ * `additionalProperties: false`.
+ */
+export function hasFreeFormObject(schema: unknown): boolean {
+  if (!schema || typeof schema !== 'object') return false;
+  if (Array.isArray(schema)) return schema.some(hasFreeFormObject);
+  const node = schema as Record<string, unknown>;
+  const additional = node.additionalProperties;
+  if (additional === true || (additional && typeof additional === 'object')) return true;
+  if (node.patternProperties || node.propertyNames) return true;
+  return Object.values(node).some(hasFreeFormObject);
+}
+
 function readStrictJsonSchemaOption(options: unknown): boolean | undefined {
   if (!options || typeof options !== 'object') return undefined;
   const strictJsonSchema = (options as { strictJsonSchema?: unknown }).strictJsonSchema;
@@ -342,8 +357,18 @@ export function execute<OUTPUT = undefined>({
    */
   // Strict json_schema (OpenAI, and OpenAI-compatible providers with native structured output)
   // requires all properties to be required, additionalProperties: false, and no unsupported keywords.
+  const isOpenAIProvider = model.provider.startsWith('openai');
+  // OpenAI rejects free-form objects in strict mode, so send those schemas non-strict instead of
+  // rewriting them into objects that can hold no keys. Mastra still validates the result against the schema.
+  const sendNonStrict =
+    isOpenAIProvider &&
+    providerOptions?.openai?.strictJsonSchema !== true &&
+    hasFreeFormObject(responseFormat?.type === 'json' ? responseFormat.schema : undefined);
   const isStrictJsonSchemaMode =
-    responseFormat?.type === 'json' && !injectionMode && usesOpenAIStrictJsonSchema(model, providerOptions);
+    responseFormat?.type === 'json' &&
+    !injectionMode &&
+    !sendNonStrict &&
+    usesOpenAIStrictJsonSchema(model, providerOptions);
 
   if (isStrictJsonSchemaMode && responseFormat?.schema) {
     responseFormat.schema = prepareJsonSchemaForOpenAIStrictMode(responseFormat.schema);
@@ -352,11 +377,11 @@ export function execute<OUTPUT = undefined>({
   // Only OpenAI providers read `providerOptions.openai`; OpenAI-compatible providers send strict by default
   // and read their own provider key.
   const providerOptionsToUse: SharedProviderOptions | undefined =
-    isStrictJsonSchemaMode && model.provider.startsWith('openai')
+    (isStrictJsonSchemaMode || sendNonStrict) && isOpenAIProvider
       ? {
           ...(providerOptions ?? {}),
           openai: {
-            strictJsonSchema: true,
+            strictJsonSchema: isStrictJsonSchemaMode,
             ...(providerOptions?.openai ?? {}),
           },
         }

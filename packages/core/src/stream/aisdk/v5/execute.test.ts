@@ -572,7 +572,7 @@ describe('execute OpenAI strict-mode schema preparation (issue #23795)', () => {
 
   async function run(
     model: MockLanguageModelV2,
-    options: { providerOptions?: Record<string, any>; jsonPromptInjection?: boolean } = {},
+    options: { providerOptions?: Record<string, any>; jsonPromptInjection?: boolean; schema?: any } = {},
   ) {
     const stream = execute({
       runId: 'test-run-id-strict',
@@ -581,7 +581,7 @@ describe('execute OpenAI strict-mode schema preparation (issue #23795)', () => {
       onResult: () => {},
       methodType: 'stream',
       providerOptions: options.providerOptions,
-      structuredOutput: { schema: strictSchema, jsonPromptInjection: options.jsonPromptInjection },
+      structuredOutput: { schema: options.schema ?? strictSchema, jsonPromptInjection: options.jsonPromptInjection },
     });
     await readStream(stream);
   }
@@ -609,6 +609,24 @@ describe('execute OpenAI strict-mode schema preparation (issue #23795)', () => {
     const { model, captured } = makeCapturingModel('openai.chat');
     await run(model);
     expectPreparedSchema(captured.options.responseFormat);
+    expect(captured.options.providerOptions?.openai?.strictJsonSchema).toBe(true);
+  });
+
+  // OpenAI strict mode cannot express free-form keys, so a z.record() field is sent non-strict (#25235).
+  it('sends schemas with a record field non-strict and unprepared for OpenAI models', async () => {
+    const { model, captured } = makeCapturingModel('openai.responses');
+    await run(model, { schema: z.object({ summary: z.string(), labels: z.record(z.string(), z.string()) }) });
+    const sent = captured.options.responseFormat.schema;
+    expect(sent.properties.labels.additionalProperties).toEqual({ type: 'string' });
+    expect(captured.options.providerOptions?.openai?.strictJsonSchema).toBe(false);
+  });
+
+  it('keeps strict mode for record schemas when the user opts in explicitly', async () => {
+    const { model, captured } = makeCapturingModel('openai.responses');
+    await run(model, {
+      schema: z.object({ labels: z.record(z.string(), z.string()) }),
+      providerOptions: { openai: { strictJsonSchema: true } },
+    });
     expect(captured.options.providerOptions?.openai?.strictJsonSchema).toBe(true);
   });
 
