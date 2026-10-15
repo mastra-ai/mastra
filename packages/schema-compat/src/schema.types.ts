@@ -46,8 +46,12 @@ export type InferPublicSchema<T extends PublicSchema> = T extends { _output: inf
   ? Output
   : T extends { _type: infer Output }
     ? Output
-    : T extends { '~standard': { types: { output: infer O } } }
-      ? O
+    : T extends { '~standard': { types?: infer Types } } // Standard Schema declares `types` as optional
+      ? NonNullable<Types> extends { output: infer O }
+        ? O
+        : T extends PublicSchema<infer Output>
+          ? Output
+          : never
       : T extends PublicSchema<infer Output>
         ? Output
         : never;

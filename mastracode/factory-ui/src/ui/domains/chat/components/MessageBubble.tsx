@@ -2,8 +2,10 @@ import type { PlanResume } from '@mastra/client-js';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-reveal';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { formatModelName } from '@mastra/playground-ui/utils/model';
 import { ReasoningPartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/reasoning-part-renderer';
 import { UserFilePartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/user-file-part-renderer';
 import { MessageAttachments } from '@mastra/playground-ui/domains/chat/attachments/message-attachments';
@@ -16,7 +18,13 @@ import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvoc
 import { channelOrigin, messageAuthor } from '../services/message-author';
 import type { MessageEntry, SuspensionPrompt } from '../services/transcript';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
-import { Message, MessageActions, MessageCopyButton, MessageTimestamp } from '@mastra/playground-ui/components/Message';
+import {
+  Message,
+  MessageActions,
+  MessageCopyButton,
+  MessageMetadata,
+  MessageTimestamp,
+} from '@mastra/playground-ui/components/Message';
 import { ChannelOriginBadge, SenderAvatar } from './MessageSender';
 import { ToolCard } from './tool/ToolCard';
 import { ToolGroup } from './tool/ToolGroup';
@@ -82,6 +90,8 @@ export function MessageBubble({
   const steeringStatus = steeringLabel(entry);
   const steeringPending = entry.deliveryStatus === 'pending';
   const steeringFailed = entry.deliveryStatus === 'failed';
+  const modelId = entry.message.content.metadata?.modelId;
+  const replyModelId = meta && typeof modelId === 'string' ? modelId : undefined;
   const messageActions = meta ? (
     <MessageActions>
       <MessageCopyButton text={meta} />
@@ -117,7 +127,24 @@ export function MessageBubble({
       </Message>
     ),
     Assistant: ({ children }) => (
-      <Message from="assistant" footer={messageActions}>
+      <Message
+        from="assistant"
+        footer={
+          messageActions && (
+            <div className="flex flex-wrap items-center gap-2">
+              {replyModelId && (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={<MessageMetadata tabIndex={0}>{formatModelName(replyModelId)}</MessageMetadata>}
+                  />
+                  <TooltipContent>{replyModelId}</TooltipContent>
+                </Tooltip>
+              )}
+              {messageActions}
+            </div>
+          )
+        }
+      >
         {children}
       </Message>
     ),

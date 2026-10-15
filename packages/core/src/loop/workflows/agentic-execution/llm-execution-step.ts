@@ -2111,6 +2111,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                       warnings: warnings || [],
                       messageId: currentStep.messageId,
                       startedAt: inferenceStartedAt,
+                      modelId: currentStep.model.modelId,
+                      provider: currentStep.model.provider,
                     },
                   };
                 },

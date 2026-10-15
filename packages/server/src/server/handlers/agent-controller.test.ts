@@ -549,9 +549,26 @@ describe('agent-controller routes', () => {
 
       expect(spy).toHaveBeenCalledWith({
         content: 'change course',
+        files: undefined,
         requestContext,
         author: { id: 'user-123' },
       });
+    });
+
+    it('forwards files to session.steer', async () => {
+      const session = await getRouteSession('user-rc');
+      const spy = vi.spyOn(session, 'steer').mockResolvedValue(undefined);
+      const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
+
+      await STEER_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        message: 'look at this instead',
+        files,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({ content: 'look at this instead', files, requestContext: undefined });
     });
 
     it('forwards requestContext to session.followUp', async () => {
@@ -567,7 +584,41 @@ describe('agent-controller routes', () => {
         requestContext,
       } as any);
 
-      expect(spy).toHaveBeenCalledWith({ content: 'and another thing', requestContext });
+      expect(spy).toHaveBeenCalledWith({ content: 'and another thing', files: undefined, requestContext });
+    });
+
+    it('forwards files to session.followUp', async () => {
+      const session = await getRouteSession('user-rc');
+      const spy = vi.spyOn(session, 'followUp').mockResolvedValue(undefined);
+      const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
+
+      await FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        message: 'also this',
+        files,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({ content: 'also this', files, requestContext: undefined });
+    });
+
+    it.each([
+      ['steer', STEER_AGENT_CONTROLLER_SESSION_ROUTE],
+      ['follow-up', FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE],
+    ])('applies the message attachment limits to the %s body schema', (_name, route) => {
+      const schema = route.bodySchema!;
+
+      expect(schema.safeParse({ message: 'hi' }).success).toBe(true);
+      expect(schema.safeParse({ message: 'hi', files: [{ data: 'aGVsbG8=', mediaType: 'image/png' }] }).success).toBe(
+        true,
+      );
+
+      const oversized = { data: 'a'.repeat(14 * 1024 * 1024 + 1), mediaType: 'image/png' };
+      expect(schema.safeParse({ message: 'hi', files: [oversized] }).success).toBe(false);
+
+      const large = { data: 'a'.repeat(10 * 1024 * 1024), mediaType: 'image/png' };
+      expect(schema.safeParse({ message: 'hi', files: [large, large, large] }).success).toBe(false);
     });
 
     it('forwards requestContext to session.respondToToolApproval', async () => {

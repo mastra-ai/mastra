@@ -260,7 +260,8 @@ describe('Board source and Linear project filters', () => {
         ),
       ),
     );
-    renderBoard('?linearProject=project-a');
+    const { client } = renderBoard('?linearProject=project-a');
+    await waitForMutationsIdle(client);
     fireEvent.click(await screen.findByRole('button', { name: 'Load more candidates' }));
     await screen.findByText('Portal: later page');
     expect(screen.queryByText('Billing: export invoices')).not.toBeInTheDocument();
@@ -322,7 +323,8 @@ describe('Board source and Linear project filters', () => {
         ),
       ),
     );
-    renderBoard('?source=github&source=linear');
+    const { client } = renderBoard('?source=github&source=linear');
+    await waitForMutationsIdle(client);
     await screen.findByRole('button', { name: 'Connect Linear' });
     expect(screen.getByText('Linear authorization expired. Reconnect to keep syncing issues.')).toBeInTheDocument();
   });
@@ -335,8 +337,10 @@ describe('Board source and Linear project filters', () => {
     );
     const view = renderBoard('?source=jira');
     await waitForMutationsIdle(view.client);
-    await screen.findByText('No work items match filters');
-    expect(screen.getByText('Try adjusting or clearing your filters.')).toBeInTheDocument();
+    await within(screen.getByTestId('board-column-intake')).findByText('No work items match filters');
+    expect(
+      within(screen.getByTestId('board-column-intake')).getByText(/Try adjusting or clearing your filters\./),
+    ).toBeInTheDocument();
     expect(screen.queryByText('No intake sources')).not.toBeInTheDocument();
   });
 });

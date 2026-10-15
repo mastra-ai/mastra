@@ -51,6 +51,8 @@ export interface ExperimentsListSelection {
   onToggleSelection: (experimentId: string) => void;
   /** Receives the ids currently listed (after filtering), in display order. */
   onToggleAll: (visibleExperimentIds: string[]) => void;
+  /** Highlights the rows of this dataset: the experiments that can be compared with the selection. */
+  comparableDatasetId?: string;
 }
 
 const BASE_COLUMNS = `${EXPERIMENT_NAME_COLUMN} ${EXPERIMENT_DESCRIPTION_COLUMN} ${EXPERIMENT_DATASET_COLUMN} ${EXPERIMENT_DETAIL_COLUMNS}`;
@@ -82,6 +84,7 @@ function ExperimentRow({
   rowProps,
   onSelect,
   featured,
+  comparable,
   onDelete,
   leadingCell,
   children,
@@ -90,6 +93,8 @@ function ExperimentRow({
   rowProps: ReturnType<ReturnType<typeof useDataListKeyboard>['getRowProps']>;
   onSelect?: () => void;
   featured?: boolean;
+  /** Tints the row as comparable with the current selection. */
+  comparable?: boolean;
   onDelete: () => void;
   /** Rendered in the first column (e.g. a selection checkbox); shifts the row content one column right. */
   leadingCell?: ReactNode;
@@ -107,6 +112,7 @@ function ExperimentRow({
           colStart={colStart}
           colEnd={-2}
           featured={featured}
+          variant={comparable ? 'info' : 'default'}
           tabIndex={-1}
           onClick={(e: MouseEvent) => {
             e.stopPropagation();
@@ -121,6 +127,7 @@ function ExperimentRow({
           colStart={colStart}
           colEnd={-2}
           featured={featured}
+          variant={comparable ? 'info' : 'default'}
           to={paths.experimentLink(exp.id)}
           LinkComponent={Link}
           tabIndex={-1}
@@ -267,6 +274,8 @@ export function ExperimentsList({
         );
 
         const isSelected = selection?.selectedExperimentIds.includes(exp.id) ?? false;
+        const isComparable =
+          selection?.comparableDatasetId !== undefined && exp.datasetId === selection.comparableDatasetId;
 
         return (
           <ExperimentRow
@@ -275,6 +284,7 @@ export function ExperimentsList({
             rowProps={getRowProps(index)}
             onSelect={onSelectExperiment ? () => onSelectExperiment(exp) : undefined}
             featured={isSelected || selectedExperimentId === exp.id}
+            comparable={isComparable}
             onDelete={() => setExperimentToDelete(exp)}
             leadingCell={
               selection && (

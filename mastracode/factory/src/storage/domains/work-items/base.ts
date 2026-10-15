@@ -1807,12 +1807,16 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           factory_project_id: input.factoryProjectId,
           identity: input.ingress.identity,
         });
-        if (prior)
-          return {
-            status: 'replayed',
-            item: await this.getForProject(input.orgId, input.factoryProjectId, input.workItemId),
-            result: prior.result as Record<string, unknown>,
-          };
+        if (prior) {
+          // Read through the transaction: on a single-connection database the
+          // root client waits for this transaction, which would never finish.
+          const row = await ops.findOne<WorkItemDbRow>('work_items', {
+            id: input.workItemId,
+            org_id: input.orgId,
+            factory_project_id: input.factoryProjectId,
+          });
+          return { status: 'replayed', item: row ? toRow(row) : null, result: prior.result as Record<string, unknown> };
+        }
 
         const now = new Date();
         let item: WorkItemRow | null = null;
@@ -2874,6 +2878,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     threadId: string;
     resourceId: string;
     sessionId: string;
+    rejectAmbiguous?: boolean;
   }): Promise<FactoryRunBindingRecord | null> {
     const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
       org_id: input.orgId,
@@ -2882,7 +2887,31 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       session_id: input.sessionId,
       status: 'active',
     });
-    if (new Set(rows.map(row => row.factory_project_id)).size !== 1) return null;
+    const projectCount = new Set(rows.map(row => row.factory_project_id)).size;
+    if (projectCount > 1 && input.rejectAmbiguous)
+      throw new Error('Factory session has ambiguous active run bindings.');
+    if (projectCount !== 1) return null;
+    const row = rows.sort((left, right) => right.created_at.getTime() - left.created_at.getTime())[0];
+    return row ? toBinding(row) : null;
+  }
+
+  /** Historical thread membership for model/billing policy only; never grants active agent authority. */
+  async findRunBindingByThread(input: {
+    orgId: string;
+    threadId: string;
+    resourceId: string;
+    sessionId: string;
+    rejectAmbiguous?: boolean;
+  }): Promise<FactoryRunBindingRecord | null> {
+    const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
+      org_id: input.orgId,
+      thread_id: input.threadId,
+      resource_id: input.resourceId,
+      session_id: input.sessionId,
+    });
+    const projectCount = new Set(rows.map(row => row.factory_project_id)).size;
+    if (projectCount > 1 && input.rejectAmbiguous) throw new Error('Factory session has ambiguous run bindings.');
+    if (projectCount !== 1) return null;
     const row = rows.sort((left, right) => right.created_at.getTime() - left.created_at.getTime())[0];
     return row ? toBinding(row) : null;
   }

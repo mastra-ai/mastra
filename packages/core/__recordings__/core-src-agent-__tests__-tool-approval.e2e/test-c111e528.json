@@ -192,7 +192,7 @@
       }
     },
     {
-      "hash": "1dd1f13f69e25a3e",
+      "hash": "72abad0eda23c1ab",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -219,7 +219,7 @@
             {
               "type": "function_call_output",
               "call_id": "call_ool5ZBh0bK8mh1w4Utu9HFgm",
-              "output": "{\"name\":\"Dero Israel\",\"email\":\"test@test.com\"}"
+              "output": "{\"email\":\"test@test.com\",\"name\":\"Dero Israel\"}"
             }
           ],
           "tools": [
