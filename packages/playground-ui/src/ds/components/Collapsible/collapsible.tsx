@@ -1,5 +1,6 @@
 import { Collapsible as CollapsiblePrimitive } from '@base-ui/react/collapsible';
 import React from 'react';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { transitions, focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -9,20 +10,56 @@ type CollapsibleTriggerProps = Omit<CollapsiblePrimitive.Trigger.Props, 'classNa
   className?: string;
   /** @deprecated Use Base UI's native `render` prop instead for stronger composition typing. */
   asChild?: boolean;
+  /**
+   * `disclosure`: a ready-made toggle row: a chevron that turns while open, then muted label text,
+   * flush with the content around it. While open it stretches into a section divider: a hairline
+   * fills the rest of the row. Default: unstyled, the caller lays it out.
+   */
+  variant?: 'default' | 'disclosure';
 };
 
+// Control height, so the row lines up with buttons beside it (e.g. in a dialog footer). Open, it
+// takes the full width and draws the divider hairline after its content.
+const disclosureTriggerClass = cn(
+  // gap spaces the text from a trailing badge; the chevron's -mr-1 leaves ~7px from its ink to the text.
+  'inline-flex h-control-md w-fit cursor-pointer items-center gap-1.5 text-label text-muted-foreground',
+  // Flush with the content around it, so the focus ring sits outside the box instead of over the glyphs.
+  'rounded-sm focus-visible:outline-offset-2',
+  'aria-expanded:w-full aria-expanded:after:ml-2 aria-expanded:after:h-px aria-expanded:after:flex-1 aria-expanded:after:bg-border',
+);
+
 const CollapsibleTrigger = React.forwardRef<HTMLButtonElement, CollapsibleTriggerProps>(
-  ({ className, asChild, children, ...props }, ref) => {
+  ({ className, asChild, variant = 'default', children, ...props }, ref) => {
     const renderProps = asChild && React.isValidElement(children) ? { render: children as React.ReactElement } : {};
+    const disclosure = variant === 'disclosure' && !asChild;
 
     return (
       <CollapsiblePrimitive.Trigger
         ref={ref}
         data-slot="collapsible-trigger"
-        className={cn('-outline-offset-2', transitions.colors, focusRing, 'hover:text-foreground', className)}
+        data-variant={variant}
+        className={cn(
+          '-outline-offset-2',
+          transitions.colors,
+          focusRing,
+          'hover:text-foreground',
+          disclosure && disclosureTriggerClass,
+          className,
+        )}
         {...renderProps}
         {...props}
       >
+        {/*
+          Line the chevron's ink up with the glyphs of the labels around it, which start ~1px inside their box.
+          Closed, the ink sits 5.3px inside the 16px icon box; turned 90° it is wider and sits 3.3px in, so
+          the open chevron shifts 2px right to stay on the same edge.
+        */}
+        {disclosure ? (
+          <DisclosureChevron
+            direction="right"
+            className="-mr-1 -ml-[4.3px] size-icon-md in-aria-expanded:translate-x-[2px]"
+          />
+        ) : null}
         {asChild ? undefined : children}
       </CollapsiblePrimitive.Trigger>
     );
