@@ -535,6 +535,23 @@ describe('expectEngineParity', () => {
       );
     }
 
+    // A converged declaration is stale even when other declared fields are absent.
+    const mixedStepFinishes = [observe(results.plain!), observe(results.durable!)];
+    for (const observation of mixedStepFinishes) {
+      observation.turns[0]!.chunkTypes = ['step-finish'];
+      observation.turns[0]!.chunkPayloads = [
+        {
+          processorRetryCount: 1,
+          metadata: { modelMetadata: { key: 'value' } },
+          output: { text: 'text' },
+        },
+      ];
+    }
+    expect(staleKnownDifferences('durable', mixedStepFinishes[0]!, mixedStepFinishes[1]!)).toContain(
+      'durable: the declared step-finish chunk difference no longer reproduces; ' +
+        'remove it from KNOWN_CHUNK_DIFFERENCES (COR-1390)',
+    );
+
     // A fully converged, populated declaration is stale even though there is no
     // remaining difference to establish applicability.
     const [plainStepFinish, wrappedStepFinish] = [observe(results.plain!), observe(results.durable!)];

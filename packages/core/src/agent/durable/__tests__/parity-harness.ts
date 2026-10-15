@@ -1335,16 +1335,8 @@ export function staleKnownDifferences(engine: string, plain: EngineObservation, 
         missingKeys.some(
           values => values.wrappedHas || (values.plainHas && !isEmptyValue(values.plainValue) && !values.wrappedHas),
         );
-      const hasFullyPopulatedDeclaration =
-        pathValues.length > 0 &&
-        pathValues.every(
-          values =>
-            isDeepStrictEqual(values.plain, values.wrapped) &&
-            !isEmptyValue(values.plain) &&
-            !isEmptyValue(values.wrapped),
-        );
-      const applicable =
-        hasObservedDifference || hasFullyPopulatedDeclaration || missingKeys.some(values => values.wrappedHas);
+      const hasPopulatedField = pathValues.some(values => !isEmptyValue(values.plain) || !isEmptyValue(values.wrapped));
+      const applicable = hasObservedDifference || hasPopulatedField || missingKeys.some(values => values.wrappedHas);
       if (!applicable) continue;
 
       for (const { path, plain: plainValue, wrapped: wrappedValue } of pathValues) {
