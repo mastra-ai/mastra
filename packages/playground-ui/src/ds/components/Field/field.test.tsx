@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -422,6 +423,12 @@ describe('FieldLabel with info', () => {
     expect(screen.getByRole('button', { name: 'About Request Context (JSON)' })).toBeTruthy();
   });
 
+  it('names the icon from the rendered label when the label holds elements', () => {
+    renderWithInfo(<span>Display name</span>);
+
+    expect(screen.getByRole('button', { name: 'About Display name' })).toBeTruthy();
+  });
+
   it('opens the tooltip on hover', async () => {
     renderWithInfo();
 
@@ -431,20 +438,24 @@ describe('FieldLabel with info', () => {
     expect(await screen.findByText('Shown to people who pick this agent.')).toBeTruthy();
   });
 
-  it('opens the tooltip on keyboard focus', async () => {
+  it('is reached with Tab and opens the tooltip on keyboard focus', async () => {
+    const user = userEvent.setup();
     renderWithInfo();
 
-    fireEvent.focus(screen.getByRole('button', { name: 'About Display name' }));
+    await user.tab();
 
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'About Display name' }));
     expect(await screen.findByText('Shown to people who pick this agent.')).toBeTruthy();
   });
 
-  it('does not focus the control when the icon is clicked', () => {
+  it('focuses the icon, not the control, when the icon is clicked', async () => {
+    const user = userEvent.setup();
     renderWithInfo();
     const icon = screen.getByRole('button', { name: 'About Display name' });
 
-    fireEvent.click(icon);
+    await user.click(icon);
 
+    expect(document.activeElement).toBe(icon);
     expect(document.activeElement).not.toBe(screen.getByRole('textbox', { name: 'Display name' }));
   });
 });

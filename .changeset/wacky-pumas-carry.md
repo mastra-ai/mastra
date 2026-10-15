@@ -8,4 +8,4 @@ Added an `info` prop to `FieldLabel`. It shows a small info icon after the label
 <FieldLabel info="Shown to people who pick this agent.">Display name</FieldLabel>
 ```
 
-Removed the internal `RequestContextLabel` component (`domains/request-context/components/request-context-label`). Use `FieldLabel` with `info` instead.
+Removed `RequestContextLabel`, imported from `@mastra/playground-ui/domains/request-context/components/request-context-label`. Use `FieldLabel` from `@mastra/playground-ui/components/Field` with `info` instead.
