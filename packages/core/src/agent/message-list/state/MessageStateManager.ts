@@ -368,4 +368,6 @@ export interface SerializedMessageListState {
   prunedResponseMessageIds?: string[];
   /** Where the latest loop-iteration boundary sits, so a restored list scopes final-step text the same way. */
   lastStepBoundary?: { messageId: string; partIndex: number };
+  /** Highest content order the list has assigned or seen, so a restored list keeps ordering above it. */
+  orderWatermark?: string;
 }

@@ -6,6 +6,28 @@ import type { MastraMessageV1 } from '../../../memory';
 import { MessageList } from '../index';
 import type { AIV4Type, AIV5Type } from '../types';
 
+/**
+ * Parts appended to or changed on an existing message carry `metadata.mastra.order` (see order.ts,
+ * covered in message-list-order.test.ts). These structural assertions predate it, so drop that key.
+ */
+function withoutPartOrders<T>(value: T): T {
+  const strip = (part: any) => {
+    const order = part?.metadata?.mastra?.order;
+    if (order === undefined) return part;
+    const { order: _order, ...mastra } = part.metadata.mastra;
+    const metadata = { ...part.metadata, mastra };
+    if (Object.keys(mastra).length === 0) delete metadata.mastra;
+    const next = { ...part, metadata };
+    if (Object.keys(metadata).length === 0) delete next.metadata;
+    return next;
+  };
+  return (value as any[]).map(item => {
+    if (item?.content?.parts) return { ...item, content: { ...item.content, parts: item.content.parts.map(strip) } };
+    if (Array.isArray(item?.parts)) return { ...item, parts: item.parts.map(strip) };
+    return strip(item);
+  }) as T;
+}
+
 type VercelUIMessage = Message;
 type VercelCoreMessage = CoreMessage;
 
@@ -756,9 +778,9 @@ describe('MessageList', () => {
           resourceId,
         },
       ];
-      expect(new MessageList({ threadId, resourceId }).add(messageSequence, 'input').get.all.db()).toEqual(
-        expected.map(m => ({ ...m, createdAt: expect.any(Date) })),
-      );
+      expect(
+        withoutPartOrders(new MessageList({ threadId, resourceId }).add(messageSequence, 'input').get.all.db()),
+      ).toEqual(expected.map(m => ({ ...m, createdAt: expect.any(Date) })));
 
       let messages: Message[] = [];
       const list = new MessageList();
@@ -1102,7 +1124,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'response');
 
-      expect(list.get.all.db()).toEqual([
+      expect(withoutPartOrders(list.get.all.db())).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
@@ -1569,7 +1591,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'response');
 
-      expect(list.get.all.db()).toEqual([
+      expect(withoutPartOrders(list.get.all.db())).toEqual([
         {
           id: userMsgV1.id,
           role: 'user',
@@ -1661,7 +1683,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'response');
 
-      expect(list.get.all.db()).toEqual([
+      expect(withoutPartOrders(list.get.all.db())).toEqual([
         {
           id: expect.any(String),
           role: 'user',
@@ -1859,7 +1881,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'response');
 
-      expect(list.get.all.db()).toEqual([
+      expect(withoutPartOrders(list.get.all.db())).toEqual([
         {
           id: expect.any(String),
           role: 'user',
@@ -2262,7 +2284,7 @@ describe('MessageList', () => {
           experimental_attachments: [],
         },
       ];
-      expect(uiMessages).toEqual(expectedMessages);
+      expect(withoutPartOrders(uiMessages)).toEqual(expectedMessages);
 
       let newId = globalThis.crypto.randomUUID();
       const responseMessages = [
@@ -2602,7 +2624,7 @@ describe('MessageList', () => {
       list.add(latestMessage, 'memory');
       list.add(messageV2, 'response');
 
-      expect(list.get.all.db()[0].content.parts).toEqual([
+      expect(withoutPartOrders(list.get.all.db()[0].content.parts)).toEqual([
         expect.objectContaining({ type: 'step-start', createdAt: expect.any(Number) }),
         {
           type: 'tool-invocation',
@@ -2655,7 +2677,7 @@ describe('MessageList', () => {
       list.add(latestMessage, 'memory');
       list.add(messageV2, 'response');
 
-      expect(list.get.all.db()[0].content.parts).toEqual([
+      expect(withoutPartOrders(list.get.all.db()[0].content.parts)).toEqual([
         expect.objectContaining({ type: 'step-start', createdAt: expect.any(Number) }),
         expect.objectContaining({ type: 'text', text: 'Let me do this.', createdAt: expect.any(Number) }),
         {
@@ -2756,7 +2778,7 @@ describe('MessageList', () => {
       list.add(latestMessage, 'memory');
       list.add(messageV2, 'response');
 
-      expect(list.get.all.db()[0].content.parts).toEqual([
+      expect(withoutPartOrders(list.get.all.db()[0].content.parts)).toEqual([
         expect.objectContaining({ type: 'step-start', createdAt: expect.any(Number) }),
         { type: 'text', text: 'Doing it.' },
         {
@@ -2809,7 +2831,7 @@ describe('MessageList', () => {
       list.add(latestMessage, 'memory');
       list.add(messageV2, 'response');
 
-      expect(list.get.all.db()[0].content.parts).toEqual([
+      expect(withoutPartOrders(list.get.all.db()[0].content.parts)).toEqual([
         { type: 'step-start' },
         { type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId: 'A', toolName: 'foo', args: {} } },
         {
@@ -2857,7 +2879,7 @@ describe('MessageList', () => {
       list.add(latestMessage, 'memory');
       list.add(messageV2, 'response');
 
-      expect(list.get.all.db()[0].content.parts).toEqual([
+      expect(withoutPartOrders(list.get.all.db()[0].content.parts)).toEqual([
         { type: 'step-start' },
         { type: 'text', text: 'Old reasoning' },
         {
@@ -2924,7 +2946,7 @@ describe('MessageList', () => {
         },
       } satisfies MastraDBMessage;
       list.add(msg3, 'response');
-      expect(list.get.all.db()[0].content.parts).toEqual([
+      expect(withoutPartOrders(list.get.all.db()[0].content.parts)).toEqual([
         { type: 'step-start' },
         { type: 'text', text: 'First...' },
         {

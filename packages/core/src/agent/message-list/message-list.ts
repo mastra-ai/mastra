@@ -59,6 +59,7 @@ import type { MastraToolInvocation, MastraToolInvocationPart } from './state/typ
 import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
 import { dropCrossProviderExecutedParts } from './utils/provider-compat';
 import { preserveResponseItemIdsOnMerge } from './utils/response-item-metadata';
+import { MessageOrderTracker } from './order';
 import { stampPart, stampToolPartUpdate } from './utils/stamp-part';
 import { advancesToolInvocationState, isClientToolInvocationUpdate } from './utils/tool-invocation-state';
 
@@ -582,8 +583,10 @@ export class MessageList {
     });
     const lastStepBoundary = this.#locateLastStepBoundary();
     const prunedResponseMessageIds = this.#getPrunedResponseMessageIds();
+    const orderWatermark = this.#order.watermark;
     return {
       ...state,
+      ...(orderWatermark ? { orderWatermark } : {}),
       ...(lastStepBoundary ? { lastStepBoundary } : {}),
       ...(prunedResponseMessageIds.length > 0 ? { prunedResponseMessageIds } : {}),
     };
@@ -626,8 +629,11 @@ export class MessageList {
     this.taggedSystemMessages = data.taggedSystemMessages;
     this.memoryInfo = data.memoryInfo;
     this._agentNetworkAppend = data.agentNetworkAppend;
+    this.#order = new MessageOrderTracker();
+    this.#order.seedWatermark(state.orderWatermark);
     for (const message of this.messages) {
       this.updateLastCreatedAt(message);
+      this.#order.seed(message);
     }
     this.#prunedResponseMessages = new Map((state.prunedResponseMessageIds ?? []).map(id => [id, undefined]));
     this.#lastStepBoundary = undefined;
@@ -1776,6 +1782,7 @@ export class MessageList {
       // Update ordering and queue the edited metadata for persistence.
       this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
       this.updateLastCreatedAt(msg);
+      this.#order.stamp(msg);
       if (!this.stateManager.isResponseMessage(msg)) {
         this.stateManager.removeMessage(msg);
         this.stateManager.addToSource(msg, 'response');
@@ -1850,6 +1857,7 @@ export class MessageList {
     // Update ordering and queue the failed calls for persistence.
     this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
     this.updateLastCreatedAt(msg);
+    this.#order.stamp(msg);
     if (!this.stateManager.isResponseMessage(msg)) {
       this.stateManager.removeMessage(msg);
       this.stateManager.addToSource(msg, 'response');
@@ -1991,6 +1999,7 @@ export class MessageList {
     // Update ordering and queue the merged result for persistence.
     this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
     this.updateLastCreatedAt(msg);
+    this.#order.stamp(msg);
     if (!this.stateManager.isResponseMessage(msg)) {
       this.stateManager.removeMessage(msg);
       this.stateManager.addToSource(msg, 'response');
@@ -2474,6 +2483,7 @@ export class MessageList {
         MessageMerger.merge(messageV2, withoutStaleToolStates(messageV2, replacementTarget));
       }
       this.stateManager.removeMessage(replacementTarget);
+      this.#order.seed(messageV2);
       this.replaceMessageAt(replacementIndex, messageV2);
       this.pushMessageToSource(messageV2, 'memory');
       this.pushMessageToSource(messageV2, replacementTargetSource);
@@ -2512,6 +2522,7 @@ export class MessageList {
       // Delegate merge logic to MessageMerger
       MessageMerger.merge(latestMessage, messageV2);
       this.updateLastCreatedAt(latestMessage);
+      this.#orderMessage(latestMessage, messageSource);
 
       // If latest message gets appended to, it should be added to the proper source
       this.pushMessageToSource(latestMessage, messageSource);
@@ -2581,6 +2592,7 @@ export class MessageList {
             if (messageV2.createdAt <= existingMessage.createdAt) {
               messageV2.createdAt = new Date(existingMessage.createdAt.getTime() + 1);
             }
+            this.#orderMessage(messageV2, messageSource);
             this.appendMessage(messageV2);
           }
           // If no new parts, don't add anything (the sealed message already has all the content)
@@ -2589,6 +2601,7 @@ export class MessageList {
           if (messageV2.createdAt <= existingMessage.createdAt) {
             messageV2.createdAt = new Date(existingMessage.createdAt.getTime() + 1);
           }
+          this.#orderMessage(messageV2, messageSource);
           this.appendMessage(messageV2);
         } else {
           const isExistingFromMemory = this.memoryMessages.has(existingMessage);
@@ -2604,6 +2617,7 @@ export class MessageList {
           if (shouldMergeIntoExisting) {
             MessageMerger.merge(existingMessage, messageV2);
             this.updateLastCreatedAt(existingMessage);
+            this.#orderMessage(existingMessage, messageSource);
             this.pushMessageToSource(existingMessage, messageSource);
             // Sort messages and return early — existingMessage stays in messages[] and its Sets
             this.sortMessages();
@@ -2612,9 +2626,12 @@ export class MessageList {
           // The replaced object must not linger in its old source set, otherwise a
           // client-echoed input message replaced by its stored copy would be re-persisted.
           this.stateManager.removeMessage(existingMessage);
+          this.#order.inherit(existingMessage, messageV2);
+          this.#orderMessage(messageV2, messageSource);
           this.replaceMessageAt(existingIndex, messageV2);
         }
       } else if (!exists) {
+        this.#orderMessage(messageV2, messageSource);
         this.appendMessage(messageV2);
       }
 
@@ -2643,6 +2660,14 @@ export class MessageList {
   }
 
   private lastCreatedAt?: number;
+
+  #order = new MessageOrderTracker();
+
+  /** Stored content keeps the order it was saved with; content produced in this run is ordered here. */
+  #orderMessage(message: MastraDBMessage, messageSource: MessageSource) {
+    if (messageSource === 'memory') this.#order.seed(message);
+    else this.#order.stamp(message);
+  }
 
   private updateLastCreatedAt(message: MastraDBMessage): void {
     // Message-level createdAt controls transcript ordering and OM observation boundaries.
