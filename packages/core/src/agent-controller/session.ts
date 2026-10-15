@@ -5752,40 +5752,45 @@ export class Session<TState = unknown> {
       throw new Error('Cannot approve a tool call without a current thread');
     }
     const threadOwnerId = await this.resolveSuspendedThreadOwnerId(agent, { runId, threadId, resourceId });
-    const abortSignal =
-      inputAbortSignal ??
-      (this.thread.getId() === threadId && this.identity.getResourceId() === resourceId
-        ? this.run.ensureAbortController().signal
-        : new AbortController().signal);
-    const requestContext = await this.machinery.buildRequestContext(requestContextInput, {
-      threadId,
-      resourceId,
-      runId,
-      threadOwnerId,
-      abortSignal,
-      execution: true,
-    });
-    const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
-    const toolsets = await this.machinery.buildToolsets(requestContext);
-    onDispatch?.();
-    await agent.sendToolApproval({
-      threadId,
-      resourceId,
-      runId,
-      toolCallId,
-      approved: true,
-      requireToolApproval: !isYolo,
-      memory: { thread: threadId, resource: resourceId },
-      abortSignal,
-      requestContext,
-      toolsets,
-      // Without the shared budget the resumed run falls back to the agent's
-      // default maxSteps (~5) and ends mid-task as "complete".
-      streamOptions: {
-        ...this.machinery.buildSharedRunOptions(requestContext),
-        onStepFinish: this.#resumeUsageRecorder(agent, runId, requestContext),
-      },
-    });
+    const startup =
+      !inputAbortSignal && this.thread.getId() === threadId && this.identity.getResourceId() === resourceId
+        ? this.#armRunForStartup()
+        : undefined;
+    const abortSignal = inputAbortSignal ?? startup?.signal ?? new AbortController().signal;
+    try {
+      const requestContext = await this.machinery.buildRequestContext(requestContextInput, {
+        threadId,
+        resourceId,
+        runId,
+        threadOwnerId,
+        abortSignal,
+        execution: true,
+      });
+      const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
+      const toolsets = await this.machinery.buildToolsets(requestContext);
+      onDispatch?.();
+      await agent.sendToolApproval({
+        threadId,
+        resourceId,
+        runId,
+        toolCallId,
+        approved: true,
+        requireToolApproval: !isYolo,
+        memory: { thread: threadId, resource: resourceId },
+        abortSignal,
+        requestContext,
+        toolsets,
+        // Without the shared budget the resumed run falls back to the agent's
+        // default maxSteps (~5) and ends mid-task as "complete".
+        streamOptions: {
+          ...this.machinery.buildSharedRunOptions(requestContext),
+          onStepFinish: this.#resumeUsageRecorder(agent, runId, requestContext),
+        },
+      });
+    } catch (error) {
+      startup?.resetIfNotStarted();
+      throw error;
+    }
   }
 
   /**
@@ -5835,41 +5840,46 @@ export class Session<TState = unknown> {
       throw new Error('Cannot decline a tool call without a current thread');
     }
     const threadOwnerId = await this.resolveSuspendedThreadOwnerId(agent, { runId, threadId, resourceId });
-    const abortSignal =
-      inputAbortSignal ??
-      (this.thread.getId() === threadId && this.identity.getResourceId() === resourceId
-        ? this.run.ensureAbortController().signal
-        : new AbortController().signal);
-    const requestContext = await this.machinery.buildRequestContext(requestContextInput, {
-      threadId,
-      resourceId,
-      runId,
-      threadOwnerId,
-      abortSignal,
-      execution: true,
-    });
-    const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
-    const toolsets = await this.machinery.buildToolsets(requestContext);
-    onDispatch?.();
-    await agent.sendToolApproval({
-      threadId,
-      resourceId,
-      runId,
-      toolCallId,
-      approved: false,
-      declineContext,
-      requireToolApproval: !isYolo,
-      memory: { thread: threadId, resource: resourceId },
-      abortSignal,
-      requestContext,
-      toolsets,
-      // Without the shared budget the resumed run falls back to the agent's
-      // default maxSteps (~5) and ends mid-task as "complete".
-      streamOptions: {
-        ...this.machinery.buildSharedRunOptions(requestContext),
-        onStepFinish: this.#resumeUsageRecorder(agent, runId, requestContext),
-      },
-    });
+    const startup =
+      !inputAbortSignal && this.thread.getId() === threadId && this.identity.getResourceId() === resourceId
+        ? this.#armRunForStartup()
+        : undefined;
+    const abortSignal = inputAbortSignal ?? startup?.signal ?? new AbortController().signal;
+    try {
+      const requestContext = await this.machinery.buildRequestContext(requestContextInput, {
+        threadId,
+        resourceId,
+        runId,
+        threadOwnerId,
+        abortSignal,
+        execution: true,
+      });
+      const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
+      const toolsets = await this.machinery.buildToolsets(requestContext);
+      onDispatch?.();
+      await agent.sendToolApproval({
+        threadId,
+        resourceId,
+        runId,
+        toolCallId,
+        approved: false,
+        declineContext,
+        requireToolApproval: !isYolo,
+        memory: { thread: threadId, resource: resourceId },
+        abortSignal,
+        requestContext,
+        toolsets,
+        // Without the shared budget the resumed run falls back to the agent's
+        // default maxSteps (~5) and ends mid-task as "complete".
+        streamOptions: {
+          ...this.machinery.buildSharedRunOptions(requestContext),
+          onStepFinish: this.#resumeUsageRecorder(agent, runId, requestContext),
+        },
+      });
+    } catch (error) {
+      startup?.resetIfNotStarted();
+      throw error;
+    }
   }
 
   private createSubscribedResumeBoundaryWaiter({
@@ -6133,74 +6143,111 @@ export class Session<TState = unknown> {
     const agent = await this.resolveSuspensionAgent(address);
     const threadOwnerId = await this.resolveSuspendedThreadOwnerId(agent, address);
     const sourceIsActive = () => threadId === this.thread.getId() && resourceId === this.identity.getResourceId();
-    const abortSignal = sourceIsActive() ? this.run.ensureAbortController().signal : new AbortController().signal;
-    const requestContext = await this.machinery.buildRequestContext(requestContextInput, {
-      threadId,
-      resourceId,
-      runId: address.runId,
-      threadOwnerId,
-      abortSignal,
-      execution: true,
-    });
-    const toolsets = await this.machinery.buildToolsets(requestContext);
-    let resumedSubscriptionBoundary: { promise: Promise<void>; cancel: () => void } | undefined;
-    if (sourceIsActive()) {
-      await this.thread.ensureSubscription(threadId, agent, requestContext, resourceId, sourceIsActive);
-      if (sourceIsActive())
-        resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter({ toolCallId, resolveOnToolEnd });
-    }
+    const startup = sourceIsActive() ? this.#armRunForStartup() : undefined;
+    const abortSignal = startup?.signal ?? new AbortController().signal;
     let observer: Awaited<ReturnType<Session<TState>['observeSourceResume']>> | undefined;
-    const prompt = [...this.displayState.get().pendingSuspensions.values()].find(
-      entry =>
-        entry.toolCallId === toolCallId &&
-        entry.runId === address.runId &&
-        entry.threadId === threadId &&
-        entry.resourceId === resourceId,
-    );
+    let resumedSubscriptionBoundary: { promise: Promise<void>; cancel: () => void } | undefined;
+    let resumeStarted = false;
     try {
-      if (!sourceIsActive()) observer = await this.observeSourceResume(agent, address, requestContext);
-      this.suspensions.delete(address);
-      this.displayState.deletePendingSuspension(address);
-      const sharedOptions = this.machinery.buildSharedRunOptions(requestContext);
-      // Interactive builtins suspend to collect user input, not for approval.
-      // The resume data is the user's answer (a bare string), which the approval
-      // re-check would reject because it cannot carry an `{ approved }` field.
-      // Exempt these tools so the answer reaches the model as-is.
-      const isInteractive = suspension.toolName === 'ask_user' || suspension.toolName === 'request_access';
-      if (isInteractive) {
-        sharedOptions.requireToolApproval = false;
-      }
-      sharedOptions.onStepFinish = this.#resumeUsageRecorder(agent, suspension.runId, requestContext);
-      await agent.sendStreamResume({
+      const requestContext = await this.machinery.buildRequestContext(requestContextInput, {
         threadId,
         resourceId,
-        runId: suspension.runId,
-        toolCallId,
-        resumeData,
-        streamOptions: {
-          ...sharedOptions,
-          memory: { thread: threadId, resource: resourceId },
-          abortSignal,
-          requestContext,
-          toolsets,
-        },
+        runId: address.runId,
+        threadOwnerId,
+        abortSignal,
+        execution: true,
       });
-      if (resumedSubscriptionBoundary) {
-        await resumedSubscriptionBoundary.promise;
-      } else {
-        await observer?.promise;
+      const toolsets = await this.machinery.buildToolsets(requestContext);
+      if (sourceIsActive()) {
+        await this.thread.ensureSubscription(threadId, agent, requestContext, resourceId, sourceIsActive);
+        if (sourceIsActive())
+          resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter({ toolCallId, resolveOnToolEnd });
+      }
+      const prompt = [...this.displayState.get().pendingSuspensions.values()].find(
+        entry =>
+          entry.toolCallId === toolCallId &&
+          entry.runId === address.runId &&
+          entry.threadId === threadId &&
+          entry.resourceId === resourceId,
+      );
+      try {
+        if (!sourceIsActive()) observer = await this.observeSourceResume(agent, address, requestContext);
+        this.suspensions.delete(address);
+        this.displayState.deletePendingSuspension(address);
+        const sharedOptions = this.machinery.buildSharedRunOptions(requestContext);
+        // Interactive builtins suspend to collect user input, not for approval.
+        // The resume data is the user's answer (a bare string), which the approval
+        // re-check would reject because it cannot carry an `{ approved }` field.
+        // Exempt these tools so the answer reaches the model as-is.
+        const isInteractive = suspension.toolName === 'ask_user' || suspension.toolName === 'request_access';
+        if (isInteractive) {
+          sharedOptions.requireToolApproval = false;
+        }
+        sharedOptions.onStepFinish = this.#resumeUsageRecorder(agent, suspension.runId, requestContext);
+        await agent.sendStreamResume({
+          threadId,
+          resourceId,
+          runId: suspension.runId,
+          toolCallId,
+          resumeData,
+          streamOptions: {
+            ...sharedOptions,
+            memory: { thread: threadId, resource: resourceId },
+            abortSignal,
+            requestContext,
+            toolsets,
+          },
+        });
+        resumeStarted = true;
+        if (resumedSubscriptionBoundary) {
+          await resumedSubscriptionBoundary.promise;
+        } else {
+          await observer?.promise;
+        }
+      } catch (error) {
+        if (!observer?.dispatched()) {
+          this.suspensions.register({ ...address, toolName: suspension.toolName });
+          this.#suspensionAgents.set(this.suspensions.get(address)!, agent);
+          if (prompt && sourceIsActive()) this.displayState.apply({ type: 'tool_suspended', ...prompt });
+        }
+        throw error;
+      } finally {
+        observer?.cancel();
+        resumedSubscriptionBoundary?.cancel();
       }
     } catch (error) {
-      if (!observer?.dispatched()) {
-        this.suspensions.register({ ...address, toolName: suspension.toolName });
-        this.#suspensionAgents.set(this.suspensions.get(address)!, agent);
-        if (prompt && sourceIsActive()) this.displayState.apply({ type: 'tool_suspended', ...prompt });
-      }
-      throw error;
-    } finally {
-      observer?.cancel();
       resumedSubscriptionBoundary?.cancel();
+      if (!resumeStarted && !observer?.dispatched()) startup?.resetIfNotStarted();
+      throw error;
     }
+  }
+
+  /**
+   * Arm the run's abort controller for a resume/approval/decline dispatch. The
+   * returned `resetIfNotStarted` returns the run to idle when the dispatch
+   * fails before a run starts, mirroring the `sendSignal` startup reset; it
+   * never touches a run that was already armed or has since been taken over.
+   */
+  #armRunForStartup(): { signal: AbortSignal; resetIfNotStarted: () => void } {
+    const wasArmed = this.run.isRunning();
+    const generation = this.run.bindingGeneration();
+    // A parked run can leave its id on the stream; only a change means a new run started.
+    const streamRunId = this.stream.activeRunId();
+    const signal = this.run.ensureAbortController().signal;
+    return {
+      signal,
+      resetIfNotStarted: () => {
+        if (
+          !wasArmed &&
+          this.run.bindingGeneration() === generation &&
+          this.run.getAbortSignal() === signal &&
+          !this.run.getRunId() &&
+          this.stream.activeRunId() === streamRunId
+        ) {
+          this.run.reset();
+        }
+      },
+    };
   }
 
   /**

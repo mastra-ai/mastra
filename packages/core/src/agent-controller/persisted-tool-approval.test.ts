@@ -139,4 +139,22 @@ describe('Session.respondToPersistedToolApproval', () => {
     expect(await env.suspendedRuns(session)).toHaveLength(1);
     expect(env.executed).toEqual([]);
   }, 30_000);
+
+  it.each([true, false])(
+    'leaves the session idle when the approval dispatch fails (approved: %s)',
+    async approved => {
+      const env = backend();
+      const session = await env.parkThenRestart();
+      vi.spyOn(session.machinery.getAgent(), 'sendToolApproval').mockRejectedValueOnce(new Error('dispatch failed'));
+
+      await expect(session.respondToPersistedToolApproval({ toolCallId: 'call-1', approved })).rejects.toThrow(
+        'dispatch failed',
+      );
+
+      expect(session.run.isRunning()).toBe(false);
+      expect(session.run.getRunId()).toBeNull();
+      expect(await env.suspendedRuns(session)).toHaveLength(1);
+    },
+    30_000,
+  );
 });

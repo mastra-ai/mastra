@@ -478,4 +478,98 @@ describe('AgentController: tool suspension and resumption', () => {
     expect(resumeOptions.streamOptions.savePerStep).toBe(false);
     expect(resumeOptions.streamOptions.modelSettings).toBeUndefined();
   });
+
+  describe('when the resume fails before its run starts', () => {
+    async function setupSuspended(id: string) {
+      const confirmTool = createTool({
+        id: 'confirm-action',
+        description: 'Confirms an action with the user',
+        inputSchema: z.object({ action: z.string() }),
+        execute: async (input: { action: string }, context?: any) => {
+          const resumeData = context?.agent?.resumeData ?? context?.workflow?.resumeData ?? context?.resumeData;
+          if (resumeData) return { result: `Action "${input.action}" confirmed` };
+          const suspend = context?.suspend ?? context?.agent?.suspend;
+          await suspend({ action: input.action });
+          return { result: 'unreachable' };
+        },
+      });
+      let callCount = 0;
+      const agent = new Agent({
+        id,
+        name: id,
+        instructions: 'You confirm actions.',
+        model: new MastraLanguageModelV2Mock({
+          doStream: async () => {
+            callCount++;
+            return { stream: callCount === 1 ? createToolCallStream() : createTextStream() };
+          },
+        }),
+        tools: { confirmAction: confirmTool },
+      });
+      const storage = new InMemoryStore();
+      const mastra = new Mastra({ agents: { [id]: agent }, logger: false, storage });
+      const registeredAgent = mastra.getAgent(id);
+      const controller = new AgentController({
+        workspace: createMockWorkspace(),
+        id: `${id}-controller`,
+        storage,
+        modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
+        initialState: { yolo: true } as any,
+      });
+      await controller.init();
+      const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+      const events: any[] = [];
+      session.subscribe(event => {
+        events.push(event);
+      });
+      await session.thread.create();
+      await session.sendMessage({ content: 'Deploy to production' });
+      expect(session.run.isRunning()).toBe(false);
+      events.length = 0;
+      return { session, registeredAgent, events };
+    }
+
+    it('leaves the session idle and the tool parked when sendStreamResume rejects', async () => {
+      const { session, registeredAgent, events } = await setupSuspended('resume-dispatch-fails');
+      vi.spyOn(registeredAgent, 'sendStreamResume').mockRejectedValueOnce(new Error('NO_SUSPENDED_THREAD_RUN'));
+
+      await session.respondToToolSuspension({ resumeData: { confirmed: true } });
+      expect(events.find(e => e.type === 'error')?.error.message).toBe('NO_SUSPENDED_THREAD_RUN');
+
+      expect(session.run.isRunning()).toBe(false);
+      expect(session.run.getRunId()).toBeNull();
+      expect(session.displayState.get().pendingSuspensions.size).toBe(1);
+      expect(events.some(e => e.type === 'agent_end')).toBe(false);
+
+      await session.respondToToolSuspension({ resumeData: { confirmed: true } });
+      expect(events.find(e => e.type === 'agent_end')?.reason).toBe('complete');
+      expect(session.run.isRunning()).toBe(false);
+    });
+
+    it('leaves the session idle when building the toolsets fails', async () => {
+      const { session, registeredAgent, events } = await setupSuspended('resume-toolsets-fail');
+      const machinery = (session as any).machinery;
+      vi.spyOn(machinery, 'buildToolsets').mockRejectedValueOnce(new Error('toolsets failed'));
+      const sendSpy = vi.spyOn(registeredAgent, 'sendStreamResume');
+
+      await session.respondToToolSuspension({ resumeData: { confirmed: true } });
+      expect(events.find(e => e.type === 'error')?.error.message).toBe('toolsets failed');
+
+      expect(sendSpy).not.toHaveBeenCalled();
+      expect(session.run.isRunning()).toBe(false);
+      expect(session.displayState.get().pendingSuspensions.size).toBe(1);
+    });
+
+    it('does not reset a run that was already armed before the resume', async () => {
+      const { session, registeredAgent, events } = await setupSuspended('resume-already-armed');
+      const signal = session.run.ensureAbortController().signal;
+      vi.spyOn(registeredAgent, 'sendStreamResume').mockRejectedValueOnce(new Error('boom'));
+
+      await session.respondToToolSuspension({ resumeData: { confirmed: true } });
+      expect(events.find(e => e.type === 'error')?.error.message).toBe('boom');
+
+      expect(session.run.isRunning()).toBe(true);
+      expect(session.run.getAbortSignal()).toBe(signal);
+    });
+  });
 });
