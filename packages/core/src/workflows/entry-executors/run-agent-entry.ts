@@ -24,7 +24,10 @@ export function resolveRegisteredAgent<T>(agent: T, mastra?: Mastra): T {
   const candidate = agent as { durable?: unknown; id?: string; getMastraInstance?: () => Mastra | undefined };
   if (!candidate?.durable) return agent;
   // Already a durable wrapper (e.g. a Proxy that forwards `durable` to its inner agent).
-  if (isDurableAgentLike(agent) && agent.agent !== agent) return agent;
+  if (isDurableAgentLike(agent)) {
+    const inner: unknown = agent.agent;
+    if (inner !== agent) return agent;
+  }
 
   for (const registered of Object.values(mastra?.listAgents?.() ?? {})) {
     if (registered !== agent && isDurableAgentLike(registered) && registered.agent === agent) {
