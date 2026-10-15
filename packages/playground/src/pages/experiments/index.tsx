@@ -20,7 +20,6 @@ import {
   NoExperimentsInfo,
 } from '@/domains/experiments';
 import { MAX_COMPARED_EXPERIMENTS } from '@/domains/experiments/components/comparison/constants';
-import { ExperimentsComparableLegend } from '@/domains/experiments/components/experiments-comparable-legend';
 import type { ExperimentsFilters } from '@/domains/experiments/components/experiments-filter-bar';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { buildReviewByExperimentMap } from '@/domains/review/review-maps';
@@ -216,24 +215,22 @@ export default function Experiments() {
         </Button>
       }
       actionRow={
-        <>
-          <ExperimentsToolbar
-            search={search}
-            statusFilter={statusFilter}
-            datasetFilter={datasetFilter}
-            datasetOptions={experimentDatasetOptions}
-            targetType={targetType}
-            targetId={targetId}
-            onFiltersChange={handleFiltersChange}
-            selection={{
-              selectedCount: selectedIds.length,
-              onClearSelection: () => setSelectedExperimentIds([]),
-              onCompare: executeCompare,
-              compareDisabledReason,
-            }}
-          />
-          <ExperimentsComparableLegend datasetId={comparableDatasetId} />
-        </>
+        <ExperimentsToolbar
+          search={search}
+          statusFilter={statusFilter}
+          datasetFilter={datasetFilter}
+          datasetOptions={experimentDatasetOptions}
+          targetType={targetType}
+          targetId={targetId}
+          onFiltersChange={handleFiltersChange}
+          selection={{
+            selectedCount: selectedIds.length,
+            onClearSelection: () => setSelectedExperimentIds([]),
+            onCompare: executeCompare,
+            compareDisabledReason,
+          }}
+          comparableDatasetId={comparableDatasetId}
+        />
       }
     >
       <h1 className="sr-only">Experiments</h1>

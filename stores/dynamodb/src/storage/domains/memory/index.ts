@@ -16,6 +16,9 @@ import {
   TABLE_RESOURCES,
   storageMessageMatchesMetadataFilter,
   validateStorageMetadataFilter,
+  executeRetentionPrune,
+  resolveRetentionTargets,
+  retentionCutoffMs,
 } from '@mastra/core/storage';
 import type {
   RunFence,
@@ -24,6 +27,10 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
 import type { ThreadEntityData, MessageEntityData, ResourceEntityData } from '../../../entities/utils';
@@ -31,11 +38,26 @@ import { resolveDynamoDBConfig } from '../../db';
 import type { DynamoDBDomainConfig } from '../../db';
 import type { DynamoDBTtlConfig } from '../../index';
 import { getTtlProps } from '../../ttl';
-import { assertRunFence, goWithRunFence, isConditionalCheckFailed, retryOnTransactionConflict } from '../run-fencing';
+import {
+  assertRunFence,
+  goWithRunFence,
+  isConditionalCheckFailed,
+  retryOnTransactionConflict,
+  pruneRunClaims,
+} from '../run-fencing';
 import type { RunFenceCheck } from '../run-fencing';
 import { deleteTableData } from '../utils';
 
 export class MemoryStorageDynamoDB extends MemoryStorage {
+  /**
+   * Tables `prune()` can clean up. Run fences anchor on `retiredAt` (epoch ms), which stays unset until the
+   * execution holding the fence settles, so a running execution's fence is
+   * never pruned.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    runFences: { table: TABLE_MEMORY_RUN_FENCES, column: 'retiredAt', indexed: false, anchorType: 'epoch-ms' },
+  };
+
   override readonly supportsPartialThreadUpdate = true;
   private service: Service<Record<string, any>>;
   private ttlConfig?: DynamoDBTtlConfig;
@@ -49,6 +71,22 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
   override supportsRunFencing(): boolean {
     return true;
+  }
+
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveRetentionTargets({
+      policies,
+      descriptor: MemoryStorageDynamoDB.retentionTables,
+      order: ['runFences'],
+    });
+    return executeRetentionPrune({
+      domain: 'memory',
+      targets,
+      options,
+      cutoffFor: (target, now) => retentionCutoffMs(target.policy, now),
+      deleteBatch: (_target, cutoff, limit) =>
+        pruneRunClaims(this.service, 'memory_run_fence', 'retiredAt', Number(cutoff), limit),
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {

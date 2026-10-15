@@ -1,5 +1,41 @@
 # @mastra/core
 
+## 1.78.0-alpha.5
+
+### Patch Changes
+
+- Fixed agent runs crashing with `RangeError: Invalid string length` when a command printed a very large amount of output. `sandbox.executeCommand()` now keeps the newest 1 MiB of stdout and stderr by default, the same limit spawned processes already use. Streaming callbacks still receive every chunk, and the result reports `stdoutTruncated` and `stdoutDroppedBytes` (and the stderr equivalents) when output was dropped. ([#27106](https://github.com/mastra-ai/mastra/pull/27106))
+
+  If you need the complete output, pass `maxRetainedBytes: Infinity`:
+
+  ```ts
+  // Before: all output was kept by default
+  const result = await sandbox.executeCommand('cat', ['data.json']);
+
+  // After: pass Infinity to keep all output
+  const result = await sandbox.executeCommand('cat', ['data.json'], { maxRetainedBytes: Infinity });
+  ```
+
+  Complete output is limited to 256 MiB per stream. A command that prints more is killed, and `executeCommand()` (or `handle.wait()`) rejects with `ProcessOutputLimitError` instead of crashing the process.
+
+  The `execute_command` and `get_process_output` tools now tell the model when the start of the output was dropped, so it doesn't mistake the newest output for all of it.
+
+## 1.78.0-alpha.4
+
+### Patch Changes
+
+- Fixed document citations disappearing after a reload. When a model streams a document source (for example an Anthropic PDF citation), memory now stores it as a `source-document` part with its media type, title and filename. Previously it was saved as a URL source with an empty `url`, so reloaded conversations showed an empty link instead of the cited document. ([#26805](https://github.com/mastra-ai/mastra/pull/26805))
+
+  ```ts
+  const { messages } = await memory.recall({ threadId, resourceId });
+  // assistant parts now include:
+  // { type: 'source-document', sourceId: 'doc-1', mediaType: 'application/pdf', title: 'Q3 report', filename: 'q3.pdf' }
+  ```
+
+  AI SDK v5 UI messages now also keep `source-document` parts and the `sourceId` and `title` of URL sources when converting to and from stored messages.
+
+- Fixed agent controller channel sessions losing the sender's identity on the first message in a new chat thread. A channel session now opens directly on its chat thread, keeping the inbound request context, instead of creating an extra empty thread and switching over without it. Hosts that resolve memory per user from the request context's `user` no longer fail on a new thread. ([#27113](https://github.com/mastra-ai/mastra/pull/27113))
+
 ## 1.78.0-alpha.3
 
 ### Minor Changes

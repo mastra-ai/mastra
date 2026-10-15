@@ -1,5 +1,21 @@
 # @mastra/deployer
 
+## 1.78.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`f738a12`](https://github.com/mastra-ai/mastra/commit/f738a120225329f619211756d69f164a3f434c5d)]:
+  - @mastra/core@1.78.0-alpha.5
+  - @mastra/server@1.78.0-alpha.5
+
+## 1.78.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`843d441`](https://github.com/mastra-ai/mastra/commit/843d4411284c3b96953edebd2c22c3ac9556bac2), [`6ea5f80`](https://github.com/mastra-ai/mastra/commit/6ea5f80919ae4ebc3e3fbba29390da74f043c69a)]:
+  - @mastra/core@1.78.0-alpha.4
+  - @mastra/server@1.78.0-alpha.4
+
 ## 1.78.0-alpha.3
 
 ### Patch Changes

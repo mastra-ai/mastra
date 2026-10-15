@@ -11,6 +11,10 @@ import type {
   StorageListWorkflowRunsInput,
   TABLE_NAMES,
   UpdateWorkflowStateOptions,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import {
   createStorageErrorId,
@@ -22,6 +26,9 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
   WorkflowsStorage,
+  executeRetentionPrune,
+  resolveRetentionTargets,
+  retentionCutoffMs,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 
@@ -53,6 +60,15 @@ function toRunOwnershipRecord(runId: string, row: Record<string, unknown>): RunO
 }
 
 export class WorkflowsStorageDO extends WorkflowsStorage {
+  /**
+   * Tables `prune()` can clean up. Run ownership records anchor on `updatedAt` (epoch ms), which every
+   * claim, renewal and release refreshes, so a live execution's record is never
+   * older than its renew interval.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    runOwnership: { table: TABLE_WORKFLOW_RUN_OWNERS, column: 'updatedAt', indexed: false, anchorType: 'epoch-ms' },
+  };
+
   #db: DODB;
 
   constructor(config: DODomainConfig) {
@@ -70,6 +86,27 @@ export class WorkflowsStorageDO extends WorkflowsStorage {
     await this.#db.createTable({
       tableName: TABLE_WORKFLOW_RUN_OWNERS as TABLE_NAMES,
       schema: RUN_FENCING_TABLE_SCHEMAS[TABLE_WORKFLOW_RUN_OWNERS],
+    });
+  }
+
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveRetentionTargets({
+      policies,
+      descriptor: WorkflowsStorageDO.retentionTables,
+      order: ['runOwnership'],
+    });
+    return executeRetentionPrune({
+      domain: 'workflows',
+      targets,
+      options,
+      cutoffFor: (target, now) => retentionCutoffMs(target.policy, now),
+      deleteBatch: (_target, cutoff, limit) =>
+        this.#db.pruneRunRows({
+          tableName: TABLE_WORKFLOW_RUN_OWNERS as TABLE_NAMES,
+          column: 'updatedAt',
+          cutoff: Number(cutoff),
+          limit,
+        }),
     });
   }
 

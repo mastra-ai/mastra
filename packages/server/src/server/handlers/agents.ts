@@ -268,6 +268,7 @@ async function validateDurableToolCallAccess({
       if (!ready || input?.agentId !== agent.id) {
         throw new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' });
       }
+      await validateRunOwnership({ resourceId: persistedResourceId }, contextResourceId, mastra);
       return;
     }
 
@@ -3067,7 +3068,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
 
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
       const workflowRun = await workflowsStore?.getWorkflowRunById({ workflowName: 'agentic-loop', runId });
-      await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined));
+      await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined), mastra);
 
       const { structuredOutput, untilIdle, ...restOptions } = rest;
 
@@ -3155,7 +3156,7 @@ export const RECOVER_ROUTE = createRoute({
         workflowName: getDurableLoopWorkflowName(agent),
         runId,
       });
-      await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined));
+      await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined), mastra);
 
       // NOTE: DurableAgent.recover() reads the workflow's requestContext from
       // the persisted snapshot. serverRequestContext is only used above for
@@ -3272,7 +3273,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
 
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
       const workflowRun = await workflowsStore?.getWorkflowRunById({ workflowName: 'agentic-loop', runId });
-      await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined));
+      await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined), mastra);
 
       const { structuredOutput, ...restOptions } = rest;
 
