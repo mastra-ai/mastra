@@ -23,12 +23,14 @@ export interface AvailableModelsTarget extends AvailableModelsFilter {
   enabled?: boolean;
 }
 
+function settingsModelsQuery(target?: AvailableModelsTarget) {
+  if (target?.scope) return `?scope=${target.scope}`;
+  if (target?.factoryProjectId) return `?factoryId=${encodeURIComponent(target.factoryProjectId)}`;
+  return '';
+}
+
 async function fetchSettingsModels(baseUrl: string, target?: AvailableModelsTarget) {
-  const query = target?.scope
-    ? `?scope=${target.scope}`
-    : target?.factoryProjectId
-      ? `?factoryId=${encodeURIComponent(target.factoryProjectId)}`
-      : '';
+  const query = settingsModelsQuery(target);
   const res = await fetch(`${baseUrl}/web/config/models${query}`, {
     credentials: 'include',
     headers: { Accept: 'application/json' },

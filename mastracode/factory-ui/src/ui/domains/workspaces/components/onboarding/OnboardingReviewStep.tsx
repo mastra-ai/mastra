@@ -1,64 +1,19 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Building2, GitBranch, ListTodo, Sparkles, UserRound } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { Building2, GitBranch, Sparkles, UserRound } from 'lucide-react';
 import { CONNECTION_METHOD_LABEL } from '../../hooks/useProviderConnection';
-import { useWorkSourceConnections, WORK_SOURCE_NAME, WORK_SOURCES } from '../../hooks/useWorkSourceConnections';
 import { SETUP_LABELS } from '../../services/onboardingSteps';
 import { isGitLabRepository } from '../../services/github';
-import type { OnboardingDraft, OnboardingStep } from '../../services/onboardingFlow';
+import type { OnboardingDraft, OnboardingModelScope, OnboardingStep } from '../../services/onboardingFlow';
 
-function OnboardingReviewRow({
-  icon,
-  label,
-  value,
-  detail,
-  disabled,
-  onEdit,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: string;
-  detail?: string;
-  disabled: boolean;
-  onEdit: () => void;
-}) {
-  return (
-    <div className="flex min-h-10 items-start gap-3">
-      <span className="text-muted-foreground mt-1 size-4 shrink-0 [&>svg]:size-4" aria-hidden="true">
-        {icon}
-      </span>
-      <div className="min-w-0 flex-1">
-        <Txt variant="caption" className="truncate">
-          {value}
-        </Txt>
-        {detail && (
-          <Txt variant="meta" tone="muted" className="mt-1">
-            {detail}
-          </Txt>
-        )}
-      </div>
-      <Button variant="ghost" size="sm" aria-label={`Edit ${label.toLowerCase()}`} disabled={disabled} onClick={onEdit}>
-        Edit
-      </Button>
-    </div>
-  );
-}
+import { OnboardingReviewRow } from './OnboardingReviewRow';
+import { OnboardingWorkReviewRow } from './OnboardingWorkReviewRow';
 
-function OnboardingWorkReviewRow({ disabled, onEdit }: { disabled: boolean; onEdit: () => void }) {
-  const status = useWorkSourceConnections();
-  const connected = WORK_SOURCES.filter(source => status[source]).map(source => WORK_SOURCE_NAME[source]);
-  return (
-    <OnboardingReviewRow
-      icon={<ListTodo />}
-      label="Work"
-      value={connected.join(', ') || 'Set up later'}
-      detail={connected.length ? 'Connected · choose issues after setup' : undefined}
-      disabled={disabled}
-      onEdit={onEdit}
-    />
-  );
+function sharedModelDetail(scope: OnboardingModelScope | undefined, local: boolean) {
+  if (local) return 'Factory default · local connection';
+  if (scope === 'hybrid') return 'Company account · Factory work';
+  return 'Company account · Factory work and sessions';
 }
 
 export function OnboardingReviewStep({
@@ -107,13 +62,7 @@ export function OnboardingReviewStep({
             icon={<Sparkles />}
             label="Model"
             value={draft.model?.modelId ?? 'Choose a model'}
-            detail={
-              local
-                ? 'Factory default · local connection'
-                : draft.modelScope === 'hybrid'
-                  ? 'Company account · Factory work'
-                  : 'Company account · Factory work and sessions'
-            }
+            detail={sharedModelDetail(draft.modelScope, local)}
             disabled={pending}
             onEdit={() => onEdit('model-provider')}
           />

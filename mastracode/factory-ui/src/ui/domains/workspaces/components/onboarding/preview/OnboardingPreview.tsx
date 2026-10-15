@@ -8,7 +8,7 @@ import { OnboardingAccountsPreview } from './OnboardingAccountsPreview';
 import { OnboardingIntakePreview } from './OnboardingIntakePreview';
 import { SketchLabel } from './SketchLabel';
 import { OnboardingIllustration } from './OnboardingIllustration';
-import type { DrawingScene } from './onboarding-drawing';
+import type { AccountsMode, DrawingScene } from './onboarding-drawing';
 import '../onboarding-preview.css';
 
 export interface OnboardingPreviewProps {
@@ -24,6 +24,12 @@ export interface OnboardingPreviewProps {
   connectionMethod?: ProviderConnectionMethod;
   personalConnectionMethod?: ProviderConnectionMethod;
 }
+
+const ACCOUNT_MODES: Record<OnboardingModelScope, AccountsMode> = {
+  factory: 'shared',
+  user: 'individual',
+  hybrid: 'hybrid',
+};
 
 function sceneForStep(step: OnboardingStep): DrawingScene {
   if (step === 'initial') return 'factory';
@@ -99,7 +105,7 @@ export function OnboardingPreview({
   personalConnectionMethod,
 }: OnboardingPreviewProps) {
   const scene = sceneForStep(step);
-  const mode = modelScope === 'factory' ? 'shared' : modelScope === 'user' ? 'individual' : 'hybrid';
+  const mode = ACCOUNT_MODES[modelScope];
   return (
     <aside className="onboarding-preview min-w-0 px-8 xl:px-12" aria-hidden="true">
       <div className="onboarding-diagram relative mx-auto w-full max-w-150">

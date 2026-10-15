@@ -1,26 +1,28 @@
 import type { ReactNode } from 'react';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Building2, KeyRound, Sparkles, UserRound } from 'lucide-react';
-import { useProvidersQuery } from '../../../../../../hooks/use-providers';
-import { useFactoryAuth } from '../../../../../../hooks/useFactoryAuth';
-import { isProviderConnected, CONNECTION_METHOD_LABEL } from '../../../hooks/useProviderConnection';
-import { useProviderModels } from '../../../hooks/useProviderModels';
+import { CONNECTION_METHOD_LABEL } from '../../../hooks/useProviderConnection';
 import type { OnboardingPreviewProps } from './OnboardingPreview';
 import { SketchLabel } from './SketchLabel';
+import { OnboardingModelLabel } from './OnboardingModelLabel';
+import { OnboardingPersonalConnectionStatus } from './OnboardingPersonalConnectionStatus';
 
-function ModelLabel({ providerId, model, scope }: { providerId?: string; model?: string; scope: 'org' | 'user' }) {
-  const catalog = useProviderModels(providerId, scope);
-  return (
-    <Txt variant="meta" tone="muted" className="truncate">
-      {model ?? catalog.suggestedModelId ?? 'Choose a model'}
-    </Txt>
-  );
+function workAccountLabel(personalWork: boolean, local: boolean) {
+  if (personalWork) return 'Work owner’s account';
+  if (local) return 'Local account';
+  return 'Company account';
+}
+
+function workSourceLabel(personalWork: boolean, local: boolean) {
+  if (personalWork) return 'Work owner';
+  if (local) return 'Local account';
+  return 'Company';
 }
 
 export function OnboardingAccountsPreview({
   step,
   modelScope = 'factory',
-  local,
+  local = false,
   model,
   providerId,
   connectionMethod,
@@ -31,19 +33,11 @@ export function OnboardingAccountsPreview({
   const shared = modelScope === 'factory';
   const personalWork = modelScope === 'user';
   const setup = step === 'model-setup';
-  const providers = useProvidersQuery();
-  const auth = useFactoryAuth();
-  const personal = providers.data?.find(item => item.provider === personalProviderId);
-  const connected = personal
-    ? isProviderConnected(personal, auth.data?.authEnabled ? 'user' : undefined, personalConnectionMethod)
-    : false;
+  const accountLabel = workAccountLabel(personalWork, local);
+  const sourceLabel = workSourceLabel(personalWork, local);
   return (
     <section key={modelScope} aria-label="Account setup preview" className="onboarding-account-labels relative h-full">
-      <AccountSource
-        x={shared ? 148 : 28}
-        label={personalWork ? 'Work owner' : local ? 'Local account' : 'Company'}
-        icon={personalWork ? <KeyRound /> : <Building2 />}
-      />
+      <AccountSource x={shared ? 148 : 28} label={sourceLabel} icon={personalWork ? <KeyRound /> : <Building2 />} />
       {!shared && (
         <>
           <AccountSource x={148} label="Personal" icon={<KeyRound />} />
@@ -71,9 +65,9 @@ export function OnboardingAccountsPreview({
         <div className="onboarding-scene-detail absolute inset-x-7 top-[89%] grid grid-cols-2 gap-6">
           <div role="group" aria-label="Factory work model" className="min-w-0">
             <Txt variant="meta" className="mb-2">
-              {personalWork ? 'Work owner’s account' : local ? 'Local account' : 'Company account'}
+              {accountLabel}
             </Txt>
-            <ModelLabel
+            <OnboardingModelLabel
               scope={personalWork ? 'user' : 'org'}
               providerId={personalWork ? personalProviderId : providerId}
               model={personalWork ? personalModel : model}
@@ -88,15 +82,13 @@ export function OnboardingAccountsPreview({
             <Txt variant="meta" className="mb-2">
               {shared ? 'Same model for sessions' : 'Your session model'}
             </Txt>
-            <ModelLabel
+            <OnboardingModelLabel
               scope={shared ? 'org' : 'user'}
               providerId={shared ? providerId : personalProviderId}
               model={shared ? model : personalModel}
             />
             {!shared && (
-              <Txt variant="meta" tone="muted" className="mt-2">
-                {connected ? 'Connected · your account' : 'Connect your account'}
-              </Txt>
+              <OnboardingPersonalConnectionStatus providerId={personalProviderId} method={personalConnectionMethod} />
             )}
           </div>
         </div>
