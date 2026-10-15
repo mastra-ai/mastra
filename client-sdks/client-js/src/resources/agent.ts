@@ -43,6 +43,7 @@ import type {
   SendAgentMessageParams,
   SendAgentSignalParams,
   QueueAgentMessageParams,
+  QueueAgentSignalParams,
   SubscribeAgentThreadParams,
   AbortAgentThreadParams,
   CancelQueuedAgentMessagesParams,
@@ -633,6 +634,10 @@ export class Agent extends BaseResource {
 
   sendSignal(params: SendAgentSignalParams): Promise<RouteResponse<'POST /agents/:agentId/signals'>> {
     return this.requestSignalRoute(`/agents/${this.agentId}/signals`, params);
+  }
+
+  queueSignal(params: QueueAgentSignalParams): Promise<RouteResponse<'POST /agents/:agentId/queue-signal'>> {
+    return this.requestSignalRoute(`/agents/${this.agentId}/queue-signal`, params);
   }
 
   async subscribeToThread(params: SubscribeAgentThreadParams): Promise<

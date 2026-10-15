@@ -14,9 +14,10 @@ import type { GenericMutationCtx as MutationCtx } from 'convex/server';
 import { mutationGeneric } from 'convex/server';
 import type { GenericId } from 'convex/values';
 
-import type { EqualityFilter, StorageRequest, StorageResponse } from '../storage/types';
+import type { EqualityFilter, RunClaimRequest, StorageRequest, StorageResponse } from '../storage/types';
 import { findBestIndex } from './index-map';
 import { handleObservationalMemoryOperation } from './observational-memory';
+import { handleRunClaimOperation, isRunClaimRequest } from './run-fencing';
 import { createEmptyWorkflowSnapshot, mergeWorkflowStepResult } from './workflow-snapshot';
 
 // Vector-specific table names (not in @mastra/core)
@@ -292,7 +293,16 @@ function resolveTable(tableName: string): { convexTable: string; isTyped: boolea
  * Main storage mutation handler.
  * Routes operations to the appropriate typed table.
  */
-export const mastraStorage = mutationGeneric(async (ctx, request: StorageRequest): Promise<StorageResponse> => {
+export const mastraStorage = mutationGeneric(
+  async (ctx, request: StorageRequest | RunClaimRequest): Promise<StorageResponse> => {
+    if (isRunClaimRequest(request)) {
+      return handleRunClaimOperation(ctx, request, routeStorageRequest);
+    }
+    return routeStorageRequest(ctx, request);
+  },
+);
+
+async function routeStorageRequest(ctx: MutationCtx<any>, request: StorageRequest): Promise<StorageResponse> {
   try {
     const { convexTable, isTyped } = resolveTable(request.tableName);
 
@@ -323,7 +333,7 @@ export const mastraStorage = mutationGeneric(async (ctx, request: StorageRequest
       error: err.message,
     };
   }
-});
+}
 
 function parseStoredSnapshot(stored: unknown, runId: string): Record<string, any> {
   if (typeof stored === 'string') return JSON.parse(stored);

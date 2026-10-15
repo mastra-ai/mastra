@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
 import { StudioSettingsPage } from './index';
+import { authDisabledCapabilities } from '@/domains/configuration/context/__tests__/fixtures/capabilities';
 import {
   MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY,
   StudioConfigProvider,
@@ -13,7 +14,7 @@ import { server } from '@/test/msw-server';
 const BASE_URL = 'http://localhost:4111';
 
 async function renderSettingsPage() {
-  server.use(http.get(BASE_URL, () => HttpResponse.text('ok')));
+  server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authDisabledCapabilities)));
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
   render(
