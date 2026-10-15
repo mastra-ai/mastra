@@ -116,11 +116,12 @@
     "@mastra/libsql": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/pg": "workspace:*",
-    "@types/node": "22.19.15",
-    "hono": "^4.13.7",
+    "@types/node": "26.6.5",
+    "hono": "^4.13.13",
     "tsdown": "0.23.1",
     "typescript": "catalog:",
-    "vitest": "catalog:",
-    "zod": "catalog:"
+    "vite": "^8.3.4",
+    "vitest": "5.0.5",
+    "zod": "^4.6.7"
   }
 }
