@@ -149,14 +149,13 @@ export function createFactoryWorkItemTools(
     factory_transition_work_item: createTool({
       id: 'factory_transition_work_item',
       description:
-        "Move a work item to another stage of its board, as the person you are working with. The board's rules decide whether the move is allowed and what it starts. Confirm with the person first.",
+        "Move a work item to another stage of its board, as the person you are working with. The board's rules decide whether the move is allowed and what it starts.",
       inputSchema: z
         .object({
           workItem: workItemRefSchema,
           stage: z.string().trim().min(1).max(64).describe('Destination stage, e.g. "planning" or "done".'),
         })
         .strict(),
-      requireApproval: true,
       execute: async ({ workItem, stage }) => {
         if (!deps.transitionService) throw new Error('Factory stage transitions are not available right now.');
         const item = await requireItem(workItem);
@@ -183,18 +182,16 @@ export function createFactoryWorkItemTools(
     factory_retry_decision: createTool({
       id: 'factory_retry_decision',
       description:
-        'Retry one failed Factory run after the person confirms its cause was fixed. Refused when the failure cannot be fixed by retrying or the item has moved on.',
+        'Retry one failed Factory run once its cause is fixed. Refused when the failure cannot be fixed by retrying or the item has moved on.',
       inputSchema: z.object({ decisionId }).strict(),
-      requireApproval: true,
       execute: async ({ decisionId }) =>
         settled(await retryFactoryDecision({ workItems: deps.workItems, boards: deps.boards, ...project, decisionId })),
     }),
 
     factory_dismiss_decision: createTool({
       id: 'factory_dismiss_decision',
-      description: 'Dismiss one proposed Factory run after the person confirms it is no longer wanted.',
+      description: 'Dismiss one proposed Factory run that is no longer wanted.',
       inputSchema: z.object({ decisionId }).strict(),
-      requireApproval: true,
       execute: async ({ decisionId }) =>
         settled(
           await dismissFactoryDecision({
@@ -210,9 +207,8 @@ export function createFactoryWorkItemTools(
     factory_resolve_proposal: createTool({
       id: 'factory_resolve_proposal',
       description:
-        "Approve or dismiss one proposed Factory run after the person confirms. Approving starts the run and lets the item's later runs start without asking.",
+        "Approve or dismiss one proposed Factory run. Approving starts the run and lets the item's later runs start without asking.",
       inputSchema: z.object({ decisionId, action: z.enum(['approve', 'dismiss']) }).strict(),
-      requireApproval: true,
       execute: async ({ decisionId, action }) =>
         settled(
           await resolveFactoryProposal({

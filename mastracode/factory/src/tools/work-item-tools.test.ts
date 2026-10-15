@@ -194,29 +194,33 @@ describe('factory_create_work_item', () => {
 });
 
 describe('approval', () => {
-  it('asks before moving or settling, and not before filing or following', async () => {
+  it('never asks before running a work-item tool', async () => {
     const { tools } = await setup();
     const flags = Object.fromEntries(
       Object.entries(tools).map(([name, tool]) => [name, tool.requireApproval === true]),
     );
     expect(flags).toEqual({
       factory_create_work_item: false,
-      factory_transition_work_item: true,
-      factory_retry_decision: true,
-      factory_dismiss_decision: true,
-      factory_resolve_proposal: true,
+      factory_transition_work_item: false,
+      factory_retry_decision: false,
+      factory_dismiss_decision: false,
+      factory_resolve_proposal: false,
       factory_subscribe_work_item: false,
       factory_unsubscribe_work_item: false,
     });
   });
 
-  it('allow-lists the read tools, filing and following, and none of the gated tools', () => {
+  it('allow-lists every user-session tool, so none of them asks', () => {
     expect([...FACTORY_TOOLS_WITHOUT_APPROVAL].sort()).toEqual(
       [
         'factory_list_work_items',
         'factory_inspect_work_item',
         'factory_list_attention',
         'factory_create_work_item',
+        'factory_transition_work_item',
+        'factory_retry_decision',
+        'factory_dismiss_decision',
+        'factory_resolve_proposal',
         'factory_subscribe_work_item',
         'factory_unsubscribe_work_item',
       ].sort(),

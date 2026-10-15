@@ -1143,6 +1143,10 @@ describe('MastraFactory.prepare', () => {
     const ALLOWED_TOOLS = [
       ...READ_TOOLS,
       'factory_create_work_item',
+      'factory_transition_work_item',
+      'factory_retry_decision',
+      'factory_dismiss_decision',
+      'factory_resolve_proposal',
       'factory_subscribe_work_item',
       'factory_unsubscribe_work_item',
     ];
@@ -1209,8 +1213,6 @@ describe('MastraFactory.prepare', () => {
       ).toEqual(Object.fromEntries(ALLOWED_TOOLS.map(name => [name, 'allow'])));
       // The same policy core consults before parking a tool call for approval.
       for (const name of ALLOWED_TOOLS) expect(session.resolveToolApproval(name)).toBe('allow');
-      // Moving and settling stay behind the person's approval.
-      expect(session.resolveToolApproval('factory_transition_work_item')).toBe('ask');
 
       const extraTools = config.extraTools as (args: {
         requestContext: RequestContext;

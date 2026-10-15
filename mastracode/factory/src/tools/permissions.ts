@@ -5,13 +5,17 @@ import type { SourceControlSessionLookup } from '../session/factory-session.js';
 /**
  * Factory tools that run without asking. Factory tools fall into the SDK's
  * `mcp` category, whose default policy is `ask`, so each of these needs an
- * explicit per-session `allow`. Approval-gated tools never appear here.
+ * explicit per-session `allow`.
  */
 export const FACTORY_TOOLS_WITHOUT_APPROVAL: readonly string[] = [
   'factory_list_work_items',
   'factory_inspect_work_item',
   'factory_list_attention',
   'factory_create_work_item',
+  'factory_transition_work_item',
+  'factory_retry_decision',
+  'factory_dismiss_decision',
+  'factory_resolve_proposal',
   'factory_subscribe_work_item',
   'factory_unsubscribe_work_item',
 ];
