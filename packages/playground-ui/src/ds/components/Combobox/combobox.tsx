@@ -463,7 +463,6 @@ function MultipleCombobox({
       autoHighlight
       items={options}
       filter={filter}
-      itemToStringLabel={optionText}
       value={selectedOptions}
       onValueChange={items => onValueChange?.(items.map(item => item.value))}
       disabled={disabled}

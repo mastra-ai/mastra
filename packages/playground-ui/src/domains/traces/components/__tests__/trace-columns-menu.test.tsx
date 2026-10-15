@@ -146,7 +146,7 @@ describe('TraceColumnsMenu', () => {
     const openAddDialog = async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
       fireEvent.click(await screen.findByRole('menuitem', { name: 'Add metadata column' }));
-      return screen.getByRole('combobox', { name: 'Metadata key' });
+      return screen.getByRole<HTMLInputElement>('combobox', { name: 'Metadata key' });
     };
 
     // The key field searches in itself: a click opens the list, typing filters it.
@@ -244,7 +244,7 @@ describe('TraceColumnsMenu', () => {
         const field = await openAddDialog();
         await typeCustomKey('tenantId');
 
-        await waitFor(() => expect((field as HTMLInputElement).value).toBe('tenantId'));
+        await waitFor(() => expect(field.value).toBe('tenantId'));
       });
     });
 
