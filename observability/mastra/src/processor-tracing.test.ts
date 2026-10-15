@@ -2910,9 +2910,12 @@ describe('Processor Tracing Tests', () => {
         // drain
       }
 
-      // The resumed tool result is processed before any step starts; the next step still gets its own span
-      const stepIds = testExporter.getModelStepSpans().map(step => step.id);
-      expect(stepIds).toContain(seen.find(chunk => chunk.type === 'text-delta')?.parentId);
+      // The resumed tool result is processed before any step starts; the step after the resume still gets its own span
+      const steps = testExporter.getModelStepSpans().sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+      const textDeltaParentId = seen.find(chunk => chunk.type === 'text-delta')?.parentId;
+      expect(steps.length).toBeGreaterThan(1);
+      expect(textDeltaParentId).toBe(steps.at(-1)!.id);
+      expect(textDeltaParentId).not.toBe(steps[0]!.id);
 
       await testExporter.finalExpectations();
     });
