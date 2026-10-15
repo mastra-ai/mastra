@@ -80,13 +80,6 @@ export class ElevenLabsVoice extends MastraVoice {
     this.speaker = speaker || '9BWtsMINqrJLrRacOk9x'; // Aria is the default speaker
   }
 
-  /**
-   * Retrieves a list of available speakers from the Eleven Labs API.
-   * Each speaker includes their ID, name, language, and gender.
-   *
-   * @returns {Promise<Array<{ voiceId: string, name: string, language: string, gender: string }>>}
-   * A promise that resolves to an array of speaker objects.
-   */
   private getSpeechClient(): ElevenLabsClient {
     if (!this.speechClient) {
       throw new Error('ElevenLabs speech API key is not set');
@@ -101,6 +94,13 @@ export class ElevenLabsVoice extends MastraVoice {
     return this.listeningClient;
   }
 
+  /**
+   * Retrieves a list of available speakers from the Eleven Labs API.
+   * Each speaker includes their ID, name, language, and gender.
+   *
+   * @returns {Promise<Array<{ voiceId: string, name: string, language: string, gender: string }>>}
+   * A promise that resolves to an array of speaker objects.
+   */
   async getSpeakers() {
     const voices = await this.getSpeechClient().voices.getAll();
     return (
