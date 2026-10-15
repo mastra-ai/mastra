@@ -32,7 +32,12 @@ const FOREIGN_DECISION_ID = '0f9e8d7c-6b5a-4493-8271-605f4e3d2c1b';
 async function setup({
   transition,
   feed,
-}: { transition?: Transition; feed?: Pick<CommentsDomain, 'createComment'> } = {}) {
+  actorProfile,
+}: {
+  transition?: Transition;
+  feed?: Pick<CommentsDomain, 'createComment'>;
+  actorProfile?: FactoryToolScope['actorProfile'];
+} = {}) {
   const seed = await createFactoryStorageForTests();
   const pubsub = new EventEmitterPubSub();
   const publish = vi.spyOn(pubsub, 'publish');
@@ -79,7 +84,7 @@ async function setup({
     ),
   };
   const auditRecorder = { record: vi.fn(async () => null) };
-  const tools = createFactoryWorkItemTools(scope, {
+  const tools = createFactoryWorkItemTools(actorProfile ? { ...scope, actorProfile } : scope, {
     workItems: seed.workItems,
     boards,
     transitionService,
@@ -121,6 +126,25 @@ function failedDecision(overrides: Partial<FactoryDeferredDecisionRecord> = {}):
 }
 
 describe('factory_create_work_item', () => {
+  it('stamps the caller’s name and avatar on what it records, so the board can show who filed and moved it', async () => {
+    const actorProfile = { name: 'Caleb', avatarUrl: 'https://example.com/caleb.png' };
+    const { run, transitionService, auditRecorder } = await setup({ actorProfile });
+
+    const created = await run<{ id: string }>('factory_create_work_item', {
+      title: 'Fix the login redirect',
+      brief: 'Users land on /404.',
+    });
+    await run('factory_transition_work_item', { workItem: created.id, stage: 'triage' });
+
+    expect(auditRecorder.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'factory.work_item.created', actorId: 'user-1', actorProfile }),
+    );
+    for (const [request] of vi.mocked(transitionService.transition).mock.calls) {
+      expect(request).toMatchObject({ actor: { type: 'human', id: 'user-1' }, actorProfile });
+    }
+    expect(transitionService.transition).toHaveBeenCalledTimes(2);
+  });
+
   it("files the item as the caller in the board's first phase, posts the brief and follows it", async () => {
     const { run, workItems, comments, transitionService, auditRecorder, publish } = await setup();
 

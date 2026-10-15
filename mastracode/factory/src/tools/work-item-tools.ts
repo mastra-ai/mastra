@@ -83,7 +83,13 @@ export function createFactoryWorkItemTools(
 ): IntegrationTools {
   const project = { orgId: scope.orgId, factoryProjectId: scope.factoryProjectId };
   const audit: FactoryAuditEmit = async input => {
-    await deps.auditRecorder.record({ orgId: scope.orgId, actorId: scope.userId, actorType: 'human', ...input });
+    await deps.auditRecorder.record({
+      orgId: scope.orgId,
+      actorId: scope.userId,
+      actorType: 'human',
+      ...(scope.actorProfile ? { actorProfile: scope.actorProfile } : {}),
+      ...input,
+    });
   };
   const requireItem = async (ref: string) => {
     const item = await findWorkItem(deps.workItems, scope, ref);
@@ -155,6 +161,7 @@ export function createFactoryWorkItemTools(
           audit,
           ...project,
           userId: scope.userId,
+          ...(scope.actorProfile ? { origin: { actorProfile: scope.actorProfile } } : {}),
           input: { title, ...(repository ? { metadata: { repository } } : {}) },
         });
         if (created.status === 'refused') throw new Error(created.message);
@@ -215,6 +222,7 @@ export function createFactoryWorkItemTools(
           ...project,
           workItemId: item.id,
           actor: { type: 'human', id: scope.userId },
+          ...(scope.actorProfile ? { actorProfile: scope.actorProfile } : {}),
           ingress: { ...parsed.data.ingress, identity: `human:${scope.userId}:${parsed.data.ingress.identity}` },
         });
         if (result.status === 'rejected') throw new Error(`The move was refused (${result.code}): ${result.reason}`);

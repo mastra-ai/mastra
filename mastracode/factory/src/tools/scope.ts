@@ -8,6 +8,8 @@ import {
   getFactoryAuthUserId,
 } from '../auth.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
+import { auditActorProfile } from '../storage/domains/audit/base.js';
+import type { AuditActorProfileInput } from '../storage/domains/audit/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
@@ -26,6 +28,8 @@ export interface FactoryToolScope {
   kind: 'user' | 'worker';
   /** True only for turns a signed-in person started over HTTP (see {@link FACTORY_INTERACTIVE_KEY}). */
   interactive: boolean;
+  /** The caller's name and avatar, stamped on audit events so the board can show who acted. */
+  actorProfile?: AuditActorProfileInput;
 }
 
 export interface ResolveFactoryToolScopeOptions {
@@ -56,13 +60,14 @@ export async function resolveFactoryToolScope({
   const threadId = controller?.threadId;
   if (!resourceId || !threadId) return null;
 
-  let caller: { orgId: string; userId: string };
+  let caller: { orgId: string; userId: string; actorProfile?: AuditActorProfileInput };
   if (authEnabled) {
     const user = getFactoryAuthUserFromContext(requestContext);
     const userId = getFactoryAuthUserId(user);
     const orgId = factoryUserOrgId(user);
     if (!userId || !orgId) return null;
-    caller = { orgId, userId };
+    const actorProfile = auditActorProfile(user);
+    caller = { orgId, userId, ...(actorProfile ? { actorProfile } : {}) };
   } else {
     caller = { orgId: 'local', userId: 'local' };
   }
@@ -90,5 +95,6 @@ export async function resolveFactoryToolScope({
     threadId,
     kind: worker ? 'worker' : 'user',
     interactive: requestContext.get(FACTORY_INTERACTIVE_KEY) === true,
+    ...(caller.actorProfile ? { actorProfile: caller.actorProfile } : {}),
   };
 }
