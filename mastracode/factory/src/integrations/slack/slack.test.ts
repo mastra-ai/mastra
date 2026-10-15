@@ -1134,14 +1134,12 @@ describe('channel session creation context (resolveSession)', () => {
   it('seeds Factory ownership before the controller session is created', async () => {
     const sourceControl = {
       sessions: {
-        getBySessionId: vi
-          .fn()
-          .mockResolvedValue({
-            orgId: 'org-1',
-            userId: 'user-1',
-            projectRepositoryId: 'pr-1',
-            factoryProjectId: 'fp-1',
-          }),
+        getBySessionId: vi.fn().mockResolvedValue({
+          orgId: 'org-1',
+          userId: 'user-1',
+          projectRepositoryId: 'pr-1',
+          factoryProjectId: 'fp-1',
+        }),
       },
     };
     const controller = { id: 'code', createSession: vi.fn().mockResolvedValue({ identity: 'session' }) };
