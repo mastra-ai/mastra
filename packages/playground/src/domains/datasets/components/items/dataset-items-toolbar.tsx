@@ -16,10 +16,6 @@ export type DatasetItemsToolbarProps = {
   onImportClick: () => void;
   onImportJsonClick: () => void;
   hasItems: boolean;
-  /** Page-level content rendered before the list actions (e.g. created date). */
-  leftSlot?: React.ReactNode;
-  /** Page-level actions rendered after the list actions, on the same row. */
-  rightSlot?: React.ReactNode;
 
   // Search props
   searchQuery?: string;
@@ -44,8 +40,6 @@ export function DatasetItemsToolbar({
   onImportClick,
   onImportJsonClick,
   hasItems,
-  leftSlot,
-  rightSlot,
   searchQuery,
   onSearchChange,
   selectedCount,
@@ -148,7 +142,6 @@ export function DatasetItemsToolbar({
       </div>
 
       <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-        {leftSlot}
         {selectionDropdown}
         {showItemActions && !isItemPanelOpen && !isViewingOldVersion && (
           <ButtonsGroup>
@@ -172,7 +165,6 @@ export function DatasetItemsToolbar({
             </DropdownMenu>
           </ButtonsGroup>
         )}
-        {rightSlot}
       </div>
     </div>
   );
