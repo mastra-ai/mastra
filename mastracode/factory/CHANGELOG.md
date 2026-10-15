@@ -1,5 +1,159 @@
 # @mastra/factory
 
+## 0.23.0-alpha.5
+
+### Patch Changes
+
+- Kept workspace file listings, change lists and untracked-file lookups complete now that sandbox commands keep only the newest 1 MiB of output by default. ([#27106](https://github.com/mastra-ai/mastra/pull/27106))
+
+- Updated dependencies [[`f738a12`](https://github.com/mastra-ai/mastra/commit/f738a120225329f619211756d69f164a3f434c5d), [`f738a12`](https://github.com/mastra-ai/mastra/commit/f738a120225329f619211756d69f164a3f434c5d)]:
+  - @mastra/core@1.78.0-alpha.5
+  - @mastra/code-sdk@1.14.0-alpha.5
+
+## 0.23.0-alpha.4
+
+### Patch Changes
+
+- Fixed Slack mentions failing with "Tenant model credential policy could not be resolved". New Slack sessions now open directly on their Slack thread and no longer leave an extra empty thread behind. ([#27113](https://github.com/mastra-ai/mastra/pull/27113))
+
+- Updated dependencies [[`843d441`](https://github.com/mastra-ai/mastra/commit/843d4411284c3b96953edebd2c22c3ac9556bac2), [`6ea5f80`](https://github.com/mastra-ai/mastra/commit/6ea5f80919ae4ebc3e3fbba29390da74f043c69a)]:
+  - @mastra/core@1.78.0-alpha.4
+  - @mastra/code-sdk@1.14.0-alpha.4
+
+## 0.23.0-alpha.3
+
+### Minor Changes
+
+- You can now remove agent controller built-in tools such as `submit_plan` without reaching into the controller's private config. Set `disableBuiltinTools` on `createMastraCode()` / `prepareAgentControllerMount()`, or on `MastraFactory` to apply it to every Factory session. When `submit_plan` is unavailable, plan mode tells the model to write the plan file instead of calling it. ([#26967](https://github.com/mastra-ai/mastra/pull/26967))
+
+  ```ts
+  new MastraFactory({ storage, disableBuiltinTools: ['submit_plan'] });
+  ```
+
+- Added a hybrid model scope: sessions run on the owner's credentials and default model, work items run on the Factory's. New Factories start in hybrid; existing Factories keep their scope. Because new Factories now bill members' interactive sessions to their own provider accounts, admins who want everything on organization credentials should switch the Factory to the factory scope. ([#27095](https://github.com/mastra-ai/mastra/pull/27095))
+
+  Previously, setting `modelScope` to `factory` on `PATCH /web/factory/projects/:id` put both sessions and work items on organization credentials:
+
+  ```json
+  { "modelScope": "factory" }
+  ```
+
+  Admins can now split sessions and work items by setting it to `hybrid`:
+
+  ```json
+  { "modelScope": "hybrid" }
+  ```
+
+- Slack threads no longer create Work board cards. A Slack DM or @-mention still starts its session and posts the "New session started" card, whatever the factory's old setting was. ([#27063](https://github.com/mastra-ai/mastra/pull/27063))
+
+  The `slackWorkItemsEnabled` project setting is removed from the project update API.
+
+  Before:
+
+  ```http
+  PATCH /web/factory/projects/:id
+  { "slackWorkItemsEnabled": true }
+  ```
+
+  After: sent alone, the field is rejected as an empty update (400, "At least one project field is required"). Sent with other fields, it is ignored:
+
+  ```http
+  PATCH /web/factory/projects/:id
+  { "name": "Platform" }
+  ```
+
+  Slack-thread cards that already exist keep receiving `aside` comments and keep posting feed comments back to Slack.
+
+### Patch Changes
+
+- Added `scope=user` to `GET /web/config/models` to list models supported by the caller's personal credentials. Organization-only models are excluded from this personal catalog. ([#27080](https://github.com/mastra-ai/mastra/pull/27080))
+
+- Fixed new Factory sessions starting on the built-in mode model instead of your default model. When a session opened before its chat thread was attached, your default went to a thread the chat never used, so the first message could run on a model you have no credentials for and fail with a provider authentication error. ([#27080](https://github.com/mastra-ai/mastra/pull/27080))
+
+- Fixed model pickers offering models that an organization-scoped Factory cannot run. `GET /web/config/models` accepts an optional `factoryId` and then lists only models served by that Factory's model scope (organization credentials for organization scope, personal credentials for personal scope). Personal model settings now note when the current Factory uses organization credentials only. ([#27077](https://github.com/mastra-ai/mastra/pull/27077))
+
+  ```text
+  GET /web/config/models?factoryId=<factory-id>
+  ```
+
+- Fixed sandbox settings becoming impossible to save when a previously stored value is no longer allowed (for example, a memory size above the new 8 GB limit). The outdated value is dropped and the provider default applies instead. ([#27098](https://github.com/mastra-ai/mastra/pull/27098))
+
+- Updated dependencies [[`386fe60`](https://github.com/mastra-ai/mastra/commit/386fe608e8ec763277b13138b6c3b37641bc6c50), [`7b08a87`](https://github.com/mastra-ai/mastra/commit/7b08a876b1060cf6842c61ed8af0eaa93e1310c4), [`5d82145`](https://github.com/mastra-ai/mastra/commit/5d82145ae3cc591eb5cdafd4af5977c36fec5c01), [`4c29655`](https://github.com/mastra-ai/mastra/commit/4c296551a79bebc6a40fddcf2409824f601e6c43), [`6155190`](https://github.com/mastra-ai/mastra/commit/6155190d2436d5e93e21f6a875d8c4306c8043ff), [`eb71f8c`](https://github.com/mastra-ai/mastra/commit/eb71f8c3abbe9aa40375f898fce60f555ef9ebf3), [`35fbdce`](https://github.com/mastra-ai/mastra/commit/35fbdce6de71332246dd6d9b4a5ecba2d87fb6cc), [`cb015a1`](https://github.com/mastra-ai/mastra/commit/cb015a1be6560cbaf4deaef219cb02e63b263bc3), [`d99fa30`](https://github.com/mastra-ai/mastra/commit/d99fa305e0baa00fb2064283658c10e00b95bf10), [`23b493b`](https://github.com/mastra-ai/mastra/commit/23b493bb4b6e8c5e7c2b7f2fa4c531571d81e988)]:
+  - @mastra/code-sdk@1.14.0-alpha.3
+  - @mastra/core@1.78.0-alpha.3
+
+## 0.23.0-alpha.2
+
+### Minor Changes
+
+- Added a Factory model scope setting so sessions can use organization models and credentials or their owner’s personal models and credentials. ([#26934](https://github.com/mastra-ai/mastra/pull/26934))
+
+  Organization admins choose the scope through the project API:
+
+  ```http
+  PATCH /web/factory/projects/:id
+  Content-Type: application/json
+
+  {"modelScope":"user"}
+  ```
+
+  Use `"factory"` for organization models and credentials. Credential scope changes apply on the next model invocation without replacing a thread’s selected model. Session ownership and project policy are resolved from durable records, and unavailable or ambiguous policy stops execution instead of falling back to another account.
+
+### Patch Changes
+
+- Fixed the GitHub repository list failing entirely when an organization still had a personal-account GitHub installation it is no longer allowed to use; those installations are now skipped. Added a refresh option that bypasses the repository cache so repositories newly granted on GitHub appear without waiting for a webhook. ([#27047](https://github.com/mastra-ai/mastra/pull/27047))
+
+- Updated dependencies [[`460b600`](https://github.com/mastra-ai/mastra/commit/460b600abe3b7563537cfb8a676d649c638a9190), [`2362057`](https://github.com/mastra-ai/mastra/commit/2362057cedc6b90b9fd71c424df40eedf3a4ecf3), [`9daf547`](https://github.com/mastra-ai/mastra/commit/9daf547f810df721eaca9c9dafc18f8ce1727b77), [`fd9088a`](https://github.com/mastra-ai/mastra/commit/fd9088ad86fc39a50d38fffa5db796a0c3751a5b), [`e496762`](https://github.com/mastra-ai/mastra/commit/e49676258181017f50eb5739d4a97c0da7317dd9)]:
+  - @mastra/core@1.78.0-alpha.2
+  - @mastra/code-sdk@1.14.0-alpha.2
+
+## 0.23.0-alpha.1
+
+### Minor Changes
+
+- Factory sessions no longer have modes: Plan and Explore are gone, and every session runs as Build. Mastra Code in the terminal keeps its modes. ([#26854](https://github.com/mastra-ai/mastra/pull/26854))
+
+  - The composer no longer shows a mode picker, and Shift+Tab no longer switches modes. `/settings` no longer prints a mode line.
+  - A thread last used in Plan or Explore mode reopens in Build mode, so it can still write files.
+  - Thinking defaults have a single global level. Per-mode thinking defaults no longer apply to Factory runs. Per-mode defaults saved by the terminal app stay in the shared settings file.
+  - `GET /web/config/thinking` no longer returns `modes` or `modeDefaults`, and `PUT /web/config/thinking` only accepts `globalDefault`. A body with `modeDefaults` now gets a 400.
+
+    ```diff
+    - PUT /web/config/thinking  { "globalDefault": "medium", "modeDefaults": { "plan": "high" } }
+    + PUT /web/config/thinking  { "globalDefault": "medium" }
+    ```
+
+  - Explore subagents in sessions without a default model now use Build mode's default model instead of Explore mode's, like sessions that have a default model already do for every subagent.
+  - Audit events for runs no longer record an agent name.
+
+### Patch Changes
+
+- The session detail route `GET /web/user-sessions/:sessionId` now returns the owner profile (`owner: { id, name, avatarUrl? }`), the same field the session list routes already return. `owner` is missing when the owner has no profile in the user directory. ([#27031](https://github.com/mastra-ai/mastra/pull/27031))
+
+  ```ts
+  const { session } = await fetch(`${baseUrl}/web/user-sessions/${sessionId}`).then(response => response.json());
+  const isTeammateSession = session.userId !== viewerUserId;
+  const ownerName = session.owner?.name ?? 'a teammate';
+  ```
+
+- Fixed model selection for Kimi For Coding, GitHub Copilot and custom providers in `/models`, `/setup`, `/model` and `/om`. Picking a Kimi or Copilot model no longer saves an id that fails with "Could not find config for provider mastracode". ([#26692](https://github.com/mastra-ai/mastra/pull/26692))
+
+  These models are now listed under ids that resolve:
+
+  - Kimi: `kimi-code-plan-cn/<model>` (your Kimi login or `KIMI_API_KEY` authenticates it)
+  - GitHub Copilot: `github-copilot/<model>`
+  - Custom providers: `<custom-provider>/<model>`
+
+  Ids you already saved keep working: `kimi-for-coding/<model>`, `mastracode/kimi-for-coding/<model>` and `mastracode/github-copilot/<model>`.
+
+  A Kimi API key saved in `/api-keys` or Factory's provider settings is now used for Kimi models, and a Kimi login shows as connected in `/api-keys`.
+
+- Fixed new chats so they run on the default model you saved in Settings. Before, the draft showed your default model but the chat ran on the built-in one. Chats where you already sent a message keep their model. ([#26996](https://github.com/mastra-ai/mastra/pull/26996))
+
+- Updated dependencies [[`bed1ccc`](https://github.com/mastra-ai/mastra/commit/bed1cccea5817d68faa42a15fda3a0b329f70680), [`4662af0`](https://github.com/mastra-ai/mastra/commit/4662af02f88e4d4826bcad59f304869f7705eef4), [`02e2eae`](https://github.com/mastra-ai/mastra/commit/02e2eae3aee1c5b5b9c807a6a3389b88eca1440c), [`c8c439d`](https://github.com/mastra-ai/mastra/commit/c8c439d3ad29294e754f61e7269904bd7843fb9b), [`1c70db1`](https://github.com/mastra-ai/mastra/commit/1c70db15096f477697022f391a82d9e23d9774de), [`b2dd0c6`](https://github.com/mastra-ai/mastra/commit/b2dd0c6333691467e61406ac920eb6f861db6bc0), [`ad16eae`](https://github.com/mastra-ai/mastra/commit/ad16eae7eec9af386c9eee81f4f30ef65d0df48b)]:
+  - @mastra/core@1.78.0-alpha.1
+  - @mastra/code-sdk@1.14.0-alpha.1
+
 ## 0.22.1-alpha.0
 
 ### Patch Changes

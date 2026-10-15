@@ -215,7 +215,7 @@
       }
     },
     {
-      "hash": "460fe2d40ecab168",
+      "hash": "2e43d47b6ee97431",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -240,7 +240,7 @@
                   "type": "function",
                   "function": {
                     "name": "agent-researchAgent",
-                    "arguments": "{\"prompt\":\"Find comprehensive information about TypeScript, including its features, benefits, use cases, and any notable differences from JavaScript. Also, include information about its popularity and community support.\",\"maxSteps\":5}"
+                    "arguments": "{\"maxSteps\":5,\"prompt\":\"Find comprehensive information about TypeScript, including its features, benefits, use cases, and any notable differences from JavaScript. Also, include information about its popularity and community support.\"}"
                   }
                 }
               ]
@@ -1351,7 +1351,7 @@
               "id": "fc_0e1653012b3b3cd9006a744dbec928819bb73b147d42a7b905",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"prompt\":\"Provide an overview of TypeScript, including its key features, use cases, and advantages over JavaScript. Also, include information about its type system, and any major frameworks or libraries that support TypeScript.\",\"threadId\":null,\"resourceId\":null,\"instructions\":null,\"maxSteps\":\"5\",\"suspendedToolRunId\":null,\"resumeData\":null}",
+              "arguments": "{\"instructions\":null,\"maxSteps\":\"5\",\"prompt\":\"Provide an overview of TypeScript, including its key features, use cases, and advantages over JavaScript. Also, include information about its type system, and any major frameworks or libraries that support TypeScript.\",\"resourceId\":null,\"resumeData\":null,\"suspendedToolRunId\":null,\"threadId\":null}",
               "call_id": "call_pzvihsI1XMMtLVNMbVP5NqW2",
               "name": "agent-researchAgent"
             }
@@ -1526,7 +1526,7 @@
       }
     },
     {
-      "hash": "d9a5ec9634ded0e8",
+      "hash": "9a464c1fb9e1b612",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -1550,7 +1550,7 @@
               "type": "function_call",
               "call_id": "call_pzvihsI1XMMtLVNMbVP5NqW2",
               "name": "agent-researchAgent",
-              "arguments": "{\"prompt\":\"Provide an overview of TypeScript, including its key features, use cases, and advantages over JavaScript. Also, include information about its type system, and any major frameworks or libraries that support TypeScript.\",\"threadId\":null,\"resourceId\":null,\"instructions\":null,\"maxSteps\":\"5\",\"suspendedToolRunId\":null,\"resumeData\":null}"
+              "arguments": "{\"instructions\":null,\"maxSteps\":\"5\",\"prompt\":\"Provide an overview of TypeScript, including its key features, use cases, and advantages over JavaScript. Also, include information about its type system, and any major frameworks or libraries that support TypeScript.\",\"resourceId\":null,\"resumeData\":null,\"suspendedToolRunId\":null,\"threadId\":null}"
             },
             {
               "type": "function_call_output",
@@ -2080,7 +2080,7 @@
               "id": "fc_086940b6fc627112006a744dc75db48199a75650f282aa466b",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"prompt\":\"Find detailed information about TypeScript, including its features, benefits, use cases, and comparison with JavaScript.\",\"threadId\":null,\"resourceId\":null,\"instructions\":null,\"maxSteps\":\"5\",\"suspendedToolRunId\":null,\"resumeData\":null}",
+              "arguments": "{\"instructions\":null,\"maxSteps\":\"5\",\"prompt\":\"Find detailed information about TypeScript, including its features, benefits, use cases, and comparison with JavaScript.\",\"resourceId\":null,\"resumeData\":null,\"suspendedToolRunId\":null,\"threadId\":null}",
               "call_id": "call_dVehB8Vlfm4b1pSR7tPM1Mfd",
               "name": "agent-researchAgent"
             }
@@ -2255,7 +2255,7 @@
       }
     },
     {
-      "hash": "3bae8a4ca98459b0",
+      "hash": "39e6aeab67625167",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -2279,7 +2279,7 @@
               "type": "function_call",
               "call_id": "call_dVehB8Vlfm4b1pSR7tPM1Mfd",
               "name": "agent-researchAgent",
-              "arguments": "{\"prompt\":\"Find detailed information about TypeScript, including its features, benefits, use cases, and comparison with JavaScript.\",\"threadId\":null,\"resourceId\":null,\"instructions\":null,\"maxSteps\":\"5\",\"suspendedToolRunId\":null,\"resumeData\":null}"
+              "arguments": "{\"instructions\":null,\"maxSteps\":\"5\",\"prompt\":\"Find detailed information about TypeScript, including its features, benefits, use cases, and comparison with JavaScript.\",\"resourceId\":null,\"resumeData\":null,\"suspendedToolRunId\":null,\"threadId\":null}"
             },
             {
               "type": "function_call_output",

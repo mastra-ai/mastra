@@ -1,5 +1,127 @@
 # mastra
 
+## 1.34.2-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`f738a12`](https://github.com/mastra-ai/mastra/commit/f738a120225329f619211756d69f164a3f434c5d)]:
+  - @mastra/core@1.78.0-alpha.5
+  - @mastra/deployer@1.78.0-alpha.5
+
+## 1.34.2-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`843d441`](https://github.com/mastra-ai/mastra/commit/843d4411284c3b96953edebd2c22c3ac9556bac2), [`6ea5f80`](https://github.com/mastra-ai/mastra/commit/6ea5f80919ae4ebc3e3fbba29390da74f043c69a)]:
+  - @mastra/core@1.78.0-alpha.4
+  - @mastra/deployer@1.78.0-alpha.4
+
+## 1.34.2-alpha.3
+
+### Patch Changes
+
+- Fixed the Factory personal default model picker offering models that only an organization credential can run. Personal model settings now warn when your saved default can't run on any of your connected accounts. ([#27080](https://github.com/mastra-ai/mastra/pull/27080))
+
+- While an experiment is queued or running, its page in Studio now shows a single progress state with a spinner and how many items have finished (for example `11 / 24 items finished`), instead of KPIs and a results list that are only partly filled in. The KPIs and results appear once the run completes or fails, and Rerun stays disabled until then. The scattered in-progress hints are gone: `Running…` in the run duration, the "so far" labels and the progress count in the breadcrumb. ([#27053](https://github.com/mastra-ai/mastra/pull/27053))
+
+- Factory now explains why connecting GitHub through Mastra Platform didn't work, instead of returning silently to onboarding or settings. If the GitHub account already had the Mastra GitHub App installed before the link, it says to uninstall the App from that account and choose Connect GitHub again. It also gives plain reasons when you need to sign in to Mastra Platform first, when the link was started for a different account, was opened in another browser, or was already used, when only the GitHub account owner can link the installation, and when your Mastra account is already connected to a different GitHub account that must be disconnected first. ([#26990](https://github.com/mastra-ai/mastra/pull/26990))
+
+- The Sessions list in the Factory sidebar can now be grouped by Board, Status, Owner or None from Properties → Group, and each group can be shown or hidden from the same menu. Both choices are remembered across reloads; hidden groups are remembered per grouping. ([#27026](https://github.com/mastra-ai/mastra/pull/27026))
+
+- Added group ordering to the Factory sidebar's Sessions list. In Properties → Group, drag a group by its handle, or highlight it and press Alt+↑ or Alt+↓. The order is remembered per grouping, and moving the groups back to the default order forgets it. ([#27028](https://github.com/mastra-ai/mastra/pull/27028))
+
+- The Factory sidebar now shows one Sessions list, grouped by board (Work, Review, any custom board, then User), with a single Properties menu on its heading. Sort and filters apply to the whole list. ([#27025](https://github.com/mastra-ai/mastra/pull/27025))
+
+  - User sessions now sort by Activity by default, like Work and Review sessions.
+  - Every group shows 5 sessions, with Show more for the rest.
+  - Sessions on a custom board get their own group instead of appearing under Work.
+  - The Status filter gains Waiting on you and Done.
+
+- Improved Factory sandbox settings: choice settings show readable labels (such as memory sizes in MB and GB), and the default choice is marked "(default)" instead of appearing twice in the dropdown. ([#27098](https://github.com/mastra-ai/mastra/pull/27098))
+
+- The Factory Slack connection settings page no longer shows the "Create work items for new Slack threads" toggle, and the Factory API commands no longer accept `slackWorkItemsEnabled` on project updates. ([#27063](https://github.com/mastra-ai/mastra/pull/27063))
+
+  Before:
+
+  ```http
+  PATCH /web/factory/projects/:id
+  { "slackWorkItemsEnabled": true }
+  ```
+
+  After: sent alone, the field is rejected as an empty update. Sent with other fields, it is ignored:
+
+  ```http
+  PATCH /web/factory/projects/:id
+  { "name": "Platform" }
+  ```
+
+- Improved experiment comparison in Studio. ([#27055](https://github.com/mastra-ai/mastra/pull/27055))
+
+  - The experiments list no longer leaves you guessing which experiments can be compared. Once you select an experiment, every experiment that ran on the same dataset is highlighted, and a note above the list gives that dataset's ID.
+  - The comparison page shows the compared dataset as a badge at the top right, linking to the dataset. Each experiment header shows the dataset version that experiment ran on, linked to the dataset at that version, and flags it when it differs from the baseline.
+
+- Added `hybrid` to the Factory project `modelScope` values accepted by `mastra api factory project update`. ([#27095](https://github.com/mastra-ai/mastra/pull/27095))
+
+  Set the update request body to:
+
+  ```json
+  { "modelScope": "hybrid" }
+  ```
+
+  Interactive sessions use their owner's personal model and credentials. Work-item threads use the Factory's default model and organization credentials.
+
+  Factory settings now offer a "Personal for sessions, Factory for work items" model scope. The chat model picker lists the models and default of the thread's billing scope: the session owner's for interactive threads, and the Factory's for work-item threads, including after the work item finishes.
+
+- Updated dependencies [[`7b08a87`](https://github.com/mastra-ai/mastra/commit/7b08a876b1060cf6842c61ed8af0eaa93e1310c4), [`5d82145`](https://github.com/mastra-ai/mastra/commit/5d82145ae3cc591eb5cdafd4af5977c36fec5c01), [`4c29655`](https://github.com/mastra-ai/mastra/commit/4c296551a79bebc6a40fddcf2409824f601e6c43), [`6155190`](https://github.com/mastra-ai/mastra/commit/6155190d2436d5e93e21f6a875d8c4306c8043ff), [`eb71f8c`](https://github.com/mastra-ai/mastra/commit/eb71f8c3abbe9aa40375f898fce60f555ef9ebf3), [`35fbdce`](https://github.com/mastra-ai/mastra/commit/35fbdce6de71332246dd6d9b4a5ecba2d87fb6cc), [`cb015a1`](https://github.com/mastra-ai/mastra/commit/cb015a1be6560cbaf4deaef219cb02e63b263bc3), [`d99fa30`](https://github.com/mastra-ai/mastra/commit/d99fa305e0baa00fb2064283658c10e00b95bf10), [`632b9c7`](https://github.com/mastra-ai/mastra/commit/632b9c756b79d963c221af836079ec7cde1c0a74)]:
+  - @mastra/core@1.78.0-alpha.3
+  - @mastra/deployer@1.78.0-alpha.3
+
+## 1.34.2-alpha.2
+
+### Patch Changes
+
+- Factory settings now let you choose whether a Factory's sessions use the organization's models and credentials or each session owner's own. The setting is also available from the CLI: ([#26934](https://github.com/mastra-ai/mastra/pull/26934))
+
+  ```bash
+  mastra api factory project update <project-id> '{"modelScope":"user"}'
+  ```
+
+- Updated dependencies [[`460b600`](https://github.com/mastra-ai/mastra/commit/460b600abe3b7563537cfb8a676d649c638a9190), [`2362057`](https://github.com/mastra-ai/mastra/commit/2362057cedc6b90b9fd71c424df40eedf3a4ecf3), [`9daf547`](https://github.com/mastra-ai/mastra/commit/9daf547f810df721eaca9c9dafc18f8ce1727b77), [`e496762`](https://github.com/mastra-ai/mastra/commit/e49676258181017f50eb5739d4a97c0da7317dd9)]:
+  - @mastra/core@1.78.0-alpha.2
+  - @mastra/deployer@1.78.0-alpha.2
+
+## 1.34.2-alpha.1
+
+### Patch Changes
+
+- Improved the model pickers in Factory settings. Models now show a readable name (for example Claude Haiku 4.5) with their provider's logo, and the full `provider/model` id underneath. Search still matches the id and the provider name. In Observational memory, "Auto" is now the first choice in the observer and reflector pickers and shows the model it currently resolves to, and the token thresholds use a number field with steppers, thousands separators and a "tokens" suffix. ([#27000](https://github.com/mastra-ai/mastra/pull/27000))
+
+- Each session list in the Factory sidebar (Work, Review and User Sessions) now has one Properties menu on its heading, with Sort and the list's filters as submenus. Each row shows its current value. ([#27004](https://github.com/mastra-ai/mastra/pull/27004))
+
+  - Work and Review Sessions sort by Activity (the previous order), Last updated or Last created. The Owner filter moved from the heading icon into the menu.
+  - User Sessions sort by Last updated (the new default) or Last created. Pinned sessions stay first. The viewer's own sessions are no longer moved to the top, because the Owner filter already starts on Mine.
+  - Owner, Status and Updated filters for User Sessions moved from the filter popover into the menu. Session text search was removed; global search (⌘K) already finds sessions by title, branch and id.
+  - The sort is remembered per list across reloads. Filters still reset on reload.
+  - Reset to default restores the sort and the filters together.
+
+- Fixed `mastra api` trace, log, metric, and score commands for projects in the EU region. They now use the project's region instead of always calling the US observability endpoint, so EU projects return their data instead of empty results or timeouts. The CLI uses `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT` (written to `.env` by `mastra init`) when set, and otherwise looks up the project's region. `--url` still overrides both. ([#27035](https://github.com/mastra-ai/mastra/pull/27035))
+
+- When you open a teammate's Factory session, a line under the composer now names whose session your messages steer, with their avatar. When their profile isn't available, it says "a teammate's session" instead. ([#27031](https://github.com/mastra-ai/mastra/pull/27031))
+
+- The Metrics page in Studio now uses the same filter bar as Traces, Experiments and Datasets, so filtering works the same way on every page. ([#27034](https://github.com/mastra-ai/mastra/pull/27034))
+
+  **Filters**
+
+  The time range is the first chip in the bar, as on Traces. Type to add a filter for a dimension such as environment, tags or thread ID. Remove a chip to clear that filter, or use the clear button to remove them all. Everything sits in one row, instead of an Add Filter button above a second row of pills.
+
+  **Saved filters**
+
+  Metrics now remembers your filters on every change, as Traces does, so the Save and Remove saved menu is gone. Opening Metrics without filters in the link restores the ones you used last. Clearing every filter forgets them.
+
+- Updated dependencies [[`bed1ccc`](https://github.com/mastra-ai/mastra/commit/bed1cccea5817d68faa42a15fda3a0b329f70680), [`02e2eae`](https://github.com/mastra-ai/mastra/commit/02e2eae3aee1c5b5b9c807a6a3389b88eca1440c), [`b2dd0c6`](https://github.com/mastra-ai/mastra/commit/b2dd0c6333691467e61406ac920eb6f861db6bc0), [`ad16eae`](https://github.com/mastra-ai/mastra/commit/ad16eae7eec9af386c9eee81f4f30ef65d0df48b)]:
+  - @mastra/core@1.78.0-alpha.1
+  - @mastra/deployer@1.78.0-alpha.1
+
 ## 1.34.2-alpha.0
 
 ### Patch Changes

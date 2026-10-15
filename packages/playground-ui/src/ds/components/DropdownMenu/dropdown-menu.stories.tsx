@@ -108,6 +108,21 @@ export const Compact: Story = {
   ),
 };
 
+export const CompactWithManyItems: Story = {
+  render: () => (
+    <DropdownMenu>
+      <DropdownMenu.Trigger render={<Button size="sm">Open long menu</Button>} />
+      <DropdownMenu.Content size="sm" className="w-40 min-w-0">
+        {Array.from({ length: 30 }, (_, i) => (
+          <DropdownMenu.Item key={i} size="sm">
+            Item {i + 1}
+          </DropdownMenu.Item>
+        ))}
+      </DropdownMenu.Content>
+    </DropdownMenu>
+  ),
+};
+
 export const WithIcons: Story = {
   render: () => (
     <DropdownMenu>
@@ -448,6 +463,9 @@ export const KitchenSink: Story = {
             <DropdownMenu.RadioItem value="small">Radio small</DropdownMenu.RadioItem>
             <DropdownMenu.RadioItem value="medium">Radio medium</DropdownMenu.RadioItem>
           </DropdownMenu.RadioGroup>
+          <DropdownMenu.Separator />
+          <DropdownMenu.Label inset>Inset label</DropdownMenu.Label>
+          <DropdownMenu.Item inset>Inset item</DropdownMenu.Item>
           <DropdownMenu.Separator />
           <DropdownMenu.Sub>
             <DropdownMenu.SubTrigger>

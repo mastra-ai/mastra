@@ -718,6 +718,7 @@
     "holo3-35b-a3b:thinking",
     "ibm-granite/granite-4.2-8b",
     "inception/mercury-2.5-preview",
+    "inclusionai/ling-3.1-flash",
     "inference-net/schematron-v2-small",
     "inference-net/schematron-v2-turbo",
     "liquid/lfm-2.5-2.6b",
@@ -1487,18 +1488,6 @@
         "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ],
-    "nimbz/gemma-4-giftige-blume-31b-v2": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "nimbz/schattenblume-31b": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
     "x-ai/grok-4.20-multi-agent": [
       {
         "type": "effort",
@@ -1912,12 +1901,6 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "ateron/gemma-4-dark-thoughts-v2-31b": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
       }
     ],
     "minimax/minimax-latest": [

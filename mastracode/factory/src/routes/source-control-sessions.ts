@@ -211,6 +211,11 @@ function createSessionOwnerProfileResolver(users: SessionOwnerUserProvider | und
   };
 }
 
+function withOwnerProfile(session: SourceControlSession, owners: Map<string, SessionOwnerProfile>) {
+  const owner = owners.get(session.userId);
+  return owner ? { ...session, owner } : session;
+}
+
 function projectSessionRoutes(
   path: '/web/source-control/projects/:id/sessions' | '/web/github/projects/:id/sessions',
   options: SourceControlSessionRoutesOptions,
@@ -234,12 +239,7 @@ function projectSessionRoutes(
           viewerUserId: userId,
         });
         const owners = await resolveOwnerProfiles(sessions.map(session => session.userId));
-        return c.json({
-          sessions: sessions.map(session => {
-            const owner = owners.get(session.userId);
-            return { ...session, ...(owner ? { owner } : {}) };
-          }),
-        });
+        return c.json({ sessions: sessions.map(session => withOwnerProfile(session, owners)) });
       },
     }),
     registerApiRoute(path, {
@@ -355,12 +355,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           )
         ).flat();
         const owners = await resolveOwnerProfiles(sessions.map(session => session.userId));
-        return c.json({
-          sessions: sessions.map(session => {
-            const owner = owners.get(session.userId);
-            return { ...session, ...(owner ? { owner } : {}) };
-          }),
-        });
+        return c.json({ sessions: sessions.map(session => withOwnerProfile(session, owners)) });
       },
     }),
     ...projectSessionRoutes('/web/source-control/projects/:id/sessions', options, resolveOwnerProfiles),
@@ -381,7 +376,8 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         ) {
           return c.json({ error: 'Session not found' }, 404);
         }
-        return c.json({ session });
+        const owners = await resolveOwnerProfiles([session.userId]);
+        return c.json({ session: withOwnerProfile(session, owners) });
       },
     }),
     registerApiRoute('/web/user-sessions/:sessionId', {

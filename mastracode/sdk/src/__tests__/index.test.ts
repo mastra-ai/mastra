@@ -592,6 +592,42 @@ describe('createMastraCode', () => {
     expect(result).not.toHaveProperty('validateExperimentalAgent');
   }, 15_000);
 
+  it('prepares trusted policy in the production main-model, goal-judge, and memory callbacks', async () => {
+    const { setCredentialStoreProvider, resolveTenantFromRequestContext } =
+      await import('../agents/credential-resolver.js');
+    const { getDynamicModel, getGoalJudgeModel } = await import('../agents/model.js');
+    const { createMastraCodeAgentController } = await import('../index.js');
+    const tenant = { orgId: 'org-1', userId: 'owner', credentialScope: 'user' as const };
+    const lookup = vi.fn(async () => tenant);
+    const memoryResolve = vi.fn(() => undefined);
+    getDynamicMemoryMock.mockReturnValue(memoryResolve);
+    vi.mocked(getDynamicModel).mockClear();
+    vi.mocked(getGoalJudgeModel).mockClear();
+    setCredentialStoreProvider(() => undefined, lookup);
+    try {
+      await createMastraCodeAgentController();
+      const agentConfig = agentConstructorMock.mock.calls[0]![0];
+      const memory = controllerConstructorMock.mock.calls[0]![0].memory;
+      for (const [callback, resolve] of [
+        [agentConfig.model, getDynamicModel],
+        [agentConfig.goal.judge, getGoalJudgeModel],
+        [memory, memoryResolve],
+      ]) {
+        const requestContext = new RequestContext();
+        await callback({ requestContext });
+        expect(resolveTenantFromRequestContext(requestContext)).toEqual(tenant);
+        expect(resolve).toHaveBeenCalledOnce();
+        lookup.mockRejectedValueOnce(new Error('policy unavailable'));
+        await expect(callback({ requestContext })).rejects.toThrow('policy unavailable');
+        expect(resolveTenantFromRequestContext(requestContext)).toBeUndefined();
+        expect(resolve).toHaveBeenCalledOnce();
+      }
+      expect(lookup).toHaveBeenCalledTimes(6);
+    } finally {
+      setCredentialStoreProvider(undefined);
+    }
+  });
+
   it.each([
     ['durable', createDurableAgentMock, durableAgentMock],
     ['evented', createEventedAgentMock, eventedAgentMock],
@@ -771,6 +807,38 @@ describe('createMastraCode', () => {
       { ...definition, allowedControllerTools: ['task_check'] },
     ]);
     expect(definition.allowedControllerTools).toEqual(['task_write', 'task_check']);
+  });
+
+  it('forwards disableBuiltinTools to the agent controller', async () => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ disableBuiltinTools: ['submit_plan'] });
+    expect(controllerConstructorMock.mock.calls[0]![0].disableBuiltinTools).toEqual(['submit_plan']);
+  });
+
+  it('removes disabled task tools from the task signal provider', async () => {
+    const { TaskSignalProvider } = await import('@mastra/core/signals');
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ disableBuiltinTools: ['task_write', 'task_check'] });
+    const codeAgentConfig = agentConstructorMock.mock.calls
+      .map(call => call?.[0] as { id?: string; signals?: unknown[] } | undefined)
+      .find(config => config?.id === 'code-agent');
+    const taskProvider = codeAgentConfig?.signals?.find(provider => provider instanceof TaskSignalProvider) as
+      | { getTools: () => Record<string, unknown> }
+      | undefined;
+    expect(Object.keys(taskProvider!.getTools()).sort()).toEqual(['task_complete', 'task_update']);
+  });
+
+  it('registers a plan mode that does not ask for submit_plan when it is disabled', async () => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ disableBuiltinTools: ['submit_plan'] });
+    const modes = controllerConstructorMock.mock.calls[0]![0].modes as { id: string; instructions?: string }[];
+    expect(modes.find(mode => mode.id === 'plan')?.instructions).not.toContain('submit_plan');
+  });
+
+  it('does not set disableBuiltinTools on the agent controller by default', async () => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode();
+    expect(controllerConstructorMock.mock.calls[0]![0]).not.toHaveProperty('disableBuiltinTools');
   });
 
   it('filters disabled workspace tools from native subagent allowlists', async () => {

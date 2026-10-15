@@ -27,7 +27,7 @@ type RouteOptions = Parameters<typeof buildSourceControlSessionRoutes>[0];
 
 function buildApp(
   sourceControls: readonly SourceControlStorageHandle[],
-  { memorySettings, projects }: Pick<RouteOptions, 'memorySettings' | 'projects'>,
+  { memorySettings, projects, users }: Pick<RouteOptions, 'memorySettings' | 'projects' | 'users'>,
   controller?: RouteOptions['controller'],
 ) {
   const app = new Hono();
@@ -43,6 +43,7 @@ function buildApp(
       projects,
       memorySettings,
       controller,
+      users,
     }),
   );
   return app;
@@ -281,6 +282,31 @@ describe('source-control session routes', () => {
     expect(opened.headers.get('content-type')).toContain('application/json');
     await expect(opened.json()).resolves.toMatchObject({
       session: { sessionId: session.sessionId, projectRepositoryId: projectRepository.id },
+    });
+  });
+
+  it("names the owner when a teammate opens someone else's session", async () => {
+    const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
+    const session = await sourceControl.sessions.create({
+      sessionId: 'gitlab-session-teammate',
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-2',
+      branch: 'user/session-teammate',
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    const users = {
+      getUser: async (id: string) =>
+        id === 'user-2' ? { id, name: 'Ward Peeters', avatarUrl: 'https://x/w.png' } : null,
+    };
+    const app = buildApp([sourceControl], { ...seed, users });
+
+    const opened = await app.request(`/web/user-sessions/${session.sessionId}`);
+
+    expect(opened.status).toBe(200);
+    await expect(opened.json()).resolves.toMatchObject({
+      session: { userId: 'user-2', owner: { id: 'user-2', name: 'Ward Peeters', avatarUrl: 'https://x/w.png' } },
     });
   });
 

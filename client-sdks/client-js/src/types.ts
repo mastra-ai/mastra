@@ -137,6 +137,8 @@ export type SendAgentMessageParams = GeneratedRequest<Body<'POST /agents/:agentI
 
 export type QueueAgentMessageParams = GeneratedRequest<Body<'POST /agents/:agentId/queue-message'>>;
 
+export type QueueAgentSignalParams = GeneratedRequest<Body<'POST /agents/:agentId/queue-signal'>>;
+
 export interface SubscribeAgentThreadParams {
   resourceId?: string;
   threadId: string;
