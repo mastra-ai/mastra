@@ -226,16 +226,17 @@ export class SarvamVoice extends MastraVoice {
       body: form,
     };
 
+    let response: Response;
     try {
-      const response = await fetch(`${this.baseUrl}/speech-to-text`, requestOptions);
-      if (!response.ok) {
-        await this.throwApiError(response);
-      }
-      const result = (await response.json()) as any;
-      return result.transcript;
+      response = await fetch(`${this.baseUrl}/speech-to-text`, requestOptions);
     } catch (error) {
       console.error('Error during speech-to-text request:', error);
       throw error;
     }
+    if (!response.ok) {
+      await this.throwApiError(response);
+    }
+    const result = (await response.json()) as any;
+    return result.transcript;
   }
 }
