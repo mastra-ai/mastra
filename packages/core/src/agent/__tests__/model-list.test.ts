@@ -182,6 +182,19 @@ function modelListTests(version: 'v1' | 'v2') {
         expect(first?.map(m => m.id)).toEqual(second?.map(m => m.id));
       });
 
+      it('should not reuse an explicit id as a generated fallback id', async () => {
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: 'test agent instructions',
+          model: () => [{ model: openai('gpt-4o') }, { id: 'model-0', model: openai('gpt-4o-mini') }],
+        });
+
+        const ids = (await agent.getModelList())!.map(m => m.id);
+        expect(new Set(ids).size).toBe(2);
+        expect(ids[1]).toBe('model-0');
+      });
+
       it('should reorder and update function-valued model lists', async () => {
         const agent = new Agent({
           id: 'test-agent',

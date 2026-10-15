@@ -3665,9 +3665,17 @@ export class Agent<
     }
 
     // Index-derived ids keep entries stable across repeated resolution of dynamic model functions.
-    return models.map((m, index) =>
-      Agent.toFallbackEntry(m, this.maxRetries ?? 0, this.#maxRetriesConfigured, `model-${index}`),
-    ) as ModelFallbacks;
+    // Skip any generated id that collides with an explicitly declared one.
+    const usedIds = new Set(models.map(m => m.id).filter((id): id is string => !!id));
+    return models.map((m, index) => {
+      let fallbackId: string | undefined;
+      if (!m.id) {
+        fallbackId = `model-${index}`;
+        for (let n = 1; usedIds.has(fallbackId); n++) fallbackId = `model-${index}-${n}`;
+        usedIds.add(fallbackId);
+      }
+      return Agent.toFallbackEntry(m, this.maxRetries ?? 0, this.#maxRetriesConfigured, fallbackId);
+    }) as ModelFallbacks;
   }
 
   /**
