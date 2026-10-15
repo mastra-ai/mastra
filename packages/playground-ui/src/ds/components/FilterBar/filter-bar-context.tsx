@@ -122,6 +122,11 @@ export type FilterBarContextValue = {
   announce: (message: string) => void;
   announcement: string;
   ariaLabel: string;
+  /**
+   * Text shown when a field's `suggestions` resolver rejects. Return `undefined` to keep the
+   * default "Couldn't load values.".
+   */
+  describeSuggestionsError?: (error: unknown) => string | undefined;
 };
 
 const FilterBarContext = createContext<FilterBarContextValue | null>(null);
@@ -155,6 +160,11 @@ export type FilterBarProviderProps = {
   /** Deepest allowed group nesting (root-level group = 1). Defaults to 3. */
   maxDepth?: number;
   ariaLabel: string;
+  /**
+   * Text shown when a field's `suggestions` resolver rejects. Return `undefined` to keep the
+   * default "Couldn't load values.".
+   */
+  describeSuggestionsError?: (error: unknown) => string | undefined;
   children: ReactNode;
 };
 
@@ -201,6 +211,7 @@ export function FilterBarProvider({
   createItemId,
   maxDepth = DEFAULT_MAX_GROUP_DEPTH,
   ariaLabel,
+  describeSuggestionsError,
   children,
 }: FilterBarProviderProps) {
   const segments = useRef(new Map<SegmentKey, HTMLElement>());
@@ -565,6 +576,7 @@ export function FilterBarProvider({
       announce,
       announcement,
       ariaLabel,
+      describeSuggestionsError,
     }),
     [
       fields,
@@ -604,6 +616,7 @@ export function FilterBarProvider({
       announce,
       announcement,
       ariaLabel,
+      describeSuggestionsError,
     ],
   );
 

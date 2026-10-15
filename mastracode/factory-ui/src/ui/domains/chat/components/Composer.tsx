@@ -23,6 +23,7 @@ import { useChatConnection } from '../context/useChatConnection';
 import { useChatModels } from '../context/useChatModels';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
+import type { PendingImage } from '../context/ComposerImagesContext';
 import {
   useAbortAgentControllerMutation,
   useSendAgentControllerMessageMutation,
@@ -37,7 +38,6 @@ import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { StatusLine } from './StatusLine';
 import { ComposerImageAttachments } from './ComposerImageAttachments';
 import { useComposerImages } from './useComposerImages';
-import type { PendingImage } from './useComposerImages';
 import { useInitializingPlaceholder } from './useInitializingPlaceholder';
 
 type ComposerProps = Pick<ComposerInputProps, 'variant'>;
@@ -79,9 +79,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const createDraftSessionMutation = useCreateUserSessionFromDraft();
   const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
   const draftConfigNotReady = onUserDraft && (modelLoading || modelError !== undefined);
-  const attachDisabled = onUserDraft || blocked || chatPreparing || planFeedback.pending;
+  const attachDisabled = blocked || chatPreparing || planFeedback.pending;
   const { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange } = useComposerImages({
-    onUserDraft,
     disabled: chatPreparing || planFeedback.pending,
   });
   const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;
@@ -140,6 +139,18 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     clearPendingHandoff(resourceId);
   };
 
+  // Images leave the composer while in flight and come back if the send fails.
+  const withPendingImages = async (run: (files: PendingImage[]) => Promise<unknown>) => {
+    const files = images;
+    setImages([]);
+    try {
+      await run(files);
+    } catch (error) {
+      setImages(current => [...files, ...current]);
+      throw error;
+    }
+  };
+
   const steer = async (text: string) => {
     if (!text.trim()) return;
     const localId = localUser(text, true);
@@ -192,7 +203,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   const createDraftSession = async (prompt: string, title: string) => {
     try {
-      await createDraftSessionMutation.mutateAsync({ prompt, title });
+      await withPendingImages(files => createDraftSessionMutation.mutateAsync({ prompt, title, files }));
     } catch (error) {
       updateDraft(prompt);
       throw error;
@@ -239,14 +250,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       await steer(text);
       return;
     }
-    const files = images;
-    setImages([]);
-    try {
-      await send(text, files);
-    } catch (error) {
-      setImages(current => [...files, ...current]);
-      throw error;
-    }
+    await withPendingImages(files => send(text, files));
   }
 
   return (

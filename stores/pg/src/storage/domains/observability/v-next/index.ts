@@ -101,6 +101,7 @@ import type {
   ListScoresArgs,
   ListScoresResponse,
   ListTracesArgs,
+  ListTracesLightResponse,
   ListTracesResponse,
   GetTraceQueryValuesResponse,
   ObservabilityStorageStrategy,
@@ -474,6 +475,9 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
 
   override async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     return this.#run('LIST_TRACES', () => tracesOps.listTraces(this.#readClient, this.#schema, args));
+  }
+  override async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
+    return this.#run('LIST_TRACES_LIGHT', () => tracesOps.listTracesLight(this.#readClient, this.#schema, args));
   }
 
   override async querySpans(plan: TrustedSpanQueryPlan): Promise<SpanQueryResponse> {

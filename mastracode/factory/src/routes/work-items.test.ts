@@ -874,6 +874,7 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
         orgId: 'org1',
         userId: 'u1',
         factoryProjectId: PROJECT_ID,
+        modelScope: 'factory',
         defaultModelId: 'anthropic/claude-fable-5',
         requestContext,
       }),

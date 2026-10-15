@@ -49,6 +49,7 @@
     "deepinfra/meta-models/Muse-Glimmer-30B",
     "deepinfra/moonshotai/Kimi-K2.5",
     "deepinfra/stepfun-ai/Step-3.7-Flash",
+    "deepinfra/stepfun-ai/Step-5-Preview",
     "deepinfra/thinkingmachines/Inkling",
     "deepinfra/thinkingmachines/Inkling-Small",
     "deepseek-v4-flash-vision-exp",
@@ -81,6 +82,7 @@
     "google/gemini-nano-banana-2.1",
     "google/gemini-pro-latest",
     "greenpt/deepseek-v4.1-flash",
+    "infomaniak/mistralai/Ministral-3-14B-Instruct-2512",
     "minimax/MiniMax-M3",
     "mistral/codestral-2508",
     "mistral/devstral-2512",
@@ -303,6 +305,7 @@
     "fireworks_ai/accounts/fireworks/models/inkling",
     "fireworks_ai/gpt-oss-120b",
     "flexai/DeepSeek-V4-Flash-0731",
+    "flexai/DeepSeek-V4-Flash-0731@eu",
     "flexai/DeepSeek-V4.1-Flash",
     "flexai/Muse-Glimmer-30B",
     "flexai/Step-3.7-Flash",
@@ -547,6 +550,7 @@
     "deepinfra/openai/gpt-oss-20b",
     "deepinfra/stepfun-ai/Step-3.5-Flash",
     "deepinfra/stepfun-ai/Step-3.7-Flash",
+    "deepinfra/stepfun-ai/Step-5-Preview",
     "deepinfra/tencent/Hy3",
     "deepinfra/tencent/Hy4-preview",
     "deepinfra/thinkingmachines/Inkling",
@@ -560,6 +564,7 @@
     "fireworks_ai/accounts/fireworks/models/gpt-oss-120b",
     "fireworks_ai/accounts/fireworks/models/inkling",
     "flexai/DeepSeek-V4-Flash-0731",
+    "flexai/DeepSeek-V4-Flash-0731@eu",
     "flexai/DeepSeek-V4.1-Flash",
     "flexai/Step-3.7-Flash",
     "flexai/gpt-oss-120b",
@@ -593,6 +598,10 @@
     "groq/openai/gpt-oss-120b",
     "groq/openai/gpt-oss-20b",
     "groq/openai/gpt-oss-safeguard-20b",
+    "infomaniak/mistralai/Ministral-3-14B-Instruct-2512",
+    "ionos/Qwen/Qwen3-Coder-Next",
+    "ionos/meta-llama/Llama-3.3-70B-Instruct",
+    "ionos/openai/gpt-oss-120b",
     "minimax/MiniMax-M2.1",
     "minimax/MiniMax-M2.5",
     "minimax/MiniMax-M2.7",
@@ -796,6 +805,12 @@
       }
     ],
     "deepinfra/stepfun-ai/Step-3.7-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "deepinfra/stepfun-ai/Step-5-Preview": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -1111,6 +1126,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "flexai/DeepSeek-V4-Flash-0731@eu": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "flexai/Step-3.7-Flash": [

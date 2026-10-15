@@ -1214,6 +1214,7 @@ describe('useChat forwards clientTools', () => {
     expect(subscribeToThreadMock).toHaveBeenCalledTimes(2);
     expect((sendError as Error | undefined)?.name).toBe('AbortError');
     expect(result.current.isRunning).toBe(false);
+    expect(result.current.messages.filter(m => m.role === 'user')).toEqual([]);
   });
 
   it('resets isRunning when the signal send request itself fails', async () => {
@@ -1243,6 +1244,36 @@ describe('useChat forwards clientTools', () => {
 
     expect((sendError as Error | undefined)?.message).toBe('network down');
     expect(result.current.isRunning).toBe(false);
+    // The optimistic pending bubble is dropped since the server never accepted it (#26831).
+    expect(result.current.messages.filter(m => m.role === 'user')).toEqual([]);
+  });
+
+  it('keeps earlier messages and allows a clean retry after a failed signal send', async () => {
+    const { result } = renderHook(
+      () =>
+        useChat({ agentId: 'test-agent', resourceId: 'resource-1', threadId: 'thread-1', enableThreadSignals: true }),
+      { wrapper },
+    );
+    await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalledTimes(1));
+
+    // An earlier send succeeds and its pending bubble stays in place.
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'stream', message: 'first message', threadId: 'thread-1' });
+    });
+
+    sendMessageMock.mockRejectedValueOnce(new Error('network down'));
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'stream', message: 'retry me', threadId: 'thread-1' }).catch(() => {});
+    });
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'stream', message: 'retry me', threadId: 'thread-1' });
+    });
+
+    const users = result.current.messages.filter(m => m.role === 'user');
+    expect(users).toHaveLength(2);
+    expect(JSON.stringify(users[0]!.content)).toContain('first message');
+    expect(JSON.stringify(users[1]!.content)).toContain('retry me');
+    expect(users.every(m => m.content.metadata?.status === 'pending')).toBe(true);
   });
 
   it('uses the legacy stream path when thread signals are explicitly disabled', async () => {

@@ -30,6 +30,7 @@ import { findCommand, isSentToAgent, parseSlashCommand } from '../services/comma
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { GLOBAL_THINKING_SOURCE_LABEL, THINKING_LEVEL_LABELS } from '../services/thinkingLevels';
 import { useChatModels } from './useChatModels';
+import { useChatModelScope } from './useChatModelScope';
 import { useChatPermissions } from './useChatPermissions';
 import { useChatSessionContext } from './useChatSessionContext';
 import { useChatRuntime } from './useChatRuntime';
@@ -58,7 +59,8 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const { transcript, busy, localUser, pushNotice } = useChatTranscript();
   const { usage, omPhase } = useChatRuntime();
   const { activeModelId, setModel } = useChatModels();
-  const activeModelReasoningOptions = useModelReasoningOptions(activeModelId);
+  const { catalogTarget } = useChatModelScope();
+  const activeModelReasoningOptions = useModelReasoningOptions(activeModelId, catalogTarget);
   const availableThinkingLevels = getAvailableThinkingLevelsForModel(activeModelId ?? '', activeModelReasoningOptions);
 
   const hookArgs = {

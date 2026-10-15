@@ -68,7 +68,26 @@ import {
 import { feedbackRecordToRow, scoreRecordToRow, spanRecordToRow } from './helpers';
 import { isReplacingMergeTreeEngine } from './migration';
 import { backfillCurrentScores } from './score-current';
-import { compileClickHouseTraceQuery, runWithClickHouseTraceQueryTimeout } from './trace-query';
+import {
+  compileClickHouseTraceQuery,
+  compileClickHouseTraceQueryKeys,
+  compileClickHouseTraceRowsByKey,
+  runWithClickHouseTraceQueryTimeout,
+} from './trace-query';
+import type { ClickHouseTraceRootKey } from './trace-query';
+
+function rootKeys(rows: Record<string, unknown>[]): ClickHouseTraceRootKey[] {
+  const iso = (value: unknown) => {
+    const text = String(value);
+    return new Date(text.includes('T') ? text : `${text.replace(' ', 'T')}Z`).toISOString();
+  };
+  return rows.map(row => ({
+    traceId: String(row.traceId),
+    dedupeKey: String(row.dedupeKey),
+    sortValue: iso(row.sortValue),
+    rootStartedAt: iso(row.rootStartedAt),
+  }));
+}
 import { ObservabilityStorageClickhouseVNext } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -309,22 +328,37 @@ describe('ObservabilityStorageClickhouseVNext', () => {
             ...request,
           }),
         );
-        const compiled = compileClickHouseTraceQuery(plan);
-        const explainResult = await client.query({
-          query: `EXPLAIN indexes = 1 ${compiled.query}`,
-          query_params: compiled.query_params,
-          format: 'TabSeparatedRaw',
-        });
-        const explain = await explainResult.text();
-        expect(explain).toContain(expectedTable);
-        if (expectPrimaryKey) expect(explain).toContain('PrimaryKey');
-        if (expectedIndex) expect(explain).toContain(expectedIndex);
+        const explain = async (compiled: { query: string; query_params: Record<string, unknown> }) => {
+          const result = await client.query({
+            query: `EXPLAIN indexes = 1 ${compiled.query}`,
+            query_params: compiled.query_params,
+            format: 'TabSeparatedRaw',
+          });
+          return result.text();
+        };
+        // Keyset lists run as a keys statement and a read of those roots by key; grouped lists
+        // still compile as one statement.
+        const compiled =
+          plan.result === 'traces' && plan.paginationMode !== 'delta'
+            ? compileClickHouseTraceQueryKeys(plan)
+            : compileClickHouseTraceQuery(plan);
+        const plainExplain = await explain(compiled);
+        if (expectPrimaryKey) expect(plainExplain).toContain('PrimaryKey');
+        if (expectedIndex) expect(plainExplain).toContain(expectedIndex);
 
         const queryId = `trace-query-perf-${randomUUID()}`;
-        await runWithClickHouseTraceQueryTimeout(client, { timeoutMs: 15_000 }, compiled, queryId);
+        const keyRows = await runWithClickHouseTraceQueryTimeout(client, { timeoutMs: 15_000 }, compiled, queryId);
+        if (plan.result === 'traces' && plan.paginationMode !== 'delta') {
+          const keys = rootKeys(keyRows);
+          expect(keys.map(key => key.traceId)).toEqual(['candidate-trace']);
+          // The rows-by-key read narrows mastra_trace_roots by its sort key.
+          expect(await explain(compileClickHouseTraceRowsByKey(plan, keys))).toContain('PrimaryKey');
+        }
         await client.command({ query: 'SYSTEM FLUSH LOGS' });
         const logResult = await client.query({
-          query: `SELECT read_rows AS readRows, read_bytes AS readBytes
+          // Subqueries used for index analysis are built during planning, so EXPLAIN may not name
+          // every table the query reads; the query log does.
+          query: `SELECT read_rows AS readRows, read_bytes AS readBytes, tables
 FROM system.query_log
 WHERE query_id = {queryId:String} AND type = 'QueryFinish'
 ORDER BY event_time_microseconds DESC
@@ -332,8 +366,9 @@ LIMIT 1`,
           query_params: { queryId },
           format: 'JSONEachRow',
         });
-        const [log] = await logResult.json<{ readRows: number; readBytes: number }>();
+        const [log] = await logResult.json<{ readRows: number; readBytes: number; tables: string[] }>();
         expect(Number(log?.readBytes)).toBeGreaterThan(0);
+        expect(log?.tables.some(table => table.endsWith(`.${expectedTable}`))).toBe(true);
         return Number(log?.readRows);
       };
 
@@ -445,66 +480,180 @@ LIMIT 1`,
           },
         }),
       );
-      const queryId = `trace-query-range-${randomUUID()}`;
+      const keysQueryId = `trace-query-range-${randomUUID()}`;
+      const keys = rootKeys(
+        await runWithClickHouseTraceQueryTimeout(
+          client,
+          { timeoutMs: 15_000 },
+          compileClickHouseTraceQueryKeys(plan),
+          keysQueryId,
+        ),
+      );
+      const rowsQueryId = `trace-query-range-${randomUUID()}`;
       const rows = await runWithClickHouseTraceQueryTimeout(
         client,
         { timeoutMs: 15_000 },
-        compileClickHouseTraceQuery(plan),
-        queryId,
+        compileClickHouseTraceRowsByKey(plan, keys),
+        rowsQueryId,
       );
       expect(rows.map(row => row.traceId)).toEqual(['in-range-trace']);
 
       await client.command({ query: 'SYSTEM FLUSH LOGS' });
-      const logResult = await client.query({
-        query: `SELECT read_bytes AS readBytes
+      for (const queryId of [keysQueryId, rowsQueryId]) {
+        const logResult = await client.query({
+          query: `SELECT read_bytes AS readBytes
 FROM system.query_log
 WHERE query_id = {queryId:String} AND type = 'QueryFinish'
 ORDER BY event_time_microseconds DESC
 LIMIT 1`,
-        query_params: { queryId },
-        format: 'JSONEachRow',
-      });
-      const [log] = await logResult.json<{ readBytes: number }>();
-      // Deduping the whole table would read every outside root's input and output.
-      expect(Number(log?.readBytes)).toBeLessThan(outsideRoots * payload.length);
+          query_params: { queryId },
+          format: 'JSONEachRow',
+        });
+        const [log] = await logResult.json<{ readBytes: number }>();
+        // Deduping the whole table would read every outside root's input and output.
+        expect(Number(log?.readBytes)).toBeGreaterThan(0);
+        expect(Number(log?.readBytes)).toBeLessThan(outsideRoots * payload.length);
+      }
     } finally {
       await client.close();
     }
   });
 
-  it('does not resurrect a trace through a non-current root in the requested time range', async () => {
+  it('lists a trace once in every mode across retried root copies and a second root', async () => {
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-08-08T00:00:00Z' };
+    const query = (request: Record<string, unknown>) =>
+      storage.queryTraces(planTraceQuery(parseTraceQueryRequest({ timeRange, ...request })));
+    const seed = await query({ mode: 'delta' });
+    if (!('deltaCursor' in seed)) throw new Error('Expected a delta cursor');
+
     const root = {
-      traceId: 'multi-root-trace',
+      traceId: 'one-root-trace',
+      spanId: 'root-a',
       parentSpanId: null,
       name: 'agent run',
       spanType: SpanType.AGENT_RUN,
       isEvent: false,
-    };
-    await storage.batchCreateSpans({
-      records: [
-        {
+      entityType: EntityType.AGENT,
+      entityName: 'agentA',
+      threadId: 'one-root-thread',
+      startedAt: new Date('2026-08-05T10:00:00.000Z'),
+      endedAt: new Date('2026-08-05T10:00:02.000Z'),
+    } as const;
+
+    await client.command({ query: `SYSTEM STOP MERGES ${TABLE_TRACE_ROOTS}` });
+    try {
+      // A retried copy of the root (same dedupeKey), and a second root in the same trace, which only
+      // a writer bug produces. Its later end time makes the two roots sort differently by endedAt.
+      await storage.createSpan({ span: root });
+      await storage.createSpan({ span: root });
+      await storage.createSpan({
+        span: {
           ...root,
-          spanId: 'root-a',
-          startedAt: new Date('2026-08-05T10:00:00.000Z'),
-          endedAt: new Date('2026-08-05T10:00:02.000Z'),
+          spanId: 'root-b',
+          entityName: 'agentB',
+          startedAt: new Date('2026-08-05T10:00:01.000Z'),
+          endedAt: new Date('2026-08-05T10:00:09.000Z'),
         },
-        {
-          ...root,
-          spanId: 'root-a-old',
-          startedAt: new Date('2026-08-01T10:00:00.000Z'),
-          endedAt: new Date('2026-08-01T10:00:01.000Z'),
-        },
-      ],
+      });
+      const physical = await client.query({
+        query: `SELECT count() AS rows FROM ${TABLE_TRACE_ROOTS} WHERE traceId = {traceId:String}`,
+        query_params: { traceId: root.traceId },
+        format: 'JSONEachRow',
+      });
+      expect(await physical.json<{ rows: number }>()).toEqual([{ rows: 3 }]);
+
+      const keyset = await query({});
+      expect('traces' in keyset ? keyset.traces.map(trace => trace.traceId) : []).toEqual([root.traceId]);
+
+      for (const direction of ['asc', 'desc'] as const) {
+        for (const field of ['startedAt', 'endedAt'] as const) {
+          // The listed row is the root whose sort value placed the trace on the page.
+          const page = await query({ orderBy: [{ field, direction }], pagination: { page: 0, perPage: 10 } });
+          if (!('pagination' in page)) throw new Error('Expected a numbered page');
+          expect(page.pagination?.total).toBe(1);
+          expect(page.traces.map(trace => trace.traceId)).toEqual([root.traceId]);
+        }
+      }
+
+      // A root-column filter matches the trace through either root, once.
+      for (const entityName of ['agentA', 'agentB']) {
+        const filtered = await query({
+          where: { op: 'eq', left: { path: 'entityName' }, right: { literal: entityName } },
+          pagination: { page: 0, perPage: 10 },
+        });
+        if (!('pagination' in filtered)) throw new Error('Expected a numbered page');
+        expect(filtered.pagination?.total).toBe(1);
+        expect(filtered.traces.map(trace => [trace.traceId, trace.entityName])).toEqual([[root.traceId, entityName]]);
+      }
+      const missing = await query({
+        where: { op: 'eq', left: { path: 'entityName' }, right: { literal: 'agentC' } },
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect('pagination' in missing ? missing.pagination?.total : undefined).toBe(0);
+
+      const groups = await query({ group: { by: ['threadId'] } });
+      expect('groups' in groups ? groups.groups : undefined).toEqual([{ threadId: root.threadId }]);
+
+      const delta = await query({ mode: 'delta', after: seed.deltaCursor });
+      expect('traces' in delta ? delta.traces.map(trace => trace.traceId) : []).toEqual([root.traceId]);
+
+      // A window with no root of the trace doesn't list it.
+      const outside = await storage.queryTraces(
+        planTraceQuery(
+          parseTraceQueryRequest({ timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-08-02T00:00:00Z' } }),
+        ),
+      );
+      expect('traces' in outside ? outside.traces : undefined).toEqual([]);
+    } finally {
+      await client.command({ query: `SYSTEM START MERGES ${TABLE_TRACE_ROOTS}` });
+      await client.close();
+    }
+  });
+
+  it('lists a trace with several roots once across keyset pages', async () => {
+    const timeRange = { from: '2026-08-10T00:00:00Z', to: '2026-08-11T00:00:00Z' };
+    const root = (traceId: string, spanId: string, at: string) => ({
+      traceId,
+      spanId,
+      parentSpanId: null,
+      name: 'agent run',
+      spanType: SpanType.AGENT_RUN,
+      isEvent: false,
+      startedAt: new Date(at),
+      endedAt: new Date(at),
     });
+    // Trace T has roots on either side of trace U's only root, which only a writer bug produces.
+    await storage.createSpan({ span: root('keyset-t', 'root-t1', '2026-08-10T10:00:01.000Z') });
+    await storage.createSpan({ span: root('keyset-t', 'root-t0', '2026-08-10T10:00:00.000Z') });
+    await storage.createSpan({ span: root('keyset-u', 'root-u', '2026-08-10T10:00:00.500Z') });
 
-    const query = async (from: string, to: string) => {
-      const response = await storage.queryTraces(planTraceQuery(parseTraceQueryRequest({ timeRange: { from, to } })));
-      if (!('traces' in response)) throw new Error('Expected trace results');
-      return response.traces.map(trace => trace.traceId);
-    };
-
-    expect(await query('2026-08-01T00:00:00Z', '2026-08-02T00:00:00Z')).toEqual([]);
-    expect(await query('2026-08-05T00:00:00Z', '2026-08-06T00:00:00Z')).toEqual(['multi-root-trace']);
+    for (const field of ['startedAt', 'endedAt'] as const) {
+      for (const direction of ['desc', 'asc'] as const) {
+        const listed: string[] = [];
+        let after: string | undefined;
+        do {
+          const response = await storage.queryTraces(
+            planTraceQuery(
+              parseTraceQueryRequest({
+                timeRange,
+                orderBy: [{ field, direction }],
+                page: { limit: 1, ...(after ? { after } : {}) },
+              }),
+            ),
+          );
+          if (!('traces' in response) || !('page' in response)) throw new Error('Expected keyset trace results');
+          listed.push(...response.traces.map(trace => trace.traceId));
+          after = response.page.next ?? undefined;
+        } while (after && listed.length < 5);
+        // T sorts by its first root in either direction, so it comes first, once.
+        expect(listed, `${field} ${direction}`).toEqual(['keyset-t', 'keyset-u']);
+      }
+    }
   });
 
   it('keeps ordinary current-score reads proportional to logical rows after merges', async () => {
@@ -765,6 +914,55 @@ LIMIT 1`,
           planTraceAggregate(parseTraceAggregateRequest({ timeRange, measures: ['count'] }), { scope }),
         );
         expect(aggregate.rows).toEqual([{ measures: { count: 1 } }]);
+      });
+    });
+
+    it("builds a legacy root's preview from its own tenant's payload when another tenant shares its identity", async () => {
+      await withFallbackStorage(async (isolatedStorage, client) => {
+        const startedAt = new Date();
+        const timeRange = {
+          from: new Date(startedAt.getTime() - 1_000).toISOString(),
+          to: new Date(startedAt.getTime() + 60_000).toISOString(),
+        };
+        // Same traceId, spanId, startedAt and endedAt in both tenants, written before previews
+        // were stored, so listing reads the preview from the payload.
+        const root = (organizationId: string) => ({
+          ...spanRecordToRow({
+            traceId: 'shared-legacy-trace',
+            spanId: 'shared-legacy-root',
+            parentSpanId: null,
+            name: `${organizationId} root`,
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            input: `${organizationId} input`,
+            output: `${organizationId} output`,
+            startedAt,
+            endedAt: new Date(startedAt.getTime() + 1),
+          }),
+          organizationId,
+          inputPreview: null,
+          outputPreview: null,
+          errorPreview: null,
+        });
+        for (const organizationId of ['org-b', 'org-a']) {
+          await client.insert({ table: TABLE_TRACE_ROOTS, format: 'JSONEachRow', values: [root(organizationId)] });
+        }
+
+        for (const organizationId of ['org-a', 'org-b']) {
+          const traces = await isolatedStorage.queryTraces(
+            planTraceQuery(parseTraceQueryRequest({ timeRange }), { scope: { organizationId } }),
+          );
+          expect('traces' in traces && traces.traces.map(trace => [trace.inputPreview, trace.outputPreview])).toEqual([
+            [`${organizationId} input`, `${organizationId} output`],
+          ]);
+          const { spans } = await isolatedStorage.listTracesLight({
+            filters: { organizationId },
+            pagination: { page: 0, perPage: 10 },
+          });
+          expect(spans.map(span => [span.inputPreview, span.outputPreview])).toEqual([
+            [`${organizationId} input`, `${organizationId} output`],
+          ]);
+        }
       });
     });
 
@@ -6662,6 +6860,67 @@ describe('listTracesLight projection', () => {
     expect(row.status).toBe('success');
     expect(row.metadata).toEqual({ customer: 'acme' });
   });
+
+  it('caps oversized supplied previews like generated ones', async () => {
+    const huge = 'p'.repeat(99) + '\u{1F600}'.repeat(1_000_000);
+    const capped = `${'p'.repeat(99)}…`;
+    await storage.batchCreateSpans({
+      records: [
+        {
+          traceId: 'light-trace-supplied',
+          spanId: 'light-span-supplied',
+          parentSpanId: null,
+          name: 'agent run',
+          spanType: SpanType.AGENT_RUN,
+          isEvent: false,
+          startedAt: new Date('2026-01-01T00:03:00Z'),
+          endedAt: new Date('2026-01-01T00:03:05Z'),
+          entityType: null,
+          entityId: null,
+          entityName: null,
+          userId: null,
+          organizationId: null,
+          resourceId: null,
+          runId: null,
+          sessionId: null,
+          threadId: null,
+          requestId: null,
+          environment: null,
+          source: null,
+          serviceName: null,
+          scope: null,
+          links: null,
+          metadata: null,
+          tags: [],
+          error: { message: 'boom' },
+          attributes: null,
+          input: 'input',
+          output: 'output',
+          inputPreview: huge,
+          outputPreview: huge,
+          errorPreview: huge,
+        },
+      ],
+    });
+
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    const stored = await (
+      await client.query({
+        query: `SELECT inputPreview, outputPreview, errorPreview FROM ${TABLE_TRACE_ROOTS} WHERE traceId = 'light-trace-supplied'`,
+        format: 'JSONEachRow',
+      })
+    ).json();
+    await client.close();
+    expect(stored).toEqual([{ inputPreview: capped, outputPreview: capped, errorPreview: capped }]);
+
+    const { spans } = await storage.listTracesLight({ pagination: { page: 0, perPage: 10 } });
+    const row = spans.find(s => s.traceId === 'light-trace-supplied')! as Record<string, unknown>;
+    expect([row.inputPreview, row.outputPreview, row.errorPreview]).toEqual([capped, capped, capped]);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -6929,11 +7188,13 @@ describe('ObservabilityStorageClickhouseVNext aggregateTraces', () => {
     await storage.createSpan({ span: { ...root, spanId: 'pushdown-root-a', entityName: 'agentA' } });
     await storage.createSpan({ span: { ...root, spanId: 'pushdown-root-b', entityName: 'agentB' } });
 
-    const all = await storage.queryTraces(
-      planTraceQuery(parseTraceQueryRequest({ timeRange: TIME_RANGE, pagination: { page: 0, perPage: 10 } })),
+    const all = await storage.aggregateTraces(
+      planTraceAggregate(
+        parseTraceAggregateRequest({ timeRange: TIME_RANGE, groupBy: ['entityName'], measures: ['count'] }),
+      ),
     );
-    expect('traces' in all ? all.traces.map(trace => trace.entityName) : []).toHaveLength(1);
-    const current = 'traces' in all ? all.traces[0]!.entityName : undefined;
+    expect(all.rows).toHaveLength(1);
+    const current = all.rows[0]!.dimensions?.entityName;
     const replaced = current === 'agentA' ? 'agentB' : 'agentA';
 
     for (const [entityName, expected] of [
@@ -6947,10 +7208,6 @@ describe('ObservabilityStorageClickhouseVNext aggregateTraces', () => {
           { op: 'eq', left: { path: 'environment' }, right: { literal: 'test' } },
         ],
       };
-      const traces = await storage.queryTraces(
-        planTraceQuery(parseTraceQueryRequest({ timeRange: TIME_RANGE, where, pagination: { page: 0, perPage: 10 } })),
-      );
-      expect('pagination' in traces ? traces.pagination?.total : undefined).toBe(expected);
       const aggregate = await storage.aggregateTraces(
         planTraceAggregate(parseTraceAggregateRequest({ timeRange: TIME_RANGE, where, measures: ['count'] })),
       );

@@ -12,6 +12,7 @@ import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatCommandsProvider } from './ChatCommandsProvider';
+import { ComposerImagesProvider } from './ComposerImagesProvider';
 import { ChatModelsProvider } from './ChatModelsProvider';
 import { ChatThinkingProvider } from './ChatThinkingProvider';
 import { ChatSessionContext } from './ChatSessionContext';
@@ -86,7 +87,7 @@ export function ChatSessionConfigProvider({
   const resolvingSession = inSession && sessionQuery.isPending;
   // Sessions and their threads are provisioned with the session's own id as the
   // memory resourceId and no scope (see FactoryStartCoordinator.prepare and
-  // UserSessionsSection), so the chat surface must address the same
+  // useSessionListRows), so the chat surface must address the same
   // (resourceId, no scope) session to read threads and share the live run.
   const resourceId = userScoped ? (draftSessionId ?? threadId) : (storedSession?.sessionId ?? sessionId ?? factory?.id);
   const projectPath = undefined;
@@ -215,7 +216,9 @@ export function ChatSessionBoundary({
       >
         <ChatModelsProvider>
           <ChatThinkingProvider>
-            <ChatCommandsProvider>{children}</ChatCommandsProvider>
+            <ChatCommandsProvider>
+              <ComposerImagesProvider>{children}</ComposerImagesProvider>
+            </ChatCommandsProvider>
           </ChatThinkingProvider>
         </ChatModelsProvider>
       </ChatTranscriptProvider>
