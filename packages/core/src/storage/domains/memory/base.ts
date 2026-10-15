@@ -25,7 +25,11 @@ import type {
   CreateReflectionGenerationInput,
   UpdateObservationalMemoryConfigInput,
 } from '../../types';
+import type { ListActionsQuery } from '../../../new-message-format/storage';
+import type { PersistableAction } from '../../../new-message-format/types';
 import { StorageDomain } from '../base';
+
+export type { ListActionsQuery, PersistableAction };
 
 function isPlainObj(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -192,6 +196,16 @@ export abstract class MemoryStorage extends StorageDomain {
   abstract listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }>;
 
   abstract saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }>;
+
+  /** Appends actions to their threads. Insert-only: an existing id is an error. */
+  async saveActions(_args: { actions: PersistableAction[] }): Promise<void> {
+    throw new Error(`Actions are not supported by this storage adapter (${this.constructor.name}). Use libsql.`);
+  }
+
+  /** Lists a thread's actions ordered by ULID id. */
+  async listActions(_query: ListActionsQuery): Promise<PersistableAction[]> {
+    throw new Error(`Actions are not supported by this storage adapter (${this.constructor.name}). Use libsql.`);
+  }
 
   abstract updateMessages(args: {
     messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {

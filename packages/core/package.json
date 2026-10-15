@@ -391,6 +391,16 @@
         "default": "./dist/memory/index.cjs"
       }
     },
+    "./new-message-format": {
+      "import": {
+        "types": "./dist/new-message-format/index.d.ts",
+        "default": "./dist/new-message-format/index.js"
+      },
+      "require": {
+        "types": "./dist/new-message-format/index.d.ts",
+        "default": "./dist/new-message-format/index.cjs"
+      }
+    },
     "./observability": {
       "import": {
         "types": "./dist/observability/index.d.ts",

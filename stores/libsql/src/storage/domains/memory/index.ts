@@ -30,6 +30,8 @@ import type {
   PruneResult,
   RetentionTablesDescriptor,
   TableRetentionPolicy,
+  ListActionsQuery,
+  PersistableAction,
 } from '@mastra/core/storage';
 import {
   createStorageErrorId,
@@ -50,6 +52,7 @@ import {
  * versions that don't export TABLE_OBSERVATIONAL_MEMORY.
  */
 const OM_TABLE = 'mastra_observational_memory' as const;
+const TABLE_ACTIONS = 'mastra_actions' as const;
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
@@ -210,6 +213,26 @@ export class MemoryLibSQL extends MemoryStorage {
       'write',
     );
 
+    await this.#client.batch(
+      [
+        {
+          sql: `CREATE TABLE IF NOT EXISTS ${TABLE_ACTIONS} (
+            id TEXT PRIMARY KEY,
+            thread_id TEXT NOT NULL,
+            resource_id TEXT,
+            run_id TEXT,
+            type TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            data TEXT NOT NULL
+          )`,
+          args: [],
+        },
+        { sql: `CREATE INDEX IF NOT EXISTS idx_actions_thread_id ON ${TABLE_ACTIONS} (thread_id, id)`, args: [] },
+        { sql: `CREATE INDEX IF NOT EXISTS idx_actions_run_id ON ${TABLE_ACTIONS} (run_id, id)`, args: [] },
+      ],
+      'write',
+    );
+
     if (omSchema) {
       // Create index on lookupKey for efficient OM queries
       await this.#client.execute({
@@ -225,6 +248,7 @@ export class MemoryLibSQL extends MemoryStorage {
     await this.#db.deleteData({ tableName: TABLE_MESSAGES });
     await this.#db.deleteData({ tableName: TABLE_THREADS });
     await this.#db.deleteData({ tableName: TABLE_RESOURCES });
+    await this.#client.execute(`DELETE FROM ${TABLE_ACTIONS}`);
     if (OM_TABLE) {
       await this.#db.deleteData({ tableName: OM_TABLE as any });
     }
@@ -747,6 +771,63 @@ export class MemoryLibSQL extends MemoryStorage {
       this.logger?.trackException?.(mastraError);
       throw mastraError;
     }
+  }
+
+  override async saveActions({ actions }: { actions: PersistableAction[] }): Promise<void> {
+    const rows = actions.filter(action => !action.transient);
+    if (rows.length === 0) return;
+    await this.#write('saveActions', () =>
+      this.#client.batch(
+        rows.map(({ id, threadId, resourceId, runId, type, createdAt, ...rest }) => ({
+          sql: `INSERT INTO ${TABLE_ACTIONS} (id, thread_id, resource_id, run_id, type, created_at, data) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          args: [
+            id,
+            threadId,
+            resourceId ?? null,
+            runId ?? null,
+            type,
+            new Date(createdAt).toISOString(),
+            JSON.stringify(rest),
+          ],
+        })),
+        'write',
+      ),
+    );
+  }
+
+  override async listActions({ threadId, runId, types, after, limit }: ListActionsQuery): Promise<PersistableAction[]> {
+    const where = ['thread_id = ?'];
+    const args: InValue[] = [threadId];
+    if (runId !== undefined) {
+      where.push('run_id = ?');
+      args.push(runId);
+    }
+    if (types?.length) {
+      where.push(`type IN (${types.map(() => '?').join(', ')})`);
+      args.push(...types);
+    }
+    if (after !== undefined) {
+      where.push('id > ?');
+      args.push(after);
+    }
+    let sql = `SELECT * FROM ${TABLE_ACTIONS} WHERE ${where.join(' AND ')} ORDER BY id`;
+    if (limit !== undefined) {
+      sql += ' LIMIT ?';
+      args.push(limit);
+    }
+    const result = await this.#client.execute({ sql, args });
+    return result.rows.map(
+      row =>
+        ({
+          ...JSON.parse(row.data as string),
+          id: row.id as string,
+          threadId: row.thread_id as string,
+          ...(row.resource_id != null ? { resourceId: row.resource_id as string } : {}),
+          ...(row.run_id != null ? { runId: row.run_id as string } : {}),
+          type: row.type as string,
+          createdAt: new Date(row.created_at as string),
+        }) as PersistableAction,
+    );
   }
 
   async saveMessages({ messages }: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {

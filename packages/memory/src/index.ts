@@ -43,6 +43,8 @@ import type {
   StorageListMessagesByResourceIdInput,
   StorageListMessagesOutput,
   MemoryStorage,
+  ListActionsQuery,
+  PersistableAction,
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
   StorageCopyThreadOutput,
@@ -721,6 +723,16 @@ export class Memory extends MastraMemory {
       throw new Error(`Memory storage domain is not available on ${this.storage.constructor.name}`);
     }
     return store;
+  }
+
+  async saveActions(args: { actions: PersistableAction[] }): Promise<void> {
+    const memoryStore = await this.getMemoryStore();
+    return memoryStore.saveActions(args);
+  }
+
+  async listActions(query: ListActionsQuery): Promise<PersistableAction[]> {
+    const memoryStore = await this.getMemoryStore();
+    return memoryStore.listActions(query);
   }
 
   async listMessagesByResourceId(args: StorageListMessagesByResourceIdInput): Promise<StorageListMessagesOutput> {
