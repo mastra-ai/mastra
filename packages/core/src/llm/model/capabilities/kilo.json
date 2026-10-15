@@ -15,7 +15,6 @@
     "anthropic/claude-opus-4.8",
     "anthropic/claude-opus-5",
     "anthropic/claude-opus-5.5",
-    "anthropic/claude-sonnet-4",
     "anthropic/claude-sonnet-4.5",
     "anthropic/claude-sonnet-4.6",
     "anthropic/claude-sonnet-5",
@@ -105,6 +104,8 @@
     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
     "nvidia/nemotron-3.5-content-safety",
     "nvidia/nemotron-3.5-content-safety:free",
+    "nvidia/nemotron-3.5-super-vl",
+    "nvidia/nemotron-3.5-super-vl:free",
     "openai/gpt-3.5-turbo",
     "openai/gpt-3.5-turbo-0613",
     "openai/gpt-3.5-turbo-16k",
@@ -218,7 +219,6 @@
     "thinkingmachines/inkling",
     "thinkingmachines/inkling-small",
     "thinkingmachines/inkling-small:free",
-    "unbiased/pareto-26.10-preview",
     "unbiased/pareto-26.9",
     "x-ai/grok-4.20",
     "x-ai/grok-4.20-multi-agent",
@@ -270,7 +270,6 @@
     "anthropic/claude-opus-4.1",
     "anthropic/claude-opus-4.5",
     "anthropic/claude-opus-4.6",
-    "anthropic/claude-sonnet-4",
     "anthropic/claude-sonnet-4.5",
     "anthropic/claude-sonnet-4.6",
     "arcee-ai/trinity-large-thinking",
@@ -422,6 +421,8 @@
     "nvidia/nemotron-3.5-content-safety:free",
     "nvidia/nemotron-3.5-lightning",
     "nvidia/nemotron-3.5-lightning:free",
+    "nvidia/nemotron-3.5-super-vl",
+    "nvidia/nemotron-3.5-super-vl:free",
     "openai/gpt-3.5-turbo",
     "openai/gpt-3.5-turbo-0613",
     "openai/gpt-3.5-turbo-16k",
@@ -529,7 +530,6 @@
     "thinkingmachines/inkling",
     "thinkingmachines/inkling-small",
     "thinkingmachines/inkling-small:free",
-    "unbiased/pareto-26.10-preview",
     "unbiased/pareto-26.9",
     "undi95/remm-slerp-l2-13b",
     "upstage/solar-mini4",
@@ -708,6 +708,8 @@
     "nvidia/nemotron-3-super-120b-a12b:free",
     "nvidia/nemotron-3-ultra-550b-a55b",
     "nvidia/nemotron-3.5-lightning",
+    "nvidia/nemotron-3.5-super-vl",
+    "nvidia/nemotron-3.5-super-vl:free",
     "openai/gpt-3.5-turbo",
     "openai/gpt-3.5-turbo-0613",
     "openai/gpt-3.5-turbo-16k",
@@ -1057,12 +1059,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-sonnet-4": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
       }
     ],
     "anthropic/claude-sonnet-5": [
@@ -1827,6 +1823,12 @@
         "values": ["high"]
       }
     ],
+    "nvidia/nemotron-3.5-super-vl:free": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
     "nvidia/nemotron-3-nano-30b-a3b": [
       {
         "type": "effort",
@@ -1855,6 +1857,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium"]
+      }
+    ],
+    "nvidia/nemotron-3.5-super-vl": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "nvidia/nemotron-3-ultra-550b-a55b:free": [
