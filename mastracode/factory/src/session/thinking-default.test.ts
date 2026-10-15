@@ -1,7 +1,7 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
-import { resolveFactoryThinkingLevel } from './thinking-default.js';
+import { readFactoryThinkingLevel, resolveFactoryThinkingLevel } from './thinking-default.js';
 
 const FACTORY_ID = '11111111-1111-4111-8111-111111111111';
 
@@ -53,6 +53,23 @@ describe('resolveFactoryThinkingLevel', () => {
     failing.sourceControl.getBySessionId.mockRejectedValue(new Error('domain not ready'));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     expect(await resolveFactoryThinkingLevel(contextFor({ resourceId: 'session-1' }), failing)).toBe('off');
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});
+
+describe('readFactoryThinkingLevel', () => {
+  it('reads the level stored on the given Factory', async () => {
+    expect(await readFactoryThinkingLevel(deps().projects, FACTORY_ID)).toBe('high');
+  });
+
+  it('uses off when the Factory is missing or the lookup fails', async () => {
+    expect(await readFactoryThinkingLevel(deps().projects, 'missing')).toBe('off');
+
+    const failing = deps();
+    failing.projects.getById.mockRejectedValue(new Error('domain not ready'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(await readFactoryThinkingLevel(failing.projects, FACTORY_ID)).toBe('off');
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });

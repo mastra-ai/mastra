@@ -4,7 +4,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 
 import { UUID_PATTERN } from '../routes/contracts.js';
 import { DEFAULT_FACTORY_THINKING_LEVEL } from '../storage/domains/projects/base.js';
-import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import type { FactoryProject, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlSessionLookup } from './factory-session.js';
 
 const FACTORY_PROJECT_ID = new RegExp(UUID_PATTERN);
@@ -39,11 +39,25 @@ export async function resolveFactoryThinkingLevel(
 ): Promise<ThinkingLevelSetting> {
   const controller = requestContext.get('controller') as AgentControllerRequestContext | undefined;
   if (!controller) return DEFAULT_FACTORY_THINKING_LEVEL;
-  try {
+  return readThinkingDefault(async () => {
     const projectId = await resolveFactoryProjectId(controller, deps);
-    if (!projectId) return DEFAULT_FACTORY_THINKING_LEVEL;
-    const project = await deps.projects.getById({ id: projectId });
-    return project?.defaultThinkingLevel ?? DEFAULT_FACTORY_THINKING_LEVEL;
+    return projectId ? deps.projects.getById({ id: projectId }) : null;
+  });
+}
+
+/** The thinking default stored on one Factory, for callers that already know which Factory a run belongs to. */
+export function readFactoryThinkingLevel(
+  projects: Pick<FactoryProjectsStorage, 'getById'>,
+  factoryProjectId: string,
+): Promise<ThinkingLevelSetting> {
+  return readThinkingDefault(() => projects.getById({ id: factoryProjectId }));
+}
+
+async function readThinkingDefault(
+  load: () => Promise<Pick<FactoryProject, 'defaultThinkingLevel'> | null>,
+): Promise<ThinkingLevelSetting> {
+  try {
+    return (await load())?.defaultThinkingLevel ?? DEFAULT_FACTORY_THINKING_LEVEL;
   } catch (error) {
     // A missed lookup costs reasoning depth, not the run.
     console.warn('[factory] Could not read the Factory thinking default; using off.', error);
