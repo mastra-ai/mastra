@@ -258,6 +258,11 @@ export type ScrollAreaViewportProps = {
   children?: React.ReactNode;
   /** The scrolling element, e.g. a virtualizer's `getScrollElement`. */
   ref?: React.Ref<HTMLDivElement>;
+  /**
+   * Renders the scrolling element as another component, for a library that has to own it
+   * (e.g. Base UI's `Select.List`, which Select scrolls to line the selected item up with the trigger).
+   */
+  render?: React.ComponentProps<typeof ScrollAreaPrimitive.Viewport>['render'];
 };
 
 function useScrollAreaViewportContext() {
@@ -266,7 +271,7 @@ function useScrollAreaViewportContext() {
   return viewport;
 }
 
-function ScrollAreaViewport({ className, contentClassName, children, ref }: ScrollAreaViewportProps) {
+function ScrollAreaViewport({ className, contentClassName, children, ref, render }: ScrollAreaViewportProps) {
   const viewport = useScrollAreaViewportContext();
   const { areaRef } = viewport;
   const viewportRef = React.useMemo(() => mergeRefs(areaRef, ref), [areaRef, ref]);
@@ -276,6 +281,7 @@ function ScrollAreaViewport({ className, contentClassName, children, ref }: Scro
       ref={viewportRef}
       className={cn(viewport.className, className)}
       style={viewport.style}
+      render={render}
     >
       <ScrollAreaPrimitive.Content className={contentClassName} style={viewport.contentStyle}>
         <ScrollAreaViewportContext value={null}>{children}</ScrollAreaViewportContext>

@@ -108,6 +108,21 @@ export const Compact: Story = {
   ),
 };
 
+export const CompactWithManyItems: Story = {
+  render: () => (
+    <DropdownMenu>
+      <DropdownMenu.Trigger render={<Button size="sm">Open long menu</Button>} />
+      <DropdownMenu.Content size="sm" className="w-40 min-w-0">
+        {Array.from({ length: 30 }, (_, i) => (
+          <DropdownMenu.Item key={i} size="sm">
+            Item {i + 1}
+          </DropdownMenu.Item>
+        ))}
+      </DropdownMenu.Content>
+    </DropdownMenu>
+  ),
+};
+
 export const WithIcons: Story = {
   render: () => (
     <DropdownMenu>
