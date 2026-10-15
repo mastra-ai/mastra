@@ -42,6 +42,22 @@ describe('work board build prompt', () => {
     expect(decision.prompt).not.toContain('pull request');
   });
 
+  it('asks the builder to open the change request itself when the project turned self-review off', async () => {
+    const off = { ...executeContext('gitlab-issue'), selfReviewEnabled: false };
+    const build = await workBoard.rules.execute?.gitlabIssue?.onEnter?.(off);
+    if (!build || build.type !== 'invokeSkill') throw new Error('Expected build invocation.');
+    expect(build.prompt).toContain('Open a merge request when the work is ready for review.');
+    expect(build.prompt).not.toContain('Do not open');
+
+    const review = await workBoard.rules.review?.gitlabIssue?.onEnter?.({
+      ...off,
+      stage: 'review',
+      fromStage: 'execute',
+      toStage: 'review',
+    });
+    expect(review).toBeUndefined();
+  });
+
   it('hands a GitHub build to self-review without opening a pull request', async () => {
     const decision = await workBoard.rules.execute?.issue?.onEnter?.(executeContext('github-issue'));
     expect(decision).toMatchObject({ type: 'invokeSkill', role: 'work' });

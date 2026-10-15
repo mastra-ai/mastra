@@ -250,6 +250,7 @@ export interface FactoryProjectPayload {
   autoApprovePlans?: boolean;
   /** Whether Review agents publish test results as a commit check. Defaults to on. */
   reviewTestChecksEnabled?: boolean;
+  selfReviewEnabled?: boolean;
 }
 
 /** `{...projectRepository, repository}` payload from the Factory project routes. */
@@ -452,7 +453,10 @@ export async function applyFactoryDefaultModelToSessions(
 export async function updateFactoryAutomation(
   baseUrl: string,
   factoryProjectId: string,
-  patch: Pick<FactoryProjectPayload, 'autoRunEnabled' | 'autoApprovePlans' | 'reviewTestChecksEnabled'>,
+  patch: Pick<
+    FactoryProjectPayload,
+    'autoRunEnabled' | 'autoApprovePlans' | 'reviewTestChecksEnabled' | 'selfReviewEnabled'
+  >,
 ): Promise<FactoryProjectPayload> {
   const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
     method: 'PATCH',

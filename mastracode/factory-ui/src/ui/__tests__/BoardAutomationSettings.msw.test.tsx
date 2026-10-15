@@ -122,6 +122,21 @@ describe('Board automation settings', () => {
     expect(await screen.findByRole('switch', { name: 'Publish review test checks' })).not.toBeChecked();
   });
 
+  it('turns self-review off, defaulting to on for older projects', async () => {
+    stubBoard({ items: [], factory: project() });
+    const user = userEvent.setup();
+    const { client } = renderBoard('work');
+
+    await user.click(await screen.findByRole('button', { name: 'Automation settings' }));
+    const selfReview = await screen.findByRole('switch', { name: 'Self-review before pull requests' });
+    expect(selfReview).toBeChecked();
+    await user.click(selfReview);
+
+    await waitForMutationsIdle(client);
+    expect(patchBodies).toEqual([{ selfReviewEnabled: false }]);
+    expect(await screen.findByRole('switch', { name: 'Self-review before pull requests' })).not.toBeChecked();
+  });
+
   it('keeps the automation switches separate', async () => {
     stubBoard({ items: [], factory: project() });
     const user = userEvent.setup();

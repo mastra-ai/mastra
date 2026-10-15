@@ -61,6 +61,7 @@ export const updateProjectBodySchema = z
     autoRunEnabled: z.boolean().optional(),
     autoApprovePlans: z.boolean().optional(),
     reviewTestChecksEnabled: z.boolean().optional(),
+    selfReviewEnabled: z.boolean().optional(),
   })
   .refine(input => Object.keys(input).length > 0, { message: 'At least one project field is required' });
 

@@ -7,7 +7,7 @@ import { updateFactoryAutomation } from '../ui/domains/workspaces/services/githu
 
 type AutomationSetting = keyof Pick<
   FactoryProjectPayload,
-  'autoRunEnabled' | 'autoApprovePlans' | 'reviewTestChecksEnabled'
+  'autoRunEnabled' | 'autoApprovePlans' | 'reviewTestChecksEnabled' | 'selfReviewEnabled'
 >;
 
 /** Toggle one of a Factory's automation settings: rule-started runs, plan approval, review test checks. */

@@ -40,15 +40,18 @@ export function BoardAutomationSettings({
   autoRunEnabled,
   autoApprovePlans,
   reviewTestChecksEnabled,
+  selfReviewEnabled,
 }: {
   factoryProjectId: string;
   autoRunEnabled: boolean;
   autoApprovePlans: boolean;
   reviewTestChecksEnabled: boolean;
+  selfReviewEnabled: boolean;
 }) {
   const autoRun = useSetFactoryAutomationMutation(factoryProjectId, 'autoRunEnabled');
   const autoApprove = useSetFactoryAutomationMutation(factoryProjectId, 'autoApprovePlans');
   const testChecks = useSetFactoryAutomationMutation(factoryProjectId, 'reviewTestChecksEnabled');
+  const selfReview = useSetFactoryAutomationMutation(factoryProjectId, 'selfReviewEnabled');
 
   return (
     <Popover>
@@ -76,6 +79,12 @@ export function BoardAutomationSettings({
             enabled={autoApprovePlans}
             mutation={autoApprove}
             description="Continue without waiting for approval."
+          />
+          <AutomationSwitch
+            label="Self-review before pull requests"
+            enabled={selfReviewEnabled}
+            mutation={selfReview}
+            description="An independent agent reviews and tests the branch before the pull request opens."
           />
           <AutomationSwitch
             label="Publish review test checks"

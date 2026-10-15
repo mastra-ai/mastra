@@ -270,6 +270,8 @@ export interface FactoryStageRuleContext extends FactoryBoundRuleContext {
   stage: FactoryRuleStage;
   fromStage: FactoryRuleStage;
   toStage: FactoryRuleStage;
+  /** Project switch: Work items get an independent self-review before the change request opens. Unset means on. */
+  selfReviewEnabled?: boolean;
 }
 
 export interface FactoryToolResultRuleContext extends FactoryBoundRuleContext {

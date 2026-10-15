@@ -403,6 +403,7 @@ export function BoardContent({
                   autoRunEnabled={factory.autoRunEnabled ?? false}
                   autoApprovePlans={factory.autoApprovePlans ?? false}
                   reviewTestChecksEnabled={factory.reviewTestChecksEnabled ?? true}
+                  selfReviewEnabled={factory.selfReviewEnabled ?? true}
                 />
               )
             }

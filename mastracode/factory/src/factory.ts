@@ -826,6 +826,11 @@ export class MastraFactory {
             const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
             return project?.autoApprovePlans ?? false;
           },
+          selfReviewEnabled: async ({ orgId, factoryProjectId }) => {
+            await factoryProjectsStorage.ensureReady();
+            const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
+            return project?.selfReviewEnabled ?? true;
+          },
           ...(onTerminalStage ? { onTerminalStage } : {}),
           ...(githubIntegration
             ? {
@@ -1233,6 +1238,15 @@ export class MastraFactory {
                               const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
                               if (!item || boardForWorkItem(item) !== 'work') return undefined;
                               if (typeof item.metadata?.openPullRequestNumber === 'number') return undefined;
+                              // A verdict already recorded still binds the change request to its head.
+                              if (item.metadata?.selfReviewVerdict === undefined) {
+                                await factoryProjectsStorage.ensureReady();
+                                const project = await factoryProjectsStorage.get({
+                                  orgId: binding.orgId,
+                                  id: binding.factoryProjectId,
+                                });
+                                if (project?.selfReviewEnabled === false) return undefined;
+                              }
                               const sha = item.metadata?.selfReviewedHeadSha;
                               return item.metadata?.selfReviewVerdict === 'approve' && typeof sha === 'string'
                                 ? sha
