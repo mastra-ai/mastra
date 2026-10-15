@@ -271,7 +271,7 @@ describe('defineBoard', () => {
     expect(workBoard.roleForPhase('triage')).toBe('triage');
     expect(workBoard.roleForPhase('planning')).toBe('plan');
     expect(workBoard.roleForPhase('execute')).toBe('work');
-    expect(workBoard.roleForPhase('review')).toBe('review');
+    expect(workBoard.roleForPhase('review')).toBe('work');
     expect(workBoard.phaseForRole('work')).toBe('execute');
     expect(workBoard.isTerminal('done')).toBe(true);
     expect(workBoard.isTerminal('canceled')).toBe(true);

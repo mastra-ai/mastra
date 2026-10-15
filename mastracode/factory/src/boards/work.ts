@@ -328,11 +328,11 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
     },
     review: {
       title: 'Review',
-      // Review is the self-review seat: an independent reviewer tests the pushed
-      // branch before any change request exists. On approve the card stays here and
-      // the builder opens the change request, then answers feedback on it.
+      // The builder's seat carries Review: it answers feedback on its own change request.
+      // With self-review on, entering Review first runs an independent reviewer in its own
+      // review seat on the pushed branch; on approve the builder opens the change request here.
       kind: 'working',
-      role: 'review',
+      role: 'work',
       outcomes: allOtherPhases,
       onEnter: {
         issue: selfReviewWorkItem,

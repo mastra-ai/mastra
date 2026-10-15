@@ -1451,6 +1451,19 @@ describe('FactoryTransitionService', () => {
     });
   });
 
+  it('opens the builder session when a person drags a card into Review with self-review off', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['triage'] });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+
+    const result = await service.transition({ ...request(item, { stage: 'review' }), cause: 'board_drag' });
+
+    expect(result).toMatchObject({
+      status: 'accepted',
+      decisions: [{ type: 'sendMessage', role: 'work', prepareBinding: true }],
+    });
+  });
+
   it('starts no second run when a run start records the card entering its own lane', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { source: 'github-pr', stages: ['intake'] });
@@ -2004,7 +2017,7 @@ describe('phase semantics', () => {
     ['triage', 'triage'],
     ['planning', 'plan'],
     ['execute', 'work'],
-    ['review', 'review'],
+    ['review', 'work'],
   ] as const)('seats a human kickoff into Work %s with the %s role', async (stage, role) => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['intake'] });
