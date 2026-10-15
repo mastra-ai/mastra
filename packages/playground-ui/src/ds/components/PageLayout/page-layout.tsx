@@ -47,7 +47,7 @@ export function PageLayout({
   const isMobile = useIsMobile();
   const hasHeaderRow = Boolean(breadcrumbs || headerActions);
   // One header on phones: the app's top bar carries the page's breadcrumbs and actions.
-  const mobileHeaderTarget = hasHeaderRow && isMobile ? mobileHeaderSlot : null;
+  const mobileHeaderTarget = hasHeaderRow && isMobile ? mobileHeaderSlot : undefined;
 
   const headerSlot = header ? (
     <div data-slot="page-layout-header" className={cn(variant === 'fit' && 'p-4')}>

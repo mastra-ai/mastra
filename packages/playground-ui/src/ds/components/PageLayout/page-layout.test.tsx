@@ -8,23 +8,17 @@ import { AppShell, AppShellMobileHeader } from '@/ds/new/layout/app-shell';
 
 afterEach(() => {
   cleanup();
-  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
+/** `useIsMobile` reads `matches` and subscribes to changes; nothing else is needed. */
 function setViewport(mobile: boolean) {
-  vi.spyOn(window, 'matchMedia').mockImplementation(
-    query =>
-      ({
-        matches: mobile,
-        media: query,
-        onchange: null,
-        addListener: () => {},
-        removeListener: () => {},
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-      }) as MediaQueryList,
-  );
+  vi.stubGlobal('matchMedia', (media: string) => ({
+    matches: mobile,
+    media,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }));
 }
 
 const CrumbLink = ({ to, ...props }: ComponentProps<'a'> & { to?: string }) => <a href={to} {...props} />;
@@ -244,7 +238,7 @@ describe('PageLayout', () => {
         expect(screen.getAllByRole('banner')).toEqual([header]);
       });
 
-      it('shows only the current crumb inline and the earlier ones behind a menu', () => {
+      it('lists the whole trail in the menu behind "…"', () => {
         setViewport(true);
         renderInShell(
           <PageLayout breadcrumbs={trail}>
@@ -253,9 +247,6 @@ describe('PageLayout', () => {
         );
 
         const header = mobileHeader();
-        expect(within(header).getByText('Workflows').closest('li')?.className).toContain('hidden');
-        expect(within(header).getByText('run-123').closest('li')?.className).not.toContain('hidden');
-
         fireEvent.click(within(header).getByRole('button', { name: 'Show breadcrumb trail' }));
         const menu = document.querySelector<HTMLElement>('[data-slot="popover-content"]');
         expect(menu).not.toBeNull();
@@ -305,9 +296,8 @@ describe('PageLayout', () => {
         </PageLayout>,
       );
 
-      expect(within(screen.getByRole('banner')).getByText('Workflows').closest('li')?.className).not.toContain(
-        'hidden',
-      );
+      expect(within(screen.getByRole('banner')).getByText('Workflows')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Show breadcrumb trail' })).toBeNull();
     });
   });
 });

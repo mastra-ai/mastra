@@ -1,13 +1,17 @@
-import { useContext, useMemo, useState } from 'react';
+import { useContext, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { MobileHeaderSlotContext } from './mobile-header-slot';
 import { cn } from '@/lib/utils';
 
 export function MobileHeaderSlotProvider({ children }: { children: ReactNode }) {
+  // The state setter is the header's ref callback: stable, and React hands it `null` on unmount.
   const [slot, setSlot] = useState<HTMLElement | null>(null);
-  const value = useMemo(() => ({ slot, setSlot }), [slot]);
-  return <MobileHeaderSlotContext.Provider value={value}>{children}</MobileHeaderSlotContext.Provider>;
+  return (
+    <MobileHeaderSlotContext.Provider value={{ slot: slot ?? undefined, setSlot }}>
+      {children}
+    </MobileHeaderSlotContext.Provider>
+  );
 }
 
 export interface AppShellMobileHeaderProps {
