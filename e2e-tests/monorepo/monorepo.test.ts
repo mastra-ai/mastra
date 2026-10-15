@@ -659,6 +659,51 @@ export const environmentRoute = registerApiRoute('/environment', {
     );
   });
 
+  // Runs after the `dev` suite's server has stopped, since two dev servers can't share the app directory.
+  describe.sequential('dev Ctrl-C', () => {
+    it(
+      'reports the model tokens when `mastra dev` is stopped with Ctrl-C',
+      async () => {
+        // Ctrl-C signals the whole foreground process group: the server receives SIGINT
+        // from the terminal and SIGTERM from the CLI a few milliseconds later. Run the CLI
+        // in its own process group and signal the group the same way.
+        const capture = await createPostHogCapture();
+        const devPort = await getPort();
+        const devController = new AbortController();
+        const appDir = join(fixturePath, 'apps', 'custom');
+        const cli = execa('mastra', ['dev'], {
+          cwd: appDir,
+          preferLocal: true,
+          detached: true,
+          reject: false,
+          cancelSignal: devController.signal,
+          env: { ...capture.env(devPort), NODE_OPTIONS: `--import ${capture.preloadUrl}` },
+        });
+        activeProcesses.push({ controller: devController, proc: cli });
+
+        try {
+          await waitForServer(devPort);
+          await callUsageAgentTwice(devPort);
+
+          process.kill(-cli.pid!, 'SIGINT');
+          await expect(cli).resolves.toMatchObject({ exitCode: 0 });
+
+          expect(await capture.usageEvents()).toEqual(twoUsageCallsReportedAtShutdown);
+        } finally {
+          try {
+            process.kill(-cli.pid!, 'SIGKILL');
+          } catch {
+            // Already exited
+          }
+          await Promise.race([cli.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
+          await killOrphanedDevServer(appDir);
+          await capture.cleanup();
+        }
+      },
+      timeout,
+    );
+  });
+
   describe.sequential('build', async () => {
     let port = await getPort();
     let proc: ReturnType<typeof execa> | undefined;
