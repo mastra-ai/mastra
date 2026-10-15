@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -35,7 +35,11 @@ function loadPages(): DocPage[] {
   cache = ['docs', 'reference'].flatMap(section =>
     walk(join(root, section)).map(file => {
       const content = readFileSync(file, 'utf8');
-      const path = relative(root, file).replace(/\.mdx$/, '').replace(/\/index$/, '');
+      const path = relative(root, file)
+        .split(sep)
+        .join('/')
+        .replace(/\.mdx$/, '')
+        .replace(/\/index$/, '');
       const title = content.match(/^title:\s*['"]?(.+?)['"]?\s*$/m)?.[1] ?? path;
       return { path, url: `https://mastra.ai/${path}`, title, content };
     }),
@@ -57,7 +61,8 @@ export const searchDocs = createTool({
         const path = page.path.toLowerCase();
         const body = page.content.toLowerCase();
         const score = terms.reduce(
-          (sum, t) => sum + (title.includes(t) ? 5 : 0) + (path.includes(t) ? 3 : 0) + Math.min(body.split(t).length - 1, 5),
+          (sum, t) =>
+            sum + (title.includes(t) ? 5 : 0) + (path.includes(t) ? 3 : 0) + Math.min(body.split(t).length - 1, 5),
           0,
         );
         return { path: page.path, url: page.url, title: page.title, score };
