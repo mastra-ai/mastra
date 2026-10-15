@@ -588,16 +588,15 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
         if (typeof modelId === 'string') await applySubagentModel(session, agentType, modelId);
       }
     } else {
-      await hydrateFactorySession(session, {
-        orgId: owner.orgId,
-        modelScope: sessionModel.modelScope,
-        ownerUserId: owner.userId,
-        defaultModelId: sessionModel.modelId,
-      });
-
-      // `hydrateFactorySession` has already persisted either the scoped model
-      // or the SDK mode default as this thread's model of record.
-      const selectedModelId = sessionModel.modelId ?? session.mode.resolve().defaultModelId ?? session.model.get();
+      // `hydrateFactorySession` persists the scoped model, a connected provider's
+      // provider default, or the SDK mode default as this thread's model of record.
+      const selectedModelId =
+        (await hydrateFactorySession(session, {
+          orgId: owner.orgId,
+          modelScope: sessionModel.modelScope,
+          ownerUserId: owner.userId,
+          defaultModelId: sessionModel.modelId,
+        })) ?? session.model.get();
 
       // Pin subagent models on the thread like the main model so a restart
       // restores the selected scope's choice rather than re-resolving it.

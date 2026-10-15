@@ -1,6 +1,7 @@
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 
+import { resolveTenantProviderDefaultModel } from '../routes/tenant-credentials.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
@@ -295,7 +296,10 @@ export interface HydrateFactorySessionArgs {
   orgId: string;
   modelScope: EffectiveModelScope;
   ownerUserId: string;
-  /** The model selected by the Factory scope. Without it the SDK mode default is applied. */
+  /**
+   * The model selected by the Factory scope. Without it the provider default of a connected
+   * provider is applied when the SDK mode default has no credential, else the mode default.
+   */
   defaultModelId?: string;
 }
 
@@ -306,7 +310,10 @@ export interface HydrateFactorySessionArgs {
  * is otherwise ready, and the reason is logged. Observational-memory settings are resolved from the
  * authoritative row per invocation before memory processors run.
  */
-export async function hydrateFactorySession(session: FactorySession, args: HydrateFactorySessionArgs): Promise<void> {
+export async function hydrateFactorySession(
+  session: FactorySession,
+  args: HydrateFactorySessionArgs,
+): Promise<string | undefined> {
   // The org rung knowledge curation scopes on. Seeded first so it lands even if
   // a later best-effort step fails; an empty org marks the session unresolved.
   await seedSessionOrg(session, args.orgId);
@@ -315,12 +322,27 @@ export async function hydrateFactorySession(session: FactorySession, args: Hydra
     factoryOwnerUserId: args.ownerUserId,
   });
 
-  const selectedModelId = args.defaultModelId ?? session.mode.resolve().defaultModelId;
-  if (!selectedModelId) return;
+  let selectedModelId = args.defaultModelId;
+  if (!selectedModelId) {
+    const modeModelId = session.mode.resolve().defaultModelId;
+    const providerModelId = await resolveTenantProviderDefaultModel(
+      { orgId: args.orgId, userId: args.ownerUserId, credentialScope: args.modelScope },
+      modeModelId,
+    ).catch(error => {
+      console.warn('[Factory Start] Failed to resolve a provider default model', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    });
+    selectedModelId = providerModelId ?? modeModelId;
+  }
+  if (!selectedModelId) return undefined;
 
+  let switched = true;
   try {
     await session.model.switch(selectedModelId);
   } catch (error) {
+    switched = false;
     console.warn('[Factory Start] Failed to apply scoped default model', {
       modelId: selectedModelId,
       error: error instanceof Error ? error.message : String(error),
@@ -340,4 +362,6 @@ export async function hydrateFactorySession(session: FactorySession, args: Hydra
       });
     }
   }
+  // Callers pin this id to the thread, so only report a model the session actually runs on.
+  return switched ? selectedModelId : undefined;
 }
