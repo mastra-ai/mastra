@@ -95,12 +95,7 @@ export interface SubagentEntry {
 
 export type PromptEntry = ApprovalPrompt | SuspensionPrompt;
 export type TimelineEntry =
-  | MessageEntry
-  | NoticeEntry
-  | PromptEntry
-  | NotificationEntry
-  | NotificationSummaryEntry
-  | SubagentEntry;
+  MessageEntry | NoticeEntry | PromptEntry | NotificationEntry | NotificationSummaryEntry | SubagentEntry;
 
 export interface TranscriptState {
   entries: TimelineEntry[];
@@ -823,7 +818,15 @@ function upsertMessage(
     message.role === 'assistant'
       ? withoutToolPartsDrawnElsewhere(preserveRuntimeToolParts(message, prevEntry?.message), entries, idx)
       : undefined;
-  const nextMessage = filtered?.message ?? preserveOptimisticUserContent(message, prevEntry?.message, viewerId);
+  // The viewer's own message sent from another client (e.g. the TUI) has no optimistic copy to hide behind.
+  const ownSignalWithoutEcho = message.role === 'signal' && idx === -1 && !hasOptimisticCopy(entries, message);
+  const nextMessage =
+    filtered?.message ??
+    preserveOptimisticUserContent(
+      ownSignalWithoutEcho ? withRenderableSignalText(message) : message,
+      prevEntry?.message,
+      viewerId,
+    );
   const canonicalEntry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools, viewerId });
   // Changing the entry id remounts open cards.
   const entry = prevEntry
@@ -834,6 +837,17 @@ function upsertMessage(
   else entries[idx] = entry;
   const next = { ...state, entries };
   return message.role === 'assistant' ? reconcileToolResults(next, [message]) : next;
+}
+
+function hasOptimisticCopy(entries: TimelineEntry[], message: MastraDBMessage): boolean {
+  const texts = new Set(drawableTexts(message));
+  return entries.some(
+    entry =>
+      entry.kind === 'message' &&
+      entry.message.role === 'user' &&
+      entry.id.startsWith('local-') &&
+      drawableTexts(entry.message).some(text => texts.has(text)),
+  );
 }
 
 function withoutToolPartsDrawnElsewhere(

@@ -1852,4 +1852,14 @@ describe('live user signals sent by someone else', () => {
     expect(drawable).toHaveLength(1);
     expect(drawable[0]?.id).toMatch(/^local-/);
   });
+
+  it("draws the viewer's own message sent from another client with no optimistic echo", () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    const message = liveSignal('sig-3', 'hello from the TUI', { id: 'user_me', name: 'Me' });
+
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message }, viewerId: 'user_me' });
+
+    const entry = state.entries.find(e => 'id' in e && e.id === 'sig-3');
+    expect(messageParts(entry)).toEqual([{ type: 'text', text: 'hello from the TUI' }]);
+  });
 });
