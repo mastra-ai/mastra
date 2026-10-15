@@ -46,7 +46,7 @@ export const InCollapsibleTrigger: Story = {
   render: args => (
     <Collapsible className="w-80">
       <CollapsibleTrigger className="flex w-full items-center gap-2 py-2 text-body-sm text-foreground">
-        <DisclosureChevron {...args} className="text-muted-foreground" />
+        <DisclosureChevron {...args} className="size-4 text-muted-foreground" />
         Advanced settings
       </CollapsibleTrigger>
       <CollapsibleContent>

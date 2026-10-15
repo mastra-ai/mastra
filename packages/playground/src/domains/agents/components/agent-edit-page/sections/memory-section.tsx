@@ -45,7 +45,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
     <div className="rounded-md border border-border bg-background">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger className="flex w-full items-center gap-1 bg-card p-3">
-          <DisclosureChevron direction="right" className="text-muted-foreground" />
+          <DisclosureChevron direction="right" className="size-4 text-muted-foreground" />
           <SectionTitle icon={<MemoryIcon className="text-muted-foreground" />}>
             Memory{(isEnabled || memoryRef) && <span className="text-success-indicator">(enabled)</span>}
           </SectionTitle>
