@@ -687,7 +687,11 @@ describe('lifecycle rule parity with @mastra/core', () => {
       '2026-06-01T00:00:00.010Z',
       '2026-06-02T00:00:00.000Z',
     ]) {
-      expect(isChunkCoveredByCursor(chunk, cursor)).toBe(isBufferedChunkCoveredByCursor(chunk, cursor));
+      for (const cursorExact of [false, true]) {
+        expect(isChunkCoveredByCursor(chunk, cursor, cursorExact)).toBe(
+          isBufferedChunkCoveredByCursor({ lastObservedAt: chunk, cursorExact }, cursor),
+        );
+      }
     }
   });
 
@@ -1068,7 +1072,7 @@ describe('observational memory lifecycle (supersededBy)', () => {
       expect(parseStoredChunks(docs[0]!.bufferedObservationChunks)).toHaveLength(1);
     });
 
-    it('skips a chunk the cursor wholly covers (cursor T, chunk T) but stores one past it (chunk T+1ms)', async () => {
+    it('skips an exact chunk the cursor covers (cursor T, chunk T) but stores one past it (chunk T+1ms)', async () => {
       const cursor = '2026-06-01T01:00:00.000Z';
       const { ctx, docs } = createFakeOMDb([storedOMDoc({ lastObservedAt: cursor })]);
 
@@ -1076,18 +1080,34 @@ describe('observational memory lifecycle (supersededBy)', () => {
         op: 'omAppendBufferedChunk',
         id: 'om-1',
         chunk: serializedChunk({ cycleId: 'c-covered', lastObservedAt: '2026-06-01T01:00:00.000Z' }),
+        chunkCursorExact: true,
         updatedAt: NOW,
       });
       const uncovered = await run(ctx, {
         op: 'omAppendBufferedChunk',
         id: 'om-1',
         chunk: serializedChunk({ cycleId: 'c-new', lastObservedAt: '2026-06-01T01:00:00.001Z' }),
+        chunkCursorExact: true,
         updatedAt: NOW,
       });
 
       expect(covered.result.persisted).toBe(false);
       expect(uncovered.result.persisted).toBe(true);
       expect(parseStoredChunks(docs[0]!.bufferedObservationChunks).map(c => c.cycleId)).toEqual(['c-new']);
+    });
+
+    it('skips a legacy +1ms chunk whose content sits at the cursor (cursor T, chunk T+1ms)', async () => {
+      const { ctx, docs } = createFakeOMDb([storedOMDoc({ lastObservedAt: '2026-06-01T01:00:00.000Z' })]);
+
+      const legacy = await run(ctx, {
+        op: 'omAppendBufferedChunk',
+        id: 'om-1',
+        chunk: serializedChunk({ cycleId: 'c-legacy', lastObservedAt: '2026-06-01T01:00:00.001Z' }),
+        updatedAt: NOW,
+      });
+
+      expect(legacy.result.persisted).toBe(false);
+      expect(parseStoredChunks(docs[0]!.bufferedObservationChunks)).toEqual([]);
     });
 
     it('never moves lastBufferedAtTime backward', async () => {

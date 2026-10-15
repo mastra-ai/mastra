@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import {
   assertActiveObservationsApplied,
   isAppendOnlySince,
+  bufferedChunkNewestMessageTime,
   isBufferedChunkCoveredByCursor,
   maxObservationCursor,
   planReflectionGenerationText,
@@ -2346,9 +2347,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         extractedValues: input.chunk.extractedValues,
         extractionFailures: input.chunk.extractionFailures,
       };
-      // A chunk stores max message time; it is wholly covered iff cursor >= that, so it may be
-      // appended only while the stored cursor is strictly below it.
-      const coverBound = new Date(input.chunk.lastObservedAt);
+      // A chunk is wholly covered iff cursor >= its newest-message time, so it may be appended
+      // only while the stored cursor is strictly below that.
+      const coverBound = new Date(bufferedChunkNewestMessageTime(input.chunk));
       const notCovered = { $or: [{ lastObservedAt: null }, { lastObservedAt: { $lt: coverBound } }] };
       const lastBufferedAtTime = input.lastBufferedAtTime ? new Date(input.lastBufferedAtTime) : undefined;
 
@@ -2412,7 +2413,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         if (Array.isArray(stored) && stored.some((c: any) => c?.cycleId === input.chunk.cycleId)) {
           return { persisted: false, recordId: targetId };
         }
-        if (isBufferedChunkCoveredByCursor(input.chunk.lastObservedAt, doc.lastObservedAt)) {
+        if (isBufferedChunkCoveredByCursor(input.chunk, doc.lastObservedAt)) {
           return { persisted: false, recordId: targetId };
         }
         if (stored !== undefined && stored !== null && !Array.isArray(stored)) {

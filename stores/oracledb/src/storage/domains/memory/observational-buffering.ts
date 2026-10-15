@@ -67,7 +67,7 @@ export async function updateBufferedObservations(
       // Skip a retried append (same cycle) and a chunk the cursor already wholly covers.
       if (
         existingChunks.some(existing => existing.cycleId === input.chunk.cycleId) ||
-        isBufferedChunkCoveredByCursor(input.chunk.lastObservedAt, row.lastObservedAt)
+        isBufferedChunkCoveredByCursor(input.chunk, row.lastObservedAt)
       ) {
         return { persisted: false, recordId: row.id };
       }

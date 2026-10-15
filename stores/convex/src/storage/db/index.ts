@@ -536,6 +536,7 @@ export class ConvexDB extends MastraBase {
   public async omAppendBufferedChunk<R>(args: {
     id: string;
     chunk: SerializedOMChunk;
+    chunkCursorExact?: boolean;
     lastBufferedAtTime?: string;
     updatedAt: string;
   }): Promise<R> {

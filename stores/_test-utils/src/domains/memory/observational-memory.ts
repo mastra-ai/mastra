@@ -2181,6 +2181,32 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
         });
         expect(cycleIds(await head(input))).toEqual([after.cycleId, partial.cycleId]);
 
+        // cursorExact chunks store the newest-message time itself: covered at the cursor, stored 1ms past it.
+        const exactInput = createSampleOMInput();
+        const exactRecord = await memoryStorage.initializeObservationalMemory(exactInput);
+        await memoryStorage.commitActiveObservations({
+          id: exactRecord.id,
+          observations: '- sync',
+          tokenCount: 1,
+          lastObservedAt: at(1000),
+        });
+        const exactCovered = { ...chunkAt('exact-covered', 1000), lastObservedAt: at(1000), cursorExact: true };
+        expect(
+          await memoryStorage.appendBufferedObservations({ id: exactRecord.id, chunk: exactCovered }),
+        ).toMatchObject({ persisted: false });
+        const exactAfter = { ...chunkAt('exact-after', 1001), lastObservedAt: at(1001), cursorExact: true };
+        expect(await memoryStorage.appendBufferedObservations({ id: exactRecord.id, chunk: exactAfter })).toMatchObject(
+          { persisted: true },
+        );
+        // A legacy chunk stamped 1001 holds content at 1000, which the cursor already covers.
+        expect(
+          await memoryStorage.appendBufferedObservations({
+            id: exactRecord.id,
+            chunk: chunkAt('legacy-at-cursor', 1000),
+          }),
+        ).toMatchObject({ persisted: false });
+        expect(cycleIds(await head(exactInput))).toEqual([exactAfter.cycleId]);
+
         const backward = createSampleOMInput();
         const backwardRecord = await memoryStorage.initializeObservationalMemory(backward);
         await memoryStorage.appendBufferedObservations({ id: backwardRecord.id, chunk: chunkAt('early', 100) });

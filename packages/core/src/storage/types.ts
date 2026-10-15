@@ -1188,6 +1188,11 @@ export interface BufferedObservationChunkInput {
   messageTokens: number;
   /** When the messages were observed */
   lastObservedAt: Date;
+  /**
+   * `lastObservedAt` is the exact newest-message time. Absent for chunks from older producers,
+   * which stored newest-message time + 1ms; coverage checks then allow for that 1ms.
+   */
+  cursorExact?: boolean;
   /** Optional suggested continuation from the observer */
   suggestedContinuation?: string;
   /** Optional current task context */
