@@ -1,3 +1,5 @@
+import type { ListActionsQuery } from '../new-message-format/storage';
+import type { PersistableAction } from '../new-message-format/types';
 import type { AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4';
 import type { MastraDBMessage } from '../agent/message-list';
 import type { AgentSignalType } from '../agent/signals';
@@ -472,6 +474,16 @@ https://mastra.ai/en/docs/memory/overview`,
    * @param threadId - The unique identifier of the thread
    * @returns Promise resolving to the thread or null if not found
    */
+  /** Appends persistable actions to the thread log. Implemented by `@mastra/memory`. */
+  async saveActions(_args: { actions: PersistableAction[] }): Promise<void> {
+    throw new Error(`Actions are not supported by this memory (${this.constructor.name}).`);
+  }
+
+  /** Lists a thread's persisted actions ordered by id. Implemented by `@mastra/memory`. */
+  async listActions(_query: ListActionsQuery): Promise<PersistableAction[]> {
+    throw new Error(`Actions are not supported by this memory (${this.constructor.name}).`);
+  }
+
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
   /**

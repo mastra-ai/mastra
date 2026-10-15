@@ -754,12 +754,12 @@ export class Memory extends MastraMemory {
     return store;
   }
 
-  async saveActions(args: { actions: PersistableAction[] }): Promise<void> {
+  override async saveActions(args: { actions: PersistableAction[] }): Promise<void> {
     const memoryStore = await this.getMemoryStore();
     return memoryStore.saveActions(args);
   }
 
-  async listActions(query: ListActionsQuery): Promise<PersistableAction[]> {
+  override async listActions(query: ListActionsQuery): Promise<PersistableAction[]> {
     const memoryStore = await this.getMemoryStore();
     return memoryStore.listActions(query);
   }

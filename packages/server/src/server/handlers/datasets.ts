@@ -1591,7 +1591,7 @@ export const GENERATE_ITEMS_ROUTE = createRoute({
         .filter(Boolean)
         .join('\n\n');
 
-      const result = await generatorAgent.generate(userMessage, {
+      const result = await generatorAgent.generateMessageList(userMessage, {
         structuredOutput: { schema: outputSchema },
       });
 
@@ -1718,7 +1718,7 @@ export const CLUSTER_FAILURES_ROUTE = createRoute({
 
       userMessage += `\n\nReturn both "clusters" (grouping items by pattern) and "proposedTags" (a list mapping each item ID to the tag labels you recommend, with a "reason" explaining why). For proposedTags, only include NEW tags to add — do not repeat tags the item already has.`;
 
-      const result = await clusterAgent.generate(userMessage, {
+      const result = await clusterAgent.generateMessageList(userMessage, {
         structuredOutput: { schema: outputSchema },
       });
 

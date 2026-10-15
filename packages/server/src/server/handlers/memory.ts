@@ -6,6 +6,7 @@ import type { MastraMemory, StorageThreadType } from '@mastra/core/memory';
 import type { MastraStorage, MemoryStorage, StorageListThreadsOutput } from '@mastra/core/storage';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { MastraFGAPermissions } from '../fga-permissions';
+import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import {
   threadIdPathParams,
@@ -1074,6 +1075,47 @@ export const GET_THREAD_BY_ID_ROUTE = createRoute({
       throw new HTTPException(400, { message: 'Memory is not initialized' });
     } catch (error) {
       return handleError(error, 'Error getting thread');
+    }
+  },
+});
+
+export const LIST_ACTIONS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/memory/threads/:threadId/actions',
+  responseType: 'json',
+  pathParamSchema: threadIdPathParams,
+  queryParamSchema: z.object({
+    agentId: z.string().optional(),
+    resourceId: z.string().optional(),
+    runId: z.string().optional(),
+    after: z.string().optional(),
+    limit: z.coerce.number().int().positive().optional(),
+  }),
+  responseSchema: z.object({ actions: z.array(z.record(z.string(), z.unknown())) }),
+  summary: 'List thread actions',
+  description: 'Returns the persisted actions of a conversation thread, ordered by id',
+  tags: ['Memory'],
+  requiresAuth: true,
+  handler: async ({ mastra, agentId, threadId, resourceId, runId, after, limit, requestContext }) => {
+    try {
+      const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
+      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+      if (!effectiveThreadId) {
+        throw new HTTPException(400, { message: 'No threadId found' });
+      }
+      const memory = await getMemoryFromContext({ mastra, agentId, requestContext, allowMissingAgent: true });
+      if (!memory) {
+        throw new HTTPException(400, { message: 'Memory is not initialized' });
+      }
+      const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+      if (!thread) {
+        throw new HTTPException(404, { message: 'Thread not found' });
+      }
+      await enforceThreadAccess({ mastra, requestContext, threadId: effectiveThreadId, thread, effectiveResourceId });
+      const actions = await memory.listActions({ threadId: effectiveThreadId, runId, after, limit });
+      return { actions: actions as unknown as Record<string, unknown>[] };
+    } catch (error) {
+      return handleError(error, 'Error listing actions');
     }
   },
 });
