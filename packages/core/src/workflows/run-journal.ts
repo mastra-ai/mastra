@@ -13,6 +13,11 @@ import type { StepResult, WorkflowRunState } from './types';
  * differs from the one last written. State is edited in place, so changes are marked
  * through `markStateChanged()` where they are merged into the run.
  *
+ * Writes in flight at the same time (parallel branches, `foreach` with concurrency) can
+ * commit in any order. A step two of them carry with different values may end up stored
+ * with either, so it isn't recorded as written and the next write sends it again. A write
+ * that overlaps a checkpoint may have been wiped by it, so the next write is a checkpoint.
+ *
  * @internal
  */
 export class RunJournal {
@@ -20,6 +25,7 @@ export class RunJournal {
   #written: Map<string, unknown>;
   #stateDirty = false;
   #needsCheckpoint: boolean;
+  #inFlight = new Set<InFlightWrite>();
 
   /**
    * @param seed The step results already in storage (a resume's loaded snapshot context).
@@ -52,9 +58,22 @@ export class RunJournal {
         state: stateDirty || args.snapshot.status !== 'running',
       };
     }
-    const written = changes
-      ? changes.stepIds.map(stepId => [stepId, context[stepId]] as const)
-      : Object.entries(context);
+    const self: InFlightWrite = {
+      steps: new Map(changes ? changes.stepIds.map(stepId => [stepId, context[stepId]]) : Object.entries(context)),
+      checkpoint,
+      unsure: new Set(),
+      overlapsCheckpoint: false,
+    };
+    for (const other of this.#inFlight) {
+      if (checkpoint || other.checkpoint) self.overlapsCheckpoint = other.overlapsCheckpoint = true;
+      for (const [stepId, value] of self.steps) {
+        if (other.steps.has(stepId) && other.steps.get(stepId) !== value) {
+          self.unsure.add(stepId);
+          other.unsure.add(stepId);
+        }
+      }
+    }
+    this.#inFlight.add(self);
 
     this.#needsCheckpoint = false;
     this.#stateDirty = false;
@@ -64,11 +83,24 @@ export class RunJournal {
       if (checkpoint) this.#needsCheckpoint = true;
       if (stateDirty) this.#stateDirty = true;
       throw error;
+    } finally {
+      this.#inFlight.delete(self);
     }
-    for (const [stepId, value] of written) {
-      this.#written.set(stepId, value);
+    if (self.overlapsCheckpoint) this.#needsCheckpoint = true;
+    for (const [stepId, value] of self.steps) {
+      if (self.unsure.has(stepId)) this.#written.delete(stepId);
+      else this.#written.set(stepId, value);
     }
   }
+}
+
+interface InFlightWrite {
+  /** stepId -> the object this write carries */
+  steps: Map<string, unknown>;
+  checkpoint: boolean;
+  /** Steps another in-flight write carries with a different value. */
+  unsure: Set<string>;
+  overlapsCheckpoint: boolean;
 }
 
 /**
