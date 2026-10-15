@@ -339,16 +339,16 @@ describe('Board card with a proposed run', () => {
     expect(transitions).toEqual([]);
   });
 
-  it('says a run is waiting on a card that would otherwise look idle', async () => {
+  it('leads with the suggested run on a card that would otherwise look idle', async () => {
     const { settled, transitions } = stubBoardEndpoints({ withLiveSession: true });
     const user = userEvent.setup();
     renderWorkBoard();
 
-    // Without the badge this card reads as a plain link to its session, so the
-    // parked run is only discoverable by opening the menu on a hunch.
+    // With no status badge, the highlighted action is what keeps the parked run
+    // from reading as a plain link to the card's session.
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
-    expect(await within(card).findByText('Suggested: Build')).toBeVisible();
-    const release = within(card).getByRole('button', { name: 'Start suggested run: Build' });
+    const release = await within(card).findByRole('button', { name: 'Start suggested run: Build' });
+    expect(within(card).queryByText(/^Suggested:/)).toBeNull();
     expect(release).toHaveAttribute('data-variant', 'primary');
     expect(within(card).getByRole('link', { name: 'Open session' })).toHaveAttribute('data-variant', 'default');
 
