@@ -232,7 +232,7 @@ describe('MessageHistory', () => {
         threadId: 'thread-1',
         createdAt: new Date(Date.now() - 10_000),
       };
-      const later: MastraDBMessage[] = [1, 2].map(i => ({
+      const later: MastraDBMessage[] = [1, 2, 3].map(i => ({
         id: `later-${i}`,
         role: 'user',
         content: { format: 2, parts: [{ type: 'text', text: `later ${i}` }] },
@@ -250,9 +250,23 @@ describe('MessageHistory', () => {
         return messageList.get.all.db().map(m => m.id);
       };
 
-      expect(await load()).toEqual(['later-1', 'later-2']);
-      expect(await load(['call_1'])).toEqual(['tool-msg', 'later-1', 'later-2']);
-      expect(await load(['call_unknown'])).toEqual(['later-1', 'later-2']);
+      expect(await load()).toEqual(['later-2', 'later-3']);
+      expect(await load(['call_1'])).toEqual(['tool-msg', 'later-2', 'later-3']);
+      expect(await load(['call_unknown'])).toEqual(['later-2', 'later-3']);
+
+      // With a token budget the pinned message wins over the oldest unpinned history,
+      // and is skipped when it cannot fit at all.
+      const tokenProcessor = (toolTokens: number) =>
+        new MessageHistory({
+          storage: mockStorage,
+          lastMessages: 2,
+          tokenLimit: { maxTokens: 7, atMaxRemoveTokens: 1 },
+          tokenCounter: { countMessage: (m: MastraDBMessage) => (m.id === 'tool-msg' ? toolTokens : 1) },
+        });
+      processor = tokenProcessor(5);
+      expect(await load(['call_1'])).toEqual(['tool-msg', 'later-3']);
+      processor = tokenProcessor(7);
+      expect(await load(['call_1'])).toEqual(['later-2', 'later-3']);
     });
 
     it('should merge historical messages with new messages', async () => {

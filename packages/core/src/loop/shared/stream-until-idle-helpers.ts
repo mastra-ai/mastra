@@ -203,10 +203,9 @@ export function buildContinuationOpts(
   const toolCallIds = batch
     .map(chunk => (chunk as { payload?: { toolCallId?: unknown } }).payload?.toolCallId)
     .filter((id): id is string => typeof id === 'string' && id.length > 0);
-  // Copy so the IDs stay scoped to this continuation instead of leaking into the caller's context.
-  const requestContext = new RequestContext(
-    (baseContinuationOpts.requestContext as RequestContext | undefined)?.entries() ?? [],
-  );
+  // Share the caller's context so tool/processor updates stay visible to it. The IDs key is
+  // overwritten per continuation and removed by the caller once the continuation finishes.
+  const requestContext = (baseContinuationOpts.requestContext as RequestContext | undefined) ?? new RequestContext();
   requestContext.set(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY, toolCallIds);
   return {
     ...baseContinuationOpts,
@@ -495,6 +494,7 @@ export async function runIdleLoop<
   const processIfIdle = async () => {
     if (isProcessing || closed || runningTaskIds.size > 0 || pendingCompletions.length === 0) return;
     isProcessing = true;
+    let continuationContext: RequestContext | undefined;
     try {
       const batch = pendingCompletions.splice(0, pendingCompletions.length);
       for (const chunk of batch) {
@@ -503,6 +503,7 @@ export async function runIdleLoop<
         if (tid && ctype) processedTerminalKeys.add(`${tid}:${ctype}`);
       }
       const continuationOpts = buildContinuationOpts(baseContinuationOpts, restStreamOptions?.context as any[], batch);
+      continuationContext = continuationOpts.requestContext;
       const segmentAbort = new AbortController();
       continuationAbort = segmentAbort;
       activeInnerRunId = undefined;
@@ -529,6 +530,7 @@ export async function runIdleLoop<
       forceClose();
       return;
     } finally {
+      continuationContext?.delete(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY);
       isProcessing = false;
       if (runningTaskIds.size === 0 && pendingCompletions.length > 0) {
         void processIfIdle();

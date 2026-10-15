@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed `untilIdle` continuation turns missing a completed background task's result once newer messages pushed it outside the `lastMessages` history window. The messages for the tool calls the continuation reports are now always loaded into its prompt.
+Fixed `untilIdle` continuations losing a completed background task's result after newer messages arrived. The continuation now always sees the result it reports.

@@ -10,6 +10,10 @@ import { MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY } from '../../request-context';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 
+// Bounds the newest-first scan for continuation tool-call messages that fall outside the history window.
+const CONTINUATION_SCAN_PAGE_SIZE = 100;
+const CONTINUATION_SCAN_MAX_PAGES = 10;
+
 /**
  * Options for the MessageHistory processor
  */
@@ -123,16 +127,54 @@ export class MessageHistory implements Processor {
     }
     if (missing.size === 0) return [];
 
+    // Scan newest-first in bounded pages so a long thread is never read in full.
     const loadedIds = new Set(loaded.map(msg => msg.id));
-    const { messages } = await this.storage.listMessages({
-      threadId,
-      resourceId,
-      perPage: false,
-      includeTotal: false,
-    });
-    return messages.filter(
-      msg => msg.role !== 'system' && !loadedIds.has(msg.id) && toolCallIdsOf(msg).some(id => missing.has(id)),
-    );
+    const found: MastraDBMessage[] = [];
+    for (let page = 0; page < CONTINUATION_SCAN_MAX_PAGES && missing.size > 0; page++) {
+      const { messages, hasMore } = await this.storage.listMessages({
+        threadId,
+        resourceId,
+        page,
+        perPage: CONTINUATION_SCAN_PAGE_SIZE,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+        includeTotal: false,
+      });
+      for (const msg of messages) {
+        if (msg.role === 'system' || loadedIds.has(msg.id)) continue;
+        const ids = toolCallIdsOf(msg).filter(id => missing.has(id));
+        if (!ids.length) continue;
+        found.push(msg);
+        loadedIds.add(msg.id);
+        for (const id of ids) missing.delete(id);
+      }
+      if (!hasMore || messages.length < CONTINUATION_SCAN_PAGE_SIZE) break;
+    }
+    return found;
+  }
+
+  /**
+   * Keep pinned messages inside the token budget: drop the oldest unpinned history first,
+   * and skip pinning entirely when the pinned messages alone exceed the budget.
+   */
+  private async fitPinnedMessages(
+    history: MastraDBMessage[],
+    pinned: MastraDBMessage[],
+  ): Promise<{ history: MastraDBMessage[]; pinned: MastraDBMessage[] }> {
+    if (!this.tokenLimit || !this.tokenCounter || !pinned.length) return { history, pinned };
+    const maxTokens = this.tokenLimit.maxTokens - this.tokenLimit.atMaxRemoveTokens;
+    let pinnedTokens = 0;
+    for (const msg of pinned) pinnedTokens += await this.tokenCounter.countMessage(msg);
+    if (pinnedTokens > maxTokens) return { history, pinned: [] };
+    // history is newest-first; keep the newest messages that still fit next to the pinned ones.
+    const kept: MastraDBMessage[] = [];
+    let total = pinnedTokens;
+    for (const msg of history) {
+      const tokens = await this.tokenCounter.countMessage(msg);
+      if (total + tokens > maxTokens) break;
+      total += tokens;
+      kept.push(msg);
+    }
+    return { history: kept, pinned };
   }
 
   async processInput(
@@ -212,7 +254,8 @@ export class MessageHistory implements Processor {
         filteredMessages,
       );
       if (pinnedMessages.length) {
-        filteredMessages.push(...pinnedMessages);
+        const fitted = await this.fitPinnedMessages(filteredMessages, pinnedMessages);
+        filteredMessages.splice(0, filteredMessages.length, ...fitted.history, ...fitted.pinned);
         filteredMessages.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       }
 
