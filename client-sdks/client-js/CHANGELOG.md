@@ -1,5 +1,24 @@
 # @mastra/client-js
 
+## 1.55.0-alpha.6
+
+### Minor Changes
+
+- Added `agent.queueSignal()` for queuing a typed signal behind the active thread run. ([#27081](https://github.com/mastra-ai/mastra/pull/27081))
+
+  ```ts
+  await agent.queueSignal({
+    signal: { type: 'reactive', tagName: 'skill', attributes: { name: 'triage' }, contents: 'Triage the new issue.' },
+    resourceId: 'user-123',
+    threadId: 'thread-abc',
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`6f50db8`](https://github.com/mastra-ai/mastra/commit/6f50db8a3e0a673c6e094229e3d18e2b8dbb99f7), [`3ddf32d`](https://github.com/mastra-ai/mastra/commit/3ddf32da0e6eaffd1e5da33105bf245b6e56a117), [`032a92d`](https://github.com/mastra-ai/mastra/commit/032a92d661696b3620ce45f4a0b1de60f0a6c068), [`1c9cb41`](https://github.com/mastra-ai/mastra/commit/1c9cb4151c3addfdf689ee1dd9d3a013c7342e25)]:
+  - @mastra/core@1.78.0-alpha.6
+
 ## 1.54.1-alpha.5
 
 ### Patch Changes
