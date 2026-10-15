@@ -1,7 +1,6 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import assert from 'node:assert';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -36,21 +35,13 @@ describe('Composer on a lazy user-session draft', () => {
       ),
     );
     const user = userEvent.setup();
-    const { client, container } = renderDraft();
+    const { client } = renderDraft();
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
-    expect(screen.getByRole('button', { name: 'Attach image' })).toBeDisabled();
     expect(createBodies).toEqual([]);
     expect(preparation.controllerCreates).toBe(0);
     expect(preparation.sessionLookups).toBe(0);
-
-    const form = container.querySelector('form');
-    assert(form);
-    fireEvent.drop(form, { dataTransfer: { files: [new File(['png'], 'shot.png', { type: 'image/png' })] } });
-    expect(await screen.findByText('Images can be attached once the session is ready.')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Remove shot.png' })).not.toBeInTheDocument();
-    expect(createBodies).toEqual([]);
 
     await user.type(message, '  fix the login bug  ');
     await user.keyboard('{Enter}');

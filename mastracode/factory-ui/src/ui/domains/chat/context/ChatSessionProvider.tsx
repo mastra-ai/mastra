@@ -12,6 +12,7 @@ import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatCommandsProvider } from './ChatCommandsProvider';
+import { ComposerImagesProvider } from './ComposerImagesProvider';
 import { ChatModelsProvider } from './ChatModelsProvider';
 import { ChatThinkingProvider } from './ChatThinkingProvider';
 import { ChatSessionContext } from './ChatSessionContext';
@@ -215,7 +216,9 @@ export function ChatSessionBoundary({
       >
         <ChatModelsProvider>
           <ChatThinkingProvider>
-            <ChatCommandsProvider>{children}</ChatCommandsProvider>
+            <ChatCommandsProvider>
+              <ComposerImagesProvider>{children}</ComposerImagesProvider>
+            </ChatCommandsProvider>
           </ChatThinkingProvider>
         </ChatModelsProvider>
       </ChatTranscriptProvider>

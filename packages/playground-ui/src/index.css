@@ -126,6 +126,14 @@
   }
 }
 
+/* Pulls a ScrollArea's scrollbar ends in from a rounded container's corners, keyed to the same
+   radius steps as `rounded-*`: pair `rounded-xl` with `scrollbar-inset-xl`. At 0.7 of the radius
+   the corner's curve no longer cuts into the 6px bar. An arbitrary radius takes an arbitrary
+   inset, `scrollbar-inset-[22px]`. ScrollBar reads the variable and defaults to 0. */
+@utility scrollbar-inset-* {
+  --scroll-area-scrollbar-inset: calc(--value(--radius-*, [length]) * 0.7);
+}
+
 @utility rounded-studio-frame {
   border-radius: var(--studio-frame-radius, 1.5rem);
 }

@@ -435,6 +435,7 @@ channels: {
 
     return controller.createSession({
       resourceId: thread.resourceId,
+      threadId: thread.id,
       scope: install.id,
       ownerId: controller.id,
       requestContext,
@@ -443,7 +444,7 @@ channels: {
 }
 ```
 
-Create the session under `thread.resourceId`. Because a session can bind only threads it owns, use `resolveResourceId` to assign a different owner to the mapped thread. Sessions are get-or-create for each `resourceId` and `scope` combination. Pass `scope` when one thread needs separate sessions for each installation or principal.
+Create the session under `thread.resourceId`. Because a session can bind only threads it owns, use `resolveResourceId` to assign a different owner to the mapped thread. Pass `threadId: thread.id` so the session opens on the mapped thread. Without it, a session that has tags or a `projectPath` doesn't treat the mapped thread as its own, so it creates an extra empty thread before switching to the mapped one. Sessions are get-or-create for each `resourceId` and `scope` combination. Pass `scope` when one thread needs separate sessions for each installation or principal.
 
 Failures that aren't refusals (a storage outage, a bug in your resolver's dependencies) still post an error to the thread, so a broken bot doesn't look like a silent one. If you need to tell them apart in your own code, a refusal is a `ChannelSessionRejectedError` with the original error as its `cause`.
 

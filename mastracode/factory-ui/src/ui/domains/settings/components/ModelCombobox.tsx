@@ -1,15 +1,20 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption } from '@mastra/playground-ui/components/Combobox';
+import { formatModelName } from '@mastra/playground-ui/utils/model';
 import { Box, Sparkles } from 'lucide-react';
 import { useMemo } from 'react';
 
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
 import { ProviderBrandIcon } from '../../workspaces/components/ProviderBrandIcon';
-import { formatModelName, modelProvider } from './model-display-name';
 import { providerDisplayName } from './provider-display-name';
 
 /** Value the picker reports when the caller's `auto` choice is picked. */
 const AUTO_VALUE = 'auto';
+
+function modelProvider(id: string): string {
+  const slash = id.indexOf('/');
+  return slash > 0 ? id.slice(0, slash) : '';
+}
 
 function modelOption(id: string, provider: string): ComboboxOption {
   const name = formatModelName(id);

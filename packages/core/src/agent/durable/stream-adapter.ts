@@ -958,6 +958,8 @@ export async function emitStepStartEvent(
     stepId?: string;
     messageId?: string;
     startedAt?: StepStartPayload['startedAt'];
+    modelId?: StepStartPayload['modelId'];
+    provider?: StepStartPayload['provider'];
     request?: StepStartPayload['request'];
     warnings?: StepStartPayload['warnings'];
   },
