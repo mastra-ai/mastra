@@ -71,7 +71,8 @@ describe('Settings ownership', () => {
     expect(screen.queryByText('Custom providers')).not.toBeInTheDocument();
     expect(screen.getByText('The model new chats start on.')).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Connect with API key' }));
-    expect(await screen.findByText('Covered by org')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Add API key for OpenAI' })).toBeInTheDocument();
+    expect(screen.queryByText('Covered by org')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Add API key for OpenAI' }));
     await user.type(screen.getByPlaceholderText('Paste API key'), 'sk-personal');
     await user.click(screen.getByRole('button', { name: 'Save' }));

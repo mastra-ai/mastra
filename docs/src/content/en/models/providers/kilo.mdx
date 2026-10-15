@@ -102,7 +102,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 943718,
-    "inputCost": 0.02376,
+    "inputCost": 0.0216,
     "outputCost": 0.72
   },
   {
@@ -114,7 +114,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 393216,
-    "inputCost": 0.225,
+    "inputCost": 0.1307,
     "outputCost": 8
   },
   {
@@ -162,8 +162,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 943718,
-    "inputCost": 0.3,
-    "outputCost": 14
+    "inputCost": 0.41,
+    "outputCost": 14.9
   },
   {
     "model": "kilo/~openai/gpt-astra-latest",
@@ -270,7 +270,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 131072,
-    "inputCost": 0.024,
+    "inputCost": 0.0608,
     "outputCost": 4.4
   },
   {
@@ -548,18 +548,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 4,
     "outputCost": 20
-  },
-  {
-    "model": "kilo/anthropic/claude-sonnet-4",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 64000,
-    "inputCost": 3,
-    "outputCost": 15
   },
   {
     "model": "kilo/anthropic/claude-sonnet-4.5",
@@ -2080,7 +2068,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 128000,
+    "contextWindow": 256000,
     "maxOutput": 16384,
     "inputCost": 0.1,
     "outputCost": 0.3
@@ -2394,6 +2382,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 65536,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "kilo/nvidia/nemotron-3.5-super-vl",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 235929,
+    "inputCost": 0.15,
+    "outputCost": 0.5
+  },
+  {
+    "model": "kilo/nvidia/nemotron-3.5-super-vl:free",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
     "inputCost": null,
     "outputCost": null
   },
@@ -3725,7 +3737,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
-    "maxOutput": 81920,
+    "maxOutput": 65536,
     "inputCost": 0.45,
     "outputCost": 2.7
   },
@@ -4206,8 +4218,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 128000,
-    "inputCost": 0.132,
-    "outputCost": 0.528
+    "inputCost": 0.0825,
+    "outputCost": 0.33
   },
   {
     "model": "kilo/tencent/hy3-preview",
@@ -4230,8 +4242,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 64000,
-    "inputCost": 0.83,
-    "outputCost": 2.501
+    "inputCost": 0.7506,
+    "outputCost": 2.2509
   },
   {
     "model": "kilo/thedrummer/cydonia-24b-v4.1",
@@ -4304,18 +4316,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 262144,
     "inputCost": null,
     "outputCost": null
-  },
-  {
-    "model": "kilo/unbiased/pareto-26.10-preview",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 1048576,
-    "maxOutput": 131072,
-    "inputCost": 0.8,
-    "outputCost": 3.2
   },
   {
     "model": "kilo/unbiased/pareto-26.9",

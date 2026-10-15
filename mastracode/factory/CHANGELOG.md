@@ -1,5 +1,57 @@
 # @mastra/factory
 
+## 0.23.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`f1a2ef7`](https://github.com/mastra-ai/mastra/commit/f1a2ef77de8eec908065ee1c72621c2501624d4c), [`a9b85ba`](https://github.com/mastra-ai/mastra/commit/a9b85ba48a2542c568d91f3032464057227d55dc), [`f28c44e`](https://github.com/mastra-ai/mastra/commit/f28c44ed98a87c6078a3e3e9ef2b197d97f97956)]:
+  - @mastra/code-sdk@1.14.0-alpha.9
+  - @mastra/core@1.78.0-alpha.9
+
+## 0.23.0-alpha.8
+
+### Patch Changes
+
+- Factory sessions and work-item runs can now start on a model you have credentials for. This applies when no default model was chosen and the built-in default model has no credential. ([#27177](https://github.com/mastra-ai/mastra/pull/27177))
+
+  The session uses the default model of a provider you have connected, for example `anthropic/claude-fable-5` for Claude or `openai/gpt-5.6-sol` for ChatGPT. A default you or your Factory chose always wins. The fallback is not saved as a default preference.
+
+- Improved the Slack "Could not authorize the owner of Slack Factory session" error. It now states which check failed: ([#27183](https://github.com/mastra-ai/mastra/pull/27183))
+
+  - The sender's account link has no organization.
+  - No source-control session row exists for the session, or its project repository row is missing.
+  - The source-control session row has no organization.
+
+- Added `scope=org` to `GET /web/config/models`. It lists only the models your organization credentials can run, next to the existing `scope=user` for personal credentials. ([#27163](https://github.com/mastra-ai/mastra/pull/27163))
+
+  ```text
+  GET /web/config/models?scope=org
+  ```
+
+  An unsupported `scope` value now returns `400` with `invalid_model_scope`. Before, it was ignored and the unfiltered list came back.
+
+- Updated dependencies [[`03646c5`](https://github.com/mastra-ai/mastra/commit/03646c587b915ced4c9fad3189391909a296f441), [`d7bd3cd`](https://github.com/mastra-ai/mastra/commit/d7bd3cda0fb2e46c68d164af2e0cb1815be03572)]:
+  - @mastra/core@1.78.0-alpha.8
+  - @mastra/code-sdk@1.14.0-alpha.8
+
+## 0.23.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`79a823f`](https://github.com/mastra-ai/mastra/commit/79a823f339bcea6fe57f3ae13ca15f0038c344a8), [`7e4b680`](https://github.com/mastra-ai/mastra/commit/7e4b68035c3e62a4fcf981afce9b02ecf65ddcf5), [`9cf0fe4`](https://github.com/mastra-ai/mastra/commit/9cf0fe4731d6186be20c890dba27ba3a2c134f5e)]:
+  - @mastra/code-sdk@1.14.0-alpha.7
+  - @mastra/core@1.78.0-alpha.7
+
+## 0.23.0-alpha.6
+
+### Patch Changes
+
+- Fixed Factory pages outside a session failing with "Factory session ownership is unavailable." Overview, Rules, Settings and other Factory pages now use the Factory's model and credential policy for the signed-in member of that organization. ([#27164](https://github.com/mastra-ai/mastra/pull/27164))
+
+- Updated dependencies [[`6f50db8`](https://github.com/mastra-ai/mastra/commit/6f50db8a3e0a673c6e094229e3d18e2b8dbb99f7), [`3ddf32d`](https://github.com/mastra-ai/mastra/commit/3ddf32da0e6eaffd1e5da33105bf245b6e56a117), [`032a92d`](https://github.com/mastra-ai/mastra/commit/032a92d661696b3620ce45f4a0b1de60f0a6c068), [`1c9cb41`](https://github.com/mastra-ai/mastra/commit/1c9cb4151c3addfdf689ee1dd9d3a013c7342e25)]:
+  - @mastra/core@1.78.0-alpha.6
+  - @mastra/code-sdk@1.14.0-alpha.6
+
 ## 0.23.0-alpha.5
 
 ### Patch Changes

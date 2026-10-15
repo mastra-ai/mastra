@@ -16,7 +16,19 @@ Keep policy, validation, and persistence in [`@mastra/factory`](../factory/READM
 
 ## Onboarding
 
-The first-Factory wizard keeps repository and model choices in a session-scoped draft (never credentials) until the final review. Confirming creates the Factory, links the repository, and saves its default model; a failed save keeps the pending Factory so retrying resumes it instead of creating another. Integration and provider connections are authorized as soon as they are connected. Members without shared credentials pick a personal model, which becomes both the Factory default and their own default.
+The onboarding Setup step offers three equal choices, one per existing `modelScope` creation value:
+
+| Choice                           | Scope     | Factory work                                  | Interactive sessions                             |
+| -------------------------------- | --------- | --------------------------------------------- | ------------------------------------------------ |
+| Company account                  | `factory` | Organization credentials and Factory default  | Organization credentials and Factory default     |
+| Company work · personal sessions | `hybrid`  | Organization credentials and Factory default  | Session owner's personal credentials and default |
+| Personal accounts                | `user`    | Work owner's personal credentials and default | Session owner's personal credentials and default |
+
+There is no fallback between account scopes. Each teammate configures their own personal account. Onboarding asks for one connection in `factory` or `user`, and a separate connection for each scope in `hybrid`. Existing scoped connections can be reused. Only organization key admins can add shared credentials; members can use connections already configured by an admin. When no company connection exists and the member cannot add one, Setup only offers personal accounts. Scope changes happen only in Setup, never as a side effect of a later step. Local servers without web authentication skip Setup and create a `factory` Factory, so sessions and Factory work share the model chosen in their single connection step.
+
+Model pickers and final confirmation use `/web/config/models?scope=org` or `?scope=user`; live session catalogs still resolve the session owner and policy before considering settings filters. Credentials are saved when connected. Factory creation and the applicable default-model writes happen on final confirmation; setting a personal default also affects other work using that person's default.
+
+The session-storage draft contains choices, never credentials. Legacy drafts without `modelScope` return to Setup with their repository and model preserved. Failed creation resumes the pending Factory; changing its scope recreates that unfinished Factory rather than bypassing the admin-only scope update. Preview fixtures and screenshot tooling stay outside this package.
 
 ## Board views
 

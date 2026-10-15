@@ -731,7 +731,7 @@ describe('GET /web/config/models', () => {
     });
   });
 
-  it("limits the personal catalog to the caller's own credentials", async () => {
+  it('separates personal and company catalogs by credential scope', async () => {
     const seed = await createFactoryStorageForTests();
     await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic', {
       type: 'api_key',
@@ -767,6 +767,8 @@ describe('GET /web/config/models', () => {
 
     expect(await ids('')).toEqual(['anthropic/claude-fable-5', 'deepseek/deepseek-flash']);
     expect(await ids('?scope=user')).toEqual(['anthropic/claude-fable-5']);
+    expect(await ids('?scope=org')).toEqual(['deepseek/deepseek-flash']);
+    expect((await app.request('/web/config/models?scope=other')).status).toBe(400);
     // Personal defaults never run on org credentials, whichever Factory the page is in.
     expect(await ids(`?scope=user&factoryId=${orgFactory.id}`)).toEqual(['anthropic/claude-fable-5']);
   });

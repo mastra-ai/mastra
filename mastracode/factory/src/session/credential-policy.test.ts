@@ -254,6 +254,29 @@ describe('trusted Factory credential policy', () => {
     await expect(prepareCredentialTenant(context('sender'))).resolves.toBeUndefined();
   });
 
+  it('resolves session-less Factory pages, addressed by project id, to the Factory policy', async () => {
+    const { seed, project, context } = await setup();
+    const factoryPage = context(project.id);
+    await prepareCredentialTenant(factoryPage);
+    expect(resolveCredentialStore(factoryPage)?.getStoredApiKey('openai-codex')).toBe('org-key');
+
+    const hybrid = await seed.projects.create({
+      orgId: ORG,
+      userId: OWNER,
+      input: { name: 'Hybrid', modelScope: 'hybrid' },
+    });
+    const hybridPage = context(hybrid.id);
+    await prepareCredentialTenant(hybridPage);
+    expect(resolveCredentialStore(hybridPage)?.getStoredApiKey('openai-codex')).toBe('sender-key');
+  });
+
+  it("refuses another org's Factory id as a session-less resource", async () => {
+    const { project, context } = await setup();
+    await expect(prepareCredentialTenant(context(project.id, 'sender', 'org-2'))).rejects.toThrow(
+      'ownership is unavailable',
+    );
+  });
+
   it('rejects ambiguous bindings instead of selecting the repository project policy', async () => {
     const { seed, project, sourceSession, context } = await setup();
     const other = await seed.projects.create({
@@ -700,7 +723,7 @@ describe('trusted Factory credential policy', () => {
     const unavailable = new RequestContext();
     await expect(
       prepareSessionRunContext(unavailable, 'missing-session', { sessions: deps.sourceControl }),
-    ).resolves.toBe('unavailable');
+    ).resolves.toBe('session-not-found');
     await expect(prepareCredentialTenant(unavailable)).rejects.toThrow('could not be resolved');
   });
 

@@ -1,5 +1,56 @@
 # @mastra/core
 
+## 1.78.0-alpha.9
+
+### Minor Changes
+
+- Added `traceAggregateDiscoverySchema` and an optional `aggregate` field on the trace-query fields response, describing the dimensions and measures `aggregateTraces()` accepts. ([#27185](https://github.com/mastra-ai/mastra/pull/27185))
+
+### Patch Changes
+
+- Fixed trace trees for agents that use output stream processors. In multi-step runs, each step's output stream processor span now sits inside that step and also covers the step's tool results, instead of every span showing up as a flat list under the agent run. Structured output processor spans stay under the agent run, because structured output runs once on the final result. ([#27172](https://github.com/mastra-ai/mastra/pull/27172))
+
+## 1.78.0-alpha.8
+
+### Patch Changes
+
+- Fixed model inference spans so they record the messages sent to the model. Observability backends that read the inference span, such as Langfuse through the OpenTelemetry exporter or Datadog, now show the input for every model call instead of an empty value. ([#26995](https://github.com/mastra-ai/mastra/pull/26995))
+
+- Fixed agents sending the same request until `maxSteps` when a text-only response ended with a non-standard finish reason, such as `other`. The run now ends after that response, so the text and token usage are no longer repeated. ([#26905](https://github.com/mastra-ai/mastra/pull/26905))
+
+## 1.78.0-alpha.7
+
+### Patch Changes
+
+- Fixed full agent output repeating earlier text after a feedback continuation. ([#26543](https://github.com/mastra-ai/mastra/pull/26543))
+
+- Fixed `createStep(agent)` running a `durable: true` agent as a plain agent. When the agent is registered with Mastra, the workflow step now runs through the registered durable wrapper on both the default and evented engines, so durable streaming and cleanup apply as expected. ([#27078](https://github.com/mastra-ai/mastra/pull/27078))
+
+  A step now logs a warning when a `durable: true` agent still has to run non-durably: when no durable wrapper for it is registered on the workflow's Mastra instance, or when it uses a legacy v1 model.
+
+## 1.78.0-alpha.6
+
+### Minor Changes
+
+- Added `queueSignal()` to `Agent` and AgentController `Session`. It queues a typed signal behind the active run like `queueMessage()`, but keeps the signal type, tag, and attributes instead of turning it into a plain user message. ([#27081](https://github.com/mastra-ai/mastra/pull/27081))
+
+  ```ts
+  agent.queueSignal(
+    { type: 'reactive', tagName: 'skill', attributes: { name: 'triage' }, contents: 'Triage the new issue.' },
+    { resourceId: 'user-123', threadId: 'thread-abc' },
+  );
+  ```
+
+  Runs started by a signal now record it on the `AGENT_RUN` span as `attributes.signal` (`id`, `type`, `tagName`, `attributes`), so traces show which signal started a run.
+
+### Patch Changes
+
+- Fixed `resumeGenerate()` and `resumeStream()` using up a suspended run when the resume data does not match the tool's `resumeSchema`. They now throw `AGENT_RESUME_INVALID_DATA` and the run stays suspended, so you can resume again with valid data. ([#27130](https://github.com/mastra-ai/mastra/pull/27130))
+
+- Fixed live assistant messages missing the model that wrote them. Messages streamed by an `AgentController` session now carry `modelId` and `provider` in their metadata, so a client can show the model without reloading the thread. After a fallback, they name the fallback model. ([#27030](https://github.com/mastra-ai/mastra/pull/27030))
+
+- Fixed a resumed workflow step losing its `suspendData` when the run restarts after a crash. The step now gets the payload it passed to `suspend()` again, alongside its `resumeData`. ([#27127](https://github.com/mastra-ai/mastra/pull/27127))
+
 ## 1.78.0-alpha.5
 
 ### Patch Changes
