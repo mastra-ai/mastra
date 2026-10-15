@@ -695,3 +695,144 @@ describe('connect', () => {
     });
   });
 });
+
+describe('connect with an options callback', () => {
+  const roleOf = (ctx?: { requestContext?: unknown }): string | undefined =>
+    (ctx?.requestContext as Map<string, string> | undefined)?.get('role');
+
+  function callbackResolver(fetchMock: typeof fetch) {
+    return connect(ctx => ({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+      providers: {
+        linear: roleOf(ctx) === 'viewer' ? { allowTools: ['linear_fake_tool'] } : {},
+      },
+    }));
+  }
+
+  it('derives provider options from the request context', async () => {
+    const { createTools } = installProvider();
+    const fetchMock = platformFetch(Response.json({ connections: [makeConnection()] }));
+    const resolver = callbackResolver(fetchMock as never);
+
+    await resolver({ requestContext: new Map([['role', 'viewer']]) });
+    await resolver({ requestContext: new Map([['role', 'admin']]) });
+
+    expect(createTools.mock.calls[0]![0].allowTools).toEqual(['linear_fake_tool']);
+    expect(createTools.mock.calls[1]![0].allowTools).toBeUndefined();
+  });
+
+  it('shares one cached snapshot across requests producing equal options', async () => {
+    const { createTools } = installProvider();
+    const fetchMock = platformFetch(Response.json({ connections: [makeConnection()] }));
+    const resolver = callbackResolver(fetchMock as never);
+
+    // Distinct ctx objects, structurally equal options from the callback.
+    const first = await resolver({ requestContext: new Map([['role', 'viewer']]) });
+    const second = await resolver({ requestContext: new Map([['role', 'viewer']]) });
+
+    expect(second).toBe(first);
+    expect(createTools).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps separate caches per distinct options value', async () => {
+    const { createTools } = installProvider();
+    const fetchMock = platformFetch(Response.json({ connections: [makeConnection()] }));
+    const resolver = callbackResolver(fetchMock as never);
+
+    await resolver({ requestContext: new Map([['role', 'viewer']]) });
+    await resolver({ requestContext: new Map([['role', 'admin']]) });
+    await resolver({ requestContext: new Map([['role', 'viewer']]) });
+    await resolver({ requestContext: new Map([['role', 'admin']]) });
+
+    // One platform refresh (and provider build) per distinct options value.
+    expect(createTools).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails resolution loudly when the callback produces invalid options', async () => {
+    installProvider();
+    const resolver = connect(() => ({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN },
+      providers: {
+        linear: { allowTools: ['a'], disallowTools: ['b'] } as unknown as Record<string, never>,
+      },
+    }));
+
+    await expect(resolver()).rejects.toMatchObject({
+      code: 'invalid_options',
+      message: expect.stringMatching(/mutually exclusive/),
+    });
+  });
+
+  it('rejects a callback that does not return an options object', async () => {
+    installProvider();
+    const resolver = connect(() => undefined as unknown as Record<string, never>);
+
+    await expect(resolver()).rejects.toMatchObject({
+      code: 'invalid_options',
+      message: expect.stringMatching(/must return a ToolsOptions object/),
+    });
+  });
+
+  it('refresh() re-fetches the no-context variant', async () => {
+    const { createTools } = installProvider();
+    const fetchMock = platformFetch(Response.json({ connections: [makeConnection()] }));
+    const resolver = callbackResolver(fetchMock as never);
+
+    await resolver();
+    await resolver.refresh();
+
+    expect(createTools).toHaveBeenCalledTimes(2);
+  });
+
+  it('disconnect() clears every variant cache', async () => {
+    const { createTools } = installProvider();
+    const fetchMock = platformFetch(Response.json({ connections: [makeConnection()] }));
+    const resolver = callbackResolver(fetchMock as never);
+
+    await resolver({ requestContext: new Map([['role', 'viewer']]) });
+    await resolver.disconnect();
+    await resolver({ requestContext: new Map([['role', 'viewer']]) });
+
+    expect(createTools).toHaveBeenCalledTimes(2);
+  });
+
+  it('supports .with() extras on the callback form', async () => {
+    installProvider();
+    const fetchMock = platformFetch(Response.json({ connections: [makeConnection()] }));
+    const extra = createTool({
+      id: 'extra_tool',
+      description: 'extra',
+      inputSchema: z.object({}),
+      execute: async () => 'ok',
+    });
+    const resolver = callbackResolver(fetchMock as never).with({ extraTool: extra });
+
+    const tools = await resolver({ requestContext: new Map([['role', 'admin']]) });
+    expect(Object.keys(tools).sort()).toEqual(['extraTool', 'linear_fake_tool']);
+  });
+
+  it('evicts the least recently used variant past the cap', async () => {
+    const { createTools } = installProvider();
+    const fetchMock = platformFetch(Response.json({ connections: [makeConnection()] }));
+    const resolver = connect(ctx => ({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+      ttlMs: (ctx?.requestContext as number | undefined) ?? 30_000,
+    }));
+
+    // 33 distinct options values: the first becomes the LRU and is evicted.
+    for (let variant = 0; variant < 33; variant++) {
+      await resolver({ requestContext: 1_000 + variant });
+    }
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('evicting the least recently used variant'));
+    expect(createTools).toHaveBeenCalledTimes(33);
+
+    // The evicted variant resolves again from scratch; a surviving one is cached.
+    await resolver({ requestContext: 1_000 });
+    expect(createTools).toHaveBeenCalledTimes(34);
+    await resolver({ requestContext: 1_032 });
+    expect(createTools).toHaveBeenCalledTimes(34);
+  });
+});
