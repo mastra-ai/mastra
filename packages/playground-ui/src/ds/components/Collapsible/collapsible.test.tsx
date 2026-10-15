@@ -66,6 +66,9 @@ describe('Collapsible', () => {
     fireEvent.click(trigger);
     expect(trigger.getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByText('Panel content')).toBeDefined();
+    // Open, it keeps its width and draws no divider after the label.
+    expect(trigger.classList.contains('w-fit')).toBe(true);
+    expect([...trigger.classList].some(name => name.startsWith('aria-expanded:'))).toBe(false);
   });
 
   it('adds no chevron to the default variant or to an asChild trigger', () => {

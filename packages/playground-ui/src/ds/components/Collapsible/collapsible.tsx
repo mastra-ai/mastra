@@ -12,21 +12,18 @@ type CollapsibleTriggerProps = Omit<CollapsiblePrimitive.Trigger.Props, 'classNa
   asChild?: boolean;
   /**
    * `form`: for an optional section inside a form or dialog body (Advanced, Request Context): a chevron
-   * that turns while open, then muted label text, flush with the fields around it. While open it stretches
-   * into a section divider: a hairline fills the rest of the row.
+   * that turns while open, then muted label text, flush with the fields around it.
    * `default`: headers, rows and cards; they lay themselves out.
    */
   variant?: 'default' | 'form';
 };
 
-// Control height, so the row lines up with buttons beside it (e.g. in a dialog footer). Open, it
-// takes the full width and draws the divider hairline after its content.
+// Control height, so the row lines up with buttons beside it (e.g. in a dialog footer).
 const formTriggerClass = cn(
   // gap spaces the text from a trailing badge; the chevron's -mr-0.5 leaves ~9px from its ink to the text.
   'inline-flex h-control-md w-fit cursor-pointer items-center gap-1.5 text-label text-muted-foreground',
   // Flush with the content around it, so the focus ring sits outside the box instead of over the glyphs.
   'rounded-sm focus-visible:outline-offset-2',
-  'aria-expanded:w-full aria-expanded:after:ml-2 aria-expanded:after:h-px aria-expanded:after:flex-1 aria-expanded:after:bg-border',
 );
 
 const CollapsibleTrigger = React.forwardRef<HTMLButtonElement, CollapsibleTriggerProps>(

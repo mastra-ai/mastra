@@ -85,7 +85,7 @@ export const Form: Story = {
     docs: {
       description: {
         story:
-          '`variant="form"` is the toggle for an optional section inside a form or dialog body (Advanced, Request Context): a chevron that turns while open, then muted label text, flush with the fields around it. Open, it stretches into a divider. Headers, rows and cards use the default variant and lay themselves out.',
+          '`variant="form"` is the toggle for an optional section inside a form or dialog body (Advanced, Request Context): a chevron that turns while open, then muted label text, flush with the fields around it. Headers, rows and cards use the default variant and lay themselves out.',
       },
     },
   },
