@@ -1,12 +1,9 @@
 'use client';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
-import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { useWorkflowSchema } from '@mastra/react/hooks/datasets';
 import { useWorkflows } from '@mastra/react/hooks/workflows';
 import type { JSONSchema7 } from 'json-schema';
@@ -176,10 +173,7 @@ export function SchemaConfigSection({
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger className={cn(quietTextHover, 'flex w-full items-center gap-2 py-2', 'text-subheading')}>
-        <DisclosureChevron direction="right" className="size-4" />
-        Schema Configuration (Optional)
-      </CollapsibleTrigger>
+      <CollapsibleTrigger variant="disclosure">Schema Configuration (Optional)</CollapsibleTrigger>
 
       <CollapsibleContent className="space-y-4 pt-4">
         <Notice variant="info" title="JSON Schema Format">
