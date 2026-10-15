@@ -7,9 +7,9 @@
 
 import { ThreadManager, resolveLaunchViewport } from '@mastra/core/browser';
 import type { BrowserState, ThreadSession, ThreadManagerConfig } from '@mastra/core/browser';
-import { BrowserManager } from 'agent-browser';
-import type { BrowserLaunchOptions } from 'agent-browser';
 import type { Page } from 'playwright-core';
+import { BrowserManager } from './browser-manager';
+import type { BrowserLaunchOptions } from './browser-manager';
 import type { BrowserConfig } from './types';
 
 /**
