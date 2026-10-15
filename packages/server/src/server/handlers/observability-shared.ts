@@ -273,6 +273,8 @@ export type ObservabilityStorageCapabilities = {
   traceQueryTenantScope: boolean;
   threadQuery: boolean;
   spanQuery: boolean;
+  /** Days of traces the store keeps. Omitted when the store does not report a limit. */
+  traceRetentionDays?: number;
   feedback: boolean;
 };
 

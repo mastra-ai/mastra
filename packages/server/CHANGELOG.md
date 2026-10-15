@@ -1,5 +1,76 @@
 # @mastra/server
 
+## 1.78.0-alpha.8
+
+### Minor Changes
+
+- Added an optional `traceRetentionDays` to the observability capabilities type and response schema, for hosts that serve `GET /observability/capabilities` themselves and know how long traces are kept. Clients can use it to stop users picking dates whose traces are already gone. Mastra's own server and built-in stores don't report a retention, so the field is omitted there. ([#27166](https://github.com/mastra-ai/mastra/pull/27166))
+
+  ```ts
+  const { capabilities } = await client.getObservabilityCapabilities();
+  capabilities.traceRetentionDays; // e.g. 180, or undefined
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`03646c5`](https://github.com/mastra-ai/mastra/commit/03646c587b915ced4c9fad3189391909a296f441), [`d7bd3cd`](https://github.com/mastra-ai/mastra/commit/d7bd3cda0fb2e46c68d164af2e0cb1815be03572)]:
+  - @mastra/core@1.78.0-alpha.8
+
+## 1.78.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`7e4b680`](https://github.com/mastra-ai/mastra/commit/7e4b68035c3e62a4fcf981afce9b02ecf65ddcf5), [`9cf0fe4`](https://github.com/mastra-ai/mastra/commit/9cf0fe4731d6186be20c890dba27ba3a2c134f5e)]:
+  - @mastra/core@1.78.0-alpha.7
+
+## 1.78.0-alpha.6
+
+### Minor Changes
+
+- Added `POST /agents/:agentId/queue-signal`, which queues a typed signal to run after the active thread run completes, or starts a run right away when the thread is idle. The body takes the same `signal` shape as `POST /agents/:agentId/signals`. ([#27081](https://github.com/mastra-ai/mastra/pull/27081))
+
+  ```bash
+  curl -X POST http://localhost:4111/api/agents/support-agent/queue-signal \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "resourceId": "user-123",
+      "threadId": "thread-123",
+      "signal": {
+        "type": "reactive",
+        "tagName": "skill",
+        "attributes": { "name": "triage" },
+        "contents": "Triage the new issue."
+      }
+    }'
+  ```
+
+### Patch Changes
+
+- Tightened ownership checks on workflow run routes when `server.auth.mapUserToResourceId` is configured. A caller mapped to a resource can only act on its own runs, including when it passes an existing run id to `/stream`, `/create-run`, `/start-async` or `/stream-legacy`, and when it resumes, recovers or approves a durable agent run. The worker endpoints `steps/execute` and `/workflows/events` apply the same check to the run they address. Restarting all active runs of a workflow now requires a privileged caller. A caller without a resource id is treated as privileged only when a fine-grained authorization (FGA) provider is configured to authorize the route. ([#26958](https://github.com/mastra-ai/mastra/pull/26958))
+
+  **Before:** with `mapUserToResourceId` configured, a caller with no mapped resource id could read and act on any run, and a mapped caller could act on runs saved without a resource id.
+
+  **After:** a mapped caller acts only on its own runs. Admin, service, worker and push-broker callers that are not mapped to a resource need an FGA provider for run access, and restarting all active runs requires such a privileged caller. Runs saved without a resource id are no longer reachable by mapped callers.
+
+  To keep privileged run access, configure an FGA provider next to the mapper:
+
+  ```ts
+  export const mastra = new Mastra({
+    server: {
+      auth: {
+        authenticateToken: async token => verifyAccessToken(token),
+        mapUserToResourceId: user => `${user.workspaceId}:${user.id}`,
+      },
+      fga: fgaProvider,
+    },
+  });
+  ```
+
+  **Servers without `mapUserToResourceId`** keep the previous rule: deny only when the caller's resource id and the run's resource id are both present and differ. That rule now also runs on routes that had no ownership check: `/stream`, `/create-run`, `/start-async`, `/stream-legacy`, `steps/execute`, `/workflows/events`, and the durable agent resume and recover routes. Reusing another resource's run id on those routes used to succeed and now returns 403.
+
+- Updated dependencies [[`6f50db8`](https://github.com/mastra-ai/mastra/commit/6f50db8a3e0a673c6e094229e3d18e2b8dbb99f7), [`3ddf32d`](https://github.com/mastra-ai/mastra/commit/3ddf32da0e6eaffd1e5da33105bf245b6e56a117), [`032a92d`](https://github.com/mastra-ai/mastra/commit/032a92d661696b3620ce45f4a0b1de60f0a6c068), [`1c9cb41`](https://github.com/mastra-ai/mastra/commit/1c9cb4151c3addfdf689ee1dd9d3a013c7342e25)]:
+  - @mastra/core@1.78.0-alpha.6
+
 ## 1.78.0-alpha.5
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # @mastra/mcp
 
+## 2.4.1-alpha.1
+
+### Patch Changes
+
+- MCP tools that declare an `outputSchema` now pass the text of embedded `resource` blocks to the model, together with their text blocks. Before, only the text blocks reached the model, so tools such as GitHub's `get_file_contents` showed the model a status line but not the file. `structuredContent` is still kept out of the model input. ([#27131](https://github.com/mastra-ai/mastra/pull/27131))
+
+- Updated dependencies [[`6f50db8`](https://github.com/mastra-ai/mastra/commit/6f50db8a3e0a673c6e094229e3d18e2b8dbb99f7), [`3ddf32d`](https://github.com/mastra-ai/mastra/commit/3ddf32da0e6eaffd1e5da33105bf245b6e56a117), [`032a92d`](https://github.com/mastra-ai/mastra/commit/032a92d661696b3620ce45f4a0b1de60f0a6c068), [`1c9cb41`](https://github.com/mastra-ai/mastra/commit/1c9cb4151c3addfdf689ee1dd9d3a013c7342e25)]:
+  - @mastra/core@1.78.0-alpha.6
+
 ## 2.4.1-alpha.0
 
 ### Patch Changes

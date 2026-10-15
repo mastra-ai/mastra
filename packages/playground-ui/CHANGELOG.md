@@ -1,5 +1,101 @@
 # @mastra/playground-ui
 
+## 64.0.0-alpha.8
+
+### Minor Changes
+
+- Added a `minDate` prop to `DateTimeRangePicker` and `TraceTimeRangeChip`, so you can stop users picking dates with no data, such as traces past retention. Days before `minDate` are disabled in both custom range calendars, and a range that already starts earlier can't be applied. ([#27166](https://github.com/mastra-ai/mastra/pull/27166))
+
+  ```tsx
+  <TraceTimeRangeChip {...rangeProps} minDate={subDays(new Date(), retentionDays)} />
+  ```
+
+- Added an `inset` variant to `SettingsContainer` for a short stack of rows that is the main content of a dialog. The default variant is unchanged and stays the one to use for settings pages and forms. ([#27171](https://github.com/mastra-ai/mastra/pull/27171))
+
+### Patch Changes
+
+- Updated dependencies [[`03646c5`](https://github.com/mastra-ai/mastra/commit/03646c587b915ced4c9fad3189391909a296f441), [`4c981d8`](https://github.com/mastra-ai/mastra/commit/4c981d8415796854c4bebee5a0ce9c39c89aa45f), [`d7bd3cd`](https://github.com/mastra-ai/mastra/commit/d7bd3cda0fb2e46c68d164af2e0cb1815be03572)]:
+  - @mastra/core@1.78.0-alpha.8
+  - @mastra/client-js@1.55.0-alpha.8
+  - @mastra/react@1.10.1-alpha.8
+
+## 64.0.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`7e4b680`](https://github.com/mastra-ai/mastra/commit/7e4b68035c3e62a4fcf981afce9b02ecf65ddcf5), [`9cf0fe4`](https://github.com/mastra-ai/mastra/commit/9cf0fe4731d6186be20c890dba27ba3a2c134f5e)]:
+  - @mastra/core@1.78.0-alpha.7
+  - @mastra/client-js@1.55.0-alpha.7
+  - @mastra/react@1.10.1-alpha.7
+
+## 64.0.0-alpha.6
+
+### Minor Changes
+
+- Added `THEME_OPTIONS`, the System, Light, and Dark choices that `ThemeToggle` shows. Use it to offer the same theme choices inside a menu, where a segmented control does not fit. ([#27097](https://github.com/mastra-ai/mastra/pull/27097))
+
+  ```tsx
+  import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+  import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
+  import { THEME_OPTIONS } from '@mastra/playground-ui/components/ThemeToggle';
+
+  function ThemeMenuItem() {
+    const { theme, setTheme } = useTheme();
+    return <DropdownMenu.RadioSub label="Theme" options={THEME_OPTIONS} value={theme} onValueChange={setTheme} />;
+  }
+  ```
+
+- Added an `info` prop to `FieldLabel`. It shows a small info icon after the label with your text in a tooltip on hover or keyboard focus. Screen readers announce the text as the icon's description, and clicking the icon never focuses the field. ([#27114](https://github.com/mastra-ai/mastra/pull/27114))
+
+  ```tsx
+  <FieldLabel info="Shown to people who pick this agent.">Display name</FieldLabel>
+  ```
+
+  Added `InfoTooltip`, the same info icon for use outside form labels, such as next to a heading or a toolbar control:
+
+  ```tsx
+  import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
+
+  <InfoTooltip aria-label="Version information" side="bottom" align="start">
+    Each save creates a version you can switch back to.
+  </InfoTooltip>;
+  ```
+
+  `TooltipContent` takes `keepMounted` to keep a closed tooltip in the page (hidden), for example so its trigger can point `aria-describedby` at it.
+
+  Removed `RequestContextLabel` (`@mastra/playground-ui/domains/request-context/components/request-context-label`). Use `FieldLabel` with `info` instead:
+
+  ```tsx
+  <FieldLabel info="Values passed to the agent at runtime.">Request context</FieldLabel>
+  ```
+
+### Patch Changes
+
+- Fixed avatars that stayed on the fallback initial after an image failed. They now show the new image when `src` changes. ([#27097](https://github.com/mastra-ai/mastra/pull/27097))
+
+- Fixed `formatModelName` for Bedrock model ids. Ids such as `us.anthropic.claude-sonnet-4-5-20250929-v1:0` now read as "Claude Sonnet 4.5" instead of "Us.anthropic.claude Sonnet 4.5 20250929 V1:0". ([#27001](https://github.com/mastra-ai/mastra/pull/27001))
+
+- Fixed scrolling in long dropdown menus, context menus and selects. Their scrollbars now match the rest of the app and stay clear of the popup's rounded corners. ([#27124](https://github.com/mastra-ai/mastra/pull/27124))
+
+- Fixed the hover highlight in lists with collapsed sections. Rows in a collapsed section are now skipped, so the highlight keeps following the visible rows instead of staying at their old positions. ([#27068](https://github.com/mastra-ai/mastra/pull/27068))
+
+- Fixed the Expand button on clipped collapsible boxes looking see-through: it now uses the default solid button style, so it stays readable over the faded content. ([#27084](https://github.com/mastra-ai/mastra/pull/27084))
+
+- Fixed scrollbars in rounded popups, popovers, command lists and the composer so their ends no longer get cut off by the rounded corners. ([#27124](https://github.com/mastra-ai/mastra/pull/27124))
+
+- Fixed visual glitches when switching tabs in `TabbedContainer`. The search and filter controls now switch together with the table, so two search fields no longer overlap mid-switch and the panel corner no longer shows a gap or a stray control. ([#26810](https://github.com/mastra-ai/mastra/pull/26810))
+
+- Fixed section labels in dropdown and context menus so they line up with the text of the items under them, including inset labels. ([#27120](https://github.com/mastra-ai/mastra/pull/27120))
+
+- Fixed Studio showing a resumed workflow run as Suspended. This happened when the run was resumed from code or the API, such as `run.resume()`. Studio asked for approval again. Studio now shows the run as running, with the approved step marked complete. ([#26939](https://github.com/mastra-ai/mastra/pull/26939))
+
+- Fixed field labels catching clicks across the whole row. Clicking the empty space beside a text label no longer focuses its field; only the label text does. Labels that wrap a checkbox, switch or radio still toggle it from anywhere in the row. ([#27110](https://github.com/mastra-ai/mastra/pull/27110))
+
+- Updated dependencies [[`6f50db8`](https://github.com/mastra-ai/mastra/commit/6f50db8a3e0a673c6e094229e3d18e2b8dbb99f7), [`3ddf32d`](https://github.com/mastra-ai/mastra/commit/3ddf32da0e6eaffd1e5da33105bf245b6e56a117), [`032a92d`](https://github.com/mastra-ai/mastra/commit/032a92d661696b3620ce45f4a0b1de60f0a6c068), [`1c9cb41`](https://github.com/mastra-ai/mastra/commit/1c9cb4151c3addfdf689ee1dd9d3a013c7342e25), [`c51a7a7`](https://github.com/mastra-ai/mastra/commit/c51a7a771b6c0668f8973f3d6415d61de724e667), [`032a92d`](https://github.com/mastra-ai/mastra/commit/032a92d661696b3620ce45f4a0b1de60f0a6c068)]:
+  - @mastra/core@1.78.0-alpha.6
+  - @mastra/react@1.10.1-alpha.6
+  - @mastra/client-js@1.55.0-alpha.6
+
 ## 63.1.0-alpha.5
 
 ### Patch Changes

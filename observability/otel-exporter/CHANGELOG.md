@@ -1,5 +1,14 @@
 # @mastra/otel-exporter
 
+## 1.4.8-alpha.2
+
+### Patch Changes
+
+- Fixed tool calls going missing from `gen_ai.output.messages`. A model step that only calls tools is now exported as an assistant message with `tool_call` parts instead of an empty text message. Inference span inputs are also converted to the GenAI message format. ([#26995](https://github.com/mastra-ai/mastra/pull/26995))
+
+- Updated dependencies [[`03646c5`](https://github.com/mastra-ai/mastra/commit/03646c587b915ced4c9fad3189391909a296f441), [`d7bd3cd`](https://github.com/mastra-ai/mastra/commit/d7bd3cda0fb2e46c68d164af2e0cb1815be03572)]:
+  - @mastra/core@1.78.0-alpha.8
+
 ## 1.4.8-alpha.1
 
 ### Patch Changes

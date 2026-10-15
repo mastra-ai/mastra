@@ -38,7 +38,12 @@ export interface NoticeEntry {
   id: string;
   level: 'info' | 'error';
   text: string;
+  /** A provider credential is missing; the notice offers a way to sign in. */
+  action?: 'provider-login';
 }
+
+/** Wire-stable `Error.name` the SDK uses for missing provider credentials. */
+export const PROVIDER_AUTH_REQUIRED_ERROR = 'ProviderAuthRequiredError';
 
 export interface ApprovalPrompt {
   kind: 'approval';
@@ -392,7 +397,12 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
     case 'info':
       return pushNotice(state, 'info', event.message);
     case 'error':
-      return pushNotice(state, 'error', describeErrorEvent(event));
+      return pushNotice(
+        state,
+        'error',
+        describeErrorEvent(event),
+        isProviderAuthError(event.error) ? 'provider-login' : undefined,
+      );
 
     default:
       return state;
@@ -404,6 +414,10 @@ function describeErrorEvent(event: { error: { message?: string } | string; error
   if (message) return message;
   if (event.errorType) return `Run failed (${event.errorType}). Check the server logs for details.`;
   return 'Run failed with an unknown error. Check the server logs for details.';
+}
+
+function isProviderAuthError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'name' in error && error.name === PROVIDER_AUTH_REQUIRED_ERROR;
 }
 
 export function createInitialTranscript({
@@ -1022,9 +1036,13 @@ function pushPrompt(state: TranscriptState, prompt: PromptEntry): TranscriptStat
   return { ...state, entries: [...state.entries, prompt] };
 }
 
-function pushNotice(state: TranscriptState, level: 'info' | 'error', text: string): TranscriptState {
-  return {
-    ...state,
-    entries: [...state.entries, { kind: 'notice', id: `notice-${Date.now()}-${noticeSeq++}`, level, text }],
-  };
+function pushNotice(
+  state: TranscriptState,
+  level: 'info' | 'error',
+  text: string,
+  action?: NoticeEntry['action'],
+): TranscriptState {
+  const notice: NoticeEntry = { kind: 'notice', id: `notice-${Date.now()}-${noticeSeq++}`, level, text };
+  if (action) notice.action = action;
+  return { ...state, entries: [...state.entries, notice] };
 }

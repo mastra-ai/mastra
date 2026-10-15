@@ -1647,6 +1647,7 @@ export interface IModelSpanTracker {
    * Open the MODEL_INFERENCE span for the current step. Call this immediately
    * before invoking the model so the span's startTime excludes input processor
    * work (and `setInferenceContext` reflects the post-processor tool set).
+   * Pass the prompt (`inputMessages`) so the span records what this call sent.
    * Falls back to auto-creation on first chunk if the caller forgets.
    */
   startInference?(payload?: StepStartPayload): void;
