@@ -194,9 +194,9 @@ describe('HttpTransport', () => {
         transport._transform({ toJSON } as any, 'utf8', () => {});
         fetchMock.mockRejectedValueOnce(new Error('network down')).mockResolvedValueOnce({ ok: true });
 
-        vi.useRealTimers();
-        await transport._flush();
-        vi.useFakeTimers();
+        const flushPromise = transport._flush();
+        await vi.advanceTimersByTimeAsync(defaultOptions.retryOptions.retryDelay);
+        await flushPromise;
 
         expect(toJSON).toHaveBeenCalledTimes(1);
         expect(fetchMock).toHaveBeenCalledTimes(2);
