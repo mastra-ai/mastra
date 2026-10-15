@@ -700,12 +700,19 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
         clearTimeout(timeout);
       }
     };
-    let shuttingDown = false;
+    // On Ctrl-C the terminal signals every process in the group, so when a parent such as
+    // `mastra dev` or `mastra start` forwards the signal too, this process receives it twice
+    // within milliseconds. Only a signal after this window is a request to force-quit.
+    const DUPLICATE_SIGNAL_WINDOW_MS = 250;
+    let shutdownStartedAt: number | undefined;
     const shutdown = async (signal: NodeJS.Signals) => {
-      if (shuttingDown) {
-        return void process.exit(1);
+      if (shutdownStartedAt !== undefined) {
+        if (Date.now() - shutdownStartedAt >= DUPLICATE_SIGNAL_WINDOW_MS) {
+          process.exit(1);
+        }
+        return;
       }
-      shuttingDown = true;
+      shutdownStartedAt = Date.now();
       const logger = mastra.getLogger();
       logger.info('Shutting down Mastra server', { signal });
       try {
@@ -763,7 +770,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
       }
       process.exit(0);
     };
-    // Keep both listeners active so any second shutdown signal can force an
+    // Keep both listeners active so a later second shutdown signal can force an
     // immediate exit, regardless of whether it matches the first signal.
     process.on('SIGINT', () => void shutdown('SIGINT'));
     process.on('SIGTERM', () => void shutdown('SIGTERM'));
