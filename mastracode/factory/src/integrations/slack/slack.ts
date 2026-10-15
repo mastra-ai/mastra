@@ -136,7 +136,7 @@ function rawTeamId(rawPayload: unknown): string | undefined {
  * The Slack team id survives onto a normalized chat Message only on
  * `message.raw` (the Slack Events API envelope).
  */
-function slackTeamId(message: HandlerMessage): string | undefined {
+function slackTeamId(message: Pick<HandlerMessage, 'raw'>): string | undefined {
   return rawTeamId(message.raw);
 }
 
@@ -170,7 +170,8 @@ export async function resolveLinkedSender({
   accountLinks,
 }: {
   thread: HandlerThread;
-  message: HandlerMessage;
+  /** The inbound message, or a button click's clicker + raw payload. */
+  message: Pick<HandlerMessage, 'author' | 'raw'>;
   accountLinks?: ChannelIdentityStorage;
 }): Promise<LinkedSenderResult> {
   if (!accountLinks) return { status: 'ungated' };
@@ -706,7 +707,7 @@ async function prepareExistingSessionOwnerContext(
  */
 async function gateDispatch(
   thread: HandlerThread,
-  message: HandlerMessage,
+  message: Pick<HandlerMessage, 'author' | 'raw'>,
   deps: SlackChannelDeps,
   ctx: ChannelHandlerContext,
   options: { requireInternalThread: boolean } = { requireInternalThread: false },
@@ -794,7 +795,7 @@ function preDispatchErrorDetails(error: unknown): { message: string; cause?: { m
 
 async function reportPreDispatchError(
   thread: HandlerThread,
-  message: HandlerMessage,
+  message: Pick<HandlerMessage, 'id' | 'author'>,
   ctx: ChannelHandlerContext,
   error: unknown,
 ): Promise<void> {
@@ -977,6 +978,23 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
     },
     onMention: newSessionChatHandler,
     onDirectMessage: newSessionChatHandler,
+    // Approve/deny resumes the parked run on this click's request context, so
+    // the clicker must pass the same gate a message does — otherwise the resume
+    // carries no tenant and model credential resolution fails closed.
+    onAction: async (event, defaultHandler, ctx) => {
+      const isToolDecision = event.actionId.startsWith('tool_approve:') || event.actionId.startsWith('tool_deny:');
+      const thread = event.thread as HandlerThread | null;
+      if (!isToolDecision || !thread) return defaultHandler();
+      const clicker = { id: event.messageId, author: event.user, raw: event.raw };
+      try {
+        const gate = await gateDispatch(thread, clicker, deps, ctx, { requireInternalThread: true });
+        if (!gate) return;
+      } catch (error) {
+        await reportPreDispatchError(thread, clicker, ctx, error);
+        return;
+      }
+      await defaultHandler();
+    },
   };
 };
 
