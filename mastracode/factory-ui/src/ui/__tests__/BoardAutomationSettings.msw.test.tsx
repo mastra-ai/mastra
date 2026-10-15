@@ -107,7 +107,22 @@ describe('Board automation settings', () => {
     expect(await screen.findByRole('switch', { name: 'Auto-approve plans' })).toBeChecked();
   });
 
-  it('keeps the two automation switches separate', async () => {
+  it('turns review test checks off, defaulting to on for older projects', async () => {
+    stubBoard({ items: [], factory: project() });
+    const user = userEvent.setup();
+    const { client } = renderBoard('review');
+
+    await user.click(await screen.findByRole('button', { name: 'Automation settings' }));
+    const testChecks = await screen.findByRole('switch', { name: 'Publish review test checks' });
+    expect(testChecks).toBeChecked();
+    await user.click(testChecks);
+
+    await waitForMutationsIdle(client);
+    expect(patchBodies).toEqual([{ reviewTestChecksEnabled: false }]);
+    expect(await screen.findByRole('switch', { name: 'Publish review test checks' })).not.toBeChecked();
+  });
+
+  it('keeps the automation switches separate', async () => {
     stubBoard({ items: [], factory: project() });
     const user = userEvent.setup();
     const { client } = renderBoard('review');

@@ -39,13 +39,16 @@ export function BoardAutomationSettings({
   factoryProjectId,
   autoRunEnabled,
   autoApprovePlans,
+  reviewTestChecksEnabled,
 }: {
   factoryProjectId: string;
   autoRunEnabled: boolean;
   autoApprovePlans: boolean;
+  reviewTestChecksEnabled: boolean;
 }) {
   const autoRun = useSetFactoryAutomationMutation(factoryProjectId, 'autoRunEnabled');
   const autoApprove = useSetFactoryAutomationMutation(factoryProjectId, 'autoApprovePlans');
+  const testChecks = useSetFactoryAutomationMutation(factoryProjectId, 'reviewTestChecksEnabled');
 
   return (
     <Popover>
@@ -73,6 +76,12 @@ export function BoardAutomationSettings({
             enabled={autoApprovePlans}
             mutation={autoApprove}
             description="Continue without waiting for approval."
+          />
+          <AutomationSwitch
+            label="Publish review test checks"
+            enabled={reviewTestChecksEnabled}
+            mutation={testChecks}
+            description="Report review test results as a check on the pull request."
           />
         </div>
       </PopoverContent>

@@ -121,6 +121,19 @@ describe('FactoryProjectsStorage', () => {
     };
     expect(await seed.projects.update({ orgId: 'org-1', id: project.id, input: cleared })).toMatchObject(cleared);
   });
+
+  it('keeps review test checks on by default and lets a project turn them off', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'P' } });
+    expect(project.reviewTestChecksEnabled).toBe(true);
+    const updated = await seed.projects.update({
+      orgId: 'org-1',
+      id: project.id,
+      input: { reviewTestChecksEnabled: false },
+    });
+    expect(updated?.reviewTestChecksEnabled).toBe(false);
+    expect((await seed.projects.get({ orgId: 'org-1', id: project.id }))?.reviewTestChecksEnabled).toBe(false);
+  });
 });
 
 describe('FactoryProjectsStorage builds', () => {

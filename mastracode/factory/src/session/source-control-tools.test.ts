@@ -868,7 +868,11 @@ describe('createSourceControlTools', () => {
 
     async function publish(
       input: Record<string, unknown>,
-      overrides: { publishCommitCheck?: unknown; pullRequest?: unknown } = {},
+      overrides: {
+        publishCommitCheck?: unknown;
+        pullRequest?: unknown;
+        testChecksEnabled?: (input: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
+      } = {},
     ) {
       const setup = await fixture();
       const publishCommitCheck =
@@ -889,6 +893,7 @@ describe('createSourceControlTools', () => {
         requestContext: requestContext(),
         providers: [{ id: 'gitlab', storage: setup.storage, versionControl }],
         audit: setup.audit,
+        ...(overrides.testChecksEnabled ? { testChecksEnabled: overrides.testChecksEnabled } : {}),
       });
       const tool = tools.source_control_publish_test_check!;
       return {
@@ -905,6 +910,20 @@ describe('createSourceControlTools', () => {
           }),
       };
     }
+
+    it('refuses to publish when the project turned test checks off', async () => {
+      const testChecksEnabled = vi.fn(async () => false);
+      const { run, publishCommitCheck } = await publish({}, { testChecksEnabled });
+      await expect(run()).rejects.toThrow(/turned off for this Factory project/);
+      expect(testChecksEnabled).toHaveBeenCalledWith({ orgId: expect.any(String), factoryProjectId: 'project-1' });
+      expect(publishCommitCheck).not.toHaveBeenCalled();
+    });
+
+    it('publishes when the project keeps test checks on', async () => {
+      const { run, publishCommitCheck } = await publish({}, { testChecksEnabled: async () => true });
+      await expect(run()).resolves.toMatchObject({ id: '9' });
+      expect(publishCommitCheck).toHaveBeenCalledOnce();
+    });
 
     it('publishes under the fixed Factory check name on the current head', async () => {
       const { run, publishCommitCheck } = await publish({ headSha: head.toUpperCase(), details: '| cmd | ok |' });

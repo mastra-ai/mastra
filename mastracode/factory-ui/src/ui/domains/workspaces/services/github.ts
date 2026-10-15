@@ -30,12 +30,7 @@ export interface GithubInstallation {
  * feature.
  */
 export type GithubStatusReason =
-  | 'missing_config'
-  | 'auth_required'
-  | 'organization_required'
-  | 'not_connected'
-  | 'ready'
-  | 'unavailable';
+  'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready' | 'unavailable';
 
 /** Non-secret diagnostic snapshot of every GitHub feature gate. */
 export interface GithubFeatureDiagnostics {
@@ -248,6 +243,8 @@ export interface FactoryProjectPayload {
   autoRunEnabled?: boolean;
   /** Whether the Factory answers a run's plan itself instead of waiting for a person. */
   autoApprovePlans?: boolean;
+  /** Whether Review agents publish test results as a commit check. Defaults to on. */
+  reviewTestChecksEnabled?: boolean;
 }
 
 /** `{...projectRepository, repository}` payload from the Factory project routes. */
@@ -450,7 +447,7 @@ export async function applyFactoryDefaultModelToSessions(
 export async function updateFactoryAutomation(
   baseUrl: string,
   factoryProjectId: string,
-  patch: { autoRunEnabled?: boolean; autoApprovePlans?: boolean },
+  patch: Pick<FactoryProjectPayload, 'autoRunEnabled' | 'autoApprovePlans' | 'reviewTestChecksEnabled'>,
 ): Promise<FactoryProjectPayload> {
   const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
     method: 'PATCH',

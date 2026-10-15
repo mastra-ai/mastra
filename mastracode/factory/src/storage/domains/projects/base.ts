@@ -62,6 +62,8 @@ export interface FactoryProject {
   buildOnPushEnabled: boolean;
   /** Minutes after a push-triggered attempt during which further pushes do not build. */
   buildPushDebounceMinutes: number;
+  /** Whether Review agents publish their test results as a commit check. Defaults to on. */
+  reviewTestChecksEnabled: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -91,6 +93,7 @@ export interface UpdateFactoryProjectInput {
   lastBuildAttemptedAt?: Date | null;
   buildOnPushEnabled?: boolean;
   buildPushDebounceMinutes?: number;
+  reviewTestChecksEnabled?: boolean;
 }
 
 export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
@@ -124,6 +127,7 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     build_start_claim_expires_at: { type: 'timestamp', nullable: true },
     build_on_push_enabled: { type: 'boolean', default: false },
     build_push_debounce_minutes: { type: 'integer', default: DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES },
+    review_test_checks_enabled: { type: 'boolean', default: true },
     /** Set once the source-control domain has backfilled repository positions and environment membership. */
     environment_backfilled_at: { type: 'timestamp', nullable: true },
     created_at: { type: 'timestamp' },
@@ -157,6 +161,7 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   build_start_claim_expires_at: Date | null;
   build_on_push_enabled: boolean | null;
   build_push_debounce_minutes: number | null;
+  review_test_checks_enabled: boolean | null;
   environment_backfilled_at: Date | null;
   created_at: Date;
   updated_at: Date;
@@ -186,6 +191,7 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     buildStartUncertain: row.build_start_uncertain ?? false,
     buildOnPushEnabled: row.build_on_push_enabled ?? false,
     buildPushDebounceMinutes: row.build_push_debounce_minutes ?? DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES,
+    reviewTestChecksEnabled: row.review_test_checks_enabled ?? true,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -302,6 +308,9 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
           ...(changes.buildOnPushEnabled !== undefined ? { build_on_push_enabled: changes.buildOnPushEnabled } : {}),
           ...(changes.buildPushDebounceMinutes !== undefined
             ? { build_push_debounce_minutes: changes.buildPushDebounceMinutes }
+            : {}),
+          ...(changes.reviewTestChecksEnabled !== undefined
+            ? { review_test_checks_enabled: changes.reviewTestChecksEnabled }
             : {}),
           updated_at: new Date(),
         };

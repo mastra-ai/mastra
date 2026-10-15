@@ -402,6 +402,7 @@ export function BoardContent({
                   factoryProjectId={factoryProjectId}
                   autoRunEnabled={factory.autoRunEnabled ?? false}
                   autoApprovePlans={factory.autoApprovePlans ?? false}
+                  reviewTestChecksEnabled={factory.reviewTestChecksEnabled ?? true}
                 />
               )
             }
