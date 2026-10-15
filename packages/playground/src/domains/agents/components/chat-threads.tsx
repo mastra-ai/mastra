@@ -1,7 +1,6 @@
 import type { StorageThreadType } from '@mastra/core/memory';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
-import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import {
   ThreadList,
@@ -276,9 +275,13 @@ function CollapsibleSection({ labelId, label, collapsed, onToggle, children }: C
       onOpenChange={onToggle}
     >
       <h2 className="flex px-3 pt-3 pb-1 text-placeholder group-first-of-type/section:pt-0">
-        <CollapsibleTrigger id={labelId} className="inline-flex items-center gap-1 rounded-sm text-meta">
+        <CollapsibleTrigger
+          id={labelId}
+          chevron="end"
+          chevronSize="xs"
+          className="inline-flex items-center gap-1 rounded-sm text-meta"
+        >
           {label}
-          <DisclosureChevron direction="right" className="size-3" />
         </CollapsibleTrigger>
       </h2>
       <CollapsibleContent>{children}</CollapsibleContent>

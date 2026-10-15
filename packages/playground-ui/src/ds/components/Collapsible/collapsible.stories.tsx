@@ -112,6 +112,39 @@ export const DisclosureFocusVisible: Story = {
   render: () => <DisclosureForm triggerClassName="outline-1 outline-offset-2 outline-border-focus outline-solid" />,
 };
 
+export const BuiltInChevron: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          '`chevron="start" | "end"` adds the turning chevron to a trigger you lay out yourself, at `chevronSize` `xs` (12px), `sm` (14px) or `md` (16px). It takes the trigger\'s text color.',
+      },
+    },
+  },
+  render: () => (
+    <div className="flex w-80 flex-col gap-4 text-muted-foreground">
+      <Collapsible>
+        <CollapsibleTrigger chevron="start" chevronSize="xs" className="flex items-center gap-1 text-meta uppercase">
+          Input
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pt-1.5 text-body-sm">Payload</CollapsibleContent>
+      </Collapsible>
+      <Collapsible>
+        <CollapsibleTrigger chevron="start" chevronSize="sm" className="flex items-center gap-2 text-caption">
+          Findings
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pt-1.5 text-body-sm">Finding list</CollapsibleContent>
+      </Collapsible>
+      <Collapsible defaultOpen>
+        <CollapsibleTrigger chevron="end" className="flex w-full items-center justify-between gap-2 text-body-sm">
+          Semantic recall
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pt-1.5 text-body-sm">Settings</CollapsibleContent>
+      </Collapsible>
+    </div>
+  ),
+};
+
 export const SettingsSection: Story = {
   render: () => (
     <div className="w-100 space-y-2">

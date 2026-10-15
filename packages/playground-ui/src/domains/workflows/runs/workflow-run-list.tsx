@@ -6,7 +6,6 @@ import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
 import { getRunResourceId, getRunTimestamp } from '../utils';
 import { AlertDialog } from '@/ds/components/AlertDialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
-import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Spinner } from '@/ds/components/Spinner';
@@ -111,8 +110,10 @@ export const WorkflowRecentRuns = ({ workflowId, runId, canDelete: canDeleteRun 
   return (
     <>
       <Collapsible open={isOpen} onOpenChange={setIsOpen} className="flex min-h-0 flex-col">
-        <CollapsibleTrigger className="flex shrink-0 items-center gap-2 px-4 py-3 text-left text-caption text-muted-foreground">
-          <DisclosureChevron direction="right" className="size-4 text-muted-foreground" />
+        <CollapsibleTrigger
+          chevron="start"
+          className="flex shrink-0 items-center gap-2 px-4 py-3 text-left text-caption text-muted-foreground"
+        >
           <span>Recent runs</span>
           {!isLoading && !error && (
             <Txt as="span" variant="meta" tone="muted">
