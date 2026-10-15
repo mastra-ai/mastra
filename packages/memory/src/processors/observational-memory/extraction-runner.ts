@@ -78,7 +78,7 @@ ${extractorInstructions}${priorLines.length > 0 ? `\n\n## Prior Extracted Values
     });
 
   const streamOnce = async (jsonPromptInjection?: boolean | 'system' | 'inline') => {
-    const output = await opts.agent.stream(prompt, {
+    const output = await opts.agent.streamMessageList(prompt, {
       structuredOutput: { schema, ...(jsonPromptInjection ? { jsonPromptInjection } : {}) },
       ...(opts.memory ? { memory: opts.memory } : {}),
       ...(opts.abortSignal ? { abortSignal: opts.abortSignal } : {}),

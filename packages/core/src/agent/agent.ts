@@ -8828,6 +8828,13 @@ export class Agent<
     const runId = options.runId ?? crypto.randomUUID();
     const threadId = resolveThreadIdFromArgs({ memory: options.memory })?.id;
     const memory = threadId ? await this.#actionStore(requestContext) : undefined;
+    const resourceId = options.memory?.resource;
+    if (threadId && memory && resourceId) {
+      const memoryInstance = await this.getMemory({ requestContext });
+      if (memoryInstance && !(await memoryInstance.getThreadById({ threadId }))) {
+        await memoryInstance.createThread({ threadId, resourceId });
+      }
+    }
 
     const model =
       typeof this.model === 'object' && this.model !== null && 'specificationVersion' in this.model
@@ -8847,7 +8854,7 @@ export class Agent<
       input: options.input,
       append: options.append,
       threadId: threadId ?? runId,
-      resourceId: options.memory?.resource,
+      resourceId,
       runId,
       memory,
       maxTurns: options.maxSteps,
