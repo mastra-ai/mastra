@@ -174,11 +174,19 @@ async function findScorer(mastra: Mastra, entityId: string, entityType: string, 
       // Resolution or scorer listing failed — fall back to mastra-registered scorer
     }
   } else if (entityType === 'WORKFLOW') {
-    const scorers = await mastra.getWorkflowById(entityId).listScorers();
-    for (const [_, scorer] of Object.entries(scorers)) {
-      if (scorer.scorer.id === scorerId) {
-        scorerToUse = scorer;
-        break;
+    let workflow: ReturnType<Mastra['getWorkflowById']> | undefined;
+    try {
+      workflow = mastra.getWorkflowById(entityId);
+    } catch {
+      // Nested workflows aren't registered on Mastra — fall back to mastra-registered scorer
+    }
+    if (workflow) {
+      const scorers = await workflow.listScorers();
+      for (const [_, scorer] of Object.entries(scorers)) {
+        if (scorer.scorer.id === scorerId) {
+          scorerToUse = scorer;
+          break;
+        }
       }
     }
   }

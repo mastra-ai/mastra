@@ -718,14 +718,24 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         const installs = await github.sourceControlStorage.installations.list({ orgId });
 
         const query = (c.req.query('q') ?? '').toLowerCase();
+        const fresh = c.req.query('refresh') === '1';
         // List every installation's repositories in parallel — installations
         // are independent upstream calls, and serial listing multiplied
         // worst-case latency by installation count.
         const listed = await Promise.all(
           installs.map(async inst => {
             try {
-              return { inst, list: await github.listInstallationRepos(Number(inst.externalId)) };
+              return { inst, list: await github.listInstallationRepos(Number(inst.externalId), { fresh }) };
             } catch (err) {
+              // 403 means this credential may not use the installation (e.g. the
+              // Platform refuses personal-account installations to org API
+              // keys). Skip it so the org's usable installations still list.
+              if ((err as { status?: number }).status === 403) {
+                console.warn(
+                  `[Mastra Factory] skipping GitHub installation ${inst.externalId} (${inst.accountName}): ${(err as Error).message}`,
+                );
+                return { inst, list: [] };
+              }
               // GitHub 404s when the installation no longer exists for this app
               // (app uninstalled/reinstalled, or the row was recorded under
               // different app credentials). Prune the stale row so `/status`

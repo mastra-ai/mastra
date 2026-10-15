@@ -54,4 +54,14 @@ describe('streaming highlighting', () => {
     expect(highlighter.highlight).toHaveBeenLastCalledWith('value = 1', 'python');
     expect(container.querySelector('code')?.textContent).toBe('value = 1');
   });
+
+  it('leaves no sampling timer behind after unmount', async () => {
+    const { rerender, unmount } = render(<Code code="const a" lang="typescript" />);
+    await advance(0);
+    rerender(<Code code="const ab" lang="typescript" />);
+    rerender(<Code code="const abc" lang="typescript" />);
+    unmount();
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });

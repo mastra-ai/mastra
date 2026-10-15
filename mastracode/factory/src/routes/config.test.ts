@@ -400,7 +400,7 @@ describe('provider key routes with a tenant', () => {
     });
     expect(res.status).toBe(400);
     expect((await res.json()).error).toBe('provider_configured_by_deployment');
-    expect(await seed.credentials.resolveCredential('org1', 'user-a', 'amazon-bedrock')).toBeUndefined();
+    expect(await seed.credentials.resolveCredential('org1', 'user-a', 'amazon-bedrock', 'org')).toBeUndefined();
   });
 
   it('stores a user-scoped key by default, invisible to other members', async () => {
@@ -412,7 +412,7 @@ describe('provider key routes with a tenant', () => {
       type: 'api_key',
       key: 'sk-mine',
     });
-    expect(await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic')).toBeUndefined();
+    expect(await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic', 'user')).toBeUndefined();
   });
 
   it('stores a Kimi key under the credential id model resolution reads', async () => {
@@ -459,7 +459,7 @@ describe('provider key routes with a tenant', () => {
     expect((await res.json()).provider?.source).toBe('stored-org');
     expect(isOrganizationAdmin).toHaveBeenCalledWith('org1', 'user-a');
 
-    const resolvedForB = await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic');
+    const resolvedForB = await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic', 'org');
     expect(resolvedForB).toMatchObject({ scope: 'org', credential: { key: 'sk-shared' } });
   });
 
@@ -488,11 +488,11 @@ describe('provider key routes with a tenant', () => {
     expect(isOrganizationAdmin).not.toHaveBeenCalled();
   });
 
-  it('user key wins over org key for the caller', async () => {
+  it("lists the caller's user key when both scopes exist", async () => {
     await putKey(buildApp(userA), { key: 'sk-shared', scope: 'org' });
     await putKey(buildApp(userA), { key: 'sk-mine' });
 
-    const resolved = await seed.credentials.resolveCredential('org1', 'user-a', 'anthropic');
+    const resolved = await seed.credentials.resolveCredential('org1', 'user-a', 'anthropic', 'user');
     expect(resolved).toMatchObject({ scope: 'user', credential: { key: 'sk-mine' } });
 
     const listed = await buildApp(userA).request('/web/config/providers');
@@ -611,6 +611,48 @@ describe('GET /web/config/models', () => {
     });
   });
 
+  it("offers only the models a Factory's model scope can serve", async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic', {
+      type: 'api_key',
+      key: 'sk-personal',
+    });
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'openai-codex', { type: 'api_key', key: 'sk-org' });
+    const orgProject = await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'Org' } });
+    const userProject = await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'Mine' } });
+    await seed.projects.update({ orgId: 'org1', id: userProject.id, input: { modelScope: 'user' } });
+    const controller = {
+      listAvailableModels: async () => [
+        { id: 'anthropic/claude-fable-5', modelName: 'claude-fable-5', provider: 'anthropic', hasApiKey: false },
+        { id: 'openai/gpt-5.6', modelName: 'gpt-5.6', provider: 'openai', hasApiKey: false },
+      ],
+    };
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, { workosId: 'user-a', organizationId: 'org1' } as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({
+        auth: fakeRouteAuth(),
+        controller,
+        modelCredentials: seed.credentials,
+        factoryProjects: seed.projects,
+      }).routes(),
+    );
+    const ids = async (query: string) => {
+      const res = await app.request(`/web/config/models${query}`);
+      expect(res.status).toBe(200);
+      return ((await res.json()) as { models: { id: string }[] }).models.map(model => model.id);
+    };
+
+    expect(await ids('')).toEqual(['anthropic/claude-fable-5', 'openai/gpt-5.6']);
+    expect(await ids(`?factoryId=${orgProject.id}`)).toEqual(['openai/gpt-5.6']);
+    expect(await ids(`?factoryId=${userProject.id}`)).toEqual(['anthropic/claude-fable-5']);
+    expect((await app.request('/web/config/models?factoryId=missing')).status).toBe(404);
+  });
+
   it('includes Bedrock models for a tenant only when the deployment opted in', async () => {
     const seed = await createFactoryStorageForTests();
     const controller = {
@@ -687,6 +729,46 @@ describe('GET /web/config/models', () => {
     expect(await res.json()).toEqual({
       models: [{ id: 'acme/fast-1', provider: 'acme', modelName: 'fast-1', hasApiKey: true }],
     });
+  });
+
+  it("limits the personal catalog to the caller's own credentials", async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic', {
+      type: 'api_key',
+      key: 'sk-user',
+    });
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'deepseek', { type: 'api_key', key: 'sk-org' });
+    const orgFactory = await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'Shared' } });
+    const controller = {
+      listAvailableModels: async () => [
+        { id: 'anthropic/claude-fable-5', modelName: 'claude-fable-5', provider: 'anthropic', hasApiKey: false },
+        { id: 'deepseek/deepseek-flash', modelName: 'deepseek-flash', provider: 'deepseek', hasApiKey: false },
+      ],
+    };
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, { workosId: 'user-a', organizationId: 'org1' } as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({
+        auth: fakeRouteAuth(),
+        controller,
+        modelCredentials: seed.credentials,
+        factoryProjects: seed.projects,
+      }).routes(),
+    );
+    const ids = async (query: string) => {
+      const res = await app.request(`/web/config/models${query}`);
+      expect(res.status).toBe(200);
+      return ((await res.json()) as { models: { id: string }[] }).models.map(m => m.id);
+    };
+
+    expect(await ids('')).toEqual(['anthropic/claude-fable-5', 'deepseek/deepseek-flash']);
+    expect(await ids('?scope=user')).toEqual(['anthropic/claude-fable-5']);
+    // Personal defaults never run on org credentials, whichever Factory the page is in.
+    expect(await ids(`?scope=user&factoryId=${orgFactory.id}`)).toEqual(['anthropic/claude-fable-5']);
   });
 });
 
