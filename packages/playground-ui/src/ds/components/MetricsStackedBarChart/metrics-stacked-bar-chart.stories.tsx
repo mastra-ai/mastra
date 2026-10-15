@@ -91,6 +91,33 @@ export const OverIncluded: Story = {
   },
 };
 
+const overageRate = 0.1;
+const cents = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+
+export const ColumnLabel: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          '`columnLabelKey` names a row field to print above that column, in the color of its top segment. Here the last day carries the overage charged to credits, so the amount sits on the red segment it explains. Rows without the field stay unlabeled.',
+      },
+    },
+  },
+  args: {
+    ...OverIncluded.args,
+    data: egress.map(({ time, total }, i) => ({
+      time,
+      included: Math.min(total, included),
+      over: Math.max(total - included, 0),
+      overage:
+        i === egress.length - 1 && total > included
+          ? `${cents.format((total - included) * overageRate)} over`
+          : undefined,
+    })),
+    columnLabelKey: 'overage',
+  },
+};
+
 /**
  * Status classes over a day with an incident. Thin 3xx/4xx/5xx slices keep a 3px minimum so
  * a handful of errors stays visible; hover a column to dim the others.

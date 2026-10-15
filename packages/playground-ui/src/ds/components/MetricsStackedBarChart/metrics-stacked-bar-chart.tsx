@@ -1,5 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Bar, CartesianGrid, ComposedChart, Line, Rectangle, ReferenceLine, Tooltip } from 'recharts';
+import { Bar, CartesianGrid, ComposedChart, LabelList, Line, Rectangle, ReferenceLine, Tooltip } from 'recharts';
+import type { LabelProps } from 'recharts';
 import { ChartSkeleton } from '@/ds/components/ChartSkeleton';
 import type { MetricsLineChartSeries } from '@/ds/components/MetricsLineChart';
 import { MetricsLineChartLegend, MetricsLineChartTooltip } from '@/ds/components/MetricsLineChart';
@@ -8,7 +9,7 @@ import type { ChartXLabels } from '@/ds/primitives/chart-axes';
 import { singleBarBox, stackedSegmentBox } from '@/ds/primitives/chart-column-layout';
 import { CHART_TICK, Y_AXIS_WIDTH, compactNumber, timeXAxis, valueYAxis } from '@/ds/primitives/chart-frame';
 import type { ChartHeight } from '@/ds/primitives/chart-frame';
-import { CHART_MARGIN } from '@/ds/primitives/chart-layout';
+import { CHART_AXIS_FONT_SIZE, CHART_MARGIN } from '@/ds/primitives/chart-layout';
 import { ChartPlot } from '@/ds/primitives/chart-plot';
 import { useChartDefsId } from '@/ds/primitives/use-chart-defs-id';
 import { cn } from '@/lib/utils';
@@ -24,6 +25,7 @@ const CAP_BODY = 0.55;
 const CAP_HEIGHT = 3;
 /** Opacity of the other columns while one is hovered. */
 const DIMMED = 0.3;
+const COLUMN_LABEL_SPACE = 16;
 
 type SegmentProps = {
   x?: number;
@@ -132,6 +134,7 @@ export type MetricsStackedBarChartProps = {
   xLabels?: ChartXLabels;
   /** Row field for the tooltip heading (e.g. a longer date); defaults to the x-axis label. */
   tooltipLabelKey?: string;
+  columnLabelKey?: string;
   /** Click a column (e.g. to open its traces); the plot shows a pointer cursor. */
   onBucketClick?: (row: Record<string, unknown>, index: number) => void;
   /** One dashed line over the bars, on its own hidden scale (e.g. a duration over counts). */
@@ -171,6 +174,7 @@ function BarPlot({
   timestampKey = 'tsMs',
   xLabels = 'auto',
   tooltipLabelKey,
+  columnLabelKey,
   onBucketClick,
   overlay,
   id,
@@ -204,7 +208,7 @@ function BarPlot({
       <ChartPlot height={height} plotRef={ref} onResize={onResize} clickable={!!onBucketClick}>
         <ComposedChart
           data={data}
-          margin={CHART_MARGIN}
+          margin={columnLabelKey ? { ...CHART_MARGIN, top: CHART_MARGIN.top + COLUMN_LABEL_SPACE } : CHART_MARGIN}
           onMouseMove={state => {
             const index = state?.activeTooltipIndex;
             setHovered.current(index === undefined || index === null ? undefined : Number(index));
@@ -256,7 +260,16 @@ function BarPlot({
               maxBarSize={28}
               isAnimationActive={false}
               shape={shapes[i]}
-            />
+            >
+              {columnLabelKey && i === series.length - 1 && (
+                <LabelList
+                  dataKey={columnLabelKey}
+                  content={(props: LabelProps) => (
+                    <ColumnLabel {...props} color={topSegmentColor(data[Number(props.index)], series)} />
+                  )}
+                />
+              )}
+            </Bar>
           ))}
           {overlay && (
             <Line
@@ -285,5 +298,25 @@ function BarPlot({
         </ComposedChart>
       </ChartPlot>
     </>
+  );
+}
+
+function topSegmentColor(row: Record<string, unknown> | undefined, series: MetricsLineChartSeries[]) {
+  return series.findLast(s => Number(row?.[s.dataKey]) > 0)?.color ?? CHART_TICK.fill;
+}
+
+function ColumnLabel({ x, y, width, value, color }: LabelProps & { color: string }) {
+  if (value === undefined || value === null || value === '') return null;
+  return (
+    <text
+      x={Number(x) + Number(width) / 2}
+      y={Number(y) - 6}
+      textAnchor="middle"
+      fontSize={CHART_AXIS_FONT_SIZE}
+      fill={color}
+      className="tabular-nums"
+    >
+      {String(value)}
+    </text>
   );
 }
