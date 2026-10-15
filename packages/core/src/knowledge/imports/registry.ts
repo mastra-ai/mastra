@@ -98,9 +98,20 @@ function normalizeCron(cron: KnowledgeImporterTriggers['cron']): KnowledgeImport
   if (!cron || typeof cron !== 'object' || Array.isArray(cron)) {
     throw new Error('Knowledge importer cron trigger must be an object');
   }
+  if (cron.resolveBindings !== undefined && typeof cron.resolveBindings !== 'function') {
+    throw new Error('Knowledge importer cron resolveBindings must be a function');
+  }
+  // With a resolver, static bindings become optional — an absent/empty list means the
+  // resolver is the sole enumeration. Without one, the existing non-empty rule holds.
+  const noStatic = cron.bindings === undefined || (Array.isArray(cron.bindings) && cron.bindings.length === 0);
+  const bindings =
+    noStatic && cron.resolveBindings
+      ? (Object.freeze([]) as readonly KnowledgeImporterBindingInput[])
+      : normalizeBindings(cron.bindings, 'cron');
   return Object.freeze({
     schedule: normalizeSchedule(cron.schedule),
-    bindings: normalizeBindings(cron.bindings, 'cron'),
+    bindings,
+    ...(cron.resolveBindings ? { resolveBindings: cron.resolveBindings } : {}),
   });
 }
 
@@ -209,6 +220,11 @@ export class KnowledgeImporterRegistry {
     const organizationId = normalizeOrganizationId(id, definition.organizationId);
     const access = normalizeAccess(definition.access);
     const triggers = normalizeTriggers(definition.triggers);
+    if (triggers.cron?.resolveBindings && access === undefined) {
+      throw new Error(
+        `Knowledge importer ${id} cron resolveBindings requires an access map: resolved bindings are confined to the scopes it covers`,
+      );
+    }
     const agentic = normalizeAgentic(definition.agentic);
     const citations = normalizeCitations(definition.citations);
     const normalized: KnowledgeImporterDefinition<TPayload> = Object.freeze({
@@ -241,6 +257,10 @@ export class KnowledgeImporterRegistry {
 
   get(id: string): KnowledgeImporterHandle | undefined {
     return this.#byId.get(id);
+  }
+
+  remove(id: string): void {
+    this.#byId.delete(id);
   }
 
   list(): KnowledgeImporterHandle[] {
