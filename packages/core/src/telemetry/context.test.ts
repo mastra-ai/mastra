@@ -7,7 +7,7 @@ const { execFile } = vi.hoisted(() => ({
 
 vi.mock('node:child_process', () => ({ execFile }));
 
-import { getServerTelemetryContext, resetProjectId2CacheForTests } from './context';
+import { getGitRepositoryIdentity, getServerTelemetryContext, resetProjectId2CacheForTests } from './context';
 import { hashTelemetryValue } from './posthog';
 
 const platformProjectId = '550e8400-e29b-41d4-a716-446655440000';
@@ -192,5 +192,28 @@ describe('getServerTelemetryContext', () => {
     vi.stubEnv('MASTRA_PROJECT_ID', platformProjectId);
     expect((await getServerTelemetryContext()).projectId2).toBe(`mp_${platformProjectId}`);
     expect(execFile).toHaveBeenCalledOnce();
+  });
+});
+
+describe('getGitRepositoryIdentity', () => {
+  beforeEach(() => {
+    execFile.mockReset();
+  });
+
+  it('returns the normalized origin of the given directory, uncached', async () => {
+    mockRemote('git@GitHub.com:org/repo.git\n');
+    await expect(getGitRepositoryIdentity('/tmp/build-root')).resolves.toBe('github.com/org/repo');
+    mockRemote('https://token@github.com/org/other');
+    await expect(getGitRepositoryIdentity('/tmp/build-root')).resolves.toBe('github.com/org/other');
+
+    expect(execFile).toHaveBeenCalledTimes(2);
+    expect(execFile.mock.calls[0]![2]).toEqual(expect.objectContaining({ cwd: '/tmp/build-root' }));
+  });
+
+  it('resolves to undefined for local remotes and unavailable Git', async () => {
+    mockRemote('/srv/git/repo.git');
+    await expect(getGitRepositoryIdentity('/tmp/build-root')).resolves.toBeUndefined();
+    execFile.mockImplementation((_file, _args, _options, callback) => callback(new Error('no origin'), '', ''));
+    await expect(getGitRepositoryIdentity('/tmp/build-root')).resolves.toBeUndefined();
   });
 });

@@ -94,7 +94,7 @@ export class VercelDeployer extends Deployer {
     return `
 import { handle } from 'hono/vercel'
 import { mastra } from '#mastra';
-import { createHonoServer, getToolExports } from '#server';
+import { createHonoServer, getToolExports, withModelUsageTelemetry } from '#server';
 import { tools } from '#tools';
 import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
 
@@ -104,13 +104,27 @@ if (mastra.getStorage()) {
 
 const app = await createHonoServer(mastra, { tools: getToolExports(tools) });
 
-export const GET = handle(app);
-export const POST = handle(app);
-export const PUT = handle(app);
-export const DELETE = handle(app);
-export const PATCH = handle(app);
-export const OPTIONS = handle(app);
-export const HEAD = handle(app);
+// Reports the model tokens each request used once its response finishes (respects
+// MASTRA_TELEMETRY_DISABLED). waitUntil comes from Vercel's request context, the same
+// source @vercel/functions reads.
+const server = {
+  fetch: await withModelUsageTelemetry(mastra, app.fetch, {
+    runtime: 'vercel',
+    projectKey: process.env.VERCEL_PROJECT_ID,
+    getWaitUntil: () => {
+      const context = globalThis[Symbol.for('@vercel/request-context')]?.get?.();
+      return context?.waitUntil ? promise => context.waitUntil(promise) : undefined;
+    },
+  }),
+};
+
+export const GET = handle(server);
+export const POST = handle(server);
+export const PUT = handle(server);
+export const DELETE = handle(server);
+export const PATCH = handle(server);
+export const OPTIONS = handle(server);
+export const HEAD = handle(server);
 `;
   }
 
