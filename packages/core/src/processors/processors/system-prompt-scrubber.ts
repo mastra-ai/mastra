@@ -351,7 +351,7 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
 
       let result: SystemPromptDetectionResult;
       if (isSupportedLanguageModel(model)) {
-        const response = await this.detectionAgent.generate(text, {
+        const response = await this.detectionAgent.generateMessageList(text, {
           structuredOutput: {
             ...(this.structuredOutputOptions ?? {}),
             schema,

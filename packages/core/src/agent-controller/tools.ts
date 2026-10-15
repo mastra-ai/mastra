@@ -397,7 +397,7 @@ Use this tool when:
       let partialText = '';
 
       try {
-        const response = await subagentToRun.stream(task, {
+        const response = await subagentToRun.streamMessageList(task, {
           maxSteps: streamMaxSteps,
           stopWhen: streamStopWhen,
           abortSignal,

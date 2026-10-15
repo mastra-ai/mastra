@@ -436,7 +436,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
 
       let result: PIIDetectionResult;
       if (isSupportedLanguageModel(model)) {
-        const response = await this.detectionAgent.generate(prompt, {
+        const response = await this.detectionAgent.generateMessageList(prompt, {
           structuredOutput: {
             ...(this.structuredOutputOptions ?? {}),
             schema,

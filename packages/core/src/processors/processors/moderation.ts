@@ -371,7 +371,7 @@ export class ModerationProcessor implements Processor<'moderation'> {
 
       let result: ModerationResult;
       if (isSupportedLanguageModel(model)) {
-        const response = await this.moderationAgent.generate(prompt, {
+        const response = await this.moderationAgent.generateMessageList(prompt, {
           structuredOutput: {
             ...(this.structuredOutputOptions ?? {}),
             schema,

@@ -200,13 +200,7 @@ export class AgentScheduleWorker extends MastraWorker {
 
 /** Outcome union written to the schedule trigger row for an agent-schedule fire. */
 export type ScheduleTriggerOutcome =
-  | 'succeeded'
-  | 'delivered'
-  | 'persisted'
-  | 'discarded'
-  | 'skipped'
-  | 'aborted'
-  | 'failed';
+  'succeeded' | 'delivered' | 'persisted' | 'discarded' | 'skipped' | 'aborted' | 'failed';
 
 /**
  * Best-effort delete of the schedule row. Self-clean is best-effort —
@@ -588,7 +582,7 @@ export async function executeAgentSchedule(
 
   // 4. threadless path: agent.generate
   try {
-    const result = await agent.generate(effective.prompt, {
+    const result = await agent.generateMessageList(effective.prompt, {
       providerOptions: mergeProviderOptions(effective.providerOptions, scheduleRunMeta),
     });
     const runId = extractRunId(result);

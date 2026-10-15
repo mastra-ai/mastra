@@ -981,19 +981,21 @@ export async function runOnEngine(engine: ParityEngine, scenario: EngineParitySc
       const runId = streamOptions.runId ?? `parity-${engine}-${turns.length}`;
       // `wrapper` is a DurableAgent whose overridden option types are narrower
       // than Agent's, so only the shared resume surface is typed here.
-      const target: Pick<Agent<string, any, any>, 'resumeStream' | 'approveToolCall' | 'declineToolCall'> = wrapper ??
-      agent;
+      const target: Pick<
+        Agent<string, any, any>,
+        'resumeStream' | 'approveToolCallMessageList' | 'declineToolCallMessageList'
+      > = wrapper ?? agent;
       const acc = emptyTurnChunks();
       // The stream whose output the snapshot reads; a continuation replaces it.
       let streamed: MastraModelOutput<any> | undefined;
 
       try {
         if (wrapper) {
-          const result = await wrapper.stream(messages, { ...streamOptions, runId });
+          const result = await wrapper.streamMessageList(messages, { ...streamOptions, runId });
           cleanups.push(result.cleanup);
           streamed = result.output;
         } else {
-          streamed = await agent.stream(messages, { ...streamOptions, runId });
+          streamed = await agent.streamMessageList(messages, { ...streamOptions, runId });
         }
         let suspendedToolCallId = await drainInto(acc, streamed);
 
@@ -1010,9 +1012,9 @@ export async function runOnEngine(engine: ParityEngine, scenario: EngineParitySc
           if ('resumeData' in continuation) {
             streamed = await target.resumeStream(continuation.resumeData, resumeOptions);
           } else if ('approve' in continuation) {
-            streamed = await target.approveToolCall(resumeOptions);
+            streamed = await target.approveToolCallMessageList(resumeOptions);
           } else {
-            streamed = await target.declineToolCall(resumeOptions);
+            streamed = await target.declineToolCallMessageList(resumeOptions);
           }
           suspendedToolCallId = await drainInto(acc, streamed);
           acc.resumed = true;
@@ -1049,8 +1051,8 @@ export async function runOnEngine(engine: ParityEngine, scenario: EngineParitySc
       let result: unknown;
       try {
         result = wrapper
-          ? await wrapper.generate(messages, { ...options, runId })
-          : await agent.generate(messages, { ...options, runId });
+          ? await wrapper.generateMessageList(messages, { ...options, runId })
+          : await agent.generateMessageList(messages, { ...options, runId });
       } catch (error) {
         // A rejected generate() is an observation to compare, like a failed run.
         acc.error ??= describeRunError(error);

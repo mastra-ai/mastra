@@ -307,7 +307,7 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
 
       let result: PromptInjectionResult;
       if (isSupportedLanguageModel(model)) {
-        const response = await this.detectionAgent.generate(prompt, {
+        const response = await this.detectionAgent.generateMessageList(prompt, {
           structuredOutput: {
             ...(this.structuredOutputOptions ?? {}),
             schema,
