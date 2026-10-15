@@ -8,7 +8,7 @@ import { hydrateFactorySession, resolveFactorySessionModel } from '../session/fa
 import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
-import type { FactoryModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { CreateWorkItemInput, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactoryTransitionService } from './transition-service.js';
@@ -23,7 +23,8 @@ export interface FactoryStartRequest {
   kickoffKey: string;
   /** Where the arrival path lands the card; a session opened on an existing card names none. */
   destinationStage?: FactoryRuleStage;
-  modelScope: FactoryModelScope;
+  /** The run's effective scope; a hybrid Factory's runs use the Factory's model and credentials. */
+  modelScope: EffectiveModelScope;
   defaultModelId?: string;
   workItem: {
     id?: string;
@@ -145,6 +146,7 @@ export class FactoryStartCoordinator {
             factoryProjectId: request.factoryProjectId,
             orgId: request.orgId,
             ownerUserId: sourceSession.userId,
+            context: 'run',
           })
         : { modelScope: request.modelScope, modelId: request.defaultModelId };
     const storedItem = request.workItem.id

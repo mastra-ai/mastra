@@ -112,10 +112,14 @@ describe('span query contract', () => {
     },
     { timeRange: { from: timeRange.to, to: timeRange.from } },
     { timeRange: { from: timeRange.from, to: timeRange.from } },
-    { timeRange: { from: timeRange.from, to: '2026-11-02T00:00:00Z' } },
     { where: { spans: { some: where } } },
   ])('rejects unsupported or invalid request fields: %j', overrides => {
     expect(spanQueryRequestSchema.safeParse({ timeRange, ...overrides }).success).toBe(false);
+  });
+
+  it('accepts time ranges of any positive width', () => {
+    const wide = { from: '2025-10-01T00:00:00Z', to: '2026-10-02T00:00:00Z' };
+    expect(parseSpanQueryRequest({ timeRange: wide }).timeRange).toEqual(wide);
   });
 
   it.each([

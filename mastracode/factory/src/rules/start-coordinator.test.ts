@@ -8,6 +8,18 @@ import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryStartCoordinator } from './start-coordinator.js';
 import { FactoryTransitionService } from './transition-service.js';
 
+const { primeTenant } = vi.hoisted(() => ({ primeTenant: vi.fn() }));
+vi.mock('../routes/tenant-credentials.js', async importOriginal => {
+  const actual = await importOriginal<typeof import('../routes/tenant-credentials.js')>();
+  return {
+    ...actual,
+    primeTenantCredentialsForTenant: (...args: Parameters<typeof actual.primeTenantCredentialsForTenant>) => {
+      primeTenant(...args);
+      return actual.primeTenantCredentialsForTenant(...args);
+    },
+  };
+});
+
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 
 function makeController(sendMessage = vi.fn(async () => {})) {
@@ -330,6 +342,39 @@ describe('FactoryStartCoordinator', () => {
     expect(session.state.set).toHaveBeenCalledWith(
       expect.objectContaining({ factoryModelScope: 'user', factoryOwnerUserId: 'user-1' }),
     );
+  });
+
+  it("runs a hybrid Factory's work item on the Factory default and organization scope", async () => {
+    primeTenant.mockClear();
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller, session } = makeController();
+    const modelDefaults = { get: vi.fn(async () => ({ modelId: 'openai/owner-model' })) };
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+      undefined,
+      {
+        projects: {
+          getById: vi.fn(async () => ({
+            orgId: 'org-1',
+            modelScope: 'hybrid',
+            defaultModelId: 'anthropic/factory-model',
+          })),
+        } as never,
+        modelDefaults: modelDefaults as never,
+      },
+    );
+
+    await coordinator.prepare(startRequest());
+
+    expect(session.model.switch).toHaveBeenCalledWith('anthropic/factory-model');
+    expect(modelDefaults.get).not.toHaveBeenCalled();
+    expect(session.state.set).toHaveBeenCalledWith(
+      expect.objectContaining({ factoryModelScope: 'factory', factoryOwnerUserId: 'user-1' }),
+    );
+    expect(primeTenant).toHaveBeenCalledWith(expect.objectContaining({ credentialScope: 'factory' }));
   });
 
   it('applies the Factory default model before preparing a board run', async () => {

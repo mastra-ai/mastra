@@ -1,5 +1,106 @@
 # @mastra/core
 
+## 1.78.0-alpha.5
+
+### Patch Changes
+
+- Fixed agent runs crashing with `RangeError: Invalid string length` when a command printed a very large amount of output. `sandbox.executeCommand()` now keeps the newest 1 MiB of stdout and stderr by default, the same limit spawned processes already use. Streaming callbacks still receive every chunk, and the result reports `stdoutTruncated` and `stdoutDroppedBytes` (and the stderr equivalents) when output was dropped. ([#27106](https://github.com/mastra-ai/mastra/pull/27106))
+
+  If you need the complete output, pass `maxRetainedBytes: Infinity`:
+
+  ```ts
+  // Before: all output was kept by default
+  const result = await sandbox.executeCommand('cat', ['data.json']);
+
+  // After: pass Infinity to keep all output
+  const result = await sandbox.executeCommand('cat', ['data.json'], { maxRetainedBytes: Infinity });
+  ```
+
+  Complete output is limited to 256 MiB per stream. A command that prints more is killed, and `executeCommand()` (or `handle.wait()`) rejects with `ProcessOutputLimitError` instead of crashing the process.
+
+  The `execute_command` and `get_process_output` tools now tell the model when the start of the output was dropped, so it doesn't mistake the newest output for all of it.
+
+## 1.78.0-alpha.4
+
+### Patch Changes
+
+- Fixed document citations disappearing after a reload. When a model streams a document source (for example an Anthropic PDF citation), memory now stores it as a `source-document` part with its media type, title and filename. Previously it was saved as a URL source with an empty `url`, so reloaded conversations showed an empty link instead of the cited document. ([#26805](https://github.com/mastra-ai/mastra/pull/26805))
+
+  ```ts
+  const { messages } = await memory.recall({ threadId, resourceId });
+  // assistant parts now include:
+  // { type: 'source-document', sourceId: 'doc-1', mediaType: 'application/pdf', title: 'Q3 report', filename: 'q3.pdf' }
+  ```
+
+  AI SDK v5 UI messages now also keep `source-document` parts and the `sourceId` and `title` of URL sources when converting to and from stored messages.
+
+- Fixed agent controller channel sessions losing the sender's identity on the first message in a new chat thread. A channel session now opens directly on its chat thread, keeping the inbound request context, instead of creating an extra empty thread and switching over without it. Hosts that resolve memory per user from the request context's `user` no longer fail on a new thread. ([#27113](https://github.com/mastra-ai/mastra/pull/27113))
+
+## 1.78.0-alpha.3
+
+### Minor Changes
+
+- Memory can now contribute error processors to an agent. `MastraMemory.getErrorProcessors()` works like `getInputProcessors()` and `getOutputProcessors()`: the agent appends what it returns to its resolved `errorProcessors`, on both regular and durable agents. These processors run after configured and default error processors, and stay in place when a call passes its own `errorProcessors`. The base implementation returns none, so existing memory classes are unaffected. ([#26029](https://github.com/mastra-ai/mastra/pull/26029))
+
+  ```ts
+  class MyMemory extends MastraMemory {
+    async getErrorProcessors() {
+      return [new MyRecoveryProcessor()];
+    }
+  }
+  ```
+
+- Added one preview format for span input, output and error. Trace lists (`queryTraces()`, `listTracesLight()`) now return `outputPreview` and `errorPreview` next to `inputPreview`, and `querySpans()` rows add `errorPreview` and `errorTruncated`. ([#26567](https://github.com/mastra-ai/mastra/pull/26567))
+
+  **New exports from `@mastra/core/storage`**
+
+  - `buildPreview(value)` builds a preview from a decoded payload, and `buildPreviewFromJson(json)` from stored JSON text. Both cut to `PREVIEW_MAX_LENGTH` (100) characters and end with `…` when cut.
+  - Exported spans and span records accept optional `inputPreview`, `outputPreview` and `errorPreview`, preserved through create/update record builders. Stores trim nonblank supplied previews and cap them like generated ones (100 characters plus `…`, never splitting a surrogate pair); missing or blank previews are generated from the payload.
+
+  ```ts
+  import { buildPreview } from '@mastra/core/storage';
+
+  buildPreview({ messages: [{ role: 'user', content: 'Where is my order?' }] }); // 'Where is my order?'
+  buildPreview({ message: 'Tool failed' }); // 'Tool failed'
+  ```
+
+  **Behavior changes**
+
+  - For a message list, previews now show the last user message instead of every user message joined with `|`.
+  - `querySpans()` previews are now at most 100 characters of readable text plus an ellipsis instead of the first 256 characters of raw JSON.
+
+  `buildInputPreview()` and `INPUT_PREVIEW_MAX_LENGTH` are deprecated. Use `buildPreview()` and `PREVIEW_MAX_LENGTH`. `buildInputPreview(input, maxLength)` still caps its preview at `maxLength`.
+
+- Removed the 31-day limit on trace search time ranges. You can now search all of your retained trace data, as long as the range starts before it ends. ([#27042](https://github.com/mastra-ai/mastra/pull/27042))
+
+  ```ts
+  // Before: rejected because the range is longer than 31 days
+  // After: returns traces from the whole six-month range
+  await mastraClient.queryTraces({
+    timeRange: { from: '2026-04-01T00:00:00Z', to: '2026-10-01T00:00:00Z' },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed `.foreach()` on the evented workflow engine when an iteration fails. The run now ends with `status: 'failed'` and the iteration's error. Before, it hung forever (`run.start()` never resolved) or, with `concurrency: 1`, finished as `success` with a corrupted output array. Iterations that finish after the failure no longer mark the foreach step successful. ([#26971](https://github.com/mastra-ai/mastra/pull/26971))
+
+- Fixed workflow agent steps to support durable agents on both execution engines. ([#26919](https://github.com/mastra-ai/mastra/pull/26919))
+
+- Fixed `resumeGenerate()` and `resumeStream()` saving messages to the thread when `memory.options.readOnly` is `true`. Resuming a suspended run now leaves read-only threads untouched, matching `generate()` and `stream()`. ([#27056](https://github.com/mastra-ai/mastra/pull/27056))
+
+- Fixed prompt caching after a suspended or tool-approval run resumes from Postgres storage. ([#26943](https://github.com/mastra-ai/mastra/pull/26943))
+
+  Tool-call arguments and JSON tool results in model prompts now use sorted object keys, so the same content produces the same request after a run resumes. Stored messages are unchanged.
+
+- Fixed two OpenAI errors with tool inputs and structured output: ([#26979](https://github.com/mastra-ai/mastra/pull/26979))
+
+  - Optional tool inputs that accept more than one type can now be left empty. Before, OpenAI models filled them with made-up values.
+  - Structured output with a field that has free-form keys, such as `z.record(z.string(), z.string())`, now works on OpenAI instead of failing with a 400 error. These schemas are sent without strict mode. To keep strict mode anyway, set `providerOptions.openai.strictJsonSchema: true`.
+
+- Updated dependencies [[`c6230e3`](https://github.com/mastra-ai/mastra/commit/c6230e30f76b4b912bad68f426d730da1cb67d83), [`cb015a1`](https://github.com/mastra-ai/mastra/commit/cb015a1be6560cbaf4deaef219cb02e63b263bc3)]:
+  - @mastra/schema-compat@1.3.15-alpha.0
+
 ## 1.78.0-alpha.2
 
 ### Patch Changes
