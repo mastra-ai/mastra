@@ -855,7 +855,7 @@ describe('MastraFactory.prepare', () => {
     ).rejects.toThrow('security state could not be restored before prompt creation');
   });
 
-  it('teaches /plan to unbound user sessions but not to channel runs', async () => {
+  it('teaches /plan to unbound user sessions, not to channel runs or runs whose binding cannot be looked up', async () => {
     const config = await prepareFactory({ storage: fakeStorage() });
     (config.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
     const context = new RequestContext();
@@ -875,6 +875,10 @@ describe('MastraFactory.prepare', () => {
     await expect(hostInstructions({ requestContext: context })).resolves.toBe(PLAN_COMMAND_INSTRUCTIONS);
 
     context.set('channel', { platform: 'slack' });
+    await expect(hostInstructions({ requestContext: context })).resolves.toBeUndefined();
+
+    context.set('channel', undefined);
+    context.set('user', { workosId: 'user-1' });
     await expect(hostInstructions({ requestContext: context })).resolves.toBeUndefined();
   });
 
