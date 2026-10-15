@@ -403,7 +403,8 @@ function ComboboxChips({ className, children, ...props }: BaseCombobox.Chips.Pro
   const [multiline, setMultiline] = React.useState(false);
 
   React.useLayoutEffect(() => {
-    if (!field) return;
+    // No observer (e.g. jsdom in tests): the field keeps its one-row shape.
+    if (!field || typeof ResizeObserver === 'undefined') return;
     // One row is the control height (the field's `min-height`); anything taller means the chips wrapped.
     // The 1px slack absorbs subpixel rounding.
     const rowHeight = parseFloat(getComputedStyle(field).minHeight) || 0;
