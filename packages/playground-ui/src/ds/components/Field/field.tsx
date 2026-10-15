@@ -1,12 +1,11 @@
 import { Field as FieldPrimitive } from '@base-ui/react/field';
 import { Fieldset as FieldsetPrimitive } from '@base-ui/react/fieldset';
-import { CircleAlertIcon, Info } from 'lucide-react';
+import { CircleAlertIcon } from 'lucide-react';
 import * as React from 'react';
 
 import { FieldAriaContext, useFieldAriaIds } from './field-control-aria';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { InfoTooltip } from '@/ds/components/Tooltip';
 import { Icon } from '@/ds/icons/Icon';
-import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 type FieldProps = Omit<FieldPrimitive.Root.Props, 'className'> & {
@@ -107,7 +106,6 @@ function FieldLabelInfo({
   labelId?: string;
 }) {
   const aboutId = React.useId();
-  const infoId = React.useId();
   const labelText = plainText(label);
   // A label with elements in it has no plain text to build a name from, so the name is read from
   // the rendered label instead, as "About <label>".
@@ -118,39 +116,14 @@ function FieldLabelInfo({
       : { 'aria-label': 'About this field' };
 
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <button
-            type="button"
-            {...name}
-            // The tooltip only mounts while open, so screen readers get the info from this copy.
-            aria-describedby={infoId}
-            // A step quieter than the placeholder grey at rest, so it reads as a hint, not a control.
-            className={cn(
-              'flex cursor-help items-center rounded-full text-placeholder/80 hover:text-muted-foreground focus-visible:text-muted-foreground',
-              controlStateColorTransition,
-              focusRing,
-            )}
-          />
-        }
-      >
-        <Icon size="xs">
-          <Info />
-        </Icon>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="max-w-64">
-        {children}
-      </TooltipContent>
-      <span id={infoId} hidden>
-        {children}
-      </span>
+    <>
+      <InfoTooltip {...name}>{children}</InfoTooltip>
       {name['aria-labelledby'] ? (
         <span id={aboutId} hidden>
           About
         </span>
       ) : null}
-    </Tooltip>
+    </>
   );
 }
 
