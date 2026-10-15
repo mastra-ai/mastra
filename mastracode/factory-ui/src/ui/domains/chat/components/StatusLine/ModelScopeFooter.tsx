@@ -2,14 +2,14 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Link } from 'react-router';
 
 import { useFactoryAuth } from '../../../../../hooks/useFactoryAuth';
-import { useFactoryProjectQuery } from '../../../../../hooks/useFactoryDefaultModel';
+import { useChatModelScope } from '../../context/useChatModelScope';
 import { settingsSectionPath } from '../../../settings/settingsSections';
 
 /** Whether the picker's list is narrowed to organization credentials, so it should say so. */
-export function useOrganizationScopedFactory(factoryId: string | undefined): boolean {
+export function useOrganizationScopedFactory(): boolean {
   const authQuery = useFactoryAuth();
-  const projectQuery = useFactoryProjectQuery(factoryId);
-  return authQuery.data?.authEnabled === true && projectQuery.data?.modelScope === 'factory';
+  const { modelScope } = useChatModelScope();
+  return authQuery.data?.authEnabled === true && modelScope === 'factory';
 }
 
 /**
