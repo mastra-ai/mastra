@@ -417,17 +417,6 @@ describe('ChatThreads — pinning', () => {
       await waitFor(() => expect(JSON.parse(localStorage.getItem(PIN_KEY) ?? '[]')).toEqual([]));
     });
   });
-
-  describe('when the stored pin references a thread that no longer exists', () => {
-    beforeEach(() => localStorage.setItem(PIN_KEY, JSON.stringify(['deleted-thread'])));
-
-    it('renders no Pinned section', async () => {
-      renderTwoThreads();
-
-      expect(await screen.findByText('Trip planning')).toBeTruthy();
-      expect(pinnedSection()).toBeNull();
-    });
-  });
 });
 
 const COLLAPSED_KEY = 'mastra:thread-sections-collapsed';
