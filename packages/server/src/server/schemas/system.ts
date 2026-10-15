@@ -47,6 +47,14 @@ export const observabilityStorageCapabilitiesSchema = z.object({
   traceQueryTenantScope: z.boolean().describe('Trusted tenant scoping of trace and thread queries'),
   threadQuery: z.boolean().describe('Advanced thread queries (POST /observability/threads/query)'),
   spanQuery: z.boolean().describe('Span queries (POST /observability/spans/query)'),
+  traceRetentionDays: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'Days of traces the store keeps. Older traces are gone, so clients can stop users from picking dates before them. Omitted when the store does not report a limit.',
+    ),
   feedback: z
     .boolean()
     .describe(
