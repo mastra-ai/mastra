@@ -1,5 +1,36 @@
 # @mastra/clickhouse
 
+## 1.25.1-alpha.1
+
+### Patch Changes
+
+- Trace and span lists use less memory. Every span now stores short previews of its input, output and error when it is written, so `queryTraces()`, `listTracesLight()` and `querySpans()` read those previews instead of each span's full payloads. Trace and span lists now also return `outputPreview` and `errorPreview`. Spans written before this change still show previews, built from their own payloads, even when another tenant has a root span with the same trace and span IDs. ([#26567](https://github.com/mastra-ai/mastra/pull/26567))
+
+  `storage.init()` adds `inputPreview`, `outputPreview` and `errorPreview` columns to `mastra_span_events`, `mastra_trace_roots` and `mastra_trace_branches`. This runs automatically on first use. If you set `disableInit: true`, run `storage.init()` from your migration step before deploying, or apply the columns yourself. Add them to `mastra_trace_roots` and `mastra_trace_branches` before `mastra_span_events`, because the views that copy span events into those tables select every column:
+
+  ```sql
+  ALTER TABLE mastra_trace_roots ADD COLUMN IF NOT EXISTS inputPreview Nullable(String);
+  ALTER TABLE mastra_trace_roots ADD COLUMN IF NOT EXISTS outputPreview Nullable(String);
+  ALTER TABLE mastra_trace_roots ADD COLUMN IF NOT EXISTS errorPreview Nullable(String);
+  ALTER TABLE mastra_trace_branches ADD COLUMN IF NOT EXISTS inputPreview Nullable(String);
+  ALTER TABLE mastra_trace_branches ADD COLUMN IF NOT EXISTS outputPreview Nullable(String);
+  ALTER TABLE mastra_trace_branches ADD COLUMN IF NOT EXISTS errorPreview Nullable(String);
+  ALTER TABLE mastra_span_events ADD COLUMN IF NOT EXISTS inputPreview Nullable(String);
+  ALTER TABLE mastra_span_events ADD COLUMN IF NOT EXISTS outputPreview Nullable(String);
+  ALTER TABLE mastra_span_events ADD COLUMN IF NOT EXISTS errorPreview Nullable(String);
+  ```
+
+  On a replicated cluster, add `ON CLUSTER <cluster>` after each table name.
+
+  Nonblank supplied previews are trimmed and capped like generated ones (100 characters plus `…`). Missing or blank write-time previews are generated through the optional core helper. Stored empty strings do not trigger read fallback. With older core versions that lack the helper, preview fields pass through unchanged without generation.
+
+- Reduced the memory used by `queryTraces()` on large projects. Trace lists, numbered pages, delta polling and thread groups no longer sort every root span payload in the time range, so busy projects that previously hit ClickHouse memory limits now return results. Trace inputs and metadata are now read only for the traces on the returned page. ([#26567](https://github.com/mastra-ai/mastra/pull/26567))
+
+  `queryTraces()` now treats each trace as having one root span. A trace that was written with more than one root span is listed once, under one of its roots, and matches root filters through any of them. Delta polling lists such a trace under the same root on every poll, and the next-page cursor still advances when a page comes back short.
+
+- Updated dependencies [[`7b08a87`](https://github.com/mastra-ai/mastra/commit/7b08a876b1060cf6842c61ed8af0eaa93e1310c4), [`5d82145`](https://github.com/mastra-ai/mastra/commit/5d82145ae3cc591eb5cdafd4af5977c36fec5c01), [`4c29655`](https://github.com/mastra-ai/mastra/commit/4c296551a79bebc6a40fddcf2409824f601e6c43), [`6155190`](https://github.com/mastra-ai/mastra/commit/6155190d2436d5e93e21f6a875d8c4306c8043ff), [`eb71f8c`](https://github.com/mastra-ai/mastra/commit/eb71f8c3abbe9aa40375f898fce60f555ef9ebf3), [`35fbdce`](https://github.com/mastra-ai/mastra/commit/35fbdce6de71332246dd6d9b4a5ecba2d87fb6cc), [`cb015a1`](https://github.com/mastra-ai/mastra/commit/cb015a1be6560cbaf4deaef219cb02e63b263bc3), [`d99fa30`](https://github.com/mastra-ai/mastra/commit/d99fa305e0baa00fb2064283658c10e00b95bf10)]:
+  - @mastra/core@1.78.0-alpha.3
+
 ## 1.25.1-alpha.0
 
 ### Patch Changes

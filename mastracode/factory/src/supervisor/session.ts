@@ -79,6 +79,7 @@ export async function hydrateSupervisorSession(
     factoryProjectId,
     orgId: project.orgId,
     ownerUserId: project.createdBy,
+    context: 'run',
   });
   await session.state.set({
     factoryProjectId,

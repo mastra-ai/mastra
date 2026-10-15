@@ -55,7 +55,7 @@ export function SettingsPanel() {
   // Factory-level pickers only offer what the Factory's model scope can run;
   // personal pickers keep the caller's full catalog.
   const factoryScoped = section === 'models' || section === 'factory-memory';
-  const modelsQuery = useAvailableModelsQuery(factoryScoped ? factoryId : undefined);
+  const modelsQuery = useAvailableModelsQuery(factoryScoped ? { factoryProjectId: factoryId } : undefined);
   const settingsQuery = useAgentControllerSettings(hookArgs);
   const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
   const models = modelsQuery.data ?? [];
@@ -90,7 +90,7 @@ export function SettingsPanel() {
       {section === 'models' && (
         <FactoryModelsSettings models={models} settings={settings} onBehaviorChange={onBehaviorChange} />
       )}
-      {section === 'personal-models' && <PersonalModelsSettings models={models} />}
+      {section === 'personal-models' && <PersonalModelsSettings />}
       {(section === 'memory' || section === 'factory-memory') && (
         <MemorySettings
           key={section}
