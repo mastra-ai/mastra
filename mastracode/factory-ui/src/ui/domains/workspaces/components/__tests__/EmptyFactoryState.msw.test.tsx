@@ -623,6 +623,62 @@ describe('Account presets', () => {
     },
   );
 
+  it('creates a hybrid Factory whose personal account was connected through provider sign-in', async () => {
+    const writes = registerSetup();
+    let signedIn = false;
+    const signInStarts: unknown[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+        HttpResponse.json({
+          orgKeyAdmin: true,
+          providers: [
+            { provider: 'openai', source: 'stored-org', orgCredential: 'api_key' },
+            {
+              provider: 'anthropic',
+              envVar: 'ANTHROPIC_API_KEY',
+              oauth: { supported: true, modes: ['paste-code'] },
+              ...(signedIn ? { source: 'oauth', userCredential: 'oauth' } : { source: 'none' }),
+            },
+          ],
+        }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/config/providers/anthropic/oauth/start`, async ({ request }) => {
+        signInStarts.push(await request.json());
+        return HttpResponse.json({
+          sessionId: 'sign-in-1',
+          kind: 'paste-code',
+          url: 'https://example.com/authorize',
+          instructions: 'Paste code',
+          expiresAt: Date.now() + 600_000,
+        });
+      }),
+      http.post(`${TEST_BASE_URL}/web/config/providers/anthropic/oauth/complete`, () => {
+        signedIn = true;
+        return HttpResponse.json({ status: 'complete' });
+      }),
+    );
+    persistOnboardingDraft({ repository: repo, modelScope: 'hybrid', model });
+    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'personal-provider');
+    const user = userEvent.setup();
+    renderOnboarding();
+    await user.click(await screen.findByRole('tab', { name: 'Provider sign-in' }));
+    await user.click(screen.getByRole('button', { name: 'Continue with Anthropic' }));
+    const dialog = within(await screen.findByRole('dialog'));
+    await user.type(dialog.getByLabelText('Authorization code'), 'demo-code');
+    await user.click(dialog.getByRole('button', { name: 'Complete sign in' }));
+    await user.click(await screen.findByRole('button', { name: 'Review setup' }));
+    expect(signInStarts).toEqual([{ mode: 'paste-code', scope: 'user' }]);
+    expect(readOnboardingDraft().personal).toEqual({
+      providerId: 'anthropic',
+      method: 'oauth',
+      modelId: personalModel.modelId,
+    });
+    await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+    await screen.findByRole('heading', { name: 'Factory ready' });
+    expect(writes.find(item => item.path === 'create')?.body).toEqual({ name: repo.name, modelScope: 'hybrid' });
+    expect(writes.find(item => item.path === 'personal-model')?.body).toEqual({ modelId: personalModel.modelId });
+  });
+
   it('requires a personal model in hybrid even when the shared model is ready', async () => {
     const writes = registerSetup();
     persistOnboardingDraft({ repository: repo, modelScope: 'hybrid', model });
