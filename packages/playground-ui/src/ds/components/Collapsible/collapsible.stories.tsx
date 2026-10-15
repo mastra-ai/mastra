@@ -1,7 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
+import { Badge } from '../Badge';
 import { Button } from '../Button';
 import { DisclosureChevron } from '../DisclosureChevron';
+import { Field, FieldLabel } from '../Field';
+import { Input } from '../Input';
 import { ScrollArea } from '../ScrollArea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './collapsible';
 
@@ -46,6 +49,67 @@ export const DefaultOpen: Story = {
       </CollapsibleContent>
     </Collapsible>
   ),
+};
+
+type DisclosureFormProps = { defaultOpen?: boolean; badge?: boolean; triggerClassName?: string };
+
+function DisclosureForm({ defaultOpen = false, badge = false, triggerClassName }: DisclosureFormProps) {
+  return (
+    <div className="flex w-100 flex-col gap-4">
+      <Field>
+        <FieldLabel>Experiment name</FieldLabel>
+        <Input placeholder="Nightly regression" />
+      </Field>
+      <Collapsible defaultOpen={defaultOpen} className="flex flex-col gap-4">
+        <CollapsibleTrigger variant="disclosure" className={triggerClassName}>
+          Advanced
+          {badge && (
+            <Badge size="xs" variant="blue">
+              set
+            </Badge>
+          )}
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <Field>
+            <FieldLabel>Max concurrency</FieldLabel>
+            <Input defaultValue="5" />
+          </Field>
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
+  );
+}
+
+export const Disclosure: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          '`variant="disclosure"` is a ready-made toggle row for optional sections: a chevron that turns while open, then muted label text, flush with the fields around it. Open, it stretches into a divider.',
+      },
+    },
+  },
+  render: () => <DisclosureForm />,
+};
+
+export const DisclosureOpen: Story = {
+  render: () => <DisclosureForm defaultOpen />,
+};
+
+export const DisclosureWithBadge: Story = {
+  render: () => <DisclosureForm badge />,
+};
+
+export const DisclosureFocusVisible: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The keyboard focus ring, drawn here statically. It sits outside the flush box so it never touches the glyphs.',
+      },
+    },
+  },
+  render: () => <DisclosureForm triggerClassName="outline-1 outline-offset-2 outline-border-focus outline-solid" />,
 };
 
 export const SettingsSection: Story = {

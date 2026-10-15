@@ -48,4 +48,36 @@ describe('Collapsible', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Toggle' }));
     expect(screen.getByText('Panel content')).toBeDefined();
   });
+
+  it('renders the disclosure variant as a chevron followed by the label, turning while open', () => {
+    render(
+      <Collapsible>
+        <CollapsibleTrigger variant="disclosure">Advanced</CollapsibleTrigger>
+        <CollapsibleContent>Panel content</CollapsibleContent>
+      </Collapsible>,
+    );
+
+    const trigger = screen.getByRole('button', { name: 'Advanced' });
+    expect(trigger.dataset.variant).toBe('disclosure');
+    expect(trigger.firstElementChild?.getAttribute('data-slot')).toBe('disclosure-chevron');
+    expect(trigger.firstElementChild?.classList.contains('in-aria-expanded:rotate-90')).toBe(true);
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+
+    fireEvent.click(trigger);
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('Panel content')).toBeDefined();
+  });
+
+  it('adds no chevron to the default variant or to an asChild trigger', () => {
+    render(
+      <Collapsible>
+        <CollapsibleTrigger>Plain</CollapsibleTrigger>
+        <CollapsibleTrigger variant="disclosure" asChild>
+          <button type="button">Custom</button>
+        </CollapsibleTrigger>
+      </Collapsible>,
+    );
+
+    expect(document.querySelector('[data-slot="disclosure-chevron"]')).toBeNull();
+  });
 });
