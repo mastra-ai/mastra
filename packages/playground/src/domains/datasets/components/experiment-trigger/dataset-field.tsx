@@ -10,7 +10,6 @@ import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { useDatasetItems } from '@mastra/react/hooks/datasets';
 import { sameValue } from './experiment-trigger-options';
 import type { DatasetOption, FieldPopupContainer } from './experiment-trigger-options';
-import { usePrefetchDataset } from './use-prefetch-dataset';
 
 /** "5 items · latest", or the pinned version when one is picked under Advanced. */
 function datasetDetail(itemCount: number | undefined, version: number | undefined) {
@@ -28,7 +27,6 @@ export interface DatasetFieldProps {
 }
 
 export function DatasetField({ datasets, datasetId, version, onDatasetChange, container }: DatasetFieldProps) {
-  const prefetchDataset = usePrefetchDataset();
   const { total: itemCount } = useDatasetItems({
     datasetId,
     search: undefined,
@@ -50,7 +48,6 @@ export function DatasetField({ datasets, datasetId, version, onDatasetChange, co
         items={datasets}
         value={dataset}
         onValueChange={(next: DatasetOption | null) => next && onDatasetChange(next.value)}
-        onItemHighlighted={(item: DatasetOption | undefined) => prefetchDataset(item?.value)}
         isItemEqualToValue={sameValue}
         autoHighlight
       >

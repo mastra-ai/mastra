@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
-import { MastraClient } from '@mastra/client-js';
+import type { MastraClient } from '@mastra/client-js';
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../test/msw-server';
-import { makeWrapper, TEST_BASE_URL } from '../../../test/render';
-import { datasetItemsQueryOptions, useDatasetItem, useDatasetItems } from '../use-dataset-items';
-import { datasetQueryOptions, useDataset, useDatasets } from '../use-datasets';
+import { makeWrapper } from '../../../test/render';
+import { useDatasetItem, useDatasetItems } from '../use-dataset-items';
+import { useDataset, useDatasets } from '../use-datasets';
 
 type DatasetRecord = Awaited<ReturnType<MastraClient['getDataset']>>;
 type DatasetItemRecord = Awaited<ReturnType<MastraClient['getDatasetItem']>>;
@@ -67,18 +67,6 @@ describe('useDataset', () => {
       await waitFor(() => expect(result.current.data?.name).toBe('Support questions'));
     });
   });
-
-  describe('when the dataset was prefetched with datasetQueryOptions', () => {
-    it('renders the prefetched dataset on the first render', async () => {
-      server.use(http.get('*/api/datasets/ds-1', () => HttpResponse.json(dataset)));
-
-      const { wrapper, queryClient } = makeWrapper();
-      await queryClient.prefetchQuery(datasetQueryOptions(new MastraClient({ baseUrl: TEST_BASE_URL }), 'ds-1'));
-      const { result } = renderHook(() => useDataset({ datasetId: 'ds-1' }), { wrapper });
-
-      expect(result.current.data?.name).toBe('Support questions');
-    });
-  });
 });
 
 describe('useDatasetItem', () => {
@@ -103,21 +91,6 @@ describe('useDatasetItems', () => {
       const { result } = renderHook(() => useDatasetItems({ datasetId: 'ds-1' }), { wrapper });
 
       await waitFor(() => expect(result.current.data.map(i => i.id)).toEqual(['item-1']));
-      expect(result.current.total).toBe(1);
-    });
-  });
-
-  describe('when the items were prefetched with datasetItemsQueryOptions', () => {
-    it('renders the prefetched items and total on the first render', async () => {
-      server.use(http.get('*/api/datasets/ds-1/items', () => HttpResponse.json(itemsPage)));
-
-      const { wrapper, queryClient } = makeWrapper();
-      await queryClient.prefetchInfiniteQuery(
-        datasetItemsQueryOptions(new MastraClient({ baseUrl: TEST_BASE_URL }), { datasetId: 'ds-1' }),
-      );
-      const { result } = renderHook(() => useDatasetItems({ datasetId: 'ds-1' }), { wrapper });
-
-      expect(result.current.data.map(i => i.id)).toEqual(['item-1']);
       expect(result.current.total).toBe(1);
     });
   });

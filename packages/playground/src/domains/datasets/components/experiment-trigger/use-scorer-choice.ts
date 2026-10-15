@@ -14,7 +14,7 @@ export function useScorerChoice({ datasetId, initialScorerIds }: { datasetId: st
     scorerIds: pickedScorerIds ?? defaultScorerIds,
     usesDefaultScorers: pickedScorerIds === undefined && defaultScorerIds.length > 0,
     setScorerIds: setPickedScorerIds,
-    /** Back to the opening scorers, so a new dataset's defaults apply. */
-    resetScorers: () => setPickedScorerIds(initialScorerIds),
+    /** Drops any pick, including a rerun's, so a new dataset's own defaults apply. */
+    resetScorers: () => setPickedScorerIds(undefined),
   };
 }

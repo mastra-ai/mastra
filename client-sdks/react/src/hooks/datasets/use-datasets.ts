@@ -1,12 +1,6 @@
 import type { ExperimentTargetType, ListDatasetsParams, MastraClient } from '@mastra/client-js';
-import { queryOptions as tanstackQueryOptions, useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import type {
-  InfiniteData,
-  QueryKey,
-  UseInfiniteQueryResult,
-  UseQueryOptions,
-  UseQueryResult,
-} from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import type { InfiniteData, QueryKey, UseInfiniteQueryResult, UseQueryResult } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
 import type { MastraInfiniteQueryOptions, MastraQueryOptions } from '../shared/query-options';
@@ -93,19 +87,6 @@ export const useInfiniteDatasets = <TData = DatasetRecord[]>({
 };
 
 /**
- * Key and fetcher of the `dataset` query, shared by `useDataset` and prefetches (e.g. on hover)
- * so both hit the same cache entry.
- */
-export const datasetQueryOptions = (
-  client: MastraClient,
-  datasetId: string,
-): UseQueryOptions<DatasetResponse, Error, DatasetResponse, QueryKey> =>
-  tanstackQueryOptions({
-    queryKey: ['dataset', datasetId] as QueryKey,
-    queryFn: () => client.getDataset(datasetId),
-  });
-
-/**
  * Hook to fetch a single dataset by ID
  *
  * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
@@ -118,7 +99,9 @@ export const useDataset = <TData = DatasetResponse>({
   queryOptions?: MastraQueryOptions<DatasetResponse, TData>;
 }): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
-  // Only the key and fetcher: the shared options are typed for the raw response, this hook takes a `select`.
-  const { queryKey, queryFn } = datasetQueryOptions(client, datasetId);
-  return useQuery({ queryKey, queryFn, ...queryOptions });
+  return useQuery({
+    queryKey: ['dataset', datasetId],
+    queryFn: () => client.getDataset(datasetId),
+    ...queryOptions,
+  });
 };

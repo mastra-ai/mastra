@@ -211,6 +211,20 @@ describe('ExperimentTriggerDialog', () => {
       });
     });
 
+    it("drops the rerun's scorers when the dataset changes", async () => {
+      const { triggerCalls } = setupHandlers({ scorers: itemScorers });
+      renderDialog({ initialDatasetId: 'dataset-1', initialScorerIds: ['quality'] });
+
+      await waitFor(() => expect(chipLabels()).toEqual(['Quality scorer']));
+      await choose(datasetField(), 'Dataset 2');
+      await waitFor(() => expect(chipLabels()).toEqual([]));
+      await pickAgentOne();
+      fireEvent.click(runButton());
+
+      await waitFor(() => expect(triggerCalls).toHaveLength(1));
+      expect(triggerCalls[0].body).not.toHaveProperty('scorerIds');
+    });
+
     it('forgets the pinned version when the dataset changes', async () => {
       const { triggerCalls } = setupHandlers();
       renderDialog({ initialDatasetId: 'dataset-1', initialDatasetVersion: 11 });
