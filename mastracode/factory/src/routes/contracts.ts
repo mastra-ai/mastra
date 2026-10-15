@@ -49,6 +49,7 @@ const decisionResponseSchema = z.object({ decision: entitySchema });
 export const createProjectBodySchema = z.object({
   name: nonEmptyTrimmed(200),
   description: nullableTrimmed(2_000).optional().default(null),
+  modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
 });
 
 export const updateProjectBodySchema = z
@@ -57,7 +58,6 @@ export const updateProjectBodySchema = z
     description: nullableTrimmed(2_000).optional(),
     defaultModelId: nullableTrimmed(200).optional(),
     modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
-    slackWorkItemsEnabled: z.boolean().optional(),
     autoRunEnabled: z.boolean().optional(),
     autoApprovePlans: z.boolean().optional(),
   })

@@ -258,7 +258,7 @@
       }
     },
     {
-      "hash": "ebb59c6a7a256196",
+      "hash": "39a9b4c9bbc1ca19",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -282,7 +282,7 @@
               "type": "function_call",
               "call_id": "call_MpADk0s2skKF62oiAPBQfFCr",
               "name": "research",
-              "arguments": "{\"topic\":\"quantum computing\",\"_background\":{\"enabled\":true,\"disposition\":\"deferred\",\"timeoutMs\":30000,\"maxRetries\":3}}"
+              "arguments": "{\"_background\":{\"disposition\":\"deferred\",\"enabled\":true,\"maxRetries\":3,\"timeoutMs\":30000},\"topic\":\"quantum computing\"}"
             },
             {
               "type": "function_call_output",

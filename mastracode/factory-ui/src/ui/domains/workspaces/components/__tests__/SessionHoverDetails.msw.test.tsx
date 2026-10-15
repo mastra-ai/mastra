@@ -10,7 +10,7 @@ import type { ReactNode } from 'react';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { ChatSessionConfigProvider } from '../../../chat/context/ChatSessionProvider';
-import { WorkspacesSection } from '../WorkspacesSection';
+import { SessionsSection } from '../SessionsSection';
 import {
   createSessionHoverDetailsFixtures,
   factoryId,
@@ -20,7 +20,6 @@ import {
   workName,
   workSessionId,
 } from './fixtures/sessionHoverDetails';
-import { sessionPropertiesTrigger } from './fixtures/sessionProperties';
 
 function stubSessionDetails(updatedAt: string, { includeSessionTitles = true, slackWorkSession = false } = {}) {
   const fixtures = createSessionHoverDetailsFixtures(updatedAt);
@@ -70,7 +69,7 @@ function renderSection(wrap: (section: ReactNode) => ReactNode = section => sect
       <Routes>
         <Route
           path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
-          element={<ChatSessionConfigProvider>{wrap(<WorkspacesSection />)}</ChatSessionConfigProvider>}
+          element={<ChatSessionConfigProvider>{wrap(<SessionsSection />)}</ChatSessionConfigProvider>}
         />
       </Routes>
     </MemoryRouter>,
@@ -145,9 +144,10 @@ describe('Workspace session hover details', () => {
 
   describe('when a review session receives keyboard focus', () => {
     it('shows the related review metadata', async () => {
-      const { user, reviewRow } = await setupSessionRows();
+      const { user, workRow, reviewRow } = await setupSessionRows();
 
-      act(() => sessionPropertiesTrigger('Review sessions').focus());
+      act(() => workRow.focus());
+      await user.tab();
       await user.tab();
 
       expect(reviewRow).toHaveFocus();
@@ -164,8 +164,9 @@ describe('Workspace session hover details', () => {
     });
 
     it('closes the details when focus moves away', async () => {
-      const { user, reviewRow } = await setupSessionRows();
-      act(() => sessionPropertiesTrigger('Review sessions').focus());
+      const { user, workRow, reviewRow } = await setupSessionRows();
+      act(() => workRow.focus());
+      await user.tab();
       await user.tab();
       expect(reviewRow).toHaveFocus();
       expect(await screen.findByLabelText(`${reviewName} session details`)).toBeInTheDocument();

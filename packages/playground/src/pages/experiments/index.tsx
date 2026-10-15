@@ -121,11 +121,13 @@ export default function Experiments() {
     const ids = selectedExperimentIds.filter(id => datasetByExperimentId.has(id));
     return { selectedIds: ids, selectedDatasetIds: new Set(ids.map(id => datasetByExperimentId.get(id))) };
   }, [experiments, selectedExperimentIds]);
+  // The first pick is the baseline, so its dataset decides which experiments can join the comparison.
+  const comparableDatasetId = experiments.find(exp => exp.id === selectedIds[0])?.datasetId ?? undefined;
   const compareDisabledReason =
     selectedIds.length < 2
       ? 'Select at least two experiments to compare'
       : selectedDatasetIds.size !== 1
-        ? 'Select experiments from the same dataset to compare'
+        ? 'Only experiments from the same dataset, highlighted in the list, can be compared'
         : undefined;
 
   const executeCompare = () => {
@@ -227,6 +229,7 @@ export default function Experiments() {
             onCompare: executeCompare,
             compareDisabledReason,
           }}
+          comparableDatasetId={comparableDatasetId}
         />
       }
     >
@@ -248,6 +251,7 @@ export default function Experiments() {
           selectedExperimentIds: selectedIds,
           onToggleSelection: toggleExperimentSelection,
           onToggleAll: toggleAllExperiments,
+          comparableDatasetId,
         }}
       />
 

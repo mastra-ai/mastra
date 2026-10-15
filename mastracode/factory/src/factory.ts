@@ -22,7 +22,7 @@
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
-import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
+import type { AgentControllerRequestContext, BuiltinToolId } from '@mastra/core/agent-controller';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
@@ -96,6 +96,7 @@ import type { MastraFactorySandboxOption } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
+import { resolveFactoryCredentialTenant } from './session/credential-policy.js';
 import { hydrateSessionDefaultModel } from './session/default-model-hydration.js';
 import { environmentSlugs, resolveSessionRepositories } from './session/environment-repositories.js';
 import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.js';
@@ -221,6 +222,13 @@ export interface MastraFactoryConfig {
    * (`'eager'`), so the boot overlaps the model's own latency.
    */
   sandboxStart?: FactorySandboxStart;
+  /**
+   * Agent controller built-in tools (e.g. `submit_plan`) removed from every
+   * Factory session, along with their prompt guidance. Use this when a custom
+   * board gates planning with its own phase transition, so the in-session plan
+   * approval cannot bypass that gate.
+   */
+  disableBuiltinTools?: BuiltinToolId[];
   /** Background Factory dispatcher configuration. */
   dispatcher?: MastraFactoryDispatcherConfig;
   /**
@@ -666,10 +674,6 @@ export class MastraFactory {
     // fallback) and break chat with "Not logged in". Leaving it unregistered
     // lets the SDK fall back to the file-backed AuthStorage (auth.json) — the
     // same store the local /login and Settings pages read and write.
-    if (auth) {
-      registerTenantCredentialResolver(modelCredentialsStorage, deploymentModelProviders);
-    }
-
     // Custom providers: DB-backed in both modes (org rows in tenant mode, the
     // sentinel `local` org in no-auth mode). Once registered, model resolution
     // and the gateway catalog never read settings.json custom providers.
@@ -697,6 +701,15 @@ export class MastraFactory {
     ];
     const sourceControlHandles = sourceControlIntegrationIds.map(id => sourceControlStorage.forIntegration(id));
     const sourceControlSessions = createSourceControlSessionLookup(sourceControlHandles);
+    if (auth) {
+      registerTenantCredentialResolver(modelCredentialsStorage, deploymentModelProviders, requestContext =>
+        resolveFactoryCredentialTenant(requestContext, {
+          projects: factoryProjectsStorage,
+          sourceControl: sourceControlSessions,
+          workItems: workItemsStorage,
+        }),
+      );
+    }
 
     // Every integration uses generic integration storage. Version-control
     // providers additionally require the source-control storage domain. Readiness
@@ -1061,6 +1074,7 @@ export class MastraFactory {
       prepareAgentControllerMount({
         controllerId: CONTROLLER_ID,
         coAuthor: { name: 'mastra-platform[bot]' },
+        ...(this.#config.disableBuiltinTools?.length ? { disableBuiltinTools: this.#config.disableBuiltinTools } : {}),
         modes: false,
         workspace: createWorkspaceFactory({
           ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
@@ -1542,6 +1556,7 @@ export class MastraFactory {
       session =>
         hydrateSupervisorSession(session, {
           projects: factoryProjectsStorage,
+          modelDefaults: modelDefaultsStorage,
         }).catch(error => {
           console.warn('[Factory Supervisor] Failed to hydrate supervisor session', {
             error: error instanceof Error ? error.message : String(error),
@@ -1565,7 +1580,8 @@ export class MastraFactory {
     prepared.base.controller.onSessionCreated(
       session =>
         hydrateSessionDefaultModel(session, {
-          sourceControl: { sessions: sourceControlSessions },
+          sourceControl: sourceControlSessions,
+          projects: factoryProjectsStorage,
           workItems: workItemsStorage,
           modelDefaults: modelDefaultsStorage,
         }),

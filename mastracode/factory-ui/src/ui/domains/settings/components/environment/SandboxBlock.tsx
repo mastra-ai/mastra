@@ -17,6 +17,21 @@ interface SettingSchema {
   minimum?: number;
   maximum?: number;
   enum?: unknown[];
+  oneOf?: Array<{ const?: unknown; title?: string }>;
+}
+
+interface Choice {
+  value: unknown;
+  label: string;
+}
+
+/** Select options from `enum`, or from a `oneOf` of `const` members whose `title` is the label. */
+function schemaChoices(schema: SettingSchema): Choice[] | undefined {
+  if (schema.enum) return schema.enum.map(value => ({ value, label: String(value) }));
+  if (schema.oneOf?.length && schema.oneOf.every(member => 'const' in member)) {
+    return schema.oneOf.map(member => ({ value: member.const, label: member.title ?? String(member.const) }));
+  }
+  return undefined;
 }
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -83,26 +98,36 @@ function SettingRow({
   const label = schema.title ?? name;
   const type = Array.isArray(schema.type) ? schema.type.find(t => t !== 'null') : schema.type;
   const placeholder = schema.default === undefined ? undefined : String(schema.default);
+  const choices = schemaChoices(schema);
   let control: React.ReactNode;
-  if (schema.enum) {
-    const options = schema.enum.map(String);
-    const current = value === undefined ? UNSET : String(value);
+  if (choices) {
+    // A default that is one of the choices is marked on that choice, and picking it clears the setting;
+    // otherwise a separate "Default" item does.
+    const defaultIsChoice = choices.some(choice => String(choice.value) === placeholder);
+    const unsetKey = defaultIsChoice ? placeholder! : UNSET;
+    const labelOf = (key: string) => {
+      const choiceLabel = choices.find(choice => String(choice.value) === key)?.label ?? key;
+      return defaultIsChoice && key === placeholder ? `${choiceLabel} (default)` : choiceLabel;
+    };
+    const current = value === undefined ? unsetKey : String(value);
     control = (
       <Select
         value={current}
         disabled={disabled}
-        onValueChange={next => void onCommit(next === UNSET ? null : coerceEnum(schema.enum!, next))}
+        onValueChange={next => void onCommit(next === unsetKey ? null : coerceChoice(choices, next))}
       >
         <SelectTrigger size="sm" aria-label={label} className="w-auto">
           <Txt as="span" variant="caption">
-            {current === UNSET ? (placeholder ? `Default (${placeholder})` : 'Default') : current}
+            {current === UNSET ? (placeholder ? `Default (${placeholder})` : 'Default') : labelOf(current)}
           </Txt>
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={UNSET}>{placeholder ? `Default (${placeholder})` : 'Default'}</SelectItem>
-          {options.map(option => (
-            <SelectItem key={option} value={option}>
-              {option}
+          {!defaultIsChoice && (
+            <SelectItem value={UNSET}>{placeholder ? `Default (${placeholder})` : 'Default'}</SelectItem>
+          )}
+          {choices.map(choice => (
+            <SelectItem key={String(choice.value)} value={String(choice.value)}>
+              {labelOf(String(choice.value))}
             </SelectItem>
           ))}
         </SelectContent>
@@ -189,7 +214,7 @@ function numberInRange(raw: string, schema: SettingSchema, integer: boolean): nu
   return undefined;
 }
 
-/** The enum member whose string form the select handed back, keeping its original type. */
-function coerceEnum(members: unknown[], picked: string): unknown {
-  return members.find(member => String(member) === picked) ?? picked;
+/** The choice whose string form the select handed back, keeping its original type. */
+function coerceChoice(choices: Choice[], picked: string): unknown {
+  return choices.find(choice => String(choice.value) === picked)?.value ?? picked;
 }

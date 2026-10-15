@@ -1,7 +1,8 @@
 import type { ModelWithRetries } from '@mastra/core/agent';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
+import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { GatewayLanguageModel, IdentifiedModelConfig, MastraModelGatewayInterface } from '@mastra/core/llm';
-import type { RequestContext } from '@mastra/core/request-context';
+import { RequestContext } from '@mastra/core/request-context';
 import { getRequestAccountSelection, isRequestAccountRoutingExhausted } from '../auth/account-routing-context.js';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import type { CredentialStore, OAuthAccountRecord } from '../auth/types.js';
@@ -17,7 +18,12 @@ import type { AnthropicPromptCacheScope } from '../providers/anthropic-prompt-ca
 import { normalizeLegacyModelId } from '../providers/model-ids.js';
 import { isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
-import { resolveCredentialStore } from './credential-resolver.js';
+import {
+  hasCredentialTenantResolver,
+  prepareCredentialTenant,
+  resolveCredentialScope,
+  resolveCredentialStore,
+} from './credential-resolver.js';
 import { resolveCustomProviders } from './custom-provider-source.js';
 import {
   MASTRA_GATEWAY_PREFIX,
@@ -51,7 +57,7 @@ export {
 } from './custom-provider-source.js';
 export type { CustomProvidersSource } from './custom-provider-source.js';
 
-type ResolvedModel = GatewayLanguageModel;
+type ResolvedModel = GatewayLanguageModel | ModelRouterLanguageModel;
 type ModelRequestHeaders = Record<string, string>;
 
 function getAgentControllerHeaders(requestContext?: RequestContext): ModelRequestHeaders | undefined {
@@ -163,7 +169,45 @@ export function resolveModel(
     requestContext?: RequestContext;
     anthropicPromptCacheScope?: AnthropicPromptCacheScope;
   },
-): GatewayLanguageModel {
+): ResolvedModel {
+  if (!hasCredentialTenantResolver()) return resolveModelForRequest(modelId, options);
+  const createRequestModel = () => {
+    const requestContext = options?.requestContext ? new RequestContext(options.requestContext.entries()) : undefined;
+    // The router supplies stable SDK metadata and adapts whichever provider the refreshed policy selects.
+    // Each invocation owns its policy context and model cache, including concurrent OM and subagent calls.
+    return new ModelRouterLanguageModel({ id: `${MASTRACODE_GATEWAY_ID}/${modelId}` }, [
+      {
+        id: MASTRACODE_GATEWAY_ID,
+        name: 'Request-scoped MastraCode',
+        fetchProviders: async () => ({}),
+        buildUrl: () => undefined,
+        getApiKey: async () => '',
+        resolveAuth: () => ({ apiKey: 'request-scoped' }),
+        resolveLanguageModel: async () => {
+          await prepareCredentialTenant(requestContext);
+          return resolveModelForRequest(modelId, { ...options, requestContext });
+        },
+      },
+    ]);
+  };
+  let currentModel = createRequestModel();
+  return new Proxy(currentModel, {
+    get(_target, property) {
+      if (property === 'supportedUrls') return createRequestModel().supportedUrls;
+      if (property === 'doStream' || property === 'doGenerate') {
+        return async (...args: unknown[]) => {
+          const refreshed = createRequestModel();
+          currentModel = refreshed;
+          return Reflect.apply(Reflect.get(refreshed, property), refreshed, args);
+        };
+      }
+      const value = Reflect.get(currentModel, property, currentModel);
+      return typeof value === 'function' ? value.bind(currentModel) : value;
+    },
+  });
+}
+
+function resolveModelForRequest(modelId: string, options?: Parameters<typeof resolveModel>[1]): GatewayLanguageModel {
   reloadAuthStorage();
   const headers = getAgentControllerHeaders(options?.requestContext);
   const settings = loadSettings();
@@ -190,9 +234,8 @@ export function resolveModel(
     throw new Error(`Invalid model id: ${modelId}`);
   }
 
-  // Deployed web registers a per-tenant credential store provider; when the
-  // request carries an authenticated tenant, resolve credentials through the
-  // caller's own store (user > org > env). Undefined = global AuthStorage.
+  // Deployed hosts resolve exactly the trusted policy's credential scope.
+  // Only local mode falls back to global AuthStorage.
   const tenantCredentialStore = resolveCredentialStore(options?.requestContext);
   const baseCredentialStore = tenantCredentialStore ?? getGlobalAuthStorage();
 
@@ -248,8 +291,12 @@ export function resolveModel(
   });
 
   if (!auth && credentialStore?.allowEnvironmentFallback === false) {
+    // Scopes are exclusive, so name the one in effect: otherwise a user with a
+    // personal sign-in can't tell why an organization-scoped Factory fails.
     throw new ProviderAuthRequiredError(
-      `No usable ${providerId} credential is configured for this signed-in Factory account. Connect the provider or add an organization credential, then try again.`,
+      resolveCredentialScope(options?.requestContext) === 'factory'
+        ? `No usable ${providerId} credential is available. This Factory uses organization credentials only, so personal provider sign-ins don't apply. Add an organization credential, then try again.`
+        : `No usable ${providerId} credential is available. This Factory uses personal credentials only, so organization credentials don't apply. Connect the provider, then try again.`,
     );
   }
 
