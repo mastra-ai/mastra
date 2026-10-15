@@ -68,6 +68,7 @@ const PROVIDER_DESCRIPTIONS: Record<PlatformConnectProviderId, string> = {
   // Not a knowledge importer; present only because the record is exhaustive
   // over all platform-connect providers. Never rendered in this section.
   'incident-io': 'Imports incident.io incidents and follow-ups.',
+  gitlab: 'Imports GitLab issues and merge requests.',
   notion: 'Imports Notion pages and databases — titles and text properties.',
   confluence: 'Imports Confluence pages with their full body text.',
   linear: 'Imports Linear documents — project docs, PRDs, and initiative docs.',
@@ -109,7 +110,7 @@ function RoutingMenu({ provider, connectionId }: { provider: PlatformConnectProv
         <Txt as="span" variant="meta" className="text-muted-foreground">
           Couldn't load sync destinations.
         </Txt>
-        <Button size="xs" variant="ghost" onClick={() => void routingQuery.refetch()}>
+        <Button size="sm" variant="ghost" onClick={() => void routingQuery.refetch()}>
           Retry
         </Button>
       </span>
@@ -160,7 +161,7 @@ function RoutingMenu({ provider, connectionId }: { provider: PlatformConnectProv
 
   return (
     <DropdownMenu>
-      <DropdownMenu.Trigger size="xs" variant="ghost" aria-label={`Sync to: ${summary}`}>
+      <DropdownMenu.Trigger size="sm" variant="ghost" aria-label={`Sync to: ${summary}`}>
         <Txt as="span" variant="meta" className="text-muted-foreground">
           Sync to
         </Txt>
@@ -235,7 +236,7 @@ function ConnectionRow({
             provider={provider}
             reconnectConnectionId={connection.id}
             label="Reconnect"
-            size="xs"
+            size="sm"
           />
         ) : (
           <RoutingMenu provider={provider} connectionId={connection.id} />
@@ -290,7 +291,7 @@ function KnowledgeImporterCard({ provider, logoUrl }: { provider: PlatformConnec
           <ProviderConnectControl
             provider={provider}
             label={`Connect ${meta.displayName}`}
-            size="xs"
+            size="sm"
             onCompleted={startFirstSync}
           />
         )}
@@ -309,7 +310,7 @@ function KnowledgeImporterCard({ provider, logoUrl }: { provider: PlatformConnec
           <Txt as="span" variant="meta" className="text-muted-foreground">
             Couldn't load connections.
           </Txt>
-          <Button size="xs" variant="ghost" onClick={() => void connectionsQuery.refetch()}>
+          <Button size="sm" variant="ghost" onClick={() => void connectionsQuery.refetch()}>
             Retry
           </Button>
         </div>

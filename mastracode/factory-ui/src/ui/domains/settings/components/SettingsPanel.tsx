@@ -7,6 +7,7 @@ import { useServerFeatures } from '../../../../hooks/useServerFeatures';
 import { useChatPermissions } from '../../chat/context/useChatPermissions';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { useSettingsSection } from '../hooks/useSettingsSection';
+import { settingsSectionPath } from '../settingsSections';
 import { useAgentControllerSettings } from '../../../../hooks/useAgentControllerSettings';
 import { useAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
 import {
