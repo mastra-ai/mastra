@@ -10,6 +10,7 @@ import { accumulateChunk, finishStreamingAssistantMessage } from './accumulator'
  */
 export const createActionChunker = ({ replay = false }: { replay?: boolean } = {}) => {
   const toolArgs = new Map<string, unknown>();
+  let awaitingApproval = false;
 
   return (action: MastraAction): ChunkType[] => {
     const runId = action.runId ?? '';
@@ -53,6 +54,7 @@ export const createActionChunker = ({ replay = false }: { replay?: boolean } = {
         toolArgs.set(action.toolCallId, action.input);
         return [chunk('tool-call', { toolCallId: action.toolCallId, toolName: action.toolName, args: action.input })];
       case 'tool-approval-requested':
+        awaitingApproval = true;
         return [
           chunk('tool-call-approval', {
             toolCallId: action.toolCallId,
@@ -75,7 +77,8 @@ export const createActionChunker = ({ replay = false }: { replay?: boolean } = {
       case 'tool-denied':
         return [chunk('tool-output-denied', { toolCallId: action.toolCallId, toolName: action.toolName })];
       case 'run-end':
-        return [chunk('finish', { stepResult: { reason: action.finishReason } })];
+        // A run paused on approval ends with 'tool-calls'; that is a suspension, not a maxSteps stop.
+        return [chunk('finish', { stepResult: { reason: awaitingApproval ? 'suspended' : action.finishReason } })];
       case 'run-aborted':
         return [chunk('abort')];
       case 'error':
@@ -85,6 +88,9 @@ export const createActionChunker = ({ replay = false }: { replay?: boolean } = {
     }
   };
 };
+
+/** Message id for a user turn; shared by history replay and live streams so they reconcile. */
+export const userMessageId = (action: MastraAction) => `${action.runId ?? action.id}-user-${action.id}`;
 
 /** Rebuilds a thread's chat history from its stored actions. */
 export const actionsToMessages = (actions: MastraAction[]): MastraDBMessage[] => {
@@ -104,7 +110,7 @@ export const actionsToMessages = (actions: MastraAction[]): MastraDBMessage[] =>
         continue;
       }
       messages.push({
-        id: `${action.runId ?? action.id}-user-${action.id}`,
+        id: userMessageId(action),
         role: 'user',
         createdAt: new Date(action.createdAt),
         threadId: action.threadId,

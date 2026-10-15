@@ -17,7 +17,7 @@ import {
   fromCoreUserMessagesToMastraDBMessage,
 } from '../lib/mastra-db';
 import type { MastraDBMessageMetadata } from '../lib/mastra-db';
-import { createActionChunker } from '../lib/mastra-db/actions';
+import { createActionChunker, userMessageId } from '../lib/mastra-db/actions';
 import { useMastraClient } from '../mastra-client-context';
 import {
   extractLatestTasksFromMessages,
@@ -814,10 +814,24 @@ export const useChat = ({
     onChunk?: (chunk: ChunkType) => Promise<void>,
   ) => {
     const toChunks = createActionChunker();
+    let adoptedUserId = false;
     for await (const action of actions as AsyncIterable<MastraAction>) {
       if (action.runId) _currentRunId.current = action.runId;
-      // The user's message is already shown optimistically.
-      if (action.type === 'text' && action.role === 'user') continue;
+      if (action.type === 'text' && action.role === 'user') {
+        // Already shown optimistically; adopt the stored id so history refetches reconcile with it.
+        if (!adoptedUserId) {
+          adoptedUserId = true;
+          const id = userMessageId(action);
+          setMessages(s => {
+            const index = s.findLastIndex(m => m.role === 'user');
+            if (index === -1) return s;
+            const next = [...s];
+            next[index] = { ...next[index]!, id };
+            return next;
+          });
+        }
+        continue;
+      }
       for (const chunk of toChunks(action)) {
         await processStreamChunk(chunk, onChunk);
       }
@@ -1139,35 +1153,14 @@ export const useChat = ({
 
     // Use the same multipart message for the request and optimistic display.
     // Sending separate attachment messages would persist separate rows on reload.
-    const dbUserMessage = fromCoreUserMessagesToMastraDBMessage(coreUserMessages);
-    const clientSetId =
-      mode === 'stream' && args.threadId && !_threadSignalsUnsupportedRef.current && !threadSignalsDisabled
-        ? `client-set-${uuid()}`
-        : undefined;
-    const signalId = clientSetId;
-    const clientMessageId = clientSetId;
-
-    if (signalId) {
-      // Signal path: append the user turn optimistically as `pending` with a
-      // visibly client-owned id. The server echo can replace the final message
-      // id while the matching client id reconciles the pending bubble.
-      const metadata: MastraDBMessageMetadata = {
-        ...dbUserMessage.content.metadata,
-        mode: 'stream',
-        status: 'pending',
-        [CLIENT_MESSAGE_ID_KEY]: clientMessageId,
-      };
-      const pendingMessage = { ...dbUserMessage, id: clientSetId, content: { ...dbUserMessage.content, metadata } };
-      setMessages(s => [...s, pendingMessage]);
-    } else {
-      setMessages(s => [...s, dbUserMessage]);
-    }
+    // Action-native runs have no server echo of the user turn, so it is shown as final immediately.
+    setMessages(s => [...s, fromCoreUserMessagesToMastraDBMessage(coreUserMessages)]);
 
     try {
       if (mode === 'generate') {
         await generate({ ...args, coreUserMessages });
       } else if (mode === 'stream') {
-        await stream({ ...args, coreUserMessages, signalId, clientMessageId });
+        await stream({ ...args, coreUserMessages });
       } else if (mode === 'network') {
         await network({ ...args, coreUserMessages });
       }

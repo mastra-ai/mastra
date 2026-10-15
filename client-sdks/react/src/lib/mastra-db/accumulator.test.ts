@@ -1165,8 +1165,8 @@ describe('accumulateChunk - tool calls', () => {
       toolCallApprovalChunk('tc-2', 'sendMail', { to: 'second' }),
     ]);
     expect(out[0].content.metadata?.requireApprovalMetadata).toEqual({
-      'tc-1': { toolCallId: 'tc-1', toolName: 'sendMail', args: { to: 'first' } },
-      'tc-2': { toolCallId: 'tc-2', toolName: 'sendMail', args: { to: 'second' } },
+      'tc-1': { toolCallId: 'tc-1', toolName: 'sendMail', args: { to: 'first' }, runId: 'run-1' },
+      'tc-2': { toolCallId: 'tc-2', toolName: 'sendMail', args: { to: 'second' }, runId: 'run-1' },
     });
   });
 

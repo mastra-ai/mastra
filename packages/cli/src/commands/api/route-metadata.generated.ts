@@ -311,6 +311,7 @@ export const API_ROUTE_METADATA = {
     "queryParams": [],
     "bodyParams": [
       "format",
+      "memory",
       "model",
       "modelSettings",
       "providerOptions",
@@ -333,6 +334,7 @@ export const API_ROUTE_METADATA = {
     "queryParams": [],
     "bodyParams": [
       "format",
+      "memory",
       "model",
       "modelSettings",
       "providerOptions",
@@ -1276,6 +1278,27 @@ export const API_ROUTE_METADATA = {
       "kind": "object-property",
       "listProperty": "messages",
       "paginationProperty": "page"
+    }
+  },
+  "GET /memory/threads/:threadId/actions": {
+    "method": "GET",
+    "path": "/memory/threads/:threadId/actions",
+    "pathParams": [
+      "threadId"
+    ],
+    "queryParams": [
+      "after",
+      "agentId",
+      "limit",
+      "resourceId",
+      "runId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "actions"
     }
   },
   "GET /memory/threads/:threadId/working-memory": {
