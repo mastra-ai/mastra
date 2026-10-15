@@ -30,7 +30,7 @@ export function useChatModelScope() {
   const modelScope = sessionTarget
     ? (sessionModelsQuery.data?.modelScope ?? (sessionModelsQuery.isSuccess ? draftScope : undefined))
     : draftScope;
-  const scopeLoading = sessionTarget ? !sessionModelsQuery.isSuccess : Boolean(factoryId && !projectQuery.isSuccess);
+  const scopeLoading = sessionTarget ? sessionModelsQuery.isPending : Boolean(factoryId && !projectQuery.isSuccess);
   const draftCatalogTarget: AvailableModelsTarget = {
     ...(draftScope === 'user' ? { scope: 'user' } : { factoryProjectId: factoryId }),
     enabled: !scopeLoading,

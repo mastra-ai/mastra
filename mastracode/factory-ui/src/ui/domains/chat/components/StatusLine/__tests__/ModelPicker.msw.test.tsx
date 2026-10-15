@@ -66,6 +66,7 @@ function renderPicker({
   modelScope,
   factoryDefaultModelId,
   emptyCatalog = false,
+  catalogFails = false,
   sessionPolicy,
 }: {
   kind?: ChatSessionContextApi['kind'];
@@ -82,6 +83,8 @@ function renderPicker({
   sessionPolicy?: { modelScope: 'factory' | 'user'; defaultModelId: string | null };
   /** The Factory's scope has no credentials, so its catalog is empty. */
   emptyCatalog?: boolean;
+  /** The session catalog request fails. */
+  catalogFails?: boolean;
 } = {}) {
   const modelSwitches: unknown[] = [];
   const stateUpdates: unknown[] = [];
@@ -92,6 +95,9 @@ function renderPicker({
       if (!modelScope) return HttpResponse.json({ models });
       const params = new URL(request.url).searchParams;
       if (params.has('resourceId')) {
+        if (catalogFails) {
+          return HttpResponse.json({ error: 'session_model_policy_unavailable' }, { status: 503 });
+        }
         expect(params.get('resourceId')).toBe('session-1');
         expect(params.get('threadId')).toBe('session-1');
         const effectiveScope = sessionPolicy?.modelScope ?? (modelScope === 'hybrid' ? kind : modelScope);
@@ -292,6 +298,14 @@ describe('ModelPicker', () => {
       '/factories/fp-1/settings/models',
     );
     expect(screen.queryByLabelText('Session model')).not.toBeInTheDocument();
+  });
+
+  it('reports a failed session catalog instead of staying locked as loading', async () => {
+    renderPicker({ modelScope: 'hybrid', kind: 'user', catalogFails: true });
+
+    const unavailable = await screen.findByLabelText('GPT-5 · model list unavailable');
+    expect(unavailable).toHaveTextContent('GPT-5 · model list unavailable');
+    expect(screen.queryByRole('button', { name: /^Session model/ })).not.toBeInTheDocument();
   });
 
   it('keeps the plain not-configured label for a personal-scoped Factory with no usable models', async () => {
