@@ -271,7 +271,8 @@ type ComboboxContentProps = BaseCombobox.Popup.Props &
 
 /**
  * The popup. Under a field (ComboboxInput or ComboboxChips) it opens at the field's width; under a
- * compact ComboboxTrigger it sizes to its content, at least as wide as the trigger.
+ * compact ComboboxTrigger it takes the trigger's width, at least 11rem. Either way the width never
+ * follows the filtered items, so it holds still while you type; long labels truncate.
  */
 function ComboboxContent({
   className,
@@ -300,7 +301,11 @@ function ComboboxContent({
       >
         <BaseCombobox.Popup
           data-slot="combobox-content"
-          className={cn(comboboxStyles.popup, field && 'w-(--anchor-width)', className)}
+          className={cn(
+            comboboxStyles.popup,
+            field ? 'w-(--anchor-width)' : 'w-[max(11rem,var(--anchor-width))]',
+            className,
+          )}
           {...props}
         />
       </BaseCombobox.Positioner>
