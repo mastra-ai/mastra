@@ -1,11 +1,39 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
-import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowRight, Building2, Users } from 'lucide-react';
+import { ArrowRight, Blend, Building2, Users } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { OnboardingModelScope } from '../../services/onboardingFlow';
+import { SETUP_LABELS } from '../../services/onboardingSteps';
+
+interface SetupOption {
+  scope: OnboardingModelScope;
+  icon: ReactNode;
+  detail: string;
+  needsCompanyAccount: boolean;
+}
+
+const SETUP_OPTIONS: SetupOption[] = [
+  {
+    scope: 'factory',
+    icon: <Building2 />,
+    detail: 'A shared account and model for Factory work and sessions.',
+    needsCompanyAccount: true,
+  },
+  {
+    scope: 'hybrid',
+    icon: <Blend />,
+    detail: 'Factory work uses the company account. Each person uses their own account for sessions.',
+    needsCompanyAccount: true,
+  },
+  {
+    scope: 'user',
+    icon: <Users />,
+    detail: 'Each person uses their own account and default model, for Factory work and sessions.',
+    needsCompanyAccount: false,
+  },
+];
 
 export function OnboardingSetupStep({
   scope,
@@ -18,52 +46,31 @@ export function OnboardingSetupStep({
   onChange: (scope: OnboardingModelScope) => void;
   onContinue: () => void;
 }) {
-  const company = scope !== 'user';
   return (
     <section aria-label="Factory account setup" className="flex w-full flex-col gap-7">
       <RadioGroup
         aria-label="Accounts for this Factory"
-        value={company ? 'company' : 'personal'}
-        onValueChange={value => onChange(value === 'personal' ? 'user' : 'factory')}
+        value={scope}
+        onValueChange={value => {
+          const option = SETUP_OPTIONS.find(item => item.scope === value);
+          if (option) onChange(option.scope);
+        }}
       >
-        <SetupOption
-          value="company"
-          label="Company account"
-          selected={company}
-          icon={<Building2 />}
-          disabled={companyLocked}
-          detail={companyOptionDetail(scope, companyLocked)}
-        />
-        <SetupOption
-          value="personal"
-          label="Personal accounts"
-          selected={!company}
-          icon={<Users />}
-          detail="Each person uses their own account and default model."
-        />
+        {SETUP_OPTIONS.map(option => {
+          const disabled = option.needsCompanyAccount && companyLocked;
+          return (
+            <SetupOptionRow
+              key={option.scope}
+              value={option.scope}
+              label={SETUP_LABELS[option.scope]}
+              icon={option.icon}
+              selected={scope === option.scope}
+              disabled={disabled}
+              detail={disabled ? 'An admin needs to connect the company account first.' : option.detail}
+            />
+          );
+        })}
       </RadioGroup>
-      {company ? (
-        <div className="flex items-start justify-between gap-4 px-4">
-          <label htmlFor="personal-sessions" className="cursor-pointer">
-            <Txt as="span" variant="caption" className="block">
-              Personal accounts for sessions
-            </Txt>
-            <Txt as="span" variant="meta" tone="muted" className="mt-1 block">
-              Factory work keeps using the company account.
-            </Txt>
-          </label>
-          <Switch
-            id="personal-sessions"
-            aria-label="Personal accounts for sessions"
-            checked={scope === 'hybrid'}
-            onCheckedChange={checked => onChange(checked ? 'hybrid' : 'factory')}
-          />
-        </div>
-      ) : (
-        <Txt variant="meta" tone="muted" className="px-4">
-          Factory work uses its owner’s account. Teammates connect their own accounts for sessions.
-        </Txt>
-      )}
       <div>
         <Button variant="primary" size="lg" onClick={onContinue}>
           Continue <ArrowRight aria-hidden="true" />
@@ -73,26 +80,20 @@ export function OnboardingSetupStep({
   );
 }
 
-function companyOptionDetail(scope: OnboardingModelScope, companyLocked: boolean) {
-  if (companyLocked) return 'An admin needs to connect the company account first.';
-  if (scope === 'hybrid') return 'A shared account and model for Factory work.';
-  return 'A shared account and model for Factory work and sessions.';
-}
-
-function SetupOption({
+function SetupOptionRow({
   value,
   label,
   detail,
   icon,
   selected,
-  disabled = false,
+  disabled,
 }: {
   value: string;
   label: string;
   detail: string;
   icon: ReactNode;
   selected: boolean;
-  disabled?: boolean;
+  disabled: boolean;
 }) {
   return (
     <label

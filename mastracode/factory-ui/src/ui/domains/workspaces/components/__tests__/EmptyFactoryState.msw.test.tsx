@@ -507,7 +507,10 @@ describe('Personal Factory model', () => {
     renderOnboarding();
     expect(await screen.findByRole('radio', { name: 'Company account' })).toHaveAttribute('aria-disabled', 'true');
     expect(screen.getByRole('radio', { name: 'Personal accounts' })).toBeChecked();
-    expect(screen.queryByRole('switch', { name: 'Personal accounts for sessions' })).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Company work · personal sessions' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
     await user.click(await screen.findByRole('button', { name: 'Review setup' }));
@@ -541,36 +544,84 @@ describe('Personal Factory model', () => {
 const personalModel = { providerId: 'anthropic', modelId: 'anthropic/claude-fable-5', method: 'api_key' as const };
 
 describe('Account presets', () => {
-  it.each(['factory', 'user', 'hybrid'] as const)('only visits and saves the models required by %s', async scope => {
-    const writes = registerSetup();
-    persistOnboardingDraft({ repository: repo });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model-setup');
-    const user = userEvent.setup();
-    renderOnboarding();
-    if (scope === 'user') await user.click(await screen.findByRole('radio', { name: 'Personal accounts' }));
-    if (scope === 'hybrid')
-      await user.click(await screen.findByRole('switch', { name: 'Personal accounts for sessions' }));
-    await user.click(await screen.findByRole('button', { name: 'Continue' }));
-    if (scope !== 'user') {
-      await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
+  it.each(['factory', 'user', 'hybrid'] as const)(
+    'connects and saves only the accounts and models required by %s',
+    async scope => {
+      const writes = registerSetup();
+      const credentials: Record<string, { orgCredential?: 'api_key'; userCredential?: 'api_key' }> = {
+        openai: {},
+        anthropic: {},
+      };
+      const savedKeys: { provider: string; scope: string }[] = [];
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            orgKeyAdmin: true,
+            providers: Object.entries(credentials).map(([provider, credential]) => ({
+              provider,
+              envVar: `${provider.toUpperCase()}_API_KEY`,
+              source: credential.orgCredential ? 'stored-org' : credential.userCredential ? 'stored-user' : 'none',
+              ...credential,
+            })),
+          }),
+        ),
+        http.put(`${TEST_BASE_URL}/web/config/providers/:provider/key`, async ({ params, request }) => {
+          const provider = z.enum(['openai', 'anthropic']).parse(params.provider);
+          const body = z.object({ scope: z.enum(['org', 'user']) }).parse(await request.json());
+          savedKeys.push({ provider, scope: body.scope });
+          credentials[provider] = {
+            ...credentials[provider],
+            [body.scope === 'org' ? 'orgCredential' : 'userCredential']: 'api_key',
+          };
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+      persistOnboardingDraft({ repository: repo });
+      sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model-setup');
+      const user = userEvent.setup();
+      renderOnboarding();
+      if (scope === 'user') await user.click(await screen.findByRole('radio', { name: 'Personal accounts' }));
+      if (scope === 'hybrid')
+        await user.click(await screen.findByRole('radio', { name: 'Company work · personal sessions' }));
       await user.click(await screen.findByRole('button', { name: 'Continue' }));
-    }
-    if (scope !== 'factory') {
-      await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
-      await user.click(await screen.findByRole('button', { name: 'Review setup' }));
-    }
-    await screen.findByRole('region', { name: 'Review factory setup' });
-    expect(writes).toEqual([]);
-    await user.click(screen.getByRole('button', { name: 'Create factory' }));
-    await screen.findByRole('heading', { name: 'Factory ready' });
-    expect(writes.find(item => item.path === 'create')?.body).toEqual({ name: repo.name, modelScope: scope });
-    expect(writes.find(item => item.path === 'model')?.body).toEqual({
-      defaultModelId: scope === 'user' ? personalModel.modelId : model.modelId,
-    });
-    expect(writes.filter(item => item.path === 'personal-model')).toEqual(
-      scope === 'factory' ? [] : [{ path: 'personal-model', body: { modelId: personalModel.modelId } }],
-    );
-  });
+      const connectWithKey = async (providerName: string) => {
+        await user.click(await screen.findByRole('button', { name: providerName }));
+        const dialog = within(await screen.findByRole('dialog'));
+        await user.type(dialog.getByLabelText(`API key for ${providerName}`), 'test-key');
+        await user.click(dialog.getByRole('button', { name: 'Save' }));
+        await screen.findByRole('combobox');
+      };
+      if (scope !== 'user') {
+        await connectWithKey('OpenAI');
+        await user.click(await screen.findByRole('button', { name: 'Continue' }));
+      }
+      if (scope !== 'factory') {
+        await connectWithKey('Anthropic');
+        await user.click(await screen.findByRole('button', { name: 'Review setup' }));
+      }
+      await screen.findByRole('region', { name: 'Review factory setup' });
+      expect(savedKeys).toEqual(
+        {
+          factory: [{ provider: 'openai', scope: 'org' }],
+          user: [{ provider: 'anthropic', scope: 'user' }],
+          hybrid: [
+            { provider: 'openai', scope: 'org' },
+            { provider: 'anthropic', scope: 'user' },
+          ],
+        }[scope],
+      );
+      expect(writes).toEqual([]);
+      await user.click(screen.getByRole('button', { name: 'Create factory' }));
+      await screen.findByRole('heading', { name: 'Factory ready' });
+      expect(writes.find(item => item.path === 'create')?.body).toEqual({ name: repo.name, modelScope: scope });
+      expect(writes.find(item => item.path === 'model')?.body).toEqual({
+        defaultModelId: scope === 'user' ? personalModel.modelId : model.modelId,
+      });
+      expect(writes.filter(item => item.path === 'personal-model')).toEqual(
+        scope === 'factory' ? [] : [{ path: 'personal-model', body: { modelId: personalModel.modelId } }],
+      );
+    },
+  );
 
   it('requires a personal model in hybrid even when the shared model is ready', async () => {
     const writes = registerSetup();
@@ -651,7 +702,7 @@ describe('Account presets', () => {
     const user = userEvent.setup();
     const view = renderOnboarding();
     await user.click(await screen.findByRole('button', { name: 'Edit setup' }));
-    await user.click(await screen.findByRole('switch', { name: 'Personal accounts for sessions' }));
+    await user.click(await screen.findByRole('radio', { name: 'Company account' }));
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     view.unmount();
     renderOnboarding();
@@ -670,8 +721,8 @@ describe('Account presets', () => {
     const user = userEvent.setup();
     renderOnboarding();
     await user.click(await screen.findByRole('button', { name: 'Edit setup' }));
-    await user.click(await screen.findByRole('switch', { name: 'Personal accounts for sessions' }));
-    await user.click(screen.getByRole('switch', { name: 'Personal accounts for sessions' }));
+    await user.click(await screen.findByRole('radio', { name: 'Company account' }));
+    await user.click(screen.getByRole('radio', { name: 'Company work · personal sessions' }));
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     expect(await screen.findByRole('heading', { name: 'Ready to create.' })).toBeInTheDocument();
     expect(readOnboardingDraft()).toMatchObject({ modelScope: 'hybrid', model, personal: personalModel });
