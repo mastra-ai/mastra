@@ -40,22 +40,22 @@ function textModel(text: string) {
   });
 }
 
-/** First call requests a tool, second call returns final text — a 2-step agentic loop. */
-function toolThenTextModel(toolName: string, toolArgs: object, finalText: string) {
+/** The first `toolTurns` calls request a tool, the next returns final text — an agentic loop. */
+function toolThenTextModel(toolName: string, toolArgs: object, finalText: string, toolTurns = 1) {
   let call = 0;
   return new MockLanguageModelV2({
     doStream: async () => {
-      const first = call++ === 0;
+      const turn = call++;
       return {
         stream: convertArrayToReadableStream(
-          first
+          turn < toolTurns
             ? [
                 { type: 'stream-start', warnings: [] },
                 { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
                 {
                   type: 'tool-call',
                   toolCallType: 'function',
-                  toolCallId: 'call-1',
+                  toolCallId: `call-${turn + 1}`,
                   toolName,
                   input: JSON.stringify(toolArgs),
                   providerExecuted: false,
@@ -262,12 +262,12 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
     }
   });
 
-  it('DurableAgent suspend and resume: originals keep their clock, resumed spans capture their own', async () => {
+  it('DurableAgent suspend and resume twice: every segment carries its own clock', async () => {
     const agent = new Agent({
       id: 'a',
       name: 'a',
       instructions: 'use the tool',
-      model: toolThenTextModel('get_weather', { city: 'Paris' }, 'It is 21C in Paris.') as any,
+      model: toolThenTextModel('get_weather', { city: 'Paris' }, 'It is 21C in Paris.', 2) as any,
       tools: {
         get_weather: createTool({
           id: 'get_weather',
@@ -279,36 +279,36 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
       },
     });
     const { wrapped } = buildMastra(testExporter, agent, 'durable');
+    const drainUntilApproval = async (out: { fullStream: AsyncIterable<{ type: string }> }) => {
+      for await (const chunk of out.fullStream) {
+        if (chunk.type === 'tool-call-approval') break;
+      }
+      await settle(testExporter);
+    };
     const res = await wrapped.stream('weather in paris?');
-    for await (const chunk of res.fullStream) {
-      if (chunk.type === 'tool-call-approval') break;
-    }
-    await settle(testExporter);
-    const resumed = await wrapped.approveToolCall({ runId: res.runId });
-    for await (const _chunk of resumed.fullStream) {
-      // Drain the resumed segment.
-    }
-    await settle(testExporter);
+    await drainUntilApproval(res);
+    await drainUntilApproval(await wrapped.approveToolCall({ runId: res.runId }));
+    await drainUntilApproval(await wrapped.approveToolCall({ runId: res.runId }));
 
-    // The originals end as `suspended`; the resumed segment opens fresh spans with
-    // a later start, so each pair must carry the clock of its own first inference.
+    // Each suspension ends its spans as `suspended` and each resume opens fresh
+    // ones with a later start, so every pair must carry its own first inference
+    // clock, never one from before it started.
     const runs = byStart(testExporter.getSpansByType('agent_run' as any));
     const generations = byStart(testExporter.getSpansByType('model_generation' as any));
     const inferences = byStart(testExporter.getSpansByType('model_inference' as any));
-    expect(runs).toHaveLength(2);
-    expect(generations).toHaveLength(2);
-    expect(inferences).toHaveLength(2);
-    expect((runs[1] as any).name).toContain('(resumed)');
-    const [originalClock, resumedClock] = inferences.map(clockOf);
-    expect(originalClock).toBeTypeOf('number');
-    expect(resumedClock).toBeGreaterThan(originalClock!);
-    expect(resumedClock).toBeGreaterThanOrEqual(+new Date((runs[1] as any).startTime));
-    expect([runs[0], generations[0]].map(clockOf)).toEqual([originalClock, originalClock]);
-    expect([runs[1], generations[1]].map(clockOf)).toEqual([resumedClock, resumedClock]);
+    expect(runs).toHaveLength(3);
+    expect(generations).toHaveLength(3);
+    expect(inferences).toHaveLength(3);
+    expect(runs.slice(1).every(run => (run as any).name.includes('(resumed)'))).toBe(true);
+    const clocks = inferences.map(clockOf);
+    clocks.forEach((clock, i) => {
+      expect(clock).toBeGreaterThanOrEqual(+new Date((runs[i] as any).startTime));
+      expect([clockOf(runs[i]), clockOf(generations[i])]).toEqual([clock, clock]);
+    });
     for (const span of [...runs, ...generations]) {
       const { events } = testExporter.getBySpanId(idOf(span));
-      const clocks = events.map(e => clockOf((e as any).exportedSpan)).filter(c => c !== undefined);
-      expect(new Set(clocks)).toEqual(new Set([clockOf(span)]));
+      const spanClocks = events.map(e => clockOf((e as any).exportedSpan)).filter(c => c !== undefined);
+      expect(new Set(spanClocks)).toEqual(new Set([clockOf(span)]));
     }
   });
 

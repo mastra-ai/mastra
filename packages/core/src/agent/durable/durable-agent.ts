@@ -3469,6 +3469,8 @@ export class DurableAgent<
           reg.resumeModelSpan = resumeModelSpan;
           reg.resumeAgentSpanData = resumeAgentSpan?.exportSpan();
           reg.resumeModelSpanData = resumeModelSpan?.exportSpan();
+          // Fresh spans capture their own first-chunk clock, never a prior segment's.
+          reg.resumeCompletionStartTime = undefined;
         }
       } catch (error) {
         // Span bookkeeping must never block resume.
