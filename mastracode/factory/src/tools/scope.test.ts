@@ -67,7 +67,7 @@ function context({
   interactive = true,
   tag,
 }: {
-  user?: { workosId: string; organizationId?: string };
+  user?: { workosId: string; organizationId?: string; name?: string; avatarUrl?: string };
   resourceId?: string;
   threadId?: string;
   interactive?: boolean;
@@ -106,6 +106,21 @@ describe('resolveFactoryToolScope', () => {
       kind: 'user',
       interactive: true,
     });
+  });
+
+  it('carries the signed-in caller’s name and avatar for audit events', async () => {
+    const { seed, createSession, sessions, workItems } = await seedFactory();
+    await createSession('session-1', 'user-1');
+    const scope = await resolveFactoryToolScope({
+      requestContext: context({
+        user: { workosId: 'user-1', organizationId: 'org-1', name: 'Caleb', avatarUrl: 'https://example.com/c.png' },
+      }),
+      authEnabled: true,
+      sessions,
+      projects: seed.projects,
+      workItems,
+    });
+    expect(scope?.actorProfile).toEqual({ name: 'Caleb', avatarUrl: 'https://example.com/c.png' });
   });
 
   it('accepts an org teammate on an org-visible session', async () => {
