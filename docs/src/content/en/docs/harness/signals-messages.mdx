@@ -1,0 +1,147 @@
+---
+title: 'Messages and steering | Signals'
+description: 'Send user messages into a running Mastra agent thread, queue follow-ups for the next turn, cancel queued input, and stop a run.'
+packages:
+  - '@mastra/core'
+  - '@mastra/client-js'
+---
+
+# Messages and steering
+
+Thread messages let a user steer an agent while it works. A message sent with `sendMessage()` reaches the running agent before its next model call. A message sent with `queueMessage()` waits for the current run to finish. Both wake the agent if the thread is idle.
+
+This page assumes you have an agent subscribed to a thread, as in the [Signals quickstart](/docs/harness/signals#quickstart).
+
+## Send a message now
+
+Use `sendMessage()` when the agent should take the message into account as soon as possible, such as a correction to the answer it's writing.
+
+```typescript title="src/chat.ts"
+const thread = { resourceId: 'user_123', threadId: 'thread_456' }
+
+const result = agent.sendMessage('Only consider the monthly price.', thread)
+const accepted = await result.accepted
+
+console.log(accepted.action) // 'wake' if the thread was idle, 'deliver' if it was running
+```
+
+On an active thread, Mastra adds the message to the running loop. If the model has started writing text or calling tools, the message waits for that response to end, and the next model call in the same run includes it. Running tools aren't cancelled.
+
+### Add attributes
+
+Pass an object with `attributes` to tell the model who sent the message or where it came from:
+
+```typescript title="src/chat.ts"
+agent.sendMessage(
+  {
+    contents: 'Use the latest customer note too.',
+    attributes: { name: 'Jane', sentFrom: 'slack' },
+  },
+  thread,
+)
+```
+
+The model receives the message wrapped in a `user` tag:
+
+```xml
+<user name="Jane" sentFrom="slack">Use the latest customer note too.</user>
+```
+
+Messages without attributes reach the model as plain user input. Use `ifActive.attributes` and `ifIdle.attributes` to add attributes that depend on the thread's state when the message arrives. Mastra merges them into the top-level `attributes`.
+
+## Queue a message for the next turn
+
+Use `queueMessage()` when the user sends a follow-up that shouldn't interrupt the current answer:
+
+```typescript title="src/chat.ts"
+agent.queueMessage('Also check whether the tests need updates.', thread)
+```
+
+On an active thread, Mastra waits for the run to finish and then starts a new run with the queued message. Subscribers see two runs, each ending with a `finish` chunk. On an idle thread, `queueMessage()` starts a run immediately, the same as `sendMessage()`.
+
+## Cancel a queued message
+
+Use `cancelQueuedMessages()` to drop queued messages without stopping the current run. Pass the IDs from each result's `signal.id`:
+
+```typescript title="src/chat.ts"
+const queued = agent.queueMessage('And summarize it in one line.', thread)
+
+const { cancelledSignalIds } = agent.cancelQueuedMessages({
+  ...thread,
+  signalIds: [queued.signal.id],
+})
+```
+
+`cancelledSignalIds` lists only the messages this process removed. Mastra also publishes the cancellation through pub/sub so other processes subscribed to the thread can remove their copy, but the result doesn't confirm that. Cancellation can't reach a message that has already started running, and it doesn't delete saved messages or revoke the `accepted` result the message already returned.
+
+Cancelling by `signalIds` reaches any listed message pending on the thread, including messages queued by other agents that share the same runtime.
+
+To cancel a group of messages without tracking their IDs, pass a `queueOwnerId` to `queueMessage()` and cancel by that ID instead. This form only cancels messages the calling agent queued with that `queueOwnerId`:
+
+```typescript title="src/chat.ts"
+agent.queueMessage('And summarize it in one line.', { ...thread, queueOwnerId: 'tab_1' })
+
+agent.cancelQueuedMessages({ ...thread, queueOwnerId: 'tab_1' })
+```
+
+`queueOwnerId` only groups messages locally. It isn't sent to other processes and isn't an authorization check.
+
+## Stop the run
+
+Call `abort()` on the subscription to stop the active run. Queued messages are kept and start a new run afterwards. Pass `clearPendingSignals: true` to drop them as well:
+
+```typescript title="src/chat.ts"
+subscription.abort({ clearPendingSignals: true })
+```
+
+Without a subscription, call `agent.abortThreadStream({ ...thread, clearPendingSignals: true })`. An aborted run ends with an `abort` chunk instead of `finish`. The subscription stays open, and later messages can start a new run.
+
+With a shared pub/sub, an abort reaches the instance that owns the run. With `clearPendingSignals`, the calling instance clears its own pending input and then asks the owning instance to clear its queue too. Neither abort nor cancellation stops continuations created with `continueWithMessages()`.
+
+## Approve tool calls
+
+When a subscribed run pauses for [tool approval](/docs/agents/human-in-the-loop), approve or decline the call with [`client.getAgent().sendToolApproval()`](/reference/client-js/agents#sendtoolapproval) or `POST /api/agents/:agentId/send-tool-approval`. The resumed run streams through the existing thread subscription.
+
+## Input that arrives during reasoning
+
+If a message or signal arrives while the model has produced only reasoning, or hasn't produced its first token yet, Mastra cancels that model request and sends a new one that includes the input. The cancelled response is dropped from history and memory. This applies to the default agent loop and to durable and evented agents running in the same process that accepted the input. It doesn't apply to the Inngest engine.
+
+Once the model starts writing text or calling tools, input waits for the next loop boundary instead.
+
+Details that affect billing and processors:
+
+- Interrupted requests don't count toward `maxSteps` or advance `stepNumber`, so `maxSteps: 1` still allows a replacement response. No separate limit applies. Repeated input can keep restarting reasoning until a request completes, the run is aborted, or its timeout expires.
+- Usage totals exclude interrupted requests, but providers may still bill for them.
+- Input processors that are running when the input arrives finish first. Output processors keep running after a cancellation, and the next request waits for them. Mastra doesn't undo processor state or external side effects from the cancelled request.
+- Reasoning that already streamed to a client may stay visible until the client reloads history.
+- Signals that processors write directly to the message history don't interrupt their own request.
+- If the run reaches `maxSteps`, queued input may be saved without a response.
+
+## Use HTTP routes
+
+To call the server directly, use `POST /api/agents/:agentId/send-message` and `POST /api/agents/:agentId/queue-message`. See [server routes](/reference/server/routes#agent-message-routes) for request and response schemas.
+
+If you expose your own Server-Sent Events (SSE) endpoint for a thread subscription, send a heartbeat while the stream is idle so browsers, proxies, and load balancers don't close it before the next run:
+
+```typescript title="src/api/subscribe.ts"
+const heartbeat = setInterval(() => {
+  controller.enqueue(encoder.encode(': keep-alive\n\n'))
+}, 25_000)
+
+request.signal.addEventListener('abort', () => {
+  clearInterval(heartbeat)
+})
+```
+
+Pair heartbeats with client-side reconnects. Heartbeats prevent idle disconnects, and reconnects recover from the ones that still happen.
+
+## Related
+
+- [Signals](/docs/harness/signals)
+- [`Agent.sendMessage()`](/reference/agents/agent#sendmessagemessage-options)
+- [`Agent.queueMessage()`](/reference/agents/agent#queuemessagemessage-options)
+- [`Agent.cancelQueuedMessages()`](/reference/agents/agent#cancelqueuedmessagesoptions)
+- [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions)
+- [`client.getAgent().sendMessage()`](/reference/client-js/agents#sendmessage)
+- [`client.getAgent().queueMessage()`](/reference/client-js/agents#queuemessage)
+- [AgentController](/docs/harness/agent-controller) for sessions with built-in steer and follow-up controls

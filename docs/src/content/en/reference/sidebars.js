@@ -708,6 +708,7 @@ const sidebars = {
           id: 'signals/create-notification-inbox-tool',
           label: 'createNotificationInboxTool()',
         },
+        { type: 'doc', id: 'signals/goal-signal-provider', label: 'GoalSignalProvider' },
         { type: 'doc', id: 'signals/signal-provider', label: 'SignalProvider' },
         { type: 'doc', id: 'signals/task-signal-provider', label: 'TaskSignalProvider' },
         { type: 'doc', id: 'signals/webhook-signal-provider', label: 'WebhookSignalProvider' },

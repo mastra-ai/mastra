@@ -1,0 +1,83 @@
+---
+title: 'Reference: GoalSignalProvider | Signals'
+description: "GoalSignalProvider keeps an agent's current goal objective in the model context as a state signal. Mastra adds it automatically when the agent has goal config."
+packages:
+  - '@mastra/core'
+---
+
+# GoalSignalProvider
+
+**Added in:** `@mastra/core@1.43.0`
+
+Keeps the agent's current [goal](/docs/harness/goals) objective in the model context. The provider registers a `GoalStateProcessor` that reads the thread's objective from the `threadState` storage domain and sends it to the model as a [state signal](/docs/harness/custom-signals#state-signals), once per change.
+
+Extends [`SignalProvider`](/reference/signals/signal-provider). The provider only shows the objective to the model. You set and change the objective with [`Agent.setObjective()`](/docs/harness/goals) and related methods.
+
+## Usage example
+
+When an agent has `goal` config, Mastra adds `GoalSignalProvider` for you:
+
+```typescript title="src/mastra/agents/worker.ts"
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+
+export const worker = new Agent({
+  id: 'worker',
+  name: 'Worker',
+  instructions: 'Work toward the current objective.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory(),
+  goal: { judge: '__GATEWAY_OPENAI_MODEL__' },
+})
+```
+
+Register it yourself when the agent has no `goal` config and you set objectives only with `setObjective()`:
+
+```typescript title="src/mastra/agents/worker.ts"
+import { Agent } from '@mastra/core/agent'
+import { GoalSignalProvider } from '@mastra/core/signals'
+import { Memory } from '@mastra/memory'
+
+export const worker = new Agent({
+  id: 'worker',
+  name: 'Worker',
+  instructions: 'Work toward the current objective.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory(),
+  signals: [new GoalSignalProvider()],
+})
+```
+
+Mastra doesn't add the provider for every agent with memory, because the processor needs a memory-backed thread on every run. If you pass a provider with the ID `goal-signals` yourself, Mastra doesn't add a second one.
+
+Goals need a memory-backed thread and a Mastra `storage` instance.
+
+## Constructor parameters
+
+`GoalSignalProvider` takes no constructor arguments.
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: "'goal-signals'",
+    description: 'Stable identifier for the provider instance.',
+  },
+]}
+/>
+
+## Methods
+
+### `getInputProcessors()`
+
+Returns the provider's `GoalStateProcessor` instance. The agent registers it on the input processor chain when the provider is passed to `signals` or added automatically.
+
+Returns: `InputProcessorOrWorkflow[]`
+
+## Related
+
+- [Goals](/docs/harness/goals)
+- [Signal providers](/docs/harness/signal-providers)
+- [`TaskSignalProvider`](/reference/signals/task-signal-provider)

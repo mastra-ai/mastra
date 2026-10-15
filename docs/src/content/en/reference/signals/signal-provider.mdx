@@ -101,6 +101,8 @@ The agent calls `connect(this)` and registers any processors or tools the provid
 
 Called by the Agent constructor. Establishes the bidirectional link so the provider can send signals back to the agent. Override to run additional setup after the link is established. Always call `super.connect(agent)`.
 
+A provider connects only once. If another agent registers the same instance, that agent skips `connect()`, `startPolling()`, and `start()`, but still merges the provider's tools and processors. Notifications keep going to the first agent, so create one provider instance per agent.
+
 ```typescript
 class MySignals extends SignalProvider<'my-signals'> {
   readonly id = 'my-signals'
@@ -114,7 +116,7 @@ class MySignals extends SignalProvider<'my-signals'> {
 
 #### `__registerMastra(mastra)`
 
-Called when the provider's agent is registered with a Mastra instance. Override to access storage or other Mastra services. Always call `super.__registerMastra(mastra)`.
+Called when the provider's agent is registered with a Mastra instance. Override to access storage or other Mastra services, for example to restore saved subscriptions. Always call `super.__registerMastra(mastra)`.
 
 ```typescript oxfmt:false
 override __registerMastra(mastra) {
@@ -295,7 +297,7 @@ Returns: `number`
 
 #### `poll(subscriptions)`
 
-Called on each poll cycle with all active subscriptions. Override to check external sources and emit notifications. The framework prevents overlapping poll cycles: if a `poll()` call takes longer than `pollInterval`, the next cycle is skipped.
+Called on each poll cycle with all active subscriptions. Override to check external sources and emit notifications. The framework prevents overlapping poll cycles: if a `poll()` call takes longer than `pollInterval`, the next cycle is skipped. Cycles with no subscriptions are skipped, and errors thrown from `poll()` are logged without stopping the timer.
 
 ```typescript oxfmt:false
 async poll(subscriptions: SignalSubscription[]) {
@@ -357,7 +359,9 @@ Returns: `Promise<{ status?: number; body?: unknown }>`
 
 #### `start()`
 
-Called after `connect()` to run async initialization. Override when setup requires the agent or Mastra instance to be available.
+Called after `connect()` and `startPolling()` to run async initialization. Mastra calls it from the `Agent` constructor, so when an agent is created before it's passed to `new Mastra()`, `this.mastra` is unset in `start()`, even after an `await`. Restore anything that needs storage or other Mastra services in an overridden [`__registerMastra()`](#__registermastramastra) instead.
+
+The agent doesn't await `start()`, so the agent can receive input before it finishes, and Mastra doesn't catch a rejected promise. Handle errors inside `start()`.
 
 ```typescript oxfmt:false
 async start() {
@@ -367,7 +371,7 @@ async start() {
 
 #### `stop()`
 
-Called on shutdown. The default implementation stops polling and clears all subscriptions.
+Stops polling and clears all subscriptions. Mastra doesn't call `stop()` for you: call it during your app's shutdown. If you override it, call `super.stop()`.
 
 ```typescript
 provider.stop()

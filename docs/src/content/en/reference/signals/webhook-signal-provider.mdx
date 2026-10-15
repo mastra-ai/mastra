@@ -1,6 +1,6 @@
 ---
 title: "Reference: WebhookSignalProvider | Signals"
-description: "Use WebhookSignalProvider for push-based signals that route incoming webhook payloads to subscribed agent threads and pending signal handlers."
+description: "Use WebhookSignalProvider to route incoming webhook payloads to subscribed agent threads as notifications."
 packages:
   - "@mastra/core"
 ---
@@ -17,40 +17,44 @@ Extends [`SignalProvider`](/reference/signals/signal-provider) with public subsc
 
 Route GitHub webhook events to subscribed threads:
 
-```typescript title="src/signals/webhook.ts"
+```typescript title="src/mastra/index.ts"
+import { Agent } from '@mastra/core/agent'
 import { WebhookSignalProvider } from '@mastra/core/signals'
+import { Memory } from '@mastra/memory'
 
-const webhookProvider = new WebhookSignalProvider({
-  extractResourceId: payload => `${payload.repository?.full_name}`,
+type GitHubEvent = { action?: string; repository?: { full_name?: string } }
+
+export const webhookProvider = new WebhookSignalProvider({
+  extractResourceId: payload => (payload as GitHubEvent).repository?.full_name,
   buildNotification: (payload, subscription) => ({
     source: 'github-webhook',
-    kind: payload.action ?? 'event',
-    summary: `${payload.action} on ${subscription.externalResourceId}`,
+    kind: (payload as GitHubEvent).action ?? 'event',
+    summary: `${(payload as GitHubEvent).action} on ${subscription.externalResourceId}`,
     payload,
   }),
 })
-```
 
-Register with an agent and subscribe a thread:
-
-```typescript title="src/mastra/index.ts"
-import { Agent } from '@mastra/core/agent'
-
-const agent = new Agent({
+export const agent = new Agent({
   id: 'agent',
+  name: 'Agent',
+  instructions: 'Respond to repository events.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory(),
   signals: [webhookProvider],
 })
 
-// subscribe a thread to a specific repo
+// Subscribe a thread to a specific repo
 webhookProvider.subscribeThread({ threadId: 'thread-1', resourceId: 'user-1' }, 'mastra-ai/mastra')
 
-// handle an incoming webhook
+// Handle an incoming webhook from your own route
 const result = await webhookProvider.handleWebhook({
   body: { repository: { full_name: 'mastra-ai/mastra' }, action: 'push' },
   headers: {},
 })
-// result.matched === 1
+// result.body.matched === 1
 ```
+
+The agent must be registered on a `Mastra` instance with notification storage. See [Signal providers](/docs/harness/signal-providers#register-the-provider).
 
 ## Constructor parameters
 
@@ -83,7 +87,8 @@ const result = await webhookProvider.handleWebhook({
     type: '(payload: unknown, subscription: SignalSubscription) => SendNotificationSignalInput',
     description: 'Build the notification object from a webhook payload and the matched subscription.',
     isOptional: true,
-    defaultValue: "Returns `{ source: id, kind: 'webhook-event', summary, payload }`",
+    defaultValue:
+      "Returns `{ source: id, kind: 'webhook-event', priority: 'medium', summary, payload }` with a `coalesceKey` per resource, so repeated pending events for one resource merge",
   },
 ]}
 />
@@ -153,9 +158,9 @@ const result = await webhookProvider.handleWebhook({
 })
 ```
 
-Returns: `Promise<{ status: number; body: { matched: number } }>`
+Returns: `Promise<{ status?: number; body?: unknown }>`
 
-Returns `{ status: 200, body: { matched: N } }` where `N` is the number of subscriptions that received notifications. Returns `matched: 0` when no resource ID could be extracted or no subscriptions match.
+At runtime it returns `{ status: 200, body: { matched: N } }` where `N` is the number of notifications sent. Returns `matched: 0` when no resource ID could be extracted or no subscriptions match. If a notification fails, the error is logged, the subscription isn't counted, and the remaining subscriptions are still notified.
 
 <PropertiesTable
   content={[
@@ -186,22 +191,9 @@ Returns `{ status: 200, body: { matched: N } }` where `N` is the number of subsc
 
 ### Static signal factories
 
-#### `WebhookSignalProvider.signals.subscribe(externalResourceId)`
-
-Create a reactive signal input that subscribes the current thread to an external resource.
+`WebhookSignalProvider.signals.subscribe(externalResourceId)` and `WebhookSignalProvider.signals.unsubscribe(externalResourceId)` return reactive signal inputs with the tag names `webhook-subscribe` and `webhook-unsubscribe`. They don't change subscriptions: nothing in Mastra acts on these signals when they're sent. Use [`subscribeThread()`](#subscribethreadtarget-externalresourceid-metadata) and [`unsubscribeThread()`](#unsubscribethreadtarget-externalresourceid) to manage subscriptions, or expose them to the agent as tools.
 
 ```typescript
 const signal = WebhookSignalProvider.signals.subscribe('mastra-ai/mastra')
+// { type: 'reactive', tagName: 'webhook-subscribe', contents: 'Subscribe to webhook resource: mastra-ai/mastra', attributes: { resource: 'mastra-ai/mastra' } }
 ```
-
-Returns: `{ type: 'reactive'; tagName: string; contents: string; attributes: { resource: string } }`
-
-#### `WebhookSignalProvider.signals.unsubscribe(externalResourceId)`
-
-Create a reactive signal input that unsubscribes the current thread from an external resource.
-
-```typescript
-const signal = WebhookSignalProvider.signals.unsubscribe('mastra-ai/mastra')
-```
-
-Returns: `{ type: 'reactive'; tagName: string; contents: string; attributes: { resource: string } }`

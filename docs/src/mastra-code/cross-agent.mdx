@@ -1,0 +1,100 @@
+---
+title: 'Cross-agent communication'
+description: 'Let Mastra Code instances discover each other, save connections, and send each other notifications, including across projects on the same machine.'
+packages:
+  - 'mastracode'
+---
+
+# Cross-agent communication
+
+Mastra Code instances running on the same machine can find each other and send each other messages. One agent can hand work to another, ask it a question, and receive a reply in its own thread. Messages arrive as [notifications](https://mastra.ai/docs/harness/notifications), so the receiving agent sees them according to their priority and whether it's busy.
+
+Cross-agent communication is experimental and off by default.
+
+## Turn it on
+
+In Mastra Code, open `/settings`, turn on **Experimental cross-agent communication**, and restart.
+
+If you embed Mastra Code, pass `crossAgentSignals: true` to `createMastraCode()`:
+
+```typescript
+import { createMastraCode } from 'mastracode'
+
+const mastraCode = await createMastraCode({
+  crossAgentSignals: true,
+})
+```
+
+The setting makes each instance advertise the threads it owns, lets it discover other instances, and adds the connection tools described below.
+
+Any local process running as your user can list the threads your instances advertise and message them, so only turn this on for machines and accounts you trust.
+
+## Connect to another agent
+
+A peer is one exact agent thread, identified by `{ agentId, resourceId, threadId }`. The agent uses four tools:
+
+1. `agent_connections_list` lists peers advertised right now and peers this thread has saved.
+1. `agent_connect` saves a discovered peer to the current thread.
+1. `agent_signal_send` sends a notification to a saved peer.
+1. `agent_disconnect` removes a saved peer. The peer doesn't need to be online, and disconnecting twice is safe.
+
+You can ask the agent in plain language, for example "list the other agents and connect to the one working on the docs".
+
+### Peer status
+
+`agent_connections_list` returns each peer with these fields:
+
+- `relationship`: `saved` if this thread saved the peer, otherwise `none`.
+- `presence`: `advertised` if the peer showed up in this discovery pass, otherwise `absent`.
+- `displayStatus`: A summary of the two, shown as below.
+- `canAttemptSend`: `true` only when the peer is saved and advertised.
+
+| Status | Meaning | Can send? |
+| - | - | - |
+| `[discovered]` | Advertised now, not saved by this thread | No |
+| `[connected]` | Saved by this thread and advertised now | Yes |
+| `[saved]` | Saved by this thread, not advertised now | No |
+
+A saved peer stays saved until you disconnect it. Saving records that you intend to work with that thread. It doesn't mean the thread is still running.
+
+## Send a message
+
+`agent_signal_send` checks discovery again before every send, and only sends when the exact peer is still saved and advertised. A peer seen earlier but missing now can't receive messages.
+
+Once the message reaches the target thread, the result shows what happened to it: `wake`, `deliver`, `persist`, `blocked`, or `discard`, depending on the target's state and its [delivery policy](https://mastra.ai/docs/harness/notifications#change-the-delivery-policy). If the thread's owner doesn't acknowledge the send, the message waits in the target's notification inbox and the `messageId` isn't used up, so the sender can retry with the same ID. Without `expectsReply` the tool reports this as `Queued for …`. With `expectsReply` it returns an error.
+
+Set `expectsReply` when the peer should answer, and `replyTo` to the original `messageId` when answering. `priority` controls how the receiving agent sees the message:
+
+| Priority | Target idle | Target busy |
+| - | - | - |
+| `urgent` | Delivered | Delivered |
+| `high` | Delivered | Summary first, full message after the run |
+| `medium` | Delivered | Summary |
+| `low` | Summary | Summary |
+
+A send with `expectsReply` fails when the message would arrive as a summary, because the peer hasn't seen it yet. Only `urgent` reliably reaches the peer directly. `high` and `medium` do so only when the peer is idle.
+
+## Agents in other projects
+
+With cross-agent communication on, `agent_connections_list` lists Mastra Code instances in every project on the machine, including the current one. An instance can connect to an instance in another project, message it, and receive replies.
+
+This uses Unix socket pub/sub, which the Mastra Code CLI turns on by default. If you embed Mastra Code, pass `unixSocketPubSub: true` along with `crossAgentSignals: true`. Discovery across projects doesn't work:
+
+- On Windows.
+- When you pass your own `pubsub`.
+- When the resource ID can't be used as a directory name. The resource ID comes from `MASTRA_RESOURCE_ID` or `resourceId` in `.mastracode/database.json`. It can't be empty, longer than 128 characters, contain `/`, `\`, or control characters, or be `.`, `..`, or `_shared`. Mastra Code logs a warning at startup, and the instance only lists instances with the same resource ID.
+
+Each thread's messages and run leases go through the socket directory of that thread's project. Thread-owner lookup and peer discovery run in a shared `/tmp/mc/_shared` directory. Instances on older versions can't see or be seen by updated instances, so restart every instance after updating.
+
+### Use a separate socket directory
+
+To isolate an instance or a test from `/tmp/mc`, set `MASTRACODE_SIGNALS_SOCKET_ROOT` to another absolute path. Relative paths are ignored. Keep the path short, because macOS limits Unix socket paths to 104 bytes.
+
+The root also holds every thread's run and ownership leases, so an instance with a different root doesn't coordinate threads with instances using the default root.
+
+## Related
+
+- [Signals](https://mastra.ai/docs/harness/signals)
+- [Notifications](https://mastra.ai/docs/harness/notifications)
+- [Configuration](/configuration)
+- [Customization](/customization)
