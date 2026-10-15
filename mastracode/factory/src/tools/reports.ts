@@ -31,7 +31,6 @@ export const FACTORY_REPORT_FORMS: Record<
   report: { kind: 'report', priority: 'high', coalesce: false },
 };
 
-const SUMMARY_LENGTH = 200;
 /** How many recent `factory-session` notifications on a recipient thread the final-report check reads. */
 const FINAL_REPORT_SCAN = 100;
 
@@ -114,7 +113,9 @@ export function reportNotification({
   return {
     kind: form.kind,
     priority: form.priority,
-    summary: message.slice(0, SUMMARY_LENGTH),
+    // The whole text: a notification's summary is all the recipient's agent ever sees, even
+    // through notification_inbox (which hides payloads), so a cut-off report loses its verdict.
+    summary: message,
     payload: { message },
     sourceId: sender.sessionId,
     ...(form.coalesce ? { coalesceKey: `factory-session:${sender.sessionId}:${form.kind}` } : {}),

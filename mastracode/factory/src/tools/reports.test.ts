@@ -61,6 +61,17 @@ function subscriber(workItemId: string, sessionId: string): WorkItemSubscription
   };
 }
 
+describe('reportNotification', () => {
+  it('carries the whole report as the summary, since that is all the recipient agent sees', () => {
+    const message = `Triage done. ${'verdict '.repeat(100)}`;
+
+    expect(reportNotification({ sender: SENDER, status: 'done', message })).toMatchObject({
+      summary: message,
+      payload: { message },
+    });
+  });
+});
+
 describe('hasFinalReport', () => {
   it('counts a reply that carries a final status', async () => {
     const env = reporting();
