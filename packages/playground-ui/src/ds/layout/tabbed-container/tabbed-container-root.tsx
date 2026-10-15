@@ -91,10 +91,11 @@ export const DataListControls = ({ dataLists }: { dataLists: ReactElement<Tabbed
                         {filterCount}
                       </Txt>
                     ) : null}
+                    {/* Ghost keeps the search in the popup: this trigger is restyled into the filter icon. */}
                     {filter.multiple ? (
-                      <Combobox {...filter} clearLabel="Clear" size="md" variant="default" />
+                      <Combobox {...filter} clearLabel="Clear" size="md" variant="ghost" />
                     ) : (
-                      <Combobox {...filter} size="md" variant="default" />
+                      <Combobox {...filter} size="md" variant="ghost" />
                     )}
                   </div>
                 </TooltipTrigger>
