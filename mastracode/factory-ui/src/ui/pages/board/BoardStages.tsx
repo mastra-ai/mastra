@@ -13,6 +13,8 @@ export interface BoardStageView {
   taskCount: number;
   loading: boolean;
   collapsed: boolean;
+  groupOpen: boolean;
+  onGroupOpenChange: (open: boolean) => void;
   createButton?: ReactNode;
   intakeSwitch?: ReactNode;
   cards: ReactNode;
@@ -81,6 +83,8 @@ export function BoardStages({
                     phaseKind={stageView.phaseKind}
                     count={stageView.taskCount}
                     loading={stageView.loading}
+                    open={stageView.groupOpen}
+                    onOpenChange={stageView.onGroupOpenChange}
                     action={stageView.createButton}
                     extras={stageView.intakeSwitch}
                     onDrop={onDrop}

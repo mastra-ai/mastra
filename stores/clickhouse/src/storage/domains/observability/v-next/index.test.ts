@@ -7172,46 +7172,52 @@ describe('ObservabilityStorageClickhouseVNext aggregateTraces', () => {
     }
   });
 
-  it('matches pushed-down filters against the current root, not a replaced one', async () => {
+  it('counts unmerged copies of a root once under pushed-down filters', async () => {
     await storage.dangerouslyClearAll();
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
     const root = {
       traceId: 'aggregate-pushdown-trace',
+      spanId: 'pushdown-root',
       parentSpanId: null,
       name: 'root-span',
       spanType: SpanType.AGENT_RUN,
       isEvent: false,
       entityType: EntityType.AGENT,
+      entityName: 'agentA',
       environment: 'test',
       startedAt: new Date('2026-08-02T00:00:00Z'),
       endedAt: new Date('2026-08-02T00:00:01Z'),
     } as const;
-    await storage.createSpan({ span: { ...root, spanId: 'pushdown-root-a', entityName: 'agentA' } });
-    await storage.createSpan({ span: { ...root, spanId: 'pushdown-root-b', entityName: 'agentB' } });
 
-    const all = await storage.aggregateTraces(
-      planTraceAggregate(
-        parseTraceAggregateRequest({ timeRange: TIME_RANGE, groupBy: ['entityName'], measures: ['count'] }),
-      ),
-    );
-    expect(all.rows).toHaveLength(1);
-    const current = all.rows[0]!.dimensions?.entityName;
-    const replaced = current === 'agentA' ? 'agentB' : 'agentA';
+    await client.command({ query: `SYSTEM STOP MERGES ${TABLE_TRACE_ROOTS}` });
+    try {
+      // Two physical copies of the same root, as left by a retried insert before merges run.
+      await storage.createSpan({ span: root });
+      await storage.createSpan({ span: root });
 
-    for (const [entityName, expected] of [
-      [current, 1],
-      [replaced, 0],
-    ] as const) {
-      const where = {
-        op: 'and',
-        args: [
-          { op: 'eq', left: { path: 'entityName' }, right: { literal: entityName } },
-          { op: 'eq', left: { path: 'environment' }, right: { literal: 'test' } },
-        ],
-      };
-      const aggregate = await storage.aggregateTraces(
-        planTraceAggregate(parseTraceAggregateRequest({ timeRange: TIME_RANGE, where, measures: ['count'] })),
-      );
-      expect(aggregate.rows).toEqual(expected === 1 ? [{ measures: { count: 1 } }] : []);
+      for (const [entityName, expected] of [
+        ['agentA', [{ measures: { count: 1 } }]],
+        ['agentB', []],
+      ] as const) {
+        const where = {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: 'entityName' }, right: { literal: entityName } },
+            { op: 'eq', left: { path: 'environment' }, right: { literal: 'test' } },
+          ],
+        };
+        const aggregate = await storage.aggregateTraces(
+          planTraceAggregate(parseTraceAggregateRequest({ timeRange: TIME_RANGE, where, measures: ['count'] })),
+        );
+        expect(aggregate.rows).toEqual(expected);
+      }
+    } finally {
+      await client.command({ query: `SYSTEM START MERGES ${TABLE_TRACE_ROOTS}` });
+      await client.close();
     }
   });
 });

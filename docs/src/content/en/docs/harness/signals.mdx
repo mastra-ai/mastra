@@ -109,6 +109,26 @@ agent.queueMessage('Also check whether the tests need updates.', {
 
 When the thread is idle, `queueMessage()` starts a run immediately. When the thread is active, it preserves turn order by starting a new run after the active run completes.
 
+### Queue a typed signal for the next turn
+
+Use `queueSignal()` when system-generated input needs the same turn ordering as `queueMessage()` but should keep its own signal type, tag, and attributes. For example, a skill invocation can render as a `<skill>` element instead of a plain user message:
+
+```typescript title="src/mastra/signals.ts"
+agent.queueSignal(
+  {
+    type: 'reactive',
+    tagName: 'skill',
+    attributes: { name: 'triage' },
+    contents: 'Triage the new issue.',
+  },
+  { resourceId: 'user_123', threadId: 'thread_456' },
+)
+```
+
+The model receives `<skill name="triage">Triage the new issue.</skill>`. Queued signals share the `queueMessage()` queue, so they count toward queue-count events and you can cancel them with `cancelQueuedMessages()`.
+
+When a signal starts a run, the run's `AGENT_RUN` span records the signal's `id`, `type`, `tagName`, and `attributes` under `attributes.signal`.
+
 ### Cancel pending input
 
 Use [`cancelQueuedMessages()`](/reference/agents/agent#cancelqueuedmessagesoptions) to remove selected pending input without stopping the active run. Cancellation is scoped to the memory thread, including input submitted by other Agents sharing the same runtime and PubSub instance.
@@ -517,12 +537,14 @@ Use heartbeats together with client-side reconnect logic. Heartbeats reduce idle
 
 - [`Agent.sendMessage()`](/reference/agents/agent#sendmessagemessage-options)
 - [`Agent.queueMessage()`](/reference/agents/agent#queuemessagemessage-options)
+- [`Agent.queueSignal()`](/reference/agents/agent#queuesignalsignal-options)
 - [`Agent.sendSignal()`](/reference/agents/agent#sendsignalsignal-options)
 - [`Agent.sendStateSignal()`](/reference/agents/agent#sendstatesignalstate-options)
 - [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions)
 - [`createNotificationInboxTool()`](/reference/signals/create-notification-inbox-tool)
 - [`client.getAgent().sendMessage()`](/reference/client-js/agents#sendmessage)
 - [`client.getAgent().queueMessage()`](/reference/client-js/agents#queuemessage)
+- [`client.getAgent().queueSignal()`](/reference/client-js/agents#queuesignal)
 - [`client.getAgent().sendSignal()`](/reference/client-js/agents#sendsignal)
 - [Server agent routes](/reference/server/routes#agent-message-routes)
 - [`client.getAgent().subscribeToThread()`](/reference/client-js/agents#subscribetothread)

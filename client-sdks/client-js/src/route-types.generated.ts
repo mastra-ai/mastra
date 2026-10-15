@@ -5318,11 +5318,11 @@ export interface PostAgentsAgentIdQueueMessage_RouteContract {
 }
 
 // ============================================================================
-// Route: POST /agents/:agentId/signals
+// Route: POST /agents/:agentId/queue-signal
 // ============================================================================
-export type PostAgentsAgentIdSignals_PathParams = GetAgentsAgentId_PathParams;
+export type PostAgentsAgentIdQueueSignal_PathParams = GetAgentsAgentId_PathParams;
 
-export type PostAgentsAgentIdSignals_Body =
+export type PostAgentsAgentIdQueueSignal_Body =
   | {
       ifActive?: InputShared_Type_4 | undefined;
       runId: string;
@@ -5339,6 +5339,34 @@ export type PostAgentsAgentIdSignals_Body =
       ifIdle?: InputShared_Type_9 | undefined;
       signal: InputShared_Type_10 | InputShared_Type_11;
     };
+
+export type PostAgentsAgentIdQueueSignal_Response = PostAgentsAgentIdSendMessage_Response;
+
+export type PostAgentsAgentIdQueueSignal_Request = Simplify<
+  (PostAgentsAgentIdQueueSignal_PathParams extends never ? {} : { params: PostAgentsAgentIdQueueSignal_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdQueueSignal_Body extends never
+      ? {}
+      : {} extends PostAgentsAgentIdQueueSignal_Body
+        ? { body?: PostAgentsAgentIdQueueSignal_Body }
+        : { body: PostAgentsAgentIdQueueSignal_Body })
+>;
+
+export interface PostAgentsAgentIdQueueSignal_RouteContract {
+  pathParams: PostAgentsAgentIdQueueSignal_PathParams;
+  queryParams: never;
+  body: PostAgentsAgentIdQueueSignal_Body;
+  request: PostAgentsAgentIdQueueSignal_Request;
+  response: PostAgentsAgentIdQueueSignal_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agents/:agentId/signals
+// ============================================================================
+export type PostAgentsAgentIdSignals_PathParams = GetAgentsAgentId_PathParams;
+
+export type PostAgentsAgentIdSignals_Body = PostAgentsAgentIdQueueSignal_Body;
 
 export type PostAgentsAgentIdSignals_Response = PostAgentsAgentIdSendMessage_Response;
 
@@ -24130,6 +24158,7 @@ export interface RouteTypes {
   'POST /agents/:agentId/observe': PostAgentsAgentIdObserve_RouteContract;
   'POST /agents/:agentId/send-message': PostAgentsAgentIdSendMessage_RouteContract;
   'POST /agents/:agentId/queue-message': PostAgentsAgentIdQueueMessage_RouteContract;
+  'POST /agents/:agentId/queue-signal': PostAgentsAgentIdQueueSignal_RouteContract;
   'POST /agents/:agentId/signals': PostAgentsAgentIdSignals_RouteContract;
   'POST /agents/:agentId/threads/abort': PostAgentsAgentIdThreadsAbort_RouteContract;
   'POST /agents/:agentId/threads/signals/cancel': PostAgentsAgentIdThreadsSignalsCancel_RouteContract;
@@ -24766,6 +24795,9 @@ export interface Client {
   };
   '/agents/:agentId/queue-message': {
     POST: PostAgentsAgentIdQueueMessage_RouteContract;
+  };
+  '/agents/:agentId/queue-signal': {
+    POST: PostAgentsAgentIdQueueSignal_RouteContract;
   };
   '/agents/:agentId/recover': {
     POST: PostAgentsAgentIdRecover_RouteContract;
