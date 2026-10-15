@@ -106,6 +106,73 @@ export const NoAllowance: Story = {
   },
 };
 
+export const WithSources: Story = {
+  args: { value: 148, max: 360, 'aria-label': 'Memory', 'aria-valuetext': '148 of 360 GB-hours' },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Pass `Meter.Source` children to say where the usage came from. Hover or focus the bar: it splits into one color per source, and a tooltip keys each source, its amount, and what is left. The sources should add up to `value`. Colors follow the order of the sources, from the same palette as `MetricsShareList`.',
+      },
+    },
+  },
+  render: args => (
+    <div className="max-w-md pt-24">
+      <Meter {...args}>
+        <Meter.Source label="research-workflows" value={112} />
+        <Meter.Source label="Sandboxes" value={36} />
+      </Meter>
+    </div>
+  ),
+};
+
+export const WithSourcesOverAllowance: Story = {
+  args: { value: 112, max: 100, 'aria-label': 'vCPU', 'aria-valuetext': '112 of 100 vCPU-hours, 12 over' },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Over the allowance, the sources keep their colors up to a tick at the allowance, and everything past it stays red. The key ends with the overage instead of what is left.',
+      },
+    },
+  },
+  render: args => (
+    <div className="max-w-md pt-24">
+      <Meter {...args}>
+        <Meter.Source label="research-workflows" value={88} />
+        <Meter.Source label="Sandboxes" value={24} />
+      </Meter>
+    </div>
+  ),
+};
+
+export const ManySources: Story = {
+  args: {
+    value: 96_420,
+    max: 250_000,
+    'aria-label': 'Observability events',
+    'aria-valuetext': '96,420 of 250,000 events',
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Past five sources the colors repeat, so roll the smallest into one "Other" source before that.',
+      },
+    },
+  },
+  render: args => (
+    <div className="max-w-md pt-40">
+      <Meter {...args}>
+        <Meter.Source label="support-agent" value={41_200} />
+        <Meter.Source label="research-workflows" value={28_900} />
+        <Meter.Source label="billing-assistant" value={14_300} />
+        <Meter.Source label="onboarding-flow" value={8_020} />
+        <Meter.Source label="Other (3)" value={4_000} />
+      </Meter>
+    </div>
+  ),
+};
+
 type Allowance = { name: string; value: number; max: number; unit: string };
 
 const ALLOWANCES: Allowance[] = [

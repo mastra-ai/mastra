@@ -9,7 +9,7 @@ afterEach(() => {
 });
 
 const segments = (meter: HTMLElement) =>
-  Array.from(meter.querySelectorAll<HTMLElement>('[data-slot^="meter-"]')).map(segment => ({
+  Array.from(meter.querySelectorAll<HTMLElement>('[data-slot="meter-bar"] > [data-slot]')).map(segment => ({
     part: segment.dataset.slot,
     grow: segment.style.getPropertyValue('--meter-share'),
   }));
@@ -105,5 +105,65 @@ describe('Meter', () => {
     );
 
     expect(screen.getByRole('meter', { name: 'Egress' })).not.toBeNull();
+  });
+
+  it('stays out of the tab order when it has no sources', () => {
+    render(<Meter value={148} max={360} aria-label="Memory" />);
+
+    expect(screen.getByRole('meter').hasAttribute('tabindex')).toBe(false);
+  });
+});
+
+describe('Meter with sources', () => {
+  const renderWithSources = (value: number, max: number) =>
+    render(
+      <Meter value={value} max={max} aria-label="vCPU">
+        <Meter.Source label="research-workflows" value={value - 24} />
+        <Meter.Source label="Sandboxes" value={24} />
+      </Meter>,
+    );
+
+  const sourceShares = (meter: HTMLElement) =>
+    Array.from(meter.querySelectorAll<HTMLElement>('[data-slot="meter-sources"] > [data-slot]')).map(segment => ({
+      part: segment.dataset.slot,
+      grow: segment.style.getPropertyValue('--meter-share'),
+    }));
+
+  it('can be focused so keyboard users get the key', () => {
+    renderWithSources(148, 360);
+
+    expect(screen.getByRole('meter', { name: 'vCPU' }).tabIndex).toBe(0);
+  });
+
+  it('describes the meter with a key of each source and what is left', () => {
+    renderWithSources(148, 360);
+
+    const meter = screen.getByRole('meter', { name: 'vCPU' });
+    const key = document.getElementById(meter.getAttribute('aria-describedby') ?? '');
+    expect(key?.textContent).toContain('research-workflows124');
+    expect(key?.textContent).toContain('Sandboxes24');
+    expect(key?.textContent).toContain('Remaining212');
+  });
+
+  it('splits the bar by source and leaves the rest of the allowance as track', () => {
+    renderWithSources(148, 360);
+
+    expect(sourceShares(screen.getByRole('meter'))).toEqual([
+      { part: 'meter-source', grow: '124' },
+      { part: 'meter-source', grow: '24' },
+      { part: 'meter-rest', grow: '212' },
+    ]);
+  });
+
+  it('keys the overage instead of a remainder when usage is over the allowance', () => {
+    renderWithSources(112, 100);
+
+    const meter = screen.getByRole('meter', { name: 'vCPU' });
+    const key = document.getElementById(meter.getAttribute('aria-describedby') ?? '');
+    expect(key?.textContent).toContain('Over allowance12');
+    expect(key?.textContent).not.toContain('Remaining');
+    expect(
+      meter.querySelector<HTMLElement>('[data-slot="meter-sources"]')?.style.getPropertyValue('--meter-over'),
+    ).toMatch(/^10\.71/);
   });
 });

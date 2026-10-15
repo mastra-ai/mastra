@@ -10,6 +10,15 @@ import { Meter } from '@mastra/playground-ui/components/Meter';
 <Meter value={112} max={100} aria-label="vCPU" aria-valuetext="112 of 100 vCPU-hours" />;
 ```
 
+Pass `Meter.Source` children to show where the usage came from. Hovering or focusing the bar splits it into one color per source, with a key of each source's amount:
+
+```tsx
+<Meter value={148} max={360} aria-label="Memory">
+  <Meter.Source label="research-workflows" value={112} />
+  <Meter.Source label="Sandboxes" value={36} />
+</Meter>
+```
+
 `MetricsStackedBarChart` can now print a label above a column. Set `columnLabelKey` to a row field, and rows that have it show the text above their column:
 
 ```tsx
