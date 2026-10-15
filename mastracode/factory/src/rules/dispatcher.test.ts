@@ -11,6 +11,7 @@ import {
   type WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import type { FactoryRunEndReporter } from '../tools/reports.js';
 import { FACTORY_DISPATCH_CONSTANTS, FactoryDecisionDispatcher } from './dispatcher.js';
 import { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision } from './types.js';
@@ -6444,6 +6445,105 @@ describe('run-end backstop report', () => {
     expect(reportRunEnd).toHaveBeenCalledWith(
       expect.objectContaining({ workItemId: item.id, outcome: { status: 'done' } }),
     );
+  });
+
+  async function dispatchStageMessage(
+    reportRunEnd: FactoryRunEndReporter,
+    { prepare = true, ...sessionOptions }: { prepare?: boolean } & Parameters<typeof createSession>[1] = {},
+  ) {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'sendMessage',
+      role: 'plan',
+      message: 'This work was moved from the triage stage to the planning stage.',
+      priority: 'urgent',
+      idleBehavior: 'wake',
+      ...(prepare ? { prepareBinding: true } : {}),
+      idempotencyKey: 'stage-transition-backstop',
+    });
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: item.id,
+        input: {
+          externalSource: item.externalSource,
+          title: item.title,
+          stages: ['execute'],
+          sessions: {},
+          metadata: item.metadata,
+        },
+      },
+      role: 'plan',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: 'stage-transition-backstop',
+      kickoffMessage: null,
+    });
+    const fake = createSession(undefined, sessionOptions);
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: fake.controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      reportRunEnd,
+    });
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    return { ...fake, item, storage, dispatcher };
+  }
+
+  it('reports done when a stage message wakes the role it seated and the run completes', async () => {
+    const reportRunEnd = vi.fn<FactoryRunEndReporter>(async () => ({ waiting: false }));
+    const { item, storage, getAgentEndListenerCount } = await dispatchStageMessage(reportRunEnd);
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+    await vi.waitFor(() => expect(reportRunEnd).toHaveBeenCalledTimes(1));
+    expect(reportRunEnd).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      role: 'plan',
+      sender: { sessionId: 'session-1', threadId: 'thread-1', userId: 'user-1' },
+      since: expect.any(Date),
+      outcome: { status: 'done' },
+    });
+    await vi.waitFor(() => expect(getAgentEndListenerCount()).toBe(0));
+  });
+
+  it('keeps watching a message-started role that ended waiting, and reports the run that finishes', async () => {
+    const reportRunEnd = vi
+      .fn<FactoryRunEndReporter>()
+      .mockResolvedValueOnce({ waiting: true })
+      .mockResolvedValue({ waiting: false });
+    const { emitAgentEnd, getAgentEndListenerCount } = await dispatchStageMessage(reportRunEnd);
+
+    await vi.waitFor(() => expect(reportRunEnd).toHaveBeenCalledTimes(1));
+    expect(getAgentEndListenerCount()).toBe(1);
+    emitAgentEnd('complete');
+    await vi.waitFor(() => expect(reportRunEnd).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(getAgentEndListenerCount()).toBe(0));
+  });
+
+  it('does not watch a rule message that seats nobody', async () => {
+    const reportRunEnd = vi.fn<FactoryRunEndReporter>(async () => ({ waiting: false }));
+    const { getAgentEndListenerCount } = await dispatchStageMessage(reportRunEnd, { prepare: false });
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(reportRunEnd).not.toHaveBeenCalled();
+    expect(getAgentEndListenerCount()).toBe(0);
+  });
+
+  it('stops watching a message-started run when the dispatcher stops', async () => {
+    const reportRunEnd = vi.fn<FactoryRunEndReporter>(async () => ({ waiting: true }));
+    const { dispatcher, getAgentEndListenerCount } = await dispatchStageMessage(reportRunEnd);
+    await vi.waitFor(() => expect(reportRunEnd).toHaveBeenCalledTimes(1));
+    expect(getAgentEndListenerCount()).toBe(1);
+
+    await dispatcher.stop();
+
+    expect(getAgentEndListenerCount()).toBe(0);
   });
 
   it('keeps the decision’s outcome when reporting fails', async () => {

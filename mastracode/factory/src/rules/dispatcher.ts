@@ -36,6 +36,7 @@ import type {
   UpsertWorkItemResult,
 } from '../storage/domains/work-items/base.js';
 import type { FactoryRunEndReporter, FactoryRunOutcome } from '../tools/reports.js';
+import { watchStartedRun } from '../tools/run-watch.js';
 import { decisionOvertaken } from './decision-applicability.js';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
@@ -526,6 +527,8 @@ export class FactoryDecisionDispatcher {
   /** Background work awaited on stop but outside both caps. */
   readonly #backgroundInFlight = new Set<Promise<void>>();
   readonly #bindingSkillRuns = new Map<string, Promise<void>>();
+  /** Run-end watches on role sessions a message started, one per binding. */
+  readonly #messageRunWatches = new Map<string, () => void>();
 
   constructor(options: FactoryDecisionDispatcherOptions) {
     this.#audit = options.audit;
@@ -569,6 +572,8 @@ export class FactoryDecisionDispatcher {
     this.#timer = undefined;
     await this.#activeClaim;
     await Promise.allSettled([...this.#runInFlight, ...this.#bookkeepingInFlight, ...this.#backgroundInFlight]);
+    for (const close of this.#messageRunWatches.values()) close();
+    this.#messageRunWatches.clear();
   }
 
   async runOnce(now = new Date()): Promise<void> {
@@ -1138,6 +1143,9 @@ export class FactoryDecisionDispatcher {
           userId: startedBy,
           orgId: record.orgId,
         });
+        // A role's kickoff message (a stage move seating it) starts its work, so its
+        // followers hear how that work ends, as they do for skill runs.
+        if (decision.prepareBinding && decision.role !== undefined) this.#watchMessageRun(session, binding, startedBy);
         await awaitNotification(
           () =>
             session.sendNotificationSignal(
@@ -1390,6 +1398,31 @@ export class FactoryDecisionDispatcher {
       );
     }
     return binding;
+  }
+
+  /**
+   * Report a message-started role run's end to the item's followers. Not
+   * awaited: the message decision succeeds on delivery. Like a spawned session's
+   * watch, it hands over past aborted or waiting runs and ends at a final report;
+   * a later message for the same binding reuses the open watch.
+   */
+  #watchMessageRun(session: BoundDispatcherSession, binding: FactoryRunBindingRecord, startedBy: string): void {
+    const reportRunEnd = this.#reportRunEnd;
+    if (!reportRunEnd || this.#messageRunWatches.has(binding.id)) return;
+    const watch = watchStartedRun(session, {
+      onEnd: (outcome, since) =>
+        reportRunEnd({
+          orgId: binding.orgId,
+          factoryProjectId: binding.factoryProjectId,
+          workItemId: binding.workItemId,
+          role: binding.role,
+          sender: { sessionId: binding.sessionId, threadId: binding.threadId, userId: startedBy },
+          since,
+          outcome,
+        }),
+      onClose: () => this.#messageRunWatches.delete(binding.id),
+    });
+    this.#messageRunWatches.set(binding.id, () => watch.close());
   }
 
   async #messageBinding(
