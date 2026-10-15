@@ -1,5 +1,31 @@
 # @mastra/memory
 
+## 1.38.0-alpha.0
+
+### Minor Changes
+
+- Observational Memory now recovers automatically when a model provider rejects a request for exceeding its context window ([#21657](https://github.com/mastra-ai/mastra/issues/21657)). ([#25055](https://github.com/mastra-ai/mastra/pull/25055))
+
+  A provider can count more tokens than Observational Memory's own estimate (attachments, formatting, or switching to a model with a smaller window), so a request can overflow before the observation threshold is reached. Previously the agent's request just failed. Now Observational Memory observes everything still pending and retries once with the smaller context. No configuration is needed. Automatic recovery needs a `@mastra/core` version that includes `MastraMemory.getErrorProcessors()`; with an older core, the error reaches the caller as before. To turn it off:
+
+  ```typescript
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        observation: { observeOnContextOverflow: false },
+      },
+    },
+  });
+  ```
+
+  `observe()` also accepts `force: true` to observe pending messages regardless of the threshold, for that call only.
+
+### Patch Changes
+
+- Updated dependencies [[`c6230e3`](https://github.com/mastra-ai/mastra/commit/c6230e30f76b4b912bad68f426d730da1cb67d83), [`7b08a87`](https://github.com/mastra-ai/mastra/commit/7b08a876b1060cf6842c61ed8af0eaa93e1310c4), [`5d82145`](https://github.com/mastra-ai/mastra/commit/5d82145ae3cc591eb5cdafd4af5977c36fec5c01), [`4c29655`](https://github.com/mastra-ai/mastra/commit/4c296551a79bebc6a40fddcf2409824f601e6c43), [`6155190`](https://github.com/mastra-ai/mastra/commit/6155190d2436d5e93e21f6a875d8c4306c8043ff), [`eb71f8c`](https://github.com/mastra-ai/mastra/commit/eb71f8c3abbe9aa40375f898fce60f555ef9ebf3), [`35fbdce`](https://github.com/mastra-ai/mastra/commit/35fbdce6de71332246dd6d9b4a5ecba2d87fb6cc), [`cb015a1`](https://github.com/mastra-ai/mastra/commit/cb015a1be6560cbaf4deaef219cb02e63b263bc3), [`d99fa30`](https://github.com/mastra-ai/mastra/commit/d99fa305e0baa00fb2064283658c10e00b95bf10)]:
+  - @mastra/schema-compat@1.3.15-alpha.0
+  - @mastra/core@1.78.0-alpha.3
+
 ## 1.37.1
 
 ### Patch Changes
