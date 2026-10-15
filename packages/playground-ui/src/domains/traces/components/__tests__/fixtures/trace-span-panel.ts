@@ -51,8 +51,40 @@ export const panelTraceSpans: GetTraceResponse = {
   spans: [rootSpan, childSpanOne, childSpanTwo],
 };
 
+/** Id of the request span outside Mastra (e.g. an OTel HTTP span) that called the agents twice. */
+const OUTSIDE_PARENT_SPAN_ID = 'f00dbabe12345678';
+
+const outsideRun = { ...rootSpan, externalParentSpanId: OUTSIDE_PARENT_SPAN_ID };
+export const firstOutsideRun = { ...outsideRun, spanId: 'span-run-1', name: 'First agent run' };
+export const secondOutsideRun = {
+  ...outsideRun,
+  spanId: 'span-run-2',
+  name: 'Second agent run',
+  entityId: 'planner-agent',
+  entityName: 'Planner Agent',
+  startedAt: new Date('2026-08-30T12:00:02.000Z'),
+  endedAt: new Date('2026-08-30T12:00:03.000Z'),
+};
+
+/** A root of the same trace with no outside parent, started between the two outside runs. */
+export const standaloneRun = {
+  ...rootSpan,
+  spanId: 'span-standalone',
+  name: 'Standalone agent run',
+  startedAt: new Date('2026-08-30T12:00:01.000Z'),
+  endedAt: new Date('2026-08-30T12:00:01.500Z'),
+};
+
+/** One trace, two roots started by the same outside request; the later run is listed first. */
+export const outsideRunsTraceSpans: GetTraceResponse = {
+  traceId: TRACE_ID,
+  spans: [secondOutsideRun, firstOutsideRun],
+};
+
 export const spanDetailById: Record<string, GetSpanResponse> = {
   'span-root': { span: { ...rootSpan, input: { message: 'go' }, output: { text: 'done' } } },
   'span-child-1': { span: { ...childSpanOne, sessionId: 'session-42', input: { arg: 1 }, output: { ok: true } } },
   'span-child-2': { span: { ...childSpanTwo, input: { arg: 2 }, output: { ok: true } } },
+  'span-run-1': { span: firstOutsideRun },
+  'span-run-2': { span: secondOutsideRun },
 };

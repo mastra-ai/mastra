@@ -116,6 +116,7 @@ const TRACE_SELECT = `
   r."name" AS "name",
   r."entityId" AS "entityId",
   r."parentSpanId" AS "parentSpanId",
+  r."externalParentSpanId" AS "externalParentSpanId",
   r."metadataRaw" AS "metadata",
   r."inputPreview" AS "inputPreview",
   r."outputPreview" AS "outputPreview",
@@ -311,15 +312,6 @@ function compileFeedbackScalarPredicate(
   return compileScalarPredicate(predicate, { value: field }, parameterOffset);
 }
 
-function latestRootPredicate(spanTable: string): string {
-  return `NOT EXISTS (
-    SELECT 1 FROM ${spanTable} newer
-    WHERE newer."traceId" = r."traceId"
-      AND newer."parentSpanId" IS NULL
-      AND newer."cursorId" > r."cursorId"
-  )`;
-}
-
 function latestSpanPredicate(spanTable: string): string {
   return `NOT EXISTS (
     SELECT 1 FROM ${spanTable} newer
@@ -328,6 +320,28 @@ function latestSpanPredicate(spanTable: string): string {
       AND (newer."isPending" < s."isPending" OR (newer."isPending" = s."isPending" AND newer."cursorId" > s."cursorId"))
   )`;
 }
+
+/**
+ * Keeps a completed root row only when it is its span's current row. A span's completed row beats
+ * its pending ones, so only a later completed row of the same root replaces it. Each root of a
+ * trace is judged by its own current row; the `parentSpanId` bound keeps the probe on root rows.
+ */
+function currentCompletedRootPredicate(spanTable: string): string {
+  return `NOT EXISTS (
+    SELECT 1 FROM ${spanTable} newer
+    WHERE newer."traceId" = r."traceId"
+      AND newer."spanId" = r."spanId"
+      AND newer."parentSpanId" IS NULL
+      AND NOT newer."isPending"
+      AND newer."cursorId" > r."cursorId"
+  )`;
+}
+
+/**
+ * `DISTINCT ON (r."traceId")` order that keeps a trace's representative root: of its candidate
+ * roots, the earliest by `startedAt`, then `spanId`.
+ */
+const REPRESENTATIVE_ROOT_ORDER = 'r."traceId", r."startedAt", r."spanId"';
 
 function latestFeedbackPredicate(feedbackTable: string): string {
   return `NOT EXISTS (
@@ -368,7 +382,7 @@ function collectThreadRelationCollections(
 }
 
 // Root columns with planner statistics. Computed fields (status, durationMs, metadata.*) and tags
-// are excluded: their default selectivity estimate is low enough to flip the latest-root anti-join
+// are excluded: their default selectivity estimate is low enough to flip the current-row anti-join
 // into a nested loop that probes every partition per root, which is far slower than filtering later.
 const ROOT_PUSHDOWN_FIELDS = new Set<string>([
   'traceId',
@@ -394,9 +408,10 @@ function isRootPushdownPredicate(predicate: TrustedTraceQueryPredicate): boolean
 
 /**
  * Splits `where` into top-level AND conjuncts that can filter `root_scope` directly and the rest,
- * which is applied in `candidates`. The latest-root check compares against the unfiltered span
- * table, so filtering a root earlier cannot change which root is current, but it stops long windows
- * from materializing every root (and running the latest-root check on it) before filtering.
+ * which is applied in `candidates`. Root predicates are judged per root and the current-row check
+ * compares against the unfiltered span table, so filtering a root earlier changes neither which row
+ * is current nor which candidate represents its trace, but it stops long windows from materializing
+ * every root (and running the current-row check on it) before filtering.
  */
 function splitRootPredicate(predicate: TrustedTraceQueryPredicate | undefined): {
   root: TrustedTraceQueryPredicate[];
@@ -516,13 +531,7 @@ function compilePostgresTraceScope(
   const values: unknown[] = [selection.timeRange.from, selection.timeRange.to];
   // The delta window binds fixed positions $3..$5, so it must be pushed before the
   // dynamically numbered tenant scope values.
-  const deltaConditions: string[] = [];
-  if (deltaWindow) {
-    values.push(deltaWindow.xactId, deltaWindow.cursorId, deltaWindow.safeHorizon);
-    // Restrict candidates before materializing roots and their related records.
-    // latestRootPredicate must still see replacements outside this interval.
-    deltaConditions.push(`(r."xactId", r."cursorId") > ($3::xid8, $4::bigint)`, `r."xactId" < $5::xid8`);
-  }
+  if (deltaWindow) values.push(deltaWindow.xactId, deltaWindow.cursorId, deltaWindow.safeHorizon);
   // Tenant scope is ANDed into every scan (roots and related signals) so a related
   // row from another tenant sharing a traceId can never match.
   const scopeConditions: string[] = [];
@@ -536,16 +545,32 @@ function compilePostgresTraceScope(
   }
   const scopeSql = (alias: string): string =>
     scopeConditions.map(condition => `\n      AND ${alias}.${condition}`).join('');
+  // Roots are judged by their own current rows; `candidates` then keeps one per trace.
   const rootConditions = [
     `r."parentSpanId" IS NULL`,
-    latestRootPredicate(spanTable),
+    currentCompletedRootPredicate(spanTable),
     `NOT r."isPending"`,
     `r."endedAt" IS NOT NULL`,
     `r."startedAt" >= $1`,
     `r."startedAt" < $2`,
-    ...deltaConditions,
     ...scopeConditions.map(condition => `r.${condition}`),
   ];
+  if (deltaWindow) {
+    // Only traces with a completed root row in the window can have their representative there,
+    // so restrict the scope to them before materializing roots and their related records. Their
+    // other roots stay in scope: the representative is chosen among all of them, and the window
+    // is applied to it afterwards.
+    rootConditions.push(`r."traceId" IN (
+      SELECT d."traceId"
+      FROM ${spanTable} d
+      WHERE d."parentSpanId" IS NULL
+        AND NOT d."isPending"
+        AND d."startedAt" >= $1
+        AND d."startedAt" < $2
+        AND (d."xactId", d."cursorId") > ($3::xid8, $4::bigint)
+        AND d."xactId" < $5::xid8${scopeSql('d')}
+    )`);
+  }
   if (rootPredicates.length > 0) rootConditions.push(compileConjunction(rootPredicates, values));
   const ctes = [
     `root_scope AS MATERIALIZED (
@@ -632,15 +657,19 @@ function compilePostgresTraceScope(
 }
 
 /**
- * Builds the CTE chain ending in `candidates`: the completed, current trace roots in the
- * selection's time range and tenant scope that match its `where` predicate. Trace queries and
- * trace aggregates both select from this CTE so they always see the same population.
+ * Builds the CTE chain ending in `candidates`: one row per trace, its representative root. A
+ * trace's candidate roots are its completed roots in the selection's time range and tenant scope
+ * that match its `where` predicate; the representative is the earliest by `startedAt`, then
+ * `spanId`. Trace queries and trace aggregates both select from this CTE so they always see the
+ * same population. With `allRoots`, `candidates` keeps every candidate root instead (thread
+ * groups, where a trace qualifies through any of its roots).
  */
 export function compilePostgresTraceCandidates(
   schema: string,
   selection: TraceSelection & { scope?: TraceQueryTenantScope },
   columns: string,
   deltaWindow?: { xactId: string; cursorId: string; safeHorizon: string },
+  allRoots = false,
 ): { ctes: string[]; values: unknown[] } {
   const relationCollections = collectRelationCollections(selection.where);
   const { root, rest } = splitRootPredicate(selection.where);
@@ -654,11 +683,20 @@ export function compilePostgresTraceCandidates(
   );
 
   const predicateSql = compileConjunction(rest, values);
-  ctes.push(`candidates AS (
+  ctes.push(
+    allRoots
+      ? `candidates AS (
     SELECT ${columns}
     FROM root_scope r
     WHERE ${predicateSql}
-  )`);
+  )`
+      : `candidates AS (
+    SELECT DISTINCT ON (r."traceId") ${columns}
+    FROM root_scope r
+    WHERE ${predicateSql}
+    ORDER BY ${REPRESENTATIVE_ROOT_ORDER}
+  )`,
+  );
   return { ctes, values };
 }
 
@@ -680,6 +718,7 @@ export function compilePostgresTraceQuery(
     plan,
     `${TRACE_SELECT}${plan.paginationMode === 'delta' ? ', r."xactId"' : ''}`,
     deltaWindow,
+    plan.result === 'groups',
   );
   const candidates = `WITH ${ctes.join(',\n')}`;
 
@@ -697,6 +736,8 @@ FROM candidates`,
     return {
       text: `${candidates}
 SELECT * FROM candidates
+WHERE ("xactId", "cursorId") > ($3::xid8, $4::bigint)
+  AND "xactId" < $5::xid8
 ORDER BY "xactId" ASC, "cursorId" ASC
 LIMIT $${values.length}`,
       values,
@@ -812,7 +853,7 @@ function discoveryRegistry(scope: TrustedTraceQueryValuesPlan['predicateScope'])
 }
 
 function discoverySource(scope: TrustedTraceQueryValuesPlan['predicateScope']): string {
-  if (scope === 'trace') return 'root_scope r';
+  if (scope === 'trace') return 'trace_roots r';
   if (scope === 'spans') return 'current_spans s';
   if (scope === 'scores') return 'current_scores s';
   return 'current_feedback s';
@@ -822,11 +863,19 @@ function discoveryCollections(scope: TrustedTraceQueryValuesPlan['predicateScope
   return scope === 'trace' ? new Set() : new Set([scope]);
 }
 
+/** Trace-level discovery reads each trace's representative root only. */
+const TRACE_ROOTS_CTE = `trace_roots AS (
+    SELECT DISTINCT ON (r."traceId") r.*
+    FROM root_scope r
+    ORDER BY ${REPRESENTATIVE_ROOT_ORDER}
+  )`;
+
 export function compilePostgresTraceQueryObservedFields(
   schema: string,
   plan: TrustedTraceQueryObservedFieldsPlan,
 ): CompiledPostgresTraceQuery {
   const { ctes, values } = compilePostgresTraceScope(schema, plan, new Set(), plan.scope);
+  ctes.push(TRACE_ROOTS_CTE);
   const searchParameter = values.length + 1;
   const search = plan.search ? `AND strpos(lower('metadata.' || entry.key), lower($${searchParameter})) > 0` : '';
   if (plan.search) values.push(plan.search);
@@ -834,7 +883,7 @@ export function compilePostgresTraceQueryObservedFields(
   return {
     text: `WITH ${ctes.join(',\n')}
 SELECT 'metadata.' || entry.key AS path, count(*)::bigint AS occurrences
-FROM root_scope r
+FROM trace_roots r
 CROSS JOIN LATERAL jsonb_each(CASE WHEN jsonb_typeof(r."metadataRaw") = 'object' THEN r."metadataRaw" ELSE '{}'::jsonb END) entry
 WHERE jsonb_typeof(entry.value) = 'string'
   AND btrim(entry.value #>> '{}') <> ''
@@ -860,13 +909,14 @@ export function compilePostgresTraceQueryValues(
     discoveryCollections(plan.predicateScope),
     plan.scope,
   );
+  if (plan.predicateScope === 'trace') ctes.push(TRACE_ROOTS_CTE);
   let extracted: string;
   if (plan.predicateScope === 'trace' && plan.path === 'tags') {
     // One row per (trace, distinct tag) so the outer count is a per-trace count.
-    extracted = `SELECT value FROM (SELECT DISTINCT r."traceId", UNNEST(r."tags") AS value FROM root_scope r) t`;
+    extracted = `SELECT value FROM (SELECT DISTINCT r."traceId", UNNEST(r."tags") AS value FROM trace_roots r) t`;
   } else if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
     const keyParameter = `$${values.length + 1}`;
-    extracted = `SELECT ${traceMetadataValueSql(keyParameter)}::text AS value FROM root_scope r`;
+    extracted = `SELECT ${traceMetadataValueSql(keyParameter)}::text AS value FROM trace_roots r`;
     values.push(plan.path.slice('metadata.'.length));
   } else {
     const field = fieldSql(discoveryRegistry(plan.predicateScope), plan.path as TraceQueryCanonicalField);
@@ -1034,6 +1084,7 @@ function traceRowToResult(row: Record<string, unknown>) {
     name: row.name,
     entityId: row.entityId ?? null,
     parentSpanId: row.parentSpanId ?? null,
+    externalParentSpanId: row.externalParentSpanId ?? null,
     createdAt: asIsoTimestamp(row.startedAt),
     metadata: row.metadata ?? null,
     inputPreview: readPreview(row.inputPreview),

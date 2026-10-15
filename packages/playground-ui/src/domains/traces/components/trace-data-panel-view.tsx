@@ -19,6 +19,7 @@ import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
 import { useTraceSearch } from '../hooks/use-trace-search';
 import type { TraceUsageSummary } from '../trace-list-columns';
 import type { LightSpanRecord } from '../types';
+import { getEarliestRootSpan } from '../utils/span-utils';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
 import { TraceIdButton } from './trace-id-button';
 import { TraceSpanTimeline } from './trace-span-timeline';
@@ -288,6 +289,7 @@ export function TraceDataPanelView({
         // rendered several components deeper.
         results.map(span => ({ ...span, matchedInPayloadOnly: payloadOnlyMatchIds.has(span.spanId) })),
         anchorSpanId,
+        { groupExternalRoots: true },
       ),
     [results, payloadOnlyMatchIds, anchorSpanId],
   );
@@ -301,7 +303,7 @@ export function TraceDataPanelView({
   }, [hierarchicalSpans]);
 
   const rootSpan = useMemo(
-    () => (anchorSpanId ? spans?.find(s => s.spanId === anchorSpanId) : spans?.find(s => s.parentSpanId == null)),
+    () => (anchorSpanId ? spans?.find(s => s.spanId === anchorSpanId) : getEarliestRootSpan(spans)),
     [spans, anchorSpanId],
   );
   const handleSpanClick = (id: string) => {

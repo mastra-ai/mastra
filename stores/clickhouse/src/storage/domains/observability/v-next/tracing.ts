@@ -175,7 +175,7 @@ export async function getTraceLight(
 ): Promise<GetTraceLightResponse | null> {
   const result = await client.query({
     query: `
-      SELECT traceId, spanId, parentSpanId, name,
+      SELECT traceId, spanId, parentSpanId, externalParentSpanId, name,
         entityType, entityId, entityName,
         spanType, error, isEvent,
         startedAt, endedAt

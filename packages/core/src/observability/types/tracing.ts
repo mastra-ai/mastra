@@ -2057,14 +2057,15 @@ export interface TracingOptions {
   requestContextKeys?: string[];
   /**
    * Trace ID to use for this execution (1-32 hexadecimal characters).
-   * If provided, this trace will be part of the specified trace rather than starting a new one.
+   * If provided, the run joins that trace as a top-level run instead of starting a new trace.
    */
   traceId?: string;
   /**
    * Parent span ID to use for this execution (1-16 hexadecimal characters).
    * Intended for correlating with an external tracing system (e.g. an
    * OpenTelemetry span in the calling service): the id is exported for
-   * external tracing but is not treated as a parent within Mastra storage.
+   * external tracing and stored as `externalParentSpanId` instead of
+   * `parentSpanId`, so the run is a top-level run in Mastra storage.
    */
   parentSpanId?: string;
   /**

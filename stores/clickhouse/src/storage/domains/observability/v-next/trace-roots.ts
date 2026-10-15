@@ -29,7 +29,7 @@ import { compileClickHouseTraceRootPayloads, toTraceRootRowKey, traceRootRowKey 
 
 /**
  * Get the root span for a trace, reading from trace_roots as compatibility path.
- * Uses ordinary LIMIT 1 (duplicates are byte-identical per design).
+ * A trace can have several roots; this returns the earliest (by startedAt, then spanId).
  */
 export async function getRootSpan(
   client: ClickHouseClient,
@@ -40,6 +40,7 @@ export async function getRootSpan(
       SELECT *
       FROM ${TABLE_TRACE_ROOTS}
       WHERE traceId = {traceId:String}
+      ORDER BY startedAt, spanId
       LIMIT 1
     `,
     query_params: { traceId: args.traceId },
@@ -73,6 +74,7 @@ const LIGHT_TRACE_ROOT_FIELDS = [
   'traceId',
   'spanId',
   'parentSpanId',
+  'externalParentSpanId',
   'name',
   'spanType',
   'isEvent',

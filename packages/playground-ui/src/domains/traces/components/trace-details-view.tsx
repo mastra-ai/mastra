@@ -31,7 +31,10 @@ export function TraceDetailsView({
   onSpanSelect,
   selectedSpanId,
 }: TraceDetailsViewProps) {
-  const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(spans ?? []), [spans]);
+  const hierarchicalSpans = useMemo(
+    () => formatHierarchicalSpans(spans ?? [], undefined, { groupExternalRoots: true }),
+    [spans],
+  );
 
   const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>([]);
 

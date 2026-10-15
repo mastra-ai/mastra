@@ -93,11 +93,11 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
 
     // Create the table (or add missing columns if it already exists)
     await this.#db.createTable({ tableName: TABLE_SPANS, schema: SPAN_SCHEMA });
-    // Add requestContext column for backwards compatibility with existing databases
+    // Add columns newer than existing tables; the writer drops values for columns a table lacks
     await this.#db.alterTable({
       tableName: TABLE_SPANS,
       schema: SPAN_SCHEMA,
-      ifNotExists: ['requestContext'],
+      ifNotExists: ['requestContext', 'externalParentSpanId'],
     });
   }
 
@@ -284,6 +284,7 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
           SELECT *
           FROM ${TABLE_SPANS} ${engine.startsWith('ReplacingMergeTree') ? 'FINAL' : ''}
           WHERE traceId = {traceId:String} AND (parentSpanId IS NULL OR parentSpanId = '')
+          ORDER BY startedAt, spanId
           LIMIT 1
         `,
         query_params: { traceId },
@@ -369,7 +370,7 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
       const engine = TABLE_ENGINES[TABLE_SPANS] ?? 'MergeTree()';
       const result = await this.client.query({
         query: `
-          SELECT traceId, spanId, parentSpanId, name,
+          SELECT traceId, spanId, parentSpanId, externalParentSpanId, name,
             entityType, entityId, entityName,
             spanType, error, isEvent,
             startedAt, endedAt, createdAt, updatedAt

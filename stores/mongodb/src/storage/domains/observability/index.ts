@@ -508,7 +508,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     const { traceId } = args;
     try {
       const collection = await this.getCollection(TABLE_SPANS);
-      const span = await collection.findOne({ traceId, parentSpanId: null });
+      const span = await collection.findOne({ traceId, parentSpanId: null }, { sort: { startedAt: 1, spanId: 1 } });
 
       if (!span) {
         return null;

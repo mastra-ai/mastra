@@ -2,6 +2,7 @@ import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useRef } from 'react';
 import type { UISpan, UISpanStyle } from '../types';
+import { getSpanNameTitle } from './shared';
 import { TimelineStructureSign } from './timeline-structure-sign';
 import { Txt } from '@/ds/components/Txt';
 import { focusRing, focusRingInset } from '@/ds/primitives/transitions';
@@ -58,7 +59,7 @@ export function TimelineNameCol({
   return (
     <div
       ref={rowRef}
-      aria-label={`View details for span ${span.name}`}
+      aria-label={span.isVirtual ? span.name : `View details for span ${span.name}`}
       aria-selected={isSelected}
       // The whole row selects the span; the name button is the keyboard target and its click bubbles here.
       onClick={() => onSpanClick?.(span.id)}
@@ -96,7 +97,8 @@ export function TimelineNameCol({
             variant="caption"
             data-highlight={span.matchedInPayloadOnly ? undefined : ''}
             data-highlight-indirect={span.matchedInPayloadOnly ? '' : undefined}
-            title={span.matchedInPayloadOnly ? 'Matches your search in this span’s details' : undefined}
+            title={getSpanNameTitle(span)}
+            tone={span.isVirtual ? 'muted' : undefined}
             className="min-w-0 truncate"
           >
             {span.name}

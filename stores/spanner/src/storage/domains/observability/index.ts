@@ -186,12 +186,12 @@ export class ObservabilitySpanner extends ObservabilityStorage {
 
   async init(): Promise<void> {
     await this.db.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
-    // `requestContext` was added after the initial schema shipped; backfill on
-    // existing tables so older deployments keep working when they upgrade.
+    // `requestContext` and `externalParentSpanId` were added after the initial schema
+    // shipped; backfill on existing tables so older deployments keep working when they upgrade.
     await this.db.alterTable({
       tableName: TABLE_SPANS,
       schema: TABLE_SCHEMAS[TABLE_SPANS],
-      ifNotExists: ['requestContext'],
+      ifNotExists: ['requestContext', 'externalParentSpanId'],
     });
     if (!this.disableMetrics) {
       await metricsOps.ensureMetricsTable(this.database, {
@@ -402,7 +402,8 @@ export class ObservabilitySpanner extends ObservabilityStorage {
       const tableName = quoteIdent(TABLE_SPANS, 'table name');
       const [rows] = await this.database.run({
         sql: `SELECT * FROM ${tableName} WHERE ${quoteIdent('traceId', 'column name')} = @traceId
-              AND ${quoteIdent('parentSpanId', 'column name')} IS NULL LIMIT 1`,
+              AND ${quoteIdent('parentSpanId', 'column name')} IS NULL
+              ORDER BY ${quoteIdent('startedAt', 'column name')} ASC, ${quoteIdent('spanId', 'column name')} ASC LIMIT 1`,
         params: { traceId },
         json: true,
       });
@@ -459,7 +460,8 @@ export class ObservabilitySpanner extends ObservabilityStorage {
       const tableName = quoteIdent(TABLE_SPANS, 'table name');
       const [rows] = await this.database.run({
         sql: `SELECT ${quoteIdent('traceId', 'column name')}, ${quoteIdent('spanId', 'column name')},
-              ${quoteIdent('parentSpanId', 'column name')}, ${quoteIdent('name', 'column name')},
+              ${quoteIdent('parentSpanId', 'column name')}, ${quoteIdent('externalParentSpanId', 'column name')},
+              ${quoteIdent('name', 'column name')},
               ${quoteIdent('entityType', 'column name')}, ${quoteIdent('entityId', 'column name')},
               ${quoteIdent('entityName', 'column name')},
               ${quoteIdent('spanType', 'column name')}, ${quoteIdent('error', 'column name')},

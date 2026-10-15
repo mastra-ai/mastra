@@ -12,9 +12,12 @@ import {
   selectTraceQueryRoots,
   THREAD_QUERY_CONFORMANCE_CASES,
   THREAD_QUERY_FIXTURE_DATA,
+  THREAD_QUERY_MULTI_ROOT_CASES,
   TRACE_QUERY_CONFORMANCE_CASES,
   TRACE_QUERY_FEEDBACK_REPLACEMENT_SCENARIOS,
   TRACE_QUERY_FIXTURE_DATA,
+  TRACE_QUERY_MULTI_ROOT_CASES,
+  TRACE_QUERY_MULTI_ROOT_FIXTURE_DATA,
   TRACE_QUERY_ORDINAL_FIXTURE_DATA,
   TRACE_QUERY_SCORE_REPLACEMENT_CASES,
   TRACE_QUERY_SCORE_REPLACEMENT_FIXTURE_DATA,
@@ -138,6 +141,16 @@ describe('trace-query reference evaluator', () => {
     }
   }
 
+  describe('traces with several roots', () => {
+    for (const testCase of TRACE_QUERY_MULTI_ROOT_CASES) {
+      it(testCase.name, () => {
+        const response = evaluateTraceQueryRequest(TRACE_QUERY_MULTI_ROOT_FIXTURE_DATA, testCase.request);
+        if (!('traces' in response)) throw new Error('Expected traces');
+        expect(response.traces.map(({ traceId, rootSpanId }) => ({ traceId, rootSpanId }))).toEqual(testCase.expected);
+      });
+    }
+  });
+
   for (const testCase of TRACE_QUERY_TIED_TIMESTAMP_CASES) {
     it(testCase.name, () => {
       expect(
@@ -234,6 +247,7 @@ describe('trace-query reference evaluator', () => {
           name: 'root-a',
           entityId: null,
           parentSpanId: null,
+          externalParentSpanId: null,
           createdAt: '2026-08-05T10:00:00.000Z',
           metadata: TRACE_QUERY_FIXTURE_DATA.spans.find(span => span.spanId === 'root-a')?.metadata,
           inputPreview: null,
@@ -330,6 +344,14 @@ describe('thread-query reference evaluator', () => {
   for (const testCase of THREAD_QUERY_CONFORMANCE_CASES) {
     it(testCase.name, () => {
       expect(evaluateThreadQueryRequest(THREAD_QUERY_FIXTURE_DATA, testCase.request, testCase.scope).threads).toEqual(
+        testCase.expected,
+      );
+    });
+  }
+
+  for (const testCase of THREAD_QUERY_MULTI_ROOT_CASES) {
+    it(testCase.name, () => {
+      expect(evaluateThreadQueryRequest(TRACE_QUERY_MULTI_ROOT_FIXTURE_DATA, testCase.request).threads).toEqual(
         testCase.expected,
       );
     });

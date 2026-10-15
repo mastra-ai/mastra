@@ -48,7 +48,9 @@ const result = await mastraClient.queryTraces({
 
 A `spans.some` clause matches when one span satisfies all its conditions. In this example, the same span must be a tool call and have an error. Use `spans.none` to find traces with no spans matching the conditions.
 
-Span clauses examine the current root span and current child spans. The root `timeRange` applies only to the selected current root's `startedAt`. Related spans can participate even when their own timestamps are outside that range. Related records correlate only through a matching non-null `traceId`.
+A trace can have more than one root span, for example when one request instrumented outside Mastra calls several agents or workflows with the same `traceId`. The root `timeRange` and trace-scope predicates, such as `entityName`, `tags`, and `metadata.<key>`, are checked against each root span. A trace matches when at least one root starts in the range and satisfies them. The earliest such root, by `startedAt` and then by the lowest span ID, is the trace's representative root, and the result row describes it. Without trace-scope predicates, the representative root is the trace's first root in the range.
+
+Span clauses examine all current spans in the trace, roots and children. Related spans can participate even when their own timestamps are outside the root `timeRange`. Related records correlate only through a matching non-null `traceId`.
 
 ## Query traces with the CLI
 
@@ -176,7 +178,7 @@ String comparisons are case-sensitive, and literals are never coerced. `matches`
 
 ### Filter by root duration
 
-At trace scope, `durationMs` is the current completed root span's elapsed time in milliseconds. The value is derived from `endedAt - startedAt` when the query runs:
+At trace scope, `durationMs` is a completed root span's elapsed time in milliseconds. The value is derived from `endedAt - startedAt` when the query runs:
 
 ```typescript
 const slowRootTraces = {
@@ -186,13 +188,13 @@ const slowRootTraces = {
 }
 ```
 
-This top-level predicate doesn't inspect child spans. In contrast, `spans.some` with a `durationMs` predicate examines the current root span and current child spans, so a long child can satisfy that clause even when its root is shorter.
+This top-level predicate doesn't inspect child spans. In contrast, `spans.some` with a `durationMs` predicate examines root and child spans, so a long child can satisfy that clause even when its root is shorter.
 
 Trace queries exclude incomplete roots before evaluating predicates. As a result, `{ op: 'notExists', path: 'durationMs' }` doesn't find running traces or malformed roots without a usable `endedAt`.
 
 ### Filter by context identifiers
 
-`runId`, `sessionId`, `userId`, and `organizationId` are available at trace scope and inside `spans.some` / `spans.none`. Trace-scope predicates read the current root span. Span-scope predicates bind to one related current span, so a run recorded only on a child span is found through `spans.some`:
+`runId`, `sessionId`, `userId`, and `organizationId` are available at trace scope and inside `spans.some` / `spans.none`. Trace-scope predicates read root spans and match when any root qualifies. Span-scope predicates bind to one related current span, so a run recorded only on a child span is found through `spans.some`:
 
 ```typescript
 const sessionTracesWithRun = {
@@ -293,7 +295,7 @@ const versionedRetrieval = {
 
 ### Filter by metadata
 
-Use `metadata.<key>` paths for custom dimensions stored on the current root span. Metadata predicates compare trimmed, non-empty string values exactly and case-sensitively. Leading and trailing whitespace in a stored string value is ignored. Values empty after trimming count as missing. Null, numeric, boolean, object, and array values also count as missing.
+Use `metadata.<key>` paths for custom dimensions stored on root spans. Metadata predicates compare trimmed, non-empty string values exactly and case-sensitively. Leading and trailing whitespace in a stored string value is ignored. Values empty after trimming count as missing. Null, numeric, boolean, object, and array values also count as missing.
 
 ```typescript
 const messageTrace = {
@@ -320,7 +322,7 @@ Trace-query discovery returns executable top-level string metadata fields observ
 
 ### Filter by tags
 
-Tags are a list of strings stored on the current root span, so they use collection operators instead of the scalar `in` and `notIn` operators. This query finds production traces tagged for manual review that don't carry the `archived` tag:
+Tags are a list of strings stored on root spans, so they use collection operators instead of the scalar `in` and `notIn` operators. This query finds production traces tagged for manual review that don't carry the `archived` tag:
 
 ```typescript
 const manualReview = {
@@ -488,7 +490,7 @@ Numbered-page handoff cursors and delta cursors also bind the authorization stat
 
 ### Trusted tenant scope
 
-Hosts that serve more than one tenant supply a trusted scope outside the query document. The server reads the reserved `organizationId` request-context key, which only server-side authentication can set, and passes `{ organizationId }` to the planner. The scope is carried on the trusted plan and ANDed into every scan: current roots, related spans and both discovery routes. A related record from another tenant that shares a `traceId` never qualifies a trace.
+Hosts that serve more than one tenant supply a trusted scope outside the query document. The server reads the reserved `organizationId` request-context key, which only server-side authentication can set, and passes `{ organizationId }` to the planner. The scope is carried on the trusted plan and ANDed into every scan: root spans, related spans and both discovery routes. A related record from another tenant that shares a `traceId` never qualifies a trace.
 
 Hosts that call storage directly can pass a fuller scope to `planTraceQuery()`, `planTraceQueryObservedFields()`, and `planTraceQueryValues()`:
 
@@ -554,7 +556,7 @@ The response separates canonical fields from observed metadata fields:
 }
 ```
 
-Canonical fields come from the same registry used to validate trace queries. They don't consume `limit`. The canonical order follows that registry. `observedFields` contains top-level string `metadata.<key>` paths found on qualifying current root spans. These fields are ordered by `occurrences` descending, then by path. Nested metadata, keys containing `.`, empty keys, non-string values, and oversized paths are omitted.
+Canonical fields come from the same registry used to validate trace queries. They don't consume `limit`. The canonical order follows that registry. `observedFields` contains top-level string `metadata.<key>` paths found on qualifying root spans. These fields are ordered by `occurrences` descending, then by path. Nested metadata, keys containing `.`, empty keys, non-string values, and oversized paths are omitted.
 
 `predicateScope` selects the local predicate grammar. It isn't an authorization scope:
 

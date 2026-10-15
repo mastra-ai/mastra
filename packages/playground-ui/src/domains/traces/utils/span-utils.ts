@@ -3,6 +3,22 @@ import { toDate } from '@/utils/date-format';
 
 type MessageLike = { role?: string; content?: unknown };
 
+type RootSpanCandidate = { spanId: string; parentSpanId?: string | null; startedAt: Date | string };
+
+/**
+ * The trace's earliest-started root span (ties broken by span id). A trace started outside
+ * Mastra can hold several roots; this one stands for the trace (summary, scores, dataset items).
+ */
+export function getEarliestRootSpan<T extends RootSpanCandidate>(spans: readonly T[] | undefined): T | undefined {
+  let earliest: T | undefined;
+  for (const span of spans ?? []) {
+    if (span.parentSpanId != null) continue;
+    const diff = earliest ? new Date(span.startedAt).getTime() - new Date(earliest.startedAt).getTime() : -1;
+    if (!earliest || diff < 0 || (diff === 0 && span.spanId < earliest.spanId)) earliest = span;
+  }
+  return earliest;
+}
+
 export function getSpanDurationMs(
   startedAt: Date | string | null | undefined,
   endedAt: Date | string | null | undefined,

@@ -19,6 +19,7 @@ import {
   durationMsSql,
   ParameterBuilder,
   runWithClickHouseTraceQueryTimeout,
+  selectRepresentativeRoots,
   TRACE_STATUS_SQL,
   traceMetadataValueSql,
 } from './trace-query';
@@ -51,24 +52,17 @@ const COMPARISON_SQL = { eq: '=', ne: '!=', lt: '<', lte: '<=', gt: '>', gte: '>
 /**
  * Compiles a trusted aggregate plan. The plan's caps are enforced by the planner and trusted here.
  *
- * Every candidate root is first reduced to a `facts` row (dimension values, duration, error flag,
- * countDistinct inputs, bucket). Without `interval`, groups are filtered, ordered, and limited in
- * one grouped select. With `interval`, one `GROUPING SETS` pass computes both the whole-window
- * group rows and the per-bucket rows: group rows are ranked (having → orderBy), and each bucket
- * row inherits its group's rank. ClickHouse re-executes a CTE at every reference, so this keeps
+ * Each trace is first reduced to a `facts` row (dimension values, duration, error flag,
+ * countDistinct inputs, bucket) read from its representative root: of its candidate roots, the
+ * earliest by `startedAt`, then `dedupeKey`. Without `interval`, groups are filtered, ordered, and
+ * limited in one grouped select. With `interval`, one `GROUPING SETS` pass computes both the
+ * whole-window group rows and the per-bucket rows: group rows are ranked (having → orderBy), and
+ * each bucket row inherits its group's rank. ClickHouse re-executes a CTE at every reference, so this keeps
  * the candidate scan to a single pass instead of joining bucket rows back to a ranked CTE.
  */
 export function compileClickHouseTraceAggregate(plan: TrustedTraceAggregatePlan): CompiledClickHouseTraceQuery {
   const parameters = new ParameterBuilder();
-  const ctes = compileClickHouseTraceCandidates(plan, '*', parameters, { oneRootPerTrace: true });
-  // Candidates may hold unmerged copies of a trace's root; count each trace once, keeping the copy
-  // with the lowest dedupeKey.
-  ctes.push(`trace_roots AS (
-    SELECT *
-    FROM candidates
-    ORDER BY traceId, dedupeKey
-    LIMIT 1 BY traceId
-  )`);
+  const ctes = compileClickHouseTraceCandidates(plan, '*', parameters);
 
   const dimensionSql = (field: TraceAggregateDimension): string => {
     if (field.startsWith('metadata.')) {
@@ -83,28 +77,33 @@ export function compileClickHouseTraceAggregate(plan: TrustedTraceAggregatePlan)
 
   const dimensionColumns = plan.dimensions.map((_, index) => `d${index}`);
   const distinctColumns = new Map<string, string>();
-  const factColumns = plan.dimensions.map(
+  // Values read from each trace's representative root.
+  const rootFacts = plan.dimensions.map(
     (dimension, index) => `CAST(${dimensionSql(dimension)} AS Nullable(String)) AS d${index}`,
   );
   for (const measure of plan.measures) {
     if (measure.type !== 'countDistinct' || distinctColumns.has(measure.field)) continue;
     const column = `cd${distinctColumns.size}`;
     distinctColumns.set(measure.field, column);
-    factColumns.push(`CAST(${distinctSql(measure.field)} AS Nullable(String)) AS ${column}`);
+    rootFacts.push(`CAST(${distinctSql(measure.field)} AS Nullable(String)) AS ${column}`);
   }
-  factColumns.push(
+  rootFacts.push(
+    `r.traceId AS traceId`,
     `toFloat64(${durationMsSql('r.startedAt', 'r.endedAt')}) AS durationMs`,
     `isNotNull(r.error) AS isError`,
-    `cityHash64(r.traceId) AS traceSeed`,
   );
   if (plan.interval !== undefined) {
     const intervalMs = coreStorage.TRACE_AGGREGATE_INTERVAL_MS[plan.interval];
     if (intervalMs === undefined) throw new Error(`Unsupported trusted trace-aggregate interval: ${plan.interval}`);
     // UTC-aligned bucket containing startedAt; may begin before timeRange.from.
-    factColumns.push(
+    rootFacts.push(
       `fromUnixTimestamp64Milli(intDiv(toUnixTimestamp64Milli(r.startedAt), ${intervalMs}) * ${intervalMs}, 'UTC') AS bucket`,
     );
   }
+  ctes.push(`per_trace AS (
+    ${selectRepresentativeRoots(rootFacts.join(',\n      '), 'candidates')}
+  )`);
+  const factColumns = ['r.*', 'cityHash64(r.traceId) AS traceSeed'];
   const measureKinds = new Set(plan.measures.map(measure => measureRule(measure.name)?.kind));
   const hasCost = measureKinds.has('cost');
   let usageJoin = '';
@@ -125,7 +124,7 @@ export function compileClickHouseTraceAggregate(plan: TrustedTraceAggregatePlan)
   }
   ctes.push(`facts AS (
     SELECT ${factColumns.join(',\n      ')}
-    FROM trace_roots r${usageJoin}
+    FROM per_trace r${usageJoin}
   )`);
 
   // More than one distinct priced unit in the group; NULL (treated as false) when nothing is priced.

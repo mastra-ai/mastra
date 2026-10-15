@@ -1,6 +1,7 @@
 import { createClient } from '@clickhouse/client';
 import type { ClickHouseClient } from '@clickhouse/client';
 import { MastraError } from '@mastra/core/error';
+import { SpanType } from '@mastra/core/observability';
 import { TABLE_SPANS, SPAN_SCHEMA } from '@mastra/core/storage';
 import { describe, expect, it, beforeAll, afterAll, beforeEach } from 'vitest';
 
@@ -1040,5 +1041,29 @@ describe('ClickHouse Migration Required Error', () => {
     // Now call init() again - should NOT throw
     const observability = new ObservabilityStorageClickhouse({ client });
     await expect(observability.init()).resolves.not.toThrow();
+  });
+  it('adds the outside parent span ID column to an existing table so its values are kept', async () => {
+    // A table created before the column existed.
+    const { externalParentSpanId: _, ...olderSchema } = SPAN_SCHEMA;
+    await new ClickhouseDB({ client, ttl: undefined }).createTable({ tableName: TABLE_SPANS, schema: olderSchema });
+
+    const observability = new ObservabilityStorageClickhouse({ client });
+    await observability.init();
+    await observability.createSpan({
+      span: {
+        traceId: 'trace-outside',
+        spanId: 'root',
+        parentSpanId: null,
+        externalParentSpanId: 'outside-parent',
+        name: 'agent run',
+        spanType: SpanType.AGENT_RUN,
+        isEvent: false,
+        startedAt: new Date('2026-08-01T10:00:00.000Z'),
+        endedAt: new Date('2026-08-01T10:00:01.000Z'),
+      },
+    });
+
+    const root = await observability.getRootSpan({ traceId: 'trace-outside' });
+    expect(root?.span).toMatchObject({ parentSpanId: null, externalParentSpanId: 'outside-parent' });
   });
 });

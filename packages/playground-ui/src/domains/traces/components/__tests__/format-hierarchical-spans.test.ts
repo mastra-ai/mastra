@@ -161,7 +161,7 @@ describe('formatHierarchicalSpans', () => {
     expect(getAt(result, 0).latency).toBe(0);
   });
 
-  it('extends the displayed root endTime to the overall latest endedAt across the spans', () => {
+  it('extends a single root endTime to a descendant that ends after it', () => {
     // When the anchor recorded ending before a descendant, the timeline is widened so the
     // root bar covers the whole subtree.
     const result = formatHierarchicalSpans([
@@ -183,5 +183,106 @@ describe('formatHierarchicalSpans', () => {
     );
     expect(result[0].id).toBe('anchor');
     expect(result[0].endTime).toBe('2026-05-12T10:00:03.000Z');
+  });
+
+  it('extends each root only to the end of its own subtree when a trace has several roots', () => {
+    const result = formatHierarchicalSpans([
+      span('first-root', null, { startedAt: '2026-05-12T10:00:00.000Z', endedAt: '2026-05-12T10:00:01.000Z' }),
+      span('late-child', 'first-root', { startedAt: '2026-05-12T10:00:00.500Z', endedAt: '2026-05-12T10:00:02.000Z' }),
+      span('second-root', null, { startedAt: '2026-05-12T10:00:03.000Z', endedAt: '2026-05-12T10:00:09.000Z' }),
+    ]);
+
+    expect(result.map(root => [root.id, root.endTime, root.latency])).toEqual([
+      ['first-root', '2026-05-12T10:00:02.000Z', 2000],
+      ['second-root', '2026-05-12T10:00:09.000Z', 6000],
+    ]);
+  });
+
+  describe('grouping roots started outside Mastra', () => {
+    /** A one-second root starting `second` seconds into the trace. */
+    const at = (spanId: string, second: number, overrides: Partial<Span> = {}) =>
+      span(spanId, null, {
+        startedAt: `2026-05-12T10:00:0${second}.000Z`,
+        endedAt: `2026-05-12T10:00:0${second + 1}.000Z`,
+        ...overrides,
+      });
+
+    const sharedParentRoots = [
+      span('second-run', null, {
+        startedAt: '2026-05-12T10:00:02.000Z',
+        endedAt: '2026-05-12T10:00:05.000Z',
+        externalParentSpanId: 'abcdef0123456789',
+      }),
+      span('first-run', null, {
+        startedAt: '2026-05-12T10:00:00.000Z',
+        endedAt: '2026-05-12T10:00:01.000Z',
+        externalParentSpanId: 'abcdef0123456789',
+      }),
+      span('tool', 'first-run', { startedAt: '2026-05-12T10:00:00.200Z', endedAt: '2026-05-12T10:00:00.800Z' }),
+    ];
+
+    it('wraps roots that share an outside parent in one virtual node', () => {
+      const result = formatHierarchicalSpans(sharedParentRoots, undefined, { groupExternalRoots: true });
+
+      expect(result).toHaveLength(1);
+      const group = getAt(result, 0);
+      expect(group).toMatchObject({
+        id: 'external:abcdef0123456789',
+        name: 'Started outside Mastra',
+        type: 'external_parent',
+        isVirtual: true,
+        externalParentSpanId: 'abcdef0123456789',
+        startTime: '2026-05-12T10:00:00.000Z',
+        endTime: '2026-05-12T10:00:05.000Z',
+        latency: 5000,
+      });
+      expect(getChildren(group).map(root => root.id)).toEqual(['first-run', 'second-run']);
+      expect(getChildren(getAt(getChildren(group), 0)).map(child => child.id)).toEqual(['tool']);
+    });
+
+    it('leaves the roots at the top level unless grouping is asked for', () => {
+      const result = formatHierarchicalSpans(sharedParentRoots);
+
+      expect(result.map(root => root.id)).toEqual(['first-run', 'second-run']);
+      expect(result.some(root => root.isVirtual)).toBe(false);
+    });
+
+    it('does not wrap a single root that has an outside parent', () => {
+      const result = formatHierarchicalSpans(
+        [span('only-run', null, { externalParentSpanId: 'abcdef0123456789' })],
+        undefined,
+        {
+          groupExternalRoots: true,
+        },
+      );
+
+      expect(result.map(root => root.id)).toEqual(['only-run']);
+    });
+
+    it('does not merge roots whose outside parents differ', () => {
+      const result = formatHierarchicalSpans(
+        [at('run-a', 0, { externalParentSpanId: 'parent-a' }), at('run-b', 2, { externalParentSpanId: 'parent-b' })],
+        undefined,
+        { groupExternalRoots: true },
+      );
+
+      expect(result.map(root => root.id)).toEqual(['run-a', 'run-b']);
+    });
+
+    it('places the group where its earliest root starts, among the other roots', () => {
+      const result = formatHierarchicalSpans(
+        [
+          at('grouped-late', 4, { externalParentSpanId: 'shared' }),
+          at('ungrouped', 2),
+          at('grouped-early', 1, { externalParentSpanId: 'shared' }),
+          at('before-all', 0),
+        ],
+        undefined,
+        { groupExternalRoots: true },
+      );
+
+      expect(result.map(root => root.id)).toEqual(['before-all', 'external:shared', 'ungrouped']);
+      expect(getChildren(getAt(result, 1)).map(root => root.id)).toEqual(['grouped-early', 'grouped-late']);
+    });
   });
 });

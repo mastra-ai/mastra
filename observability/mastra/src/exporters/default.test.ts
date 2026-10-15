@@ -288,8 +288,16 @@ describe('DefaultExporter', () => {
         const records = mockObservabilityStore.batchCreateSpans.mock.calls.flatMap((call: any) => call[0].records);
         expect(records).toEqual(
           expect.arrayContaining([
-            expect.objectContaining({ spanId: 'external-root', parentSpanId: null }),
-            expect.objectContaining({ spanId: 'resumed-root', parentSpanId: 'suspended-span' }),
+            expect.objectContaining({
+              spanId: 'external-root',
+              parentSpanId: null,
+              externalParentSpanId: 'external-parent',
+            }),
+            expect.objectContaining({
+              spanId: 'resumed-root',
+              parentSpanId: 'suspended-span',
+              externalParentSpanId: null,
+            }),
           ]),
         );
       });

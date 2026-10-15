@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getSpanTimingLayout } from '../../utils/span-timing';
 import { formatHierarchicalSpans } from '../format-hierarchical-spans';
 import { TraceSpanTimeline } from '../trace-span-timeline';
-import { nestedSpanFixture } from './fixtures/trace-data-panel-view';
+import { nestedSpanFixture, rootSpanFixture } from './fixtures/trace-data-panel-view';
 
 const scrollIntoView = vi.fn();
 Element.prototype.scrollIntoView = scrollIntoView;
@@ -25,11 +25,13 @@ const fixture = nestedSpanFixture.map(span =>
 const hierarchicalSpans = formatHierarchicalSpans(fixture);
 
 function Harness({
+  spans = hierarchicalSpans,
   initialExpanded = [],
   onSpanClick = () => {},
   revealSpanId,
   featuredSpanIds,
 }: {
+  spans?: typeof hierarchicalSpans;
   initialExpanded?: string[];
   onSpanClick?: (id: string) => void;
   revealSpanId?: string;
@@ -38,7 +40,7 @@ function Harness({
   const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>(initialExpanded);
   return (
     <TraceSpanTimeline
-      hierarchicalSpans={hierarchicalSpans}
+      hierarchicalSpans={spans}
       onSpanClick={onSpanClick}
       expandedSpanIds={expandedSpanIds}
       setExpandedSpanIds={setExpandedSpanIds}
@@ -141,5 +143,27 @@ describe('TraceSpanTimeline', () => {
     render(<Harness />);
     const axis = screen.getByLabelText('Trace time axis');
     expect(axis.textContent).toBe('0 ms250 ms500 ms750 ms1.000 s');
+  });
+
+  it('runs the time axis over every root when a trace has several', () => {
+    // A 1s run, then a second 1s run starting 3s in: the axis must reach the second run's end.
+    const twoRoots = formatHierarchicalSpans([
+      ...rootSpanFixture,
+      ...rootSpanFixture.map(span => ({
+        ...span,
+        spanId: 'second-root',
+        name: 'second run',
+        startedAt: new Date('2026-06-01T10:00:03.000Z'),
+        endedAt: new Date('2026-06-01T10:00:04.000Z'),
+      })),
+    ]);
+    render(<Harness spans={twoRoots} />);
+
+    expect(screen.getByLabelText('Trace time axis').textContent).toBe('0 ms1.000 s2.000 s3.000 s4.000 s');
+    const bars = screen.getAllByTestId('span-timeline-bar').map(bar => [bar.style.left, bar.style.width]);
+    expect(bars).toEqual([
+      ['0%', '25%'],
+      ['75%', '25%'],
+    ]);
   });
 });

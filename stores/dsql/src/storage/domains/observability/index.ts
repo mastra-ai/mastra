@@ -232,7 +232,7 @@ export class ObservabilityDSQL extends ObservabilityStorage {
 
       const row = await this.#db.client.oneOrNone<SpanRecord>(
         `SELECT
-          "traceId", "spanId", "parentSpanId", "name",
+          "traceId", "spanId", "parentSpanId", "externalParentSpanId", "name",
           "entityType", "entityId", "entityName",
           "userId", "organizationId", "resourceId",
           "runId", "sessionId", "threadId", "requestId",
@@ -279,7 +279,7 @@ export class ObservabilityDSQL extends ObservabilityStorage {
 
       const row = await this.#db.client.oneOrNone<SpanRecord>(
         `SELECT
-          "traceId", "spanId", "parentSpanId", "name",
+          "traceId", "spanId", "parentSpanId", "externalParentSpanId", "name",
           "entityType", "entityId", "entityName",
           "userId", "organizationId", "resourceId",
           "runId", "sessionId", "threadId", "requestId",
@@ -289,7 +289,9 @@ export class ObservabilityDSQL extends ObservabilityStorage {
           "startedAtZ" as "startedAt", "endedAtZ" as "endedAt",
           "createdAtZ" as "createdAt", "updatedAtZ" as "updatedAt"
         FROM ${tableName}
-        WHERE "traceId" = $1 AND "parentSpanId" IS NULL`,
+        WHERE "traceId" = $1 AND "parentSpanId" IS NULL
+        ORDER BY "startedAtZ" ASC, "spanId" ASC
+        LIMIT 1`,
         [traceId],
       );
 
@@ -326,7 +328,7 @@ export class ObservabilityDSQL extends ObservabilityStorage {
 
       const spans = await this.#db.client.manyOrNone<SpanRecord>(
         `SELECT
-          "traceId", "spanId", "parentSpanId", "name",
+          "traceId", "spanId", "parentSpanId", "externalParentSpanId", "name",
           "entityType", "entityId", "entityName",
           "userId", "organizationId", "resourceId",
           "runId", "sessionId", "threadId", "requestId",
@@ -588,7 +590,7 @@ export class ObservabilityDSQL extends ObservabilityStorage {
       // Get paginated spans
       const spans = await this.#db.client.manyOrNone<SpanRecord>(
         `SELECT
-          r."traceId", r."spanId", r."parentSpanId", r."name",
+          r."traceId", r."spanId", r."parentSpanId", r."externalParentSpanId", r."name",
           r."entityType", r."entityId", r."entityName",
           r."userId", r."organizationId", r."resourceId",
           r."runId", r."sessionId", r."threadId", r."requestId",

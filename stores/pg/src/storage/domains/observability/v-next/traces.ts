@@ -3,7 +3,10 @@
  *
  * - `listTraces` / `getRootSpan` filter by `parentSpanId IS NULL`. The partial
  *   indexes declared in ddl.ts make this predicate selective enough to act as
- *   the root-span projection without a separate table.
+ *   the root-span projection without a separate table. A trace can have several
+ *   roots (for example several runs under one outside parent); each is judged
+ *   by its own current row and listed as its own row. `queryTraces` is the API
+ *   that lists a trace once, under its earliest matching root.
  * - `listBranches` filters by `spanType IN (BRANCH_SPAN_TYPES)` (or the
  *   user-supplied spanType when it's a branch type). Branches include nested
  *   anchors as well as root spans of the listed types.
@@ -47,44 +50,19 @@ function asIsoTimestamp(value: unknown): string {
 }
 
 /**
- * Ordering that picks the row representing a trace's current root.
- *
- * A trace can hold more than one root row. A span is written once when it
- * starts and again when it ends, and a durable run that suspends ends its root
- * span and opens a fresh one on resume. In both cases the newest row is the one
- * that describes the trace right now, and `cursorId` — a sequence assigned at
- * insert — is what "newest" means here. It also orders correctly where
- * timestamps cannot: a zero-duration span has `startedAt = endedAt`, and a
- * resumed root starts after the suspended root ended.
- */
-const ROOT_COLLAPSE_ORDER = '"cursorId" DESC';
-
-/**
  * Predicate that keeps only the winning row for each span — the ended row when
- * one exists, the newest row otherwise. Mirrors `SPAN_COLLAPSE_ORDER` as an
- * anti-join, for the same reason as {@link latestRootPredicate}.
+ * one exists, the newest (by `cursorId`) otherwise. A span is written once when
+ * it starts and again when it ends, so it has a row per write. Written as an
+ * anti-join rather than a `DISTINCT ON` so the outer query still scans the
+ * partial root indexes and streams rows in `LIMIT`-order. For root rows, `root`
+ * keeps the probe on root rows too.
  */
-function latestSpanPredicate(spanTable: string): string {
+function latestSpanPredicate(spanTable: string, { root = false } = {}): string {
   return `NOT EXISTS (
     SELECT 1 FROM ${spanTable} newer
     WHERE newer."traceId" = r."traceId"
-      AND newer."spanId" = r."spanId"
+      AND newer."spanId" = r."spanId"${root ? `\n      AND newer."parentSpanId" IS NULL` : ''}
       AND (newer."isPending" < r."isPending" OR (newer."isPending" = r."isPending" AND newer."cursorId" > r."cursorId"))
-  )`;
-}
-
-/**
- * Predicate that keeps only a trace's current root row, as an anti-join rather
- * than a `DISTINCT ON`. Written this way so the outer query still scans the
- * partial root indexes and streams rows in `LIMIT`-order; grouping first would
- * force every root in the table to be read before the first page came back.
- */
-function latestRootPredicate(spanTable: string): string {
-  return `NOT EXISTS (
-    SELECT 1 FROM ${spanTable} newer
-    WHERE newer."traceId" = r."traceId"
-      AND newer."parentSpanId" IS NULL
-      AND newer."cursorId" > r."cursorId"
   )`;
 }
 
@@ -94,11 +72,12 @@ export async function getRootSpan(
   args: GetRootSpanArgs,
 ): Promise<GetRootSpanResponse | null> {
   const table = qualifiedTable(schema, TABLE_SPAN_EVENTS);
+  // The trace's earliest root (by `startedAt`, then `spanId`), as that root's current row.
   const row = await client.oneOrNone<Record<string, any>>(
     `SELECT ${SPAN_SELECT_COLUMNS}
-     FROM ${table}
-     WHERE "traceId" = $1 AND "parentSpanId" IS NULL
-     ORDER BY ${ROOT_COLLAPSE_ORDER}
+     FROM ${table} r
+     WHERE r."traceId" = $1 AND r."parentSpanId" IS NULL AND ${latestSpanPredicate(table, { root: true })}
+     ORDER BY r."startedAt" ASC, r."spanId" ASC
      LIMIT 1`,
     [args.traceId],
   );
@@ -110,14 +89,15 @@ export async function getRootSpan(
  * Build the WHERE conditions and bind params for a listTraces query against
  * `mastra_span_events r`. Always prepends the root-span predicate so the
  * partial root indexes (and the partial cursor index) get picked up by the
- * planner. Starts numbering from `nextParamIdx`.
+ * planner. Each root is judged by its own current row, so a trace with several
+ * roots can match once per root. Starts numbering from `nextParamIdx`.
  */
 function buildListTracesFilters(
   filters: ListTracesArgs['filters'],
   spanTable: string,
   nextParamIdx: number,
 ): { conditions: string[]; params: unknown[]; nextParamIdx: number } {
-  const conditions: string[] = [`r."parentSpanId" IS NULL`, latestRootPredicate(spanTable)];
+  const conditions: string[] = [`r."parentSpanId" IS NULL`, latestSpanPredicate(spanTable, { root: true })];
   const params: unknown[] = [];
   let i = nextParamIdx;
 

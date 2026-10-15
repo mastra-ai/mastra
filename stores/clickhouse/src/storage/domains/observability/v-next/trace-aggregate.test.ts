@@ -29,27 +29,13 @@ describe('ClickHouse trace aggregate compiler', () => {
     );
 
     expect(compiled.query).toContain('candidates AS (');
+    // Each trace counts once, through its earliest candidate root.
     expect(compiled.query).toMatch(
-      /trace_roots AS \(\s+SELECT \*\s+FROM candidates\s+ORDER BY traceId, dedupeKey\s+LIMIT 1 BY traceId\s+\)/,
+      /FROM candidates r\n\s+ORDER BY r\.traceId, r\.startedAt, r\.dedupeKey, r\.endedAt\n\s+LIMIT 1 BY r\.traceId/,
     );
-    expect(compiled.query).toContain('FROM trace_roots r');
+    expect(compiled.query).not.toContain('current_roots');
     expect(compiled.query).not.toContain('FINAL');
     expect(Object.values(compiled.query_params)).toContain('prod');
-  });
-
-  it("reads the tenant's window root rows once, without re-reading every root of their traces", () => {
-    const compiled = compileClickHouseTraceAggregate(
-      planTraceAggregate(parseTraceAggregateRequest({ timeRange: TIME_RANGE, measures: ['count'] }), {
-        scope: { organizationId: 'org-1' },
-      }),
-    );
-
-    expect(compiled.query).not.toContain('current_roots');
-    expect(compiled.query.match(/FROM mastra_trace_roots\b/g)).toHaveLength(1);
-    expect(compiled.query).toMatch(
-      /root_scope AS \(\s+SELECT \*\s+FROM mastra_trace_roots r\s+WHERE startedAt >= \{trace_query_1:[^}]+\}\s+AND startedAt < \{trace_query_2:[^}]+\}\s+AND organizationId = \{trace_query_\d+:String\}/,
-    );
-    expect(compiled.query).not.toContain('org-1');
   });
 
   it('parameterizes metadata keys and having literals', () => {

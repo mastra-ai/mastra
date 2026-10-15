@@ -250,7 +250,9 @@ export class ObservabilityStorage extends StorageDomain {
   }
 
   /**
-   * Retrieves a single root span.
+   * Retrieves a trace's root span. A trace can have several roots (spans with no Mastra
+   * parent, e.g. several runs under one outside parent); this returns the earliest one by
+   * `startedAt`, then `spanId`.
    */
   async getRootSpan(_args: GetRootSpanArgs): Promise<GetRootSpanResponse | null> {
     throw new MastraError({
@@ -371,6 +373,9 @@ export class ObservabilityStorage extends StorageDomain {
 
   /**
    * Retrieves a list of traces with optional filtering.
+   *
+   * Rows are root spans, so a trace with several roots can come back once per matching root.
+   * Callers that show one row per trace keep the earliest by `startedAt`, then `spanId`.
    */
   async listTraces(_args: ListTracesArgs): Promise<ListTracesResponse> {
     throw new MastraError({
@@ -407,6 +412,10 @@ export class ObservabilityStorage extends StorageDomain {
 
   /**
    * Executes a validated advanced trace-query plan.
+   *
+   * Each trace is listed once, as its representative root: of the complete roots that start
+   * in the time range and match the trace-level predicates, the earliest by `startedAt`, then
+   * `spanId`. The row's fields and sort value come from that root.
    */
   async queryTraces(_plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
     throw new MastraError({

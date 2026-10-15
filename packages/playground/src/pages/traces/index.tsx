@@ -49,6 +49,7 @@ import {
 } from '@mastra/playground-ui/domains/traces/trace-query-filters';
 import type { TraceQueryRelatedScope } from '@mastra/playground-ui/domains/traces/trace-query-filters';
 import type { SpanTab } from '@mastra/playground-ui/domains/traces/types';
+import { getEarliestRootSpan } from '@mastra/playground-ui/domains/traces/utils/span-utils';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { useMastraClient } from '@mastra/react';
 import { useTraceSpanScores } from '@mastra/react/hooks/scores';
@@ -184,8 +185,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     anchorSpanId: null,
   });
   const anchorSpan = useMemo(
-    () =>
-      anchorSpanId ? traceSpans?.find(s => s.spanId === anchorSpanId) : traceSpans?.find(s => s.parentSpanId == null),
+    () => (anchorSpanId ? traceSpans?.find(s => s.spanId === anchorSpanId) : getEarliestRootSpan(traceSpans)),
     [traceSpans, anchorSpanId],
   );
 

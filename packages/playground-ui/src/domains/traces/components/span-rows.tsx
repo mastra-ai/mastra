@@ -2,6 +2,7 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import { Fragment, useEffect } from 'react';
 import { getSpanDescendantIds } from '../hooks/get-all-span-ids';
 import type { UISpan, UISpanStyle } from '../types';
+import { getTraceTimeRange } from '../utils/span-timing';
 import { getSpanTypeUi } from './shared';
 
 export type SpanRowExpansion = {
@@ -48,8 +49,7 @@ export type SpanRowsProps = SharedRowProps & {
  * only mounted while their parent is expanded.
  */
 export function SpanRows({ spans, ...rowProps }: SpanRowsProps) {
-  const overallLatency = spans[0]?.latency || 0;
-  const overallStartTime = spans[0]?.startTime || '';
+  const { latency: overallLatency, startTime: overallStartTime } = getTraceTimeRange(spans);
 
   return (
     <>
@@ -131,7 +131,8 @@ function SpanRow({
     isRevealed: revealSpanId === span.id,
     overallLatency,
     overallStartTime,
-    onSpanClick,
+    // A virtual node has no span to show: clicking it only expands or collapses it.
+    onSpanClick: span.isVirtual ? toggleChildren : onSpanClick,
     expansion: {
       hasChildren,
       numOfChildren,

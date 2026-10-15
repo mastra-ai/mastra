@@ -56,6 +56,7 @@ const COLUMNS = [
   'traceId',
   'spanId',
   'parentSpanId',
+  'externalParentSpanId',
   'name',
   'spanType',
   'isEvent',
@@ -134,6 +135,7 @@ const SPAN_RECONSTRUCT_SELECT = `
     ${argMaxNonNull('name')},
     ${argMaxNonNull('spanType')},
     ${argMaxNonNull('parentSpanId')},
+    ${argMaxNonNull('externalParentSpanId')},
     ${argMaxNonNull('isEvent')},
     coalesce(min(timestamp) FILTER (WHERE eventType = 'start'), min(timestamp)) as startedAt,
     ${argMaxNonNull('endedAt')},
@@ -173,6 +175,7 @@ const SPAN_RECONSTRUCT_SELECT_LIGHT = `
     ${argMaxNonNull('name')},
     ${argMaxNonNull('spanType')},
     ${argMaxNonNull('parentSpanId')},
+    ${argMaxNonNull('externalParentSpanId')},
     ${argMaxNonNull('isEvent')},
     coalesce(min(timestamp) FILTER (WHERE eventType = 'start'), min(timestamp)) as startedAt,
     ${argMaxNonNull('endedAt')},
@@ -194,6 +197,7 @@ const SPAN_RECONSTRUCT_SELECT_LIGHT_LIST = `
     ${argMaxNonNull('name')},
     ${argMaxNonNull('spanType')},
     ${argMaxNonNull('parentSpanId')},
+    ${argMaxNonNull('externalParentSpanId')},
     ${argMaxNonNull('isEvent')},
     coalesce(min(timestamp) FILTER (WHERE eventType = 'start'), min(timestamp)) as startedAt,
     ${argMaxNonNull('endedAt')},
@@ -336,6 +340,7 @@ function rowToLightSpanRecord(row: Record<string, unknown>): LightSpanRecord {
     name: row.name as string,
     spanType: row.spanType as LightSpanRecord['spanType'],
     parentSpanId: (row.parentSpanId as string) ?? null,
+    externalParentSpanId: (row.externalParentSpanId as string) ?? null,
     isEvent: row.isEvent as boolean,
     startedAt: toDate(row.startedAt),
     endedAt: rowEndedAt(row),
@@ -396,6 +401,7 @@ function rowToSpanRecord(row: Record<string, unknown>): SpanRecord {
     name: row.name as string,
     spanType: row.spanType as SpanRecord['spanType'],
     parentSpanId: (row.parentSpanId as string) ?? null,
+    externalParentSpanId: (row.externalParentSpanId as string) ?? null,
     isEvent: row.isEvent as boolean,
     startedAt: toDate(row.startedAt),
     endedAt: rowEndedAt(row),
@@ -610,6 +616,7 @@ interface SpanEventRow {
   traceId: string;
   spanId: string;
   parentSpanId: string | null;
+  externalParentSpanId: string | null;
   name: string | null;
   spanType: string | null;
   isEvent: boolean | null;
@@ -685,6 +692,7 @@ function toValuesTuple(row: SpanEventRow): string {
     v(row.traceId),
     v(row.spanId),
     v(row.parentSpanId),
+    v(row.externalParentSpanId),
     v(row.name),
     v(row.spanType),
     v(row.isEvent),
@@ -746,6 +754,7 @@ function createStartSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     traceId: s.traceId,
     spanId: s.spanId,
     parentSpanId: s.parentSpanId ?? null,
+    externalParentSpanId: s.externalParentSpanId ?? null,
     name: s.name,
     spanType: s.spanType,
     isEvent: s.isEvent,
@@ -796,6 +805,7 @@ function createEndSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     traceId: s.traceId,
     spanId: s.spanId,
     parentSpanId: s.parentSpanId ?? null,
+    externalParentSpanId: s.externalParentSpanId ?? null,
     name: s.name,
     spanType: s.spanType,
     isEvent: s.isEvent,
@@ -902,10 +912,13 @@ export async function getSpan(db: DuckDBConnection, args: GetSpanArgs): Promise<
   return { span: rowToSpanRecord(rows[0]!) };
 }
 
-/** Reconstruct the root span (no parent) for a trace. */
+/**
+ * Reconstruct a trace's root span (no parent). A trace can have several roots; this returns the
+ * earliest by `startedAt`, then `spanId`.
+ */
 export async function getRootSpan(db: DuckDBConnection, args: GetRootSpanArgs): Promise<GetRootSpanResponse | null> {
   const rows = await db.query(
-    `${SPAN_RECONSTRUCT_SELECT} WHERE traceId = ? GROUP BY traceId, spanId HAVING arg_max(parentSpanId, timestamp) IS NULL LIMIT 1`,
+    `${SPAN_RECONSTRUCT_SELECT} WHERE traceId = ? GROUP BY traceId, spanId HAVING arg_max(parentSpanId, timestamp) IS NULL ORDER BY startedAt, spanId LIMIT 1`,
     [args.traceId],
   );
   if (rows.length === 0) return null;

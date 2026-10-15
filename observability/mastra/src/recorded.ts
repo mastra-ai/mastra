@@ -228,6 +228,7 @@ class RecordedSpanImpl<TType extends SpanType = SpanType> implements RecordedSpa
   public readonly isEvent: boolean;
   public readonly isRootSpan: boolean;
   public readonly parentSpanId?: string;
+  public readonly externalParentSpanId?: string;
   public parent?: RecordedSpanImpl;
   public readonly children: RecordedSpanImpl[] = [];
 
@@ -271,6 +272,7 @@ class RecordedSpanImpl<TType extends SpanType = SpanType> implements RecordedSpa
     this.isEvent = raw.isEvent;
     this.isRootSpan = !raw.parentSpanId;
     this.parentSpanId = raw.parentSpanId ?? undefined;
+    this.externalParentSpanId = raw.externalParentSpanId ?? undefined;
   }
 
   async addScore(score: ScoreInput): Promise<void> {
@@ -377,9 +379,13 @@ class RecordedTraceImpl implements RecordedTrace {
 
 function findRootSpan(spans: SpanRecord[]): SpanRecord | undefined {
   const spanIds = new Set(spans.map(span => span.spanId));
-  // Prefer the true root; storage may return spans in any order, so an orphan
-  // (parent not persisted) must not win just by appearing first.
-  return spans.find(span => !span.parentSpanId) ?? spans.find(span => !spanIds.has(span.parentSpanId!)) ?? spans[0];
+  // A trace can have several parentless roots; the trace root is the earliest by
+  // startedAt (lowest spanId on a tie), whatever order storage returns them in.
+  // An orphan (parent not persisted) only wins when there is no parentless span.
+  const earliestRoot = spans
+    .filter(span => !span.parentSpanId)
+    .sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime() || (a.spanId < b.spanId ? -1 : 1))[0];
+  return earliestRoot ?? spans.find(span => !spanIds.has(span.parentSpanId!)) ?? spans[0];
 }
 
 export function hydrateRecordedTrace(args: {

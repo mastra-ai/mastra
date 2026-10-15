@@ -42,6 +42,11 @@ const createOmitKeys = <T extends z.ZodRawShape>(shape: T): { [K in keyof T]: tr
 
 const spanNameField = z.string().describe('Human-readable span name');
 const parentSpanIdField = z.string().describe('Parent span reference (null = root span)');
+const externalParentSpanIdField = z
+  .string()
+  .describe(
+    'Parent span ID in an outside tracing system, kept for correlation. It is not a Mastra parent, so the span stays a trace root',
+  );
 const spanTypeField = z.nativeEnum(SpanType).describe('Span type (e.g., WORKFLOW_RUN, AGENT_RUN, TOOL_CALL, etc.)');
 const attributesField = z
   .record(z.string(), z.unknown())
@@ -122,6 +127,7 @@ export const spanRecordSchema = z
 
     // Shared fields
     parentSpanId: parentSpanIdField.nullish(),
+    externalParentSpanId: externalParentSpanIdField.nullish(),
     ...sharedFields,
 
     // Experimentation
@@ -660,6 +666,7 @@ export function toLightSpanRecord(span: SpanRecord): LightSpanRecord {
     traceId: span.traceId,
     spanId: span.spanId,
     parentSpanId: span.parentSpanId,
+    externalParentSpanId: span.externalParentSpanId,
     name: span.name,
     spanType: span.spanType,
     isEvent: span.isEvent,
@@ -697,6 +704,7 @@ export const lightSpanRecordSchema = z
 
     // Nullish fields needed for timeline/status
     parentSpanId: parentSpanIdField.nullish(),
+    externalParentSpanId: externalParentSpanIdField.nullish(),
     endedAt: endedAtField.nullish(),
     error: errorField.nullish(),
 

@@ -102,6 +102,7 @@ import type {
 
 import {
   BRANCH_SPAN_TYPE_SET,
+  computeTraceStatus,
   listBranchesArgsSchema,
   listTracesArgsSchema,
   TraceStatus,
@@ -117,12 +118,19 @@ const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling';
 export interface TraceEntry {
   /** All spans in this trace, keyed by spanId */
   spans: Record<string, SpanRecord>;
-  /** Root span for this trace (parentSpanId === null) */
+  /** The trace's earliest root span (parentSpanId === null); a trace can have several roots */
   rootSpan: SpanRecord | null;
   /** Computed trace status based on root span state */
   status: TraceStatus;
   /** True if any span in the trace has an error */
   hasChildError: boolean;
+}
+
+/** Orders trace roots: earliest `startedAt` first, then lowest `spanId`. */
+function compareRoots(a: SpanRecord, b: SpanRecord): number {
+  const diff = a.startedAt.getTime() - b.startedAt.getTime();
+  if (diff !== 0) return diff;
+  return a.spanId < b.spanId ? -1 : a.spanId > b.spanId ? 1 : 0;
 }
 
 /** In-memory implementation of ObservabilityStorage for testing and development. */
@@ -409,7 +417,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
   private getTraceCursorId(traceId: string, filters: ListTracesArgs['filters']): number | null {
     const cursorId = this.db.traceCursorIds.get(traceId);
     const traceEntry = this.db.traces.get(traceId);
-    if (cursorId === undefined || !traceEntry?.rootSpan || !this.traceMatchesFilters(traceEntry, filters)) {
+    if (cursorId === undefined || !traceEntry || !this.findMatchingRoot(traceEntry, filters)) {
       return null;
     }
 
@@ -559,9 +567,8 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
     traceEntry.spans[spanId] = span;
 
-    // Update root span if this is a root span
-    if (span.parentSpanId == null) {
-      traceEntry.rootSpan = span;
+    if (span.parentSpanId == null || traceEntry.rootSpan?.spanId === spanId) {
+      traceEntry.rootSpan = this.findMatchingRoot(traceEntry, undefined);
     }
 
     this.recomputeTraceProperties(traceEntry);
@@ -679,6 +686,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
           traceId: span.traceId,
           spanId: span.spanId,
           parentSpanId: span.parentSpanId,
+          externalParentSpanId: span.externalParentSpanId,
           name: span.name,
           spanType: span.spanType,
           isEvent: span.isEvent,
@@ -706,10 +714,9 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     const matchingRootSpans: SpanRecord[] = [];
 
     for (const [, traceEntry] of this.db.traces) {
-      if (!traceEntry.rootSpan) continue;
-
-      if (this.traceMatchesFilters(traceEntry, filters)) {
-        matchingRootSpans.push(traceEntry.rootSpan);
+      const rootSpan = this.findMatchingRoot(traceEntry, filters);
+      if (rootSpan) {
+        matchingRootSpans.push(rootSpan);
       }
     }
 
@@ -771,11 +778,12 @@ export class ObservabilityInMemory extends ObservabilityStorage {
           }
 
           const traceEntry = this.db.traces.get(traceId);
-          if (!traceEntry?.rootSpan || !this.traceMatchesFilters(traceEntry, filters)) {
+          const rootSpan = traceEntry && this.findMatchingRoot(traceEntry, filters);
+          if (!rootSpan) {
             return [];
           }
 
-          return [{ cursorId, row: traceEntry.rootSpan }];
+          return [{ cursorId, row: rootSpan }];
         })
         .sort((a, b) => a.cursorId - b.cursorId)
         .slice(0, limit + 1);
@@ -798,14 +806,26 @@ export class ObservabilityInMemory extends ObservabilityStorage {
   }
 
   /**
-   * Check if a trace matches all provided filters
+   * Finds the root that represents a trace for these filters: the earliest root
+   * (by `startedAt`, then `spanId`) that matches them, or null when none does.
    */
-  private traceMatchesFilters(traceEntry: TraceEntry, filters: ListTracesArgs['filters']): boolean {
-    if (!filters) return true;
+  private findMatchingRoot(traceEntry: TraceEntry, filters: ListTracesArgs['filters']): SpanRecord | null {
+    let match: SpanRecord | null = null;
+    for (const span of Object.values(traceEntry.spans)) {
+      if (span.parentSpanId != null || (match && compareRoots(span, match) >= 0)) continue;
+      if (!filters || this.rootMatchesFilters(span, traceEntry, filters)) match = span;
+    }
+    return match;
+  }
 
-    const rootSpan = traceEntry.rootSpan;
-    if (!rootSpan) return false;
-
+  /**
+   * Check if a trace root matches all provided filters
+   */
+  private rootMatchesFilters(
+    rootSpan: SpanRecord,
+    traceEntry: TraceEntry,
+    filters: NonNullable<ListTracesArgs['filters']>,
+  ): boolean {
     // Date range filters on startedAt (based on root span)
     if (filters.startedAt) {
       if (
@@ -948,7 +968,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     }
 
     // Derived status filter
-    if (filters.status !== undefined && traceEntry.status !== filters.status) {
+    if (filters.status !== undefined && computeTraceStatus(rootSpan) !== filters.status) {
       return false;
     }
 
@@ -1053,7 +1073,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
   /**
    * Check if a single anchor span matches all provided branch filters. All
    * predicates apply to the span itself (not the trace root) -- this is the
-   * key difference from {@link traceMatchesFilters}.
+   * key difference from {@link rootMatchesFilters}.
    */
   private spanMatchesBranchFilters(span: SpanRecord, filters: ListBranchesArgs['filters']): boolean {
     if (!filters) return true;
@@ -1159,9 +1179,8 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
     traceEntry.spans[spanId] = updatedSpan;
 
-    // Update root span reference if this is the root span
-    if (updatedSpan.parentSpanId == null) {
-      traceEntry.rootSpan = updatedSpan;
+    if (updatedSpan.parentSpanId == null || traceEntry.rootSpan?.spanId === spanId) {
+      traceEntry.rootSpan = this.findMatchingRoot(traceEntry, undefined);
     }
 
     this.recomputeTraceProperties(traceEntry);
@@ -1197,7 +1216,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       }
 
       if (traceEntry.rootSpan && !traceEntry.spans[traceEntry.rootSpan.spanId]) {
-        traceEntry.rootSpan = remainingSpans.find(span => span.parentSpanId == null) ?? null;
+        traceEntry.rootSpan = this.findMatchingRoot(traceEntry, undefined);
       }
       if (!traceEntry.rootSpan) {
         this.db.traceCursorIds.delete(traceId);

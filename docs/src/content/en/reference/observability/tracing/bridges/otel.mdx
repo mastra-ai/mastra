@@ -18,7 +18,7 @@ The OpenTelemetry Bridge is currently **experimental**. APIs and configuration o
 
 :::
 
-Enables bidirectional integration between Mastra tracing and OpenTelemetry infrastructure. Creates native OTEL spans for Mastra operations and inherits context from active OTEL spans. Also forwards Mastra log events to the globally-registered OTEL `LoggerProvider`, emitting each log under the OTEL context of the originating Mastra span so trace-log correlation works automatically.
+Enables bidirectional integration between Mastra tracing and OpenTelemetry infrastructure. Creates native OTEL spans for Mastra operations and inherits context from active OTEL spans. When a Mastra run starts inside an OTEL span that Mastra didn't create, Mastra stores that span's ID as the run's `externalParentSpanId`, and the run is a top-level run in Mastra storage and Studio. Also forwards Mastra log events to the globally-registered OTEL `LoggerProvider`, emitting each log under the OTEL context of the originating Mastra span so trace-log correlation works automatically.
 
 ## Constructor
 
@@ -194,12 +194,14 @@ const mastra = new Mastra({
 })
 ```
 
+The bridge reads trace and span IDs from the active OTEL span even when the OTEL sampler drops that span. `MastraStorageExporter` and other Mastra exporters still record the Mastra spans. Only the OTEL copies of those spans are non-recording.
+
 ## Setup requirements
 
 The bridge creates spans through an OpenTelemetry tracer provider. For Mastra spans to be exported:
 
 - **A tracer provider must be available.** Register one globally before Mastra runs, for example by calling `sdk.start()` on `NodeSDK` from `@opentelemetry/sdk-node`, or by calling `trace.setGlobalTracerProvider(provider)`. If the provider isn't registered globally, pass it with `new OtelBridge({ tracerProvider })`.
-- **A context manager must be installed for Mastra spans to nest under outer spans.** `NodeSDK` installs one automatically. Without a context manager, spans are still exported, but Mastra root spans can't read the active span, so they start new traces instead of joining the outer trace.
+- **A context manager must be installed for Mastra spans to nest under outer spans.** `NodeSDK` installs one automatically. Without a context manager, spans are still exported, but Mastra root spans can't read the active span, so they start new traces instead of joining the outer trace. With a context manager, each Mastra run inside the outer span joins the outer trace in your OTEL backend. In Mastra storage, the run is a root span with the outer span's ID in `externalParentSpanId`. See [Traces with several top-level runs](/docs/observability/tracing/overview#traces-with-several-top-level-runs).
 
 When no tracer provider is available, agents and workflows still run, but no Mastra spans are exported through OpenTelemetry. The bridge logs this warning once:
 

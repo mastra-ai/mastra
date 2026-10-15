@@ -34,9 +34,12 @@ import {
   normalizeTraceQueryResponse,
   THREAD_QUERY_CONFORMANCE_CASES,
   THREAD_QUERY_FIXTURE_DATA,
+  THREAD_QUERY_MULTI_ROOT_CASES,
   TRACE_QUERY_CONFORMANCE_CASES,
   TRACE_QUERY_FEEDBACK_REPLACEMENT_SCENARIOS,
   TRACE_QUERY_FIXTURE_DATA,
+  TRACE_QUERY_MULTI_ROOT_CASES,
+  TRACE_QUERY_MULTI_ROOT_FIXTURE_DATA,
   TRACE_QUERY_ORDINAL_FIXTURE_DATA,
   TRACE_QUERY_SCORE_REPLACEMENT_CASES,
   TRACE_QUERY_SCORE_REPLACEMENT_FIXTURE_DATA,
@@ -127,18 +130,20 @@ function traceQueryFixtureForWriteModel(
     return { spans: data.spans, relatedSpans: [], scores: data.scores, feedback: data.feedback };
   }
 
-  const roots = new Map<string | null, TraceQueryFixtureData['spans'][number]>();
+  // A trace can have several roots, so each root keeps its own latest completed row.
+  const roots = new Map<string, TraceQueryFixtureData['spans'][number]>();
   const spans = new Map<string, TraceQueryFixtureData['spans'][number]>();
   for (const span of data.spans) {
-    if (span.parentSpanId === null) {
-      roots.set(span.traceId, span);
-    } else {
-      spans.set(`${span.traceId}\u0000${span.spanId}`, span);
+    const key = `${span.traceId}\u0000${span.spanId}`;
+    if (span.parentSpanId !== null) {
+      spans.set(key, span);
+    } else if (!span.isPending) {
+      roots.set(key, span);
     }
   }
 
   return {
-    spans: [...roots.values()].filter(root => !root.isPending),
+    spans: [...roots.values()],
     relatedSpans: [...spans.values()],
     scores: data.scores,
     feedback: data.feedback,
@@ -157,6 +162,7 @@ export async function writeTraceQueryFixture(
       traceId: span.traceId!,
       spanId: span.spanId,
       parentSpanId: span.parentSpanId,
+      externalParentSpanId: span.externalParentSpanId ?? null,
       name: span.name,
       spanType: span.spanType as SpanType,
       isEvent: false,
@@ -347,7 +353,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
       const writeDiscoveryFixture = () =>
         writeTraceQueryFixture(storage, TRACE_QUERY_DISCOVERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
 
-      it('discovers only executable top-level string metadata fields from current qualified roots', async () => {
+      it('discovers only executable top-level string metadata fields from the earliest qualified root of each trace', async () => {
         await writeDiscoveryFixture();
         await expect(observedFields({ predicateScope: 'trace' })).resolves.toEqual({
           observedFields: [
@@ -470,7 +476,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         });
       });
 
-      it('discovers tag values with per-trace counts from current qualified roots', async () => {
+      it('discovers tag values with per-trace counts from the earliest qualified root of each trace', async () => {
         await writeDiscoveryFixture();
         await expect(values({ predicateScope: 'trace', path: 'tags' })).resolves.toEqual({
           values: [
@@ -682,6 +688,37 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         } while (after);
         expect(pagedTraceIds).toEqual(['trace-d', 'trace-c', 'trace-a', 'trace-b']);
         expect(new Set(pagedTraceIds).size).toBe(pagedTraceIds.length);
+      });
+
+      it('lists traces with several roots once, under their representative root', async () => {
+        await writeTraceQueryFixture(
+          storage,
+          TRACE_QUERY_MULTI_ROOT_FIXTURE_DATA,
+          capabilities.traceQuerySpanWriteModel,
+        );
+
+        for (const testCase of TRACE_QUERY_MULTI_ROOT_CASES) {
+          const response = await storage.queryTraces(planTraceQuery(parseTraceQueryRequest(testCase.request)));
+          if (!('traces' in response)) throw new Error('Expected traces');
+          const rows = response.traces.map(({ traceId, rootSpanId }) => ({ traceId, rootSpanId }));
+          expect.soft(rows, testCase.name).toEqual(testCase.expected);
+        }
+
+        const shared = await storage.queryTraces(
+          planTraceQuery(
+            parseTraceQueryRequest({
+              timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+              where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'multi-shared' } },
+            }),
+          ),
+        );
+        expect('traces' in shared && shared.traces).toEqual([
+          expect.objectContaining({
+            rootSpanId: 'shared-first',
+            parentSpanId: null,
+            externalParentSpanId: 'outside-request',
+          }),
+        ]);
       });
 
       describe('score replacement conformance', () => {
@@ -901,6 +938,19 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         } while (after);
         expect(threadIds).toEqual(['thread-1', 'thread-2']);
         expect(new Set(threadIds).size).toBe(threadIds.length);
+      });
+
+      it('matches the shared thread-query cases for traces with several roots', async () => {
+        await writeTraceQueryFixture(
+          storage,
+          TRACE_QUERY_MULTI_ROOT_FIXTURE_DATA,
+          capabilities.traceQuerySpanWriteModel,
+        );
+
+        for (const testCase of THREAD_QUERY_MULTI_ROOT_CASES) {
+          const response = await storage.queryThreads(planThreadQuery(parseQueryThreadsInput(testCase.request)));
+          expect.soft(response.threads, testCase.name).toEqual(testCase.expected);
+        }
       });
 
       it('paginates mixed-case and non-ASCII thread IDs in ordinal order', async () => {
@@ -2331,6 +2381,32 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         expect((span as Record<string, unknown>).input).toBeUndefined();
         expect((span as Record<string, unknown>).output).toBeUndefined();
         expect((span as Record<string, unknown>).attributes).toBeUndefined();
+      });
+
+      it('keeps the outside parent on a stored root', async () => {
+        await storage.createSpan({
+          span: makeSpan({ traceId: 't-outside', spanId: 'outside-root', externalParentSpanId: 'outside-parent' }),
+        });
+        const stored = { parentSpanId: null, externalParentSpanId: 'outside-parent' };
+
+        const trace = await storage.getTrace({ traceId: 't-outside' });
+        expect(trace?.spans[0]).toMatchObject(stored);
+        const structure = await storage.getStructure({ traceId: 't-outside' });
+        expect(structure?.spans[0]).toMatchObject(stored);
+      });
+
+      it('returns the earliest root of a trace with several roots, whatever the write order', async () => {
+        // The earliest root has the higher spanId, so ordering by spanId alone fails.
+        const roots = (traceId: string) => [
+          makeSpan({ traceId, spanId: 'root-z-earliest', startedAt: VNEXT_BASE_DATE }),
+          makeSpan({ traceId, spanId: 'root-a-later', startedAt: new Date(VNEXT_BASE_DATE.getTime() + 5000) }),
+        ];
+        await storage.batchCreateSpans({ records: [...roots('t-in-order'), ...roots('t-reversed').reverse()] });
+
+        for (const traceId of ['t-in-order', 't-reversed']) {
+          const result = await storage.getRootSpan({ traceId });
+          expect(result?.span.spanId, traceId).toBe('root-z-earliest');
+        }
       });
 
       it('getTraceLight forwards to getStructure (deprecated alias)', async () => {

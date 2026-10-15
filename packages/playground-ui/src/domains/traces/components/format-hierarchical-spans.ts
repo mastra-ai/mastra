@@ -8,7 +8,71 @@ type TimelineSpan = {
   startedAt: Date | string;
   endedAt?: Date | string | null;
   parentSpanId?: string | null;
+  /** Id of the span outside Mastra (e.g. an OTel request span) that started this root. */
+  externalParentSpanId?: string | null;
   matchedInPayloadOnly?: boolean;
+};
+
+export type FormatHierarchicalSpansOptions = {
+  /**
+   * Wraps top-level spans that share an `externalParentSpanId` (two or more) in one virtual
+   * "Started outside Mastra" node. Only for views that render the tree as-is.
+   */
+  groupExternalRoots?: boolean;
+};
+
+/** Span type of the virtual node grouping roots started by the same span outside Mastra. */
+const EXTERNAL_PARENT_SPAN_TYPE = 'external_parent';
+
+const EXTERNAL_PARENT_ID_PREFIX = 'external:';
+
+/** True for ids of virtual nodes, which have no span record (no details, no navigation, no URL). */
+export const isVirtualSpanId = (id: string | null | undefined) => !!id?.startsWith(EXTERNAL_PARENT_ID_PREFIX);
+
+const toTime = (value: string) => new Date(value).getTime();
+
+/** Latest end of the span or anything below it; undefined when nothing has ended. */
+const getLatestEnd = (span: UISpan): number | undefined => {
+  let latest = span.endTime ? toTime(span.endTime) : undefined;
+  for (const child of span.spans ?? []) {
+    const childEnd = getLatestEnd(child);
+    if (childEnd !== undefined && (latest === undefined || childEnd > latest)) latest = childEnd;
+  }
+  return latest;
+};
+
+const groupExternalRoots = (roots: UISpan[], externalParentBySpanId: Map<string, string>): UISpan[] => {
+  const members = new Map<string, UISpan[]>();
+  for (const root of roots) {
+    const externalParentSpanId = externalParentBySpanId.get(root.id);
+    if (externalParentSpanId) members.set(externalParentSpanId, [...(members.get(externalParentSpanId) ?? []), root]);
+  }
+
+  // Roots are sorted by start, so each group takes the place of its earliest root.
+  return roots.flatMap(root => {
+    const externalParentSpanId = externalParentBySpanId.get(root.id);
+    const group = externalParentSpanId ? members.get(externalParentSpanId) : undefined;
+    if (!externalParentSpanId || !group || group.length < 2) return [root];
+    if (group[0] !== root) return [];
+
+    const startTime = root.startTime;
+    const ends = group.flatMap(member => (member.endTime ? [toTime(member.endTime)] : []));
+    const end = ends.length > 0 ? Math.max(...ends) : undefined;
+    return [
+      {
+        id: `${EXTERNAL_PARENT_ID_PREFIX}${externalParentSpanId}`,
+        name: 'Started outside Mastra',
+        type: EXTERNAL_PARENT_SPAN_TYPE,
+        latency: end !== undefined ? end - toTime(startTime) : 0,
+        startTime,
+        endTime: end !== undefined ? new Date(end).toISOString() : undefined,
+        spans: group,
+        parentSpanId: null,
+        externalParentSpanId,
+        isVirtual: true,
+      },
+    ];
+  });
 };
 
 /**
@@ -17,18 +81,14 @@ type TimelineSpan = {
  * where the anchor has a real parent that's outside the returned set. Without
  * it, the displayed roots are the spans with no parent (the trace case).
  */
-export const formatHierarchicalSpans = (spans: TimelineSpan[], anchorSpanId?: string): UISpan[] => {
+export const formatHierarchicalSpans = (
+  spans: TimelineSpan[],
+  anchorSpanId?: string,
+  options?: FormatHierarchicalSpansOptions,
+): UISpan[] => {
   if (!spans || spans.length === 0) {
     return [];
   }
-
-  const overallEndDate = spans.reduce(
-    (latest, span) => {
-      const endDate = span?.endedAt ? new Date(span.endedAt) : undefined;
-      return endDate && (!latest || endDate > latest) ? endDate : latest;
-    },
-    null as Date | null,
-  );
 
   const spanMap = new Map<string, UISpan>();
   const rootSpans: UISpan[] = [];
@@ -60,12 +120,6 @@ export const formatHierarchicalSpans = (spans: TimelineSpan[], anchorSpanId?: st
     if (!uiSpan) return;
 
     if (isAnchor(spanRecord)) {
-      if (overallEndDate && uiSpan.endTime && overallEndDate > new Date(uiSpan.endTime)) {
-        uiSpan.endTime = overallEndDate.toISOString();
-        const overallEndTime = new Date(overallEndDate).getTime();
-        const spanStartTime = new Date(uiSpan.startTime).getTime();
-        uiSpan.latency = overallEndTime - spanStartTime;
-      }
       rootSpans.push(uiSpan);
     } else {
       const parent = spanRecord.parentSpanId ? spanMap.get(spanRecord.parentSpanId) : undefined;
@@ -98,5 +152,21 @@ export const formatHierarchicalSpans = (spans: TimelineSpan[], anchorSpanId?: st
 
   sortNestedSpans(sortedRootSpans);
 
-  return sortedRootSpans;
+  // A root recorded as ending before one of its descendants is widened to cover its own
+  // subtree, never another root's. A still-running root keeps no end time.
+  for (const root of sortedRootSpans) {
+    const latestEnd = getLatestEnd(root);
+    if (root.endTime && latestEnd !== undefined && latestEnd > toTime(root.endTime)) {
+      root.endTime = new Date(latestEnd).toISOString();
+      root.latency = latestEnd - toTime(root.startTime);
+    }
+  }
+
+  if (!options?.groupExternalRoots) return sortedRootSpans;
+
+  const externalParentBySpanId = new Map<string, string>();
+  for (const span of spans) {
+    if (span.externalParentSpanId) externalParentBySpanId.set(span.spanId, span.externalParentSpanId);
+  }
+  return groupExternalRoots(sortedRootSpans, externalParentBySpanId);
 };

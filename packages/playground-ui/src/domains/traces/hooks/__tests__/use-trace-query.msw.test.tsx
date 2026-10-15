@@ -11,7 +11,12 @@ import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { buildTraceListFilters } from '../../trace-filters';
 import { firstTraceQueryPage, lastTraceQueryPage } from './fixtures/trace-query';
-import { firstLegacyTracePage, lastLegacyTracePage } from './fixtures/trace-query-legacy';
+import {
+  firstLegacyTracePage,
+  lastLegacyTracePage,
+  outsideTraceFirstLegacyPage,
+  outsideTraceLastLegacyPage,
+} from './fixtures/trace-query-legacy';
 
 const BASE_URL = 'http://localhost:4111';
 const QUERY_URL = `${BASE_URL}/api/observability/traces/query`;
@@ -364,6 +369,39 @@ describe('useTraceQuery', () => {
           inputPreview: null,
         }),
       ]);
+    });
+
+    it('lists a trace with several roots once, by its earliest root, at the place it first appeared', async () => {
+      server.use(
+        http.get(LEGACY_URL, ({ request }) => {
+          const page = new URL(request.url).searchParams.get('page');
+          return HttpResponse.json(page === '0' ? outsideTraceFirstLegacyPage : outsideTraceLastLegacyPage);
+        }),
+      );
+      const { result } = renderHook(() => useTraceQuery({ query, withQueryTrace: false, limit: 2 }), {
+        wrapper: makeWrapper(),
+      });
+      const rows = () => result.current.data?.map(trace => [trace.traceId, trace.rootSpanId]);
+
+      await waitFor(() => expect(result.current.hasNextPage).toBe(true));
+      expect(rows()).toEqual([
+        ['trace-outside', 'span-outside-late'],
+        ['trace-other', 'span-other'],
+      ]);
+
+      // The next page brings the trace's earlier root: it replaces the row in place, no second row.
+      await act(async () => {
+        await result.current.fetchNextPage();
+      });
+      await waitFor(() => expect(result.current.hasNextPage).toBe(false));
+      expect(rows()).toEqual([
+        ['trace-outside', 'span-outside-early'],
+        ['trace-other', 'span-other'],
+      ]);
+      expect(result.current.data?.[0]).toMatchObject({
+        name: 'First agent run',
+        startedAt: '2026-09-01T10:00:00.000Z',
+      });
     });
 
     it('lists traces without touching any trace-query endpoint when composed like the platform page', async () => {

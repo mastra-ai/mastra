@@ -3425,6 +3425,7 @@ type Shared_Type_61 = {
   /** When the span started */
   startedAt: Date;
   parentSpanId?: (string | null) | undefined;
+  externalParentSpanId?: (string | null) | undefined;
   entityType?: (Shared_Type_60 | null) | undefined;
   entityId?: (string | null) | undefined;
   entityName?: (string | null) | undefined;
@@ -3504,6 +3505,7 @@ type Shared_Type_62 = {
   /** When the span started */
   startedAt: Date;
   parentSpanId?: (string | null) | undefined;
+  externalParentSpanId?: (string | null) | undefined;
   endedAt?: (Date | null) | undefined;
   error?: (unknown | null) | undefined;
   status?: (('success' | 'error' | 'running') | null) | undefined;
@@ -3540,6 +3542,7 @@ type Shared_Type_63 = {
   /** When the span started */
   startedAt: Date;
   parentSpanId?: (string | null) | undefined;
+  externalParentSpanId?: (string | null) | undefined;
   entityType?: (Shared_Type_60 | null) | undefined;
   entityId?: (string | null) | undefined;
   entityName?: (string | null) | undefined;
@@ -3609,6 +3612,7 @@ type Shared_Type_64 = {
   name: string;
   entityId: string | null;
   parentSpanId: string | null;
+  externalParentSpanId?: (string | null) | undefined;
   createdAt: string;
   metadata: {
     [key: string]: unknown;

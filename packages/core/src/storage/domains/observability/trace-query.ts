@@ -378,6 +378,7 @@ export const traceQueryTraceSchema = z
     name: z.string(),
     entityId: z.string().nullable(),
     parentSpanId: z.string().nullable(),
+    externalParentSpanId: z.string().nullable().optional(),
     createdAt: z.string().datetime({ offset: true }),
     metadata: z.record(z.string(), z.unknown()).nullable(),
     inputPreview: z.string().nullable(),

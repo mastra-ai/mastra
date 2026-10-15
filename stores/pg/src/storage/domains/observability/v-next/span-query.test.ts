@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createPreviewTests, createSpanQueryTests } from '@internal/storage-test-utils';
+import { SpanType } from '@mastra/core/observability';
 import { planSpanQuery } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, expect, it } from 'vitest';
@@ -51,6 +52,31 @@ it('adds the preview columns to a span table created before they existed', async
     'errorPreview',
     'inputPreview',
     'outputPreview',
+  ]);
+});
+
+it('adds the outside parent column to a span table created before it existed and reads old rows as null', async () => {
+  await client.none(`ALTER TABLE "${schemaName}".${TABLE_SPAN_EVENTS} DROP COLUMN "externalParentSpanId"`);
+  // A row as written before the column existed, inside the partitions created around today.
+  const startedAt = new Date();
+  startedAt.setUTCHours(12, 0, 0, 0);
+  const { externalParentSpanId: _, ...row } = spanRecordToRow({
+    traceId: 'pre-outside-parent',
+    spanId: 'pre-outside-parent-root',
+    parentSpanId: null,
+    name: 'root',
+    spanType: SpanType.AGENT_RUN,
+    isEvent: false,
+    startedAt,
+    endedAt: new Date(startedAt.getTime() + 1000),
+  });
+  const insert = buildInsert(schemaName, TABLE_SPAN_EVENTS, [row])!;
+  await client.query(insert.text, insert.values);
+
+  await new ObservabilityStoragePostgresVNext({ client, schemaName }).init();
+  const trace = await storage.getTrace({ traceId: 'pre-outside-parent' });
+  expect(trace?.spans).toEqual([
+    expect.objectContaining({ spanId: 'pre-outside-parent-root', parentSpanId: null, externalParentSpanId: null }),
   ]);
 });
 

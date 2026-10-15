@@ -583,7 +583,7 @@ The OpenTelemetry (OTEL) Bridge enables bidirectional integration between Mastra
 Use the `OtelBridge` when you:
 
 - Have existing OTEL instrumentation in your application (HTTP servers, database clients, etc.)
-- Want Mastra operations to appear as child spans of your existing OTEL traces
+- Want Mastra operations to appear as child spans of your existing OTEL traces in your OTEL backend
 - Need OTEL-instrumented code inside Mastra tools to maintain proper parent-child relationships
 - Are building a distributed system where trace context must propagate across services
 
@@ -594,8 +594,8 @@ The `OtelBridge` provides two-way integration:
 **From OTEL to Mastra:**
 
 - Reads from OTEL ambient context (AsyncLocalStorage) automatically
-- Inherits trace ID and parent span ID from active OTEL spans
-- Respects OTEL sampling decisions: if a trace isn't sampled, Mastra won't create spans for it
+- Inherits trace ID and parent span ID from active OTEL spans. Mastra stores the parent span ID as the run's `externalParentSpanId`, so the run is a top-level run in Mastra storage and Studio
+- Reads IDs from the active OTEL span even when OTEL doesn't sample it. Mastra storage and other Mastra exporters still record the Mastra spans, and only the OTEL copies are non-recording
 - No manual trace ID passing required when OTEL auto-instrumentation is active
 
 **From Mastra to OTEL:**
@@ -680,7 +680,7 @@ export const mastra = new Mastra({
 })
 ```
 
-No Mastra exporters are required when using the bridge. Traces are sent via your OTEL SDK configuration. You can optionally add Mastra exporters if you want to send traces to additional destinations.
+No Mastra exporters are required when using the bridge. Traces are sent via your OTEL SDK configuration. You can optionally add Mastra exporters if you want to send traces to additional destinations. Add `MastraStorageExporter` to see the Mastra runs in Studio. Spans from your own OTEL instrumentation, such as the HTTP request span, stay in your OTEL backend.
 
 #### Forwarding logs (optional)
 
@@ -727,7 +727,7 @@ For details on span naming and attributes, see the [OpenTelemetry Exporter seman
 
 ### Trace hierarchy
 
-With the `OtelBridge`, your traces maintain proper hierarchy across OTEL and Mastra boundaries:
+With the `OtelBridge`, your OTEL backend shows one hierarchy across OTEL and Mastra boundaries:
 
 ```
 HTTP POST /api/chat (from Hono middleware)
@@ -740,6 +740,18 @@ HTTP POST /api/chat (from Hono middleware)
         └── agent_step assistant (turn 2)
             └── chat __AI_SDK_OPENAI_MODEL_BASE__ (follow-up LLM call)
 ```
+
+Mastra storage and Studio record only the Mastra spans. The `HTTP POST /api/chat` and `HTTP GET api.example.com` spans stay in your OTEL backend. In Mastra storage, the agent run is a root span, and its `externalParentSpanId` holds the ID of the `HTTP POST /api/chat` span.
+
+When the handler starts several Mastra runs in the same request, each run is a separate root span in the same trace. The Studio trace page groups runs that share an `externalParentSpanId` under one **Started outside Mastra** node, and each run shows its own duration:
+
+```text
+Started outside Mastra
+├── agent run: 'assistant'
+└── workflow run: 'follow-up'
+```
+
+The trace list shows the trace once, by default under its earliest run. See [Traces with several top-level runs](/docs/observability/tracing/overview#traces-with-several-top-level-runs) for how filters pick the listed run.
 
 ### Multi-service distributed tracing
 

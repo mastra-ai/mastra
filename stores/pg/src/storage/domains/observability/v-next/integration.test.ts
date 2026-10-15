@@ -558,8 +558,13 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
           expect(nodes.some(node => node['Index Name']?.includes('mastra_span_events_root_'))).toBe(true);
         }
         expect(groupedNodes.some(node => node['Relation Name'] === TABLE_SCORE_EVENTS)).toBe(false);
+        // The representative-root `DISTINCT ON` is a Unique node too; only score history must not be deduplicated.
         for (const nodes of [scoreNodes, repeatedScoreNodes, mixedNodes]) {
-          expect(nodes.some(node => node['Node Type'] === 'Unique')).toBe(false);
+          expect(
+            nodes
+              .filter(node => node['Node Type'] === 'Unique')
+              .some(node => collectPlanNodes(node).some(child => child['Relation Name'] === TABLE_SCORE_EVENTS)),
+          ).toBe(false);
         }
         expect(
           groupedNodes
@@ -1744,25 +1749,53 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
       }
     });
 
-    it('does not resurrect an older root when its replacement lies above the safe horizon', async () => {
+    it('does not resurrect an older root row when its newer row lies above the safe horizon', async () => {
       const harness = await createHarness({ schemaPrefix: 'query_delta_replacement' });
       try {
         await withDeltaPolling(async () => {
           const bootstrap = await harness.domain.queryTraces(request({ mode: 'delta' }));
           if (!('deltaCursor' in bootstrap)) throw new Error('Expected delta cursor');
-          await harness.domain.createSpan({ span: makeSpan({ traceId: 'replaced', spanId: 'older' }) });
+          const root = { traceId: 'replaced', spanId: 'root' };
+          await harness.domain.createSpan({ span: makeSpan(root) });
           const horizon = await harness.client.one<{ horizon: string }>(
             'SELECT pg_snapshot_xmin(pg_current_snapshot())::text AS horizon',
           );
-          await harness.domain.createSpan({
-            span: makeSpan({ traceId: 'replaced', spanId: 'newer', startedAt: dayAt(0, 11) }),
-          });
+          await harness.domain.createSpan({ span: makeSpan({ ...root, endedAt: dayAt(0, 10, 0, 5) }) });
           const plan = request({ mode: 'delta', after: bootstrap.deltaCursor });
           const compiled = compilePostgresTraceQuery(harness.schema, plan, 'data', horizon.horizon);
           expect(await harness.client.any(compiled.text, compiled.values)).toEqual([]);
           expect(await harness.domain.queryTraces(plan)).toMatchObject({
-            traces: [{ traceId: 'replaced', rootSpanId: 'newer' }],
+            traces: [{ traceId: 'replaced', rootSpanId: 'root', endedAt: dayAt(0, 10, 0, 5).toISOString() }],
           });
+        });
+      } finally {
+        await harness.close();
+      }
+    });
+
+    it('polls a trace with several roots under its earliest root, again only when that root changes', async () => {
+      const harness = await createHarness({ schemaPrefix: 'query_delta_multi_root' });
+      try {
+        await withDeltaPolling(async () => {
+          const traceId = 'multi-root';
+          const poll = async (after: string) => {
+            const response = await harness.domain.queryTraces(request({ mode: 'delta', after }));
+            if (!('deltaCursor' in response)) throw new Error('Expected delta cursor');
+            return { roots: response.traces.map(trace => trace.rootSpanId), after: response.deltaCursor };
+          };
+          const bootstrap = await harness.domain.queryTraces(request({ mode: 'delta' }));
+          if (!('deltaCursor' in bootstrap)) throw new Error('Expected delta cursor');
+
+          await harness.domain.createSpan({ span: makeSpan({ traceId, spanId: 'second', startedAt: dayAt(0, 11) }) });
+          const first = await poll(bootstrap.deltaCursor);
+          expect(first.roots).toEqual(['second']);
+
+          await harness.domain.createSpan({ span: makeSpan({ traceId, spanId: 'first', startedAt: dayAt(0, 10) }) });
+          const earlier = await poll(first.after);
+          expect(earlier.roots).toEqual(['first']);
+
+          await harness.domain.createSpan({ span: makeSpan({ traceId, spanId: 'third', startedAt: dayAt(0, 12) }) });
+          expect((await poll(earlier.after)).roots).toEqual([]);
         });
       } finally {
         await harness.close();
@@ -2188,24 +2221,40 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
       }
     });
 
-    it('shows one trace when a suspended run opens a second root on resume', async () => {
-      const harness = await createHarness({ schemaPrefix: 'obs_vnext_collapse_resume' });
+    it('lists each root of a trace with several roots as its own row, by its current row', async () => {
+      const harness = await createHarness({ schemaPrefix: 'obs_vnext_collapse_multi_root' });
 
       try {
-        const traceId = 'collapse-resume-trace';
+        const traceId = 'collapse-multi-root-trace';
+        // The later root is written first: write order does not pick the root.
         await harness.domain.createSpan({
-          span: makeSpan({ traceId, spanId: 'root-suspended', startedAt: dayAt(0, 18), endedAt: dayAt(0, 18, 1) }),
+          span: makeSpan({ traceId, spanId: 'root-later', startedAt: dayAt(0, 19), endedAt: undefined }),
         });
         await harness.domain.createSpan({
-          span: makeSpan({ traceId, spanId: 'root-resumed', startedAt: dayAt(0, 19), endedAt: undefined }),
+          span: makeSpan({ traceId, spanId: 'root-earliest', startedAt: dayAt(0, 18), endedAt: undefined }),
+        });
+        await harness.domain.createSpan({
+          span: makeSpan({ traceId, spanId: 'root-earliest', startedAt: dayAt(0, 18), endedAt: dayAt(0, 18, 1) }),
         });
 
         const listed = await harness.domain.listTraces({});
-        expect(listed.pagination.total).toBe(1);
-        expect(listed.spans.map(s => s.spanId)).toEqual(['root-resumed']);
+        expect(listed.pagination.total).toBe(2);
+        expect(listed.spans.map(s => [s.spanId, s.endedAt ?? null])).toEqual([
+          ['root-later', null],
+          ['root-earliest', dayAt(0, 18, 1)],
+        ]);
+        const light = await harness.domain.listTracesLight({});
+        expect(light.spans.map(s => s.spanId)).toEqual(['root-later', 'root-earliest']);
+
+        const running = await harness.domain.listTraces({ filters: { status: TraceStatus.RUNNING } });
+        expect(running.spans.map(s => s.spanId)).toEqual(['root-later']);
+
+        const polled = await withDeltaPolling(() => harness.domain.listTraces({ mode: 'delta', after: '0:0' }));
+        expect(polled.spans.map(s => s.spanId).sort()).toEqual(['root-earliest', 'root-later']);
 
         const root = await harness.domain.getRootSpan({ traceId });
-        expect(root?.span.spanId).toBe('root-resumed');
+        expect(root?.span.spanId).toBe('root-earliest');
+        expect(root?.span.endedAt).toEqual(dayAt(0, 18, 1));
       } finally {
         await harness.close();
       }

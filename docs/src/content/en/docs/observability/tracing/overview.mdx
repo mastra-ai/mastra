@@ -808,8 +808,10 @@ const result = await agent.generate('Analyze this data', {
   },
 })
 
-// The Mastra trace will now appear as a child in your distributed trace
+// Your tracing backend shows this run as a child of parentSpanId
 ```
+
+Your tracing backend shows the run under the parent span, but Mastra storage and Studio don't record that outside span. In Mastra, the run is a top-level run that keeps the outside span ID in its `externalParentSpanId` field. See [Traces with several top-level runs](#traces-with-several-top-level-runs).
 
 ### OpenTelemetry integration
 
@@ -851,7 +853,7 @@ const result = await run.start({
 
 ### Nesting a run under an earlier Mastra run
 
-A `parentSpanId` can point at two kinds of spans. The span can belong to your own tracing system, as in the examples above. Mastra then treats the run as the top of the trace it exports, and the run sets the trace's name, input, output, and tags.
+A `parentSpanId` can point at two kinds of spans. The span can belong to your own tracing system, as in the examples above. Mastra then treats the run as the top of the trace it exports, and the run sets the trace's name, input, output, and tags. Mastra stores the ID as the run's `externalParentSpanId`, not as its `parentSpanId`. When one outside trace calls Mastra several times with the same `traceId`, each call is a separate top-level run in Mastra storage, and the earliest run represents the trace. See [Traces with several top-level runs](#traces-with-several-top-level-runs).
 
 The span can also be an earlier Mastra run in the same trace, such as an LLM judge that scores a finished turn. Set `nestUnderParent: true` for this case. The new run becomes a child of that span, and the trace keeps the name, input, output, tags, user, and session of the run that started it.
 
@@ -878,6 +880,20 @@ await judge.generate(`Grade this answer: ${turn.text}`, {
 ```
 
 Both runs can be in different processes. Mastra ignores `nestUnderParent` when `traceId` or `parentSpanId` is missing or not valid. It also ignores the option when a tracing bridge starts the run in a different trace. The [Langfuse](/integrations/observability/langfuse) and [Braintrust](/integrations/observability/braintrust) exporters use this option. In other exporters, only the tags rule applies.
+
+### Traces with several top-level runs
+
+One outside request, such as an HTTP handler instrumented with OpenTelemetry, can call Mastra agents, tools, or workflows several times with the same trace ID. Each call starts its own root span, so the trace has several top-level runs. The trace list still shows the trace once. Among the roots that start in the requested time range and match the trace-level filters, the earliest one, by `startedAt` and then by the lowest span ID, represents the trace. The listed name, entity, input and output preview, status, start time, and sort value come from that run. With no filters, it's the trace's first run, and a filter that only a later run matches still finds the trace and lists it under that run.
+
+```text
+Your tracing backend               Studio trace page
+POST /api/chat                     Started outside Mastra
+├── agent run: 'router'            ├── agent run: 'router'      ← listed when no filter is set
+├── workflow run: 'enrich'         ├── workflow run: 'enrich'
+└── agent run: 'writer'            └── agent run: 'writer'
+```
+
+When two or more top-level runs share one `externalParentSpanId`, the Studio trace page groups them under one **Started outside Mastra** node. The outside span itself stays in your tracing backend because Mastra doesn't record it. Each run shows its own duration. The observability store's `getRootSpan()` returns the trace's earliest root. A resumed durable agent run isn't a new root, because it nests under the span that suspended.
 
 ### ID format requirements
 
@@ -921,7 +937,7 @@ app.post('/api/analyze', async (req, res) => {
 })
 ```
 
-This creates a single distributed trace that includes both the HTTP request handling and the Mastra agent execution, viewable in your observability platform of choice.
+Your OpenTelemetry backend shows one distributed trace with the HTTP request span above the Mastra agent spans, while Mastra storage and Studio show the agent run as a top-level run because they don't record the HTTP request span. When the handler calls Mastra more than once, the trace has several top-level runs, as described in [Traces with several top-level runs](#traces-with-several-top-level-runs).
 
 ### MCP calls
 

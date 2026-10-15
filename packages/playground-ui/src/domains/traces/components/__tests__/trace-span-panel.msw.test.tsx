@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { TraceSpanPanel, type TraceSpanPanelProps } from '../trace-span-panel';
 import { queryPageFromList } from './fixtures/thread-traces';
-import { TRACE_ID, panelTraceSpans, spanDetailById } from './fixtures/trace-span-panel';
+import { TRACE_ID, outsideRunsTraceSpans, panelTraceSpans, spanDetailById } from './fixtures/trace-span-panel';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -317,6 +317,53 @@ describe('TraceSpanPanel', () => {
     fireEvent.click(screen.getByLabelText('Go to previous span'));
     expect(await screen.findByRole('heading', { name: /span-root/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+  });
+
+  describe('given a trace whose runs were started by the same request outside Mastra', () => {
+    it('then the runs sit under one "Started outside Mastra" row and the summary shows the earliest run', async () => {
+      installHandlers();
+      const { queryClient } = renderPanel({ spans: outsideRunsTraceSpans.spans });
+
+      const group = await screen.findByLabelText('Started outside Mastra');
+      expect(within(group).getByTitle('Parent f00dbabe is not recorded by Mastra')).not.toBeNull();
+      expect(screen.getByLabelText('View details for span First agent run')).not.toBeNull();
+      expect(screen.getByLabelText('View details for span Second agent run')).not.toBeNull();
+      // The listed-first run started later: the summary must not pick it.
+      expect(screen.getByRole('link', { name: /Weather Agent/ })).not.toBeNull();
+      expect(screen.queryByRole('link', { name: /Planner Agent/ })).toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
+    it('when the group row is clicked, then it only collapses and no span detail is requested', async () => {
+      installHandlers();
+      const onSpanSelect = vi.fn<(spanId: string | undefined) => void>();
+      const { queryClient } = renderPanel({ spans: outsideRunsTraceSpans.spans, onSpanSelect });
+
+      fireEvent.click(await screen.findByLabelText('Started outside Mastra'));
+
+      expect(screen.queryByLabelText('View details for span First agent run')).toBeNull();
+      // Mount clears the selection with `undefined`; the group row never becomes the selected span.
+      expect(onSpanSelect.mock.calls.filter(([spanId]) => spanId !== undefined)).toEqual([]);
+
+      fireEvent.click(screen.getByLabelText('Started outside Mastra'));
+      expect(screen.getByLabelText('View details for span First agent run')).not.toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(onSpanDetailRequest).not.toHaveBeenCalled();
+    });
+
+    it('when next/previous is clicked, then it moves between the runs and skips the group row', async () => {
+      installHandlers();
+      const { queryClient } = renderPanel({ spans: outsideRunsTraceSpans.spans, initialSpanId: 'span-run-1' });
+
+      expect(await screen.findByRole('heading', { name: /span-run-1/ })).not.toBeNull();
+      // The earliest run is the first real span: the group row before it is not a step.
+      expect(screen.getByLabelText('Go to previous span')).toHaveProperty('disabled', true);
+
+      fireEvent.click(screen.getByLabelText('Go to next span'));
+      expect(await screen.findByRole('heading', { name: /span-run-2/ })).not.toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(onSpanDetailRequest.mock.calls.map(([spanId]) => spanId)).toEqual(['span-run-1', 'span-run-2']);
+    });
   });
 
   it('when the selected span is clicked again, then onSpanSelect(undefined) clears the selection', async () => {

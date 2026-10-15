@@ -662,14 +662,16 @@ describe('ClickHouse advanced trace query', () => {
     expect(compiled.query_params).toMatchObject({ trace_query_3: 'alpha', trace_query_4: 'beta' });
   });
 
-  it('discovers tag values one row per distinct tag per root', () => {
+  it("discovers tag values one row per distinct tag of each trace's earliest root", () => {
     const compiled = compileClickHouseTraceQueryValues(
       planTraceQueryValues(
         parseGetTraceQueryValuesArgs({ timeRange: TIME_RANGE, predicateScope: 'trace', path: 'tags', search: 'al' }),
       ),
     );
 
-    expect(compiled.query).toContain('SELECT toString(arrayJoin(arrayDistinct(r.tags))) AS value FROM root_scope r');
+    expect(compiled.query).toMatch(
+      /SELECT toString\(arrayJoin\(rootValue\)\) AS value FROM \(SELECT arrayDistinct\(r\.tags\) AS rootValue\s+FROM root_scope r\s+ORDER BY r\.traceId, r\.startedAt, r\.dedupeKey, r\.endedAt\s+LIMIT 1 BY r\.traceId\)/,
+    );
     expect(compiled.query).toContain('positionCaseInsensitiveUTF8(value, {trace_query_3:String}) > 0');
     expect(compiled.query).toContain('ORDER BY count DESC, value ASC');
     expect(compiled.query_params).toMatchObject({ trace_query_3: 'al' });
@@ -690,7 +692,9 @@ describe('ClickHouse advanced trace query', () => {
     });
     const keys = compileClickHouseTraceQueryKeys(after);
 
-    expect(keys.query).toContain('max(endedAt) AS sortValue');
+    // The sort value is the representative root's, not the latest endedAt of the trace's roots.
+    expect(keys.query).toContain('min((startedAt, dedupeKey, endedAt)) AS root, root.3 AS sortValue');
+    expect(keys.query).not.toMatch(/max\(endedAt\)/);
     expect(keys.query).toContain('ORDER BY sortValue DESC, traceId ASC');
     expect(keys.query).toContain('traceId > {trace_query_4:String}');
     expect(Object.values(keys.query_params).at(-1)).toBe(3);
@@ -714,10 +718,10 @@ describe('ClickHouse advanced trace query', () => {
       'clickhouse',
       JSON.stringify({ cursorId: '0', traceId: '' }),
     );
-    // Delta lists in the default order (startedAt DESC): the row that sorts first, as in the keys
-    // statement; then the lowest dedupeKey, then the latest endedAt.
+    // The representative root, as in the keys statement: the earliest startedAt, then the lowest
+    // dedupeKey, then the earliest endedAt, even though delta lists in startedAt DESC order.
     expect(compileClickHouseTraceQuery(plan({ mode: 'delta', after })).query).toContain(
-      'ORDER BY d.latestCursorId ASC, c.traceId ASC, c.startedAt DESC, c.dedupeKey ASC, c.endedAt DESC\nLIMIT 1 BY c.traceId',
+      'ORDER BY d.latestCursorId ASC, c.traceId ASC, c.startedAt ASC, c.dedupeKey ASC, c.endedAt ASC\nLIMIT 1 BY c.traceId',
     );
   });
 
@@ -772,12 +776,11 @@ describe('ClickHouse advanced trace query', () => {
     });
 
     const keys = compileClickHouseTraceQueryKeys(pagePlan);
-    // One sort value per trace (its first root row, which also gives the key), the page by offset,
-    // and the total on every row.
-    expect(keys.query).toContain('min(endedAt) AS sortValue');
-    expect(keys.query).toContain('argMin((dedupeKey, startedAt), endedAt) AS root');
-    expect(keys.query).toContain('root.1 AS dedupeKey');
-    expect(keys.query).toContain('root.2 AS rootStartedAt');
+    // One sort value per trace (its representative root, which also gives the key), the page by
+    // offset, and the total on every row.
+    expect(keys.query).toContain('min((startedAt, dedupeKey, endedAt)) AS root, root.3 AS sortValue');
+    expect(keys.query).toContain('root.2 AS dedupeKey');
+    expect(keys.query).toContain('root.1 AS rootStartedAt');
     expect(keys.query).toContain('count() OVER () AS __total');
     expect(keys.query).toMatch(
       /ORDER BY sortValue ASC, traceId ASC\nLIMIT \{trace_query_\d+:UInt64\} OFFSET \{trace_query_\d+:UInt64\}$/,
@@ -856,7 +859,9 @@ describe('ClickHouse advanced trace query', () => {
     expect(compiled.query.match(/current_spans AS/g)).toHaveLength(1);
     expect(compiled.query.match(/current_scores AS/g)).toHaveLength(1);
     expect(compiled.query.match(/current_feedback AS/g)).toHaveLength(1);
-    expect(compiled.query.match(/FROM mastra_trace_roots/g)).toHaveLength(2);
+    // One read of the window's roots: every candidate root qualifies its thread, with no re-read.
+    expect(compiled.query.match(/FROM mastra_trace_roots/g)).toHaveLength(1);
+    expect(compiled.query).not.toContain('current_roots');
     expect(compiled.query).toContain('FROM mastra_feedback_events FINAL');
     expect(compiled.query).toContain('eligible_roots AS');
     expect(compiled.query).toContain('SELECT *\n    FROM root_scope r');
@@ -956,11 +961,12 @@ describe('ClickHouse advanced trace query', () => {
       traces: [{ traceId: 'trace-a', rootSpanId: 'root-trace-a', status: 'success' }],
       page: { next: expect.any(String) },
     });
-    expect(Object.keys(response.traces[0]!)).toHaveLength(18);
+    expect(Object.keys(response.traces[0]!)).toHaveLength(19);
     expect(response.traces[0]).toMatchObject({
       name: 'Agent run',
       entityId: 'agent-1',
       parentSpanId: null,
+      externalParentSpanId: null,
       createdAt: '2026-01-01T12:00:00.000Z',
       metadata: { customer: { id: 'customer-1' }, count: 2 },
       inputPreview: 'Help with my order',

@@ -1,6 +1,7 @@
 import { useSpanDetail, useThreadHasOtherTraces } from '@mastra/react/hooks/traces';
 import { MessagesSquareIcon } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
+import { isVirtualSpanId } from '@/domains/traces/components/format-hierarchical-spans';
 import { SpanDataPanelView } from '@/domains/traces/components/span-data-panel-view';
 import { TraceDataPanel } from '@/domains/traces/components/trace-data-panel';
 import type { TraceDataPanelView } from '@/domains/traces/components/trace-data-panel-view';
@@ -8,6 +9,7 @@ import { TraceMessagesPanel } from '@/domains/traces/components/trace-messages-p
 import { getTraceThreadId } from '@/domains/traces/components/trace-thread-context';
 import { TraceThreadPanel } from '@/domains/traces/components/trace-thread-panel';
 import { useTraceSpanNavigation } from '@/domains/traces/hooks/use-trace-span-navigation';
+import { getEarliestRootSpan } from '@/domains/traces/utils/span-utils';
 import { Button } from '@/ds/components/Button';
 import { useLinkComponent } from '@/lib/framework';
 import type { LinkComponentPaths } from '@/lib/framework';
@@ -136,15 +138,16 @@ export function TraceSpanPanel({
   const { data: spanDetailData, isLoading: isLoadingSpanDetail } = useSpanDetail({
     traceId: traceId,
     spanId: selectedSpanId ?? '',
-    queryOptions: { enabled: !!traceId && !!selectedSpanId },
+    // A virtual timeline node (e.g. a hand-edited URL) has no span record to fetch.
+    queryOptions: { enabled: !!traceId && !!selectedSpanId && !isVirtualSpanId(selectedSpanId) },
   });
-  const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(spans, selectedSpanId, onSpanSelect);
+  const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(spans, selectedSpanId, onSpanSelect, {
+    groupExternalRoots: true,
+  });
   const { Link, paths } = useLinkComponent();
 
   // The trace summary links the entity to its page; the app's link provider owns the routes.
-  const rootSpan = anchorSpanId
-    ? spans?.find(s => s.spanId === anchorSpanId)
-    : spans?.find(s => s.parentSpanId == null);
+  const rootSpan = anchorSpanId ? spans?.find(s => s.spanId === anchorSpanId) : getEarliestRootSpan(spans);
   const entityHref = getEntityHref(paths, rootSpan?.entityType, rootSpan?.entityId);
   const threadId = getTraceThreadId(rootSpan, anchorSpanId);
   const hasMessagesPanel = !!(traceId && showPartialThread && threadId);

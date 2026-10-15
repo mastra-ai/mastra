@@ -659,6 +659,64 @@ describe('RecordedTrace', () => {
     );
   });
 
+  describe('multiple parentless roots', () => {
+    const rootSpan = (spanId: string, startedAt: string, externalParentSpanId: string | null = null) => ({
+      traceId: 'trace-multi-root',
+      spanId,
+      parentSpanId: null,
+      externalParentSpanId,
+      name: spanId,
+      spanType: SpanType.AGENT_RUN,
+      isEvent: false,
+      startedAt: new Date(startedAt),
+      endedAt: new Date('2026-01-01T00:00:10Z'),
+    });
+
+    it('picks the earliest root when roots arrive newest-first', () => {
+      const trace = hydrateRecordedTrace({
+        trace: {
+          traceId: 'trace-multi-root',
+          spans: [rootSpan('later-root', '2026-01-01T00:00:05Z'), rootSpan('earlier-root', '2026-01-01T00:00:01Z')],
+        },
+        emitRecordedEvent: vi.fn().mockResolvedValue(undefined),
+        canEmitRecordedEvent: () => true,
+      });
+
+      expect(trace!.rootSpan.id).toBe('earlier-root');
+    });
+
+    it('breaks a startedAt tie between roots with the lowest span id', () => {
+      const trace = hydrateRecordedTrace({
+        trace: {
+          traceId: 'trace-multi-root',
+          spans: [rootSpan('span-b', '2026-01-01T00:00:01Z'), rootSpan('span-a', '2026-01-01T00:00:01Z')],
+        },
+        emitRecordedEvent: vi.fn().mockResolvedValue(undefined),
+        canEmitRecordedEvent: () => true,
+      });
+
+      expect(trace!.rootSpan.id).toBe('span-a');
+    });
+
+    it('exposes the external parent span id from the stored record', () => {
+      const trace = hydrateRecordedTrace({
+        trace: {
+          traceId: 'trace-multi-root',
+          spans: [
+            rootSpan('bridged-root', '2026-01-01T00:00:01Z', 'external-parent'),
+            rootSpan('plain-root', '2026-01-01T00:00:05Z'),
+          ],
+        },
+        emitRecordedEvent: vi.fn().mockResolvedValue(undefined),
+        canEmitRecordedEvent: () => true,
+      });
+
+      expect(trace!.getSpan('bridged-root')!.externalParentSpanId).toBe('external-parent');
+      expect(trace!.getSpan('bridged-root')!.parentSpanId).toBeUndefined();
+      expect(trace!.getSpan('plain-root')!.externalParentSpanId).toBeUndefined();
+    });
+  });
+
   it('debug-logs when a top-level recorded annotation is dropped because no observability instance is registered', async () => {
     const storage = new MockStore();
     const debug = vi.fn();

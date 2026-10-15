@@ -33,7 +33,8 @@ import {
  * In-memory reference evaluator for `TrustedTraceAggregatePlan`.
  *
  * Candidate traces come from `selectTraceQueryRoots`, so this evaluator aggregates exactly the
- * population `evaluateTraceQuery` paginates. Groups are distinct dimension tuples;
+ * population `evaluateTraceQuery` paginates, each trace grouped by its representative root.
+ * Groups are distinct dimension tuples;
  * `having`, `orderBy`, and `limit` act on whole-window group measures, and only the surviving
  * groups expand into bucket rows. The planner alone enforces bucket/row caps — nothing is
  * re-checked here.
@@ -99,8 +100,8 @@ function isPricingFailure(metric: RawTraceAggregateMetric): boolean {
 }
 
 /**
- * Usage stage: every token metric row for a candidate trace counts — including spend before a
- * suspend/resume and rows whose span was never persisted — deduplicated on `metricId`. Rows are
+ * Usage stage: every token metric row for a candidate trace counts — including spend under any of
+ * its roots and rows whose span was never persisted — deduplicated on `metricId`. Rows are
  * pruned only by `timestamp >= from` (no upper bound) and the trusted tenant scope. Traces with no
  * qualifying row are absent from the result, i.e. not usage-bearing.
  */
@@ -504,7 +505,7 @@ function aggregateRoot(spec: AggregateRootSpec): RawTraceQuerySpan[] {
  * | triage-3    | 2   | 3000  |     | t-2    | '  acme '  | yes    | padded → `acme`           |
  * | triage-4    | 3   | 4000  |     | t-3    | globex     | yes    |                           |
  * | triage-5    | 5   | 8000  | yes | t-3    | ''         | yes    | empty → `null`            |
- * | triage-6    | 5   | 8000  |     | t-4    |            |        | superseded copy excluded  |
+ * | triage-6    | 5   | 8000  |     | t-4    |            |        | older row excluded        |
  * | billing-1   | 1   | 500   |     | t-5    | acme       | yes    |                           |
  * | billing-2   | 2   | 1500  |     | t-5    | globex     |        |                           |
  * | billing-3   | 3   | 2500  | yes | t-6    |            | yes    |                           |
@@ -521,7 +522,7 @@ function aggregateRoot(spec: AggregateRootSpec): RawTraceQuerySpan[] {
  * p95 2500), support 4 (1 error, p95 6000), research 2 (1 error, p95 12000), scheduler 2
  * (p95 2900), null 1. Total 20 traces, 5 errors.
  *
- * Excluded records: a superseded `triage-6` root (lower `cursorId`, error + 60 s duration), a
+ * Excluded records: an older row of the `triage-6` root (lower `cursorId`, error + 60 s duration), a
  * pending `triage-pending` root, and a `triage-late` root starting exactly at `to`.
  */
 export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
@@ -1278,7 +1279,7 @@ const {
  *
  * | trace     | entity    | day   | in   | out | rsn | cache | cost      | covered | notes                                         |
  * |-----------|-----------|-------|------|-----|-----|-------|-----------|---------|-----------------------------------------------|
- * | early-1   | triage    | 06-01 | 100  | 20  |     |       | 0.25 usd  | yes     | resumed; pre-`from` spend (999 in) pruned      |
+ * | early-1   | triage    | 06-01 | 100  | 20  |     |       | 0.25 usd  | yes     | two roots; pre-`from` spend (999 in) pruned   |
  * | sup-1     | support   | 08-14 | 1000 | 200 | 50  | 400   | 0.75 usd  | yes     | costed detail rows ignored; dup `metricId`    |
  * | sup-2     | support   | 08-14 | 2000 | 400 |     |       | 1 usd     | yes     | cost on the input row only (`query_total`)    |
  * | sup-3     | support   | 08-15 | 500  | 100 |     |       | —         | no      | both rows `no_matching_model`                 |
@@ -1289,15 +1290,17 @@ const {
  * | bil-2     | billing   | 08-20 | 600  | 80  |     |       | 0.25 usd  | no      | output row errored (its 0.125 is ignored)     |
  * | sch-1     | scheduler | 08-21 |      |     |     |       |           |         | no metric rows (retention skew)               |
  * | sch-2     | scheduler | 08-22 |      |     |     |       |           |         | no metric rows (retention skew)               |
- * | resume-1  | planner   | 08-26 | 1000 | 300 |     |       | 1.25 usd  | yes     | resumed: two roots, spend from both           |
+ * | multi-1   | planner   | 08-26 | 1000 | 300 |     |       | 1.25 usd  | yes     | two roots, spend from both                    |
  *
- * `resume-1` has an older root (`entityName: 'planner-suspended'`, 08-25) carrying 400 in / 100
- * out / 0.5 usd, and the current root (`planner`, 08-26, `metadata.resumedFromSpanId`) whose
- * 600 in / 200 out / 0.75 usd rows reference a model span that was never persisted. The trace
- * counts once, groups as `planner`, buckets on 08-26, and sums usage from both attempts.
+ * `multi-1` has two roots, like two runs under one outside request: the earliest (`planner`,
+ * 08-26 09:00, `metadata.outsideRequest`) carrying 400 in / 100 out / 0.5 usd, and a later one
+ * written after it (`planner-followup`, 08-26 09:30) whose 600 in / 200 out / 0.75 usd rows
+ * reference a model span that was never persisted. The trace counts once, groups and buckets by
+ * its earliest root (`planner`, 08-26), and sums usage from both roots.
  *
- * `early-1` was suspended before `from`: its older root (`triage-suspended`, 05-31) carries a
- * 999 in / 9 usd row recorded before `from`, which never counts. The current root is in the window.
+ * `early-1` has a root before `from` (`triage-suspended`, 05-31) carrying a 999 in / 9 usd row
+ * recorded before `from`, which never counts. Its other root is the only one in the window, so it
+ * represents the trace.
  *
  * Whole-window groups by `entityName` (usage-bearing / covered → coverage):
  * support 4 traces, in 6500, out 1300, cost 3.75 usd (4 / 3 → 0.75); planner 1, in 1000, out
@@ -1406,20 +1409,20 @@ export const TRACE_AGGREGATE_TOKEN_FIXTURE_DATA: TraceAggregateFixtureData = {
       durationMs: 2000,
       threadId: 't-25',
     }),
-    span(1110, 'resume-1', 'resume-1-a', {
-      entityName: 'planner-suspended',
-      organizationId: 'org-a',
-      threadId: 't-26',
-      startedAt: '2026-08-25T10:00:00.000Z',
-      endedAt: '2026-08-25T10:01:00.000Z',
-    }),
-    span(1120, 'resume-1', 'resume-1-b', {
+    span(1110, 'multi-1', 'multi-1-a', {
       entityName: 'planner',
       organizationId: 'org-a',
       threadId: 't-26',
-      metadata: { resumedFromSpanId: 'resume-1-a' },
+      metadata: { outsideRequest: 'request-1' },
       startedAt: '2026-08-26T09:00:00.000Z',
       endedAt: '2026-08-26T09:02:00.000Z',
+    }),
+    span(1120, 'multi-1', 'multi-1-b', {
+      entityName: 'planner-followup',
+      organizationId: 'org-a',
+      threadId: 't-26',
+      startedAt: '2026-08-26T09:30:00.000Z',
+      endedAt: '2026-08-26T09:31:00.000Z',
     }),
     ...aggregateRoot({
       cursorId: 1130,
@@ -1480,18 +1483,10 @@ export const TRACE_AGGREGATE_TOKEN_FIXTURE_DATA: TraceAggregateFixtureData = {
       error: 'no_pricing_for_usage_type',
     }),
 
-    tokenMetric('resume-1-pre-in', 'resume-1', 'resume-1-a', INPUT, 400, '2026-08-25T10:00:30.000Z', usd(0.25)),
-    tokenMetric('resume-1-pre-out', 'resume-1', 'resume-1-a', OUTPUT, 100, '2026-08-25T10:00:30.000Z', usd(0.25)),
-    tokenMetric('resume-1-post-in', 'resume-1', 'resume-1-b-model', INPUT, 600, '2026-08-26T09:01:00.000Z', usd(0.5)),
-    tokenMetric(
-      'resume-1-post-out',
-      'resume-1',
-      'resume-1-b-model',
-      OUTPUT,
-      200,
-      '2026-08-26T09:01:00.000Z',
-      usd(0.25),
-    ),
+    tokenMetric('multi-1-a-in', 'multi-1', 'multi-1-a', INPUT, 400, '2026-08-26T09:00:30.000Z', usd(0.25)),
+    tokenMetric('multi-1-a-out', 'multi-1', 'multi-1-a', OUTPUT, 100, '2026-08-26T09:00:30.000Z', usd(0.25)),
+    tokenMetric('multi-1-b-in', 'multi-1', 'multi-1-b-model', INPUT, 600, '2026-08-26T09:30:30.000Z', usd(0.5)),
+    tokenMetric('multi-1-b-out', 'multi-1', 'multi-1-b-model', OUTPUT, 200, '2026-08-26T09:30:30.000Z', usd(0.25)),
 
     tokenMetric('tenant-in', 'tenant-check', 'tenant-check', INPUT, 100, '2026-09-10T10:00:01.000Z', usd(0.125)),
     tokenMetric('tenant-out', 'tenant-check', 'tenant-check', OUTPUT, 10, '2026-09-10T10:00:01.000Z', usd(0.125)),
@@ -1848,7 +1843,7 @@ export const TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES: TraceAggregateConformanceC
     name: 'token and cost measures grouped by a metadata dimension, with having and orderBy',
     request: {
       timeRange: tokenRange,
-      groupBy: ['metadata.resumedFromSpanId'],
+      groupBy: ['metadata.outsideRequest'],
       measures: ['count', 'tokens.total.sum', 'cost.sum'],
       having: { op: 'gt', left: { path: 'tokens.total.sum' }, right: { literal: 0 } },
       orderBy: { field: 'tokens.total.sum', direction: 'desc' },
@@ -1856,12 +1851,12 @@ export const TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES: TraceAggregateConformanceC
     expected: {
       rows: [
         {
-          dimensions: { 'metadata.resumedFromSpanId': null },
+          dimensions: { 'metadata.outsideRequest': null },
           measures: { count: 11, 'tokens.total.sum': 12120, 'cost.sum': null },
           cost: { coverage: 2 / 3, unit: 'mixed' },
         },
         {
-          dimensions: { 'metadata.resumedFromSpanId': 'resume-1-a' },
+          dimensions: { 'metadata.outsideRequest': 'request-1' },
           measures: { count: 1, 'tokens.total.sum': 1300, 'cost.sum': 1.25 },
           cost: { coverage: 1, unit: 'usd' },
         },

@@ -33,6 +33,14 @@ describe('record-builders', () => {
       expect(buildCreateSpanRecord(span()).links).toBeNull();
       expect(buildUpdateSpanRecord(span()).links).toBeNull();
     });
+
+    it('stores an outside parent apart from parentSpanId so the span stays a root', () => {
+      expect(buildCreateSpanRecord({ ...span(), externalParentSpanId: 'outside-parent' })).toMatchObject({
+        parentSpanId: null,
+        externalParentSpanId: 'outside-parent',
+      });
+      expect(buildCreateSpanRecord(span()).externalParentSpanId).toBeNull();
+    });
   });
 
   it('preserves exporter-supplied previews for create and update records', () => {

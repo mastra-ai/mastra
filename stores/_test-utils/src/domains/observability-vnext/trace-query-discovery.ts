@@ -95,12 +95,6 @@ export const TRACE_QUERY_DISCOVERY_SCOPED_TIME_RANGE = {
 
 export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
   spans: [
-    span(1, 'trace-a', 'root-a-old', {
-      startedAt: '2026-08-02T10:00:00.000Z',
-      metadata: { superseded: 'old' },
-      environment: 'development',
-      tags: ['superseded'],
-    }),
     span(10, 'trace-a', 'root-a', {
       tags: ['beta', 'alpha'],
       metadata: {
@@ -136,6 +130,15 @@ export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
       name: 'model-call',
       spanType: 'model_generation',
       attributes: { model: 'claude-sonnet-4-6', provider: 'anthropic' },
+    }),
+    // A later, last-written root of trace-a: the earliest root represents the trace, so its
+    // values are never discovered.
+    span(13, 'trace-a', 'root-a-later', {
+      startedAt: '2026-08-20T10:00:00.000Z',
+      endedAt: '2026-08-20T10:00:01.000Z',
+      metadata: { laterRootOnly: 'hidden' },
+      environment: 'development',
+      tags: ['later-root'],
     }),
     span(20, 'trace-b', 'root-b', {
       startedAt: '2026-08-11T10:00:00.000Z',

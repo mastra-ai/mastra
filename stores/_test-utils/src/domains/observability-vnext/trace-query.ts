@@ -38,6 +38,7 @@ export interface RawTraceQuerySpan {
   traceId: string | null;
   spanId: string;
   parentSpanId: string | null;
+  externalParentSpanId?: string | null;
   isPending: boolean;
   name: string;
   spanType: string;
@@ -671,13 +672,6 @@ export const TRACE_QUERY_FEEDBACK_REPLACEMENT_SCENARIOS: TraceQueryFeedbackRepla
 
 export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
   spans: [
-    span(1, 'trace-a', 'root-a-old', {
-      threadId: 'thread-1',
-      resourceId: 'resource-old',
-      startedAt: '2026-08-01T10:00:00.000Z',
-      endedAt: '2026-08-01T10:00:01.000Z',
-      tags: ['superseded'],
-    }),
     span(10, 'trace-a', 'root-a', {
       threadId: 'thread-1',
       resourceId: 'resource-1',
@@ -790,11 +784,6 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       startedAt: '2026-08-08T10:00:00.000Z',
       endedAt: '2026-08-08T10:00:02.000Z',
       tags: ['production'],
-    }),
-    span(50, 'trace-running', 'root-running-old', {
-      threadId: 'thread-3',
-      startedAt: '2026-08-09T10:00:00.000Z',
-      endedAt: '2026-08-09T10:00:02.000Z',
     }),
     span(51, 'trace-running', 'root-running', {
       threadId: 'thread-3',
@@ -1080,28 +1069,19 @@ export const TRACE_QUERY_ORDINAL_FIXTURE_DATA: TraceQueryFixtureData = {
 
 export const TRACE_QUERY_TIED_TIMESTAMP_FIXTURE_DATA: TraceQueryFixtureData = {
   spans: [
-    span(100, 'trace-tied', 'root-z-old', {
+    span(101, 'trace-tied', 'root-tied', {
       threadId: 'thread-tied',
-      resourceId: 'resource-old',
       startedAt: tiedStartedAt,
       endedAt: tiedEndedAt,
-      entityName: 'old-root',
-    }),
-    span(101, 'trace-tied', 'root-a-current', {
-      threadId: 'thread-tied',
-      resourceId: 'resource-current',
-      startedAt: tiedStartedAt,
-      endedAt: tiedEndedAt,
-      entityName: 'current-root',
     }),
     span(102, 'trace-tied', 'span-tied-tool', {
-      parentSpanId: 'root-a-current',
+      parentSpanId: 'root-tied',
       spanType: 'tool_call',
       startedAt: tiedStartedAt,
       endedAt: tiedEndedAt,
     }),
     span(103, 'trace-tied', 'span-tied-tool', {
-      parentSpanId: 'root-a-current',
+      parentSpanId: 'root-tied',
       spanType: 'tool_call',
       error: { message: 'current attempt failed' },
       startedAt: tiedStartedAt,
@@ -1325,18 +1305,6 @@ export const THREAD_QUERY_CONFORMANCE_CASES: ThreadQueryConformanceCase[] = [
     expected: [{ threadId: 'thread-1' }],
   },
   {
-    name: 'does not qualify through a superseded trace root',
-    request: {
-      traces: { timeRange: fullRange },
-      where: {
-        traces: {
-          some: { op: 'eq', left: { path: 'resourceId' }, right: { literal: 'resource-old' } },
-        },
-      },
-    },
-    expected: [],
-  },
-  {
     name: 'supports thread boolean or',
     request: {
       traces: { timeRange: fullRange },
@@ -1514,14 +1482,6 @@ export const TRACE_QUERY_SCORE_TIE_CASE: TraceQueryConformanceCase = {
 
 export const TRACE_QUERY_TIED_TIMESTAMP_CASES: TraceQueryConformanceCase[] = [
   {
-    name: 'selects the later root when root timestamps tie',
-    request: {
-      timeRange: fullRange,
-      where: { op: 'eq', left: { path: 'entityName' }, right: { literal: 'current-root' } },
-    },
-    expected: [{ traceId: 'trace-tied' }],
-  },
-  {
     name: 'selects the later span when span timestamps tie',
     request: {
       timeRange: fullRange,
@@ -1539,14 +1499,217 @@ export const TRACE_QUERY_TIED_TIMESTAMP_CASES: TraceQueryConformanceCase[] = [
   },
 ];
 
+const multiRoot = (
+  cursorId: number,
+  traceId: string,
+  spanId: string,
+  startedAt: string,
+  overrides: Partial<RawTraceQuerySpan> = {},
+): RawTraceQuerySpan =>
+  span(cursorId, traceId, spanId, {
+    startedAt,
+    endedAt: new Date(Date.parse(startedAt) + 1000).toISOString(),
+    ...overrides,
+  });
+
+/**
+ * Traces with several roots, like several runs under one outside request. Each trace is listed
+ * once, under its earliest root (by `startedAt`, then `spanId`) among the complete roots that
+ * start in the range and match the trace-level predicates; its row and sort value come from that
+ * root. Cursor order is write order, so neither the newest nor the first-written root wins.
+ *
+ * | trace          | root            | cursor | startedAt   | notes                                  |
+ * |----------------|-----------------|--------|-------------|----------------------------------------|
+ * | multi-shared   | shared-first    | 300    | 08-10 10:00 | planner, outside parent, `first-run`   |
+ * |                | shared-second   | 302    | 08-10 10:05 | reviewer, same outside parent          |
+ * | multi-reversed | reversed-second | 310    | 08-10 10:03 | reviewer, written first                |
+ * |                | reversed-first  | 311    | 08-10 10:01 | planner                                |
+ * | multi-tied     | tied-a          | 320    | 08-10 10:02 | planner, own thread                    |
+ * |                | tied-z          | 321    | 08-10 10:02 | reviewer, own thread, same start       |
+ * | multi-pending  | pending-first   | 330    | 08-11 10:00 | complete                               |
+ * |                | pending-second  | 331    | 08-11 10:05 | still running                          |
+ * | multi-late     | late-first      | 340    | 08-12 10:00 | still running                          |
+ * |                | late-second     | 341    | 08-12 10:05 | complete                               |
+ * | multi-range    | range-first     | 350    | 07-31 23:00 | before `fullRange`                     |
+ * |                | range-second    | 351    | 08-01 01:00 | first root inside `fullRange`          |
+ */
+export const TRACE_QUERY_MULTI_ROOT_FIXTURE_DATA: TraceQueryFixtureData = {
+  spans: [
+    multiRoot(300, 'multi-shared', 'shared-first', '2026-08-10T10:00:00.000Z', {
+      externalParentSpanId: 'outside-request',
+      entityName: 'planner',
+      threadId: 'thread-shared',
+      resourceId: 'resource-first',
+      tags: ['first-run'],
+    }),
+    span(301, 'multi-shared', 'shared-first-tool', {
+      parentSpanId: 'shared-first',
+      spanType: 'tool_call',
+      startedAt: '2026-08-10T10:00:00.100Z',
+      endedAt: '2026-08-10T10:00:00.500Z',
+    }),
+    multiRoot(302, 'multi-shared', 'shared-second', '2026-08-10T10:05:00.000Z', {
+      externalParentSpanId: 'outside-request',
+      entityName: 'reviewer',
+      threadId: 'thread-shared',
+      resourceId: 'resource-second',
+      tags: ['second-run'],
+    }),
+    multiRoot(310, 'multi-reversed', 'reversed-second', '2026-08-10T10:03:00.000Z', {
+      entityName: 'reviewer',
+      threadId: 'thread-reversed',
+    }),
+    multiRoot(311, 'multi-reversed', 'reversed-first', '2026-08-10T10:01:00.000Z', {
+      entityName: 'planner',
+      threadId: 'thread-reversed',
+    }),
+    multiRoot(320, 'multi-tied', 'tied-a', '2026-08-10T10:02:00.000Z', {
+      entityName: 'planner',
+      threadId: 'thread-tied-a',
+    }),
+    multiRoot(321, 'multi-tied', 'tied-z', '2026-08-10T10:02:00.000Z', {
+      entityName: 'reviewer',
+      threadId: 'thread-tied-z',
+    }),
+    multiRoot(330, 'multi-pending', 'pending-first', '2026-08-11T10:00:00.000Z'),
+    multiRoot(331, 'multi-pending', 'pending-second', '2026-08-11T10:05:00.000Z', {
+      isPending: true,
+      endedAt: null,
+    }),
+    multiRoot(340, 'multi-late', 'late-first', '2026-08-12T10:00:00.000Z', { isPending: true, endedAt: null }),
+    multiRoot(341, 'multi-late', 'late-second', '2026-08-12T10:05:00.000Z'),
+    multiRoot(350, 'multi-range', 'range-first', '2026-07-31T23:00:00.000Z'),
+    multiRoot(351, 'multi-range', 'range-second', '2026-08-01T01:00:00.000Z'),
+  ],
+  scores: [],
+  feedback: [],
+};
+
+export interface TraceQueryMultiRootCase {
+  name: string;
+  request: TraceQueryRequest;
+  expected: Array<{ traceId: string; rootSpanId: string }>;
+}
+
+const traceIdIs = (traceId: string): TraceQueryPredicate => ({
+  op: 'eq',
+  left: { path: 'traceId' },
+  right: { literal: traceId },
+});
+
+export const TRACE_QUERY_MULTI_ROOT_CASES: TraceQueryMultiRootCase[] = [
+  {
+    name: 'lists a trace with several roots once, under its earliest root',
+    request: { timeRange: fullRange },
+    expected: [
+      { traceId: 'multi-late', rootSpanId: 'late-second' },
+      { traceId: 'multi-pending', rootSpanId: 'pending-first' },
+      { traceId: 'multi-tied', rootSpanId: 'tied-a' },
+      { traceId: 'multi-reversed', rootSpanId: 'reversed-first' },
+      { traceId: 'multi-shared', rootSpanId: 'shared-first' },
+      { traceId: 'multi-range', rootSpanId: 'range-second' },
+    ],
+  },
+  {
+    name: 'matches a trace through a later root and lists and sorts it under that root',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'eq', left: { path: 'entityName' }, right: { literal: 'reviewer' } },
+    },
+    expected: [
+      { traceId: 'multi-shared', rootSpanId: 'shared-second' },
+      { traceId: 'multi-reversed', rootSpanId: 'reversed-second' },
+      { traceId: 'multi-tied', rootSpanId: 'tied-z' },
+    ],
+  },
+  {
+    name: 'matches tags carried only by a later root',
+    request: { timeRange: fullRange, where: { op: 'includes', path: 'tags', value: 'second-run' } },
+    expected: [{ traceId: 'multi-shared', rootSpanId: 'shared-second' }],
+  },
+  {
+    name: 'evaluates negated root predicates against each root',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'ne', left: { path: 'entityName' }, right: { literal: 'planner' } },
+    },
+    expected: [
+      { traceId: 'multi-late', rootSpanId: 'late-second' },
+      { traceId: 'multi-pending', rootSpanId: 'pending-first' },
+      { traceId: 'multi-shared', rootSpanId: 'shared-second' },
+      { traceId: 'multi-reversed', rootSpanId: 'reversed-second' },
+      { traceId: 'multi-tied', rootSpanId: 'tied-z' },
+      { traceId: 'multi-range', rootSpanId: 'range-second' },
+    ],
+  },
+  {
+    name: 'breaks a root start-time tie by the lowest span ID',
+    request: { timeRange: fullRange, where: traceIdIs('multi-tied') },
+    expected: [{ traceId: 'multi-tied', rootSpanId: 'tied-a' }],
+  },
+  {
+    name: 'lists a trace under its complete root while a later root is still running',
+    request: { timeRange: fullRange, where: traceIdIs('multi-pending') },
+    expected: [{ traceId: 'multi-pending', rootSpanId: 'pending-first' }],
+  },
+  {
+    name: 'lists a trace under a later complete root while its earlier root is still running',
+    request: { timeRange: fullRange, where: traceIdIs('multi-late') },
+    expected: [{ traceId: 'multi-late', rootSpanId: 'late-second' }],
+  },
+  {
+    name: 'lists a trace whose only in-range root is the later one under it',
+    request: { timeRange: fullRange, where: traceIdIs('multi-range') },
+    expected: [{ traceId: 'multi-range', rootSpanId: 'range-second' }],
+  },
+  {
+    name: 'lists a trace whose only in-range root is the earlier one under it',
+    request: { timeRange: { from: '2026-07-31T00:00:00Z', to: '2026-08-01T00:00:00Z' } },
+    expected: [{ traceId: 'multi-range', rootSpanId: 'range-first' }],
+  },
+];
+
+export const THREAD_QUERY_MULTI_ROOT_CASES: ThreadQueryConformanceCase[] = [
+  {
+    name: 'returns the threads of every candidate root',
+    request: { traces: { timeRange: fullRange } },
+    expected: [
+      { threadId: 'thread-reversed' },
+      { threadId: 'thread-shared' },
+      { threadId: 'thread-tied-a' },
+      { threadId: 'thread-tied-z' },
+    ],
+  },
+  {
+    name: 'qualifies a thread through a later root of one of its traces',
+    request: {
+      traces: { timeRange: fullRange },
+      where: {
+        traces: { some: { op: 'eq', left: { path: 'resourceId' }, right: { literal: 'resource-second' } } },
+      },
+    },
+    expected: [{ threadId: 'thread-shared' }],
+  },
+  {
+    name: 'requires no candidate root of the thread to match for traces.none',
+    request: {
+      traces: { timeRange: fullRange },
+      where: {
+        traces: { none: { op: 'eq', left: { path: 'entityName' }, right: { literal: 'reviewer' } } },
+      },
+    },
+    expected: [{ threadId: 'thread-tied-a' }],
+  },
+];
+
 export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
   {
-    name: 'returns one current completed root per trace in default order',
+    name: 'returns one completed root per trace in default order',
     request: { timeRange: fullRange },
     expected: [{ traceId: 'trace-d' }, { traceId: 'trace-c' }, { traceId: 'trace-a' }, { traceId: 'trace-b' }],
   },
   {
-    name: 'filters by the current root duration without matching long child spans',
+    name: 'filters by the root duration without matching long child spans',
     request: {
       timeRange: fullRange,
       where: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
@@ -1970,7 +2133,7 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     expected: [],
   },
   {
-    name: 'includes current root and child spans in span relations',
+    name: 'includes root and child spans in span relations',
     request: {
       timeRange: fullRange,
       where: { spans: { some: { op: 'exists', path: 'error' } } },
@@ -1978,7 +2141,7 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     expected: [{ traceId: 'trace-c' }, { traceId: 'trace-a' }],
   },
   {
-    name: 'applies span none predicates to current root and child spans',
+    name: 'applies span none predicates to root and child spans',
     request: {
       timeRange: fullRange,
       where: { spans: { none: { op: 'exists', path: 'error' } } },
@@ -2004,18 +2167,10 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     expected: [{ traceId: 'trace-a' }, { traceId: 'trace-b' }],
   },
   {
-    name: 'does not resurrect an older root when the current root is pending',
+    name: 'does not list a trace whose only root is still running',
     request: {
       timeRange: fullRange,
       where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'trace-running' } },
-    },
-    expected: [],
-  },
-  {
-    name: 'does not resurrect an older root when the current root is outside the requested range',
-    request: {
-      timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-08-02T00:00:00Z' },
-      where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'trace-a' } },
     },
     expected: [],
   },
@@ -2461,14 +2616,9 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     expected: [],
   },
   {
-    name: 'includes matches traces whose current root carries the tag',
+    name: 'includes matches traces whose root carries the tag',
     request: { timeRange: fullRange, where: { op: 'includes', path: 'tags', value: 'production' } },
     expected: [{ traceId: 'trace-d' }, { traceId: 'trace-a' }],
-  },
-  {
-    name: 'includes ignores tags on superseded roots',
-    request: { timeRange: fullRange, where: { op: 'includes', path: 'tags', value: 'superseded' } },
-    expected: [],
   },
   {
     name: 'includes compares whole tags exactly and case-sensitively',
@@ -2684,30 +2834,45 @@ export interface TraceQueryRootSelection {
 }
 
 /**
- * The candidate population shared by every trace-scoped read: current, completed,
- * non-pending roots inside the half-open `[from, to)` window that satisfy `where` and `scope`.
+ * Every candidate root of a trace-scoped read. A trace can have several roots (current span
+ * records with no parent, each judged by its own current state); a candidate is a completed,
+ * non-pending root inside the half-open `[from, to)` window that satisfies `where` and `scope`.
+ * Thread and grouped reads use every candidate, so a trace qualifies through any of its roots.
  */
-export function selectTraceQueryRoots(
+export function selectTraceQueryCandidateRoots(
   data: TraceQueryFixtureData,
   selection: TraceQueryRootSelection,
 ): RawTraceQuerySpan[] {
-  const spans = currentSpans(data.spans).filter(span => matchesScope(span, selection.scope));
+  const allSpans = currentSpans(data.spans);
+  const spans = allSpans.filter(span => matchesScope(span, selection.scope));
   const scores = currentScores(data.scores).filter(score => matchesScope(score, selection.scope));
   const feedback = currentFeedback(data.feedback).filter(record => matchesScope(record, selection.scope));
-  return currentRoots(data.spans)
+  return allSpans
+    .filter(root => root.parentSpanId === null)
     .filter(root => matchesScope(root, selection.scope))
     .filter(root => !root.isPending && root.endedAt !== null)
     .filter(root => root.startedAt >= selection.timeRange.from && root.startedAt < selection.timeRange.to)
     .filter(root => !selection.where || evaluateTracePredicate(selection.where, root, spans, scores, feedback));
 }
 
-export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTraceQueryPlan): TraceQueryResponse {
-  const roots = selectTraceQueryRoots(data, plan);
+/**
+ * The trace population shared by trace rows and aggregates: one representative root per trace,
+ * its earliest candidate root by `startedAt`, then `spanId`. The trace's row, sort value, and
+ * group come from that root.
+ */
+export function selectTraceQueryRoots(
+  data: TraceQueryFixtureData,
+  selection: TraceQueryRootSelection,
+): RawTraceQuerySpan[] {
+  return representativeRoots(selectTraceQueryCandidateRoots(data, selection));
+}
 
+export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTraceQueryPlan): TraceQueryResponse {
   if (plan.result === 'groups') {
-    let groups = [...new Set(roots.map(root => root.threadId).filter((value): value is string => value !== null))].sort(
-      compareTraceQueryStrings,
-    );
+    const candidates = selectTraceQueryCandidateRoots(data, plan);
+    let groups = [
+      ...new Set(candidates.map(root => root.threadId).filter((value): value is string => value !== null)),
+    ].sort(compareTraceQueryStrings);
     if (plan.cursor) groups = groups.filter(threadId => compareTraceQueryStrings(threadId, plan.cursor!.threadId) > 0);
     const visible = groups.slice(0, plan.limit + 1);
     const hasNext = visible.length > plan.limit;
@@ -2716,6 +2881,7 @@ export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTra
     return { groups: page.map(threadId => ({ threadId })), page: { next } } satisfies TraceQueryGroupResponse;
   }
 
+  const roots = selectTraceQueryRoots(data, plan);
   const head = data.spans.reduce((max, row) => (row.parentSpanId === null ? Math.max(max, row.cursorId) : max), 0);
   if (plan.paginationMode === 'delta') {
     const watermark = getTraceQueryDeltaWatermark(plan, 'reference');
@@ -2773,7 +2939,7 @@ export function evaluateThreadQuery(data: TraceQueryFixtureData, plan: TrustedTh
   const spans = currentSpans(data.spans).filter(span => matchesScope(span, plan.scope));
   const scores = currentScores(data.scores).filter(score => matchesScope(score, plan.scope));
   const feedback = currentFeedback(data.feedback).filter(record => matchesScope(record, plan.scope));
-  const eligibleRoots = selectTraceQueryRoots(data, {
+  const eligibleRoots = selectTraceQueryCandidateRoots(data, {
     timeRange: plan.traces.timeRange,
     where: plan.traces.where,
     scope: plan.scope,
@@ -2862,12 +3028,19 @@ export async function collectTraceQueryPages(
   return results;
 }
 
-function currentRoots(spans: RawTraceQuerySpan[]): RawTraceQuerySpan[] {
+/** Orders a trace's roots: earliest `startedAt` first, then lowest `spanId`. */
+function compareTraceQueryRoots(left: RawTraceQuerySpan, right: RawTraceQuerySpan): number {
+  return (
+    compareTraceQueryStrings(left.startedAt, right.startedAt) || compareTraceQueryStrings(left.spanId, right.spanId)
+  );
+}
+
+/** Keeps each trace's earliest candidate root. */
+function representativeRoots(candidates: RawTraceQuerySpan[]): RawTraceQuerySpan[] {
   const roots = new Map<string, RawTraceQuerySpan>();
-  for (const candidate of spans) {
-    if (candidate.traceId === null || candidate.parentSpanId !== null) continue;
-    const current = roots.get(candidate.traceId);
-    if (!current || candidate.cursorId > current.cursorId) roots.set(candidate.traceId, candidate);
+  for (const candidate of candidates) {
+    const current = roots.get(candidate.traceId!);
+    if (!current || compareTraceQueryRoots(candidate, current) < 0) roots.set(candidate.traceId!, candidate);
   }
   return [...roots.values()];
 }
@@ -3131,6 +3304,7 @@ function toTraceQueryTrace(root: RawTraceQuerySpan): TraceQueryTrace {
     name: root.name,
     entityId: root.entityId,
     parentSpanId: root.parentSpanId,
+    externalParentSpanId: root.externalParentSpanId ?? null,
     createdAt: root.startedAt,
     metadata: root.metadata,
     inputPreview: null,

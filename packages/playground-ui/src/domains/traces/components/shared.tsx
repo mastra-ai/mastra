@@ -1,5 +1,5 @@
 import { BrainIcon, GaugeIcon } from 'lucide-react';
-import type { UISpanStyle } from '../types';
+import type { UISpan, UISpanStyle } from '../types';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { FolderIcon } from '@/ds/icons/FolderIcon';
 import { McpServerIcon } from '@/ds/icons/McpServerIcon';
@@ -19,6 +19,7 @@ export const spanTypePrefixes = [
   'workspace',
   'skill',
   'scorer',
+  'external',
   'other',
 ];
 
@@ -83,6 +84,12 @@ const spanTypeToUiElements: Record<string, UISpanStyle> = {
     label: 'Scorer',
     typePrefix: 'scorer',
   },
+  // Virtual "Started outside Mastra" node (`external_parent`): muted, Mastra did not record that span.
+  external: {
+    color: 'var(--placeholder)',
+    label: 'Outside Mastra',
+    typePrefix: 'external',
+  },
 };
 
 const otherSpanType: UISpanStyle = {
@@ -94,4 +101,12 @@ const otherSpanType: UISpanStyle = {
 export function getSpanTypeUi(type: string) {
   const typePrefix = type?.toLowerCase().split('_')[0] ?? '';
   return spanTypeToUiElements[typePrefix] ?? otherSpanType;
+}
+
+/** Tooltip of a span row name: why the search kept the span, or which outside span a virtual node stands for. */
+export function getSpanNameTitle(span: UISpan): string | undefined {
+  if (span.isVirtual && span.externalParentSpanId) {
+    return `Parent ${span.externalParentSpanId.slice(0, 8)} is not recorded by Mastra`;
+  }
+  return span.matchedInPayloadOnly ? 'Matches your search in this span’s details' : undefined;
 }

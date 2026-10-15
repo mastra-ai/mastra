@@ -98,6 +98,9 @@ export const SPAN_EVENT_COLUMNS = [
   { name: 'inputPreview', type: 'text', nullable: true },
   { name: 'outputPreview', type: 'text', nullable: true },
   { name: 'errorPreview', type: 'text', nullable: true },
+  // Parent span ID in an outside tracing system, kept for correlation only: a span with one is
+  // still a root when `parentSpanId` is NULL. Listed last like the previews, for the same reason.
+  { name: 'externalParentSpanId', type: 'text', nullable: true },
 ] as const satisfies readonly SignalColumn[];
 
 export const METRIC_EVENT_COLUMNS = [
@@ -175,6 +178,7 @@ export const SPAN_LIGHT_SELECT_COLUMN_NAMES = [
   'traceId',
   'spanId',
   'parentSpanId',
+  'externalParentSpanId',
   'name',
   'entityType',
   'entityId',

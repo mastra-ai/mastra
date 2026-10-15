@@ -43,6 +43,9 @@ CREATE TABLE IF NOT EXISTS span_events (
   traceId VARCHAR NOT NULL,
   spanId VARCHAR NOT NULL,
   parentSpanId VARCHAR,
+  -- Parent span in an outside tracing system. A span with one is still a root
+  -- when parentSpanId is NULL.
+  externalParentSpanId VARCHAR,
   experimentId VARCHAR,
 
   -- Entity
@@ -357,6 +360,8 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS hasInputPayload BOOLEAN`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS hasOutputPayload BOOLEAN`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS hasErrorPayload BOOLEAN`,
+  // Existing rows keep NULL: their outside parent was never stored.
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS externalParentSpanId VARCHAR`,
 
   // Metrics. Legacy rows remain page-visible but are not part of delta polling.
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS cursorId BIGINT`,

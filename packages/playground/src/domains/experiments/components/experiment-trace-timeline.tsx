@@ -1,5 +1,6 @@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { getTraceTimeRange } from '@mastra/playground-ui/domains/traces/utils/span-timing';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ExperimentUISpan } from '../types';
 import { ExperimentTraceTimelineSpan } from './experiment-trace-timeline-span';
@@ -25,9 +26,7 @@ export function ExperimentTraceTimeline({
   setExpandedSpanIds,
   featuredSpanIds,
 }: ExperimentTraceTimelineProps) {
-  const overallLatency = hierarchicalSpans?.[0]?.latency || 0;
-  const overallStartTime = hierarchicalSpans?.[0]?.startTime || '';
-  const overallEndTime = hierarchicalSpans?.[0]?.endTime || '';
+  const { latency: overallLatency, startTime: overallStartTime } = getTraceTimeRange(hierarchicalSpans);
 
   return (
     <>
@@ -62,7 +61,6 @@ export function ExperimentTraceTimeline({
               selectedSpanId={selectedSpanId}
               overallLatency={overallLatency}
               overallStartTime={overallStartTime}
-              overallEndTime={overallEndTime}
               fadedTypes={fadedTypes}
               featuredSpanIds={featuredSpanIds}
               expandedSpanIds={expandedSpanIds}
