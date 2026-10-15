@@ -105,18 +105,10 @@ export function CompareExperimentsContent({
 
   return (
     <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
-      {/* Padding lives on the toolbar only: the comparison table runs edge to edge. */}
       <div className="grid w-full content-start">
-        <div className="flex min-w-0 flex-wrap items-center gap-3 px-4 py-3">
-          <Txt as="h1" variant="heading" tone="ink">
-            Experiments comparison
-          </Txt>
-
-          <Txt variant="caption" tone="muted" className="flex flex-wrap items-center gap-2">
-            <ExperimentIdLinks experimentIds={experimentIds} />
-          </Txt>
-        </div>
-
+        <Txt as="h1" variant="heading" className="sr-only">
+          Experiments comparison
+        </Txt>
         <ExperimentsComparison
           datasetId={datasetId}
           baselineId={baselineId}

@@ -77,24 +77,24 @@ function EntityIndexControls({
         <ListSearch
           value={search}
           onSearch={onSearchChange}
-          label="Filter entities"
-          placeholder="Filter by entity identifier"
+          label="Filter agents"
+          placeholder="Filter by agent identifier"
         />
       </div>
       <div className="flex items-center justify-between gap-2 sm:ml-auto sm:justify-end">
         <TraceIntelligenceExplainer signalCatalog={signalCatalog} />
         <Select<TraceIntelligenceEntitySort> value={sort} onValueChange={onSortChange}>
-          <SelectTrigger aria-label="Sort entities" size="md" variant="ghost" className="w-auto">
+          <SelectTrigger aria-label="Sort agents" size="md" variant="ghost" className="w-auto">
             <SelectValue />
           </SelectTrigger>
           <SelectContent align="end">
             <SelectItem value="default">Default order</SelectItem>
-            <SelectItem value="entity-asc">Entity: A–Z</SelectItem>
-            <SelectItem value="entity-desc">Entity: Z–A</SelectItem>
+            <SelectItem value="entity-asc">Agent: A–Z</SelectItem>
+            <SelectItem value="entity-desc">Agent: Z–A</SelectItem>
           </SelectContent>
         </Select>
         {headerAction}
-        <ButtonsGroup aria-label="Entities view">
+        <ButtonsGroup aria-label="Agents view">
           <Button
             type="button"
             variant={view === 'list' ? 'primary' : 'default'}
@@ -153,15 +153,15 @@ export function TraceIntelligenceEntityIndex({
   );
   if (entitiesQuery.isPending) {
     body = (
-      <div role="status" aria-label="Loading Trace Intelligence entities">
+      <div role="status" aria-label="Loading Trace Intelligence agents">
         <DataListSkeleton columns={listColumns} />
       </div>
     );
   } else if (entitiesQuery.data.entities.length === 0 && !hasSearch) {
     body = (
       <EmptyState
-        titleSlot="No Trace Intelligence entities yet"
-        descriptionSlot="Entities appear after Trace Intelligence begins collecting generated signal data."
+        titleSlot="No Trace Intelligence agents yet"
+        descriptionSlot="Agents appear after Trace Intelligence begins collecting generated signal data."
       />
     );
   } else if (view === 'compact') {

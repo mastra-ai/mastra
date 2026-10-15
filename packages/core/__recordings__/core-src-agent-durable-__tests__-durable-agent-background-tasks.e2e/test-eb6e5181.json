@@ -252,7 +252,7 @@
       }
     },
     {
-      "hash": "4bcba1c7f0ab41a4",
+      "hash": "3ad80bb568fb0aac",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -276,7 +276,7 @@
               "type": "function_call",
               "call_id": "call_O6UkTME2jILJaNq3zJJHJCC9",
               "name": "research",
-              "arguments": "{\"topic\":\"quantum computing\",\"_background\":{\"enabled\":true,\"disposition\":\"awaited\",\"timeoutMs\":30000,\"maxRetries\":3}}"
+              "arguments": "{\"_background\":{\"disposition\":\"awaited\",\"enabled\":true,\"maxRetries\":3,\"timeoutMs\":30000},\"topic\":\"quantum computing\"}"
             },
             {
               "type": "function_call_output",
@@ -504,7 +504,7 @@
       }
     },
     {
-      "hash": "491e2d858bec119d",
+      "hash": "e72706dd20c206c7",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -532,7 +532,7 @@
               "type": "function_call",
               "call_id": "call_O6UkTME2jILJaNq3zJJHJCC9",
               "name": "research",
-              "arguments": "{\"topic\":\"quantum computing\",\"_background\":{\"enabled\":true,\"disposition\":\"awaited\",\"timeoutMs\":30000,\"maxRetries\":3}}"
+              "arguments": "{\"_background\":{\"disposition\":\"awaited\",\"enabled\":true,\"maxRetries\":3,\"timeoutMs\":30000},\"topic\":\"quantum computing\"}"
             },
             {
               "type": "function_call_output",

@@ -65,6 +65,39 @@ async function pickModel(user: ReturnType<typeof userEvent.setup>, modelId: stri
 }
 
 describe('FactoryDefaultModelSection', () => {
+  it('stays available in a hybrid Factory and says it drives work items', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
+        HttpResponse.json({
+          project: { id: 'fp-1', name: 'Mastra', defaultModelId: 'openai/gpt-5', modelScope: 'hybrid' },
+        }),
+      ),
+    );
+
+    renderSection();
+
+    expect(
+      await screen.findByText(
+        "Work items (triage, board runs) start on this model and run on organization credentials. Interactive sessions start on each owner's personal default instead.",
+      ),
+    ).toBeInTheDocument();
+    const combobox = screen.getByRole('combobox');
+    await waitFor(() => expect(combobox).toBeEnabled());
+    expect(combobox).toHaveTextContent('GPT-5');
+  });
+
+  it('keeps the Factory-run copy outside hybrid scope', async () => {
+    stubProject('openai/gpt-5');
+
+    renderSection();
+
+    expect(
+      await screen.findByText(
+        "Factory runs (triage, board work items) start on this model and use the Factory memory settings. Your personal defaults don't apply to them.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it('shows the saved default model and offers no way to clear it', async () => {
     stubProject('anthropic/claude-sonnet-4-5');
     const user = userEvent.setup();
@@ -73,7 +106,7 @@ describe('FactoryDefaultModelSection', () => {
 
     const combobox = screen.getByRole('combobox');
     await waitFor(() => expect(combobox).toBeEnabled());
-    expect(combobox).toHaveTextContent('anthropic/claude-sonnet-4-5');
+    expect(combobox).toHaveTextContent('Claude Sonnet 4.5');
 
     await user.click(combobox);
     const options = await screen.findAllByRole('option');
@@ -92,9 +125,9 @@ describe('FactoryDefaultModelSection', () => {
     const combobox = await pickModel(user, 'openai/gpt-5');
 
     expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
-    expect(screen.getByText('Also switch running sessions to openai/gpt-5?')).toBeInTheDocument();
+    expect(screen.getByText('Also switch running sessions to GPT-5?')).toBeInTheDocument();
     expect(patchedBodies).toEqual([{ defaultModelId: 'openai/gpt-5' }]);
-    expect(combobox).toHaveTextContent('openai/gpt-5');
+    expect(combobox).toHaveTextContent('GPT-5');
 
     await user.click(screen.getByRole('button', { name: 'Keep them as-is' }));
     await waitForMutationsIdle(client);
@@ -180,6 +213,6 @@ describe('FactoryDefaultModelSection', () => {
 
     expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByLabelText('Saving default model')).not.toBeInTheDocument());
-    expect(combobox).toHaveTextContent('openai/gpt-5');
+    expect(combobox).toHaveTextContent('GPT-5');
   });
 });

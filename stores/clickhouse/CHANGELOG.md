@@ -1,5 +1,67 @@
 # @mastra/clickhouse
 
+## 1.25.1-alpha.1
+
+### Patch Changes
+
+- Trace and span lists use less memory. Every span now stores short previews of its input, output and error when it is written, so `queryTraces()`, `listTracesLight()` and `querySpans()` read those previews instead of each span's full payloads. Trace and span lists now also return `outputPreview` and `errorPreview`. Spans written before this change still show previews, built from their own payloads, even when another tenant has a root span with the same trace and span IDs. ([#26567](https://github.com/mastra-ai/mastra/pull/26567))
+
+  `storage.init()` adds `inputPreview`, `outputPreview` and `errorPreview` columns to `mastra_span_events`, `mastra_trace_roots` and `mastra_trace_branches`. This runs automatically on first use. If you set `disableInit: true`, run `storage.init()` from your migration step before deploying, or apply the columns yourself. Add them to `mastra_trace_roots` and `mastra_trace_branches` before `mastra_span_events`, because the views that copy span events into those tables select every column:
+
+  ```sql
+  ALTER TABLE mastra_trace_roots ADD COLUMN IF NOT EXISTS inputPreview Nullable(String);
+  ALTER TABLE mastra_trace_roots ADD COLUMN IF NOT EXISTS outputPreview Nullable(String);
+  ALTER TABLE mastra_trace_roots ADD COLUMN IF NOT EXISTS errorPreview Nullable(String);
+  ALTER TABLE mastra_trace_branches ADD COLUMN IF NOT EXISTS inputPreview Nullable(String);
+  ALTER TABLE mastra_trace_branches ADD COLUMN IF NOT EXISTS outputPreview Nullable(String);
+  ALTER TABLE mastra_trace_branches ADD COLUMN IF NOT EXISTS errorPreview Nullable(String);
+  ALTER TABLE mastra_span_events ADD COLUMN IF NOT EXISTS inputPreview Nullable(String);
+  ALTER TABLE mastra_span_events ADD COLUMN IF NOT EXISTS outputPreview Nullable(String);
+  ALTER TABLE mastra_span_events ADD COLUMN IF NOT EXISTS errorPreview Nullable(String);
+  ```
+
+  On a replicated cluster, add `ON CLUSTER <cluster>` after each table name.
+
+  Nonblank supplied previews are trimmed and capped like generated ones (100 characters plus `…`). Missing or blank write-time previews are generated through the optional core helper. Stored empty strings do not trigger read fallback. With older core versions that lack the helper, preview fields pass through unchanged without generation.
+
+- Reduced the memory used by `queryTraces()` on large projects. Trace lists, numbered pages, delta polling and thread groups no longer sort every root span payload in the time range, so busy projects that previously hit ClickHouse memory limits now return results. Trace inputs and metadata are now read only for the traces on the returned page. ([#26567](https://github.com/mastra-ai/mastra/pull/26567))
+
+  `queryTraces()` now treats each trace as having one root span. A trace that was written with more than one root span is listed once, under one of its roots, and matches root filters through any of them. Delta polling lists such a trace under the same root on every poll, and the next-page cursor still advances when a page comes back short.
+
+- Updated dependencies [[`7b08a87`](https://github.com/mastra-ai/mastra/commit/7b08a876b1060cf6842c61ed8af0eaa93e1310c4), [`5d82145`](https://github.com/mastra-ai/mastra/commit/5d82145ae3cc591eb5cdafd4af5977c36fec5c01), [`4c29655`](https://github.com/mastra-ai/mastra/commit/4c296551a79bebc6a40fddcf2409824f601e6c43), [`6155190`](https://github.com/mastra-ai/mastra/commit/6155190d2436d5e93e21f6a875d8c4306c8043ff), [`eb71f8c`](https://github.com/mastra-ai/mastra/commit/eb71f8c3abbe9aa40375f898fce60f555ef9ebf3), [`35fbdce`](https://github.com/mastra-ai/mastra/commit/35fbdce6de71332246dd6d9b4a5ecba2d87fb6cc), [`cb015a1`](https://github.com/mastra-ai/mastra/commit/cb015a1be6560cbaf4deaef219cb02e63b263bc3), [`d99fa30`](https://github.com/mastra-ai/mastra/commit/d99fa305e0baa00fb2064283658c10e00b95bf10)]:
+  - @mastra/core@1.78.0-alpha.3
+
+## 1.25.1-alpha.0
+
+### Patch Changes
+
+- Fixed ClickHouse deleteMessages bumping thread updatedAt with an ALTER TABLE UPDATE mutation, which rewrote whole data parts (often forbidden on managed deployments) and stamped the same updatedAt on every stored version of the thread row — making thread reads ambiguous on the ReplacingMergeTree until parts merged, so a just-renamed or archived thread could read back its previous state. The timestamp bump now inserts a strictly newer thread version, like every other thread write. Fixes #25580 ([#26838](https://github.com/mastra-ai/mastra/pull/26838))
+
+- Updated dependencies [[`bed1ccc`](https://github.com/mastra-ai/mastra/commit/bed1cccea5817d68faa42a15fda3a0b329f70680), [`02e2eae`](https://github.com/mastra-ai/mastra/commit/02e2eae3aee1c5b5b9c807a6a3389b88eca1440c), [`b2dd0c6`](https://github.com/mastra-ai/mastra/commit/b2dd0c6333691467e61406ac920eb6f861db6bc0), [`ad16eae`](https://github.com/mastra-ai/mastra/commit/ad16eae7eec9af386c9eee81f4f30ef65d0df48b)]:
+  - @mastra/core@1.78.0-alpha.1
+
+## 1.25.0
+
+### Minor Changes
+
+- Added `clickhouse_settings` to `ObservabilityStorageClickhouseVNext` and the other ClickHouse storage domains, so settings such as `filesystem_prefetches_limit` can be applied to every query without passing a pre-configured client. ([#26327](https://github.com/mastra-ai/mastra/pull/26327))
+
+  ```typescript
+  const observabilityStore = new ObservabilityStorageClickhouseVNext({
+    url: process.env.CLICKHOUSE_URL!,
+    username: process.env.CLICKHOUSE_USERNAME!,
+    password: process.env.CLICKHOUSE_PASSWORD!,
+    clickhouse_settings: { filesystem_prefetches_limit: 8 },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed trace queries and trace aggregates dropping a trace when another tenant stored a trace with the same trace ID. Scoped trace queries and aggregates now read only that tenant's trace roots when picking each trace's current root. ([#26327](https://github.com/mastra-ai/mastra/pull/26327))
+
+- Updated dependencies [[`54e9dc3`](https://github.com/mastra-ai/mastra/commit/54e9dc3ed0615ee84a6526395a9fefe17320fe7e), [`f8c0ce2`](https://github.com/mastra-ai/mastra/commit/f8c0ce2646427327b63c05d2eb09e76a3b04133e), [`eaa9d12`](https://github.com/mastra-ai/mastra/commit/eaa9d12407f4962e94e0d5cd49a643e6e317d60a), [`5a70664`](https://github.com/mastra-ai/mastra/commit/5a7066478c1924a6e9a94e1ba3210f9b67a35535), [`59164cb`](https://github.com/mastra-ai/mastra/commit/59164cb7f8b298e28e13305b0273ed2ef7f1d9e1), [`2a1bb80`](https://github.com/mastra-ai/mastra/commit/2a1bb80305bca1859504287e1a09f43c8a014330), [`4df792b`](https://github.com/mastra-ai/mastra/commit/4df792b5b9146b5a2d6726193ee82d9db31180a4), [`0017956`](https://github.com/mastra-ai/mastra/commit/001795671cf329997bee74541f5de9056e6b1cec), [`aa00f41`](https://github.com/mastra-ai/mastra/commit/aa00f41855e8d6802546f613ffec1669e03409fc), [`36fc7ea`](https://github.com/mastra-ai/mastra/commit/36fc7eabf79ca70bd489e4022eb39a3d8382ace5), [`2ec9c07`](https://github.com/mastra-ai/mastra/commit/2ec9c07eddb142c965f1201f5c6e5dbb288405f9), [`e384817`](https://github.com/mastra-ai/mastra/commit/e3848177f2a0051ea1469a06fb6502164bfada7c), [`519e97f`](https://github.com/mastra-ai/mastra/commit/519e97f624a15362fec7b143dea4eabcff556712), [`e384817`](https://github.com/mastra-ai/mastra/commit/e3848177f2a0051ea1469a06fb6502164bfada7c), [`821b8d4`](https://github.com/mastra-ai/mastra/commit/821b8d4253dcac5d8cf886994884e4645899bedc), [`878e0e2`](https://github.com/mastra-ai/mastra/commit/878e0e2f5adf9669158c7a8a8d67cd8809633c24), [`aea91e7`](https://github.com/mastra-ai/mastra/commit/aea91e7f3a4fb066bfda96dca670d7d2a766d770), [`380e9f5`](https://github.com/mastra-ai/mastra/commit/380e9f57ea9ba7c37950b989d145b70c03a09a6c), [`4029a96`](https://github.com/mastra-ai/mastra/commit/4029a964848512399f27bca283915d49fd106717), [`8dc4d65`](https://github.com/mastra-ai/mastra/commit/8dc4d65b34aad280c4f6ab265162c4846face7e3), [`ca92c02`](https://github.com/mastra-ai/mastra/commit/ca92c02696427baad81dd7a61b049ef37c332452), [`3504acd`](https://github.com/mastra-ai/mastra/commit/3504acdb2833b71db61dc9387c0f25f3cd0a3070), [`5bb6d71`](https://github.com/mastra-ai/mastra/commit/5bb6d711680d17370eacdcdab105e5af69202c5f), [`dab6849`](https://github.com/mastra-ai/mastra/commit/dab6849945ab2a0e4c946f5b31fb6f41b2c1cd7d), [`da87b0a`](https://github.com/mastra-ai/mastra/commit/da87b0a1629d5ffc980b434f70fe60f9445ddb1c), [`182f097`](https://github.com/mastra-ai/mastra/commit/182f09745783aa83e42131307085ecf913cfbc38), [`d9da0da`](https://github.com/mastra-ai/mastra/commit/d9da0da5e5d36023469b527f7be55c017634b186), [`097f002`](https://github.com/mastra-ai/mastra/commit/097f00297b0d46aa304eba3a7203248e21d1a70a), [`958bdc9`](https://github.com/mastra-ai/mastra/commit/958bdc942aa78f00c9ec25f8adfb8e14a0dd4fd9), [`4659a11`](https://github.com/mastra-ai/mastra/commit/4659a1130842f07364d4778aa360f3cb7877679d), [`aa00f41`](https://github.com/mastra-ai/mastra/commit/aa00f41855e8d6802546f613ffec1669e03409fc), [`5227c95`](https://github.com/mastra-ai/mastra/commit/5227c95d54d0b4846220530450063f259797b587), [`226823f`](https://github.com/mastra-ai/mastra/commit/226823ffde55e2dcce01f2111a6a35be3f2c9b85), [`67a6b30`](https://github.com/mastra-ai/mastra/commit/67a6b30769f041244f75f9093a181cdf38e1f2e7), [`7236b47`](https://github.com/mastra-ai/mastra/commit/7236b472bca9bbc9dddba53f683b15c271350183)]:
+  - @mastra/core@1.77.0
+
 ## 1.25.0-alpha.0
 
 ### Minor Changes

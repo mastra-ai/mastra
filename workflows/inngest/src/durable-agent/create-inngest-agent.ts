@@ -46,6 +46,8 @@ import {
   runDurableStreamUntilIdle,
   runResumeDurableStreamUntilIdle,
   globalRunRegistry,
+  getRunRegistryEntry,
+  deleteRunRegistryEntry,
   publishAbortRequest,
 } from '@mastra/core/agent/durable';
 import type { AgentStepFinishEventData, AgentSuspendedEventData } from '@mastra/core/agent/durable';
@@ -73,6 +75,7 @@ import { InngestPubSub } from '../pubsub';
 import type { InngestFlowControlConfig } from '../types';
 import type { InngestWorkflow } from '../workflow';
 import { createInngestDurableAgenticWorkflow, InngestDurableStepIds } from './create-inngest-agentic-workflow';
+import { keepSuspendedRunScopes } from './resume-scopes';
 
 class InngestAgentPubSubRouter extends PubSub {
   constructor(
@@ -911,7 +914,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
    * worker. Mirrors the `abort()` handed out with a stream result.
    */
   function abortDurableRun(runId: string): void {
-    const controller = globalRunRegistry.get(runId)?.abortController;
+    const controller = getRunRegistryEntry(runId, mastra)?.abortController;
     if (controller && !controller.signal.aborted) {
       controller.abort(new Error('Aborted'));
     }
@@ -998,6 +1001,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         messages,
         options: callbackOptions as AgentExecutionOptions<TOutput>,
         optionsAreResolved: true,
+        // `callbackOptions` include the Agent's defaults; only the call's own scopes are caller input.
+        // `scopes` is not part of the typed stream options, but callers can still pass it through.
+        callScopes: (streamOptions as { scopes?: string[] } | undefined)?.scopes,
         runId: streamOptions?.runId,
         requestContext: streamOptions?.requestContext,
         methodType: (streamOptions as any)?.__methodType ?? 'stream',
@@ -1042,7 +1048,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const finalizeGlobalRegistry = () => {
         if (cleanedUp) return;
         cleanedUp = true;
-        globalRunRegistry.delete(runId);
+        deleteRunRegistryEntry(runId, mastra);
       };
 
       // 2. Create the durable agent stream (subscribes to pubsub)
@@ -1111,7 +1117,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         .catch(error => {
           void emitError(runId, error);
         });
-      const trackedEntry = globalRunRegistry.get(runId);
+      const trackedEntry = getRunRegistryEntry(runId, mastra);
       if (trackedEntry) {
         trackedEntry.workflowExecution = workflowExecution;
       }
@@ -1181,7 +1187,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         ) as Promise<InngestAgentStreamResult<TOutput>>;
       }
 
-      const existingRegistryEntry = globalRunRegistry.get(runId);
+      const existingRegistryEntry = getRunRegistryEntry(runId, mastra);
       const priorExecution = existingRegistryEntry?.workflowExecution;
 
       // Settle the prior segment before reading its snapshot or event offset. Otherwise a late
@@ -1248,6 +1254,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       let existingEntry = existingRegistryEntry;
       if (!existingEntry) {
         existingEntry = {
+          mastra,
           // Minimal placeholder fields. The durable LLM step recreates tools
           // and model from the workflow input; this slot exists primarily to
           // carry the abort controller across the resumed segment. The
@@ -1268,7 +1275,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const finalizeResumeRegistry = () => {
         if (resumeCleanedUp) return;
         resumeCleanedUp = true;
-        globalRunRegistry.delete(runId);
+        deleteRunRegistryEntry(runId, mastra);
       };
 
       // Re-subscribe to the stream
@@ -1386,6 +1393,13 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         }
 
         const requestContext = mergeResumeRequestContext(snapshot?.requestContext, resumeOptions?.requestContext);
+        try {
+          keepSuspendedRunScopes(snapshot, requestContext, resumeOptions);
+        } catch (error) {
+          // A scope rejection belongs to this caller; the parked run stays resumable.
+          notResumable = true;
+          throw error;
+        }
         const tracingOptions = snapshot?.tracingContext
           ? {
               traceId: snapshot.tracingContext.traceId,
@@ -1549,7 +1563,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           version: 'v3',
         },
         offset: observeOptions?.offset,
-        structuredOutput: globalRunRegistry.get(runId)?.structuredOutput as
+        structuredOutput: getRunRegistryEntry(runId, mastra)?.structuredOutput as
           | StructuredOutputOptions<TOutput>
           | undefined,
         onChunk: observeOptions?.onChunk,
@@ -1605,7 +1619,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         // snapshot has landed before returning — otherwise a follow-up
         // resumeGenerate() may race the storage write.
         if (suspended) {
-          await globalRunRegistry.get(result.runId)?.workflowExecution;
+          await getRunRegistryEntry(result.runId, mastra)?.workflowExecution;
         }
         if (!fullOutput.runId) {
           (fullOutput as { runId?: string }).runId = result.runId;
@@ -1643,7 +1657,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         }
         suspended = fullOutput.finishReason === 'suspended';
         if (suspended) {
-          await globalRunRegistry.get(result.runId)?.workflowExecution;
+          await getRunRegistryEntry(result.runId, mastra)?.workflowExecution;
         }
         if (!fullOutput.runId) {
           (fullOutput as { runId?: string }).runId = result.runId;
@@ -1915,7 +1929,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // Publish regardless of local knowledge: the run is normally executing
       // on an Inngest worker this process cannot see.
       abortDurableRun(runId);
-      return aborted || globalRunRegistry.get(runId) !== undefined;
+      return aborted || getRunRegistryEntry(runId, mastra) !== undefined;
     },
 
     __fork() {

@@ -49,12 +49,7 @@ export function FactoryLayout() {
     <ActiveFactoryContext.Provider value={factory}>
       <GitHubAppCallbackHandler />
       <FeedEventsProvider factoryProjectId={factory.id}>
-        {factory.repositories.map(repository => (
-          <SessionRunObserver
-            key={repository.projectRepositoryId}
-            projectRepositoryId={repository.projectRepositoryId}
-          />
-        ))}
+        {factory.repositories.length > 0 && <SessionRunObserver factoryId={factory.id} />}
         <Outlet />
       </FeedEventsProvider>
     </ActiveFactoryContext.Provider>

@@ -10,6 +10,7 @@ import type {
   ClientOptions,
   CancelQueuedAgentMessagesParams,
   QueueAgentMessageParams,
+  QueueAgentSignalParams,
   SendAgentMessageParams,
   SendAgentSignalParams,
   SubscribeAgentThreadParams,
@@ -202,6 +203,26 @@ describe('Agent signal routes', () => {
     await agent.queueMessage(params);
 
     expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/queue-message', {
+      method: 'POST',
+      body: routeBody,
+    });
+  });
+
+  it('queues typed signals to the queue-signal route', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue({ accepted: true, runId: 'queued-run-123' });
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const params = {
+      signal: { type: 'reactive', tagName: 'skill', attributes: { name: 'factory-triage' }, contents: 'Triage it.' },
+      resourceId: 'resource-123',
+      threadId: 'thread-123',
+    } satisfies QueueAgentSignalParams;
+    const routeBody: Body<'POST /agents/:agentId/queue-signal'> = params;
+
+    await agent.queueSignal(params);
+
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/queue-signal', {
       method: 'POST',
       body: routeBody,
     });

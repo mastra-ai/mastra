@@ -100,6 +100,10 @@ function FieldLabel({ className, required = false, size = 'default', children, o
       data-slot="field-label"
       className={cn(
         'inline-flex shrink-0 items-center text-label text-foreground data-disabled:text-muted-foreground',
+        // Only the text is clickable, not the empty width beside it. A label that wraps its
+        // checkbox, switch or radio is a row target, so it keeps stretching. Zero specificity, so a
+        // width from `className` (`sr-only`, `w-24`) still wins.
+        '[:where(&:not(:has([role=checkbox],[role=switch],[role=radio])))]:w-fit',
         'not-data-disabled:has-[[role=checkbox],[role=switch],[role=radio]]:cursor-pointer',
         'not-data-disabled:[:is([data-slot=field],[data-slot=field-item]):has(>[role=checkbox],>[role=switch],>[role=radio])_&]:cursor-pointer',
         'data-disabled:cursor-not-allowed',

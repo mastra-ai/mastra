@@ -1,7 +1,7 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import {
   useAllDatasetExperimentResultsQueries,
@@ -9,14 +9,18 @@ import {
   useDatasetExperimentsQueries,
   useScoresByExperimentIdsQueries,
 } from '@mastra/react/hooks/datasets';
+import { useExperimentsItemUsage } from '@mastra/react/hooks/experiments';
 import { useMemo } from 'react';
 import type { CSSProperties } from 'react';
-import { buildComparisonRows } from './build-comparison-rows';
+import { buildComparisonRows, sideDurationMs } from './build-comparison-rows';
 import type { ComparisonRow } from './build-comparison-rows';
 import { ComparisonItemPayload } from './comparison-item-payload';
+import { totalTokens } from './comparison-metric-format';
+import { sectionStackClass } from './comparison-section';
 import { ComparisonSideCell } from './comparison-side-cell';
 import { ComparisonSideHeader } from './comparison-side-header';
-import type { ScorerSummary } from './comparison-side-header';
+import type { ComparisonSideMetrics, ScorerSummary } from './comparison-side-header';
+import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 
 interface ExperimentsComparisonProps {
   datasetId: string;
@@ -31,15 +35,29 @@ const cell = 'min-w-0 px-4 py-3';
 
 /** Items column plus one column per experiment. N is dynamic, so it goes through a CSS variable. */
 const gridRow =
-  'grid border-border xl:grid-cols-[minmax(20rem,24rem)_repeat(var(--compare-cols),minmax(22rem,1fr))] xl:divide-x xl:divide-border';
+  'grid border-border xl:grid-cols-[minmax(22rem,26rem)_repeat(var(--compare-cols),minmax(32rem,1fr))] xl:divide-x xl:divide-border';
 
 const columnLabel = (index: number) => (index === 0 ? 'Baseline' : `Contender ${index}`);
 
-const average = (rows: ComparisonRow[], index: number, scorerId: string) => {
-  const values = rows
-    .map(row => row.sides[index]?.scores.find(score => score.scorerId === scorerId)?.value)
-    .filter((value): value is number => value != null);
-  return values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+const isNumber = (value: number | null): value is number => value != null;
+
+const mean = (values: number[]) =>
+  values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+
+const average = (rows: ComparisonRow[], index: number, scorerId: string) =>
+  mean(
+    rows
+      .map(row => row.sides[index]?.scores.find(score => score.scorerId === scorerId)?.value ?? null)
+      .filter(isNumber),
+  );
+
+const columnMetrics = (rows: ComparisonRow[], index: number): ComparisonSideMetrics => {
+  const sides = rows.map(row => row.sides[index]).filter(side => side?.present);
+  return {
+    errorCount: sides.filter(side => side.error).length,
+    averageScore: mean(sides.flatMap(side => side.scores.map(score => score.value)).filter(isNumber)),
+    averageDurationMs: mean(sides.map(sideDurationMs).filter(isNumber)),
+  };
 };
 
 /**
@@ -52,7 +70,6 @@ export function ExperimentsComparison({
   contenderIds,
   onSetBaseline,
 }: ExperimentsComparisonProps) {
-  const { Link, paths } = useLinkComponent();
   const experimentIds = useMemo(() => [baselineId, ...contenderIds], [baselineId, contenderIds]);
 
   const {
@@ -83,9 +100,16 @@ export function ExperimentsComparison({
   // Scorer reasons live in the scores store, not on the result rows.
   const { data: scoresById } = useScoresByExperimentIdsQueries({ experiments: experimentRefs });
 
+  const { supportsMetrics, isLoading: isCapabilitiesLoading } = useObservabilityStorageCapabilities();
+  // Filtered by experiment id, so it runs alongside the results instead of waiting for their trace ids.
+  const { data: usageById, isLoading: isUsageLoading } = useExperimentsItemUsage({
+    experiments: experimentRefs,
+    supportsMetrics,
+  });
+
   const rows = useMemo(
-    () => buildComparisonRows({ comparison, experimentIds, resultsById, scoresById }),
-    [comparison, experimentIds, resultsById, scoresById],
+    () => buildComparisonRows({ comparison, experimentIds, resultsById, scoresById, usageById }),
+    [comparison, experimentIds, resultsById, scoresById, usageById],
   );
 
   /** Per-scorer averages for each column; contenders also carry their delta against the baseline. */
@@ -103,9 +127,24 @@ export function ExperimentsComparison({
     );
   }, [rows, experimentIds]);
 
-  if (isLoading || isExperimentsLoading) {
+  const metrics = useMemo(
+    () =>
+      experimentIds.map((experimentId, index): ComparisonSideMetrics => {
+        const summary = usageById[experimentId]?.summary;
+        return {
+          ...columnMetrics(rows, index),
+          cost: summary?.estimatedCost,
+          costUnit: summary?.costUnit,
+          tokens: totalTokens(summary),
+        };
+      }),
+    [rows, experimentIds, usageById],
+  );
+
+  if (isLoading || isExperimentsLoading || isCapabilitiesLoading || isUsageLoading) {
+    // Centred on the viewport, like the app boot spinner, so swapping from one to the other doesn't shift.
     return (
-      <div className="flex h-64 items-center justify-center">
+      <div className="pointer-events-none fixed inset-0 flex items-center justify-center">
         <Spinner />
       </div>
     );
@@ -130,14 +169,14 @@ export function ExperimentsComparison({
   const baselineExperiment = experimentsById[baselineId];
 
   return (
-    <div className="overflow-x-auto">
+    <ScrollArea orientation="horizontal" mask={{ x: '6rem' }}>
       <div
         role="table"
         aria-label="Experiments comparison"
         className="grid"
         style={{ '--compare-cols': experimentIds.length } as CSSProperties}
       >
-        <div role="row" className={cn(gridRow, 'border-y')}>
+        <div role="row" className={cn(gridRow, 'border-b')}>
           <div role="columnheader" aria-label="Items" className={cn('text-muted-foreground', `${cell} uppercase`)}>
             <Txt as="span" variant="caption" className="block">
               Items
@@ -152,12 +191,15 @@ export function ExperimentsComparison({
                   label={columnLabel(index)}
                   experiment={experiment}
                   summary={summaries[index]}
+                  metrics={isResultsLoading ? undefined : metrics[index]}
+                  baselineMetrics={isResultsLoading ? undefined : metrics[0]}
                   versionMismatch={
                     index > 0 && Boolean(experiment) && Boolean(baselineExperiment)
                       ? experiment?.datasetVersion !== baselineExperiment?.datasetVersion
                       : undefined
                   }
                   onSetBaseline={index > 0 && onSetBaseline ? () => onSetBaseline(experimentId) : undefined}
+                  showUsage={supportsMetrics}
                 />
               </div>
             );
@@ -166,33 +208,19 @@ export function ExperimentsComparison({
 
         {rows.map(row => (
           <div key={row.itemId} role="row" aria-label={row.itemId} className={cn(gridRow, 'border-b')}>
-            <div role="cell" className={`${cell} grid content-start gap-1`}>
-              <Link
-                href={paths.datasetItemLink(datasetId, row.itemId)}
-                aria-label={`Open item ${row.itemId}`}
-                className={cn(
-                  row.sides.every(side => side.present) ? 'text-muted-foreground' : 'text-placeholder',
-                  'flex items-start gap-1.5 break-all hover:underline [&>svg]:mt-0.5 [&>svg]:size-3.5 [&>svg]:shrink-0',
-                )}
-              >
-                <Txt as="span" variant="caption" font="mono" className="min-w-0">
-                  {row.itemId}
-                </Txt>
-              </Link>
-              <div className="grid pt-3">
-                <ComparisonItemPayload label="Input" value={row.input} />
-                <ComparisonItemPayload label="Ground truth" value={row.groundTruth} />
-              </div>
+            <div role="cell" className={cn(cell, sectionStackClass)}>
+              <ComparisonItemPayload label="Input" value={row.input} />
+              <ComparisonItemPayload label="Ground truth" value={row.groundTruth} />
             </div>
 
             {row.sides.map((side, index) => (
               <div key={side.experimentId} role="cell" aria-label={columnLabel(index)} className={cell}>
-                <ComparisonSideCell column={side} isLoading={isResultsLoading} />
+                <ComparisonSideCell column={side} isLoading={isResultsLoading} showUsage={supportsMetrics} />
               </div>
             ))}
           </div>
         ))}
       </div>
-    </div>
+    </ScrollArea>
   );
 }

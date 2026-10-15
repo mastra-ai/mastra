@@ -10,7 +10,9 @@ import type { AgentController, AgentControllerRequestContext } from '@mastra/cor
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext } from '../auth.js';
-import { hydrateFactorySession } from '../session/factory-session.js';
+import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.js';
+import { hydrateFactorySession, resolveFactorySessionModel } from '../session/factory-session.js';
+import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SupervisorScope } from './read-tools.js';
 
@@ -62,18 +64,38 @@ export async function resolveSupervisorScope(options: {
  */
 export async function hydrateSupervisorSession(
   session: FactorySession,
-  deps: { projects: Pick<FactoryProjectsStorage, 'getById'> },
+  deps: {
+    projects: FactoryProjectsStorage;
+    modelDefaults: ModelDefaultsStorage;
+  },
 ): Promise<void> {
   const factoryProjectId = parseSupervisorResourceId(session.identity.getResourceId());
   if (!factoryProjectId) return;
   const project = await deps.projects.getById({ id: factoryProjectId });
   if (!project) return;
+  const sessionModel = await resolveFactorySessionModel({
+    projects: deps.projects,
+    modelDefaults: deps.modelDefaults,
+    factoryProjectId,
+    orgId: project.orgId,
+    ownerUserId: project.createdBy,
+    context: 'run',
+  });
   await session.state.set({
     factoryProjectId,
     factoryOrgId: project.orgId,
+    factoryModelScope: sessionModel.modelScope,
+    factoryOwnerUserId: project.createdBy,
+  });
+  await primeTenantCredentialsForTenant({
+    orgId: project.orgId,
+    userId: project.createdBy,
+    credentialScope: sessionModel.modelScope,
   });
   await hydrateFactorySession(session, {
     orgId: project.orgId,
-    defaultModelId: project.defaultModelId ?? undefined,
+    modelScope: sessionModel.modelScope,
+    ownerUserId: project.createdBy,
+    defaultModelId: sessionModel.modelId,
   });
 }
