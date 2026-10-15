@@ -124,7 +124,7 @@ describe('hydrateSessionDefaultModel', () => {
     });
   });
 
-  it("falls back to a connected provider's subscription default when no default was chosen", async () => {
+  it("falls back to a connected provider's default model when no default was chosen", async () => {
     providerDefault.mockResolvedValueOnce('anthropic/claude-fable-5');
     const session = createSession();
     const dependencies = createDependencies(null);
@@ -139,7 +139,46 @@ describe('hydrateSessionDefaultModel', () => {
     expect(session.model.switch).toHaveBeenCalledExactlyOnceWith('anthropic/claude-fable-5');
   });
 
-  it('keeps the current model when no default was chosen and no subscription default applies', async () => {
+  it('checks the credentials the session is billed to: org credentials for Factory scope and hybrid runs', async () => {
+    providerDefault.mockClear();
+    const factoryScoped = createDependencies(null, 'factory');
+    vi.mocked(factoryScoped.projects.getById).mockResolvedValue({
+      id: 'factory-1',
+      orgId: 'org-1',
+      modelScope: 'factory',
+      defaultModelId: null,
+    } as never);
+    await hydrateSessionDefaultModel(createSession(), factoryScoped);
+    expect(providerDefault).toHaveBeenLastCalledWith(
+      { orgId: 'org-1', userId: 'user-1', credentialScope: 'factory' },
+      'openai/mode-default',
+    );
+
+    // A hybrid Factory bills interactive sessions to the user.
+    await hydrateSessionDefaultModel(createSession(), createDependencies(null, 'hybrid'));
+    expect(providerDefault).toHaveBeenLastCalledWith(
+      { orgId: 'org-1', userId: 'user-1', credentialScope: 'user' },
+      'openai/mode-default',
+    );
+  });
+
+  it('keeps the session usable when the provider-default lookup fails', async () => {
+    providerDefault.mockRejectedValueOnce(new Error('credentials down'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const session = createSession();
+
+    await hydrateSessionDefaultModel(session, createDependencies(null));
+
+    expect(session.model.switch).not.toHaveBeenCalled();
+    expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ factoryModelScope: 'user' }));
+    expect(warn).toHaveBeenCalledWith(
+      '[Factory default-model hydration] Unable to resolve a provider default model.',
+      expect.any(Error),
+    );
+    warn.mockRestore();
+  });
+
+  it('keeps the current model when no default was chosen and no provider default applies', async () => {
     const session = createSession();
 
     await hydrateSessionDefaultModel(session, createDependencies(null));
@@ -147,7 +186,7 @@ describe('hydrateSessionDefaultModel', () => {
     expect(session.model.switch).not.toHaveBeenCalled();
   });
 
-  it('never consults subscription defaults when a default was chosen', async () => {
+  it('never consults provider defaults when a default was chosen', async () => {
     providerDefault.mockClear();
     await hydrateSessionDefaultModel(createSession(), createDependencies());
     expect(providerDefault).not.toHaveBeenCalled();

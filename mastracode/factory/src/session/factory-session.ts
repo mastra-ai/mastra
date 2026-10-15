@@ -297,7 +297,7 @@ export interface HydrateFactorySessionArgs {
   modelScope: EffectiveModelScope;
   ownerUserId: string;
   /**
-   * The model selected by the Factory scope. Without it the subscription default of a connected
+   * The model selected by the Factory scope. Without it the provider default of a connected
    * provider is applied when the SDK mode default has no credential, else the mode default.
    */
   defaultModelId?: string;
@@ -329,7 +329,7 @@ export async function hydrateFactorySession(
       { orgId: args.orgId, userId: args.ownerUserId, credentialScope: args.modelScope },
       modeModelId,
     ).catch(error => {
-      console.warn('[Factory Start] Failed to resolve a subscription default model', {
+      console.warn('[Factory Start] Failed to resolve a provider default model', {
         error: error instanceof Error ? error.message : String(error),
       });
       return undefined;

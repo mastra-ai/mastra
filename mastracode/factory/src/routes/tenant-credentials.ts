@@ -253,7 +253,7 @@ export async function primeTenantCredentialsForTenant(tenant: SdkCredentialTenan
 
 /**
  * The model a session should fall back to when its scope has no chosen default:
- * the subscription default (`PROVIDER_DEFAULT_MODELS`) of the first provider the
+ * the provider default (`PROVIDER_DEFAULT_MODELS`) of the first provider the
  * tenant is connected to. Returns `undefined` when `currentModelId` is already
  * usable, when no connected provider has a default, or before registration.
  */

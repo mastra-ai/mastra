@@ -304,7 +304,7 @@ describe('resolveTenantProviderDefaultModel', () => {
   const USER_SCOPE = { ...USER_TENANT, credentialScope: 'user' } as const;
   const FACTORY_SCOPE = { ...USER_TENANT, credentialScope: 'factory' } as const;
 
-  it("picks the subscription default of the tenant's connected provider when the current model has no credential", async () => {
+  it("picks the default model of the tenant's connected provider when the current model has no credential", async () => {
     registerTenantCredentialResolver(seed.credentials);
     await seed.credentials.setCredential(USER_TENANT, 'openai-codex', FRESH_OAUTH);
 

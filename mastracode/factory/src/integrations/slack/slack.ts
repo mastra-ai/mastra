@@ -589,7 +589,7 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
       }
     } else {
       // `hydrateFactorySession` persists the scoped model, a connected provider's
-      // subscription default, or the SDK mode default as this thread's model of record.
+      // provider default, or the SDK mode default as this thread's model of record.
       const selectedModelId =
         (await hydrateFactorySession(session, {
           orgId: owner.orgId,

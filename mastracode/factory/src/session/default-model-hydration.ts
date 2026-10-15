@@ -98,11 +98,14 @@ export async function hydrateSessionDefaultModel(
       (modelScope === 'factory'
         ? project.defaultModelId
         : (await modelDefaults.get({ orgId: sourceSession.orgId, userId: sourceSession.userId }))?.modelId) ??
-      // No chosen default: a connected provider's subscription default, unless the current model is usable.
+      // No chosen default: a connected provider's default, unless the current model is usable.
       (await resolveTenantProviderDefaultModel(
         { orgId: sourceSession.orgId, userId: sourceSession.userId, credentialScope: modelScope },
         session.model.get() || undefined,
-      ));
+      ).catch(error => {
+        console.warn('[Factory default-model hydration] Unable to resolve a provider default model.', error);
+        return undefined;
+      }));
     if (!scopedModelId) return;
     // A thread the session creates later (the UI binding its conventional
     // thread after a thread-agnostic request opened the session) starts from

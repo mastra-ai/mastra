@@ -4,6 +4,7 @@ import { UniqueViolationError } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  invalidateTenantCredentialSnapshots,
   registerTenantCredentialResolver,
   resetTenantCredentialResolverForTests,
 } from '../routes/tenant-credentials.js';
@@ -406,7 +407,7 @@ describe('hydrateFactorySession', () => {
     expect(double.state.set).not.toHaveBeenCalledWith(expect.objectContaining({ factoryOrgId: expect.anything() }));
   });
 
-  it("runs on a connected provider's subscription default when no default was chosen and the mode default has no credential", async () => {
+  it("runs on a connected provider's default model when no default was chosen and the mode default has no credential", async () => {
     const seeded = await createFactoryStorageForTests();
     registerTenantCredentialResolver(seeded.credentials);
     try {
@@ -422,8 +423,8 @@ describe('hydrateFactorySession', () => {
         type: 'api_key',
         key: 'org-openai',
       });
+      invalidateTenantCredentialSnapshots({ orgId: 'org-1' });
       const fresh = createSessionDouble();
-      registerTenantCredentialResolver(seeded.credentials);
       await expect(hydrateFactorySession(fresh.session, args)).resolves.toBe('openai/gpt-5.5');
     } finally {
       resetTenantCredentialResolverForTests();

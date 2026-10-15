@@ -11,10 +11,13 @@ const prime = vi.fn(async (context: RequestContext) => {
   primedUsers.push(context.get('user'));
 });
 const primeTenant = vi.fn(async (_tenant: unknown) => undefined);
+const providerDefault = vi.fn(async (_tenant: unknown, _current: string | undefined): Promise<string | undefined> =>
+  undefined,
+);
 vi.mock('../../routes/tenant-credentials.js', () => ({
   primeTenantCredentialsForRequestContext: (context: RequestContext) => prime(context),
   primeTenantCredentialsForTenant: (tenant: unknown) => primeTenant(tenant),
-  resolveTenantProviderDefaultModel: async () => undefined,
+  resolveTenantProviderDefaultModel: (tenant: unknown, current: string | undefined) => providerDefault(tenant, current),
 }));
 
 import {
@@ -1848,6 +1851,23 @@ describe('session start (onSessionStart)', () => {
 
     expect(session.model.switch).toHaveBeenCalledExactlyOnceWith('openai/gpt-5.5');
     expect(session.restoredModel()).toBe('openai/gpt-5.5');
+  });
+
+  it("records a connected provider's default model, for the main model and every subagent, when the mode default has no credential", async () => {
+    providerDefault.mockResolvedValueOnce('anthropic/claude-fable-5');
+    const deps = makeStartDeps({ defaultModelId: null });
+    const session = makeSession({ currentModel: 'openai/gpt-5.5' });
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    expect(providerDefault).toHaveBeenCalledWith(expect.objectContaining({ orgId: 'org-1' }), 'openai/gpt-5.5');
+    expect(session.model.switch).toHaveBeenCalledExactlyOnceWith('anthropic/claude-fable-5');
+    expect(session.restoredModel()).toBe('anthropic/claude-fable-5');
+    for (const agentType of ['explore', 'plan', 'execute']) {
+      await expect(session.thread.getSetting({ key: `slackSubagentModelId_${agentType}` })).resolves.toBe(
+        'anthropic/claude-fable-5',
+      );
+    }
   });
 
   it('records nothing when the session has no model to record', async () => {
