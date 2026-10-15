@@ -5,7 +5,13 @@ import type { RedeliveryDriver, RedeliveryMatch } from './redelivery-driver';
 
 export const REDELIVERY_MODES = ['publish', 'same-id', 'expired'] as const;
 
-/** The scenario-local equivalent of EngineDifference for non-stream observations. */
+/**
+ * COR-1429's EngineDifference compares only agent stream output and model requests;
+ * it cannot express tool, step, or workflow execution counts, so those observations
+ * use this scenario-local equivalent. It follows the same rules: a reason is
+ * required, expect rewrites the correct value, and the check fails once a declared
+ * difference converges.
+ */
 interface RedeliveryDifference<T> {
   reason: string;
   expect: (correct: T) => T;
