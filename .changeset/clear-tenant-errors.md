@@ -2,4 +2,9 @@
 '@mastra/code-sdk': patch
 ---
 
-Made the "Tenant model credential policy could not be resolved" error say why it failed: either the request has no authenticated user, or no credential policy applies to that user. A warning with non-secret diagnostics and the stack trace is also logged, so you can find the caller that dropped the request context.
+Improved the "Tenant model credential policy could not be resolved" error. It now states why resolution failed:
+
+- The request has no authenticated user.
+- No credential policy applies to the user.
+
+Added a warning with non-secret diagnostics and a stack trace. Use it to locate where the request context was lost.
