@@ -165,16 +165,16 @@ const workspace = new Workspace({
   bm25: true,
   vectorStore: new MongoDBVector({
     id: 'workspace-vector',
-    uri: process.env.MONGODB_URI,
-    dbName: process.env.MONGODB_DB_NAME,
+    uri: process.env.MONGODB_URI!,
+    dbName: process.env.MONGODB_DB_NAME!,
     autoEmbed: { model: 'voyage-4' },
   }),
 })
 ```
 
-Mastra sends document and query text to the store, and MongoDB embeds them. Vector and hybrid search work the same way as with a client-side embedder. The default index name ends in `_search_selfembed`, so server-embedded documents never share an index with client-supplied vectors. If you also pass an `embedder`, Mastra uses it instead.
+Mastra sends document and query text to the store, and MongoDB embeds them. Vector and hybrid search work the same way as with a client-side embedder. The default index name ends in `_search_selfembed`. Server-embedded documents never share an index with client-supplied vectors. If you also pass an `embedder`, Mastra uses it instead.
 
-MongoDB embeds new documents in the background, so a file indexed moments ago may not be searchable immediately. Every other store keeps requiring an `embedder`.
+MongoDB embeds new documents in the background. A file indexed moments ago may not be searchable yet. Stores without self-embedding still require an `embedder`.
 
 ### Custom index name
 

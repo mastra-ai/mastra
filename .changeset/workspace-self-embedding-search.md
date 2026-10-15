@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Workspace vector and hybrid search now work with vector stores that generate embeddings themselves, such as `MongoDBVector` with `autoEmbed`. The `embedder` option is no longer required for these stores: Mastra sends document and query text to the store instead of vectors.
+Added Workspace vector and hybrid search for vector stores that generate embeddings themselves, such as `MongoDBVector` with `autoEmbed`. The `embedder` option is no longer required for these stores: Mastra sends document and query text to the store instead of vectors.
 
 ```ts
 const workspace = new Workspace({
