@@ -1,10 +1,12 @@
 import { Field as FieldPrimitive } from '@base-ui/react/field';
 import { Fieldset as FieldsetPrimitive } from '@base-ui/react/fieldset';
-import { CircleAlertIcon } from 'lucide-react';
+import { CircleAlertIcon, Info } from 'lucide-react';
 import * as React from 'react';
 
 import { FieldAriaContext, useFieldAriaIds } from './field-control-aria';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Icon } from '@/ds/icons/Icon';
+import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 type FieldProps = Omit<FieldPrimitive.Root.Props, 'className'> & {
@@ -14,7 +16,8 @@ type FieldProps = Omit<FieldPrimitive.Root.Props, 'className'> & {
 
 const orientationClassName = {
   vertical: 'grid gap-2',
-  horizontal: 'flex items-center gap-2 has-[>[data-slot=field-label]:first-child]:justify-between',
+  horizontal:
+    'flex items-center gap-2 has-[>[data-slot=field-label]:first-child,>[data-slot=field-label-row]:first-child]:justify-between',
   responsive: 'flex flex-col gap-2 sm:flex-row sm:items-center',
 } satisfies Record<NonNullable<FieldProps['orientation']>, string>;
 
@@ -83,9 +86,56 @@ type FieldLabelProps = Omit<FieldPrimitive.Label.Props, 'className' | 'id'> & {
   className?: string;
   required?: boolean;
   size?: 'smaller' | 'default' | 'bigger';
+  /** What the field is for, shown in a tooltip on a muted info icon after the label. */
+  info?: React.ReactNode;
 };
 
-function FieldLabel({ className, required = false, size = 'default', children, onClick, ...props }: FieldLabelProps) {
+/** The label's plain text (`{name} (JSON)` included), or null when it holds elements. */
+function plainText(node: React.ReactNode) {
+  const parts = React.Children.toArray(node);
+  return parts.every(part => typeof part === 'string' || typeof part === 'number') ? parts.join('') : null;
+}
+
+/** The info icon after a label. Outside the `<label>`, so hovering or clicking it never focuses the field. */
+function FieldLabelInfo({ children, label }: { children: React.ReactNode; label: React.ReactNode }) {
+  const labelText = plainText(label);
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            aria-label={labelText ? `About ${labelText}` : 'About this field'}
+            // A step quieter than the placeholder grey at rest, so it reads as a hint, not a control.
+            className={cn(
+              'flex cursor-help items-center rounded-full text-placeholder/80 hover:text-muted-foreground focus-visible:text-muted-foreground',
+              controlStateColorTransition,
+              focusRing,
+            )}
+          />
+        }
+      >
+        <Icon size="xs">
+          <Info />
+        </Icon>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-64">
+        {children}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function FieldLabel({
+  className,
+  required = false,
+  size = 'default',
+  info,
+  children,
+  onClick,
+  ...props
+}: FieldLabelProps) {
   const field = useFieldAriaIds();
 
   const focusManualControl: FieldLabelProps['onClick'] = event => {
@@ -94,7 +144,7 @@ function FieldLabel({ className, required = false, size = 'default', children, o
     event.currentTarget.ownerDocument.getElementById(field.controlId)?.focus();
   };
 
-  return (
+  const label = (
     <FieldPrimitive.Label
       id={field?.labelId}
       data-slot="field-label"
@@ -113,6 +163,14 @@ function FieldLabel({ className, required = false, size = 'default', children, o
       {children}
       {required ? <RequiredMark /> : null}
     </FieldPrimitive.Label>
+  );
+
+  if (!info) return label;
+  return (
+    <span data-slot="field-label-row" className="flex w-fit items-center gap-1">
+      {label}
+      <FieldLabelInfo label={children}>{info}</FieldLabelInfo>
+    </span>
   );
 }
 
