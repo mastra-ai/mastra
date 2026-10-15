@@ -1,6 +1,7 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { overlaySurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
@@ -77,11 +78,8 @@ function FindingsContent({
           <div className="flex flex-col gap-1">
             {groups.map(([kind, items]) => (
               <Collapsible key={kind}>
-                <CollapsibleTrigger
-                  chevron="start"
-                  chevronSize="sm"
-                  className="flex w-full items-center gap-2 px-2 py-2 text-left"
-                >
+                <CollapsibleTrigger className="flex w-full items-center gap-2 px-2 py-2 text-left">
+                  <DisclosureChevron direction="right" className="size-3.5" />
                   <Txt tone="ink" variant="caption" className="min-w-0 flex-1">
                     {FINDING_LABELS[kind]}
                   </Txt>

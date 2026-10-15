@@ -2,6 +2,7 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Code } from '@mastra/playground-ui/components/Code';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -67,10 +68,7 @@ function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo })
   return (
     <SettingsContainer>
       <Collapsible>
-        <CollapsibleTrigger
-          chevron="end"
-          className="text-muted-foreground flex w-full items-center justify-between gap-4 px-4 py-3 text-left"
-        >
+        <CollapsibleTrigger className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left">
           <div className="flex min-w-0 flex-col gap-0.5">
             <span className="flex items-center gap-2">
               <Txt tone="ink" as="span" variant="body">
@@ -91,6 +89,7 @@ function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo })
               </Txt>
             )}
           </div>
+          <DisclosureChevron direction="right" className="text-muted-foreground size-4" />
         </CollapsibleTrigger>
         <CollapsibleContent>
           <SkillContent content={skill.content} />

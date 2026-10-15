@@ -80,24 +80,4 @@ describe('Collapsible', () => {
 
     expect(document.querySelector('[data-slot="disclosure-chevron"]')).toBeNull();
   });
-
-  it('places the built-in chevron before or after the children at the requested size', () => {
-    render(
-      <Collapsible>
-        <CollapsibleTrigger chevron="start" chevronSize="xs">
-          Leading
-        </CollapsibleTrigger>
-        <CollapsibleTrigger chevron="end">Trailing</CollapsibleTrigger>
-      </Collapsible>,
-    );
-
-    const leading = screen.getByRole('button', { name: 'Leading' });
-    expect(leading.firstElementChild?.getAttribute('data-slot')).toBe('disclosure-chevron');
-    expect(leading.firstElementChild?.classList.contains('size-icon-xs')).toBe(true);
-
-    const trailing = screen.getByRole('button', { name: 'Trailing' });
-    expect(trailing.lastElementChild?.getAttribute('data-slot')).toBe('disclosure-chevron');
-    expect(trailing.lastElementChild?.classList.contains('size-icon-md')).toBe(true);
-    expect(trailing.firstChild?.textContent).toBe('Trailing');
-  });
 });

@@ -6,40 +6,16 @@ import { cn } from '@/lib/utils';
 
 const Collapsible = CollapsiblePrimitive.Root;
 
-type CollapsibleChevronSize = 'xs' | 'sm' | 'md';
-
 type CollapsibleTriggerProps = Omit<CollapsiblePrimitive.Trigger.Props, 'className'> & {
   className?: string;
   /** @deprecated Use Base UI's native `render` prop instead for stronger composition typing. */
   asChild?: boolean;
-} & (
-    | {
-        /** Default: unstyled, the caller lays it out. */
-        variant?: 'default';
-        /**
-         * Adds the built-in chevron (points right, turns 90° while open) before or after the children.
-         * It takes the trigger's text color; the caller's className sets the gap and typography.
-         */
-        chevron?: 'start' | 'end';
-        /** Icon size token for the chevron: 12, 14 or 16px (default `md`). */
-        chevronSize?: CollapsibleChevronSize;
-      }
-    | {
-        /**
-         * `disclosure`: a ready-made toggle row: a chevron that turns while open, then muted label text,
-         * flush with the content around it. While open it stretches into a section divider: a hairline
-         * fills the rest of the row.
-         */
-        variant: 'disclosure';
-        chevron?: never;
-        chevronSize?: never;
-      }
-  );
-
-const chevronSizeClass: Record<CollapsibleChevronSize, string> = {
-  xs: 'size-icon-xs',
-  sm: 'size-icon-sm',
-  md: 'size-icon-md',
+  /**
+   * `disclosure`: a ready-made toggle row: a chevron that turns while open, then muted label text,
+   * flush with the content around it. While open it stretches into a section divider: a hairline
+   * fills the rest of the row. Default: unstyled, the caller lays it out.
+   */
+  variant?: 'default' | 'disclosure';
 };
 
 // Control height, so the row lines up with buttons beside it (e.g. in a dialog footer). Open, it
@@ -53,11 +29,9 @@ const disclosureTriggerClass = cn(
 );
 
 const CollapsibleTrigger = React.forwardRef<HTMLButtonElement, CollapsibleTriggerProps>(
-  ({ className, asChild, variant = 'default', chevron, chevronSize = 'md', children, ...props }, ref) => {
+  ({ className, asChild, variant = 'default', children, ...props }, ref) => {
     const renderProps = asChild && React.isValidElement(children) ? { render: children as React.ReactElement } : {};
     const disclosure = variant === 'disclosure' && !asChild;
-    const plainChevron =
-      chevron && !asChild ? <DisclosureChevron direction="right" className={chevronSizeClass[chevronSize]} /> : null;
 
     return (
       <CollapsiblePrimitive.Trigger
@@ -86,9 +60,7 @@ const CollapsibleTrigger = React.forwardRef<HTMLButtonElement, CollapsibleTrigge
             className="-mr-0.5 -ml-[4.3px] size-icon-md in-aria-expanded:translate-x-[2px]"
           />
         ) : null}
-        {chevron === 'start' ? plainChevron : null}
         {asChild ? undefined : children}
-        {chevron === 'end' ? plainChevron : null}
       </CollapsiblePrimitive.Trigger>
     );
   },
