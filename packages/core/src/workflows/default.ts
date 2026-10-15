@@ -1027,12 +1027,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         // land as orphans. Undefined when nothing in the chain is exportable, which
         // correctly makes those children trace roots instead.
         const persistTracingContext =
-          result.status === 'suspended' && workflowSpan
-            ? {
-                traceId: workflowSpan.traceId,
-                spanId: resolveExportedSpanId(workflowSpan),
-                parentSpanId: workflowSpan.getParentSpanId(),
-              }
+          result.status === 'suspended'
+            ? (this.options.resumeTracingContext ??
+              (workflowSpan
+                ? {
+                    traceId: workflowSpan.traceId,
+                    spanId: resolveExportedSpanId(workflowSpan),
+                    parentSpanId: workflowSpan.getParentSpanId(),
+                  }
+                : {}))
             : {};
 
         await this.persistStepUpdate({

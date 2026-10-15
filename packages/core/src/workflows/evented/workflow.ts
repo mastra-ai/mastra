@@ -1737,6 +1737,7 @@ export function createWorkflow<
       validateInputs: params.options?.validateInputs ?? true,
       shouldPersistSnapshot: params.options?.shouldPersistSnapshot ?? (() => true),
       pruneSnapshot: params.options?.pruneSnapshot,
+      resumeTracingContext: params.options?.resumeTracingContext,
       tracingPolicy: params.options?.tracingPolicy,
       onStart: params.options?.onStart,
       onFinish: params.options?.onFinish,

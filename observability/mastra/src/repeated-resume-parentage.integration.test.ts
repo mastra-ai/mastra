@@ -88,6 +88,14 @@ async function resumeParents(engine: 'normal' | 'durable', recreateAgent = false
     const added = exporter.getSpansByType(SpanType.AGENT_RUN).filter(span => !invocationIds.includes(span.id));
     expect(added).toHaveLength(1);
     invocationIds.push(added[0]!.id);
+    if (engine === 'normal' && count < 3) {
+      const workflows = await storage.getStore('workflows');
+      const snapshot = await workflows!.loadWorkflowSnapshot({ workflowName: 'agentic-loop', runId });
+      expect(snapshot?.tracingContext).toEqual({
+        traceId: added[0]!.traceId,
+        spanId: invocationIds[0],
+      });
+    }
   }
   try {
     const first = await (durable ?? agent).generate('Start.', { runId, maxSteps: 10 });

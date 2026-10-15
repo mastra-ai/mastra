@@ -694,18 +694,23 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
     // that happened to be active when the internal workflow suspended. Only
     // reuse the saved parent when this invocation actually resumed beneath it;
     // an explicit caller tracing context can start a different lineage.
-    const initialAgentSpanId =
-      agentSpan &&
-      previousContext?.spanId &&
-      agentSpan.traceId === previousContext.traceId &&
-      agentSpan.getParentSpanId() === previousContext.spanId
-        ? previousContext.spanId
-        : resolveExportedSpanId(agentSpan);
+    const resumeTracingContext = agentSpan
+      ? previousContext?.spanId &&
+        agentSpan.traceId === previousContext.traceId &&
+        agentSpan.getParentSpanId() === previousContext.spanId
+        ? { ...previousContext }
+        : {
+            traceId: agentSpan.traceId,
+            spanId: resolveExportedSpanId(agentSpan),
+            parentSpanId: agentSpan.getParentSpanId(),
+          }
+      : undefined;
     return this.workflowFactory()({
       id: AGENTIC_LOOP_WORKFLOW_ID,
       inputSchema: llmIterationOutputSchema,
       outputSchema: llmIterationOutputSchema,
       options: {
+        resumeTracingContext,
         tracingPolicy: {
           // mark all workflow spans related to the
           // VNext execution as internal
@@ -729,17 +734,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         // Agent-loop snapshots are pure resume artifacts — strip everything a
         // resume never reads (stale suspend payloads, duplicated message
         // arrays, AI SDK step history) before persisting.
-        pruneSnapshot: params => {
-          const snapshot = pruneAgentLoopSnapshot(params);
-          if (params.workflowStatus === 'suspended' && agentSpan) {
-            snapshot.tracingContext = {
-              traceId: agentSpan.traceId,
-              spanId: initialAgentSpanId,
-              parentSpanId: agentSpan.getParentSpanId(),
-            };
-          }
-          return snapshot;
-        },
+        pruneSnapshot: pruneAgentLoopSnapshot,
         validateInputs: false,
       },
     })
