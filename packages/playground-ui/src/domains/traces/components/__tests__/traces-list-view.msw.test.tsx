@@ -96,7 +96,7 @@ describe('TracesListView Output column', () => {
   });
 
   describe('when the server predates output and error previews', () => {
-    it('shows an empty Output cell for every row', async () => {
+    it('shows a dash in every Output cell, in the error color for the failed run', async () => {
       renderTracesList(tracesWithoutPreviewsPage);
 
       const finished = await screen.findByText('What is the weather in Paris?');
@@ -106,11 +106,13 @@ describe('TracesListView Output column', () => {
       const output = columns.indexOf('Output');
       expect(output).toBeGreaterThan(-1);
 
-      for (const row of [rowOf('What is the weather in Paris?'), rowOf('Book a table for two')]) {
-        expect(row.children[output]?.textContent).toBe('-');
-      }
+      const succeeded = rowOf('What is the weather in Paris?').children[output];
+      const failed = rowOf('Book a table for two').children[output];
+      expect(succeeded?.textContent).toBe('-');
+      expect(failed?.textContent).toBe('-');
+      expect(succeeded?.classList.contains('text-destructive-foreground')).toBe(false);
+      expect(failed?.classList.contains('text-destructive-foreground')).toBe(true);
       expect(finished).toBeTruthy();
-      expect(document.querySelector('.text-destructive-foreground')).toBeNull();
     });
   });
 });

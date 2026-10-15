@@ -39,9 +39,9 @@ export type TracesListViewTrace = {
   inputPreview?: string | null;
   input?: unknown;
   /** Server-rendered preview of the root span's output. */
-  outputPreview?: string | null;
+  outputPreview?: string;
   /** Server-rendered preview of the root span's error. Shown in place of the output when `status` is `'error'`. */
-  errorPreview?: string | null;
+  errorPreview?: string;
   metadata?: Record<string, unknown> | null;
   startedAt?: Date | string | null;
   endedAt?: Date | string | null;
