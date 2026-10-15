@@ -177,7 +177,7 @@ describe('factory_signal_session', () => {
       source: 'factory-session',
       kind: 'message',
       priority: 'medium',
-      summary: text.slice(0, 200),
+      summary: text,
       payload: { message: text },
       sourceId: 'session-1',
       resourceId: 'session-b',

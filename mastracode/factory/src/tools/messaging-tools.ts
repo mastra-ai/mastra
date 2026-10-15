@@ -27,7 +27,6 @@ export const SIGNAL_RATE_LIMIT = 10;
 export const SIGNAL_RATE_WINDOW_MS = 10 * 60 * 1000;
 /** How many recent `factory-session` notifications on a thread the rate and duplicate checks read. */
 const RECENT_SCAN = 100;
-const SUMMARY_LENGTH = 200;
 const RATE_LIMITED = 'Too many messages to that session in the last 10 minutes; wait before sending more.';
 
 export interface FactoryMessaging {
@@ -182,7 +181,7 @@ export function createFactoryMessagingTools(
         notification: {
           kind: 'message',
           priority,
-          summary: text.slice(0, SUMMARY_LENGTH),
+          summary: text,
           payload: { message: text },
           sourceId: scope.sessionId,
           attributes: {
@@ -261,7 +260,7 @@ export function createFactoryMessagingTools(
         notification: {
           kind: 'reply',
           priority: 'high',
-          summary: text.slice(0, SUMMARY_LENGTH),
+          summary: text,
           payload: { message: text },
           sourceId: scope.sessionId,
           attributes: {
