@@ -446,7 +446,7 @@ describe.each(ENGINES)('declarative step runtime ($name engine)', ({ evented }) 
     const run = await wf.createRun();
     const result = await run.start({ inputData: { prompt: 'say hi' } });
     expect(result.status).toBe('success');
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('registered on a different Mastra instance'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('no durable wrapper for it is registered'));
   });
 
   it('createStep() keeps an unrelated agent that shares an id with a registered durable agent', async () => {

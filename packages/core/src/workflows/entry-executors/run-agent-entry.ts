@@ -23,6 +23,8 @@ import type { EntryExecuteContext } from './types';
 export function resolveRegisteredAgent<T>(agent: T, mastra?: Mastra): T {
   const candidate = agent as { durable?: unknown; id?: string; getMastraInstance?: () => Mastra | undefined };
   if (!candidate?.durable) return agent;
+  // Already a durable wrapper (e.g. a Proxy that forwards `durable` to its inner agent).
+  if (isDurableAgentLike(agent) && agent.agent !== agent) return agent;
 
   for (const registered of Object.values(mastra?.listAgents?.() ?? {})) {
     if (registered !== agent && isDurableAgentLike(registered) && registered.agent === agent) {
@@ -37,7 +39,7 @@ export function resolveRegisteredAgent<T>(agent: T, mastra?: Mastra): T {
     (mastra ?? owner)
       .getLogger()
       ?.warn(
-        `Agent "${candidate.id}" has durable enabled but is registered on a different Mastra instance than this workflow, so the step runs it non-durably. Register the agent on the workflow's Mastra instance.`,
+        `Agent "${candidate.id}" has durable enabled but no durable wrapper for it is registered on this workflow's Mastra instance, so the step runs it non-durably. Register the agent in the \`agents\` of the Mastra instance that runs this workflow.`,
       );
   }
   return agent;
