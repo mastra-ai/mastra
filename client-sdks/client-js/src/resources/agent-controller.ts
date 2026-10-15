@@ -79,8 +79,7 @@ type AgentControllerLegacyPagedListMessagesOptions = {
 
 /** Pagination, ordering, filtering, and include options for an Agent Controller thread's messages. */
 export type AgentControllerListMessagesOptions =
-  | AgentControllerModernListMessagesOptions
-  | AgentControllerLegacyPagedListMessagesOptions;
+  AgentControllerModernListMessagesOptions | AgentControllerLegacyPagedListMessagesOptions;
 
 /** A page of hydrated Agent Controller thread messages. */
 export type AgentControllerListMessagesResult = StorageListMessagesOutput;
