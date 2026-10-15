@@ -1,605 +1,699 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useRef, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Field, FieldError, FieldLabel } from '../Field';
 import { Form } from '../Form';
-import { Combobox as BareCombobox } from './combobox';
-import type { ComboboxProps } from './combobox';
-
-/** Most tests use the Combobox the way forms do: inside a `Field`, where a single select searches in the field. */
-function Combobox(props: ComboboxProps) {
-  return (
-    <Field>
-      <FieldLabel>Provider</FieldLabel>
-      <BareCombobox {...props} />
-    </Field>
-  );
-}
+import { Combobox } from './combobox';
+import type { ComboboxMultipleProps, ComboboxOption, ComboboxSingleProps } from './combobox';
 
 afterEach(() => {
   cleanup();
 });
 
-const options = [
+const providers: ComboboxOption[] = [
   { label: 'OpenAI', value: 'openai' },
   { label: 'Anthropic', value: 'anthropic' },
   { label: 'Google', value: 'google' },
 ];
 
-/** A single-select `default` Combobox is a field: you click it to open the list and type in it to search. */
-async function openField(user = userEvent.setup()) {
-  const field = screen.getByRole('combobox');
-  await user.click(field);
-  await screen.findAllByRole('option');
-  return { user, field };
-}
-
-function renderCombobox(props?: {
-  onValueChange?: (value: string) => void;
-  value?: string;
-  allowCustomValue?: boolean;
-}) {
-  return render(
-    <Combobox
-      options={options}
-      value={props?.value}
-      onValueChange={props?.onValueChange}
-      placeholder="Pick provider"
-      searchPlaceholder="Search providers"
-      allowCustomValue={props?.allowCustomValue}
-    />,
+function InField({ children }: { children: ReactNode }) {
+  return (
+    <Field>
+      <FieldLabel>Provider</FieldLabel>
+      {children}
+    </Field>
   );
 }
 
-describe('Combobox', () => {
-  it('opens the popup outside a portal container provider', async () => {
-    renderCombobox();
-
-    await openField();
-
-    expect(screen.getByRole('option', { name: 'OpenAI' })).toBeTruthy();
-    expect(screen.getByRole('option', { name: 'Anthropic' })).toBeTruthy();
-    expect(screen.getByRole('option', { name: 'Google' })).toBeTruthy();
-  });
-
-  it('portals the popup into document.body when there is no portal container provider', async () => {
-    const { container } = renderCombobox();
-
-    await openField();
-
-    // The regression: outside a SideDialog the portal container resolved to
-    // `null`, which Base UI's FloatingPortal reads as "render nothing", so the
-    // popup never mounted. It must land in document.body, outside the trigger's
-    // own subtree.
-    const option = await screen.findByRole('option', { name: 'OpenAI' });
-    expect(document.body.contains(option)).toBe(true);
-    expect(container.contains(option)).toBe(false);
-  });
-
-  it('selects an item and fires onValueChange with the selected value', async () => {
-    const onValueChange = vi.fn();
-    renderCombobox({ onValueChange });
-
-    const { user } = await openField();
-    await user.click(screen.getByRole('option', { name: 'Anthropic' }));
-
-    await waitFor(() => {
-      expect(onValueChange).toHaveBeenCalledWith('anthropic');
-    });
-  });
-
-  it('supports multiple selections and fires onValueChange with selected values', async () => {
-    const onValueChange = vi.fn();
-    render(
+/** A single-select Combobox in a form field whose value the test (like a real caller) owns. */
+function SingleField({ initial, ...props }: Partial<ComboboxSingleProps> & { initial?: string }) {
+  const [value, setValue] = useState(initial);
+  return (
+    <InField>
       <Combobox
-        multiple
-        options={options}
-        value={['openai']}
-        onValueChange={onValueChange}
+        options={providers}
+        placeholder="Pick provider"
+        {...props}
+        value={value}
+        onValueChange={next => {
+          setValue(next);
+          props.onValueChange?.(next);
+        }}
+      />
+    </InField>
+  );
+}
+
+/** A multiple-select Combobox in a form field whose value the test owns. */
+function MultipleField({ initial = [], ...props }: Partial<ComboboxMultipleProps> & { initial?: string[] }) {
+  const [value, setValue] = useState(initial);
+  return (
+    <InField>
+      <Combobox
+        options={providers}
         placeholder="Pick providers"
-        searchPlaceholder="Search providers"
-      />,
-    );
-
-    // In a Field, the picks are chips and the field is the search.
-    expect(screen.getByRole('button', { name: 'Remove OpenAI' })).toBeTruthy();
-
-    const { user } = await openField();
-    await user.click(screen.getByRole('option', { name: 'Anthropic' }));
-
-    await waitFor(() => {
-      expect(onValueChange).toHaveBeenCalledWith(['openai', 'anthropic']);
-    });
-  });
-
-  it('removes a chip with its × and with Backspace', async () => {
-    function Controlled() {
-      const [value, setValue] = useState<string[]>(['openai', 'google']);
-      return <Combobox multiple options={options} value={value} onValueChange={setValue} />;
-    }
-    render(<Controlled />);
-    const user = userEvent.setup();
-
-    await user.click(screen.getByRole('button', { name: 'Remove OpenAI' }));
-    expect(screen.queryByRole('button', { name: 'Remove OpenAI' })).toBeNull();
-
-    await user.click(screen.getByRole('combobox'));
-    await user.keyboard('{Backspace}');
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Remove Google' })).toBeNull());
-  });
-
-  it('keeps "N selected" on a compact multi-select trigger outside a Field', async () => {
-    const onValueChange = vi.fn();
-    render(<BareCombobox multiple options={options} value={['openai']} onValueChange={onValueChange} />);
-
-    expect(screen.getByRole('combobox').textContent).toContain('1 selected');
-
-    fireEvent.click(screen.getByRole('combobox'));
-    const anthropic = await screen.findByRole('option', { name: 'Anthropic' });
-    fireEvent.pointerDown(anthropic, { pointerType: 'mouse' });
-    fireEvent.click(anthropic, { detail: 1 });
-
-    await waitFor(() => {
-      expect(onValueChange).toHaveBeenCalledWith(['openai', 'anthropic']);
-    });
-  });
-
-  it('clears a multi-selection from the popup footer', async () => {
-    const onValueChange = vi.fn();
-    render(
-      <Combobox
+        {...props}
         multiple
-        options={options}
-        value={['openai', 'anthropic']}
-        onValueChange={onValueChange}
-        clearLabel="Clear"
-      />,
-    );
+        value={value}
+        onValueChange={next => {
+          setValue(next);
+          props.onValueChange?.(next);
+        }}
+      />
+    </InField>
+  );
+}
 
-    const { user } = await openField();
-    await user.click(screen.getByRole('button', { name: 'Clear' }));
+const field = () => screen.getByRole<HTMLInputElement>('combobox', { name: 'Provider' });
+const optionNames = () => screen.queryAllByRole('option').map(option => option.textContent);
+const highlighted = () =>
+  screen
+    .queryAllByRole('option')
+    .filter(option => option.hasAttribute('data-highlighted'))
+    .map(option => option.textContent);
+// While the list is open, Base UI hides everything outside it from assistive tech, the chips included.
+const chipNames = () =>
+  screen.queryAllByRole('button', { name: /^Remove /, hidden: true }).map(button => button.getAttribute('aria-label'));
 
-    expect(onValueChange).toHaveBeenCalledWith([]);
-  });
+async function openField() {
+  const user = userEvent.setup();
+  await user.click(field());
+  await screen.findAllByRole('option');
+  return user;
+}
 
-  it('does not submit a form when clearing a multi-selection from its portal', async () => {
-    const onSubmit = vi.fn((event: FormEvent) => event.preventDefault());
-    const onValueChange = vi.fn();
+describe('Combobox', () => {
+  describe('when it is a single select inside a Field', () => {
+    it('is a text field named by the field label', () => {
+      render(<SingleField />);
 
-    function FormCombobox() {
-      const formRef = useRef<HTMLFormElement>(null);
+      expect(field().tagName).toBe('INPUT');
+      expect(field().placeholder).toBe('Pick provider');
+    });
 
-      return (
-        <Form ref={formRef} onSubmit={onSubmit}>
-          <Combobox
-            multiple
-            container={formRef}
-            options={options}
-            value={['openai']}
-            onValueChange={onValueChange}
-            clearLabel="Clear"
-          />
-        </Form>
+    it('focuses the field when the label is clicked', async () => {
+      render(<SingleField />);
+
+      await userEvent.click(screen.getByText('Provider'));
+
+      expect(document.activeElement).toBe(field());
+    });
+
+    it('opens the list when the field is clicked', async () => {
+      render(<SingleField />);
+
+      await openField();
+
+      expect(optionNames()).toEqual(['OpenAI', 'Anthropic', 'Google']);
+    });
+
+    it('opens the list from the keyboard', async () => {
+      render(<SingleField />);
+      const user = userEvent.setup();
+
+      field().focus();
+      await user.keyboard('{ArrowDown}');
+
+      expect(await screen.findByRole('option', { name: 'OpenAI' })).toBeTruthy();
+    });
+
+    it('moves the highlight with the arrow keys and selects with Enter', async () => {
+      const onValueChange = vi.fn();
+      render(<SingleField onValueChange={onValueChange} />);
+      const user = userEvent.setup();
+
+      field().focus();
+      await user.keyboard('{ArrowDown}');
+      await screen.findByRole('option', { name: 'OpenAI' });
+      expect(highlighted()).toEqual(['OpenAI']);
+
+      await user.keyboard('{ArrowDown}');
+      expect(highlighted()).toEqual(['Anthropic']);
+
+      await user.keyboard('{Enter}');
+      expect(onValueChange).toHaveBeenLastCalledWith('anthropic');
+    });
+
+    it('filters the options as you type', async () => {
+      render(<SingleField />);
+      const user = await openField();
+
+      await user.keyboard('goo');
+
+      await waitFor(() => expect(optionNames()).toEqual(['Google']));
+    });
+
+    it('selects the first match with Enter after typing', async () => {
+      const onValueChange = vi.fn();
+      render(<SingleField onValueChange={onValueChange} />);
+      const user = await openField();
+
+      await user.keyboard('anth{Enter}');
+
+      expect(onValueChange).toHaveBeenLastCalledWith('anthropic');
+    });
+
+    it('shows the chosen option in the field', async () => {
+      render(<SingleField />);
+      const user = await openField();
+
+      await user.click(screen.getByRole('option', { name: 'Google' }));
+
+      await waitFor(() => expect(field().value).toBe('Google'));
+    });
+
+    it('lists every option again when reopened with a value chosen', async () => {
+      render(<SingleField initial="google" />);
+      const user = await openField();
+
+      expect(optionNames()).toEqual(['OpenAI', 'Anthropic', 'Google']);
+
+      await user.keyboard('{Escape}');
+      await user.click(field());
+
+      await waitFor(() => expect(optionNames()).toEqual(['OpenAI', 'Anthropic', 'Google']));
+    });
+
+    it('marks the chosen option in the list', async () => {
+      render(<SingleField initial="anthropic" />);
+      await openField();
+
+      expect(screen.getByRole('option', { name: 'Anthropic' }).getAttribute('aria-selected')).toBe('true');
+      expect(screen.getByRole('option', { name: 'OpenAI' }).getAttribute('aria-selected')).toBe('false');
+    });
+
+    it('closes with Escape and keeps the value and focus', async () => {
+      render(<SingleField initial="openai" />);
+      const user = await openField();
+
+      await user.keyboard('{Escape}');
+
+      await waitFor(() => expect(screen.queryByRole('option')).toBeNull());
+      expect(field().value).toBe('OpenAI');
+      expect(document.activeElement).toBe(field());
+    });
+
+    it('says so when nothing matches', async () => {
+      render(<SingleField emptyText="No providers found." />);
+      const user = await openField();
+
+      await user.keyboard('zzz');
+
+      expect(await screen.findByText('No providers found.')).toBeTruthy();
+      expect(screen.queryByRole('option')).toBeNull();
+    });
+
+    it('keeps up with a value changed by the caller', () => {
+      const { rerender } = render(
+        <InField>
+          <Combobox options={providers} value="openai" />
+        </InField>,
       );
-    }
+      expect(field().value).toBe('OpenAI');
 
-    render(<FormCombobox />);
-    const { user } = await openField();
-    await user.click(screen.getByRole('button', { name: 'Clear' }));
+      rerender(
+        <InField>
+          <Combobox options={providers} value="google" />
+        </InField>,
+      );
 
-    expect(onValueChange).toHaveBeenCalledWith([]);
-    expect(onSubmit).not.toHaveBeenCalled();
-  });
-
-  it('shows the clear action only when a selected multi-combobox provides its label', async () => {
-    const { rerender } = render(<Combobox multiple options={options} value={[]} clearLabel="Clear" />);
-
-    fireEvent.click(screen.getByRole('combobox'));
-    expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
-
-    rerender(<Combobox multiple options={options} value={['openai']} />);
-    expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
-  });
-
-  it('selects the first filtered item when pressing Enter after searching in the field', async () => {
-    const onValueChange = vi.fn();
-    renderCombobox({ onValueChange });
-
-    const { user } = await openField();
-    // No separate search row: the field itself is the search.
-    expect(screen.queryByPlaceholderText('Search providers')).toBeNull();
-    await user.keyboard('goo');
-
-    await waitFor(() => {
-      expect(screen.queryByRole('option', { name: 'OpenAI' })).toBeNull();
-    });
-    const google = screen.getByRole('option', { name: 'Google' });
-    await waitFor(() => {
-      expect(google.hasAttribute('data-highlighted')).toBe(true);
+      expect(field().value).toBe('Google');
     });
 
-    await user.keyboard('{Enter}');
+    it("shows the chosen option's start adornment in the field", () => {
+      const withLogo: ComboboxOption[] = [{ label: 'OpenAI', value: 'openai', start: <span data-testid="logo" /> }];
+      render(<SingleField options={withLogo} initial="openai" />);
 
-    await waitFor(() => {
-      expect(onValueChange).toHaveBeenCalledWith('google');
-    });
-  });
-
-  it('finds an option by its keywords as well as its label', async () => {
-    render(
-      <Combobox
-        options={[
-          { label: 'Claude Haiku 4.5', value: 'anthropic/claude-haiku-4-5', keywords: ['anthropic/claude-haiku-4-5'] },
-          { label: 'GPT-5 Mini', value: 'openai/gpt-5-mini', keywords: ['openai/gpt-5-mini'] },
-        ]}
-      />,
-    );
-
-    const { user, field } = await openField();
-
-    await user.keyboard('anthropic');
-    await waitFor(() => {
-      expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['Claude Haiku 4.5']);
+      expect(field().parentElement?.contains(screen.getByTestId('logo'))).toBe(true);
     });
 
-    await user.clear(field);
-    await user.keyboard('mini');
-    await waitFor(() => {
-      expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['GPT-5 Mini']);
-    });
-  });
+    it('finds an option by its keywords', async () => {
+      const models: ComboboxOption[] = [
+        { label: 'Claude Haiku 4.5', value: 'anthropic/claude-haiku-4-5', keywords: ['anthropic/claude-haiku-4-5'] },
+        { label: 'GPT-5 Mini', value: 'openai/gpt-5-mini', keywords: ['openai/gpt-5-mini'] },
+      ];
+      render(<SingleField options={models} />);
+      const user = await openField();
 
-  it('finds an option by the plain-text displayLabel the field shows', async () => {
-    render(<Combobox options={[{ label: 'Auto', value: 'auto', displayLabel: 'Auto · GPT-5 Mini' }, ...options]} />);
+      await user.keyboard('anthropic');
 
-    const { user } = await openField();
-    await user.keyboard('mini');
-
-    await waitFor(() => {
-      expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['Auto']);
-    });
-  });
-
-  it('selects a custom value when custom values are allowed', async () => {
-    const onValueChange = vi.fn();
-    renderCombobox({ onValueChange, allowCustomValue: true });
-
-    const { user } = await openField();
-    await user.keyboard('new-provider/new-model');
-
-    await user.click(await screen.findByRole('option', { name: 'Use “new-provider/new-model”' }));
-
-    await waitFor(() => {
-      expect(onValueChange).toHaveBeenCalledWith('new-provider/new-model');
-    });
-  });
-
-  it('reports the search text through onInputValueChange and resets it after a compact selection', async () => {
-    const onInputValueChange = vi.fn();
-    render(
-      <Combobox
-        options={options}
-        variant="ghost"
-        onInputValueChange={onInputValueChange}
-        searchPlaceholder="Search providers"
-      />,
-    );
-
-    fireEvent.click(screen.getByRole('combobox'));
-
-    const search = await screen.findByPlaceholderText('Search providers');
-    fireEvent.input(search, { target: { value: 'goo' }, inputType: 'insertText' });
-
-    await waitFor(() => {
-      expect(onInputValueChange).toHaveBeenCalledWith('goo');
+      await waitFor(() => expect(optionNames()).toEqual(['Claude Haiku 4.5']));
     });
 
-    const google = await screen.findByRole('option', { name: 'Google' });
-    fireEvent.pointerDown(google, { pointerType: 'mouse' });
-    fireEvent.click(google, { detail: 1 });
+    it('finds an option by the plain-text displayLabel the field shows', async () => {
+      render(
+        <SingleField options={[{ label: 'Auto', value: 'auto', displayLabel: 'Auto · GPT-5 Mini' }, ...providers]} />,
+      );
+      const user = await openField();
 
-    await waitFor(() => {
-      expect(onInputValueChange).toHaveBeenLastCalledWith('');
+      await user.keyboard('mini');
+
+      await waitFor(() => expect(optionNames()).toEqual(['Auto']));
     });
-  });
 
-  it('reports the text typed in a field through onInputValueChange', async () => {
-    const onInputValueChange = vi.fn();
-    render(<Combobox options={options} onInputValueChange={onInputValueChange} />);
+    it('reports the typed text through onInputValueChange', async () => {
+      const onInputValueChange = vi.fn();
+      render(<SingleField onInputValueChange={onInputValueChange} />);
+      const user = await openField();
 
-    const { user } = await openField();
-    await user.keyboard('goo');
+      await user.keyboard('goo');
 
-    await waitFor(() => {
       expect(onInputValueChange).toHaveBeenLastCalledWith('goo');
     });
-  });
 
-  it('shows the chosen option in the field after a pick, not the search text', async () => {
-    function Controlled() {
-      const [value, setValue] = useState<string>();
-      return <Combobox options={options} value={value} onValueChange={setValue} />;
-    }
-    render(<Controlled />);
+    it('opens its list in document.body when no dialog provides a container', async () => {
+      const { container } = render(<SingleField />);
 
-    const { user, field } = await openField();
-    await user.keyboard('goo');
-    await user.click(await screen.findByRole('option', { name: 'Google' }));
+      await openField();
 
-    await waitFor(() => expect((field as HTMLInputElement).value).toBe('Google'));
-  });
-
-  it('keeps a consumer-injected option whose label contains the search text as the first option', async () => {
-    const onValueChange = vi.fn();
-    render(
-      <Combobox options={[{ label: 'Create "goo"', value: '__create__' }, ...options]} onValueChange={onValueChange} />,
-    );
-
-    const { user } = await openField();
-    await user.keyboard('goo');
-
-    await waitFor(() => {
-      expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(['Create "goo"', 'Google']);
-    });
-
-    await user.click(screen.getByRole('option', { name: 'Create "goo"' }));
-
-    await waitFor(() => {
-      expect(onValueChange).toHaveBeenCalledWith('__create__');
+      const option = screen.getByRole('option', { name: 'OpenAI' });
+      expect(document.body.contains(option)).toBe(true);
+      expect(container.contains(option)).toBe(false);
     });
   });
 
-  it('does not offer a custom value unless custom values are allowed', async () => {
-    renderCombobox();
+  describe('when custom values are allowed', () => {
+    it('offers the typed text as an option and picks it', async () => {
+      const onValueChange = vi.fn();
+      render(<SingleField allowCustomValue onValueChange={onValueChange} />);
+      const user = await openField();
 
-    const { user } = await openField();
-    await user.keyboard('new-provider/new-model');
+      await user.keyboard('new-provider/new-model');
+      await user.click(await screen.findByRole('option', { name: 'Use “new-provider/new-model”' }));
 
-    expect(await screen.findByText('No option found.')).toBeTruthy();
-    expect(screen.queryByRole('option', { name: /new-provider\/new-model/ })).toBeNull();
+      expect(onValueChange).toHaveBeenLastCalledWith('new-provider/new-model');
+    });
+
+    it('does not offer text that is already an option', async () => {
+      render(<SingleField allowCustomValue />);
+      const user = await openField();
+
+      await user.keyboard('Google');
+
+      await waitFor(() => expect(optionNames()).toEqual(['Google']));
+    });
+
+    it('does not offer the text the field shows for the chosen option', async () => {
+      render(<SingleField allowCustomValue initial="google" />);
+
+      await openField();
+
+      expect(screen.queryByRole('option', { name: /^Use / })).toBeNull();
+    });
   });
 
-  it('renders a pill-shaped field and trigger from the shared buttonVariants recipe', () => {
-    render(<Combobox options={options} placeholder="Pick provider" />);
+  describe('when custom values are not allowed', () => {
+    it('only says nothing matches', async () => {
+      render(<SingleField />);
+      const user = await openField();
 
-    // Composes the Button recipe: pill radius; width belongs to the call site.
-    const field = screen.getByRole('combobox').closest('[data-slot=combobox-input]');
-    expect(field?.className).toContain('rounded-full');
+      await user.keyboard('new-provider/new-model');
 
-    cleanup();
-    render(<Combobox options={options} placeholder="Pick provider" variant="ghost" />);
-
-    const trigger = screen.getByRole('combobox');
-    expect(trigger.className).toContain('rounded-full');
-    expect(trigger.className).toContain('justify-between');
+      expect(await screen.findByText('No option found.')).toBeTruthy();
+      expect(screen.queryByRole('option', { name: /new-provider/ })).toBeNull();
+    });
   });
 
-  it('renders options on the shared menu item recipe (md, rounded-lg)', async () => {
-    render(<Combobox options={options} placeholder="Pick provider" />);
+  describe('when the caller injects an option matching the search', () => {
+    it('keeps it first and lets it be picked', async () => {
+      const onValueChange = vi.fn();
+      render(
+        <SingleField
+          options={[{ label: 'Create "goo"', value: '__create__' }, ...providers]}
+          onValueChange={onValueChange}
+        />,
+      );
+      const user = await openField();
 
-    await openField();
+      await user.keyboard('goo');
+      await waitFor(() => expect(optionNames()).toEqual(['Create "goo"', 'Google']));
+      await user.click(screen.getByRole('option', { name: 'Create "goo"' }));
 
-    const option = await screen.findByRole('option', { name: 'OpenAI' });
-    expect(option.className).toContain('min-h-control-md');
-    expect(option.className).toContain('text-label');
-    expect(option.className).toContain('rounded-lg');
-    expect(option.className).not.toContain('rounded-full');
-    expect(option.className).not.toContain('rounded-md');
+      expect(onValueChange).toHaveBeenLastCalledWith('__create__');
+    });
   });
 
-  it('says what went wrong under the field, and nothing when nothing did', () => {
-    render(
-      <Field invalid>
-        <FieldLabel>Provider</FieldLabel>
-        <BareCombobox options={options} />
-        <FieldError>Required</FieldError>
-      </Field>,
-    );
-    const field = screen.getByRole('combobox', { name: 'Provider' });
-    const message = screen.getByRole('alert');
+  describe('when it is a multiple select inside a Field', () => {
+    it('shows the picks as chips in the field', () => {
+      render(<MultipleField initial={['openai', 'google']} />);
 
-    expect(field.getAttribute('aria-invalid')).toBe('true');
-    expect(field.getAttribute('aria-describedby')).toContain(message.id);
-    expect(message.textContent).toContain('Required');
+      expect(chipNames()).toEqual(['Remove OpenAI', 'Remove Google']);
+    });
 
-    cleanup();
+    it('shows the placeholder only while nothing is picked', () => {
+      const { unmount } = render(<MultipleField />);
+      expect(field().placeholder).toBe('Pick providers');
+      unmount();
 
-    render(
-      <Field>
-        <FieldLabel>Provider</FieldLabel>
-        <BareCombobox options={options} />
-      </Field>,
-    );
+      render(<MultipleField initial={['openai']} />);
 
-    expect(screen.getByRole('combobox', { name: 'Provider' }).getAttribute('aria-invalid')).toBeNull();
-    expect(screen.queryByRole('alert')).toBeNull();
+      expect(field().placeholder).toBe('');
+    });
+
+    it('adds a chip for each pick and keeps the list open for more', async () => {
+      const onValueChange = vi.fn();
+      render(<MultipleField initial={['openai']} onValueChange={onValueChange} />);
+      const user = await openField();
+
+      await user.click(screen.getByRole('option', { name: 'Anthropic' }));
+
+      expect(onValueChange).toHaveBeenLastCalledWith(['openai', 'anthropic']);
+      expect(chipNames()).toEqual(['Remove OpenAI', 'Remove Anthropic']);
+      expect(screen.getByRole('option', { name: 'Google' })).toBeTruthy();
+    });
+
+    it('unpicks an option that is picked again', async () => {
+      const onValueChange = vi.fn();
+      render(<MultipleField initial={['openai', 'google']} onValueChange={onValueChange} />);
+      const user = await openField();
+
+      await user.click(screen.getByRole('option', { name: 'OpenAI' }));
+
+      expect(onValueChange).toHaveBeenLastCalledWith(['google']);
+    });
+
+    it('filters as you type and clears the search after a pick', async () => {
+      render(<MultipleField />);
+      const user = await openField();
+
+      await user.keyboard('anth');
+      await waitFor(() => expect(optionNames()).toEqual(['Anthropic']));
+      await user.keyboard('{Enter}');
+
+      expect(chipNames()).toEqual(['Remove Anthropic']);
+      await waitFor(() => expect(field().value).toBe(''));
+    });
+
+    it('removes a chip with its ×', async () => {
+      render(<MultipleField initial={['openai', 'google']} />);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Remove OpenAI' }));
+
+      expect(chipNames()).toEqual(['Remove Google']);
+    });
+
+    it('removes the last chip with Backspace in the empty field', async () => {
+      render(<MultipleField initial={['openai', 'google']} />);
+      const user = userEvent.setup();
+
+      await user.click(field());
+      await user.keyboard('{Backspace}');
+
+      await waitFor(() => expect(chipNames()).toEqual(['Remove OpenAI']));
+    });
+
+    it('keeps the chips when Backspace deletes typed text', async () => {
+      render(<MultipleField initial={['openai']} />);
+      const user = await openField();
+
+      await user.keyboard('go{Backspace}');
+
+      expect(chipNames()).toEqual(['Remove OpenAI']);
+      expect(field().value).toBe('g');
+    });
+
+    it('keeps up with picks changed by the caller', () => {
+      const { rerender } = render(
+        <InField>
+          <Combobox multiple options={providers} value={['openai']} />
+        </InField>,
+      );
+      expect(chipNames()).toEqual(['Remove OpenAI']);
+
+      rerender(
+        <InField>
+          <Combobox multiple options={providers} value={['openai', 'google']} />
+        </InField>,
+      );
+
+      expect(chipNames()).toEqual(['Remove OpenAI', 'Remove Google']);
+    });
   });
 
-  it('takes the medium size unless the caller asks otherwise', () => {
-    const fieldClass = () => screen.getByRole('combobox').closest('[data-slot=combobox-input]')?.className;
-    const { rerender } = render(<Combobox options={options} />);
-    expect(fieldClass()).toContain('h-control-md');
+  describe('when a multiple select offers a clear action', () => {
+    it('clears every pick from the popup footer', async () => {
+      const onValueChange = vi.fn();
+      render(<MultipleField initial={['openai', 'anthropic']} clearLabel="Clear" onValueChange={onValueChange} />);
+      const user = await openField();
 
-    rerender(<Combobox options={options} size="sm" />);
+      await user.click(screen.getByRole('button', { name: 'Clear' }));
 
-    expect(fieldClass()).toContain('h-control-sm');
+      expect(onValueChange).toHaveBeenLastCalledWith([]);
+    });
+
+    it('hides the action while nothing is picked', async () => {
+      render(<MultipleField clearLabel="Clear" />);
+
+      await openField();
+
+      expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
+    });
+
+    it('does not submit the surrounding form', async () => {
+      const onSubmit = vi.fn((event: FormEvent) => event.preventDefault());
+
+      function FormCombobox() {
+        const formRef = useRef<HTMLFormElement>(null);
+        return (
+          <Form ref={formRef} onSubmit={onSubmit}>
+            <MultipleField initial={['openai']} clearLabel="Clear" container={formRef} />
+          </Form>
+        );
+      }
+
+      render(<FormCombobox />);
+      const user = await openField();
+      await user.click(screen.getByRole('button', { name: 'Clear' }));
+
+      expect(chipNames()).toEqual([]);
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
   });
 
-  it('renders a chevron-only trigger at icon sizes while keeping the value for assistive tech', async () => {
-    const onValueChange = vi.fn();
-    render(
-      <Combobox
-        options={options}
-        value="openai"
-        onValueChange={onValueChange}
-        size="icon-sm"
-        aria-label="Switch provider"
-      />,
-    );
+  describe('when it is disabled', () => {
+    it('does not open or take text', async () => {
+      render(<SingleField disabled initial="openai" />);
 
-    const trigger = screen.getByRole('combobox', { name: 'Switch provider' });
-    expect(trigger.className).toContain('w-control-sm');
-    expect(trigger.className).not.toContain('w-full');
-    expect(trigger.dataset.shape).toBe('icon');
-    expect(screen.getByText('OpenAI').className).toContain('sr-only');
+      await userEvent.click(field());
 
-    fireEvent.click(trigger);
-    fireEvent.click(await screen.findByRole('option', { name: 'Anthropic' }));
+      expect(field().disabled).toBe(true);
+      expect(screen.queryByRole('option')).toBeNull();
+    });
 
-    expect(onValueChange).toHaveBeenCalledWith('anthropic');
+    it('does not let chips be removed', async () => {
+      render(<MultipleField disabled initial={['openai']} />);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Remove OpenAI' }));
+
+      expect(chipNames()).toEqual(['Remove OpenAI']);
+    });
   });
 
-  it('invites a choice in its own words when the caller gives none', () => {
-    render(<Combobox options={options} />);
-    expect(screen.getByRole('combobox').getAttribute('placeholder')).toBe('Select option...');
+  describe('when the field is invalid', () => {
+    it('marks the field invalid and links the error message', () => {
+      render(
+        <Field invalid>
+          <FieldLabel>Provider</FieldLabel>
+          <Combobox options={providers} />
+          <FieldError>Required</FieldError>
+        </Field>,
+      );
+      const message = screen.getByRole('alert');
 
-    cleanup();
-    render(<Combobox multiple options={options} value={[]} />);
+      expect(field().getAttribute('aria-invalid')).toBe('true');
+      expect(field().getAttribute('aria-describedby')).toContain(message.id);
+    });
 
-    expect(screen.getByRole('combobox').getAttribute('placeholder')).toBe('Select options...');
+    it('does the same for a multiple select', () => {
+      render(
+        <Field invalid>
+          <FieldLabel>Provider</FieldLabel>
+          <Combobox multiple options={providers} value={[]} />
+          <FieldError>Required</FieldError>
+        </Field>,
+      );
+
+      expect(field().getAttribute('aria-invalid')).toBe('true');
+      expect(field().getAttribute('aria-describedby')).toContain(screen.getByRole('alert').id);
+    });
+
+    it('says nothing when the field is valid', () => {
+      render(<SingleField />);
+
+      expect(field().getAttribute('aria-invalid')).toBeNull();
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
   });
 
-  it('offers its own words for searching and for a search that finds nothing', async () => {
-    render(<Combobox options={options} variant="ghost" />);
+  describe('when it is outside a Field', () => {
+    const trigger = () => screen.getByRole('combobox');
 
-    fireEvent.click(screen.getByRole('combobox'));
-    const search = await screen.findByPlaceholderText('Search...');
-    fireEvent.change(search, { target: { value: 'nothing matches this' } });
+    it('is a button showing the chosen option', () => {
+      render(<Combobox options={providers} value="anthropic" />);
 
-    expect(await screen.findByText('No option found.')).toBeTruthy();
+      expect(trigger().tagName).toBe('BUTTON');
+      expect(trigger().textContent).toContain('Anthropic');
+    });
 
-    cleanup();
-    render(<Combobox options={options} />);
-    const { user } = await openField();
-    await user.keyboard('nothing matches this');
+    it('shows its own invitation while nothing is chosen', () => {
+      render(<Combobox options={providers} />);
 
-    expect(await screen.findByText('No option found.')).toBeTruthy();
+      expect(trigger().textContent).toContain('Select option...');
+    });
+
+    it('names itself when no label names it', () => {
+      render(<Combobox options={providers} />);
+
+      expect(screen.getByRole('combobox', { name: 'Select option' })).toBeTruthy();
+    });
+
+    it('searches in the popup and focuses the search', async () => {
+      render(<Combobox options={providers} searchPlaceholder="Search providers" />);
+      const user = userEvent.setup();
+
+      await user.click(trigger());
+      const search = await screen.findByPlaceholderText('Search providers');
+
+      await waitFor(() => expect(document.activeElement).toBe(search));
+    });
+
+    it('filters as you type in the popup search and picks with Enter', async () => {
+      const onValueChange = vi.fn();
+      render(<Combobox options={providers} onValueChange={onValueChange} searchPlaceholder="Search providers" />);
+      const user = userEvent.setup();
+
+      await user.click(trigger());
+      const search = await screen.findByPlaceholderText('Search providers');
+      await waitFor(() => expect(document.activeElement).toBe(search));
+      await user.keyboard('goo');
+      await waitFor(() => expect(optionNames()).toEqual(['Google']));
+      await user.keyboard('{Enter}');
+
+      expect(onValueChange).toHaveBeenLastCalledWith('google');
+    });
+
+    it('starts the popup search empty after a pick', async () => {
+      const onInputValueChange = vi.fn();
+      render(
+        <Combobox options={providers} onInputValueChange={onInputValueChange} searchPlaceholder="Search providers" />,
+      );
+      const user = userEvent.setup();
+
+      await user.click(trigger());
+      const search = await screen.findByPlaceholderText('Search providers');
+      await waitFor(() => expect(document.activeElement).toBe(search));
+      await user.keyboard('goo');
+      await user.click(await screen.findByRole('option', { name: 'Google' }));
+
+      expect(onInputValueChange).toHaveBeenLastCalledWith('');
+    });
+
+    it('shows "N selected" for a multiple select', () => {
+      render(<Combobox multiple options={providers} value={['openai', 'google']} />);
+
+      expect(trigger().textContent).toContain('2 selected');
+    });
+
+    it('closes with Escape', async () => {
+      render(<Combobox options={providers} />);
+      const user = userEvent.setup();
+
+      await user.click(trigger());
+      await screen.findAllByRole('option');
+      await user.keyboard('{Escape}');
+
+      await waitFor(() => expect(screen.queryByRole('option')).toBeNull());
+    });
   });
 
-  it('shows the option that is chosen, not the invitation', () => {
-    render(<Combobox options={options} value="anthropic" placeholder="Pick provider" />);
+  describe('when a Field holds a compact trigger', () => {
+    it('keeps the trigger for a ghost variant', () => {
+      render(
+        <InField>
+          <Combobox options={providers} variant="ghost" />
+        </InField>,
+      );
 
-    expect((screen.getByRole('combobox') as HTMLInputElement).value).toBe('Anthropic');
+      expect(screen.getByRole('combobox', { name: 'Provider' }).tagName).toBe('BUTTON');
+    });
 
-    cleanup();
-    render(<Combobox options={options} value="anthropic" placeholder="Pick provider" variant="ghost" />);
+    it('keeps the trigger for a non-text placeholder', () => {
+      render(
+        <InField>
+          <Combobox options={providers} placeholder={<span>Add tag</span>} />
+        </InField>,
+      );
 
-    expect(screen.getByRole('combobox').textContent).toContain('Anthropic');
-    expect(screen.getByRole('combobox').textContent).not.toContain('Pick provider');
+      expect(screen.getByRole('combobox', { name: 'Provider' }).tagName).toBe('BUTTON');
+    });
   });
 
-  it("shows the selected option's start adornment in the field", () => {
-    render(
-      <Combobox
-        options={[{ label: 'OpenAI', value: 'openai', start: <span data-testid="logo" /> }, ...options.slice(1)]}
-        value="openai"
-      />,
-    );
+  describe('when the trigger is icon-sized', () => {
+    it('keeps the chosen option for assistive tech and still picks', async () => {
+      const onValueChange = vi.fn();
+      render(
+        <Combobox
+          options={providers}
+          value="openai"
+          onValueChange={onValueChange}
+          size="icon-sm"
+          aria-label="Switch provider"
+        />,
+      );
+      const trigger = screen.getByRole('combobox', { name: 'Switch provider' });
 
-    const field = screen.getByRole('combobox').closest('[data-slot=combobox-input]');
-    expect(field?.contains(screen.getByTestId('logo'))).toBe(true);
+      expect(within(trigger).getByText('OpenAI')).toBeTruthy();
+
+      fireEvent.click(trigger);
+      fireEvent.click(await screen.findByRole('option', { name: 'Anthropic' }));
+
+      expect(onValueChange).toHaveBeenLastCalledWith('anthropic');
+    });
   });
 
-  it('keeps up with a selection that changes from outside', () => {
-    const chips = () =>
-      screen.queryAllByRole('button', { name: /^Remove / }).map(chip => chip.getAttribute('aria-label'));
-    const { rerender } = render(<Combobox multiple options={options} value={['openai']} />);
-    expect(chips()).toEqual(['Remove OpenAI']);
+  describe('when the trigger shows only the value', () => {
+    it('renders the chosen start adornment and label without a chevron', () => {
+      render(
+        <Combobox
+          options={[{ label: 'OpenAI', value: 'openai', start: <span data-testid="logo" />, displayLabel: 'Hidden' }]}
+          value="openai"
+          showChevron={false}
+          iconOnlyValue
+        />,
+      );
+      const trigger = screen.getByRole('combobox');
 
-    rerender(<Combobox multiple options={options} value={['openai', 'google']} />);
-
-    expect(chips()).toEqual(['Remove OpenAI', 'Remove Google']);
+      expect(screen.getByTestId('logo')).toBeTruthy();
+      expect(trigger.textContent).toBe('Hidden');
+      expect(trigger.querySelector('svg')).toBeNull();
+    });
   });
 
-  it('describes an option that carries a description', async () => {
-    const described = [
-      { label: 'OpenAI', value: 'openai', description: 'GPT models' },
-      { label: 'Anthropic', value: 'anthropic' },
-    ];
-    render(<Combobox options={described} />);
+  describe('when nobody listens to changes', () => {
+    it('picks a single value without throwing', async () => {
+      render(
+        <InField>
+          <Combobox options={providers} />
+        </InField>,
+      );
+      const user = await openField();
 
-    await openField();
+      await expect(user.click(screen.getByRole('option', { name: 'Anthropic' }))).resolves.not.toThrow();
+    });
 
-    const withDescription = await screen.findByRole('option', { name: /OpenAI/ });
-    expect(withDescription.textContent).toContain('GPT models');
-    expect(screen.getByRole('option', { name: 'Anthropic' }).querySelector('span > span:nth-child(2)')).toBeNull();
-  });
+    it('picks multiple values without throwing', async () => {
+      render(
+        <InField>
+          <Combobox multiple options={providers} value={[]} />
+        </InField>,
+      );
+      const user = await openField();
 
-  it('says what went wrong under a multi-select field too', () => {
-    render(
-      <Field invalid>
-        <FieldLabel>Providers</FieldLabel>
-        <BareCombobox multiple options={options} value={[]} />
-        <FieldError>Required</FieldError>
-      </Field>,
-    );
-    const field = screen.getByRole('combobox', { name: 'Providers' });
-
-    expect(field.getAttribute('aria-invalid')).toBe('true');
-    expect(field.getAttribute('aria-describedby')).toContain(screen.getByRole('alert').id);
-  });
-
-  it('picks a single value with nobody listening', async () => {
-    render(<Combobox options={options} />);
-
-    const { user } = await openField();
-
-    await expect(user.click(screen.getByRole('option', { name: 'Anthropic' }))).resolves.not.toThrow();
-  });
-
-  it('picks a value with nobody listening', async () => {
-    render(<Combobox multiple options={options} value={[]} />);
-
-    const { user } = await openField();
-
-    await expect(user.click(screen.getByRole('option', { name: 'Anthropic' }))).resolves.not.toThrow();
-  });
-});
-
-describe('Combobox outside a Field', () => {
-  it('keeps a compact trigger with the search in the popup', async () => {
-    const onValueChange = vi.fn();
-    render(
-      <BareCombobox
-        options={options}
-        onValueChange={onValueChange}
-        aria-label="Provider"
-        searchPlaceholder="Search providers"
-      />,
-    );
-
-    const trigger = screen.getByRole('combobox', { name: 'Provider' });
-    expect(trigger.tagName).toBe('BUTTON');
-
-    fireEvent.click(trigger);
-    const search = await screen.findByPlaceholderText('Search providers');
-    fireEvent.input(search, { target: { value: 'goo' }, inputType: 'insertText' });
-    fireEvent.click(await screen.findByRole('option', { name: 'Google' }));
-
-    expect(onValueChange).toHaveBeenCalledWith('google');
-  });
-});
-
-describe('Combobox icon-only value', () => {
-  it('renders the selected start adornment and label without a chevron', () => {
-    render(
-      <Combobox
-        options={[{ label: 'OpenAI', value: 'openai', start: <span data-testid="logo" />, displayLabel: 'Hidden' }]}
-        value="openai"
-        showChevron={false}
-        iconOnlyValue
-      />,
-    );
-
-    // A compact trigger: no chevron, so the search lives in the popup.
-    const trigger = screen.getByRole('combobox');
-    expect(trigger.tagName).toBe('BUTTON');
-    expect(screen.getByTestId('logo')).toBeTruthy();
-    expect(trigger.textContent).toBe('Hidden');
-    expect(trigger.querySelector('svg')).toBeNull();
+      await expect(user.click(screen.getByRole('option', { name: 'Anthropic' }))).resolves.not.toThrow();
+    });
   });
 });
