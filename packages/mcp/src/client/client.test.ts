@@ -1190,6 +1190,40 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
     });
   });
 
+  it('should include embedded resource text in toModelOutput alongside text blocks', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'get_file_contents',
+          description: 'Returns a file as an embedded resource',
+          inputSchema: { type: 'object' as const, properties: { path: { type: 'string' } } },
+          outputSchema: { type: 'object' as const, properties: { sha: { type: 'string' } } },
+        },
+      ],
+    });
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: { sha: 'abc' },
+      content: [
+        { type: 'text', text: 'successfully downloaded text file (SHA: abc)' },
+        { type: 'resource', resource: { uri: 'repo://README.md', mimeType: 'text/markdown', text: '# Hello' } },
+        { type: 'resource', resource: { uri: 'repo://logo.png', mimeType: 'image/png', blob: 'AAAA' } },
+      ],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const tool = tools['get_file_contents'];
+    const result = await tool.execute?.({ path: 'README.md' });
+
+    expect(tool.toModelOutput?.(result)).toEqual({
+      type: 'text',
+      value: 'successfully downloaded text file (SHA: abc)\n# Hello',
+    });
+  });
+
   it('should fall back to json toModelOutput when content has no text blocks', async () => {
     const sdkClient = (client as any).client as Client;
 
