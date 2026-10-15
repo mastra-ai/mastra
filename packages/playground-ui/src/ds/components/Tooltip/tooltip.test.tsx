@@ -67,7 +67,7 @@ describe('InfoTooltip', () => {
     const user = userEvent.setup();
     render(
       <TooltipProvider delay={0}>
-        <InfoTooltip aria-label="What is trace intelligence?" contentClassName="max-w-sm">
+        <InfoTooltip aria-label="What is trace intelligence?">
           <p>Traces are clustered into themes.</p>
           <ul>
             <li>Errors</li>
@@ -82,6 +82,13 @@ describe('InfoTooltip', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'What is trace intelligence?' }));
     expect(tooltip.textContent).toContain('Traces are clustered into themes.');
     expect(tooltip.querySelector('li')?.textContent).toBe('Errors');
-    expect(tooltip.className).toContain('max-w-sm');
+    // The description reuses the popup instead of a second copy of the content.
+    expect(document.querySelectorAll('li')).toHaveLength(1);
+    expect(
+      screen.getByRole('button', {
+        name: 'What is trace intelligence?',
+        description: 'Traces are clustered into themes. Errors',
+      }),
+    ).toBeTruthy();
   });
 });

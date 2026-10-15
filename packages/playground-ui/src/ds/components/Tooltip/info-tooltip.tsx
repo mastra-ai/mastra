@@ -29,7 +29,7 @@ function InfoTooltip({ children, side = 'top', align, contentClassName, ...name 
           <button
             type="button"
             {...name}
-            // The tooltip only mounts while open, so screen readers get the text from this copy.
+            // The popup stays mounted (hidden) while closed, so screen readers always get the text.
             aria-describedby={descriptionId}
             // A step quieter than the placeholder grey at rest, so it reads as a hint, not a control.
             className={cn(
@@ -44,12 +44,15 @@ function InfoTooltip({ children, side = 'top', align, contentClassName, ...name 
           <Info />
         </Icon>
       </TooltipTrigger>
-      <TooltipContent side={side} align={align} className={cn('max-w-64', contentClassName)}>
+      <TooltipContent
+        id={descriptionId}
+        keepMounted
+        side={side}
+        align={align}
+        className={cn('max-w-64', contentClassName)}
+      >
         {children}
       </TooltipContent>
-      <span id={descriptionId} hidden>
-        {children}
-      </span>
     </Tooltip>
   );
 }

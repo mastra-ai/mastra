@@ -89,10 +89,19 @@ type FieldLabelProps = Omit<FieldPrimitive.Label.Props, 'className' | 'id'> & {
   info?: React.ReactNode;
 };
 
-/** The label's plain text (`{name} (JSON)` included), or null when it holds elements. */
+/** The label's plain text (`{name} (JSON)` included), or undefined when it holds elements. */
 function plainText(node: React.ReactNode) {
   const parts = React.Children.toArray(node);
-  return parts.every(part => typeof part === 'string' || typeof part === 'number') ? parts.join('') : null;
+  if (!parts.every(part => typeof part === 'string' || typeof part === 'number')) return undefined;
+  return parts.join('');
+}
+
+/** How the info icon is named: "About <label>", from the label's text or, for a label with elements, the label itself. */
+function infoTooltipName({ label, labelId, aboutId }: { label: React.ReactNode; labelId?: string; aboutId: string }) {
+  const labelText = plainText(label);
+  if (labelText) return { 'aria-label': `About ${labelText}` };
+  if (labelId) return { 'aria-labelledby': `${aboutId} ${labelId}` };
+  return { 'aria-label': 'About this field' };
 }
 
 /** The info icon after a label. Outside the `<label>`, so hovering or clicking it never focuses the field. */
@@ -106,19 +115,13 @@ function FieldLabelInfo({
   labelId?: string;
 }) {
   const aboutId = React.useId();
-  const labelText = plainText(label);
-  // A label with elements in it has no plain text to build a name from, so the name is read from
-  // the rendered label instead, as "About <label>".
-  const name = labelText
-    ? { 'aria-label': `About ${labelText}` }
-    : labelId
-      ? { 'aria-labelledby': `${aboutId} ${labelId}` }
-      : { 'aria-label': 'About this field' };
+  const name = infoTooltipName({ label, labelId, aboutId });
+  const isNamedByLabel = 'aria-labelledby' in name;
 
   return (
     <>
       <InfoTooltip {...name}>{children}</InfoTooltip>
-      {name['aria-labelledby'] ? (
+      {isNamedByLabel ? (
         <span id={aboutId} hidden>
           About
         </span>
