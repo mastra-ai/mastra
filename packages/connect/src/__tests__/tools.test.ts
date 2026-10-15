@@ -835,4 +835,87 @@ describe('connect with an options callback', () => {
     await resolver({ requestContext: 1_032 });
     expect(createTools).toHaveBeenCalledTimes(34);
   });
+
+  it('keeps an evicted variant connected until its in-flight resolution settles', async () => {
+    const { createTools } = installProvider();
+    let releaseFirstFetch!: () => void;
+    const firstFetchGate = new Promise<void>(resolve => (releaseFirstFetch = resolve));
+    let connectionCalls = 0;
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async input => {
+      const path = new URL(String(input)).pathname;
+      if (path === '/v2/integrations') return Response.json({ integrations: [] });
+      connectionCalls += 1;
+      if (connectionCalls === 1) await firstFetchGate;
+      return Response.json({ connections: [makeConnection()] });
+    });
+    const resolver = connect(ctx => ({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+      ttlMs: (ctx?.requestContext as number | undefined) ?? 30_000,
+    }));
+
+    // The first variant hangs on its platform fetch…
+    const inflight = resolver({ requestContext: 1_000 });
+    await vi.waitFor(() => expect(connectionCalls).toBe(1));
+    // …while 33 more variants evict it from the LRU cache.
+    for (let variant = 1; variant <= 33; variant++) {
+      await resolver({ requestContext: 1_000 + variant });
+    }
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('evicting the least recently used variant'));
+
+    // The eviction must not tear the variant down under the in-flight call.
+    releaseFirstFetch();
+    await expect(inflight).resolves.toHaveProperty('linear_fake_tool');
+    expect(createTools).toHaveBeenCalledTimes(34);
+
+    // Once that resolution settled the evicted variant was disconnected, so
+    // resolving the same options again rebuilds from scratch.
+    await resolver({ requestContext: 1_000 });
+    expect(createTools).toHaveBeenCalledTimes(35);
+  });
+
+  it('does not memoize a variant behind an in-progress disconnect()', async () => {
+    installProvider();
+    const events: string[] = [];
+    let releaseFirstFetch!: () => void;
+    const firstFetchGate = new Promise<void>(resolve => (releaseFirstFetch = resolve));
+    let connectionCalls = 0;
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async input => {
+      const path = new URL(String(input)).pathname;
+      if (path === '/v2/integrations') return Response.json({ integrations: [] });
+      connectionCalls += 1;
+      if (connectionCalls === 1) await firstFetchGate;
+      if (connectionCalls === 2) events.push('second variant fetch');
+      return Response.json({ connections: [makeConnection()] });
+    });
+    let releaseOptions!: () => void;
+    const optionsGate = new Promise<void>(resolve => (releaseOptions = resolve));
+    const resolver = connect(async ctx => {
+      if (roleOf(ctx) === 'late') await optionsGate;
+      return {
+        projectId: 'proj_1',
+        client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+        providers: { linear: roleOf(ctx) === 'late' ? {} : { allowTools: ['linear_fake_tool'] } },
+      };
+    });
+
+    // First variant's platform fetch hangs, so disconnect() below stays
+    // pending while that refresh drains.
+    const first = resolver({ requestContext: new Map([['role', 'admin']]) });
+    await vi.waitFor(() => expect(connectionCalls).toBe(1));
+    // Second resolution is parked inside the options callback.
+    const second = resolver({ requestContext: new Map([['role', 'late']]) });
+    const closed = resolver.disconnect().then(() => events.push('disconnected'));
+
+    // The callback settles while disconnect() is still draining; the
+    // resolution must wait for the cleanup instead of inserting a variant
+    // behind its back.
+    releaseOptions();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(events).toEqual([]);
+
+    releaseFirstFetch();
+    await Promise.all([first, second, closed]);
+    expect(events).toEqual(['disconnected', 'second variant fetch']);
+  });
 });

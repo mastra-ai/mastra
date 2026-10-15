@@ -377,14 +377,39 @@ const MAX_OPTION_VARIANTS = 32;
  * swallowed.
  */
 function dynamicTools(getOptions: (ctx?: ToolsResolverContext) => ToolsOptions | Promise<ToolsOptions>): ToolsResolver {
+  interface VariantEntry {
+    resolver: ToolsResolver;
+    /** In-flight resolutions; an evicted variant disconnects once this drains. */
+    inUse: number;
+    evicted: boolean;
+  }
+
   // Insertion order doubles as LRU order: a hit is re-inserted at the tail,
   // so the head is always the least recently used variant.
-  const variants = new Map<string, ToolsResolver>();
+  const variants = new Map<string, VariantEntry>();
   let closing: Promise<void> | undefined;
 
-  const variantFor = async (ctx?: ToolsResolverContext): Promise<ToolsResolver> => {
+  const disconnectEvicted = (entry: VariantEntry): void => {
+    void entry.resolver.disconnect().catch((error: unknown) => {
+      console.warn(
+        `[@mastra/connect] Failed to disconnect evicted tools variant: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
+  };
+
+  const releaseVariant = (entry: VariantEntry): void => {
+    entry.inUse -= 1;
+    // An evicted variant stays connected while resolutions are in flight so
+    // they never see a closed MCP transport; the last one out disconnects it.
+    if (entry.evicted && entry.inUse === 0) disconnectEvicted(entry);
+  };
+
+  const acquireVariant = async (ctx?: ToolsResolverContext): Promise<VariantEntry> => {
     if (closing) await closing;
     const options = await getOptions(ctx);
+    // disconnect() may have started while getOptions was pending; wait for it
+    // so this resolution never inserts into the map behind the cleanup's back.
+    if (closing) await closing;
     if (typeof options !== 'object' || options === null || Array.isArray(options)) {
       throw new MastraConnectError(
         'invalid_options',
@@ -396,28 +421,30 @@ function dynamicTools(getOptions: (ctx?: ToolsResolverContext) => ToolsOptions |
     if (existing) {
       variants.delete(key);
       variants.set(key, existing);
+      existing.inUse += 1;
       return existing;
     }
-    const variant = tools(options);
-    variants.set(key, variant);
+    const entry: VariantEntry = { resolver: tools(options), inUse: 1, evicted: false };
+    variants.set(key, entry);
     if (variants.size > MAX_OPTION_VARIANTS) {
       const [oldestKey, oldest] = variants.entries().next().value!;
       variants.delete(oldestKey);
       console.warn(
         `[@mastra/connect] tools() options callback produced more than ${MAX_OPTION_VARIANTS} distinct options values; evicting the least recently used variant. Derive options from a small, closed set of inputs (e.g. roles), not per-request data.`,
       );
-      void oldest.disconnect().catch((error: unknown) => {
-        console.warn(
-          `[@mastra/connect] Failed to disconnect evicted tools variant: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      });
+      oldest.evicted = true;
+      if (oldest.inUse === 0) disconnectEvicted(oldest);
     }
-    return variant;
+    return entry;
   };
 
   const resolve = async (ctx?: ToolsResolverContext): Promise<ResolvedToolsRecord> => {
-    const variant = await variantFor(ctx);
-    return variant(ctx);
+    const entry = await acquireVariant(ctx);
+    try {
+      return await entry.resolver(ctx);
+    } finally {
+      releaseVariant(entry);
+    }
   };
 
   const resolver: ToolsResolver = Object.assign(resolve, {
@@ -426,15 +453,19 @@ function dynamicTools(getOptions: (ctx?: ToolsResolverContext) => ToolsOptions |
     // `await resolver()` call uses. Other variants keep their own TTL-based
     // revalidation.
     refresh: async (): Promise<ResolvedToolsRecord> => {
-      const variant = await variantFor(undefined);
-      return variant.refresh();
+      const entry = await acquireVariant(undefined);
+      try {
+        return await entry.resolver.refresh();
+      } finally {
+        releaseVariant(entry);
+      }
     },
     disconnect: (): Promise<void> => {
       closing ??= (async () => {
         try {
           const all = Array.from(variants.values());
           variants.clear();
-          await Promise.allSettled(all.map(variant => variant.disconnect()));
+          await Promise.allSettled(all.map(entry => entry.resolver.disconnect()));
         } finally {
           closing = undefined;
         }

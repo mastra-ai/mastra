@@ -98,9 +98,9 @@ export const opsAgent = new Agent({
 })
 ```
 
-This example gives viewers only the Linear read tools and gates deletions behind [approval](/docs/agents/human-in-the-loop) for other roles. Set the role in trusted server-side code based on the authenticated user. The resolver caches one toolset per distinct options value, so requests that produce the same options share a cached snapshot. Derive options from a small, closed set of inputs such as roles — not from unbounded per-request data.
+This example gives viewers only the Linear read tools and gates deletions behind [approval](/docs/agents/human-in-the-loop) for other roles. Set the role in trusted server-side code based on the authenticated user. The resolver caches one toolset per distinct options value, so requests that produce the same options share a cached snapshot. Derive options from a small, closed set of inputs such as roles, not from unbounded per-request data.
 
-To post-process the resolved tool record instead — for example, to filter on something other than tool keys — hoist the resolver and wrap it in the agent's `tools` function:
+To post-process the resolved tool record instead (for example, to filter on something other than tool keys), hoist the resolver and wrap it in the agent's `tools` function:
 
 ```typescript title="src/mastra/agents/ops.ts"
 import { Agent } from '@mastra/core/agent'
