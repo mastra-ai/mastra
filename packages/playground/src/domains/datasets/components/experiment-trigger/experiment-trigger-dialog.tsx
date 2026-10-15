@@ -336,7 +336,7 @@ export function ExperimentTriggerDialog({
           </ol>
 
           <Collapsible>
-            <CollapsibleTrigger variant="disclosure">
+            <CollapsibleTrigger variant="form">
               Request Context (JSON, optional)
               {hasRequestContext && (
                 <Badge size="xs" variant="blue">
