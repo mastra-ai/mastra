@@ -1,5 +1,21 @@
 # @mastra/code-sdk
 
+## 1.14.0-alpha.9
+
+### Patch Changes
+
+- Fixed revoked or invalid OAuth sign-ins showing a raw API error. When Anthropic, OpenAI Codex, GitHub Copilot, xAI, or Kimi For Coding rejects a stored sign-in with a 401, the error is now a `ProviderAuthRequiredError` that says the sign-in was rejected, the same as a missing sign-in. Hosts can match on the error name to prompt the user to sign in again. ([#27187](https://github.com/mastra-ai/mastra/pull/27187))
+
+  ```ts
+  if (error.name === 'ProviderAuthRequiredError') {
+    // e.g. "Anthropic rejected the stored sign-in: OAuth access token is invalid."
+    promptSignIn();
+  }
+  ```
+
+- Updated dependencies [[`a9b85ba`](https://github.com/mastra-ai/mastra/commit/a9b85ba48a2542c568d91f3032464057227d55dc), [`f28c44e`](https://github.com/mastra-ai/mastra/commit/f28c44ed98a87c6078a3e3e9ef2b197d97f97956)]:
+  - @mastra/core@1.78.0-alpha.9
+
 ## 1.14.0-alpha.8
 
 ### Patch Changes

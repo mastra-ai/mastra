@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 1.78.0-alpha.9
+
+### Minor Changes
+
+- Added `traceAggregateDiscoverySchema` and an optional `aggregate` field on the trace-query fields response, describing the dimensions and measures `aggregateTraces()` accepts. ([#27185](https://github.com/mastra-ai/mastra/pull/27185))
+
+### Patch Changes
+
+- Fixed trace trees for agents that use output stream processors. In multi-step runs, each step's output stream processor span now sits inside that step and also covers the step's tool results, instead of every span showing up as a flat list under the agent run. Structured output processor spans stay under the agent run, because structured output runs once on the final result. ([#27172](https://github.com/mastra-ai/mastra/pull/27172))
+
 ## 1.78.0-alpha.8
 
 ### Patch Changes
