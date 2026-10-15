@@ -14,6 +14,7 @@ import type {
 import { chatContextToMessages, extractNewTurnMessages } from './messages';
 import { createRemoteAgentReplyGenerator } from './remote';
 import type { RemoteMastraAgentOptions } from './remote';
+import type { LiveKitTranscriptPersistence } from './transcript';
 import type { VoiceTurnMetricsHook } from './turn-metrics';
 import { VOICE_FLUSH_METADATA, VOICE_TURN_METADATA } from './turn-metrics';
 
@@ -21,14 +22,17 @@ export type { RemoteMastraAgentOptions } from './remote';
 
 /**
  * Options for {@link MastraLLM}. Provide **exactly one** reply source — `remote` (the headline: a
- * Mastra app on a remote server), `agent` (an in-process Mastra agent), or `generate` (a custom
- * {@link VoiceReplyGenerator}). The `toolFeedback` / `onToolCall` / `onTurnComplete` hooks apply to
- * the `remote` and `agent` sources; a `generate` source owns its own hooks.
+ * Mastra app on a remote server), `agent` (an in-process Mastra agent), `generate` (a custom
+ * {@link VoiceReplyGenerator}), or a managed `transcriptPersistence` binding. The `toolFeedback`,
+ * `onToolCall`, and `onTurnComplete` hooks apply to local and remote agents, including those supplied
+ * by a persistence binding; a `generate` source owns its own hooks.
  */
 export interface MastraLLMOptions {
+  /** Supplies the agent source, read-only memory, and request context. Attach it before session.start. */
+  transcriptPersistence?: LiveKitTranscriptPersistence;
   /** Per-attempt metrics; use observeVoiceSession for playback metrics. */
   onTurnMetrics?: VoiceTurnMetricsHook;
-  /** Remote Mastra server. Provide exactly one of `remote`, `agent`, `generate`. */
+  /** Remote Mastra server. Mutually exclusive with agent, generate, and transcriptPersistence. */
   remote?: RemoteMastraAgentOptions;
   /** In-process Mastra agent (reuses `createAgentReplyGenerator`). */
   agent?: MastraAgent;
@@ -118,6 +122,7 @@ function livekitToolNames(toolCtx: object): string[] {
  * ```
  */
 export class MastraLLM extends llm.LLM {
+  readonly #transcriptPersistence?: LiveKitTranscriptPersistence;
   readonly #model: string;
   readonly #onTurnMetrics?: VoiceTurnMetricsHook;
   readonly #memory: MastraVoiceAgentMemory | false;
@@ -133,6 +138,29 @@ export class MastraLLM extends llm.LLM {
 
   constructor(options: MastraLLMOptions) {
     super();
+    const persistence = options.transcriptPersistence;
+    if (persistence) {
+      if (
+        options.agent ||
+        options.remote ||
+        options.generate ||
+        options.memory !== undefined ||
+        options.requestContext
+      ) {
+        throw new Error(
+          '@mastra/livekit: transcript persistence supplies the agent source, memory, and request context',
+        );
+      }
+      persistence.claim();
+      options = {
+        ...options,
+        agent: persistence.agent,
+        remote: persistence.remote,
+        memory: persistence.memory,
+        requestContext: persistence.requestContext,
+      };
+    }
+    this.#transcriptPersistence = persistence;
     this.#onTurnMetrics = options.onTurnMetrics;
     const sources = [
       options.remote ? 'remote' : undefined,
@@ -229,6 +257,7 @@ export class MastraLLM extends llm.LLM {
       onTurnMetrics: this.#onTurnMetrics,
       memory: this.#memory,
       requestContext: this.#requestContext,
+      transcriptPersistence: this.#transcriptPersistence,
     });
   }
 
@@ -237,6 +266,7 @@ export class MastraLLM extends llm.LLM {
 }
 
 interface MastraLLMStreamOptions {
+  transcriptPersistence?: LiveKitTranscriptPersistence;
   onTurnMetrics?: VoiceTurnMetricsHook;
   chatCtx: llm.ChatContext;
   toolCtx?: llm.ToolContext;
@@ -253,6 +283,7 @@ interface MastraLLMStreamOptions {
  * `this.abortController` and `run()` returns silently.
  */
 class MastraLLMStream extends llm.LLMStream {
+  readonly #transcriptPersistence?: LiveKitTranscriptPersistence;
   readonly #generator: VoiceReplyGenerator;
   readonly #onTurnMetrics?: VoiceTurnMetricsHook;
   readonly #memory: MastraVoiceAgentMemory | false;
@@ -264,11 +295,15 @@ class MastraLLMStream extends llm.LLMStream {
     this.#onTurnMetrics = options.onTurnMetrics;
     this.#memory = options.memory;
     this.#requestContext = options.requestContext;
+    this.#transcriptPersistence = options.transcriptPersistence;
   }
 
   protected async run(): Promise<void> {
-    const messages =
-      this.#memory === false ? chatContextToMessages(this.chatCtx) : extractNewTurnMessages(this.chatCtx);
+    const messages = this.#transcriptPersistence
+      ? this.#transcriptPersistence.messages(this.chatCtx)
+      : this.#memory === false
+        ? chatContextToMessages(this.chatCtx)
+        : extractNewTurnMessages(this.chatCtx);
     // No new input to answer → close without a request (equivalent to the wrapper returning null).
     if (messages.length === 0) return;
 
@@ -278,6 +313,7 @@ class MastraLLMStream extends llm.LLMStream {
       chatCtx: this.chatCtx,
       memory: this.#memory,
       requestContext: this.#requestContext,
+      transcriptPersistence: this.#transcriptPersistence,
       onUsage: turnUsage => {
         usage = turnUsage;
       },

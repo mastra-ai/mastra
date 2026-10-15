@@ -5,6 +5,7 @@ import type { TracingContext } from '@mastra/core/observability';
 import { RequestContext } from '@mastra/core/request-context';
 import { chatContextToMessages, extractNewTurnMessages } from './messages';
 import type { VoiceTurnMessage } from './messages';
+import type { LiveKitTranscriptPersistence } from './transcript';
 import { createGenerationMetrics, VOICE_TEXT_FLUSH, VOICE_TURN_METADATA } from './turn-metrics';
 import type { VoiceReplyChunk, VoiceTurnMetricsHook } from './turn-metrics';
 import { mapVoiceStream } from './voice-stream';
@@ -134,7 +135,8 @@ export interface MastraVoiceAgentMemory {
    * `AgentMemoryOption`). The notable use is `{ readOnly: true }`: the agent still reads thread
    * history but persists nothing, which keeps LiveKit's preemptive (speculative) turns from writing
    * partial user and assistant messages to the thread. With `readOnly` the caller owns persistence
-   * of committed turns (e.g. from `onTurnComplete` via `memory.saveMessages`).
+   * of committed turns. Use transcriptPersistence or LiveKit's conversation-item events;
+   * onTurnComplete describes generation, not committed speech.
    */
   options?: AgentMemoryOption['options'];
 }
@@ -144,6 +146,8 @@ export interface MastraVoiceAgentMemory {
  * detected user turn; the bridge builds this context and asks the generator for the reply.
  */
 export interface VoiceTurnContext {
+  /** @internal Managed persistence shared with the LiveKit session. */
+  transcriptPersistence?: LiveKitTranscriptPersistence;
   /** Stable user-turn identifier, supplied by the worker or plugin. */
   turnId?: string;
   /** Unique generation attempt identifier, including speculative replies and retries. */
@@ -271,8 +275,19 @@ export function createAgentReplyGenerator(options: AgentReplyGeneratorOptions): 
     return new ReadableStream<VoiceReplyChunk>({
       start: async controller => {
         try {
+          if (ctx.transcriptPersistence) {
+            await ctx.transcriptPersistence.beforeGeneration();
+            if (cancelled) return;
+          }
           const result = await agent.stream(ctx.messages, mergedOptions);
           for await (const chunk of result.fullStream) {
+            if (chunk.type === 'tool-call' || chunk.type === 'tool-result' || chunk.type === 'tool-error') {
+              ctx.transcriptPersistence?.toolChunk(
+                chunk.type,
+                chunk.payload as unknown as Record<string, unknown>,
+                ctx,
+              );
+            }
             if (cancelled) break;
             if (chunk.type === 'text-delta') {
               if (chunk.payload.text) {
@@ -340,6 +355,8 @@ export function createAgentReplyGenerator(options: AgentReplyGeneratorOptions): 
             return;
           }
           controller.error(error);
+        } finally {
+          ctx.transcriptPersistence?.endGeneration(ctx.attemptId);
         }
       },
       cancel: () => {
@@ -351,6 +368,8 @@ export function createAgentReplyGenerator(options: AgentReplyGeneratorOptions): 
 }
 
 export interface MastraVoiceAgentOptions {
+  /** Opt-in persistence binding. Supplies its own local agent, memory, and request context. */
+  transcriptPersistence?: LiveKitTranscriptPersistence;
   /** Receives per-attempt generation metrics. Playback metrics come from observeVoiceSession. */
   onTurnMetrics?: VoiceTurnMetricsHook;
   /**
@@ -454,6 +473,7 @@ class MastraPlaceholderLLM extends llm.LLM {
  * the in-flight generation.
  */
 export class MastraVoiceAgent extends voice.Agent {
+  private readonly transcriptPersistence?: LiveKitTranscriptPersistence;
   readonly mastraAgent?: MastraAgent;
   readonly memory: MastraVoiceAgentMemory | false;
   readonly requestContext?: RequestContext;
@@ -463,6 +483,27 @@ export class MastraVoiceAgent extends voice.Agent {
   private readonly reminder?: DisclosureReminder;
 
   constructor(options: MastraVoiceAgentOptions) {
+    const persistence = options.transcriptPersistence;
+    if (persistence) {
+      if (
+        options.agent ||
+        options.generate ||
+        options.memory !== undefined ||
+        options.requestContext ||
+        options.streamOptions?.memory !== undefined ||
+        options.streamOptions?.requestContext !== undefined
+      ) {
+        throw new Error('@mastra/livekit: transcript persistence supplies the agent, memory, and request context');
+      }
+      if (!persistence.agent) throw new Error('@mastra/livekit: use MastraLLM for remote transcript persistence');
+      persistence.claim();
+      options = {
+        ...options,
+        agent: persistence.agent,
+        memory: persistence.memory,
+        requestContext: persistence.requestContext,
+      };
+    }
     if (options.agent && options.generate) {
       throw new Error(
         '@mastra/livekit: MastraVoiceAgent requires `agent` or `generate`, not both — they are mutually exclusive reply sources.',
@@ -478,6 +519,7 @@ export class MastraVoiceAgent extends voice.Agent {
       turnHandling: options.turnHandling,
     });
     this.onTurnMetrics = options.onTurnMetrics;
+    this.transcriptPersistence = persistence;
     this.memory = options.memory ?? false;
     this.requestContext = toRequestContext(options.requestContext);
     this.streamOptions = options.streamOptions;
@@ -509,8 +551,11 @@ export class MastraVoiceAgent extends voice.Agent {
     _toolCtx: llm.ToolContext,
     _modelSettings: voice.ModelSettings,
   ): Promise<ReadableStream<llm.ChatChunk | string | FlushSentinel> | null> {
-    const messages: VoiceTurnMessage[] =
-      this.memory === false ? chatContextToMessages(chatCtx) : extractNewTurnMessages(chatCtx);
+    const messages: VoiceTurnMessage[] = this.transcriptPersistence
+      ? this.transcriptPersistence.messages(chatCtx)
+      : this.memory === false
+        ? chatContextToMessages(chatCtx)
+        : extractNewTurnMessages(chatCtx);
     if (messages.length === 0) return null;
 
     const ctx = {
@@ -519,6 +564,7 @@ export class MastraVoiceAgent extends voice.Agent {
       memory: this.memory,
       requestContext: this.requestContext,
       tracingContext: this.streamOptions?.tracingContext,
+      transcriptPersistence: this.transcriptPersistence,
     };
     const { reply, identity } = await instrumentVoiceReply(this.replyGenerator, ctx, this.onTurnMetrics);
     if (!reply) return null;

@@ -2324,6 +2324,9 @@ importers:
         specifier: ^2.15.4
         version: 2.16.0
     devDependencies:
+      '@internal/ai-sdk-v5':
+        specifier: workspace:*
+        version: link:../../packages/_vendored/ai_v5
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -2345,12 +2348,27 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/hono':
+        specifier: workspace:*
+        version: link:../../server-adapters/hono
+      '@mastra/libsql':
+        specifier: workspace:*
+        version: link:../../stores/libsql
+      '@mastra/memory':
+        specifier: workspace:*
+        version: link:../../packages/memory
+      '@mastra/pg':
+        specifier: workspace:*
+        version: link:../../stores/pg
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
       eslint:
         specifier: ^10.7.0
         version: 10.7.0(jiti@2.7.0)(supports-color@10.2.2)
+      hono:
+        specifier: 4.13.13
+        version: 4.13.13
       tsdown:
         specifier: 0.22.9
         version: 0.22.9(@volar/typescript@2.4.23(typescript@7.0.2))(oxc-resolver@11.21.2)(tsx@4.23.1)(typescript@7.0.2)

@@ -231,6 +231,10 @@ export function createRemoteAgentReplyGenerator(options: RemoteAgentReplyGenerat
         // voice turn is never replayed half-heard. It also gates the standalone connect-retry.
         let retryable = true;
         try {
+          if (ctx.transcriptPersistence) {
+            await ctx.transcriptPersistence.beforeGeneration();
+            if (cancelled) return;
+          }
           for (let attempt = 0; ; attempt++) {
             // A fresh controller per attempt: reusing one across retries meant a watchdog abort on an
             // earlier attempt left every subsequent attempt's fetch already-aborted before it started.
@@ -288,6 +292,7 @@ export function createRemoteAgentReplyGenerator(options: RemoteAgentReplyGenerat
                 // indefinite dead air. It disarms on the first sign of model output below.
                 retryable = false;
                 const payload = chunk.payload ?? {};
+                ctx.transcriptPersistence?.toolChunk(chunk.type ?? '', payload, ctx);
                 switch (chunk.type) {
                   case 'text-delta': {
                     const text = payload.text;
@@ -396,6 +401,8 @@ export function createRemoteAgentReplyGenerator(options: RemoteAgentReplyGenerat
             return;
           }
           controller.error(error);
+        } finally {
+          ctx.transcriptPersistence?.endGeneration(ctx.attemptId);
         }
       },
       cancel: () => {

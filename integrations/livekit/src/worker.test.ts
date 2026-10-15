@@ -2,6 +2,7 @@ import { inference, InferenceRunner, initializeLogger, voice } from '@livekit/ag
 import type { JobContext, JobProcess, VAD } from '@livekit/agents';
 import type { Mastra } from '@mastra/core/mastra';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { LiveKitSessionMetadataSchema } from './metadata';
 import {
   createLiveKitWorker,
   DEFAULT_END_CALL_DRAIN_MS,
@@ -253,6 +254,140 @@ describe('worker session VAD', () => {
     const session = await startSession({ vad, sessionOptions: { vad: null } });
     expect(session.vad).toBeUndefined();
   });
+});
+
+describe('worker session configuration from metadata', () => {
+  beforeEach(() => {
+    initializeLogger({ level: 'silent', pretty: false });
+    vi.stubEnv('LIVEKIT_API_KEY', 'devkey');
+    vi.stubEnv('LIVEKIT_API_SECRET', 'secret-secret-secret-secret-secret');
+    // Exercise LiveKit's real constructor and option resolution without connecting audio.
+    vi.spyOn(voice.AgentSession.prototype, 'start').mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  async function startSession(metadata: unknown, options: Partial<CreateLiveKitWorkerOptions> = {}) {
+    const onSessionStart = vi.fn<(args: SessionStartArgs) => void>();
+    const definition = createLiveKitWorker({
+      mastra: fakeMastra(),
+      generate: async () => null,
+      memory: false,
+      observability: false,
+      vad: false,
+      turnDetection: 'manual',
+      onSessionStart,
+      ...options,
+    });
+    const ctx = fakeJobContext(JSON.stringify(metadata));
+    ctx.addShutdownCallback = vi.fn();
+    await definition.entry(ctx);
+    expect(onSessionStart).toHaveBeenCalledOnce();
+    return onSessionStart.mock.calls[0]![0];
+  }
+
+  const metadata = LiveKitSessionMetadataSchema.parse({
+    threadId: 'thread-42',
+    resourceId: 'caller-7',
+    requestContext: { tenant: 'acme' },
+    sessionConfig: {
+      version: 1,
+      options: {
+        stt: 'deepgram/nova-3:en',
+        tts: 'cartesia/sonic-3',
+        userAwayTimeout: null,
+        turnHandling: {
+          endpointing: { minDelay: 250, maxDelay: 1200 },
+          interruption: { enabled: false, minDuration: 400 },
+        },
+      },
+    },
+  });
+
+  it('passes validated settings to LiveKit while preserving worker defaults and call context', async () => {
+    const result = await startSession(metadata, {
+      sessionConfigFromMetadata: true,
+      turnHandling: {
+        endpointing: { mode: 'fixed', minDelay: 500 },
+        interruption: { enabled: true, minWords: 2 },
+      },
+    });
+    expect(result.session.stt).toBeInstanceOf(inference.STT);
+    expect(result.session.stt?.model).toBe('deepgram/nova-3');
+    expect(result.session.tts).toBeInstanceOf(inference.TTS);
+    expect(result.session.tts?.model).toBe('cartesia/sonic-3');
+    expect(result.session.sessionOptions).toMatchObject({
+      userAwayTimeout: null,
+      turnHandling: {
+        turnDetection: 'manual',
+        preemptiveGeneration: { enabled: false },
+        endpointing: { mode: 'fixed', minDelay: 250, maxDelay: 1200 },
+        interruption: { enabled: false, minDuration: 400, minWords: 2 },
+      },
+    });
+    expect(result.metadata).toEqual(metadata);
+  });
+
+  it('ignores even incompatible sessionConfig metadata until the worker opts in', async () => {
+    const result = await startSession(
+      { sessionConfig: { version: 2, options: { userAwayTimeout: 1 } } },
+      { sessionOptions: { userAwayTimeout: 30 } },
+    );
+    expect(result.session.sessionOptions.userAwayTimeout).toBe(30);
+  });
+
+  it.each([{}, { sessionConfig: { version: 1, options: {} } }])(
+    'keeps existing defaults when configuration is absent or empty: %j',
+    async value => {
+      const legacy = await startSession({}, { turnHandling: { endpointing: { minDelay: 600 } } });
+      const optedIn = await startSession(value, {
+        sessionConfigFromMetadata: true,
+        turnHandling: { endpointing: { minDelay: 600 } },
+      });
+      expect(optedIn.session.sessionOptions).toEqual(legacy.session.sessionOptions);
+    },
+  );
+
+  it('lets speech resolvers override metadata, with undefined falling back to metadata', async () => {
+    const stt = new inference.STT({ model: 'deepgram/nova-3' });
+    const result = await startSession(metadata, {
+      sessionConfigFromMetadata: true,
+      configuration: { stt: () => stt, tts: () => undefined },
+    });
+    expect(result.session.stt).toBe(stt);
+    expect(result.session.tts?.model).toBe('cartesia/sonic-3');
+  });
+
+  it('keeps explicit sessionOptions as the final override', async () => {
+    const tts = new inference.TTS({ model: 'cartesia/sonic-3' });
+    const result = await startSession(metadata, {
+      sessionConfigFromMetadata: true,
+      sessionOptions: {
+        tts,
+        userAwayTimeout: 45,
+        turnHandling: { turnDetection: 'manual', endpointing: { minDelay: 800 } },
+      },
+    });
+    expect(result.session.tts).toBe(tts);
+    expect(result.session.sessionOptions.userAwayTimeout).toBe(45);
+    expect(result.session.sessionOptions.turnHandling.endpointing.minDelay).toBe(800);
+    expect(result.session.sessionOptions.turnHandling.interruption.enabled).toBe(true);
+  });
+
+  it.each(['not json', '{"sessionConfig":{"version":2,"options":{}}}'])(
+    'rejects invalid metadata before connecting or resolving an agent: %s',
+    async raw => {
+      const mastra = fakeMastra();
+      const definition = createLiveKitWorker({ mastra, vad: false, sessionConfigFromMetadata: true });
+      const ctx = fakeJobContext(raw);
+      await expect(definition.entry(ctx)).rejects.toThrow();
+      expect(ctx.connect).not.toHaveBeenCalled();
+      expect(mastra.getAgentById).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('resolveMemoryInstance', () => {

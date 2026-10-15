@@ -18,6 +18,12 @@ import { parseSessionMetadata } from './metadata';
 import type { LiveKitSessionMetadata } from './metadata';
 import { startVoiceCallObservability } from './observability';
 import { observeVoiceSession } from './speech';
+import { createLiveKitTranscriptPersistence } from './transcript';
+import type {
+  LiveKitTranscriptPersistence,
+  TranscriptPersistenceOptions,
+  TranscriptPersistenceStatus,
+} from './transcript';
 import type { VoiceSpeechCompleteHook, VoiceTurnMetricsHook } from './turn-metrics';
 import { notifyVoiceObserver } from './turn-metrics';
 import { ensureVoiceCallThread, persistSpokenGreeting } from './voice-thread';
@@ -42,6 +48,8 @@ export interface ResolveMastraAgentArgs {
 }
 
 export interface SessionStartArgs {
+  /** Managed persistence, when enabled. Use flush({ retryFailed: true }) for an explicit retry. */
+  transcriptPersistence?: LiveKitTranscriptPersistence;
   session: voice.AgentSession;
   ctx: JobContext;
   agent: MastraVoiceAgent;
@@ -50,6 +58,8 @@ export interface SessionStartArgs {
 
 /** Context handed to {@link CreateLiveKitWorkerOptions.onCallEnd} when the call ends. */
 export interface VoiceCallEndArgs {
+  /** Final managed-persistence result, when opted in. Pending or failed items mean an incomplete transcript. */
+  transcriptPersistence?: TranscriptPersistenceStatus;
   /** Resolved memory mapping for the call (thread/resource), or `false` if memory was disabled. */
   memory: MastraVoiceAgentMemory | false;
   /**
@@ -82,6 +92,10 @@ export interface VoiceCallEndArgs {
 export type VoiceCallEndHook = (args: VoiceCallEndArgs) => void | Promise<void>;
 
 export interface CreateLiveKitWorkerOptions {
+  /** Save committed LiveKit conversation items to the resolved agent's Memory. Omitted by default. */
+  transcriptPersistence?: 'memory';
+  /** Shutdown budget and persistence observers, used only with transcriptPersistence: 'memory'. */
+  transcriptPersistenceOptions?: TranscriptPersistenceOptions;
   /** Generation and server-playout metrics; observer errors never interrupt the call. */
   onTurnMetrics?: VoiceTurnMetricsHook;
   /** Playback completion, separate from onTurnComplete. Does not reconcile memory. */
@@ -142,6 +156,12 @@ export interface CreateLiveKitWorkerOptions {
   /** Extra `AgentSession` options merged over what this helper builds. */
   sessionOptions?: Partial<voice.AgentSessionOptions>;
   /**
+   * Validate job metadata and apply its versioned `sessionConfig` using LiveKit session APIs.
+   * Defaults to false. Metadata overrides top-level speech/turn defaults; configuration
+   * resolvers and explicit `sessionOptions` retain precedence. Only enable for trusted dispatchers.
+   */
+  sessionConfigFromMetadata?: boolean;
+  /**
    * Memory mapping. Defaults to `{ thread: metadata.threadId ?? room name, resource:
    * metadata.resourceId ?? thread }` when the resolved agent has memory configured.
    * Pass `false` to disable, or a function to customize.
@@ -157,7 +177,8 @@ export interface CreateLiveKitWorkerOptions {
    * `agent.getMemory()` does), so a `Memory` that relies on the Mastra instance for storage works.
    */
   memoryInstance?:
-    MastraMemory | ((args: ResolveMastraAgentArgs) => MastraMemory | undefined | Promise<MastraMemory | undefined>);
+    | MastraMemory
+    | ((args: ResolveMastraAgentArgs) => MastraMemory | undefined | Promise<MastraMemory | undefined>);
   /**
    * Spoken while a Mastra tool call runs. Works on both the agent and workflow paths; on the
    * workflow path it fires only for tool calls the reply step surfaces to its `writer` (use
@@ -393,7 +414,8 @@ export type SessionComponentResolver<T> = (
  * Return `undefined` (or empty) for no greeting on that call.
  */
 export type GreetingText =
-  string | ((context: GreetingContext) => string | undefined | void | Promise<string | undefined | void>);
+  | string
+  | ((context: GreetingContext) => string | undefined | void | Promise<string | undefined | void>);
 
 /**
  * The opening greeting spoken when the session starts — and the vehicle for a required AI
@@ -637,13 +659,19 @@ type ResolvedGreetingConfiguration = Omit<GreetingConfiguration, 'text'> & { tex
 export async function speakGreeting(
   session: Pick<voice.AgentSession, 'say'>,
   greeting: ResolvedGreetingConfiguration,
+  sayOptions?: Pick<NonNullable<Parameters<voice.AgentSession['say']>[1]>, 'addToChatCtx'>,
 ): Promise<ReturnType<voice.AgentSession['say']> | undefined> {
   if (!greeting.text) return undefined;
   // Only pass a say-options object when we actually override a default, so an unset
   // `allowInterruptions` keeps LiveKit's own default rather than forcing a value.
   const handle = session.say(
     greeting.text,
-    greeting.allowInterruptions === undefined ? undefined : { allowInterruptions: greeting.allowInterruptions },
+    greeting.allowInterruptions === undefined && !sayOptions
+      ? undefined
+      : {
+          ...sayOptions,
+          ...(greeting.allowInterruptions !== undefined && { allowInterruptions: greeting.allowInterruptions }),
+        },
   );
   if (greeting.awaitPlayout) {
     // waitForPlayout rejects if the greeting is interrupted; that's a normal outcome for an
@@ -817,6 +845,9 @@ function composeTurnComplete(
  * ```
  */
 export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
+  if (options.transcriptPersistence && (options.generate || options.workflow || options.memory === false)) {
+    throw new Error('@mastra/livekit: transcript persistence requires a local Mastra agent with Memory');
+  }
   if (options.generate && (options.agent || options.workflow)) {
     throw new Error(
       '@mastra/livekit: set exactly one reply generator — `generate`, `agent`, or `workflow` — not a combination.',
@@ -886,7 +917,8 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
       // Route degradation warnings through the Mastra logger so they honor the app's
       // configured log level and transports instead of writing straight to the console.
       const logger = options.mastra.getLogger();
-      const metadata = parseSessionMetadata(ctx.job.metadata);
+      const metadata = parseSessionMetadata(ctx.job.metadata, { validate: options.sessionConfigFromMetadata });
+      const metadataOptions = options.sessionConfigFromMetadata ? metadata.sessionConfig?.options : undefined;
       const args: ResolveMastraAgentArgs = { metadata, ctx };
       const requestContext = metadata.requestContext
         ? new RequestContext<unknown>(Object.entries(metadata.requestContext))
@@ -936,13 +968,28 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
         vad = ctx.proc.userData.vad ?? (await loadSileroVad());
       }
 
-      const memory = resolveMemory(options, mastraAgent, args, roomName);
+      let memory = resolveMemory(options, mastraAgent, args, roomName);
+      let transcriptPersistence: LiveKitTranscriptPersistence | undefined;
+      if (options.transcriptPersistence) {
+        if (!memory || !mastraAgent) throw new Error('@mastra/livekit: transcript persistence requires agent Memory');
+        transcriptPersistence = await createLiveKitTranscriptPersistence({
+          logger,
+          ...options.transcriptPersistenceOptions,
+          agent: mastraAgent,
+          sessionId: ctx.job.id,
+          memory,
+          requestContext,
+        });
+        memory = transcriptPersistence.memory;
+      }
       // The memory instance backs up-front thread bootstrap and greeting persistence. With an
       // agent it comes from the agent; on the workflow/custom-generator path it comes from the
       // `memoryInstance` option. When neither is available it stays null and the generator owns
       // persistence (e.g. saveMessages inside a step).
-      const memoryInstance = memory ? await resolveMemoryInstance(options, mastraAgent, args, requestContext) : null;
-      if (memory && memoryInstance) {
+      const memoryInstance =
+        transcriptPersistence?.memoryInstance ??
+        (memory ? await resolveMemoryInstance(options, mastraAgent, args, requestContext) : null);
+      if (!transcriptPersistence && memory && memoryInstance) {
         try {
           await ensureVoiceCallThread({
             memory: memoryInstance,
@@ -983,7 +1030,9 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
         const onCallEnd = options.onCallEnd;
         ctx.addShutdownCallback(async () => {
           try {
+            const persistenceStatus = await transcriptPersistence?.close();
             await onCallEnd({
+              transcriptPersistence: persistenceStatus,
               memory,
               memoryInstance,
               metadata,
@@ -1014,10 +1063,13 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
       };
       const agent = createMastraVoiceAgent({
         onTurnMetrics,
-        ...(replyGenerator ? { generate: replyGenerator } : { agent: mastraAgent! }),
+        ...(transcriptPersistence
+          ? { transcriptPersistence }
+          : replyGenerator
+            ? { generate: replyGenerator }
+            : { agent: mastraAgent! }),
         instructions: mastraAgent ? await resolveInstructions(mastraAgent, requestContext) : undefined,
-        memory,
-        requestContext,
+        ...(!transcriptPersistence && { memory, requestContext }),
         toolFeedback: options.toolFeedback,
         onTurnComplete,
         greetingReminder,
@@ -1031,20 +1083,36 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
       // constructors read the job's inference executor, so instances must be built inside the job.
       const callContext: VoiceCallContext = { metadata, requestContext, roomName, ctx };
       const [stt, tts, turnDetection] = await Promise.all([
-        resolveSessionComponent(options.configuration?.stt, options.stt, callContext),
-        resolveSessionComponent(options.configuration?.tts, options.tts, callContext),
+        resolveSessionComponent(options.configuration?.stt, metadataOptions?.stt ?? options.stt, callContext),
+        resolveSessionComponent(options.configuration?.tts, metadataOptions?.tts ?? options.tts, callContext),
         resolveTurnDetection(options, callContext),
       ]);
 
+      const turnHandling = buildTurnHandling(options, turnDetection);
       const session = new voice.AgentSession({
+        ...metadataOptions,
         stt,
         tts,
         vad,
-        turnHandling: buildTurnHandling(options, turnDetection),
+        turnHandling: {
+          ...turnHandling,
+          ...(metadataOptions?.turnHandling?.endpointing && {
+            endpointing: { ...turnHandling?.endpointing, ...metadataOptions.turnHandling.endpointing },
+          }),
+          ...(metadataOptions?.turnHandling?.interruption && {
+            interruption: { ...turnHandling?.interruption, ...metadataOptions.turnHandling.interruption },
+          }),
+        },
         ...options.sessionOptions,
       });
 
       // Subscribe before start so the first turn's metrics are captured.
+      if (transcriptPersistence) {
+        transcriptPersistence.attach(session);
+        ctx.addShutdownCallback(async () => {
+          await transcriptPersistence.close();
+        });
+      }
       voiceObs?.attach(session);
       const detachSpeechObserver = observeVoiceSession(session, {
         onTurnMetrics,
@@ -1067,8 +1135,12 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
           // then use that same resolved text for both speaking and persistence.
           const greetingText = await resolveGreetingText(greetingConfig.text, callContext);
           if (greetingText) {
-            await speakGreeting(session, { ...greetingConfig, text: greetingText });
-            if (greetingConfig.persist !== false && memory && memoryInstance) {
+            await speakGreeting(
+              session,
+              { ...greetingConfig, text: greetingText },
+              transcriptPersistence && greetingConfig.persist === false ? { addToChatCtx: false } : undefined,
+            );
+            if (!transcriptPersistence && greetingConfig.persist !== false && memory && memoryInstance) {
               try {
                 await persistSpokenGreeting({
                   memory: memoryInstance,
@@ -1082,8 +1154,9 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
             }
           }
         }
-        await options.onSessionStart?.({ session, ctx, agent, metadata });
+        await options.onSessionStart?.({ session, ctx, agent, metadata, transcriptPersistence });
       } catch (error) {
+        await transcriptPersistence?.close();
         detachSpeechObserver();
         voiceObs?.finalize({ error });
         throw error;
