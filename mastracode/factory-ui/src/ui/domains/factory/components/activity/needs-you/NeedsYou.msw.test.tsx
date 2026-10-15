@@ -348,7 +348,7 @@ describe('Needs you', () => {
       'View card for Fix the loader',
       'View card for Loader retry landed',
     ]);
-    expect(screen.getByText('2', { selector: 'span' })).toBeVisible();
+    expect(within(screen.getByRole('region', { name: 'Needs you' })).getByText('2')).toBeVisible();
   });
 
   it('offers older items when a page comes back empty but the scan has more', async () => {

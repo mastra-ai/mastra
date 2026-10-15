@@ -231,7 +231,9 @@ describe('Factory feed', () => {
     const user = userEvent.setup();
     renderActivity();
 
-    await user.click(await screen.findByRole('button', { name: 'Load more activity' }));
+    const loadMore = await screen.findByRole('button', { name: 'Load more activity' });
+    expect(screen.queryByRole('link', { name: 'Old card' })).not.toBeInTheDocument();
+    await user.click(loadMore);
 
     expect(await screen.findByRole('link', { name: 'Old card' })).toBeInTheDocument();
     expect(screen.queryByText('Nothing has happened yet.')).not.toBeInTheDocument();

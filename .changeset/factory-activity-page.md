@@ -8,4 +8,4 @@ Opening a Factory now lands on its board, and Boards come first in the sidebar. 
 - **Timeline**: what moved and who moved it, with cards that need you flagged. One properties menu groups similar events or lists every event with its details, filters by kind (work items, runs, git, agent, intake), and switches to a compact view.
 - **Codebase**: the linked repository's recent commits, grouped by day.
 
-Old Overview and Attention links redirect to Activity; old Audit log links open the timeline with every event listed.
+The page lives at `/factories/:factoryId/activity`, and `?view=codebase` opens the Codebase view. Old Overview and Attention links redirect there; old Audit log links open the timeline with every event listed (`?events=all`).

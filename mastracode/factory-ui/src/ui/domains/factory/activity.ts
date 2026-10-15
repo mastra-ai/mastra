@@ -204,15 +204,20 @@ export function boardAndTrailEntries(
   return [...moves, ...factoryDeeds(events, activityCards(items))];
 }
 
+function trailCursor(events: AuditEvent[], trailHasMore: boolean): number {
+  if (!trailHasMore) return Number.NEGATIVE_INFINITY;
+  const loadedTimes = events.flatMap(event => eventTime(event) ?? []);
+  if (loadedTimes.length === 0) return Number.POSITIVE_INFINITY;
+  return Math.min(...loadedTimes);
+}
+
 /** Board moves span all time, so they wait at the trail's cursor until the deeds beside them have loaded. */
 export function newestFirstUpToTrailCursor(
   entries: ActivityEntry[],
   events: AuditEvent[],
   trailHasMore: boolean,
 ): ActivityEntry[] {
-  const cursorAt = trailHasMore
-    ? Math.min(...events.flatMap(event => eventTime(event) ?? []))
-    : Number.NEGATIVE_INFINITY;
+  const cursorAt = trailCursor(events, trailHasMore);
   return entries.filter(entry => entry.at >= cursorAt).toSorted((left, right) => right.at - left.at);
 }
 
