@@ -122,9 +122,11 @@ const TRACE_SYNTHETIC_PARAM_BY_FIELD: Record<string, string> = {
 };
 
 export const TRACE_LIST_MODE_PARAM = 'listMode';
-/** Grouped view of the Traces table: the dimension to group by and the measure (`<measure>:<dir>`) to sort groups by. */
+/** Grouped view of the Traces table: the dimensions (comma-separated) to group by and the measure (`<measure>:<dir>`) to sort groups by. */
 export const TRACE_GROUP_BY_PARAM = 'groupBy';
 export const TRACE_GROUP_SORT_PARAM = 'groupSort';
+/** Grouped view only: filters on the groups' measures (`<measure>:<op>:<value>,…`). */
+export const TRACE_GROUP_HAVING_PARAM = 'groupHaving';
 /** Branch-mode only: identifies the anchor span that defines the displayed subtree.
  *  Stable across intra-panel span navigation (which only changes `spanId`). */
 export const TRACE_ANCHOR_SPAN_ID_PARAM = 'anchorSpanId';
@@ -739,7 +741,7 @@ export function getPreservedTraceFilterParams(searchParams: URLSearchParams) {
 
   const listMode = searchParams.get(TRACE_LIST_MODE_PARAM);
   if (listMode) next.set(TRACE_LIST_MODE_PARAM, listMode);
-  for (const param of [TRACE_GROUP_BY_PARAM, TRACE_GROUP_SORT_PARAM]) {
+  for (const param of [TRACE_GROUP_BY_PARAM, TRACE_GROUP_SORT_PARAM, TRACE_GROUP_HAVING_PARAM]) {
     const value = searchParams.get(param);
     if (value) next.set(param, value);
   }

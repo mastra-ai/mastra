@@ -1,6 +1,6 @@
 import type { TraceAggregateDiscovery } from '@mastra/client-js';
 import { describe, expect, it } from 'vitest';
-import type { TraceGroupRow } from '../trace-group-by';
+import type { TraceGroupByDimension, TraceGroupRow, TraceGrouping } from '../trace-group-by';
 import {
   applyTraceGroupDrillDown,
   buildTraceGroupByRequest,
@@ -9,9 +9,12 @@ import {
   formatTraceGroupValue,
   getOfferedTraceGroupByDimensions,
   getTraceGroupDrillDown,
+  getTraceGroupValue,
   parseTraceGroupBy,
+  parseTraceGroupHaving,
   parseTraceGroupSort,
   serializeTraceGroupSort,
+  writeTraceGrouping,
 } from '../trace-group-by';
 import { buildTraceQueryRequest } from '../trace-query-filters';
 
@@ -51,11 +54,50 @@ describe('getOfferedTraceGroupByDimensions', () => {
   });
 });
 
+const grouped = (dimensions: TraceGroupRow['dimensions']): TraceGroupRow => ({ dimensions, measures: { count: 1 } });
+
 describe('URL state', () => {
-  it('reads only offered dimensions', () => {
-    expect(parseTraceGroupBy(new URLSearchParams('groupBy=status'), ['entityName', 'status'])).toBe('status');
-    expect(parseTraceGroupBy(new URLSearchParams('groupBy=projectId'), ['entityName', 'status'])).toBeUndefined();
-    expect(parseTraceGroupBy(new URLSearchParams(), ['entityName'])).toBeUndefined();
+  it('reads offered dimensions in order, without repeats, at most two', () => {
+    const offered = ['entityName', 'status', 'environment'] as const;
+    expect(parseTraceGroupBy(new URLSearchParams('groupBy=status'), offered)).toEqual(['status']);
+    expect(parseTraceGroupBy(new URLSearchParams('groupBy=environment,entityName'), offered)).toEqual([
+      'environment',
+      'entityName',
+    ]);
+    expect(parseTraceGroupBy(new URLSearchParams('groupBy=status,status,projectId,entityName'), offered)).toEqual([
+      'status',
+      'entityName',
+    ]);
+    expect(parseTraceGroupBy(new URLSearchParams('groupBy=status,entityName,environment'), offered)).toEqual([
+      'status',
+      'entityName',
+    ]);
+    expect(parseTraceGroupBy(new URLSearchParams(), offered)).toEqual([]);
+  });
+
+  it('reads group filters and drops malformed or repeated ones', () => {
+    const params = new URLSearchParams({
+      groupHaving:
+        'errorRate:gt:0.25,count:gte:10,count:lt:3,bogus:gt:1,cost.sum:eq:1,duration.p95:lt:,tokens.input.sum:lt:abc',
+    });
+    expect(parseTraceGroupHaving(params)).toEqual([
+      { measure: 'errorRate', operatorId: 'gt', value: 0.25 },
+      { measure: 'count', operatorId: 'gte', value: 10 },
+    ]);
+  });
+
+  it('round-trips the grouping, and drops group filters once nothing is grouped', () => {
+    const params = new URLSearchParams('datePreset=last-24h');
+    const grouping: TraceGrouping = {
+      groupBy: ['entityName', 'environment'],
+      having: [{ measure: 'errorRate', operatorId: 'gt', value: 0.25 }],
+    };
+    writeTraceGrouping(params, grouping);
+    expect(parseTraceGroupBy(params, ['entityName', 'environment'])).toEqual(grouping.groupBy);
+    expect(parseTraceGroupHaving(params)).toEqual(grouping.having);
+
+    writeTraceGrouping(params, { groupBy: [], having: grouping.having });
+    expect(params.toString()).toBe('datePreset=last-24h');
   });
 
   it('round-trips a sort and falls back to Traces descending for anything malformed', () => {
@@ -68,14 +110,20 @@ describe('URL state', () => {
 });
 
 describe('buildTraceGroupByRequest', () => {
-  it('groups the same selection as the trace list', () => {
-    const query = buildTraceQueryRequest({
-      status: 'error',
-      tokens: [{ fieldId: 'environment', value: 'production' }],
-      now: new Date('2026-10-15T12:00:00.000Z'),
-    });
+  const query = buildTraceQueryRequest({
+    status: 'error',
+    tokens: [{ fieldId: 'environment', value: 'production' }],
+    now: new Date('2026-10-15T12:00:00.000Z'),
+  });
 
-    expect(buildTraceGroupByRequest(query, 'entityName', { measure: 'cost.sum', direction: 'desc' })).toEqual({
+  it('groups the same selection as the trace list', () => {
+    expect(
+      buildTraceGroupByRequest(
+        query,
+        { groupBy: ['entityName'], having: [] },
+        { measure: 'cost.sum', direction: 'desc' },
+      ),
+    ).toEqual({
       timeRange: query.timeRange,
       where: query.where,
       groupBy: ['entityName'],
@@ -93,9 +141,40 @@ describe('buildTraceGroupByRequest', () => {
     });
   });
 
-  it('omits where when the list has no filters', () => {
-    const query = buildTraceQueryRequest({ tokens: [], now: new Date('2026-10-15T12:00:00.000Z') });
-    expect(buildTraceGroupByRequest(query, 'status', DEFAULT_TRACE_GROUP_SORT)).not.toHaveProperty('where');
+  it('groups by two dimensions in order', () => {
+    const request = buildTraceGroupByRequest(
+      query,
+      { groupBy: ['entityName', 'environment'], having: [] },
+      DEFAULT_TRACE_GROUP_SORT,
+    );
+    expect(request.groupBy).toEqual(['entityName', 'environment']);
+  });
+
+  it('sends one group filter as a comparison and several joined with and', () => {
+    const errorRate = { measure: 'errorRate', operatorId: 'gt', value: 0.25 } as const;
+    const count = { measure: 'count', operatorId: 'gte', value: 10 } as const;
+    const one = buildTraceGroupByRequest(query, { groupBy: ['status'], having: [errorRate] }, DEFAULT_TRACE_GROUP_SORT);
+    expect(one.having).toEqual({ op: 'gt', left: { path: 'errorRate' }, right: { literal: 0.25 } });
+
+    const two = buildTraceGroupByRequest(
+      query,
+      { groupBy: ['status'], having: [errorRate, count] },
+      DEFAULT_TRACE_GROUP_SORT,
+    );
+    expect(two.having).toEqual({
+      op: 'and',
+      args: [
+        { op: 'gt', left: { path: 'errorRate' }, right: { literal: 0.25 } },
+        { op: 'gte', left: { path: 'count' }, right: { literal: 10 } },
+      ],
+    });
+  });
+
+  it('omits where and having when there is nothing to filter', () => {
+    const unfiltered = buildTraceQueryRequest({ tokens: [], now: new Date('2026-10-15T12:00:00.000Z') });
+    const request = buildTraceGroupByRequest(unfiltered, { groupBy: ['status'], having: [] }, DEFAULT_TRACE_GROUP_SORT);
+    expect(request).not.toHaveProperty('where');
+    expect(request).not.toHaveProperty('having');
   });
 });
 
@@ -105,80 +184,91 @@ describe('formatTraceGroupValue', () => {
     expect(formatTraceGroupValue('status', 'success')).toBe('Success');
     expect(formatTraceGroupValue('entityType', 'workflow_run')).toBe('Workflow');
     expect(formatTraceGroupValue('entityType', 'tool')).toBe('tool');
-    expect(formatTraceGroupValue('environment', null)).toBe('(not set)');
-    expect(formatTraceGroupValue('entityName', '')).toBe('(not set)');
+    expect(formatTraceGroupValue('environment', undefined)).toBe('(not set)');
     expect(formatTraceGroupValue('entityName', 'support-agent')).toBe('support-agent');
+  });
+
+  it('treats a null or empty dimension from the server as not set', () => {
+    expect(getTraceGroupValue(grouped({ environment: null }), 'environment')).toBeUndefined();
+    expect(getTraceGroupValue(grouped({ environment: '' }), 'environment')).toBeUndefined();
+    expect(getTraceGroupValue(grouped({}), 'environment')).toBeUndefined();
   });
 });
 
 describe('drill-down', () => {
+  const filterFor = (dimension: TraceGroupByDimension, value: string | null) =>
+    getTraceGroupDrillDown([dimension], grouped({ [dimension]: value }));
+
   it('maps each dimension to the trace list filter that selects the group', () => {
-    expect(getTraceGroupDrillDown('entityName', 'support-agent')).toEqual({
-      kind: 'filter',
-      param: 'filterEntityName',
-      value: 'support-agent',
-      operatorId: 'is',
+    expect(filterFor('entityName', 'support-agent')).toEqual({
+      filters: [{ param: 'filterEntityName', value: 'support-agent', operatorId: 'is' }],
     });
-    expect(getTraceGroupDrillDown('status', 'error')).toEqual({
-      kind: 'filter',
-      param: 'status',
-      value: 'error',
-      operatorId: 'is',
+    expect(filterFor('status', 'error')).toEqual({ filters: [{ param: 'status', value: 'error', operatorId: 'is' }] });
+    expect(filterFor('entityType', 'agent')).toEqual({
+      filters: [{ param: 'rootEntityType', value: 'agent', operatorId: 'is' }],
     });
-    expect(getTraceGroupDrillDown('entityType', 'agent')).toEqual({
-      kind: 'filter',
-      param: 'rootEntityType',
-      value: 'agent',
-      operatorId: 'is',
+    expect(filterFor('environment', 'production')).toEqual({
+      filters: [{ param: 'filterEnvironment', value: 'production', operatorId: 'is' }],
     });
-    expect(getTraceGroupDrillDown('environment', 'production')).toEqual({
-      kind: 'filter',
-      param: 'filterEnvironment',
-      value: 'production',
-      operatorId: 'is',
-    });
-    expect(getTraceGroupDrillDown('projectId', 'project-a')).toEqual({ kind: 'project', projectId: 'project-a' });
+    expect(filterFor('projectId', 'project-a')).toEqual({ filters: [], projectId: 'project-a' });
   });
 
   it('selects traces without an environment with notExists', () => {
-    expect(getTraceGroupDrillDown('environment', null)).toEqual({
-      kind: 'filter',
-      param: 'filterEnvironment',
-      value: '',
-      operatorId: 'notExists',
+    expect(filterFor('environment', null)).toEqual({
+      filters: [{ param: 'filterEnvironment', value: '', operatorId: 'notExists' }],
     });
   });
 
   it('has no drill-down for groups the filters cannot express', () => {
-    expect(getTraceGroupDrillDown('entityName', null)).toBeUndefined();
-    expect(getTraceGroupDrillDown('entityType', 'tool')).toBeUndefined();
-    expect(getTraceGroupDrillDown('entityType', null)).toBeUndefined();
-    expect(getTraceGroupDrillDown('status', null)).toBeUndefined();
-    expect(getTraceGroupDrillDown('projectId', null)).toBeUndefined();
+    expect(filterFor('entityName', null)).toBeUndefined();
+    expect(filterFor('entityType', 'tool')).toBeUndefined();
+    expect(filterFor('entityType', null)).toBeUndefined();
+    expect(filterFor('status', null)).toBeUndefined();
+    expect(filterFor('projectId', null)).toBeUndefined();
   });
 
-  it('replaces the existing filter on that field, keeps the rest and leaves the grouped view', () => {
-    const params = new URLSearchParams(
-      'groupBy=environment&groupSort=cost.sum:desc&datePreset=last-24h&filterEnvironment=staging&filterEnvironment.op=isNot&filterEntityName=support-agent',
-    );
-    const drillDown = getTraceGroupDrillDown('environment', 'production');
-    if (drillDown?.kind !== 'filter') throw new Error('expected a filter drill-down');
+  it('combines the filters of both dimensions, and has none when either value is inexpressible', () => {
+    expect(
+      getTraceGroupDrillDown(
+        ['entityName', 'environment'],
+        grouped({ entityName: 'support-agent', environment: 'production' }),
+      ),
+    ).toEqual({
+      filters: [
+        { param: 'filterEntityName', value: 'support-agent', operatorId: 'is' },
+        { param: 'filterEnvironment', value: 'production', operatorId: 'is' },
+      ],
+    });
+    expect(
+      getTraceGroupDrillDown(['entityName', 'environment'], grouped({ entityName: null, environment: 'production' })),
+    ).toBeUndefined();
+  });
 
-    const next = applyTraceGroupDrillDown(params, drillDown);
+  it('replaces the existing filters on those fields, keeps the rest and leaves the grouped view', () => {
+    const params = new URLSearchParams(
+      'groupBy=environment,status&groupHaving=count:gt:1&groupSort=cost.sum:desc&datePreset=last-24h&filterEnvironment=staging&filterEnvironment.op=isNot&filterEntityName=support-agent',
+    );
+    const drillDown = getTraceGroupDrillDown(
+      ['environment', 'status'],
+      grouped({ environment: 'production', status: 'error' }),
+    );
+
+    const next = applyTraceGroupDrillDown(params, drillDown?.filters ?? []);
 
     expect(next.has('groupBy')).toBe(false);
+    expect(next.has('groupHaving')).toBe(false);
     expect(next.get('groupSort')).toBe('cost.sum:desc');
     expect(next.get('datePreset')).toBe('last-24h');
     expect(next.getAll('filterEnvironment')).toEqual(['production']);
     expect(next.has('filterEnvironment.op')).toBe(false);
+    expect(next.get('status')).toBe('error');
     expect(next.get('filterEntityName')).toBe('support-agent');
   });
 
   it('writes the notExists operator for a not-set environment', () => {
-    const drillDown = getTraceGroupDrillDown('environment', null);
-    if (drillDown?.kind !== 'filter') throw new Error('expected a filter drill-down');
+    const drillDown = filterFor('environment', null);
 
-    const next = applyTraceGroupDrillDown(new URLSearchParams('groupBy=environment'), drillDown);
+    const next = applyTraceGroupDrillDown(new URLSearchParams('groupBy=environment'), drillDown?.filters ?? []);
 
     expect(next.get('filterEnvironment')).toBe('');
     expect(next.get('filterEnvironment.op')).toBe('notExists');

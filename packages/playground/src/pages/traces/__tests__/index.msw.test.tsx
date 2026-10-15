@@ -1789,14 +1789,31 @@ describe('Traces page group by', () => {
         HttpResponse.json(traceQueryFieldsWithAggregate),
       ),
       http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
-        onListRequest((await request.json()) as QueryTracesInput);
+        const body: QueryTracesInput = await request.json();
+        onListRequest(body);
         return HttpResponse.json(groupedTraceQueryPage);
       }),
       http.post(`${TEST_BASE_URL}/api/observability/traces/aggregate`, async ({ request }) => {
-        onAggregateRequest((await request.json()) as AggregateTracesArgs);
+        const body: AggregateTracesArgs = await request.json();
+        onAggregateRequest(body);
         return HttpResponse.json(aggregateByEntityName(groupedTraceQueryPage));
       }),
     );
+  };
+
+  const locationParams = () => new URLSearchParams(screen.getByTestId('location').textContent ?? '');
+  const filterInput = () => screen.getByRole<HTMLInputElement>('combobox', { name: 'Add filter' });
+  const typeField = async (text: string) => {
+    filterInput().focus();
+    fireEvent.change(filterInput(), { target: { value: text } });
+  };
+  const groupBy = async (...dimensions: string[]) => {
+    await typeField('Group by');
+    fireEvent.click(await screen.findByRole('option', { name: 'Group by' }));
+    for (const dimension of dimensions) fireEvent.click(await screen.findByRole('option', { name: dimension }));
+    fireEvent.click(screen.getByRole('button', { name: /^Done/ }));
+    // The bar keeps its input open for the next filter; close it as a user would.
+    fireEvent.keyDown(filterInput(), { key: 'Escape' });
   };
 
   describe('when the server cannot group traces', () => {
@@ -1807,7 +1824,9 @@ describe('Traces page group by', () => {
 
       await waitFor(() => expect(onListRequest).toHaveBeenCalled());
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(screen.queryByRole('button', { name: /Group by/ })).toBeNull();
+      await typeField('Group');
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(screen.queryByRole('option', { name: 'Group by' })).toBeNull();
       expect(onAggregateRequest).not.toHaveBeenCalled();
     });
   });
@@ -1817,12 +1836,14 @@ describe('Traces page group by', () => {
       setGroupByHandlers(traceAggregateCapabilities);
       renderPage('/traces');
 
-      fireEvent.click(await screen.findByRole('button', { name: 'Group by: None' }));
+      await waitFor(() => expect(onListRequest).toHaveBeenCalled());
+      await typeField('Group by');
+      fireEvent.click(await screen.findByRole('option', { name: 'Group by' }));
 
-      expect(await screen.findByRole('menuitemradio', { name: 'Agent / workflow' })).not.toBeNull();
-      expect(screen.getByRole('menuitemradio', { name: 'Status' })).not.toBeNull();
-      expect(screen.queryByRole('menuitemradio', { name: 'Environment' })).toBeNull();
-      expect(screen.queryByRole('menuitemradio', { name: 'Project' })).toBeNull();
+      expect(await screen.findByRole('option', { name: 'Agent / workflow' })).not.toBeNull();
+      expect(screen.getByRole('option', { name: 'Status' })).not.toBeNull();
+      expect(screen.queryByRole('option', { name: 'Environment' })).toBeNull();
+      expect(screen.queryByRole('option', { name: 'Project' })).toBeNull();
     });
 
     it('groups the same selection as the list, and the group counts add up to the list', async () => {
@@ -1832,8 +1853,7 @@ describe('Traces page group by', () => {
       await waitFor(() => expect(onListRequest).toHaveBeenCalled());
       const listBody = onListRequest.mock.lastCall![0];
 
-      fireEvent.click(await screen.findByRole('button', { name: 'Group by: None' }));
-      fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Agent / workflow' }));
+      await groupBy('Agent / workflow');
 
       const support = await screen.findByRole('button', { name: 'Show traces for support-agent' });
       const billing = screen.getByRole('button', { name: 'Show traces for billing-agent' });
@@ -1855,9 +1875,8 @@ describe('Traces page group by', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Show traces for support-agent' }));
 
       await waitFor(() => {
-        const params = new URLSearchParams(screen.getByTestId('location').textContent ?? '');
-        expect(params.has('groupBy')).toBe(false);
-        expect(params.get('filterEntityName')).toBe('support-agent');
+        expect(locationParams().has('groupBy')).toBe(false);
+        expect(locationParams().get('filterEntityName')).toBe('support-agent');
       });
       await waitFor(() =>
         expect(onListRequest).toHaveBeenLastCalledWith(
@@ -1869,7 +1888,25 @@ describe('Traces page group by', () => {
           }),
         ),
       );
-      expect(await screen.findByRole('button', { name: 'Group by: None' })).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'Remove Group by filter' })).toBeNull();
+    });
+
+    it('keeps the grouping when a trace filter changes, and keeps the filters when grouping is removed', async () => {
+      setGroupByHandlers(traceAggregateCapabilities);
+      renderPage('/traces?groupBy=entityName&groupHaving=count:gt:1&filterEnvironment=production');
+      await screen.findByRole('button', { name: 'Show traces for support-agent' });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Environment filter' }));
+
+      await waitFor(() => expect(locationParams().has('filterEnvironment')).toBe(false));
+      expect(locationParams().get('groupBy')).toBe('entityName');
+      expect(locationParams().get('groupHaving')).toBe('count:gt:1');
+      await waitFor(() => expect(onAggregateRequest.mock.lastCall?.[0]).not.toHaveProperty('where'));
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Group by filter' }));
+      await waitFor(() => expect(locationParams().has('groupBy')).toBe(false));
+      expect(locationParams().has('groupHaving')).toBe(false);
+      await waitFor(() => expect(onListRequest).toHaveBeenCalled());
     });
 
     it('shows the error when the server rejects the grouped request', async () => {
@@ -1882,7 +1919,7 @@ describe('Traces page group by', () => {
       renderPage('/traces?groupBy=entityName');
 
       expect(await screen.findByText('Failed to group traces')).not.toBeNull();
-      expect(screen.getByRole('button', { name: 'Group by: Agent / workflow' })).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Remove Group by filter' })).not.toBeNull();
     });
   });
 });

@@ -5,10 +5,17 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, useLocation, useSearchParams } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
-import { TracesGroupByMenu } from '../components/traces-group-by-menu';
+import { FilterBar } from '../../../ds/components/FilterBar';
+import type { FilterBarItem } from '../../../ds/components/FilterBar';
 import { TracesGroupedView } from '../components/traces-grouped-view';
 import { useTraceGroupBy } from '../hooks/use-trace-group-by';
-import type { TraceGroupDrillDown } from '../trace-group-by';
+import { TRACE_FILTER_BAR_OPERATORS } from '../trace-filters';
+import type { TraceGroupByDimension } from '../trace-group-by';
+import {
+  createTraceGroupByFilterBarFields,
+  splitTraceGroupingFromFilterBar,
+  traceGroupingToFilterBarItems,
+} from '../trace-group-by-filter-bar';
 import { buildTraceQueryRequest } from '../trace-query-filters';
 import { groupedByEntityName, groupedByStatus } from './fixtures/trace-group-by';
 import { server } from '@/test/msw-server';
@@ -16,6 +23,7 @@ import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 const AGGREGATE_URL = `${TEST_BASE_URL}/api/observability/traces/aggregate`;
 const NOW = new Date('2026-10-15T12:00:00.000Z');
+const DIMENSIONS: TraceGroupByDimension[] = ['entityName', 'status', 'environment', 'entityType'];
 
 const onAggregate = vi.fn<(body: AggregateTracesArgs) => void>();
 
@@ -34,38 +42,47 @@ const serveAggregate = (respond: (body: AggregateTracesArgs) => Response | Aggre
 let lastError: Error | null = null;
 const onProjectDrillDown = vi.fn<(projectId: string) => void>();
 
+/** The grouped view as a page wires it: Group by chips in a FilterBar above the grouped table. */
 function Harness({ enabled = true }: { enabled?: boolean }) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const dimensions = enabled ? DIMENSIONS : [];
   const groups = useTraceGroupBy({
     searchParams,
     setSearchParams,
-    dimensions: ['entityName', 'status', 'environment', 'entityType'],
+    dimensions,
     query: () => buildTraceQueryRequest({ tokens: [{ fieldId: 'environment', value: 'production' }], now: NOW }),
     enabled,
   });
   lastError = groups.error;
   const location = useLocation();
-  const onDrillDown = (drillDown: TraceGroupDrillDown) =>
-    drillDown.kind === 'filter' ? groups.applyFilterDrillDown(drillDown) : onProjectDrillDown(drillDown.projectId);
+  const handleChange = (items: FilterBarItem[]) =>
+    groups.setGrouping(splitTraceGroupingFromFilterBar(items, dimensions).grouping);
   return (
     <>
-      {enabled && (
-        <TracesGroupByMenu
-          value={groups.groupBy}
-          dimensions={['entityName', 'status', 'environment', 'entityType']}
-          onChange={groups.setGroupBy}
-        />
-      )}
-      {groups.groupBy && (
+      <FilterBar
+        value={traceGroupingToFilterBarItems(groups.grouping)}
+        onValueChange={handleChange}
+        fields={createTraceGroupByFilterBarFields({ dimensions, grouped: groups.grouped })}
+        operators={TRACE_FILTER_BAR_OPERATORS}
+        createItemId={fieldId => fieldId}
+      >
+        <FilterBar.Chips />
+        <FilterBar.Input placeholder="Filter traces…" />
+      </FilterBar>
+      {groups.grouped && (
         <TracesGroupedView
-          dimension={groups.groupBy}
+          dimensions={groups.grouping.groupBy}
           rows={groups.rows}
           truncated={groups.truncated}
           isLoading={groups.isLoading}
           filtersApplied
           sort={groups.sort}
           onSortChange={groups.setSort}
-          onDrillDown={onDrillDown}
+          onDrillDown={drillDown =>
+            drillDown.projectId
+              ? onProjectDrillDown(drillDown.projectId)
+              : groups.applyFilterDrillDown(drillDown.filters)
+          }
         />
       )}
       <div data-testid="location">{location.search}</div>
@@ -82,46 +99,90 @@ const renderHarness = (search = '', props: { enabled?: boolean } = {}) =>
 
 const locationParams = () => new URLSearchParams(screen.getByTestId('location').textContent ?? '');
 const rowFor = (label: string) => screen.getByRole('button', { name: `Show traces for ${label}` });
+const filterInput = () => screen.getByRole<HTMLInputElement>('combobox', { name: 'Add filter' });
+
+/** Pick a field from the bar's typeahead, the way a user adds any filter. */
+async function startFilter(field: string) {
+  const input = filterInput();
+  input.focus();
+  fireEvent.change(input, { target: { value: field } });
+  fireEvent.click(await screen.findByRole('option', { name: field }));
+}
+
+const ALL_MEASURES = [
+  'count',
+  'errorRate',
+  'duration.p50',
+  'duration.p95',
+  'tokens.input.sum',
+  'tokens.output.sum',
+  'cost.sum',
+];
 
 describe('Traces group by', () => {
-  it('requests nothing while grouping is off', async () => {
+  it('requests nothing and offers no Group by while grouping is off', async () => {
     serveAggregate(() => groupedByEntityName);
     renderHarness('?groupBy=entityName', { enabled: false });
 
+    filterInput().focus();
+    fireEvent.change(filterInput(), { target: { value: 'Group' } });
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(onAggregate).not.toHaveBeenCalled();
-    expect(screen.queryByRole('button', { name: /Group by/ })).toBeNull();
+    expect(screen.queryByRole('option', { name: 'Group by' })).toBeNull();
   });
 
-  it('groups the list selection by the chosen dimension', async () => {
+  it('groups the list selection by the dimensions picked in the Group by filter', async () => {
     serveAggregate(() => groupedByEntityName);
     renderHarness();
 
-    expect(screen.getByRole('button', { name: 'Group by: None' })).not.toBeNull();
-    expect(onAggregate).not.toHaveBeenCalled();
+    await startFilter('Group by');
+    fireEvent.click(await screen.findByRole('option', { name: 'Agent / workflow' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Environment' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Done/ }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Group by: None' }));
-    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Agent / workflow' }));
-
-    await screen.findByRole('button', { name: 'Show traces for support-agent' });
-    expect(locationParams().get('groupBy')).toBe('entityName');
+    await screen.findByRole('button', { name: /^Show traces for support-agent/ });
+    expect(locationParams().get('groupBy')).toBe('entityName,environment');
     expect(onAggregate).toHaveBeenCalledWith({
       ...buildTraceQueryRequest({ tokens: [{ fieldId: 'environment', value: 'production' }], now: NOW }),
-      groupBy: ['entityName'],
-      measures: [
-        'count',
-        'errorRate',
-        'duration.p50',
-        'duration.p95',
-        'tokens.input.sum',
-        'tokens.output.sum',
-        'cost.sum',
-      ],
+      groupBy: ['entityName', 'environment'],
+      measures: ALL_MEASURES,
       orderBy: { field: 'count', direction: 'desc' },
       limit: 50,
     });
-    expect(screen.getByRole('button', { name: 'Group by: Agent / workflow' })).not.toBeNull();
-    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    // One label column per dimension, and the chip summarises both.
+    expect(screen.getByText('Agent / workflow')).not.toBeNull();
+    expect(screen.getByText('Environment')).not.toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Value: Agent / workflow, Environment' })).not.toBeNull();
+  });
+
+  it('filters the groups by a measure once grouped', async () => {
+    serveAggregate(() => groupedByEntityName);
+    renderHarness('?groupBy=entityName');
+    await screen.findByRole('button', { name: 'Show traces for support-agent' });
+
+    await startFilter('Group error rate (%)');
+    fireEvent.click(await screen.findByRole('option', { name: 'greater than' }));
+    fireEvent.change(filterInput(), { target: { value: '25' } });
+    fireEvent.keyDown(filterInput(), { key: 'Enter' });
+
+    await waitFor(() => expect(locationParams().get('groupHaving')).toBe('errorRate:gt:0.25'));
+    await waitFor(() =>
+      expect(onAggregate).toHaveBeenLastCalledWith(
+        expect.objectContaining({ having: { op: 'gt', left: { path: 'errorRate' }, right: { literal: 0.25 } } }),
+      ),
+    );
+  });
+
+  it('leaves the grouped view, and its group filters, when the Group by filter is removed', async () => {
+    serveAggregate(() => groupedByEntityName);
+    renderHarness('?groupBy=entityName&groupHaving=count:gt:1');
+    await screen.findByRole('button', { name: 'Show traces for support-agent' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Group by filter' }));
+
+    await waitFor(() => expect(locationParams().has('groupBy')).toBe(false));
+    expect(locationParams().has('groupHaving')).toBe(false);
+    expect(screen.queryByRole('button', { name: 'Show traces for support-agent' })).toBeNull();
   });
 
   it('shows measures and explains missing or partial tokens and cost', async () => {
@@ -218,6 +279,6 @@ describe('Traces group by', () => {
 
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(onAggregate).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'Group by: None' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Remove Group by filter' })).toBeNull();
   });
 });

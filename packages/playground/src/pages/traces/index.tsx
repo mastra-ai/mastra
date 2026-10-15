@@ -26,7 +26,6 @@ import {
   TraceTimeRangeChip,
 } from '@mastra/playground-ui/domains/traces/components/trace-time-range-chip';
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
-import { TracesGroupByMenu } from '@mastra/playground-ui/domains/traces/components/traces-group-by-menu';
 import { TracesGroupedView } from '@mastra/playground-ui/domains/traces/components/traces-grouped-view';
 import { TracesListView } from '@mastra/playground-ui/domains/traces/components/traces-list-view';
 import { TracesPageSkeleton } from '@mastra/playground-ui/domains/traces/components/traces-page-skeleton';
@@ -34,9 +33,10 @@ import { useTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/
 import { useTraceFilterPersistence } from '@mastra/playground-ui/domains/traces/hooks/use-trace-filter-persistence';
 import { useTraceGroupBy } from '@mastra/playground-ui/domains/traces/hooks/use-trace-group-by';
 import { useTraceListNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-list-navigation';
-import { useTraceUrlState } from '@mastra/playground-ui/domains/traces/hooks/use-trace-url-state';
+import { clearSelectionParams, useTraceUrlState } from '@mastra/playground-ui/domains/traces/hooks/use-trace-url-state';
 import { useTracesListSource } from '@mastra/playground-ui/domains/traces/hooks/use-traces-list-source';
 import {
+  applyTracePropertyFilterTokens,
   buildTraceListFilters,
   createTraceFilterBarFields,
   filterBarExpressionToTraceFilters,
@@ -47,6 +47,11 @@ import {
   traceTokensToFilterBarItems,
 } from '@mastra/playground-ui/domains/traces/trace-filters';
 import { getOfferedTraceGroupByDimensions } from '@mastra/playground-ui/domains/traces/trace-group-by';
+import {
+  createTraceGroupByFilterBarFields,
+  splitTraceGroupingFromFilterBar,
+  traceGroupingToFilterBarItems,
+} from '@mastra/playground-ui/domains/traces/trace-group-by-filter-bar';
 import { hasTraceUsageColumn, isTraceUsageColumn } from '@mastra/playground-ui/domains/traces/trace-list-columns';
 import {
   buildTraceQueryRequest,
@@ -243,10 +248,32 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     [client, discoveryTimeRange],
   );
 
-  const filterBarFields = useMemo(
-    () => [
-      TRACE_TIME_RANGE_FIELD,
-      ...createTraceFilterBarFields({
+  const buildListQuery = (now: Date) =>
+    buildTraceQueryRequest({
+      rootEntityType: url.selectedEntityOption?.entityType,
+      status: url.selectedStatus,
+      dateFrom: url.selectedDateFrom,
+      dateTo: url.selectedDateTo,
+      tokens: url.filterTokens,
+      groups: url.filterGroups,
+      excludedFieldIds: withRootDuration ? undefined : ROOT_DURATION_FIELD_IDS,
+      now,
+    });
+
+  // Grouping counts the same selection as the list. The scoped tabs (one agent or workflow) don't offer it.
+  const withGroupBy = useTraceAggregateAvailable().enabled && !isScoped;
+  const groupByDimensions = withGroupBy ? getOfferedTraceGroupByDimensions({ discovery: aggregateDiscovery }) : [];
+  const groupView = useTraceGroupBy({
+    searchParams,
+    setSearchParams: setPersistedSearchParams,
+    dimensions: groupByDimensions,
+    query: buildListQuery,
+    enabled: withGroupBy,
+  });
+
+  const traceFilterBarFields = useMemo(
+    () =>
+      createTraceFilterBarFields({
         availableRootEntityNames: rootEntityNameSuggestions,
         availableEnvironments: discoveredEnvironments,
         hiddenFieldIds,
@@ -256,7 +283,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         withQueryTrace,
         withRootDuration,
       }),
-    ],
     [
       withRootDuration,
       rootEntityNameSuggestions,
@@ -268,6 +294,13 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       withQueryTrace,
     ],
   );
+  // Group by sits first in the field list so it's easy to find; its group filters appear only while grouped.
+  const filterBarFields = [
+    TRACE_TIME_RANGE_FIELD,
+    ...createTraceGroupByFilterBarFields({ dimensions: groupByDimensions, grouped: groupView.grouped }),
+    ...traceFilterBarFields,
+  ];
+  const groupingFilterBarItems = traceGroupingToFilterBarItems(groupView.grouping);
   // Metadata columns read top-level keys only, so nested paths collapse to their first segment.
   const availableMetadataKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -285,65 +318,45 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // The time-range chip is a synthetic, always-present item so it takes part in keyboard
   // navigation; it never round-trips to filter tokens (its state lives in the date params).
   // Expression mode so root-level AND/OR groups render as "Advanced filter" chips.
-  const filterBarValue = useMemo<FilterBarExpression>(() => {
+  const traceFilterBarValue = useMemo<FilterBarExpression>(() => {
     const expression = traceFiltersToFilterBarExpression([], url.filterGroups);
     return { ...expression, nodes: [TRACE_TIME_RANGE_ITEM, ...filterBarItems, ...expression.nodes] };
   }, [filterBarItems, url.filterGroups]);
+  const filterBarValue: FilterBarExpression = {
+    ...traceFilterBarValue,
+    nodes: [...traceFilterBarValue.nodes, ...groupingFilterBarItems],
+  };
   // Re-inject the hidden scope items so the FilterBar clear button (which drops every removable item) and any other
   // edit can never drop the scope from the URL.
-  const handleFilterBarChange = useCallback(
-    (expression: FilterBarExpression) => {
-      const scoped = allFilterBarItems.filter(item => scopedFieldIds.has(item.fieldId));
-      const { tokens, groups } = filterBarExpressionToTraceFilters({
-        ...expression,
-        nodes: expression.nodes.filter(node => isFilterBarGroup(node) || node.fieldId !== TRACE_TIME_RANGE_FIELD_ID),
-      });
-      url.handleFilterTokensChange([...filterBarItemsToTraceTokens(scoped), ...tokens], groups);
-    },
-    [allFilterBarItems, scopedFieldIds, url],
-  );
+  // The Group by chips live in the same bar: split them out and write them in the same URL update as the filters.
+  const handleFilterBarChange = (expression: FilterBarExpression) => {
+    const scoped = allFilterBarItems.filter(item => scopedFieldIds.has(item.fieldId));
+    const { grouping, nodes } = splitTraceGroupingFromFilterBar(expression.nodes, groupByDimensions);
+    const { tokens, groups } = filterBarExpressionToTraceFilters({
+      ...expression,
+      nodes: nodes.filter(node => isFilterBarGroup(node) || node.fieldId !== TRACE_TIME_RANGE_FIELD_ID),
+    });
+    const nextTokens = [...filterBarItemsToTraceTokens(scoped), ...tokens];
+    if (!withGroupBy) {
+      url.handleFilterTokensChange(nextTokens, groups);
+      return;
+    }
+    groupView.setGrouping(grouping, next => {
+      applyTracePropertyFilterTokens(next, nextTokens, groups);
+      clearSelectionParams(next);
+    });
+  };
   // Legacy mode: the list endpoint can't express AND/OR groups, so the bar runs in flat mode, which never offers
   // "Advanced filter".
-  const flatFilterBarValue = useMemo(() => [TRACE_TIME_RANGE_ITEM, ...filterBarItems], [filterBarItems]);
-  const handleFlatFilterBarChange = useCallback(
-    (items: FilterBarItem[]) => handleFilterBarChange({ ...traceFiltersToFilterBarExpression([], []), nodes: items }),
-    [handleFilterBarChange],
-  );
-  const handleFilterByField = useCallback(
-    (fieldId: string, value: string) => {
-      const withoutField = filterBarItems.filter(item => item.fieldId !== fieldId);
-      const item: FilterBarItem = { id: `${fieldId}:${value}`, fieldId, operatorId: 'is', value };
-      const groups = filterBarValue.nodes.filter(isFilterBarGroup);
-      handleFilterBarChange({ ...filterBarValue, nodes: [...withoutField, item, ...groups] });
-    },
-    [filterBarItems, filterBarValue, handleFilterBarChange],
-  );
-
-  const buildListQuery = (now: Date) =>
-    buildTraceQueryRequest({
-      rootEntityType: url.selectedEntityOption?.entityType,
-      status: url.selectedStatus,
-      dateFrom: url.selectedDateFrom,
-      dateTo: url.selectedDateTo,
-      tokens: url.filterTokens,
-      groups: url.filterGroups,
-      excludedFieldIds: withRootDuration ? undefined : ROOT_DURATION_FIELD_IDS,
-      now,
-    });
-
-  // Grouping counts the same selection as the list. The scoped tabs (one agent or workflow) don't offer it.
-  const withGroupBy = useTraceAggregateAvailable().enabled && !isScoped;
-  const groupByDimensions = useMemo(
-    () => getOfferedTraceGroupByDimensions({ discovery: aggregateDiscovery }),
-    [aggregateDiscovery],
-  );
-  const groups = useTraceGroupBy({
-    searchParams,
-    setSearchParams: setPersistedSearchParams,
-    dimensions: groupByDimensions,
-    query: buildListQuery,
-    enabled: withGroupBy,
-  });
+  const flatFilterBarValue = [TRACE_TIME_RANGE_ITEM, ...filterBarItems, ...groupingFilterBarItems];
+  const handleFlatFilterBarChange = (items: FilterBarItem[]) =>
+    handleFilterBarChange({ ...traceFiltersToFilterBarExpression([], []), nodes: items });
+  const handleFilterByField = (fieldId: string, value: string) => {
+    const withoutField = filterBarItems.filter(item => item.fieldId !== fieldId);
+    const item: FilterBarItem = { id: `${fieldId}:${value}`, fieldId, operatorId: 'is', value };
+    const groups = filterBarValue.nodes.filter(isFilterBarGroup);
+    handleFilterBarChange({ ...filterBarValue, nodes: [...withoutField, item, ...groups, ...groupingFilterBarItems] });
+  };
 
   const {
     rows: traces,
@@ -359,7 +372,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     query: buildListQuery,
     orderBy: [{ field: 'startedAt', direction: sortDirection }],
     withQueryTrace,
-    enabled: !traceQuery.isLoading && !groups.groupBy,
+    enabled: !traceQuery.isLoading && !groupView.grouped,
     legacyFilters: buildTraceListFilters({
       rootEntityType: url.selectedEntityOption?.entityType,
       status: url.selectedStatus,
@@ -458,11 +471,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         </FilterBar>
       </ActionRow.Start>
       <ActionRow.End>
-        {withGroupBy && (
-          <TracesGroupByMenu value={groups.groupBy} dimensions={groupByDimensions} onChange={groups.setGroupBy} />
-        )}
         {/* The grouped view has fixed columns and doesn't poll. */}
-        {!groups.groupBy && (
+        {!groupView.grouped && (
           <>
             <TraceColumnsMenu
               preferences={traceColumns.preferences}
@@ -503,26 +513,25 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     );
   }
 
-  if (groups.groupBy) {
+  if (groupView.grouped) {
     return (
       <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
         <h1 className="sr-only">Traces</h1>
-        {groups.error ? (
+        {groupView.error ? (
           <div className="flex h-full items-center justify-center">
-            <TracesErrorContent error={groups.error} resource="traces" errorTitle="Failed to group traces" />
+            <TracesErrorContent error={groupView.error} resource="traces" errorTitle="Failed to group traces" />
           </div>
         ) : (
           <TracesGroupedView
-            dimension={groups.groupBy}
-            rows={groups.rows}
-            truncated={groups.truncated}
-            isLoading={groups.isLoading}
-            filtersApplied={filtersApplied}
-            sort={groups.sort}
-            onSortChange={groups.setSort}
-            onDrillDown={drillDown => {
-              if (drillDown.kind === 'filter') groups.applyFilterDrillDown(drillDown);
-            }}
+            dimensions={groupView.grouping.groupBy}
+            rows={groupView.rows}
+            truncated={groupView.truncated}
+            isLoading={groupView.isLoading}
+            filtersApplied={filtersApplied || groupView.grouping.having.length > 0}
+            sort={groupView.sort}
+            onSortChange={groupView.setSort}
+            // Studio has no project dimension, so every drill-down is a set of filters.
+            onDrillDown={drillDown => groupView.applyFilterDrillDown(drillDown.filters)}
           />
         )}
       </PageLayout>

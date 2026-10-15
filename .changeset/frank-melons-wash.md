@@ -2,4 +2,4 @@
 '@mastra/playground-ui': minor
 ---
 
-Added **Group by** to the Traces page. It summarizes the filtered traces by agent or workflow, status, environment, or entity type, with trace count, error rate, p50 and p95 duration, tokens, and cost per group. Sort by any column, and select a row to filter the trace list to that group. The control appears only when the observability store supports trace aggregation.
+Added **Group by** to the Traces page filter bar. It summarizes the filtered traces by up to two of agent or workflow, status, environment, and entity type, with trace count, error rate, p50 and p95 duration, tokens, and cost per group. While grouped, group filters such as **Group error rate (%)** keep only the groups that match. Sort by any column, and select a row to filter the trace list to that group. Group by is offered only when the observability store supports trace aggregation.

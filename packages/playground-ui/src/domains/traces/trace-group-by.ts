@@ -8,6 +8,7 @@ import type { TraceFilterOperatorId } from './trace-filters';
 import {
   ROOT_ENTITY_TYPE_OPTIONS,
   TRACE_GROUP_BY_PARAM,
+  TRACE_GROUP_HAVING_PARAM,
   TRACE_GROUP_SORT_PARAM,
   TRACE_PROPERTY_FILTER_PARAM_BY_FIELD,
   TRACE_ROOT_ENTITY_TYPE_PARAM,
@@ -18,7 +19,7 @@ import { formatCompactNumber, formatCost, formatFullNumber } from '@/lib/cost';
 import { formatPercent } from '@/lib/number';
 import { formatDuration } from '@/utils/duration';
 
-export { TRACE_GROUP_BY_PARAM, TRACE_GROUP_SORT_PARAM };
+export { TRACE_GROUP_BY_PARAM, TRACE_GROUP_HAVING_PARAM, TRACE_GROUP_SORT_PARAM };
 
 /** Dimensions the Traces table offers in its Group by menu when the server supports them. */
 export const TRACE_GROUP_BY_DIMENSIONS = ['entityName', 'status', 'environment', 'entityType'] as const;
@@ -68,6 +69,21 @@ export const TRACE_GROUP_BY_LIMIT = 50;
 
 export const TRACE_GROUP_NOT_SET_LABEL = '(not set)';
 
+/** The server groups by at most two dimensions per request. */
+export const TRACE_GROUP_BY_MAX_DIMENSIONS = 2;
+
+export const TRACE_GROUP_HAVING_OPERATORS = ['gt', 'gte', 'lt', 'lte'] as const;
+export type TraceGroupHavingOperator = (typeof TRACE_GROUP_HAVING_OPERATORS)[number];
+
+/** A filter on the groups themselves, e.g. error rate above 0.25. `value` is in the measure's own unit. */
+export type TraceGroupHaving = { measure: TraceGroupByMeasure; operatorId: TraceGroupHavingOperator; value: number };
+
+/** The grouped view: what to group by (in order) and which groups to keep. */
+export type TraceGrouping = { groupBy: TraceGroupByDimension[]; having: TraceGroupHaving[] };
+
+const isTraceGroupHavingOperator = (value: string): value is TraceGroupHavingOperator =>
+  (TRACE_GROUP_HAVING_OPERATORS as readonly string[]).includes(value);
+
 const isTraceGroupByMeasure = (value: string): value is TraceGroupByMeasure =>
   (TRACE_GROUP_BY_MEASURES as readonly string[]).includes(value);
 
@@ -88,12 +104,50 @@ export function getOfferedTraceGroupByDimensions({
   return [...TRACE_GROUP_BY_DIMENSIONS, ...extraDimensions].filter(dimension => reported.has(dimension));
 }
 
+/** The dimensions to group by, in order: offered ones only, without repeats, at most two. */
 export function parseTraceGroupBy(
   params: URLSearchParams,
   offered: readonly TraceGroupByDimension[],
-): TraceGroupByDimension | undefined {
-  const value = params.get(TRACE_GROUP_BY_PARAM);
-  return offered.find(dimension => dimension === value);
+): TraceGroupByDimension[] {
+  const requested = (params.get(TRACE_GROUP_BY_PARAM) ?? '').split(',');
+  const dimensions: TraceGroupByDimension[] = [];
+  for (const value of requested) {
+    const dimension = offered.find(candidate => candidate === value);
+    if (dimension && !dimensions.includes(dimension)) dimensions.push(dimension);
+  }
+  return dimensions.slice(0, TRACE_GROUP_BY_MAX_DIMENSIONS);
+}
+
+/** Group filters from `groupHaving=<measure>:<op>:<value>,…`. Malformed entries are dropped. */
+export function parseTraceGroupHaving(params: URLSearchParams): TraceGroupHaving[] {
+  const raw = params.get(TRACE_GROUP_HAVING_PARAM);
+  if (!raw) return [];
+  const having: TraceGroupHaving[] = [];
+  for (const entry of raw.split(',')) {
+    const [measure = '', operatorId = '', text = ''] = entry.split(':');
+    const value = Number(text);
+    if (!isTraceGroupByMeasure(measure) || !isTraceGroupHavingOperator(operatorId)) continue;
+    if (text === '' || !Number.isFinite(value)) continue;
+    if (having.some(existing => existing.measure === measure)) continue;
+    having.push({ measure, operatorId, value });
+  }
+  return having;
+}
+
+const serializeTraceGroupHaving = (having: readonly TraceGroupHaving[]) =>
+  having.map(({ measure, operatorId, value }) => `${measure}:${operatorId}:${value}`).join(',');
+
+/** Write the grouped view into `params`. Group filters only exist while grouped. */
+export function writeTraceGrouping(params: URLSearchParams, { groupBy, having }: TraceGrouping): void {
+  const dimensions = groupBy.slice(0, TRACE_GROUP_BY_MAX_DIMENSIONS);
+  if (dimensions.length === 0) {
+    params.delete(TRACE_GROUP_BY_PARAM);
+    params.delete(TRACE_GROUP_HAVING_PARAM);
+    return;
+  }
+  params.set(TRACE_GROUP_BY_PARAM, dimensions.join(','));
+  if (having.length === 0) params.delete(TRACE_GROUP_HAVING_PARAM);
+  else params.set(TRACE_GROUP_HAVING_PARAM, serializeTraceGroupHaving(having));
 }
 
 export function parseTraceGroupSort(params: URLSearchParams): TraceGroupSort {
@@ -113,14 +167,21 @@ export const serializeTraceGroupSort = ({ measure, direction }: TraceGroupSort) 
 /** The grouped request for the same selection (`timeRange` + `where`) as the trace list. */
 export function buildTraceGroupByRequest(
   query: Pick<QueryTracesInput, 'timeRange' | 'where'>,
-  dimension: TraceGroupByDimension,
+  { groupBy, having }: TraceGrouping,
   sort: TraceGroupSort,
 ): AggregateTracesArgs {
+  const comparisons = having.map(({ measure, operatorId, value }) => ({
+    op: operatorId,
+    left: { path: measure },
+    right: { literal: value },
+  }));
   return {
     timeRange: query.timeRange,
     ...(query.where ? { where: query.where } : {}),
-    groupBy: [dimension],
+    groupBy: groupBy.slice(0, TRACE_GROUP_BY_MAX_DIMENSIONS),
     measures: [...TRACE_GROUP_BY_MEASURES],
+    ...(comparisons.length === 1 ? { having: comparisons[0] } : {}),
+    ...(comparisons.length > 1 ? { having: { op: 'and' as const, args: comparisons } } : {}),
     orderBy: { field: sort.measure, direction: sort.direction },
     limit: TRACE_GROUP_BY_LIMIT,
   };
@@ -128,13 +189,14 @@ export function buildTraceGroupByRequest(
 
 export type TraceGroupRow = AggregateTracesResponse['rows'][number];
 
-export const getTraceGroupValue = (row: TraceGroupRow, dimension: TraceGroupByDimension): string | null =>
-  row.dimensions?.[dimension] ?? null;
+/** The group's value for a dimension; undefined when the traces don't set it. */
+export const getTraceGroupValue = (row: TraceGroupRow, dimension: TraceGroupByDimension): string | undefined =>
+  row.dimensions?.[dimension] || undefined;
 
 const STATUS_LABELS: Record<string, string> = { success: 'Success', error: 'Error' };
 
-export function formatTraceGroupValue(dimension: TraceGroupByDimension, value: string | null): string {
-  if (value === null || value === '') return TRACE_GROUP_NOT_SET_LABEL;
+export function formatTraceGroupValue(dimension: TraceGroupByDimension, value: string | undefined): string {
+  if (value === undefined) return TRACE_GROUP_NOT_SET_LABEL;
   if (dimension === 'status') return STATUS_LABELS[value] ?? value;
   if (dimension === 'entityType') {
     return ROOT_ENTITY_TYPE_OPTIONS.find(option => option.entityType === value)?.label ?? value;
@@ -142,54 +204,69 @@ export function formatTraceGroupValue(dimension: TraceGroupByDimension, value: s
   return value;
 }
 
-export type TraceGroupDrillDown =
-  | { kind: 'filter'; param: string; value: string; operatorId: TraceFilterOperatorId }
-  | { kind: 'project'; projectId: string };
+export type TraceGroupFilter = { param: string; value: string; operatorId: TraceFilterOperatorId };
 
-/** How clicking a group narrows the trace list, or undefined when the list's filters can't express the group. */
-export function getTraceGroupDrillDown(
+type TraceDimensionDrillDown = { kind: 'filter'; filter: TraceGroupFilter } | { kind: 'project'; projectId: string };
+
+/** How one dimension's value narrows the trace list, or undefined when the list's filters can't express it. */
+function getTraceDimensionDrillDown(
   dimension: TraceGroupByDimension,
-  value: string | null,
-): TraceGroupDrillDown | undefined {
-  const isSet = value !== null && value !== '';
+  value: string | undefined,
+): TraceDimensionDrillDown | undefined {
+  const isSet = value !== undefined;
+  const filter = (param: string, filterValue: string, operatorId: TraceFilterOperatorId = 'is') =>
+    ({ kind: 'filter', filter: { param, value: filterValue, operatorId } }) as const;
   switch (dimension) {
     case 'entityName':
-      return isSet
-        ? { kind: 'filter', param: TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.entityName, value, operatorId: 'is' }
-        : undefined;
+      return isSet ? filter(TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.entityName, value) : undefined;
     case 'environment':
       return isSet
-        ? { kind: 'filter', param: TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.environment, value, operatorId: 'is' }
-        : {
-            kind: 'filter',
-            param: TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.environment,
-            value: '',
-            operatorId: 'notExists',
-          };
+        ? filter(TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.environment, value)
+        : filter(TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.environment, '', 'notExists');
     case 'status':
-      return value === 'success' || value === 'error'
-        ? { kind: 'filter', param: TRACE_STATUS_PARAM, value, operatorId: 'is' }
-        : undefined;
+      return value === 'success' || value === 'error' ? filter(TRACE_STATUS_PARAM, value) : undefined;
     case 'entityType':
       return isSet && ROOT_ENTITY_TYPE_OPTIONS.some(option => option.entityType === value)
-        ? { kind: 'filter', param: TRACE_ROOT_ENTITY_TYPE_PARAM, value, operatorId: 'is' }
+        ? filter(TRACE_ROOT_ENTITY_TYPE_PARAM, value)
         : undefined;
     case 'projectId':
       return isSet ? { kind: 'project', projectId: value } : undefined;
   }
 }
 
-/** Apply a filter drill-down: replace that field's filter with the group's value and leave the grouped view. */
+/**
+ * How clicking a group narrows the trace list: one filter per grouped dimension, plus the project to open when
+ * grouped by project. Undefined when any of the group's values can't be expressed as a filter.
+ */
+export type TraceGroupDrillDown = { filters: TraceGroupFilter[]; projectId?: string };
+
+export function getTraceGroupDrillDown(
+  groupBy: readonly TraceGroupByDimension[],
+  row: TraceGroupRow,
+): TraceGroupDrillDown | undefined {
+  const drillDown: TraceGroupDrillDown = { filters: [] };
+  for (const dimension of groupBy) {
+    const step = getTraceDimensionDrillDown(dimension, getTraceGroupValue(row, dimension));
+    if (!step) return undefined;
+    if (step.kind === 'project') drillDown.projectId = step.projectId;
+    else drillDown.filters.push(step.filter);
+  }
+  return drillDown;
+}
+
+/** Apply a drill-down's filters: replace those fields' filters with the group's values and leave the grouped view. */
 export function applyTraceGroupDrillDown(
   params: URLSearchParams,
-  drillDown: Extract<TraceGroupDrillDown, { kind: 'filter' }>,
+  filters: readonly TraceGroupFilter[],
 ): URLSearchParams {
   const next = new URLSearchParams(params);
-  next.delete(TRACE_GROUP_BY_PARAM);
-  next.set(drillDown.param, drillDown.value);
-  const operatorParam = traceFilterOperatorParam(drillDown.param);
-  if (drillDown.operatorId === 'is') next.delete(operatorParam);
-  else next.set(operatorParam, drillDown.operatorId);
+  writeTraceGrouping(next, { groupBy: [], having: [] });
+  for (const filter of filters) {
+    next.set(filter.param, filter.value);
+    const operatorParam = traceFilterOperatorParam(filter.param);
+    if (filter.operatorId === 'is') next.delete(operatorParam);
+    else next.set(operatorParam, filter.operatorId);
+  }
   return next;
 }
 
