@@ -466,18 +466,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "nvidia/nvidia/nemotron-3-super-120b-a12b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 262144,
-    "inputCost": 0.2,
-    "outputCost": 0.8
-  },
-  {
     "model": "nvidia/nvidia/nemotron-3-ultra-550b-a55b",
     "imageInput": false,
     "audioInput": false,
@@ -510,6 +498,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "nvidia/nvidia/nemotron-3.5-super-vl-120b-a12b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 8192,
     "inputCost": null,
     "outputCost": null
   },

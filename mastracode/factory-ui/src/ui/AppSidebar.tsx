@@ -1,16 +1,13 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
-import { Settings } from 'lucide-react';
-import { useLocation, useNavigate, useParams } from 'react-router';
+import { useLocation } from 'react-router';
 
-import { SidebarAccountLink } from './domains/auth/components/SidebarAccountLink';
+import { SidebarUserMenu } from './domains/auth/components/SidebarUserMenu';
 import { FactorySection } from './domains/factory/components/FactorySection';
 import { SidebarAttention } from './domains/factory/components/SidebarAttention';
 import { SidebarGlobalSearchButton } from './domains/search/components/SidebarGlobalSearchButton';
 import { SettingsNavigation } from './domains/settings/components/SettingsNavigation';
-import { useCloseSettings } from './domains/settings/hooks/useCloseSettings';
-import { settingsSectionPath } from './domains/settings/settingsSections';
 import { FactorySwitcher } from './domains/workspaces/components/FactorySwitcher';
 import { SessionsSection } from './domains/workspaces/components/SessionsSection';
 
@@ -83,53 +80,11 @@ export function AppSidebar() {
         )}
       </Sidebar.Nav>
       <Sidebar.Footer aria-label="Attention, account, and settings">
-        <AppSidebarFooter />
+        <Sidebar.NavList>
+          <SidebarAttention />
+          <SidebarUserMenu />
+        </Sidebar.NavList>
       </Sidebar.Footer>
     </Sidebar>
-  );
-}
-
-function AppSidebarFooter() {
-  const { factoryId } = useParams<{ factoryId: string }>();
-  const settingsOpen = useSettingsOpen();
-  const closeSettings = useCloseSettings();
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  const toggleSettings = () => {
-    if (settingsOpen) {
-      closeSettings();
-      return;
-    }
-    if (factoryId) {
-      void navigate(settingsSectionPath(factoryId, 'preferences'), { state: { from: location } });
-    }
-  };
-
-  return (
-    <Sidebar.NavList>
-      <SidebarAttention />
-      <SidebarAccountLink />
-      <Sidebar.NavLink
-        asChild
-        link={{
-          name: 'Settings',
-          url: '#',
-          icon: <Settings />,
-        }}
-        isActive={settingsOpen}
-      >
-        <button
-          id="settings-trigger"
-          type="button"
-          onClick={toggleSettings}
-          aria-label="Settings"
-          aria-current={settingsOpen ? 'page' : undefined}
-        >
-          <Settings />
-          <Sidebar.NavLabel>Settings</Sidebar.NavLabel>
-        </button>
-      </Sidebar.NavLink>
-    </Sidebar.NavList>
   );
 }

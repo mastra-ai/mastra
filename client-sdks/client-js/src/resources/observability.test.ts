@@ -264,22 +264,16 @@ describe('Observability Methods', () => {
     it('should fetch traces with date range filter using string dates', async () => {
       mockSuccessfulResponse();
 
-      const startDate = new Date('2024-01-01T00:00:00Z');
-      const endDate = new Date('2024-01-31T23:59:59Z');
+      const start = '2024-01-01T00:00:00Z';
+      const end = '2024-01-31T23:59:59Z';
 
       await client.getTraces({
         pagination: {
-          dateRange: {
-            start: startDate,
-            end: endDate,
-          },
+          dateRange: { start, end },
         },
-      });
+      } as unknown as Parameters<typeof client.getTraces>[0]);
 
-      const expectedDateRange = JSON.stringify({
-        start: startDate.toISOString(),
-        end: endDate.toISOString(),
-      });
+      const expectedDateRange = JSON.stringify({ start, end });
 
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/observability/traces?dateRange=${encodeURIComponent(expectedDateRange)}`,
