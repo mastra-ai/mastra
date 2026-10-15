@@ -1,5 +1,55 @@
 # mastra
 
+## 1.34.2-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`7e4b680`](https://github.com/mastra-ai/mastra/commit/7e4b68035c3e62a4fcf981afce9b02ecf65ddcf5), [`9cf0fe4`](https://github.com/mastra-ai/mastra/commit/9cf0fe4731d6186be20c890dba27ba3a2c134f5e)]:
+  - @mastra/core@1.78.0-alpha.7
+  - @mastra/deployer@1.78.0-alpha.7
+
+## 1.34.2-alpha.6
+
+### Patch Changes
+
+- You can now attach images when starting a new session in Factory. Paste, drop or pick images on the "What do you want to work on?" screen and they are sent with your first prompt once the session is created. You can also start a session with only an image. Before, the composer showed "Images can be attached once the session is ready." and you had to send a prompt first. If the session can't be created or the first message fails to send, your text and images stay in the composer so you can retry. ([#27101](https://github.com/mastra-ai/mastra/pull/27101))
+
+- Updated Factory boards to open as an issue list grouped by workflow status, with collapsible groups. Saved Kanban views keep their layout. Creating an issue or following an issue link reveals its group. ([#27068](https://github.com/mastra-ai/mastra/pull/27068))
+
+- The Factory sidebar footer now has one user menu instead of separate account and Settings links. It shows your profile picture, name and email, and opens My account, Preferences, Your models, Your memory, Connections, Settings, a Theme choice and Log out. Without sign-in, it opens the same settings without My account or Log out. ([#27097](https://github.com/mastra-ai/mastra/pull/27097))
+
+  - Theme opens System, Light and Dark as a submenu you can reach with the arrow keys.
+  - Back to app returns to the page where you opened settings, including its filters.
+
+- Added the model name under each finished reply in Factory chats, so you can see which model wrote it, including after the session switches models. The composer's model picker now names models the same way, so dated ids such as `claude-sonnet-4-5-20250929` read as "Claude Sonnet 4.5". ([#27001](https://github.com/mastra-ai/mastra/pull/27001))
+
+- Improved Factory onboarding by placing Continue and Skip for now outside the integrations list, showing connected integrations with muted Connected labels, and keeping the list scrollable on short mobile screens. Simplified mobile workflow previews while preserving their animated transitions. ([#27059](https://github.com/mastra-ai/mastra/pull/27059))
+
+- The buttons that open the experiment dialog in Studio now read "New experiment" with a plus icon instead of "Run Experiment" with a play icon, on the Experiments page, a dataset page, a scorer page and the empty states. The dialog still runs the experiment when you submit it. ([#27115](https://github.com/mastra-ai/mastra/pull/27115))
+
+- Fixed the Factory chat model picker staying locked when its model list fails to load. It now shows that the model list is unavailable. ([#27107](https://github.com/mastra-ai/mastra/pull/27107))
+
+- Added `POST /agents/:agentId/queue-signal`, which queues a typed signal to run after the active thread run completes, or starts a run right away when the thread is idle. The body takes the same `signal` shape as `POST /agents/:agentId/signals`. ([#27081](https://github.com/mastra-ai/mastra/pull/27081))
+
+  ```bash
+  curl -X POST http://localhost:4111/api/agents/support-agent/queue-signal \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "resourceId": "user-123",
+      "threadId": "thread-123",
+      "signal": {
+        "type": "reactive",
+        "tagName": "skill",
+        "attributes": { "name": "triage" },
+        "contents": "Triage the new issue."
+      }
+    }'
+  ```
+
+- Updated dependencies [[`6f50db8`](https://github.com/mastra-ai/mastra/commit/6f50db8a3e0a673c6e094229e3d18e2b8dbb99f7), [`3ddf32d`](https://github.com/mastra-ai/mastra/commit/3ddf32da0e6eaffd1e5da33105bf245b6e56a117), [`032a92d`](https://github.com/mastra-ai/mastra/commit/032a92d661696b3620ce45f4a0b1de60f0a6c068), [`1c9cb41`](https://github.com/mastra-ai/mastra/commit/1c9cb4151c3addfdf689ee1dd9d3a013c7342e25)]:
+  - @mastra/core@1.78.0-alpha.6
+  - @mastra/deployer@1.78.0-alpha.6
+
 ## 1.34.2-alpha.5
 
 ### Patch Changes

@@ -22,9 +22,12 @@
  * `iter-throws` throws from `onIterationComplete` and has no throwing mapper,
  * `mapper-throws` throws from `toModelOutput` and installs no hook.
  *
- * Plain's values are pinned literally, read from the observation the helper
- * returns. The two throwing legs are the only ones driven directly: a rejected
- * run leaves the helper nothing to record.
+ * The `iter-feedback` leg carries no declarations: plain resolves the previous
+ * iteration's text exactly once (COR-1416) and the wrapped engines report the
+ * continuation flag for the iteration that asked for it, so all three engines
+ * agree on the whole snapshot. Plain's values are pinned literally, read from
+ * the observation the helper returns. The two throwing legs are the only ones
+ * driven directly: a rejected run leaves the helper nothing to record.
  */
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -320,7 +323,7 @@ describe('T18 default loop contracts (plain, durable, evented)', () => {
       ]);
     }
 
-    // Plain's resolved full output matches the text emitted by the stream after feedback continuation.
+    // Plain's resolved full output carries the response exactly once, matching the stream.
     const plainTurn = results.plain!.turns.at(-1)!;
     expect(hookCalls.get('plain')).toEqual([
       { iteration: 1, isFinal: true, text: 'first' },

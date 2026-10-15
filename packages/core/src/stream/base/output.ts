@@ -249,6 +249,98 @@ function resolveOutputTextSkippingCompletionChecks(messageList: MessageList): st
   return lastConverted ? coreContentToString(lastConverted.content) : undefined;
 }
 
+type StepMessagePart = MastraDBMessage['content']['parts'][number];
+
+function resolveProcessedStepText({
+  processedStepMessage,
+  processedStepParts,
+  originalMessageId,
+  originalIterationPartOffset,
+  originalPartCount,
+  originalParts,
+  originalStepText,
+  outputText,
+}: {
+  processedStepMessage: MastraDBMessage | undefined;
+  processedStepParts: StepMessagePart[] | undefined;
+  originalMessageId: string | undefined;
+  originalIterationPartOffset: number | undefined;
+  originalPartCount: number | undefined;
+  originalParts: StepMessagePart[] | undefined;
+  originalStepText: string | undefined;
+  outputText: string | undefined;
+}): string {
+  if (!processedStepMessage || !processedStepParts) return outputText ?? '';
+
+  const textWithin = (parts: StepMessagePart[]) => parts.map(part => (part.type === 'text' ? part.text : '')).join('');
+  const boundaryIndex = processedStepParts.findLastIndex(part => part.type === 'step-start');
+  if (boundaryIndex !== -1) return textWithin(processedStepParts.slice(boundaryIndex + 1));
+
+  if (processedStepMessage.id === originalMessageId && originalParts) {
+    const sliceFrom = (index: number) => textWithin(processedStepParts.slice(index));
+    const offset = originalIterationPartOffset;
+    const textOffset = findIterationOffsetInParts(processedStepParts, originalStepText);
+    if (textOffset !== undefined) return sliceFrom(textOffset);
+
+    if (
+      offset !== undefined &&
+      offset > 0 &&
+      processedStepParts.length >= offset &&
+      originalParts.slice(0, offset).every((part, index) => partMatches(part, processedStepParts[index]))
+    ) {
+      return sliceFrom(offset);
+    }
+
+    if (
+      offset !== undefined &&
+      originalPartCount !== undefined &&
+      processedStepParts.length === originalPartCount &&
+      originalParts.slice(0, offset).every((part, index) => part?.type === processedStepParts[index]?.type)
+    ) {
+      return sliceFrom(offset);
+    }
+
+    let common = 0;
+    while (
+      common < originalParts.length &&
+      common < processedStepParts.length &&
+      partMatches(originalParts[common], processedStepParts[common])
+    ) {
+      common++;
+    }
+    if (common > 0) return sliceFrom(common);
+
+    return textWithin(processedStepParts);
+  }
+
+  const offset = findIterationOffsetInParts(processedStepParts, originalStepText);
+  return offset !== undefined ? textWithin(processedStepParts.slice(offset)) : textWithin(processedStepParts);
+}
+
+function partMatches(a: StepMessagePart | undefined, b: StepMessagePart | undefined): boolean {
+  if (!a || !b || a.type !== b.type) return false;
+  if (a.type === 'text') return a.text === (b as typeof a).text;
+  if (a.type === 'reasoning') return a.reasoning === (b as typeof a).reasoning;
+  if (a.type === 'tool-invocation') {
+    return a.toolInvocation?.toolCallId === (b as typeof a).toolInvocation?.toolCallId;
+  }
+  if (a.type === 'step-start') return Number(a.createdAt) === Number((b as typeof a).createdAt);
+  return true;
+}
+
+function findIterationOffsetInParts(parts: StepMessagePart[], stepText: string | undefined): number | undefined {
+  if (!stepText) return undefined;
+
+  let suffixText = '';
+  for (let index = parts.length - 1; index >= 0; index--) {
+    const part = parts[index];
+    if (part?.type === 'text') suffixText = part.text + suffixText;
+    if (suffixText === stepText) return index;
+    if (!stepText.endsWith(suffixText)) return undefined;
+  }
+  return undefined;
+}
+
 function findIterationPartOffset(
   messageList: MessageList,
   message: MastraDBMessage,
@@ -1432,7 +1524,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
                   const outputTextBeforeProcessing = resolveOutputTextSkippingCompletionChecks(self.messageList);
                   const stepMessage = resolveOutputMessageSkippingCompletionChecks(self.messageList);
-                  const stepMessageParts = stepMessage?.content?.parts;
                   const iterationPartOffset = stepMessage
                     ? findIterationPartOffset(self.messageList, stepMessage, lastStepText)
                     : undefined;
@@ -1447,6 +1538,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                           .find(message => message.id === separatedIteration.earlierMessageId),
                         self.#bufferedSteps.slice(0, -1),
                       )
+                    : undefined;
+                  const processorStepMessageId = separatedIteration?.currentMessageId ?? stepMessage?.id;
+                  const processorStepMessage = processorStepMessageId
+                    ? self.messageList.get.response.db().find(message => message.id === processorStepMessageId)
+                    : undefined;
+                  const processorStepMessageParts = processorStepMessage?.content?.parts;
+                  const originalProcessorStepMessageParts = processorStepMessageParts
+                    ? [...processorStepMessageParts]
                     : undefined;
 
                   let outputText: string | undefined;
@@ -1464,10 +1563,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     );
 
                     const responseMessages = self.messageList.get.response.db();
-                    const processedStepMessageId = separatedIteration?.currentMessageId ?? stepMessage?.id;
-                    const processedStepMessage = processedStepMessageId
-                      ? responseMessages.find(message => message.id === processedStepMessageId)
+                    const resolvedProcessedStepMessage = resolveOutputMessageSkippingCompletionChecks(self.messageList);
+                    const idMatchedProcessedStepMessage = processorStepMessageId
+                      ? responseMessages.find(message => message.id === processorStepMessageId)
                       : undefined;
+                    const processedStepMessage =
+                      resolvedProcessedStepMessage?.id === separatedIteration?.earlierMessageId
+                        ? idMatchedProcessedStepMessage
+                        : (resolvedProcessedStepMessage ?? idMatchedProcessedStepMessage);
                     processedEarlierMessage = separatedIteration
                       ? responseMessages.find(message => message.id === separatedIteration.earlierMessageId)
                       : undefined;
@@ -1476,27 +1579,33 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                         ? resolveMessageText(processedEarlierMessage)
                         : ''
                       : undefined;
-                    outputText =
-                      separatedIteration && processedStepMessage
-                        ? `${processedEarlierText}${resolveMessageText(processedStepMessage)}`
-                        : resolveOutputTextSkippingCompletionChecks(self.messageList);
+                    const processedOutputText = resolveOutputTextSkippingCompletionChecks(self.messageList);
                     const processedStepParts = processedStepMessage?.content?.parts;
-                    stepText = separatedIteration
-                      ? processedStepMessage
-                        ? resolveMessageText(processedStepMessage)
-                        : ''
-                      : outputText !== outputTextBeforeProcessing
-                        ? processedStepMessage &&
-                          processedStepParts &&
-                          stepMessageParts &&
-                          processedStepParts.length === stepMessageParts.length &&
-                          iterationPartOffset !== undefined
-                          ? processedStepParts
-                              .slice(iterationPartOffset)
-                              .map(part => (part.type === 'text' ? part.text : ''))
-                              .join('')
-                          : (outputText ?? '')
+                    stepText =
+                      separatedIteration || processedOutputText !== outputTextBeforeProcessing
+                        ? resolveProcessedStepText({
+                            processedStepMessage,
+                            processedStepParts,
+                            originalMessageId: processorStepMessage?.id,
+                            originalIterationPartOffset: separatedIteration ? 0 : iterationPartOffset,
+                            originalPartCount: processorStepMessageParts?.length,
+                            originalParts: originalProcessorStepMessageParts,
+                            originalStepText: lastStepText,
+                            outputText: processedOutputText,
+                          })
                         : undefined;
+                    const stepMessageWasReplaced =
+                      separatedIteration &&
+                      processedStepMessage &&
+                      processedStepMessage.id !== processorStepMessage?.id;
+                    if (stepMessageWasReplaced && resolveMessageText(processedStepMessage) === processedEarlierText) {
+                      stepText = '';
+                    }
+                    outputText = separatedIteration
+                      ? stepMessageWasReplaced
+                        ? processedOutputText
+                        : `${processedEarlierText}${stepText ?? ''}`
+                      : processedOutputText;
 
                     if (processedEarlierText !== undefined) {
                       reconcileBufferedStepTexts(
@@ -1527,7 +1636,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // processor intentionally emptied it. Only fall back to the raw model
                   // text when there is no processed message at all.
                   this.resolvePromises({
-                    text: outputText ?? lastStepText,
+                    text: outputText ?? (stepMessage ? '' : lastStepText),
                     finishReason: self.#finishReason,
                   });
 
