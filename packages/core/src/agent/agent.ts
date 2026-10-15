@@ -7918,6 +7918,8 @@ export class Agent<
     toolCallId,
     resumeData,
     requestContext,
+    toolsets,
+    clientTools,
     runId,
     method,
   }: {
@@ -7925,21 +7927,35 @@ export class Agent<
     toolCallId: string | undefined;
     resumeData: unknown;
     requestContext: RequestContext | undefined;
+    toolsets?: Record<string, Record<string, unknown>>;
+    clientTools?: Record<string, unknown>;
     runId: string;
     method: string;
   }): Promise<void> {
-    const suspended = this.#getSuspendedToolCalls(snapshot).filter(call => !call.requiresApproval);
+    // A run pinned to a stored version resolves that version's tools later; the current
+    // agent's schema may differ, so leave validation to the tool-call step.
+    if (this.#getSnapshotAgentVersionId(snapshot)) return;
+
+    // Without a toolCallId the target is only certain when exactly one call is suspended.
+    const suspended = this.#getSuspendedToolCalls(snapshot);
     const target =
       toolCallId !== undefined
         ? suspended.find(call => call.toolCallId === toolCallId)
         : suspended.length === 1
           ? suspended[0]
           : undefined;
-    if (!target?.toolName) return;
+    if (!target?.toolName || target.requiresApproval) return;
 
-    const tools = (await this.listTools({ requestContext, resolveWebSearch: false })) as Record<string, any>;
+    const assigned = (await this.listTools({ requestContext, resolveWebSearch: false })) as Record<string, any>;
+    const tools: Record<string, any> = {
+      ...assigned,
+      ...Object.assign({}, ...Object.values(toolsets ?? {})),
+      ...clientTools,
+    };
     const tool = tools[target.toolName] ?? Object.values(tools).find(t => t?.id === target.toolName);
-    const validation = validateToolInput(tool?.resumeSchema, resumeData, target.toolName);
+    // Tools resolved elsewhere (workspace, processors) keep the tool-call step's validation.
+    if (!tool?.resumeSchema) return;
+    const validation = validateToolInput(tool.resumeSchema, resumeData, target.toolName);
     if (!validation.error) return;
 
     throw new MastraError({
@@ -10528,6 +10544,8 @@ export class Agent<
       toolCallId: streamOptions?.toolCallId,
       resumeData,
       requestContext: mergedStreamOptions.requestContext,
+      toolsets: mergedStreamOptions.toolsets,
+      clientTools: mergedStreamOptions.clientTools,
       runId,
       method: 'resumeStream',
     });
@@ -10732,6 +10750,8 @@ export class Agent<
       toolCallId: options?.toolCallId,
       resumeData,
       requestContext: mergedOptions.requestContext,
+      toolsets: mergedOptions.toolsets,
+      clientTools: mergedOptions.clientTools,
       runId,
       method: 'resumeGenerate',
     });

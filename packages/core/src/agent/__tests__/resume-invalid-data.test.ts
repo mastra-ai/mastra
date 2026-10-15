@@ -36,8 +36,8 @@ function createModel() {
   });
 }
 
-function setup() {
-  const ask = createTool({
+function createAsk() {
+  return createTool({
     id: 'ask',
     description: 'Ask a person',
     inputSchema: z.object({}),
@@ -47,7 +47,10 @@ function setup() {
       return { answer: (agent.resumeData as { answer: string }).answer };
     },
   });
-  const agent = new Agent({ id: 'asker', name: 'asker', instructions: 'ask', model: createModel(), tools: { ask } });
+}
+
+function setup(tools: Record<string, any> = { ask: createAsk() }) {
+  const agent = new Agent({ id: 'asker', name: 'asker', instructions: 'ask', model: createModel(), tools });
   new Mastra({ agents: { asker: agent }, storage: new InMemoryStore(), logger: false });
   return agent;
 }
@@ -71,4 +74,17 @@ describe('resume with data that fails the tool resumeSchema', () => {
       expect(resumed.text).toBe('done');
     });
   }
+
+  it('validates a tool passed through toolsets', async () => {
+    const agent = setup({});
+    const toolsets = { extra: { ask: createAsk() } };
+    const first = await (await agent.stream('go', { toolsets })).getFullOutput();
+    expect(first.finishReason).toBe('suspended');
+    const runId = first.runId!;
+
+    await expect(agent.resumeGenerate({ nope: 1 }, { runId, toolsets })).rejects.toMatchObject({
+      id: 'AGENT_RESUME_INVALID_DATA',
+    });
+    expect((await agent.listSuspendedRuns()).total).toBe(1);
+  });
 });
