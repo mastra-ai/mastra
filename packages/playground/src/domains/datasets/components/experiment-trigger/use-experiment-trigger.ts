@@ -183,7 +183,8 @@ export function useExperimentTrigger(
 
   const { triggerExperiment } = useDatasetMutations();
   const isRunning = triggerExperiment.isPending;
-  const canRun = Boolean(datasetId && target) && !isRunning;
+  // Wait for the targets to load, so a rerun is named after the display name, not the raw id.
+  const canRun = Boolean(datasetId && target) && !targetsLoading && !isRunning;
 
   const resolveRequestContext = () => {
     if (hasRequestContextSchema) {
