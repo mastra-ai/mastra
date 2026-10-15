@@ -2159,7 +2159,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // per-chunk processor pass; the deferred-error branch below runs
             // processors on the error once recovery has been ruled out.
             deferErrorChunks: true,
-            tracingContext,
+            // Stream processors run per step, so their spans belong under the step span.
+            tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
             processorStates,
             requestContext,
             abortSignal: options?.abortSignal,
