@@ -83,6 +83,7 @@ import type {
   InferWorkflowRequestContext,
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { resolveLegacyAgent, resolveRegisteredAgent } from '../entry-executors';
 import type { ClassifierStepOutput } from '../entry-executors';
 import { createStepFromClassifier } from '../step-factories';
 import type { ClassifierStepOptions } from '../step-factories';
@@ -576,13 +577,14 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
     }) => {
       const observabilityContext = resolveObservabilityContext(obsFields);
       const logger = mastra?.getLogger();
+      const agent = resolveRegisteredAgent(params, mastra);
       const toolData = {
         name: params.name ?? params.id,
         args: inputData,
       } as const;
 
       // Detect model version to choose streaming method
-      const isV2Model = isSupportedLanguageModel(await params.getModel({ requestContext }));
+      const isV2Model = isSupportedLanguageModel(await agent.getModel({ requestContext }));
 
       // Track structured output result
       let structuredResult: any = null;
@@ -602,7 +604,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
 
       try {
         if (isV2Model) {
-          const streamResult = await params.stream((inputData as { prompt: string }).prompt, {
+          const streamResult = await agent.stream((inputData as { prompt: string }).prompt, {
             ...(agentOptions ?? {}),
             ...observabilityContext,
             requestContext,
@@ -631,11 +633,12 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
             resolveText = resolve;
           });
 
-          if (typeof params.streamLegacy !== 'function') {
+          const legacyAgent = resolveLegacyAgent(agent, mastra);
+          if (typeof legacyAgent.streamLegacy !== 'function') {
             throw new Error(`Agent step "${params.id}" uses a legacy v1 model but does not implement streamLegacy().`);
           }
 
-          const legacyResult = await params.streamLegacy((inputData as { prompt: string }).prompt, {
+          const legacyResult = await legacyAgent.streamLegacy((inputData as { prompt: string }).prompt, {
             ...(agentOptions ?? {}),
             ...observabilityContext,
             requestContext,
