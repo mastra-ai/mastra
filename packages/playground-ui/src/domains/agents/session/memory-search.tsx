@@ -33,6 +33,7 @@ export const MemorySearch = ({
   const prevThreadIdRef = useRef<string | undefined>(currentThreadId);
   const lastSearchTimeRef = useRef<number>(0);
   const pendingSearchRef = useRef<string | null>(null);
+  const searchRequestRef = useRef(0);
   const queryRef = useRef(query);
   queryRef.current = query;
 
@@ -43,18 +44,21 @@ export const MemorySearch = ({
         return;
       }
 
+      const requestId = ++searchRequestRef.current;
       setIsSearching(true);
       setError(null);
 
       try {
         const response = await searchMemory(searchQuery);
+        if (requestId !== searchRequestRef.current) return;
         setResults(response.results);
         setIsOpen(prev => prev || response.results.length > 0);
       } catch (err) {
+        if (requestId !== searchRequestRef.current) return;
         setError('Failed to search memory');
         console.error('Memory search error:', err);
       } finally {
-        setIsSearching(false);
+        if (requestId === searchRequestRef.current) setIsSearching(false);
       }
     },
     [searchMemory],

@@ -43,8 +43,11 @@ export function useAgentSettingsState({ agentId, defaultSettings: defaultSetting
   }, [LOCAL_STORAGE_KEY, defaultSettingsProp]);
 
   const setSettings = (settingsValue: AgentSettings) => {
-    setSettingsState(prev => ({ ...prev, ...settingsValue }));
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ ...settingsValue, agentId }));
+    setSettingsState(prev => {
+      const next = { ...prev, ...settingsValue };
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ ...next, agentId }));
+      return next;
+    });
   };
 
   const resetAll = () => {

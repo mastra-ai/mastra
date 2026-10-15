@@ -5,6 +5,7 @@
 Added `AgentSession`, the Studio agent chat with its config panel, as a published export so other apps can render the same agent page.
 
 ```tsx
+import { MastraReactProvider } from '@mastra/react';
 import { AgentSession } from '@mastra/playground-ui/domains/agents/session';
 
 <MastraReactProvider baseUrl={serverUrl}>

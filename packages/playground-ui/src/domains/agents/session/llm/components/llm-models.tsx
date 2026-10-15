@@ -34,7 +34,7 @@ export const LLMModels = ({
   'aria-label': ariaLabel,
 }: LLMModelsProps) => {
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
-  const providers = dataProviders?.providers || [];
+  const providers = useMemo(() => dataProviders?.providers ?? [], [dataProviders]);
 
   // Get all models flattened, then drop any disallowed by admin policy
   const policy = useBuilderModelPolicy();

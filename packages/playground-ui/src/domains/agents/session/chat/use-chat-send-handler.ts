@@ -356,7 +356,7 @@ export const useChatSendHandler = ({
         resetObservationalMemoryStreamState();
         return delivered || mayHaveBeenStored(error);
       } finally {
-        abortControllerRef.current = null;
+        if (abortControllerRef.current === controller) abortControllerRef.current = null;
       }
     },
     [

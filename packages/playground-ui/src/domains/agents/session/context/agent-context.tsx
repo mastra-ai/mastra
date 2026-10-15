@@ -10,7 +10,7 @@ type AgentContextType = {
   resetAll: () => void;
 };
 
-export const AgentSettingsContext = createContext<AgentContextType>({} as AgentContextType);
+export const AgentSettingsContext = createContext<AgentContextType | null>(null);
 
 export interface AgentSettingsProviderProps {
   children: ReactNode;
@@ -38,5 +38,7 @@ export function AgentSettingsProvider({ children, agentId, defaultSettings }: Ag
 }
 
 export const useAgentSettings = () => {
-  return useContext(AgentSettingsContext);
+  const ctx = useContext(AgentSettingsContext);
+  if (!ctx) throw new Error('useAgentSettings must be used within an AgentSettingsProvider');
+  return ctx;
 };

@@ -51,7 +51,7 @@ export function AgentSession({
     <AgentSettingsProvider agentId={agentId} defaultSettings={defaultSettings}>
       <WorkingMemoryProvider agentId={agentId} threadId={threadId} resourceId={resourceId ?? agentId}>
         <ThreadInputProvider>
-          <ObservationalMemoryProvider>
+          <ObservationalMemoryProvider key={threadId}>
             <ActivatedSkillsProvider>
               <div
                 className={cn(

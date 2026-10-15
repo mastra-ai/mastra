@@ -41,7 +41,8 @@ export const AgentMetadataModelList = ({
     reorderModelList({ reorderedModelIds: items.map(item => item.id) });
   };
 
-  const updateModel = (params: UpdateModelInModelListParams) => {
+  const updateModel = async (params: UpdateModelInModelListParams) => {
+    const previous = modelConfigs;
     setModelConfigs(prev =>
       prev.map(modelConfig =>
         modelConfig.id === params.modelConfigId
@@ -58,7 +59,12 @@ export const AgentMetadataModelList = ({
           : modelConfig,
       ),
     );
-    return updateModelInModelList(params);
+    try {
+      return await updateModelInModelList(params);
+    } catch (error) {
+      setModelConfigs(previous);
+      throw error;
+    }
   };
 
   return (
@@ -142,7 +148,9 @@ const AgentMetadataModelListItem = ({
             checked={enabled}
             onCheckedChange={checked => {
               setEnabled(checked);
-              void updateModelInModelList({ modelConfigId: modelConfig.id, enabled: checked });
+              updateModelInModelList({ modelConfigId: modelConfig.id, enabled: checked }).catch(() => {
+                setEnabled(!checked);
+              });
             }}
             className="shrink-0"
           />

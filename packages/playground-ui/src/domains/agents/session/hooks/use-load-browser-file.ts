@@ -5,16 +5,22 @@ export const useLoadBrowserFile = (file?: File) => {
 
   useEffect(() => {
     if (!file) return;
+    let isCanceled = false;
 
     const run = async () => {
       setState(s => ({ ...s, isLoading: true }));
-
-      const text = await file.text();
-
-      setState(s => ({ ...s, isLoading: false, text }));
+      try {
+        const text = await file.text();
+        if (!isCanceled) setState(s => ({ ...s, text }));
+      } finally {
+        if (!isCanceled) setState(s => ({ ...s, isLoading: false }));
+      }
     };
 
-    void run();
+    run().catch(() => {});
+    return () => {
+      isCanceled = true;
+    };
   }, [file]);
 
   return state;

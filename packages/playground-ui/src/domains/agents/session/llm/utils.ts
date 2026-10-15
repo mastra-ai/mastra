@@ -1,4 +1,4 @@
-import { cleanProviderId } from '@/domains/agents/session/llm';
+import { cleanProviderId } from '@/domains/llm';
 
 /**
  * Finds a provider from a list by provider ID, handling both:

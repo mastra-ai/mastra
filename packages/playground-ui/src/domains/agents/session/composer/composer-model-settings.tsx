@@ -92,14 +92,15 @@ const StreamSubscriptionRadio = ({ supported, disabled }: StreamSubscriptionRadi
 };
 
 export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) => {
+  const [requestContext] = useEntityRequestContext('agent', agentId);
   const { data: agent, isLoading } = useAgent({
     agentId: agentId,
-    requestContext: useEntityRequestContext('agent', agentId)[0],
+    requestContext,
     queryOptions: { enabled: Boolean(agentId) },
   });
   const { data: memory, isLoading: isMemoryLoading } = useMemory({
     agentId: agentId,
-    requestContext: useEntityRequestContext('agent', agentId)[0],
+    requestContext,
     queryOptions: { enabled: Boolean(agentId) },
   });
   const { settings, setSettings, resetAll } = useAgentSettings();

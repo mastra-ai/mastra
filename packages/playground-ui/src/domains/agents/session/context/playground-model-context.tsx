@@ -64,7 +64,7 @@ export function usePlaygroundModel() {
   return ctx;
 }
 
-/** Like usePlaygroundModel but returns null outside the provider (e.g. shared session page). */
+/** Like usePlaygroundModel but returns undefined outside the provider (e.g. shared session page). */
 export function usePlaygroundModelOptional() {
   return useContext(PlaygroundModelContext) ?? undefined;
 }

@@ -27,6 +27,7 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
   const providerOptionsStr = JSON.stringify(settings?.modelSettings?.providerOptions ?? {});
 
   useEffect(() => {
+    let isCanceled = false;
     const run = async () => {
       if (!isValidJson(providerOptionsStr)) {
         setError('Invalid JSON');
@@ -34,10 +35,15 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
       }
 
       const formatted = await formatJSON(providerOptionsStr);
+      if (isCanceled) return;
+      setError(null);
       setProviderOptionsValue(formatted);
     };
 
     void run();
+    return () => {
+      isCanceled = true;
+    };
   }, [providerOptionsStr]);
 
   const formatProviderOptions = async () => {

@@ -77,7 +77,8 @@ export function ChatProvider({
   const threadSignalsUnsupportedRef = useRef(false);
   const modelSettings = settings?.modelSettings ?? {};
   const threadSignalsEnabled =
-    (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS !== 'false' &&
+    (typeof window === 'undefined' ||
+      (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS !== 'false') &&
     supportsMemory !== false &&
     !modelSettings.chatWithLegacyStream;
 

@@ -504,8 +504,11 @@ const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript
   const [requestContext] = useEntityRequestContext('agent', agentId ?? '');
   const { start, stop, isListening, transcript } = useSpeechRecognition({ agentId, requestContext });
 
+  const appliedTranscriptRef = useRef<string | undefined>(undefined);
+
   useEffect(() => {
-    if (!transcript) return;
+    if (!transcript || transcript === appliedTranscriptRef.current) return;
+    appliedTranscriptRef.current = transcript;
     startTransition(() => onTranscript(transcript));
   }, [onTranscript, transcript]);
 

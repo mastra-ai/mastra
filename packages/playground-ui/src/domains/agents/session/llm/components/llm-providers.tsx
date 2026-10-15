@@ -38,7 +38,7 @@ export const LLMProviders = ({
   'aria-label': ariaLabel,
 }: LLMProvidersProps) => {
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
-  const allProviders = dataProviders?.providers || [];
+  const allProviders = useMemo(() => dataProviders?.providers ?? [], [dataProviders]);
 
   // Apply admin model policy first (drops disallowed providers entirely),
   // then sort: connected -> popular -> alphabetical

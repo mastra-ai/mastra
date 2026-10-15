@@ -61,19 +61,23 @@ export const AgentChat = ({
 
   // Handle scrolling to message after navigation
   useEffect(() => {
-    if (messageId && data && !isMessagesLoading) {
-      // Small delay to ensure DOM is ready
-      setTimeout(() => {
-        const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
-        if (messageElement) {
-          messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          messageElement.classList.add('bg-muted');
-          setTimeout(() => {
-            messageElement.classList.remove('bg-muted');
-          }, 2000);
-        }
-      }, 100);
-    }
+    if (!messageId || !data || isMessagesLoading) return;
+    let highlightTimer: ReturnType<typeof setTimeout> | undefined;
+    // Small delay to ensure DOM is ready
+    const scrollTimer = setTimeout(() => {
+      const messageElement = document.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
+      if (messageElement) {
+        messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        messageElement.classList.add('bg-muted');
+        highlightTimer = setTimeout(() => {
+          messageElement.classList.remove('bg-muted');
+        }, 2000);
+      }
+    }, 100);
+    return () => {
+      clearTimeout(scrollTimer);
+      clearTimeout(highlightTimer);
+    };
   }, [messageId, data, isMessagesLoading]);
 
   // Stable empty array per thread: stays the same reference across re-renders

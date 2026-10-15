@@ -26,11 +26,12 @@ const ComposerPdfAttachment = ({
     const run = async () => {
       if (!attachment.file) return;
       setState(s => ({ ...s, isLoading: true }));
-      const text = await fileToBase64(attachment.file);
-      if (isCanceled) {
-        return;
+      try {
+        const text = await fileToBase64(attachment.file);
+        if (!isCanceled) setState(s => ({ ...s, isLoading: false, text }));
+      } catch {
+        if (!isCanceled) setState(s => ({ ...s, isLoading: false }));
       }
-      setState(s => ({ ...s, isLoading: false, text }));
     };
     void run();
 
