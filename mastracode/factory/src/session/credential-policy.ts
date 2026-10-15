@@ -20,6 +20,44 @@ interface FactoryModelPolicyDependencies {
   workItems: Pick<WorkItemsStorage, 'findRunBindingByThread'>;
 }
 
+type FactoryModelPolicyFailure =
+  | 'supervisor-project-unavailable'
+  | 'no-session'
+  | 'session-not-visible'
+  | 'session-without-factory'
+  | 'project-unavailable';
+
+/**
+ * Policy refusal carrying the request it refused. Model calls and agent-controller reads surface it as an
+ * opaque handler error, so the message names the resource, thread and caller to make logs actionable.
+ */
+export class FactoryModelPolicyError extends Error {
+  readonly reason: FactoryModelPolicyFailure;
+  readonly details: Readonly<Record<string, string>>;
+
+  constructor(summary: string, reason: FactoryModelPolicyFailure, details: Record<string, string | null | undefined>) {
+    const present = Object.fromEntries(
+      Object.entries(details).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+    );
+    const context = Object.entries({ reason, ...present })
+      .map(([key, value]) => `${key}=${value}`)
+      .join(' ');
+    super(`${summary} [${context}]`);
+    this.name = 'FactoryModelPolicyError';
+    this.reason = reason;
+    this.details = present;
+  }
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function resourceKind(resourceId: string, userId: string | undefined): string {
+  if (resourceId === userId) return 'user';
+  if (resourceId.startsWith('channel:')) return 'channel';
+  if (parseSupervisorResourceId(resourceId)) return 'supervisor';
+  return UUID.test(resourceId) ? 'uuid' : 'other';
+}
+
 /** Resolve billing authority from authenticated identity and durable bindings, never session state. */
 export async function resolveFactoryCredentialTenant(
   requestContext: RequestContext,
@@ -38,10 +76,22 @@ export async function resolveFactoryModelPolicy(
   const controller = requestContext.get('controller') as AgentControllerRequestContext | undefined;
   if (!controller?.resourceId) return { tenant: principal };
 
+  const request = {
+    resourceId: controller.resourceId,
+    resourceKind: resourceKind(controller.resourceId, principal.userId),
+    threadId: controller.threadId,
+    userId: principal.userId,
+  };
   const supervisorProjectId = parseSupervisorResourceId(controller.resourceId);
   if (supervisorProjectId) {
     const project = await deps.projects.getById({ id: supervisorProjectId });
-    if (!project || project.orgId !== principal.orgId) throw new Error('Factory model policy is unavailable.');
+    if (!project || project.orgId !== principal.orgId) {
+      throw new FactoryModelPolicyError('Factory model policy is unavailable.', 'supervisor-project-unavailable', {
+        ...request,
+        projectId: supervisorProjectId,
+        project: project ? 'other-org' : 'missing',
+      });
+    }
     // Supervisor turns are Factory-owned automation, so a hybrid Factory bills them as runs.
     return {
       factoryProjectId: project.id,
@@ -80,18 +130,34 @@ export async function resolveFactoryModelPolicy(
         tenant: { ...principal, credentialScope: effectiveModelScope(factoryProject.modelScope, 'session') },
       };
     }
-    throw new Error('Factory session ownership is unavailable.');
+    throw new FactoryModelPolicyError('Factory session ownership is unavailable.', 'no-session', {
+      ...request,
+      runBinding: binding ? binding.factoryProjectId : 'none',
+      factoryProject: factoryProject ? 'other-org' : undefined,
+    });
   }
   if (
     sourceSession.orgId !== principal.orgId ||
     (sourceSession.visibility === 'private' && sourceSession.userId !== principal.userId)
   ) {
-    throw new Error('Factory session is not available to the current user.');
+    throw new FactoryModelPolicyError('Factory session is not available to the current user.', 'session-not-visible', {
+      ...request,
+      session: sourceSession.orgId !== principal.orgId ? 'other-org' : 'private-to-another-user',
+    });
   }
-  if (!sourceSession.factoryProjectId) throw new Error('Factory session ownership is unavailable.');
+  if (!sourceSession.factoryProjectId) {
+    throw new FactoryModelPolicyError('Factory session ownership is unavailable.', 'session-without-factory', request);
+  }
   const projectId = binding?.factoryProjectId ?? sourceSession.factoryProjectId;
   const project = await deps.projects.getById({ id: projectId });
-  if (!project || project.orgId !== sourceSession.orgId) throw new Error('Factory model policy is unavailable.');
+  if (!project || project.orgId !== sourceSession.orgId) {
+    throw new FactoryModelPolicyError('Factory model policy is unavailable.', 'project-unavailable', {
+      ...request,
+      projectId,
+      projectSource: binding ? 'run-binding' : 'session',
+      project: project ? 'other-org' : 'missing',
+    });
+  }
   // Work-item threads keep their billing scope after revocation; history never restores run authority.
   return {
     factoryProjectId: project.id,

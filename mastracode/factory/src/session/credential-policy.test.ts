@@ -277,6 +277,54 @@ describe('trusted Factory credential policy', () => {
     );
   });
 
+  it('names the refused resource, thread, caller and reason so logs show which surface failed', async () => {
+    const { sourceControl, sourceSession, project, deps, context } = await setup();
+    await expect(resolveFactoryCredentialTenant(context(project.id, 'sender', 'org-2'), deps)).rejects.toMatchObject({
+      name: 'FactoryModelPolicyError',
+      reason: 'no-session',
+      details: {
+        resourceId: project.id,
+        resourceKind: 'uuid',
+        threadId: project.id,
+        userId: 'sender',
+        runBinding: 'none',
+        factoryProject: 'other-org',
+      },
+      message: expect.stringContaining(
+        `Factory session ownership is unavailable. [reason=no-session resourceId=${project.id}`,
+      ),
+    });
+    await expect(resolveFactoryCredentialTenant(context('desk:42'), deps)).rejects.toMatchObject({
+      details: expect.objectContaining({ resourceKind: 'other' }),
+    });
+
+    await expect(
+      resolveFactoryCredentialTenant(context(sourceSession.sessionId, 'sender', 'org-2'), deps),
+    ).rejects.toMatchObject({
+      reason: 'session-not-visible',
+      details: expect.objectContaining({ session: 'other-org' }),
+    });
+    const privateSession = await sourceControl.sessions.create({
+      orgId: ORG,
+      sessionId: 'private-detail-session',
+      projectRepositoryId: sourceSession.projectRepositoryId,
+      userId: OWNER,
+      branch: 'private-detail-test',
+      baseBranch: 'main',
+      visibility: 'private',
+    });
+    await expect(resolveFactoryCredentialTenant(context(privateSession.sessionId), deps)).rejects.toMatchObject({
+      reason: 'session-not-visible',
+      details: expect.objectContaining({ session: 'private-to-another-user' }),
+    });
+
+    await deps.projects.delete({ orgId: ORG, id: project.id });
+    await expect(resolveFactoryCredentialTenant(context(), deps)).rejects.toMatchObject({
+      reason: 'project-unavailable',
+      details: expect.objectContaining({ projectId: project.id, projectSource: 'session', project: 'missing' }),
+    });
+  });
+
   it('rejects ambiguous bindings instead of selecting the repository project policy', async () => {
     const { seed, project, sourceSession, context } = await setup();
     const other = await seed.projects.create({
