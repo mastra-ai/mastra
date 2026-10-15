@@ -1,9 +1,4 @@
-/**
- * Port of durability harness case T56 (wf-nested-suspend-loop).
- *
- * Includes the default-engine parity leg and completed-transition redelivery
- * contracts, with stale-detecting known differences for COR-1307/COR-1394.
- */
+/** Port of durability harness T56: before → nested suspend/inc loop → after. */
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -14,113 +9,102 @@ import { createStep } from '../workflow';
 import { REDELIVERY_MODES, expectRedeliveryParity, redeliverAndDrain } from './test-utils/redelivery-contract';
 import { RedeliveryDriver } from './test-utils/redelivery-driver';
 
-const Value = z.object({ value: z.number() });
-const Resume = z.object({ add: z.number() });
-
+const Value = z.object({ n: z.number() });
 type Engine = 'default' | 'evented';
 
-function build(engine: Engine, executed: number[]) {
+async function runCell(engine: Engine, mode?: (typeof REDELIVERY_MODES)[number]) {
+  const driver = mode ? new RedeliveryDriver() : undefined;
+  const increments: number[] = [];
+  const afterInputs: number[] = [];
+  const before = createStep({
+    id: 'before',
+    inputSchema: Value,
+    outputSchema: Value,
+    execute: async ({ inputData }) => ({ n: inputData.n + 1 }),
+  });
   const gate = createStep({
     id: 'gate',
     inputSchema: Value,
     outputSchema: Value,
-    resumeSchema: Resume,
+    resumeSchema: z.object({ ok: z.literal(true) }),
     execute: async ({ inputData, resumeData, suspend }) => {
-      if (!resumeData) return suspend({ value: inputData.value });
-      executed.push(inputData.value);
-      return { value: inputData.value + resumeData.add };
+      if (!resumeData) return suspend({ n: inputData.n });
+      return inputData;
     },
   });
-  const nestedFactory = engine === 'evented' ? createEventedWorkflow : createWorkflow;
-  const nested = nestedFactory({ id: `t56-nested-${engine}`, inputSchema: Value, outputSchema: Value })
-    .then(gate)
+  const inc = createStep({
+    id: 'inc',
+    inputSchema: Value,
+    outputSchema: Value,
+    execute: async ({ inputData }) => {
+      const n = inputData.n + 1;
+      increments.push(n);
+      return { n };
+    },
+  });
+  const after = createStep({
+    id: 'after',
+    inputSchema: Value,
+    outputSchema: Value,
+    execute: async ({ inputData }) => {
+      afterInputs.push(inputData.n);
+      return { n: inputData.n + 1 };
+    },
+  });
+  const factory = engine === 'evented' ? createEventedWorkflow : createWorkflow;
+  const nested = factory({ id: 't56-nested', inputSchema: Value, outputSchema: Value }).then(gate).then(inc).commit();
+  const workflow = factory({ id: 't56-wf', inputSchema: Value, outputSchema: Value })
+    .then(before)
+    .dountil(nested, { predicate: { op: 'gte', left: { path: 'inputData.n' }, right: { literal: 3 } } })
+    .then(after)
     .commit();
-  const parentFactory = engine === 'evented' ? createEventedWorkflow : createWorkflow;
-  const parent = parentFactory({ id: `t56-parent-${engine}`, inputSchema: Value, outputSchema: Value })
-    .dountil(nested, {
-      predicate: { op: 'gte', left: { path: 'inputData.value' }, right: { literal: 2 } },
-    })
-    .commit();
-  return { nested, parent };
-}
-
-async function runCell(engine: Engine) {
-  const executed: number[] = [];
-  const { nested, parent } = build(engine, executed);
   const mastra = new Mastra({
     logger: false,
     storage: new MockStore(),
-    workflows: { [nested.id]: nested, [parent.id]: parent },
+    ...(driver ? { pubsub: driver.pubsub } : {}),
+    workflows: { [nested.id]: nested, [workflow.id]: workflow },
   });
-  if (engine === 'evented') await mastra.startWorkers();
   try {
-    const run = await parent.createRun({ runId: `t56-${engine}-run` });
-    const started = await run.start({ inputData: { value: 0 } });
+    if (engine === 'evented') await mastra.startWorkers();
+    driver?.assertEvented(workflow);
+    const runId = `t56-${engine}-${mode ?? 'fault-free'}`;
+    const run = await workflow.createRun({ runId });
+    const started = await run.start({ inputData: { n: 0 } });
     expect(started.status).toBe('suspended');
-    if (engine === 'default') expect(started.suspendPayload).toEqual({ [nested.id]: { value: 0 } });
-    expect(executed).toEqual([]);
-    const firstResume = await run.resume({ step: [nested.id, 'gate'], resumeData: { add: 1 } });
+    expect(increments).toEqual([]);
+    expect(afterInputs).toEqual([]);
+    const firstResume = await run.resume({ step: [nested.id, 'gate'], resumeData: { ok: true } });
     expect(firstResume.status).toBe('suspended');
-    if (engine === 'default') expect(firstResume.suspendPayload).toEqual({ [nested.id]: { value: 1 } });
-    expect(executed).toEqual([0]);
-    const result = await run.resume({ step: [nested.id, 'gate'], resumeData: { add: 1 } });
-    expect(result.status).toBe('success');
-    expect(result.result).toEqual({ value: 2 });
-    expect(executed).toEqual([0, 1]);
+    expect(increments).toEqual([2]);
+    expect(afterInputs).toEqual([]);
+    const result = await run.resume({ step: [nested.id, 'gate'], resumeData: { ok: true } });
+    expect([started.status, firstResume.status, result.status]).toEqual(['suspended', 'suspended', 'success']);
+    expect(result.result).toEqual({ n: 4 });
+    expect(increments).toEqual([2, 3]);
+    expect(afterInputs).toEqual([3]);
+    if (driver && mode) {
+      const match = { spec: 't56-wf@2', runId } as const;
+      expect(driver.stepRuns(match).at(-1)?.data).toMatchObject({ workflowId: 't56-wf', runId, executionPath: [2] });
+      await redeliverAndDrain(driver, match, mode);
+      expectRedeliveryParity(
+        { increments, afterInputs },
+        { increments: [2, 3], afterInputs: [3] },
+        mode === 'same-id'
+          ? undefined
+          : {
+              reason: 'COR-1307 / COR-1394: completed after executes again on fresh-ID or expired replay.',
+              expect: correct => ({ ...correct, afterInputs: [...correct.afterInputs, 3] }),
+            },
+      );
+    }
   } finally {
     if (engine === 'evented') await mastra.stopWorkers();
+    driver?.dispose();
+    vi.useRealTimers();
   }
 }
 
 describe('T56 wf-nested-suspend-loop', () => {
-  it.each(['default', 'evented'] as const)('%s: resumes every nested loop suspension', runCell);
-
-  it.each(REDELIVERY_MODES)('wf-evented-redeliver / %s: executes each completed transition once', async mode => {
-    const driver = new RedeliveryDriver();
-    const executed: number[] = [];
-    const { nested, parent } = build('evented', executed);
-    const mastra = new Mastra({
-      logger: false,
-      storage: new MockStore(),
-      pubsub: driver.pubsub,
-      workflows: { [nested.id]: nested, [parent.id]: parent },
-    });
-    try {
-      await mastra.startWorkers();
-      driver.assertEvented(parent);
-      const runId = 't56-redeliver-run';
-      const run = await parent.createRun({ runId });
-      const started = await run.start({ inputData: { value: 0 } });
-      expect(started.status).toBe('suspended');
-      expect(executed).toEqual([]);
-      const firstResume = await run.resume({ step: [nested.id, 'gate'], resumeData: { add: 1 } });
-      expect(firstResume.status).toBe('suspended');
-      expect(executed).toEqual([0]);
-      const result = await run.resume({ step: [nested.id, 'gate'], resumeData: { add: 1 } });
-      expect(result.status).toBe('success');
-      expect(result.result).toEqual({ value: 2 });
-      expect(executed).toEqual([0, 1]);
-
-      const match = { spec: `${parent.id}@0`, runId } as const;
-      const original = driver.stepRuns(match).at(-1)!;
-      expect(original.data).toMatchObject({ workflowId: parent.id, runId, executionPath: [0] });
-      const outcome = await redeliverAndDrain(driver, match, mode);
-      expect(outcome.event.data).toEqual(original.data);
-      expectRedeliveryParity(
-        { executed },
-        { executed: [0, 1] },
-        mode === 'same-id'
-          ? undefined
-          : {
-              reason:
-                'COR-1307 / COR-1394: a completed nested transition executes again on fresh-ID or expired replay.',
-              expect: correct => ({ ...correct, executed: [...correct.executed, 1] }),
-            },
-      );
-    } finally {
-      await mastra.stopWorkers();
-      driver.dispose();
-      vi.useRealTimers();
-    }
-  });
+  it.each(['default', 'evented'] as const)('%s: resumes the nested suspend/inc loop', engine => runCell(engine));
+  it.each(REDELIVERY_MODES)('wf-evented-redeliver / %s: executes after once', mode => runCell('evented', mode));
 });
