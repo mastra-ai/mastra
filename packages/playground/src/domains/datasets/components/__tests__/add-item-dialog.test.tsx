@@ -119,10 +119,14 @@ const useScorerHandler = () => {
 const selectScorer = async (name: string) => {
   const selector = await screen.findByRole('combobox');
   await waitFor(() => expect(selector.hasAttribute('disabled')).toBe(false));
-  fireEvent.click(selector);
+  // The scorer field searches in itself and opens on mousedown (a real press), which fireEvent.click doesn't send.
+  fireEvent.mouseDown(selector);
   const option = await screen.findByRole('option', { name: new RegExp(name, 'i') });
   fireEvent.pointerDown(option, { pointerType: 'mouse' });
   fireEvent.click(option, { detail: 1 });
+  // A multi-select keeps its list open for more picks; Escape closes it like a keyboard user would.
+  fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('option', { name: new RegExp(name, 'i') })).toBeNull());
 };
 
 describe('AddItemDialog', () => {
