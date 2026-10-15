@@ -7,6 +7,7 @@ import { MetricsLineChartLegend, MetricsLineChartTooltip } from '@/ds/components
 import { CHART_GRID_PROPS, useChartSize } from '@/ds/primitives/chart-axes';
 import type { ChartXLabels } from '@/ds/primitives/chart-axes';
 import { singleBarBox, stackedSegmentBox } from '@/ds/primitives/chart-column-layout';
+import type { SegmentBox } from '@/ds/primitives/chart-column-layout';
 import { CHART_TICK, Y_AXIS_WIDTH, compactNumber, timeXAxis, valueYAxis } from '@/ds/primitives/chart-frame';
 import type { ChartHeight } from '@/ds/primitives/chart-frame';
 import { CHART_AXIS_FONT_SIZE, CHART_MARGIN } from '@/ds/primitives/chart-layout';
@@ -262,11 +263,17 @@ function BarPlot({
               isAnimationActive={false}
               shape={shapes[i]}
             >
-              {columnLabelKey && i === series.length - 1 && (
+              {columnLabelKey && (
                 <LabelList
                   dataKey={columnLabelKey}
                   content={(props: LabelProps) => (
-                    <ColumnLabel {...props} color={topSegmentColor(data[Number(props.index)], series)} />
+                    <ColumnLabel
+                      {...props}
+                      row={data[Number(props.index)]}
+                      keys={series.map(({ dataKey }) => dataKey)}
+                      self={i}
+                      color={s.color}
+                    />
                   )}
                 />
               )}
@@ -302,19 +309,28 @@ function BarPlot({
   );
 }
 
-function topSegmentColor(
-  row: MetricsStackedBarChartProps['data'][number] | undefined,
-  series: MetricsLineChartSeries[],
-) {
-  return series.findLast(s => Number(row?.[s.dataKey]) > 0)?.color ?? CHART_TICK.fill;
+type ColumnLabelProps = LabelProps & {
+  row: MetricsStackedBarChartProps['data'][number] | undefined;
+  keys: string[];
+  self: number;
+  color: string;
+};
+
+function paintedTop(values: number[], self: number, box: SegmentBox) {
+  if (values.length > 1) return stackedSegmentBox(values, self, box, { gap: SEGMENT_GAP })?.y;
+  return singleBarBox(values[self] ?? 0, box)?.y;
 }
 
-function ColumnLabel({ x, y, width, value, color }: LabelProps & { color: string }) {
+function ColumnLabel({ x, y, width, height, value, row, keys, self, color }: ColumnLabelProps) {
   if (value === undefined || value === null || value === '') return null;
+  const values = keys.map(key => Number(row?.[key]) || 0);
+  const topmost = values.findLastIndex(v => v > 0);
+  if (self !== (topmost === -1 ? keys.length - 1 : topmost)) return null;
+  const top = paintedTop(values, self, { y: Number(y), height: Math.max(Number(height), 0) }) ?? Number(y);
   return (
     <text
       x={Number(x) + Number(width) / 2}
-      y={Number(y) - 6}
+      y={top - 6}
       textAnchor="middle"
       fontSize={CHART_AXIS_FONT_SIZE}
       fill={color}

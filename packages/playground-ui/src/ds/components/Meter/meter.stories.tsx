@@ -4,6 +4,7 @@ import { useId } from 'react';
 import { Meter } from './meter';
 import { Card, CardContent } from '@/ds/components/Card';
 import { Txt } from '@/ds/components/Txt';
+import { formatFullNumber } from '@/utils/cost';
 
 const meta = {
   title: 'DataDisplay/Meter',
@@ -117,11 +118,11 @@ const ALLOWANCES: Allowance[] = [
 function AllowanceReading({ name, value, max, unit }: Allowance) {
   const labelId = useId();
   const unitSuffix = unit ? ` ${unit}` : '';
-  const allowance = `of ${max.toLocaleString()}${unitSuffix}`;
-  const reading = `${value.toLocaleString()} ${allowance}`;
+  const allowance = `of ${formatFullNumber(max)}${unitSuffix}`;
+  const reading = `${formatFullNumber(value)} ${allowance}`;
   const over = value - max;
   const valueClassName = over > 0 ? 'text-destructive-indicator' : 'text-foreground';
-  const valueText = over > 0 ? `${reading}, ${over.toLocaleString()} over` : reading;
+  const valueText = over > 0 ? `${reading}, ${formatFullNumber(over)} over` : reading;
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between gap-3">
@@ -129,7 +130,7 @@ function AllowanceReading({ name, value, max, unit }: Allowance) {
           {name}
         </Txt>
         <Txt as="span" variant="body-sm" tone="muted" className="tabular-nums">
-          <span className={valueClassName}>{value.toLocaleString()}</span> {allowance}
+          <span className={valueClassName}>{formatFullNumber(value)}</span> {allowance}
         </Txt>
       </div>
       <Meter value={value} max={max} aria-labelledby={labelId} aria-valuetext={valueText} />
