@@ -188,6 +188,50 @@ describe('TemporalRun', () => {
     expect(signal).not.toHaveBeenCalled();
   });
 
+  it('throws when a started workflow status cannot be observed', async () => {
+    const queryError = new Error('Temporal service unavailable');
+    const result = vi.fn(() => new Promise(() => {}));
+    const query = vi.fn().mockRejectedValue(queryError);
+    const start = vi.fn().mockResolvedValue({ result, query });
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: z.object({ value: z.number() }), outputSchema: z.unknown() },
+      { client: { workflow: { start } } as unknown as Client, taskQueue: 'test-queue' },
+    );
+    const run = await workflow.createRun({ runId: 'test-run' });
+
+    await expect(run.start({ inputData: { value: 1 } })).rejects.toMatchObject({
+      name: 'TemporalWorkflowStatusUnknownError',
+      message: 'Unable to determine Temporal workflow status for run "test-run".',
+      cause: queryError,
+    });
+  });
+
+  it('throws after signaling when a resumed workflow status cannot be observed', async () => {
+    const suspended = {
+      status: 'suspended',
+      steps: { approval: { status: 'suspended', suspendedAt: 1 } },
+      suspended: [['approval']],
+    };
+    const queryError = new Error('Temporal service unavailable');
+    const signal = vi.fn().mockResolvedValue(undefined);
+    const result = vi.fn(() => new Promise(() => {}));
+    const query = vi.fn().mockResolvedValueOnce(suspended).mockRejectedValue(queryError);
+    const getHandle = vi.fn().mockReturnValue({ signal, result, query });
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: z.unknown(), outputSchema: z.unknown() },
+      { client: { workflow: { getHandle } } as unknown as Client, taskQueue: 'test-queue' },
+    );
+    const run = await workflow.createRun({ runId: 'test-run' });
+
+    await expect(run.resume({ step: 'approval', resumeData: { approved: true } })).rejects.toMatchObject({
+      name: 'TemporalWorkflowStatusUnknownError',
+      message:
+        'Unable to determine Temporal workflow status for run "test-run" after sending a resume signal. The signal may have been delivered; do not retry resume() blindly.',
+      cause: queryError,
+    });
+    expect(signal).toHaveBeenCalledOnce();
+  });
+
   it('returns suspended from start when the Temporal workflow stays open waiting for resume', async () => {
     const suspended = {
       status: 'suspended',

@@ -12,6 +12,18 @@ type TemporalRunStartArgs<TState, TInput, TRequestContext> = {
   requestContext?: RequestContext<TRequestContext>;
 } & WorkflowRunStartOptions;
 
+export class TemporalWorkflowStatusUnknownError extends Error {
+  constructor(runId: string, cause: unknown, afterResumeSignal = false) {
+    super(
+      afterResumeSignal
+        ? `Unable to determine Temporal workflow status for run "${runId}" after sending a resume signal. The signal may have been delivered; do not retry resume() blindly.`
+        : `Unable to determine Temporal workflow status for run "${runId}".`,
+      { cause },
+    );
+    this.name = 'TemporalWorkflowStatusUnknownError';
+  }
+}
+
 export class TemporalRun<
   TSteps extends Step<string, any, any, any, any, any, TemporalEngineType, any>[] = Step<
     string,
@@ -68,6 +80,9 @@ export class TemporalRun<
 
       return await this.awaitResultOrSuspended(handle, input, initialState);
     } catch (error) {
+      if (error instanceof TemporalWorkflowStatusUnknownError) {
+        throw error;
+      }
       return this.failedResult(input, initialState, error);
     }
   }
@@ -77,6 +92,7 @@ export class TemporalRun<
     input: unknown,
     initialState: unknown,
     previousSuspension?: { stepId: string; suspendedAt?: number },
+    afterResumeSignal = false,
   ) {
     const terminalResult = handle.result().then(
       output => ({ type: 'terminal' as const, output }),
@@ -96,7 +112,12 @@ export class TemporalRun<
         continue;
       }
 
-      const status = await handle.query('mastra.status');
+      let status: unknown;
+      try {
+        status = await handle.query('mastra.status');
+      } catch (error) {
+        throw new TemporalWorkflowStatusUnknownError(this.runId, error, afterResumeSignal);
+      }
       if (isSuspendedWorkflowResult(status)) {
         const targetResult = previousSuspension ? status.steps[previousSuspension.stepId] : undefined;
         const isPreviousSuspension =
@@ -152,7 +173,14 @@ export class TemporalRun<
   ) {
     const step = Array.isArray(params.step) ? params.step.at(-1) : params.step;
     let stepId = typeof step === 'string' ? step : step?.id;
-    const status = typeof handle.query === 'function' ? await handle.query('mastra.status') : undefined;
+    let status: unknown;
+    if (typeof handle.query === 'function') {
+      try {
+        status = await handle.query('mastra.status');
+      } catch (error) {
+        throw new TemporalWorkflowStatusUnknownError(this.runId, error);
+      }
+    }
 
     if (isSuspendedWorkflowResult(status)) {
       if (stepId === undefined && params.label !== undefined) {
@@ -248,7 +276,7 @@ export class TemporalRun<
     const handle = this.client.workflow.getHandle(this.runId);
     const { payload, previousSuspension } = await this.resumePayload(params, handle);
     await handle.signal('mastra.resume', payload);
-    return this.awaitResultOrSuspended(handle, undefined, undefined, previousSuspension);
+    return this.awaitResultOrSuspended(handle, undefined, undefined, previousSuspension, true);
   }
 
   override async resumeAsync<TResume>(params: {
