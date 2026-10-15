@@ -45,7 +45,7 @@ import { E2BFactorySandbox } from '@mastra/e2b'
 import { DockerFactorySandbox } from '@mastra/docker'
 import { LocalFactorySandbox } from '@mastra/factory'
 
-new PlatformFactorySandbox() // reads MASTRA_PLATFORM_ACCESS_TOKEN and MASTRA_ENVIRONMENT_ID
+new PlatformFactorySandbox() // reads MASTRA_PLATFORM_ACCESS_TOKEN (or MASTRA_PLATFORM_SECRET_KEY), MASTRA_PROJECT_ID and MASTRA_ENVIRONMENT_ID
 new E2BFactorySandbox() // reads E2B_API_KEY
 new DockerFactorySandbox({ defaults: { baseImage: 'node:22-slim' } })
 new LocalFactorySandbox({ root: '/var/sandboxes', env: { HOME: process.env.HOME! } })

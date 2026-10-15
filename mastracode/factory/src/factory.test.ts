@@ -253,6 +253,10 @@ async function prepareIntegrationContext(config: ConstructorParameters<typeof Ma
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Without a configured sandbox the factory reads these to pick its default;
+  // keep the developer's shell from turning tests onto the Platform sandbox.
+  vi.stubEnv('MASTRA_PROJECT_ID', '');
+  vi.stubEnv('MASTRA_ENVIRONMENT_ID', '');
   studioInstances.length = 0;
   dispatcherOptions.length = 0;
   terminalCleanups.length = 0;
