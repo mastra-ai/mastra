@@ -1214,9 +1214,9 @@ describe('Processor Tracing Tests', () => {
       expect(modelSpan?.parentSpanId).toBe(agentSpan?.id);
       // 2. MODEL_STEP is child of MODEL_GENERATION
       expect(modelStepSpan?.parentSpanId).toBe(modelSpan?.id);
-      // 3. Both stream processor spans are children of agent span
-      expect(streamSpan1?.parentSpanId).toBe(agentSpan?.id);
-      expect(streamSpan2?.parentSpanId).toBe(agentSpan?.id);
+      // 3. Both stream processor spans are children of the step whose stream they process
+      expect(streamSpan1?.parentSpanId).toBe(modelStepSpan?.id);
+      expect(streamSpan2?.parentSpanId).toBe(modelStepSpan?.id);
 
       await testExporter.finalExpectations();
     });
@@ -2652,6 +2652,174 @@ describe('Processor Tracing Tests', () => {
         span => JSON.stringify(span.output ?? {}).includes('Blocked by aborting-stream') || span.errorInfo,
       );
       expect(tripwireSpans.length).toBe(1);
+    });
+
+    it("should nest each step's stream processor span under that step, including its tool results", async () => {
+      let call = 0;
+      const model = new MockLanguageModelV2({
+        doStream: async () => {
+          call++;
+          if (call === 1) {
+            return {
+              stream: convertArrayToReadableStream([
+                { type: 'response-metadata', id: '1' },
+                { type: 'tool-call', toolCallId: 'call-1', toolName: 'echo', input: JSON.stringify({ text: 'hi' }) },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                },
+              ]),
+            };
+          }
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'response-metadata', id: '2' },
+              { type: 'text-delta', id: '1', delta: 'done' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              },
+            ]),
+          };
+        },
+      });
+
+      // Parent of the processor span each chunk was processed under
+      const spanParentByChunkType = new Map<string, string | undefined>();
+      class RecordingStreamProcessor implements Processor {
+        readonly id = 'recording-stream';
+
+        async processOutputStream({ part, tracingContext }: ProcessOutputStreamArgs): Promise<ChunkType> {
+          spanParentByChunkType.set(part.type, tracingContext?.currentSpan?.parent?.id);
+          return part;
+        }
+      }
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model,
+        tools: {
+          echo: createTool({
+            id: 'echo',
+            description: 'Echo the input back',
+            inputSchema: z.object({ text: z.string() }),
+            execute: async ({ text }) => ({ text }),
+          }),
+        },
+        outputProcessors: [new RecordingStreamProcessor()],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      const stream = await mastra.getAgent('agent').stream('Hello');
+      for await (const _chunk of stream.fullStream) {
+        // drain
+      }
+
+      const [firstStep, secondStep] = testExporter
+        .getModelStepSpans()
+        .sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+      const streamProcessorSpans = testExporter
+        .getProcessorSpans()
+        .filter(span => span.name === 'output stream processor: recording-stream');
+
+      // One span per step, each a child of its own step rather than the agent run
+      expect(streamProcessorSpans.map(span => span.parentSpanId).sort()).toEqual(
+        [firstStep!.id, secondStep!.id].sort(),
+      );
+      // The tool result arrives after the first step's model stream ends, and still lands in that step's span
+      expect(spanParentByChunkType.get('tool-result')).toBe(firstStep!.id);
+      expect(spanParentByChunkType.get('text-delta')).toBe(secondStep!.id);
+
+      await testExporter.finalExpectations();
+    });
+
+    it("should keep a failing step's stream processor spans under that step and end them", async () => {
+      let call = 0;
+      const model = new MockLanguageModelV2({
+        doStream: async () => {
+          call++;
+          if (call === 1) {
+            return {
+              stream: convertArrayToReadableStream([
+                { type: 'response-metadata', id: '1' },
+                { type: 'tool-call', toolCallId: 'call-1', toolName: 'echo', input: JSON.stringify({ text: 'hi' }) },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                },
+              ]),
+            };
+          }
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'response-metadata', id: '2' },
+              { type: 'text-delta', id: '1', delta: 'partial' },
+              { type: 'error', error: new Error('provider stream broke') },
+            ]),
+          };
+        },
+      });
+
+      class PassThroughStreamProcessor implements Processor {
+        readonly id = 'pass-through-stream';
+
+        async processOutputStream({ part }: ProcessOutputStreamArgs): Promise<ChunkType> {
+          return part;
+        }
+      }
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model,
+        tools: {
+          echo: createTool({
+            id: 'echo',
+            description: 'Echo the input back',
+            inputSchema: z.object({ text: z.string() }),
+            execute: async ({ text }) => ({ text }),
+          }),
+        },
+        outputProcessors: [new PassThroughStreamProcessor()],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      const stream = await mastra.getAgent('agent').stream('Hello');
+      const chunkTypes: string[] = [];
+      for await (const chunk of stream.fullStream) {
+        chunkTypes.push(chunk.type);
+      }
+      expect(chunkTypes).toContain('error');
+
+      const [firstStep, failedStep] = testExporter
+        .getModelStepSpans()
+        .sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+      const streamProcessorSpans = testExporter
+        .getProcessorSpans()
+        .filter(span => span.name === 'output stream processor: pass-through-stream');
+
+      // The failed step's spans, including the one for the deferred error chunk, stay under that step
+      expect(streamProcessorSpans.length).toBeGreaterThan(1);
+      expect(streamProcessorSpans.every(span => [firstStep!.id, failedStep!.id].includes(span.parentSpanId!))).toBe(
+        true,
+      );
+      expect(streamProcessorSpans.some(span => span.parentSpanId === failedStep!.id)).toBe(true);
+
+      await testExporter.finalExpectations();
     });
   });
 });

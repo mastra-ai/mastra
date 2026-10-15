@@ -764,7 +764,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
             }
           },
           flush() {
-            processorRunner.endStreamProcessorSpans(processorStates);
+            // Only this step's model stream ended; the step's tool results are still to come.
+            processorRunner.endStreamProcessorSpans(processorStates, { keepStepScopedSpans: true });
           },
           cancel() {
             processorRunner.endStreamProcessorSpans(processorStates);

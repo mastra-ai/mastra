@@ -654,8 +654,9 @@ export interface ProcessorPipelineAttributes {
   /**
    * Milliseconds spent inside `processOutputStream`, summed across every
    * chunk of the stream. Only set on output stream processor spans. The
-   * span's own duration covers the whole stream, model latency included, so
-   * this is what separates a slow processor from a slow model.
+   * span's own duration covers its step, from the first chunk to the step's
+   * end with model latency and tool calls included, so this is what separates
+   * a slow processor from the rest of the step.
    */
   hookDurationMs?: number;
   /** MessageList mutations performed by this processor */

@@ -38,7 +38,7 @@ import {
   ProcessorStepSchema,
   createProcessorSendSignal,
 } from '../../processors';
-import { OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX } from '../../processors/runner';
+import { OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX, findOwnModelStepSpan } from '../../processors/runner';
 import {
   resolveProcessorSpanAttributes,
   resolveProcessorSpanName,
@@ -1063,6 +1063,8 @@ function createStepFromProcessor<TProcessorId extends string>(
       // Find appropriate parent span:
       // - For input/outputResult: find AGENT_RUN (processor runs once at start/end)
       // - For inputStep/outputStep/toolResult: find MODEL_STEP (processor runs per LLM call / tool round-trip)
+      // - For outputStream: the MODEL_STEP whose stream is processed, else AGENT_RUN when the stream
+      //   carries no step (e.g. durable agents)
       // When workflow is executed, currentSpan is WORKFLOW_STEP, so we walk up the parent chain
       // Fall back to currentSpan only when its tree can reach exporters — otherwise
       // the public processor span would export as an orphan trace root.
@@ -1070,7 +1072,9 @@ function createStepFromProcessor<TProcessorId extends string>(
       const parentSpan =
         phase === 'inputStep' || phase === 'outputStep' || phase === 'toolResult'
           ? currentSpan?.findParent(SpanType.MODEL_STEP) || fallbackSpan
-          : currentSpan?.findParent(SpanType.AGENT_RUN) || fallbackSpan;
+          : (phase === 'outputStream' && findOwnModelStepSpan(currentSpan)) ||
+            currentSpan?.findParent(SpanType.AGENT_RUN) ||
+            fallbackSpan;
 
       const processorSpan =
         phase !== 'outputStream'
@@ -1432,6 +1436,20 @@ function createStepFromProcessor<TProcessorId extends string>(
                 // End span on finish chunk
                 if (part && (part as ChunkType).type === 'finish') {
                   processorSpan?.end({
+                    output: { totalChunks: (streamParts ?? []).length },
+                    attributes: { hookDurationMs: readHookDurationMs() },
+                  });
+                  delete mutableState[spanKey];
+                  delete mutableState[hookDurationKey];
+                }
+                // A span under a step outlives that step's model stream so the step's tool
+                // results land in it too, and ends with the step.
+                const partType = (part as ChunkType).type;
+                if (
+                  processorSpan?.parent?.type === SpanType.MODEL_STEP &&
+                  (partType === 'step-finish' || partType === 'error' || partType === 'abort')
+                ) {
+                  processorSpan.end({
                     output: { totalChunks: (streamParts ?? []).length },
                     attributes: { hookDurationMs: readHookDurationMs() },
                   });

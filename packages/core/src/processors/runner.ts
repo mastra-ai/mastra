@@ -20,7 +20,7 @@ import {
   createObservabilityContext,
   resolveObservabilityContext,
 } from '../observability';
-import type { ObservabilityContext, ProcessorSpanType, Span } from '../observability';
+import type { AnySpan, ObservabilityContext, ProcessorSpanType, Span } from '../observability';
 import type { TracingContext } from '../observability/types';
 import { executeWithContext } from '../observability/utils';
 import { RequestContext } from '../request-context';
@@ -210,6 +210,21 @@ export class ProcessorState<OUTPUT = undefined> {
  * hook time on the shared processor state, next to `__outputStreamSpan_<id>`.
  */
 export const OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX = '__outputStreamHookDurationMs_';
+
+/**
+ * The MODEL_STEP an output stream processor span belongs under: `span` itself
+ * (a step's stream passes its step span) or its nearest step ancestor. Stops at
+ * the first agent run, so a nested agent's stream never attaches to its
+ * caller's step.
+ */
+export function findOwnModelStepSpan(span: AnySpan | undefined): AnySpan | undefined {
+  for (let current = span; current && current.type !== SpanType.AGENT_RUN; current = current.parent) {
+    if (current.type === SpanType.MODEL_STEP) {
+      return current;
+    }
+  }
+  return undefined;
+}
 
 /**
  * Union type for processor or workflow that can be used as a processor
@@ -1057,17 +1072,30 @@ export class ProcessorRunner {
     }
   }
 
-  endStreamProcessorSpans<OUTPUT>(processorStates: Map<string, ProcessorState<OUTPUT>>): void {
+  endStreamProcessorSpans<OUTPUT>(
+    processorStates: Map<string, ProcessorState<OUTPUT>>,
+    options?: {
+      /**
+       * Leave workflow-path spans parented to a model step open. Set when only
+       * the step's model stream closed: the step's tool results still flow
+       * through the processors, and the span ends with the step's
+       * `step-finish` chunk.
+       */
+      keepStepScopedSpans?: boolean;
+    },
+  ): void {
     for (const state of processorStates.values()) {
       state.span?.end({ output: state.getFinalOutput(), attributes: state.getFinalAttributes() });
 
       for (const [key, value] of Object.entries(state.customState)) {
         if (key.startsWith('__outputStreamSpan_')) {
+          const span = value as Span<SpanType.PROCESSOR_RUN> | undefined;
+          if (options?.keepStepScopedSpans && span?.parent?.type === SpanType.MODEL_STEP) {
+            continue;
+          }
           const durationKey = OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX + key.slice('__outputStreamSpan_'.length);
           const hookDurationMs = state.customState[durationKey];
-          (value as Span<SpanType.PROCESSOR_RUN> | undefined)?.end(
-            typeof hookDurationMs === 'number' ? { attributes: { hookDurationMs } } : undefined,
-          );
+          span?.end(typeof hookDurationMs === 'number' ? { attributes: { hookDurationMs } } : undefined);
           // Processor state outlives a single LLM step, so a kept reference would
           // leave later steps writing to an already-ended span parented to the
           // previous step - dropping their output and any tripwire abort.
