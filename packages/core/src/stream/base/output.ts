@@ -439,7 +439,10 @@ function reconcileBufferedStepTexts<OUTPUT>(
   processedText: string,
   processedMessage?: MastraDBMessage,
   stepPartBoundaries?: StepPartBoundaries,
+  originalText?: string,
 ): void {
+  if (processedText === originalText) return;
+
   const processedParts = processedMessage?.content.parts;
   let processedOffsets: number[] | undefined;
 
@@ -1557,13 +1560,16 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     stepMessage && iterationPartOffset !== undefined
                       ? self.messageList.splitResponseMessageAtPartOffset(stepMessage.id, iterationPartOffset)
                       : undefined;
+                  const earlierStepMessage = separatedIteration
+                    ? self.messageList.get.response
+                        .db()
+                        .find(message => message.id === separatedIteration.earlierMessageId)
+                    : undefined;
                   const earlierStepPartBoundaries = separatedIteration
-                    ? findStepPartBoundaries(
-                        self.messageList.get.response
-                          .db()
-                          .find(message => message.id === separatedIteration.earlierMessageId),
-                        self.#bufferedSteps.slice(0, -1),
-                      )
+                    ? findStepPartBoundaries(earlierStepMessage, self.#bufferedSteps.slice(0, -1))
+                    : undefined;
+                  const earlierTextBeforeProcessing = earlierStepMessage
+                    ? resolveMessageText(earlierStepMessage)
                     : undefined;
                   const processorStepMessageId = separatedIteration?.currentMessageId ?? stepMessage?.id;
                   const processorStepMessage = processorStepMessageId
@@ -1639,6 +1645,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                         processedEarlierText,
                         processedEarlierMessage,
                         earlierStepPartBoundaries,
+                        earlierTextBeforeProcessing,
                       );
                     }
                   } finally {

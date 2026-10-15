@@ -509,6 +509,50 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
     expect(fullOutput.text).toBe('FIRST!SECOND!THIRD!');
   });
 
+  it('keeps step attribution when text-preserving processing merges earlier step parts', async () => {
+    const model = scriptedModel([
+      [...textPart('t1a', 'fir'), ...textPart('t1b', 'st'), finish('stop')],
+      [...textPart('t2', 'second'), finish('stop')],
+      [...textPart('t3', 'third'), finish('stop')],
+    ]);
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model,
+      outputProcessors: [
+        {
+          id: 'merge-text-parts',
+          processOutputResult: async ({ messages }) =>
+            messages.map(message => {
+              const textParts = message.content.parts?.filter(part => part.type === 'text');
+              const firstTextPart = textParts?.[0];
+              if (!firstTextPart) return message;
+
+              return {
+                ...message,
+                content: {
+                  ...message.content,
+                  parts: [{ ...firstTextPart, text: textParts.map(part => part.text).join('') }],
+                },
+              };
+            }),
+        },
+      ],
+    });
+    let iteration = 0;
+
+    const stream = await agent.stream('hi', {
+      maxSteps: 3,
+      onIterationComplete: async () => (++iteration < 3 ? { continue: true, feedback: 'Continue.' } : undefined),
+    });
+    const fullOutput = await stream.getFullOutput();
+
+    expect(await stream.text).toBe('firstsecondthird');
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['first', 'second', 'third']);
+    expect(fullOutput.text).toBe('firstsecondthird');
+  });
+
   it('removes final step text when its response is removed', async () => {
     const model = scriptedModel([
       [...textPart('t1', 'first'), finish('stop')],
