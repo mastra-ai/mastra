@@ -236,7 +236,10 @@ describe('credential store provider registry', () => {
   it('says why tenant resolution failed and logs non-secret diagnostics', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
-      setCredentialStoreProvider(() => fakeStore({}), async () => undefined);
+      setCredentialStoreProvider(
+        () => fakeStore({}),
+        async () => undefined,
+      );
       const anonymous = new RequestContext();
       anonymous.set('controller', { resourceId: 'session-1', threadId: 'thread-1' });
       await expect(prepareCredentialTenant(anonymous)).rejects.toThrow(
