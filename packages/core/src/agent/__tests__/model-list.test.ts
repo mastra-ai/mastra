@@ -103,6 +103,23 @@ function modelListTests(version: 'v1' | 'v2') {
         expect(reorderedModelList?.map(model => model.id)).toEqual(['fallback', 'primary']);
       });
 
+      it('should reorder a function-valued model list without explicit IDs', async () => {
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: 'test agent instructions',
+          model: () => [{ model: openai('gpt-4o') }, { model: openai('gpt-4o-mini') }],
+        });
+
+        const modelList = await agent.getModelList();
+        const reversedModelIds = [...(modelList?.map(model => model.id) ?? [])].reverse();
+
+        await agent.reorderModels(reversedModelIds);
+
+        const reorderedModelList = await agent.getModelList();
+        expect(reorderedModelList?.map(model => model.id)).toEqual(reversedModelIds);
+      });
+
       it('should keep unlisted models at the end when reordering with a partial list', async () => {
         const agent = new Agent({
           id: 'test-agent',
@@ -206,6 +223,34 @@ function modelListTests(version: 'v1' | 'v2') {
 
         const updatedModelList = await agent.getModelList();
         const fallback = updatedModelList?.find(model => model.id === 'fallback');
+        expect((fallback?.model as LanguageModelV2).modelId).toBe('gpt-4.1');
+        expect(fallback?.enabled).toBe(false);
+        expect(fallback?.maxRetries).toBe(5);
+      });
+
+      it('should update a function-valued model list without explicit IDs', async () => {
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: 'test agent instructions',
+          model: () => [{ model: openai('gpt-4o') }, { model: openai('gpt-4o-mini'), maxRetries: 1 }],
+        });
+
+        const modelList = await agent.getModelList();
+        const fallbackId = modelList?.[1]?.id;
+        if (!fallbackId) {
+          expect.fail('Fallback model should have a generated ID');
+        }
+
+        await agent.updateModelInModelList({
+          id: fallbackId,
+          model: openai('gpt-4.1'),
+          enabled: false,
+          maxRetries: 5,
+        });
+
+        const updatedModelList = await agent.getModelList();
+        const fallback = updatedModelList?.find(model => model.id === fallbackId);
         expect((fallback?.model as LanguageModelV2).modelId).toBe('gpt-4.1');
         expect(fallback?.enabled).toBe(false);
         expect(fallback?.maxRetries).toBe(5);

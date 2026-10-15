@@ -812,6 +812,7 @@ export class Agent<
   readonly #metadata?: DynamicArgument<Record<string, unknown>, TRequestContext>;
   model: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
   #originalModel: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
+  #dynamicModelFallbackIds: string[] = [];
   maxRetries?: number;
   readonly #maxRetriesConfigured: boolean;
   #mastra?: Mastra;
@@ -3663,14 +3664,21 @@ export class Agent<
    * Normalizes model arrays into the internal fallback shape.
    * @internal
    */
-  private normalizeModelFallbacks(models: ModelWithRetries[] | ModelFallbacks): ModelFallbacks {
+  private normalizeModelFallbacks(
+    models: ModelWithRetries[] | ModelFallbacks,
+    generatedIds?: string[],
+  ): ModelFallbacks {
     if (this.isModelFallbacks(models)) {
       return models;
     }
 
-    return models.map(m =>
-      Agent.toFallbackEntry(m, this.maxRetries ?? 0, this.#maxRetriesConfigured),
-    ) as ModelFallbacks;
+    return models.map((model, index) => {
+      const id = model.id ?? generatedIds?.[index] ?? globalThis.crypto.randomUUID();
+      if (generatedIds) {
+        generatedIds[index] = id;
+      }
+      return Agent.toFallbackEntry({ ...model, id }, this.maxRetries ?? 0, this.#maxRetriesConfigured);
+    }) as ModelFallbacks;
   }
 
   /**
@@ -3749,7 +3757,7 @@ export class Agent<
           throw mastraError;
         }
 
-        return this.normalizeModelFallbacks(resolved);
+        return this.normalizeModelFallbacks(resolved, this.#dynamicModelFallbackIds);
       }
 
       return resolved;
