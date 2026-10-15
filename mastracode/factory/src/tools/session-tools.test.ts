@@ -274,6 +274,14 @@ describe('factory_start_session in side mode', () => {
     expect(calls).toEqual(['prime', 'kickoff']);
   });
 
+  it('bills a side session in a hybrid Factory as an interactive session, on the caller', async () => {
+    const env = await setup();
+    await env.seed.projects.update({ orgId: 'org-1', id: env.scope.factoryProjectId, input: { modelScope: 'hybrid' } });
+    await env.start({ prompt: 'Go.' });
+
+    expect(prime).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1', credentialScope: 'user' });
+  });
+
   it("bills the side session to the caller's credential tenant", async () => {
     const { start, seed, sessions } = await setup();
     const result = (await start({ prompt: 'Go.' })) as { sessionId: string };
@@ -624,6 +632,14 @@ describe('factory_start_session in work-item mode', () => {
     });
     expect(request).not.toHaveProperty('destinationStage');
     expect(request.requestContext).toBeUndefined();
+  });
+
+  it("starts a work-item role in a hybrid Factory on the Factory's scope, like the Start route", async () => {
+    const env = await withItem();
+    await env.seed.projects.update({ orgId: 'org-1', id: env.scope.factoryProjectId, input: { modelScope: 'hybrid' } });
+    await env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' });
+
+    expect(env.prepare.mock.calls[0]![0]).toMatchObject({ modelScope: 'factory' });
   });
 
   it("bills the work-item session to the caller's credential tenant", async () => {

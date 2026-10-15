@@ -29,6 +29,7 @@ import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
+import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -218,6 +219,8 @@ export function createFactorySessionTools(
         factoryProjectId: scope.factoryProjectId,
         orgId: scope.orgId,
         ownerUserId: scope.userId,
+        // No work item, so an interactive session: a hybrid Factory bills it as one.
+        context: 'session',
       });
 
       // Only the new row's owner as `user`. The tool call's context carries the
@@ -336,6 +339,8 @@ export function createFactorySessionTools(
     if (!messaging) throw new Error('Starting sessions is not available on this server.');
     const project = await deps.sessionModel.projects.get({ orgId: scope.orgId, id: scope.factoryProjectId });
     if (!project) throw new Error('This Factory no longer exists.');
+    // A work-item start is a run, so a hybrid Factory uses the Factory's scope (as the Start route does).
+    const modelScope = effectiveModelScope(project.modelScope, 'run');
     const projectRepositoryId = await resolveRepository(sourceControl, item);
 
     const sessionId = globalThis.crypto.randomUUID();
@@ -375,8 +380,8 @@ export function createFactorySessionTools(
         sessionId: ensured.sessionId,
         threadTitle: title ?? `${label} ${role}`,
         kickoffKey: globalThis.crypto.randomUUID(),
-        modelScope: project.modelScope,
-        defaultModelId: project.modelScope === 'factory' ? (project.defaultModelId ?? undefined) : undefined,
+        modelScope,
+        defaultModelId: modelScope === 'factory' ? (project.defaultModelId ?? undefined) : undefined,
         workItem: {
           id: item.id,
           role,
