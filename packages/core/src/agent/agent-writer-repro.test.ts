@@ -2,8 +2,8 @@
  * Reproduction test for writer being undefined in processOutputStream.
  *
  * Tests every chunk type that flows through processOutputStream to verify
- * writer is always defined. This covers the full agent.stream() path
- * (handleChatStream → agent.stream() → workflowLoopStream → MastraModelOutput).
+ * writer is always defined. This covers the full agent.streamMessageList() path
+ * (handleChatStream → agent.streamMessageList() → workflowLoopStream → MastraModelOutput).
  */
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
@@ -12,7 +12,7 @@ import type { ChunkType } from '../stream/types';
 import { Agent } from './index';
 
 describe('writer availability in processOutputStream (end-to-end)', () => {
-  it('should pass a defined writer for every chunk type during agent.stream()', async () => {
+  it('should pass a defined writer for every chunk type during agent.streamMessageList()', async () => {
     const writerByChunkType = new Map<string, ProcessorStreamWriter | undefined>();
 
     class WriterCaptureProcessor implements Processor {
@@ -53,7 +53,7 @@ describe('writer availability in processOutputStream (end-to-end)', () => {
       outputProcessors: [new WriterCaptureProcessor()],
     });
 
-    const stream = await agent.stream('test message');
+    const stream = await agent.streamMessageList('test message');
 
     // Consume the full stream
     for await (const _chunk of stream.fullStream) {

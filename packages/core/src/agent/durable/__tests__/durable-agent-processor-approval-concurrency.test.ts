@@ -192,7 +192,7 @@ describe('durable processor-injected approval tool concurrency', () => {
       // Leg 1: stream until the first approval, then keep the (unapproved) stream
       // open for a stabilization window. The gate must hold the sibling back, so
       // no second approval arrives even though the model called the tool twice.
-      const first = await durableAgent.stream('Echo twice', { memory, maxSteps: 6 });
+      const first = await durableAgent.streamMessageList('Echo twice', { memory, maxSteps: 6 });
       const firstChunks: any[] = [];
       for await (const chunk of first.fullStream) {
         firstChunks.push(chunk);
@@ -219,7 +219,7 @@ describe('durable processor-injected approval tool concurrency', () => {
 
       // Leg 2: approving the first call releases the sibling, which now raises its
       // own approval instead of having suspended alongside it.
-      const second = await durableAgent.approveToolCall({
+      const second = await durableAgent.approveToolCallMessageList({
         runId: first.runId,
         toolCallId: firstApprovals[0].payload.toolCallId,
         memory,
@@ -234,7 +234,7 @@ describe('durable processor-injected approval tool concurrency', () => {
       expect(toolExecutions.count).toBe(1);
 
       // Leg 3: approving the sibling lets the run finish rather than hanging.
-      const third = await durableAgent.approveToolCall({
+      const third = await durableAgent.approveToolCallMessageList({
         runId: first.runId,
         toolCallId: secondApprovals[0].payload.toolCallId,
         memory,

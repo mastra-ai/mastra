@@ -248,7 +248,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
             resourceId: 'resource-1-generate',
           });
         } else {
-          await agent.generate('repeat tool calls', {
+          await agent.generateMessageList('repeat tool calls', {
             memory: {
               thread: 'thread-1-generate',
               resource: 'resource-1-generate',
@@ -293,7 +293,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
             resourceId: `resource-2-${version}-generate`,
           });
         } else {
-          await agent.generate('no progress', {
+          await agent.generateMessageList('no progress', {
             memory: {
               thread: `thread-2-${version}-generate`,
               resource: `resource-2-${version}-generate`,
@@ -339,7 +339,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
             resourceId: 'resource-3-generate',
           });
         } else {
-          await agent.generate('interrupt before step', {
+          await agent.generateMessageList('interrupt before step', {
             memory: {
               thread: 'thread-3-generate',
               resource: 'resource-3-generate',
@@ -421,7 +421,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
             },
           });
         } else {
-          await agent.generate('trigger error', {
+          await agent.generateMessageList('trigger error', {
             memory: {
               resource: 'user-err',
               thread: {
@@ -491,7 +491,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           errorProcessorDefaults: false,
         });
 
-        const result = await agent.stream('tell me something', {
+        const result = await agent.streamMessageList('tell me something', {
           memory: { thread: 'thread-partial-error', resource: 'resource-partial-error' },
           modelSettings: { maxRetries: 0 },
         });
@@ -530,7 +530,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           ],
         });
 
-        const result = await agent.stream('tell me something', {
+        const result = await agent.streamMessageList('tell me something', {
           memory: { thread: 'thread-processed-error', resource: 'resource-processed-error' },
           modelSettings: { maxRetries: 0 },
         });
@@ -569,7 +569,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           ],
         });
 
-        const result = await agent.stream('tell me something', {
+        const result = await agent.streamMessageList('tell me something', {
           memory: { thread: 'thread-rotate-error', resource: 'resource-rotate-error' },
           modelSettings: { maxRetries: 0 },
         });
@@ -632,7 +632,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           memory: mockMemory,
         });
 
-        const result = await agent.stream('tell me something', {
+        const result = await agent.streamMessageList('tell me something', {
           memory: { thread: 'thread-recovered', resource: 'resource-recovered' },
           modelSettings: { maxRetries: 1 },
         });
@@ -681,7 +681,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           instructions: 'You are a helpful assistant.',
         });
 
-        const result = await agent.stream('Hello', {
+        const result = await agent.streamMessageList('Hello', {
           onError: ({ error }) => {
             onErrorCallbackError = error;
           },
@@ -739,7 +739,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         let onErrorCallbackError: any = null;
         let fullStreamError: any = null;
 
-        const result = await agent.stream('Hello', {
+        const result = await agent.streamMessageList('Hello', {
           onError: ({ error }) => {
             onErrorCallbackError = error;
           },
@@ -818,7 +818,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         let onErrorCallbackError: any = null;
         let fullStreamError: any = null;
 
-        const result = await agent.stream('Hello', {
+        const result = await agent.streamMessageList('Hello', {
           onError: ({ error }) => {
             onErrorCallbackError = error;
           },
@@ -893,7 +893,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
 
         let caughtError: Error | null = null;
         try {
-          await agent.generate('Hello', { modelSettings: { maxRetries: 0 } });
+          await agent.generateMessageList('Hello', { modelSettings: { maxRetries: 0 } });
         } catch (err: any) {
           caughtError = err;
         }
@@ -923,7 +923,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
 
         let caughtError: Error | null = null;
         try {
-          await agent.generate('Please use a tool', { modelSettings: { maxRetries: 0 } });
+          await agent.generateMessageList('Please use a tool', { modelSettings: { maxRetries: 0 } });
         } catch (err: any) {
           caughtError = err;
         }
@@ -950,7 +950,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           instructions: 'You are a helpful assistant.',
         });
 
-        const output = await agent.stream('Please use a tool', { modelSettings: { maxRetries: 0 } });
+        const output = await agent.streamMessageList('Please use a tool', { modelSettings: { maxRetries: 0 } });
 
         let errorChunk: any;
         for await (const chunk of output.fullStream) {
@@ -994,7 +994,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         let onErrorArg: string | Error | null = null;
 
         try {
-          await agent.generate('Please use a tool', {
+          await agent.generateMessageList('Please use a tool', {
             onError: ({ error }) => {
               onErrorCalled = true;
               onErrorArg = error;
@@ -1030,7 +1030,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         let onErrorCalled = false;
         let onErrorArg: string | Error | null = null;
 
-        const output = await agent.stream('Please use a tool', {
+        const output = await agent.streamMessageList('Please use a tool', {
           onError: ({ error }) => {
             onErrorCalled = true;
             onErrorArg = error;
@@ -1093,7 +1093,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
               instructions: 'You are a helpful assistant.',
             });
 
-            await expect(agent.generate('Hello', { modelSettings: { maxRetries: 0 } })).rejects.toThrow();
+            await expect(agent.generateMessageList('Hello', { modelSettings: { maxRetries: 0 } })).rejects.toThrow();
           });
         }
 
@@ -1149,7 +1149,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
             ],
           });
 
-          const output = await agent.stream('Hello', {
+          const output = await agent.streamMessageList('Hello', {
             modelSettings: { maxRetries: 0 },
             memory: { thread: 'partial-failure-thread', resource: 'partial-failure-resource' },
             onError,
@@ -1226,7 +1226,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           let onErrorArg: any = null;
 
           try {
-            await agent.generate('Hello', {
+            await agent.generateMessageList('Hello', {
               onError: ({ error }) => {
                 onErrorCalled = true;
                 onErrorArg = error;
@@ -1362,7 +1362,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           const registeredAgent = mastra.getAgent('testResumeError');
 
           // First call suspends
-          const output = await registeredAgent.generate('test', {
+          const output = await registeredAgent.generateMessageList('test', {
             maxSteps: 2,
             modelSettings: { maxRetries: 0 },
           });
@@ -1445,7 +1445,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         const agent = createAgentWithFailingTool(model);
 
         // Tool execution failures bail the workflow but don't throw
-        const result = await agent.generate('Please use a tool');
+        const result = await agent.generateMessageList('Please use a tool');
         expect(result).toBeDefined();
       });
 
@@ -1453,7 +1453,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         const model = createModelWithFailingToolCall();
         const agent = createAgentWithFailingTool(model);
 
-        const output = await agent.stream('Please use a tool');
+        const output = await agent.streamMessageList('Please use a tool');
 
         const errorChunks: any[] = [];
         for await (const chunk of output.fullStream) {
@@ -1472,7 +1472,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
 
         let onErrorCalled = false;
 
-        await agent.generate('Please use a tool', {
+        await agent.generateMessageList('Please use a tool', {
           onError: () => {
             onErrorCalled = true;
           },
@@ -1488,7 +1488,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
 
         let onErrorCalled = false;
 
-        const output = await agent.stream('Please use a tool', {
+        const output = await agent.streamMessageList('Please use a tool', {
           onError: () => {
             onErrorCalled = true;
           },
@@ -1524,7 +1524,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         let errorCaught = false;
         let caughtError: any = null;
 
-        const stream = await agent.stream('Hello', {
+        const stream = await agent.streamMessageList('Hello', {
           onError: ({ error }) => {
             errorCaught = true;
             caughtError = error;
@@ -1554,7 +1554,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
 
         const chunks: any[] = [];
 
-        const stream = await agent.stream('Hello', {
+        const stream = await agent.streamMessageList('Hello', {
           onChunk: chunk => {
             chunks.push(chunk);
           },
@@ -1617,7 +1617,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         let abortEvent: any = null;
         const onFinish = vi.fn();
 
-        const stream = await agent.stream('Hello', {
+        const stream = await agent.streamMessageList('Hello', {
           onAbort: event => {
             abortCalled = true;
             abortEvent = event;
@@ -1718,7 +1718,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           options: { lastMessages: 10 },
         } as const;
 
-        const abortedStream = await agent.stream('message before abort', {
+        const abortedStream = await agent.streamMessageList('message before abort', {
           abortSignal: abortController.signal,
           memory,
           modelSettings: { maxRetries: 0 },
@@ -1759,7 +1759,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           afterAbort.messages.flatMap(message => message.content?.parts ?? []).filter(part => part.type === 'error'),
         ).toEqual([]);
 
-        const nextStream = await agent.stream('message after abort', {
+        const nextStream = await agent.streamMessageList('message after abort', {
           memory,
           modelSettings: { maxRetries: 0 },
         });
@@ -1868,7 +1868,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           memory: mockMemory,
         });
 
-        const stream = await agent.stream('Write a very long essay', {
+        const stream = await agent.streamMessageList('Write a very long essay', {
           abortSignal: abortController.signal,
           memory: {
             thread: 'bounded-abort-thread',
@@ -2005,7 +2005,7 @@ describe('message persistence across completed steps', () => {
       tools: { 'echo-tool': echoTool },
     });
 
-    const result = await agent.stream('test message', {
+    const result = await agent.streamMessageList('test message', {
       memory: {
         thread: 'thread-save-per-step-model-output',
         resource: 'resource-save-per-step-model-output',
@@ -2132,7 +2132,7 @@ describe('message persistence across completed steps', () => {
     const abortController = new AbortController();
     let stepFinishCount = 0;
 
-    const result = await agent.stream('test message', {
+    const result = await agent.streamMessageList('test message', {
       memory: {
         thread: 'thread-save-per-step-abort',
         resource: 'resource-save-per-step-abort',
@@ -2257,7 +2257,7 @@ describe('message persistence across completed steps', () => {
     const abortController = new AbortController();
     let stepFinishCount = 0;
 
-    const result = await agent.stream('test message', {
+    const result = await agent.streamMessageList('test message', {
       memory: {
         thread: 'thread-save-per-step-abort-regression',
         resource: 'resource-save-per-step-abort-regression',
@@ -2414,7 +2414,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
         instructions: 'You are a helpful assistant.',
       });
 
-      await expect(agent.stream('Hello')).rejects.toThrow('prepare step failed');
+      await expect(agent.streamMessageList('Hello')).rejects.toThrow('prepare step failed');
 
       const agentRunSpan = getAgentRunSpan();
       expect(agentRunSpan).toBeDefined();
@@ -2444,7 +2444,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
         instructions: 'You are a helpful assistant.',
       });
 
-      await expect(agent.stream('Hello')).rejects.toThrow(prepareError);
+      await expect(agent.streamMessageList('Hello')).rejects.toThrow(prepareError);
 
       const agentRunSpan = getAgentRunSpan();
       expect(agentRunSpan).toBeDefined();
@@ -2476,7 +2476,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
         instructions: 'You are a helpful assistant.',
       });
 
-      const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+      const output = await agent.streamMessageList('Hello', { modelSettings: { maxRetries: 0 } });
 
       for await (const _chunk of output.fullStream) {
         // drain
@@ -2546,7 +2546,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
         mastra,
       });
 
-      const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+      const output = await agent.streamMessageList('Hello', { modelSettings: { maxRetries: 0 } });
 
       await output.consumeStream();
 
@@ -2591,7 +2591,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       instructions: 'You are a helpful assistant.',
     });
 
-    const output = await agent.stream('Hello', {
+    const output = await agent.streamMessageList('Hello', {
       modelSettings: { maxRetries: 0 },
       onError: (payload: { error: Error }) => onErrorCalls.push(payload),
     });
@@ -2632,7 +2632,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       errorProcessorDefaults: false,
     });
 
-    const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+    const output = await agent.streamMessageList('Hello', { modelSettings: { maxRetries: 0 } });
 
     const chunks: ChunkType[] = [];
     for await (const chunk of output.fullStream) {
@@ -2671,7 +2671,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       instructions: 'You are a helpful assistant.',
     });
 
-    const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+    const output = await agent.streamMessageList('Hello', { modelSettings: { maxRetries: 0 } });
 
     const chunks: ChunkType[] = [];
     for await (const chunk of output.fullStream) {
@@ -2712,7 +2712,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
         instructions: 'You are a helpful assistant.',
       });
 
-      const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+      const output = await agent.streamMessageList('Hello', { modelSettings: { maxRetries: 0 } });
 
       for await (const _chunk of output.fullStream) {
         // drain
@@ -2763,7 +2763,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
         instructions: 'You are a helpful assistant.',
       });
 
-      const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+      const output = await agent.streamMessageList('Hello', { modelSettings: { maxRetries: 0 } });
 
       for await (const _chunk of output.fullStream) {
         // drain
@@ -2824,7 +2824,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
         memory: new MockMemory(),
       });
 
-      const output = await agent.stream('Find the user with name - Dero Israel', {
+      const output = await agent.streamMessageList('Find the user with name - Dero Israel', {
         memory: { thread: 'thread-suspend', resource: 'resource-suspend' },
         modelSettings: { maxRetries: 0 },
       });
@@ -2897,7 +2897,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
         instructions: 'You are a helpful assistant.',
       });
 
-      const output = await agent.stream('Hello', {
+      const output = await agent.streamMessageList('Hello', {
         abortSignal: abortController.signal,
         modelSettings: { maxRetries: 0 },
       });

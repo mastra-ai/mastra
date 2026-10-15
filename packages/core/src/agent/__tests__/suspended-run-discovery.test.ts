@@ -234,7 +234,7 @@ function createToolSuspensionSetup({
 }
 
 async function suspendRun(agent: Agent, threadId: string, resourceId: string) {
-  const stream = await agent.stream('Find the user with name - Dero Israel', {
+  const stream = await agent.streamMessageList('Find the user with name - Dero Israel', {
     requireToolApproval: true,
     memory: { thread: threadId, resource: resourceId },
   });
@@ -626,7 +626,7 @@ describe('suspended-run discovery', () => {
       });
       new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
 
-      const stream = await agent.stream('Find the user', {
+      const stream = await agent.streamMessageList('Find the user', {
         memory: { thread: 'thread-1', resource: 'resource-1' },
       });
       for await (const _chunk of stream.fullStream) {
@@ -668,7 +668,7 @@ describe('suspended-run discovery', () => {
       });
       new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
 
-      const stream = await agent.stream('Find the user', {
+      const stream = await agent.streamMessageList('Find the user', {
         memory: { thread: 'thread-1', resource: 'resource-1' },
       });
       let suspendedToolCallId = '';
@@ -717,7 +717,7 @@ describe('suspended-run discovery', () => {
       });
       new Mastra({ agents: { agent }, logger: false, storage });
 
-      const stream = await agent.stream('Find the user', {
+      const stream = await agent.streamMessageList('Find the user', {
         memory: { thread: 'thread-1', resource: 'resource-1' },
       });
       let suspendedToolCallId = '';
@@ -757,7 +757,7 @@ describe('suspended-run discovery', () => {
       const { agent } = createSuspendedSetup();
       const { runId, toolCallId } = await suspendRun(agent, 'thread-1', 'resource-1');
 
-      const resumeStream = await agent.approveToolCall({ runId, toolCallId });
+      const resumeStream = await agent.approveToolCallMessageList({ runId, toolCallId });
       for await (const _chunk of resumeStream.fullStream) {
         // consume
       }
@@ -780,7 +780,7 @@ describe('suspended-run discovery', () => {
       });
       new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
 
-      const stream = await agent.stream('do both', {
+      const stream = await agent.streamMessageList('do both', {
         requireToolApproval: true,
         memory: { thread: 'thread-par', resource: 'resource-par' },
       });
@@ -797,7 +797,7 @@ describe('suspended-run discovery', () => {
       ]);
 
       // Approve the first call; the loop resumes and re-suspends on the second.
-      const afterFirst = await agent.approveToolCall({ runId: stream.runId, toolCallId: 'call-A' });
+      const afterFirst = await agent.approveToolCallMessageList({ runId: stream.runId, toolCallId: 'call-A' });
       for await (const _chunk of afterFirst.fullStream) {
         // consume until the next suspension
       }
@@ -810,7 +810,7 @@ describe('suspended-run discovery', () => {
       ]);
 
       // Approve the second call; the run completes and is no longer discoverable.
-      const afterSecond = await agent.approveToolCall({ runId: stream.runId, toolCallId: 'call-B' });
+      const afterSecond = await agent.approveToolCallMessageList({ runId: stream.runId, toolCallId: 'call-B' });
       for await (const _chunk of afterSecond.fullStream) {
         // consume to completion
       }
@@ -979,7 +979,7 @@ describe('suspended-run discovery', () => {
       const storage = new InMemoryStore();
       const resumedTool = vi.fn();
       const { agent } = createToolSuspensionSetup({ storage, toolCallOnFirstCall: true, onResume: resumedTool });
-      const stream = await agent.stream('Find the user', {
+      const stream = await agent.streamMessageList('Find the user', {
         memory: { thread: 'thread-1', resource: 'resource-1' },
       });
       let toolCallId = '';
@@ -1098,7 +1098,7 @@ describe('suspended-run discovery', () => {
       const storage = new InMemoryStore();
       const { agent } = createSuspendedSetup({ storage });
       const ended = await suspendRun(agent, 'thread-1', 'resource-1');
-      const approved = await agent.approveToolCall({ runId: ended.runId, toolCallId: ended.toolCallId });
+      const approved = await agent.approveToolCallMessageList({ runId: ended.runId, toolCallId: ended.toolCallId });
       for await (const _chunk of approved.fullStream) {
         // drain so the run ends
       }
@@ -1125,7 +1125,7 @@ describe('suspended-run discovery', () => {
       const resumedTool = vi.fn();
       const storage = new InMemoryStore();
       const { agent } = createToolSuspensionSetup({ storage, toolCallOnFirstCall: true, onResume: resumedTool });
-      const stream = await agent.stream('Find the user', {
+      const stream = await agent.streamMessageList('Find the user', {
         memory: { thread: 'thread-1', resource: 'resource-1' },
       });
       let suspendedToolCallId = '';
@@ -1190,7 +1190,7 @@ describe('suspended-run discovery', () => {
       });
       new Mastra({ agents: { agent }, logger: false, storage });
 
-      const stream = await agent.stream('Continue after approval', {
+      const stream = await agent.streamMessageList('Continue after approval', {
         memory: { thread: 'thread-1', resource: 'resource-1' },
       });
       let toolCallId = '';
@@ -1515,7 +1515,7 @@ describe('snapshot path contract for threadId pushdown (#22627)', () => {
     const durableAgent = createDurableAgent({ agent: baseAgent });
     new Mastra({ agents: { durableAgent: durableAgent as any }, logger: false, storage });
 
-    const result: any = await durableAgent.stream('Find the user with name - Dero Israel', {
+    const result: any = await durableAgent.streamMessageList('Find the user with name - Dero Israel', {
       memory: { thread: 'durable-thread-1', resource: 'durable-resource-1' },
     });
     let sawApproval = false;

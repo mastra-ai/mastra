@@ -407,7 +407,7 @@ describe('DurableAgent tool approval', () => {
         resourceId: memory.resource,
       });
 
-      const result = await durableAgent.stream('Search for test', { memory });
+      const result = await durableAgent.streamMessageList('Search for test', { memory });
       let sawApproval = false;
       const chunkTypes: string[] = [];
       for await (const chunk of result.fullStream) {
@@ -424,7 +424,7 @@ describe('DurableAgent tool approval', () => {
         expect(durationAtApproval).toBeGreaterThan(0);
       });
 
-      const resumed = await durableAgent.approveToolCall({ runId: result.runId, memory });
+      const resumed = await durableAgent.approveToolCallMessageList({ runId: result.runId, memory });
       for await (const _chunk of resumed.fullStream) {
         // Drain the resumed segment.
       }
@@ -455,7 +455,7 @@ describe('DurableAgent tool approval', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { runId, cleanup } = await durableAgent.stream('Search for test', {
+      const { runId, cleanup } = await durableAgent.streamMessageList('Search for test', {
         requireToolApproval: true,
       });
 
@@ -484,7 +484,7 @@ describe('DurableAgent tool approval', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { runId, cleanup } = await durableAgent.stream('Search for test', {
+      const { runId, cleanup } = await durableAgent.streamMessageList('Search for test', {
         requireToolApproval: true,
       });
 
@@ -516,7 +516,7 @@ describe('DurableAgent tool approval', () => {
 
       const onSuspended = vi.fn();
 
-      const { runId, cleanup } = await durableAgent.stream('Use the tool', {
+      const { runId, cleanup } = await durableAgent.streamMessageList('Use the tool', {
         requireToolApproval: true,
         onSuspended,
       });

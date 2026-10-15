@@ -83,7 +83,7 @@ describe('DurableAgent suspend metadata persistence', () => {
     });
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-    const { runId, cleanup } = await durableAgent.stream('Please proceed', {
+    const { runId, cleanup } = await durableAgent.streamMessageList('Please proceed', {
       memory: { thread: threadId, resource: resourceId },
     });
     expect(runId).toBeDefined();

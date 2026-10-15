@@ -165,7 +165,7 @@ describe('agent-loop snapshot size', () => {
     const thread = buildLongThread(100, filler);
     const rawThreadSize = JSON.stringify(thread).length;
 
-    const stream = await agent.stream(thread, { requireToolApproval: true });
+    const stream = await agent.streamMessageList(thread, { requireToolApproval: true });
     const first = await collectApproval(stream);
     expect(first.toolCallId).toBeTruthy();
 
@@ -176,7 +176,7 @@ describe('agent-loop snapshot size', () => {
     // and not another in `context.input`.
     const fillerCopiesFirst = countMarker(runsAtFirstSuspension, `message 42: ${filler}`);
 
-    const resume1 = await agent.approveToolCall({ runId: stream.runId, toolCallId: first.toolCallId });
+    const resume1 = await agent.approveToolCallMessageList({ runId: stream.runId, toolCallId: first.toolCallId });
     const second = await collectApproval(resume1);
     expect(second.toolCallId).toBeTruthy();
     expect(second.toolCallId).not.toBe(first.toolCallId);
@@ -207,7 +207,7 @@ describe('agent-loop snapshot size', () => {
     expect(sizeAtSecondSuspension).toBeLessThan(ceiling);
 
     // The run must still complete correctly after the final approval.
-    const resume2 = await agent.approveToolCall({ runId: stream.runId, toolCallId: second.toolCallId });
+    const resume2 = await agent.approveToolCallMessageList({ runId: stream.runId, toolCallId: second.toolCallId });
     const final = await collectApproval(resume2);
     expect(final.text).toBe('All users found');
     expect(executedCalls).toEqual(['User 1', 'User 2']);
@@ -235,7 +235,7 @@ describe('agent-loop snapshot size', () => {
     const filler = 'y'.repeat(600);
     const thread = buildLongThread(50, filler);
 
-    const stream = await agentBefore.stream(thread, { requireToolApproval: true });
+    const stream = await agentBefore.streamMessageList(thread, { requireToolApproval: true });
     const first = await collectApproval(stream);
     expect(first.toolCallId).toBeTruthy();
 
@@ -266,7 +266,7 @@ describe('agent-loop snapshot size', () => {
     });
     const mastraAfter = new Mastra({ agents: { agent: agentAfter }, logger: false, storage });
 
-    const resumed = await agentAfter.approveToolCall({ runId: stream.runId, toolCallId: first.toolCallId });
+    const resumed = await agentAfter.approveToolCallMessageList({ runId: stream.runId, toolCallId: first.toolCallId });
     const final = await collectApproval(resumed);
 
     expect(executedCalls).toEqual(['User 1']);

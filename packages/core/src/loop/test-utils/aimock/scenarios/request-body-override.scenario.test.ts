@@ -1,7 +1,7 @@
 /**
  * AIMock Scenario: Request Body Override
  *
- * Tests that model settings passed to agent.stream() correctly override defaults
+ * Tests that model settings passed to agent.streamMessageList() correctly override defaults
  * and land in the model request body. This covers the regression class where
  * temperature, maxTokens, topP, and other model settings could be dropped during
  * request building.

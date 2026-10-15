@@ -170,7 +170,7 @@ describe('durable delegated approval persisted runId', () => {
     memory: { thread: string; resource: string },
     storage: InMemoryStore,
   ) => {
-    const result = await durableAgent.stream('Get the secret', { memory, maxSteps: 5 });
+    const result = await durableAgent.streamMessageList('Get the secret', { memory, maxSteps: 5 });
     let sawApproval = false;
     const seen: string[] = [];
     for await (const chunk of result.fullStream) {
@@ -262,7 +262,7 @@ describe('durable delegated approval persisted runId', () => {
     expect(entry.delegatedRunId).not.toBe(entry.runId);
     expect(toolExecutions.count).toBe(0);
 
-    const resumed = await durableAgent.approveToolCall({
+    const resumed = await durableAgent.approveToolCallMessageList({
       runId: entry.runId,
       toolCallId: entry.toolCallId,
       memory,
@@ -281,7 +281,7 @@ describe('durable delegated approval persisted runId', () => {
 
     // ---- Leg 1: the outer delegation tool is approval-gated, so the run
     // suspends at the pre-execution gate before the sub-agent ever starts. ----
-    const result = await durableAgent.stream('Get the secret', {
+    const result = await durableAgent.streamMessageList('Get the secret', {
       memory,
       maxSteps: 5,
       requireToolApproval: true,
@@ -301,7 +301,7 @@ describe('durable delegated approval persisted runId', () => {
 
     // ---- Leg 2: approve the outer gate. The sub-agent starts and raises its
     // own delegated approval mid-execution. ----
-    const midResumed = await durableAgent.approveToolCall({
+    const midResumed = await durableAgent.approveToolCallMessageList({
       runId: outerGateEntry.runId,
       toolCallId: outerGateEntry.toolCallId,
       memory,
@@ -335,7 +335,7 @@ describe('durable delegated approval persisted runId', () => {
     // Even though the tool is approval-gated at the outer step, the decision
     // must resume the suspended inner run instead of re-executing the
     // delegation from scratch. ----
-    const resumed = await durableAgent.approveToolCall({
+    const resumed = await durableAgent.approveToolCallMessageList({
       runId: outerGateEntry.runId,
       toolCallId: outerGateEntry.toolCallId,
       memory,
@@ -371,7 +371,7 @@ describe('durable delegated approval persisted runId', () => {
       });
       new Mastra({ agents: { durableAgent: durableAgent2 }, storage, logger: false });
 
-      const resumed = await durableAgent2.approveToolCall({
+      const resumed = await durableAgent2.approveToolCallMessageList({
         runId: entry.runId,
         toolCallId: entry.toolCallId,
         memory,

@@ -111,7 +111,7 @@ describe('DurableAgent tool writer', () => {
       pubsub,
     });
 
-    const chunks = await drain((await durableAgent.stream('go', { maxSteps: 3 })).fullStream);
+    const chunks = await drain((await durableAgent.streamMessageList('go', { maxSteps: 3 })).fullStream);
     const types = chunks.map(c => c.type);
 
     expect(seen.writer).toBe('ToolStream');
@@ -149,7 +149,7 @@ describe('DurableAgent tool writer', () => {
       originalSet(runId, { ...entry, tools: undefined, baseTools: undefined })) as typeof globalRunRegistry.set;
 
     try {
-      const chunks = await drain((await durableAgent.stream('go', { maxSteps: 3 })).fullStream);
+      const chunks = await drain((await durableAgent.streamMessageList('go', { maxSteps: 3 })).fullStream);
       const types = chunks.map(c => c.type);
 
       expect(seen.writer).toBe('ToolStream');

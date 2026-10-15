@@ -201,7 +201,7 @@ describe('Agent.streamUntilIdle', () => {
     const agent = new Agent({ id: 'd1', name: 'd1', instructions: 'test', model, defaultOptions: { untilIdle: true } });
     plainMastra.addAgent(agent, 'd1');
 
-    const result = await agent.stream('hi');
+    const result = await agent.streamMessageList('hi');
     const chunks = await drain(result.fullStream as ReadableStream<any>);
 
     expect(chunks.some(c => c?.type === 'error')).toBe(false);
@@ -225,7 +225,7 @@ describe('Agent.streamUntilIdle', () => {
     });
     mastra.addAgent(agent, 'd2');
 
-    const result = await agent.stream('hi', { memory: { thread: 'thread-d2', resource: 'user-1' } });
+    const result = await agent.streamMessageList('hi', { memory: { thread: 'thread-d2', resource: 'user-1' } });
     await drain(result.fullStream as ReadableStream<any>);
 
     expect(getCallCount()).toBe(1);
@@ -301,7 +301,7 @@ describe('Agent.streamUntilIdle', () => {
     const suppliedRunId = callerRunId ? `caller-initial-abort-${abortBy}` : undefined;
     const threadId = `initial-abort-thread-${abortBy}-${callerRunId ? 'caller' : 'generated'}`;
     const resourceId = 'user-1';
-    const result = await agent.stream('hi', {
+    const result = await agent.streamMessageList('hi', {
       ...(suppliedRunId ? { runId: suppliedRunId } : {}),
       memory: { thread: threadId, resource: resourceId },
       untilIdle: true,
@@ -341,7 +341,7 @@ describe('Agent.streamUntilIdle', () => {
       const runId = `caller-abort-${abortBy}`;
       const threadId = `abort-thread-${abortBy}`;
       const resourceId = 'user-1';
-      const result = await agent.stream('hi', {
+      const result = await agent.streamMessageList('hi', {
         runId,
         memory: { thread: threadId, resource: resourceId },
         untilIdle: true,
@@ -652,7 +652,7 @@ describe('Agent.streamUntilIdle', () => {
     mastra.addAgent(agent, 'resume-default-until-idle');
 
     const memoryOptions = { thread: 'resume-default-thread', resource: 'user-1' };
-    const initial = await agent.stream('start', { memory: memoryOptions });
+    const initial = await agent.streamMessageList('start', { memory: memoryOptions });
     const initialChunks = await drain(initial.fullStream as ReadableStream<any>);
     expect(initialChunks.some(chunk => chunk.type === 'tool-call-suspended')).toBe(true);
 
@@ -698,7 +698,7 @@ describe('Agent.streamUntilIdle', () => {
     mastra.addAgent(agent, 'resume-run-id-options');
 
     const memoryOptions = { thread: 'resume-run-id-thread', resource: 'user-1' };
-    const initial = await agent.stream('start', {
+    const initial = await agent.streamMessageList('start', {
       runId: 'resume-caller-run-id',
       memory: memoryOptions,
     });

@@ -163,7 +163,7 @@ describe('Gemini Model Compatibility Tests', () => {
         model: MODEL,
       });
 
-      const result = await agent.generate('Hello, how are you?');
+      const result = await agent.generateMessageList('Hello, how are you?');
       expect(result).toBeDefined();
       expect(result.text).toBeDefined();
     });
@@ -176,7 +176,7 @@ describe('Gemini Model Compatibility Tests', () => {
         model: MODEL,
       });
 
-      const result = await agent.generate('List 3 benefits of exercise', {
+      const result = await agent.generateMessageList('List 3 benefits of exercise', {
         structuredOutput: {
           schema: z.object({
             benefits: z.array(z.string()),
@@ -219,7 +219,7 @@ describe('Gemini Model Compatibility Tests', () => {
         workflows: { summarizeWorkflow },
       });
 
-      const result = await agent.generate('Return a short structured summary about exercise.', {
+      const result = await agent.generateMessageList('Return a short structured summary about exercise.', {
         structuredOutput: {
           schema: z.object({
             summary: z.string(),
@@ -243,7 +243,7 @@ describe('Gemini Model Compatibility Tests', () => {
         model: MODEL,
       });
 
-      await expect(agent.generate('')).rejects.toThrow();
+      await expect(agent.generateMessageList('')).rejects.toThrow();
     });
 
     it('should handle single turn with maxSteps=1 and messages ending with assistant', async () => {
@@ -255,7 +255,7 @@ describe('Gemini Model Compatibility Tests', () => {
         memory,
       });
 
-      const result = await agent.generate(
+      const result = await agent.generateMessageList(
         [
           {
             role: 'user',
@@ -296,7 +296,7 @@ describe('Gemini Model Compatibility Tests', () => {
         tools: { testTool },
       });
 
-      const result = await agent.generate([
+      const result = await agent.generateMessageList([
         { role: 'user', content: 'What is the weather?' },
         {
           role: 'assistant',
@@ -342,7 +342,7 @@ describe('Gemini Model Compatibility Tests', () => {
         tools: { testTool },
       });
 
-      const result = await agent.generate([
+      const result = await agent.generateMessageList([
         {
           role: 'assistant',
           content: [
@@ -379,7 +379,7 @@ describe('Gemini Model Compatibility Tests', () => {
         model: MODEL,
       });
 
-      const result = await agent.generate([{ role: 'assistant', content: 'I can help you with that task.' }]);
+      const result = await agent.generateMessageList([{ role: 'assistant', content: 'I can help you with that task.' }]);
 
       expect(result).toBeDefined();
     });
@@ -726,7 +726,7 @@ describe('Gemini Model Compatibility Tests', () => {
         inputSchema: z.object({ topic: z.string() }),
         outputSchema: z.object({ summary: z.string() }),
         execute: async ({ inputData }) => {
-          const resp = await researchAgent.generate(`Research: ${inputData.topic}`, {
+          const resp = await researchAgent.generateMessageList(`Research: ${inputData.topic}`, {
             structuredOutput: {
               schema: z.object({ summary: z.string() }),
             },
@@ -864,7 +864,7 @@ describe('Gemini Model Compatibility Tests', () => {
         });
 
         // This should trigger a tool call, then process the result
-        const stream = await agent.stream('What is the weather in San Francisco?', {
+        const stream = await agent.streamMessageList('What is the weather in San Francisco?', {
           maxSteps: 5,
           memory: {
             thread: 'tool-calls',
@@ -879,7 +879,7 @@ describe('Gemini Model Compatibility Tests', () => {
         expect(result.text.length).toBeGreaterThan(0);
         expect(result.error).toBeUndefined();
 
-        const stream2 = await agent.stream('Whats the weather there now?', {
+        const stream2 = await agent.streamMessageList('Whats the weather there now?', {
           memory: {
             thread: 'tool-calls',
             resource: 'gemini-3',
@@ -924,7 +924,7 @@ describe('Gemini Model Compatibility Tests', () => {
       });
 
       // This should trigger a tool call, then process the result
-      const result = await agent.generate('What is the weather in San Francisco and New York?', {
+      const result = await agent.generateMessageList('What is the weather in San Francisco and New York?', {
         maxSteps: 5,
       });
 
@@ -1006,7 +1006,7 @@ describe('Gemini Model Compatibility Tests', () => {
           thread: 'tool-suspend-stream-thread',
           resource: 'tool-suspend-stream-resource',
         };
-        const stream = await agentOne.stream('Find the name, age and profession of the user - Dero Israel', {
+        const stream = await agentOne.streamMessageList('Find the name, age and profession of the user - Dero Israel', {
           memory: threadAndResource,
         });
         for await (const _chunk of stream.fullStream) {
@@ -1021,7 +1021,7 @@ describe('Gemini Model Compatibility Tests', () => {
         expect((suspendData.suspendPayload as any)?.message).toBe('Please provide the age of the user');
 
         if (suspendData.suspendPayload) {
-          const resumeStream = await agentOne.stream('He is 25 years old', {
+          const resumeStream = await agentOne.streamMessageList('He is 25 years old', {
             memory: threadAndResource,
           });
           for await (const _chunk of resumeStream.fullStream) {
@@ -1108,7 +1108,7 @@ describe('Gemini Model Compatibility Tests', () => {
           thread: 'tool-suspend-generate-thread',
           resource: 'tool-suspend-generate-resource',
         };
-        const output = await agentOne.generate('Find the name, age and profession of the user - Dero Israel', {
+        const output = await agentOne.generateMessageList('Find the name, age and profession of the user - Dero Israel', {
           memory: threadAndResource,
         });
 
@@ -1120,7 +1120,7 @@ describe('Gemini Model Compatibility Tests', () => {
             message: 'Please provide the age of the user',
           },
         });
-        const resumeOutput = await agentOne.generate('He is 25 years old', {
+        const resumeOutput = await agentOne.generateMessageList('He is 25 years old', {
           memory: threadAndResource,
         });
 
@@ -1214,7 +1214,7 @@ describe('Gemini Model Compatibility Tests', () => {
         };
 
         let toolCall;
-        const stream = await agentOne.stream('Find the name and age of the user - Dero Israel', {
+        const stream = await agentOne.streamMessageList('Find the name and age of the user - Dero Israel', {
           memory: threadAndResource,
         });
         const suspendData = {
@@ -1228,7 +1228,7 @@ describe('Gemini Model Compatibility Tests', () => {
           }
         }
         if (suspendData.suspendPayload) {
-          const resumeStream = await agentOne.stream('He is 25 years old', {
+          const resumeStream = await agentOne.streamMessageList('He is 25 years old', {
             memory: threadAndResource,
           });
           for await (const _chunk of resumeStream.fullStream) {
@@ -1329,7 +1329,7 @@ describe('Gemini Model Compatibility Tests', () => {
           resource: 'test-resource-2',
         };
 
-        const output = await agentOne.generate('Find the name and age of the user - Dero Israel', {
+        const output = await agentOne.generateMessageList('Find the name and age of the user - Dero Israel', {
           memory: threadAndResource,
         });
         expect(output.finishReason).toBe('suspended');
@@ -1340,7 +1340,7 @@ describe('Gemini Model Compatibility Tests', () => {
             message: 'Please provide the age of the user',
           },
         });
-        const resumeOutput = await agentOne.generate('He is 25 years old', {
+        const resumeOutput = await agentOne.generateMessageList('He is 25 years old', {
           memory: threadAndResource,
         });
 

@@ -251,7 +251,7 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
     try {
       const agent = createRegisteredAgent();
 
-      const stream = await agent.stream('Find Dero Israel', { requireToolApproval: true });
+      const stream = await agent.streamMessageList('Find Dero Israel', { requireToolApproval: true });
 
       let toolCallId = '';
       for await (const chunk of stream.fullStream) {
@@ -259,7 +259,7 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
       }
       expect(toolCallId).toBeTruthy();
 
-      const resumeStream = await agent.approveToolCall({ runId: stream.runId, toolCallId });
+      const resumeStream = await agent.approveToolCallMessageList({ runId: stream.runId, toolCallId });
       await drainFullStream(resumeStream);
 
       expect(agentRunCalls.length).toBe(2);
@@ -492,7 +492,7 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
     try {
       const agent = createRegisteredAgent();
 
-      const stream = await agent.stream('Find Dero Israel', { requireToolApproval: true });
+      const stream = await agent.streamMessageList('Find Dero Israel', { requireToolApproval: true });
       await drainFullStream(stream);
 
       const resumeStream = await agent.resumeStream(
@@ -519,7 +519,7 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
     try {
       const agent = createRegisteredAgent();
 
-      const stream = await agent.stream('Find Dero Israel', { requireToolApproval: true });
+      const stream = await agent.streamMessageList('Find Dero Israel', { requireToolApproval: true });
 
       let suspendedToolCallId = '';
       for await (const chunk of stream.fullStream) {
@@ -555,7 +555,7 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
     try {
       const agent = createRegisteredAgent(createSuspendingUserTool());
 
-      const stream = await agent.stream('Find Dero Israel');
+      const stream = await agent.streamMessageList('Find Dero Israel');
 
       let suspendedToolName = '';
       for await (const chunk of stream.fullStream) {
@@ -584,7 +584,7 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
     try {
       const agent = createRegisteredAgent();
 
-      const output = await agent.generate('Find Dero Israel', { requireToolApproval: true });
+      const output = await agent.generateMessageList('Find Dero Israel', { requireToolApproval: true });
       expect(output.finishReason).toBe('suspended');
       expect(output.suspendPayload?.toolCallId).toBeTruthy();
 

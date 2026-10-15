@@ -1,7 +1,7 @@
 /**
  * AIMock Scenario: Provider Options Passthrough
  *
- * Tests that `providerOptions` can be forwarded through `agent.stream()` and
+ * Tests that `providerOptions` can be forwarded through `agent.streamMessageList()` and
  * coexist with model settings that ARE observable on the wire.
  *
  * Important controller limitation: the OpenAI v5 provider does not serialize

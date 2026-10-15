@@ -166,7 +166,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
           requestContext,
         });
       } else {
-        response = await agent.generate('test message', {
+        response = await agent.generateMessageList('test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -267,7 +267,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
           requestContext,
         });
       } else {
-        stream = await agent.stream('test message', {
+        stream = await agent.streamMessageList('test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -379,7 +379,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
           runId: 'test-run',
         });
       } else {
-        await agent.generate(testMessages, {
+        await agent.generateMessageList(testMessages, {
           threadId: 'test-thread',
           resourceId: 'test-resource',
           runId: 'test-run',
@@ -489,7 +489,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
           // Just consume the stream
         }
       } else {
-        const stream = await agent.stream(testMessages, {
+        const stream = await agent.streamMessageList(testMessages, {
           threadId: 'test-thread',
           resourceId: 'test-resource',
           runId: 'test-run',
@@ -595,7 +595,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
           // Just consume the stream
         }
       } else {
-        const stream = await agent.stream(testMessages);
+        const stream = await agent.streamMessageList(testMessages);
         // Consume the stream to trigger the model call
         for await (const _chunk of stream.fullStream) {
           // Just consume the stream
@@ -693,7 +693,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       if (version === 'v1') {
         await agent.generateLegacy(testMessages);
       } else {
-        await agent.generate(testMessages);
+        await agent.generateMessageList(testMessages);
       }
 
       // Check if system message from user input is preserved in the final prompt
@@ -777,7 +777,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
           system: 'You must respond in JSON format',
         });
       } else {
-        await agent.generate('Hello', {
+        await agent.generateMessageList('Hello', {
           system: 'You must respond in JSON format',
         });
       }
@@ -871,7 +871,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
           // Just consume the stream
         }
       } else {
-        const streamResult = await agent.stream('Hello', {
+        const streamResult = await agent.streamMessageList('Hello', {
           system: 'Always be concise',
         });
         await streamResult.getFullOutput(); // Consume the stream
@@ -955,7 +955,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
           system: 'Additional system context',
         });
       } else {
-        await agent.generate('Hello', {
+        await agent.generateMessageList('Hello', {
           instructions: 'Override instructions',
           system: 'Additional system context',
         });
@@ -1020,7 +1020,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       });
 
       // Test with CoreSystemMessage object
-      await agent.generate('Hello', {
+      await agent.generateMessageList('Hello', {
         system: {
           role: 'system',
           content: 'You are a helpful assistant that responds in JSON format',
@@ -1082,7 +1082,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       });
 
       // Test with SystemModelMessage object (AI SDK v5 format)
-      const result = await agent.stream('Hello', {
+      const result = await agent.streamMessageList('Hello', {
         system: {
           role: 'system',
           content: 'You are an expert programmer who provides detailed explanations',
@@ -1159,7 +1159,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
 
       // Test 1: String system message
       capturedMessages = [];
-      await agent.generate('Test 1', {
+      await agent.generateMessageList('Test 1', {
         system: 'String system message',
       });
       let systemMessages = capturedMessages.filter(m => m.role === 'system');
@@ -1170,7 +1170,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
 
       // Test 2: CoreSystemMessage object
       capturedMessages = [];
-      await agent.generate('Test 2', {
+      await agent.generateMessageList('Test 2', {
         system: {
           role: 'system',
           content: 'CoreSystemMessage content',
@@ -1184,7 +1184,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
 
       // Test 3: SystemModelMessage with string content
       capturedMessages = [];
-      await agent.generate('Test 3', {
+      await agent.generateMessageList('Test 3', {
         system: {
           role: 'system',
           content: 'SystemModelMessage with full string content',
@@ -1250,7 +1250,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
 
       // Test 1: Array of strings
       capturedMessages = [];
-      await agent.generate('Test string array', {
+      await agent.generateMessageList('Test string array', {
         system: ['First string message', 'Second string message', 'Third string message'],
       });
 
@@ -1271,7 +1271,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
 
       // Test 2: Array of CoreSystemMessage objects
       capturedMessages = [];
-      await agent.generate('Test object array', {
+      await agent.generateMessageList('Test object array', {
         system: [
           { role: 'system', content: 'First system message' },
           { role: 'system', content: 'Second system message' },

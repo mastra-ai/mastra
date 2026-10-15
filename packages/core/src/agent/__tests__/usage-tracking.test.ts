@@ -42,7 +42,7 @@ describe('Agent usage tracking', () => {
           instructions: 'You are a helpful assistant',
         });
 
-        const result = await agent.generate('Hello');
+        const result = await agent.generateMessageList('Hello');
 
         // Check that usage exists
         expect(result.usage).toBeDefined();
@@ -86,7 +86,7 @@ describe('Agent usage tracking', () => {
           instructions: 'You are a helpful assistant',
         });
 
-        const stream = await agent.stream('Hello');
+        const stream = await agent.streamMessageList('Hello');
 
         // Consume stream to get usage
         for await (const _ of stream.fullStream) {

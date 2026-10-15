@@ -99,7 +99,7 @@ describe('tool-call-resumed chunk (#24280)', () => {
     );
     new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
 
-    const stream = await agent.stream('ask', { maxSteps: 3 });
+    const stream = await agent.streamMessageList('ask', { maxSteps: 3 });
     const initial = await collect(stream);
     expect(initial.some(c => c.type === 'tool-call-suspended')).toBe(true);
     expect(initial.some(c => c.type === 'tool-call-resumed')).toBe(false);
@@ -217,7 +217,7 @@ describe('tool-call-resumed chunk (#24280)', () => {
     );
     new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
 
-    const chunks = await collect(await agent.stream('ask', { maxSteps: 3 }));
+    const chunks = await collect(await agent.streamMessageList('ask', { maxSteps: 3 }));
     expect(chunks.some(c => c.type === 'tool-result' && c.payload.toolCallId === 'tc-fresh')).toBe(true);
     expect(chunks.some(c => c.type === 'tool-call-resumed')).toBe(false);
   });
@@ -242,11 +242,11 @@ describe('tool-call-resumed chunk (#24280)', () => {
     );
     new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
 
-    const stream = await agent.stream('go', { maxSteps: 3 });
+    const stream = await agent.streamMessageList('go', { maxSteps: 3 });
     const initial = await collect(stream);
     expect(initial.some(c => c.type === 'tool-call-approval')).toBe(true);
 
-    const chunks = await collect(await agent.approveToolCall({ runId: stream.runId, toolCallId: 'tc-appr' }));
+    const chunks = await collect(await agent.approveToolCallMessageList({ runId: stream.runId, toolCallId: 'tc-appr' }));
     const acks = chunks.filter(c => c.type === 'tool-call-resumed');
     expect(acks).toHaveLength(1);
     expect(acks[0].payload).toMatchObject({ toolCallId: 'tc-appr', kind: 'approval', args: { value: 'x' } });
@@ -275,11 +275,11 @@ describe('tool-call-resumed chunk (#24280)', () => {
     new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
 
     const transform = { targets: ['display'], transformToolPayload: (ctx: any) => `[redacted ${ctx.phase}]` };
-    const stream = await agent.stream('go', { maxSteps: 3, transform } as any);
+    const stream = await agent.streamMessageList('go', { maxSteps: 3, transform } as any);
     await collect(stream);
 
     const chunks = await collect(
-      await agent.approveToolCall({ runId: stream.runId, toolCallId: 'tc-red', transform } as any),
+      await agent.approveToolCallMessageList({ runId: stream.runId, toolCallId: 'tc-red', transform } as any),
     );
     const ack = chunks.find(c => c.type === 'tool-call-resumed');
     expect(ack, chunks.map(c => c.type).join(',')).toBeDefined();

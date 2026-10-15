@@ -314,7 +314,7 @@ async function runT44ThrowsDirect(engine: ParityEngine): Promise<ThrowCaseState>
   let output: { fullStream: AsyncIterable<{ type: string; payload?: unknown }> } | undefined;
   try {
     if (engine === 'plain') {
-      output = (await agent.stream('hello there', options)) as never;
+      output = (await agent.streamMessageList('hello there', options)) as never;
     } else {
       const result = await (
         runner as unknown as {

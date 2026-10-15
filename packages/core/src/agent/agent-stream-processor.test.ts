@@ -86,7 +86,7 @@ describe('Stream vs Non-Stream Output Processor Consistency (Issue #7087)', () =
     });
 
     // Stream the response
-    const stream = await agent.stream('test message');
+    const stream = await agent.streamMessageList('test message');
 
     // Collect stream chunks
     const streamedText: string[] = [];
@@ -116,7 +116,7 @@ describe('Stream vs Non-Stream Output Processor Consistency (Issue #7087)', () =
     });
 
     // Stream the response with memory enabled
-    const stream = await agent.stream('test message', {
+    const stream = await agent.streamMessageList('test message', {
       memory: {
         thread: 'test-thread-123',
         resource: 'test-resource-123',
@@ -174,7 +174,7 @@ describe('Output processor stream errors', () => {
       outputProcessors: [throwingRedactor],
     });
 
-    const result = await agent.stream('Reveal the card number');
+    const result = await agent.streamMessageList('Reveal the card number');
     const chunks = [];
 
     for await (const chunk of result.fullStream) {
@@ -253,7 +253,7 @@ describe('Processor state persistence across processOutputStream and processOutp
       outputProcessors: [new StatePersistenceProcessor()],
     });
 
-    const stream = await agent.stream('test message');
+    const stream = await agent.streamMessageList('test message');
 
     // Consume the stream to trigger both processOutputStream and processOutputResult
     for await (const _chunk of stream.textStream) {
@@ -300,7 +300,7 @@ describe('Processor state persistence across processOutputStream and processOutp
       outputProcessors: [new LifecycleStateProcessor()],
     });
 
-    const stream = await agent.stream('test message');
+    const stream = await agent.streamMessageList('test message');
     for await (const _chunk of stream.textStream) {
       // consume
     }
@@ -388,7 +388,7 @@ describe('OutputProcessor Metadata with Streaming (Issue #11454)', () => {
     });
 
     // Stream the response
-    const stream = await agent.stream('What is the meaning of life?');
+    const stream = await agent.streamMessageList('What is the meaning of life?');
 
     // Consume the stream to trigger processOutputResult
     const _fullOutput = await stream.getFullOutput();
@@ -423,7 +423,7 @@ describe('OutputProcessor Metadata with Streaming (Issue #11454)', () => {
     });
 
     // Stream the response
-    const stream = await agent.stream('What is the meaning of life?');
+    const stream = await agent.streamMessageList('What is the meaning of life?');
 
     // Consume the stream to trigger processOutputResult
     await stream.getFullOutput();
@@ -461,7 +461,7 @@ describe('OutputProcessor Metadata with Streaming (Issue #11454)', () => {
     });
 
     // Stream the response
-    const stream = await agent.stream('What is the meaning of life?');
+    const stream = await agent.streamMessageList('What is the meaning of life?');
 
     // Consume the stream via textStream (common user pattern)
     const textChunks: string[] = [];
@@ -502,7 +502,7 @@ describe('OutputProcessor Metadata with Streaming (Issue #11454)', () => {
     });
 
     // Stream the response
-    const stream = await agent.stream('What is the meaning of life?');
+    const stream = await agent.streamMessageList('What is the meaning of life?');
 
     // Collect all chunks from fullStream
     const chunks: any[] = [];

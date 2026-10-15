@@ -360,7 +360,7 @@ describe('DurableAgent image handling', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { output, cleanup } = await durableAgent.stream([
+      const { output, cleanup } = await durableAgent.streamMessageList([
         {
           role: 'user',
           content: [

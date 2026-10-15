@@ -1,7 +1,7 @@
 /**
  * What the suspended-run TTL means for callers, end to end.
  *
- * A suspended `agent.stream()` run is kept warm so a resume that lands on the same
+ * A suspended `agent.streamMessageList()` run is kept warm so a resume that lands on the same
  * instance reattaches to in-memory state instead of rehydrating a snapshot. That warm
  * state is now bounded by `MASTRA_SUSPENDED_RUN_TTL_MS`: within the window nothing
  * changes, and once it lapses the record is evicted and resume falls back to the
@@ -124,7 +124,7 @@ function createSetup() {
 }
 
 async function suspendRun(agent: Agent) {
-  const stream = await agent.stream('Find the user with name - Dero Israel', {
+  const stream = await agent.streamMessageList('Find the user with name - Dero Israel', {
     requireToolApproval: true,
     memory: { thread: SUSPENDED_THREAD_ID, resource: RESOURCE_ID },
   });
@@ -147,7 +147,7 @@ async function sweepAfter(elapsedMs: number, sweeperAgent: Agent) {
   vi.useFakeTimers({ shouldAdvanceTime: true, now: Date.now() });
   vi.setSystemTime(Date.now() + elapsedMs);
   try {
-    const stream = await sweeperAgent.stream('hello', {
+    const stream = await sweeperAgent.streamMessageList('hello', {
       memory: { thread: SWEEP_THREAD_ID, resource: RESOURCE_ID },
     });
     for await (const _chunk of stream.fullStream) {

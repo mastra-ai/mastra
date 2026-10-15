@@ -943,7 +943,7 @@ describe('Agent signals', () => {
     });
     const nextRun = readNextRun(subscription.stream[Symbol.asyncIterator]());
 
-    const stream = await agent.stream('Hello', {
+    const stream = await agent.streamMessageList('Hello', {
       memory: { thread: 'future-thread', resource: 'future-user' },
     });
 
@@ -1680,7 +1680,7 @@ describe('Agent signals', () => {
     });
     const wrapper = {
       id: agent.id,
-      stream: vi.fn((...args: Parameters<Agent['stream']>) => agent.stream(...args)),
+      stream: vi.fn((...args: Parameters<Agent['streamMessageList']>) => agent.streamMessageList(...args)),
     };
     agent.__setThreadRuntimeAgent(wrapper as unknown as Agent<any, any, any, any>);
 
@@ -4277,7 +4277,7 @@ describe('Agent signals', () => {
     });
 
     const subscription = await agent.subscribeToThread({ threadId, resourceId });
-    const stream = await agent.stream('Hello', { memory: { thread: threadId, resource: resourceId } });
+    const stream = await agent.streamMessageList('Hello', { memory: { thread: threadId, resource: resourceId } });
 
     try {
       await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
@@ -4328,7 +4328,7 @@ describe('Agent signals', () => {
     });
 
     const subscription = await agent.subscribeToThread({ threadId, resourceId });
-    const stream = await agent.stream('Hello', { memory: { thread: threadId, resource: resourceId } });
+    const stream = await agent.streamMessageList('Hello', { memory: { thread: threadId, resource: resourceId } });
 
     try {
       await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
@@ -4364,7 +4364,7 @@ describe('Agent signals', () => {
       const follower = new AgentThreadStreamRuntime();
       let observer = mode === 'live' ? await follower.subscribeToThread(agent, scope, pubsub) : undefined;
       try {
-        const first = await agent.stream('initial', { memory: { resource: scope.resourceId, thread: scope.threadId } });
+        const first = await agent.streamMessageList('initial', { memory: { resource: scope.resourceId, thread: scope.threadId } });
         await vi.waitFor(() => expect(getStreamCount()).toBe(1));
         const signal = agent.sendSignal({ type: 'user-message', contents: 'already answered' }, scope);
         await signal.accepted;
@@ -4394,7 +4394,7 @@ describe('Agent signals', () => {
       const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel('first', 'follow-up');
       const agent = new Agent({ id: 'forwarded-replay', name: 'Forwarded', instructions: 'Test', model, pubsub });
       try {
-        const first = await agent.stream('initial', { memory: { resource: scope.resourceId, thread: scope.threadId } });
+        const first = await agent.streamMessageList('initial', { memory: { resource: scope.resourceId, thread: scope.threadId } });
         await vi.waitFor(() => expect(getStreamCount()).toBe(1));
         const ownSourceId = pubsub.publishedData.find(data => typeof data.sourceId === 'string')?.sourceId;
         expect(ownSourceId).toBeTypeOf('string');
@@ -4428,7 +4428,7 @@ describe('Agent signals', () => {
       const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel('first', 'follow-up');
       const agent = new Agent({ id: 'local-echo', name: 'Echo', instructions: 'Test', model, pubsub });
       try {
-        const first = await agent.stream('initial', { memory: { resource: scope.resourceId, thread: scope.threadId } });
+        const first = await agent.streamMessageList('initial', { memory: { resource: scope.resourceId, thread: scope.threadId } });
         await vi.waitFor(() => expect(getStreamCount()).toBe(1));
         await agent.sendSignal({ type: 'user-message', contents: 'local follow-up' }, scope).accepted;
         await pubsub.flush();
@@ -4456,7 +4456,7 @@ describe('Agent signals', () => {
         const gate = new Promise<void>(resolve => {
           release = resolve;
         });
-        const first = await agent.stream('initial', { memory: { resource: scope.resourceId, thread: scope.threadId } });
+        const first = await agent.streamMessageList('initial', { memory: { resource: scope.resourceId, thread: scope.threadId } });
         await vi.waitFor(() => expect(getStreamCount()).toBe(1));
         const signal = createSignal({ id: 'delayed-retry', type: 'user-message', contents: 'cancelled retry input' });
         const enqueue = {
@@ -4539,7 +4539,7 @@ describe('Agent signals', () => {
       });
       const remote = new AgentThreadStreamRuntime();
       try {
-        const first = await agent.stream('initial', { memory: { resource: scope.resourceId, thread: scope.threadId } });
+        const first = await agent.streamMessageList('initial', { memory: { resource: scope.resourceId, thread: scope.threadId } });
         await vi.waitFor(() => expect(getStreamCount()).toBe(1));
         await agent.sendSignal({ type: 'user-message', contents: 'followup' }, scope).accepted;
         const forwarded = remote.sendSignal(
@@ -4579,7 +4579,7 @@ describe('Agent signals', () => {
       const followerRuntime = new AgentThreadStreamRuntime();
       const follower = await followerRuntime.subscribeToThread(agent, scope, pubsub);
       try {
-        const first = await agent.stream('initial', { memory: { resource: scope.resourceId, thread: scope.threadId } });
+        const first = await agent.streamMessageList('initial', { memory: { resource: scope.resourceId, thread: scope.threadId } });
         await vi.waitFor(() => expect(getStreamCount()).toBe(1));
         await agent.sendSignal({ type: 'user-message', contents: 'already consumed input' }, scope).accepted;
         await pubsub.flush();
@@ -4604,7 +4604,7 @@ describe('Agent signals', () => {
         const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel('first', 'next');
         const agent = new Agent({ id: 'retained-lifetime', name: 'Retained', model, pubsub, instructions: 'Test' });
         const options = { memory: { resource: scope.resourceId, thread: scope.threadId } };
-        const first = await agent.stream('initial', options);
+        const first = await agent.streamMessageList('initial', options);
         await vi.waitFor(() => expect(getStreamCount()).toBe(1));
         await agent.sendSignal({ type: 'user-message', contents: 'already executed' }, scope).accepted;
         const cancelled = createSignal({ type: 'user-message', contents: 'already cancelled' });
@@ -4697,7 +4697,7 @@ describe('Agent signals', () => {
       const agent = new Agent({ id: 'control-owner', name: 'Control', instructions: 'Test', model, pubsub });
       const options = { memory: { resource: scope.resourceId, thread: scope.threadId } };
       try {
-        const first = await agent.stream('initial', options);
+        const first = await agent.streamMessageList('initial', options);
         await vi.waitFor(() => expect(getStreamCount()).toBe(1));
         expect(pubsub.subscriberCount(topic)).toBe(1);
         const signal = createSignal({ type: 'user-message', contents: 'remote input exactly once' });
@@ -4712,7 +4712,7 @@ describe('Agent signals', () => {
         await vi.waitFor(() => expect(pubsub.subscriberCount(topic)).toBe(0));
         expect(getStreamCount()).toBe(2);
         expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('remote input exactly once');
-        const next = await agent.stream('new request', options);
+        const next = await agent.streamMessageList('new request', options);
         await next.text;
         await vi.waitFor(() => expect(pubsub.subscriberCount(topic)).toBe(0));
         expect(getStreamCount()).toBe(3);
@@ -4749,7 +4749,7 @@ describe('Agent signals', () => {
             return 'Test';
           },
         });
-        const starting = agent.stream('initial', { memory: { resource: scope.resourceId, thread: scope.threadId } });
+        const starting = agent.streamMessageList('initial', { memory: { resource: scope.resourceId, thread: scope.threadId } });
         void starting.catch(() => {});
         try {
           await preparing;
@@ -4853,7 +4853,7 @@ describe('Agent signals', () => {
         pubsub,
       });
       const options = { memory: { resource: scope.resourceId, thread: scope.threadId } };
-      const starting = agent.stream('initial', options);
+      const starting = agent.streamMessageList('initial', options);
       void starting.catch(() => {});
       try {
         await vi.waitFor(() => expect(subscribe).toHaveBeenCalledTimes(1));
@@ -4866,7 +4866,7 @@ describe('Agent signals', () => {
           ),
         ).toBe(0);
         subscribe.mockRestore();
-        await expect((await agent.stream('retry', options)).text).resolves.toBe('answer');
+        await expect((await agent.streamMessageList('retry', options)).text).resolves.toBe('answer');
       } finally {
         release();
         subscribe.mockRestore();
@@ -4895,7 +4895,7 @@ describe('Agent signals', () => {
         const owner = observer === 'absent' ? undefined : await agent.subscribeToThread(scope);
         const follower = await followerRuntime.subscribeToThread(agent, scope, pubsub);
         try {
-          const first = await agent.stream('initial', {
+          const first = await agent.streamMessageList('initial', {
             memory: { resource: scope.resourceId, thread: scope.threadId },
           });
           await vi.waitFor(() => expect(getStreamCount()).toBe(1));
@@ -5096,7 +5096,7 @@ describe('Agent signals', () => {
       });
       const subscription = await agent.subscribeToThread(scope);
       try {
-        const first = await agent.stream('initial', { memory: { resource: scope.resourceId, thread: scope.threadId } });
+        const first = await agent.streamMessageList('initial', { memory: { resource: scope.resourceId, thread: scope.threadId } });
         await vi.waitFor(() => expect(getStreamCount()).toBe(1));
         await agent.sendSignal({ type: 'user-message', contents: 'cleared pending input' }, scope).accepted;
         await agent.queueMessage('cleared idle input', scope).accepted;
@@ -5144,7 +5144,7 @@ describe('Agent signals', () => {
         });
         const topic = `agent.thread-stream.${encodeURIComponent(`${scope.resourceId}\u0000${scope.threadId}`)}`;
         try {
-          const first = await agent.stream('initial', {
+          const first = await agent.streamMessageList('initial', {
             memory: { resource: scope.resourceId, thread: scope.threadId },
           });
           await vi.waitFor(() => expect(getStreamCount()).toBe(1));
@@ -5173,7 +5173,7 @@ describe('Agent signals', () => {
           }
           expect(agent.abortThreadStream({ ...scope, clearPendingSignals: true })).toBe(false);
           await vi.waitFor(() => expect(pubsub.subscriberCount(topic)).toBe(0));
-          const next = await agent.stream('new input', {
+          const next = await agent.streamMessageList('new input', {
             memory: { resource: scope.resourceId, thread: scope.threadId },
           });
           await next.text;
@@ -5337,7 +5337,7 @@ describe('Agent signals', () => {
           throw new Error('Listener errors must not interrupt abort cleanup');
         });
         try {
-          const first = await agent.stream('initial', {
+          const first = await agent.streamMessageList('initial', {
             memory: { resource: scope.resourceId, thread: scope.threadId },
           });
           await vi.waitFor(() => expect(getStreamCount()).toBe(1));
@@ -5365,7 +5365,7 @@ describe('Agent signals', () => {
           expect(JSON.stringify(model.doStreamCalls[1]?.prompt.at(-1))).toContain('listener survivor');
           expect(JSON.stringify(model.doStreamCalls[1]?.prompt.at(-1))).not.toContain('aborted startup');
           expect(prompts).not.toContain('cleared idle');
-          const next = await agent.stream('after clear', {
+          const next = await agent.streamMessageList('after clear', {
             memory: { resource: scope.resourceId, thread: scope.threadId },
           });
           await next.text;
@@ -5417,7 +5417,7 @@ describe('Agent signals', () => {
         });
         const subscription = await agent.subscribeToThread(scope);
         try {
-          const first = await agent.stream('initial', {
+          const first = await agent.streamMessageList('initial', {
             memory: { resource: scope.resourceId, thread: scope.threadId },
           });
           await vi.waitFor(() => expect(getStreamCount()).toBe(1));
@@ -5442,7 +5442,7 @@ describe('Agent signals', () => {
           release();
           await vi.waitFor(() => expect(pubsub.publishedData.some(data => data.type === 'run-failed')).toBe(true));
           await vi.waitFor(() => expect(agentThreadStreamRuntime.getActiveThreadRunId(scope, pubsub)).toBeUndefined());
-          const next = await agent.stream('new input', {
+          const next = await agent.streamMessageList('new input', {
             memory: { resource: scope.resourceId, thread: scope.threadId },
           });
           await next.text;
@@ -5474,7 +5474,7 @@ describe('Agent signals', () => {
           const remote = new AgentThreadStreamRuntime();
           const follower = await remote.subscribeToThread(agent, scope, pubsub);
           try {
-            const output = await agent.stream('initial', {
+            const output = await agent.streamMessageList('initial', {
               memory: { resource: scope.resourceId, thread: scope.threadId },
             });
             await vi.waitFor(() => expect(getStreamCount()).toBe(1));
@@ -5552,7 +5552,7 @@ describe('Agent signals', () => {
       const counts: number[] = [];
       const unsubscribe = agent.subscribeThreadEvents(scope, event => counts.push(event.count));
       const subscription = await agent.subscribeToThread(scope);
-      const started = agent.stream('initial', { memory: { resource: scope.resourceId, thread: scope.threadId } });
+      const started = agent.streamMessageList('initial', { memory: { resource: scope.resourceId, thread: scope.threadId } });
       try {
         await prepared;
         const preRun = agent.sendSignal({ type: 'user-message', contents: 'remove pre-run' }, scope);
@@ -5630,7 +5630,7 @@ describe('Agent signals', () => {
         await publish(topic, event);
       });
       try {
-        const output = await agent.stream('initial', {
+        const output = await agent.streamMessageList('initial', {
           memory: { resource: scope.resourceId, thread: scope.threadId },
         });
         await vi.waitFor(() => expect(getStreamCount()).toBe(1));
@@ -5692,7 +5692,7 @@ describe('Agent signals', () => {
           release = resolve;
         });
         try {
-          const output = await agent.stream('initial', {
+          const output = await agent.streamMessageList('initial', {
             memory: { resource: scope.resourceId, thread: scope.threadId },
           });
           await vi.waitFor(() => expect(getStreamCount()).toBe(1));
@@ -5748,7 +5748,7 @@ describe('Agent signals', () => {
             expect(pubsub.owners.get(key)).toBe('new-owner');
             await pubsub.releaseLease(key, 'new-owner');
           } else await vi.waitFor(() => expect(pubsub.owners.get(key)).toBeUndefined());
-          const after = await agent.stream('after cancellation', {
+          const after = await agent.streamMessageList('after cancellation', {
             memory: { resource: scope.resourceId, thread: scope.threadId },
           });
           await after.text;
@@ -5806,7 +5806,7 @@ describe('Agent signals', () => {
           );
         }
         await pubsub.flush();
-        const output = await agent.stream('winner input', {
+        const output = await agent.streamMessageList('winner input', {
           runId: 'winner-run',
           memory: { resource: scope.resourceId, thread: scope.threadId },
         });
@@ -5861,7 +5861,7 @@ describe('Agent signals', () => {
       });
       const subscription = await agent.subscribeToThread(scope);
       try {
-        const initial = await agent.stream('initial', {
+        const initial = await agent.streamMessageList('initial', {
           memory: { resource: scope.resourceId, thread: scope.threadId },
         });
         await vi.waitFor(() => expect(getStreamCount()).toBe(1));
@@ -5933,7 +5933,7 @@ describe('Agent signals', () => {
       });
       const subscription = await agent.subscribeToThread(scope);
       const runId = 'aborted-preparation';
-      const streamPromise = agent.stream('first', {
+      const streamPromise = agent.streamMessageList('first', {
         runId,
         memory: { resource: scope.resourceId, thread: scope.threadId },
       });
@@ -5993,7 +5993,7 @@ describe('Agent signals', () => {
       // A separate runtime has no owner records and must forward abort over PubSub.
       const follower = new AgentThreadStreamRuntime();
       const remoteSubscription = await follower.subscribeToThread(agent, scope, pubsub);
-      const stream = await agent.stream('first', {
+      const stream = await agent.streamMessageList('first', {
         memory: { resource: scope.resourceId, thread: scope.threadId },
         abortSignal: upstream.signal,
       });
@@ -6078,7 +6078,7 @@ describe('Agent signals', () => {
       },
     });
     const subscription = await agent.subscribeToThread(scope);
-    const first = agent.stream('first', { memory: { resource: scope.resourceId, thread: scope.threadId } });
+    const first = agent.streamMessageList('first', { memory: { resource: scope.resourceId, thread: scope.threadId } });
     void first.catch(() => {});
     try {
       await started;
@@ -6097,7 +6097,7 @@ describe('Agent signals', () => {
       await vi.waitFor(() => expect(pubsub.owners.get(`${scope.resourceId}\u0000${scope.threadId}`)).toBeUndefined());
       expect(preparations).toBe(2);
       expect(model.doStreamCalls).toHaveLength(0);
-      const recovered = await agent.stream('natural next turn', {
+      const recovered = await agent.streamMessageList('natural next turn', {
         memory: { resource: scope.resourceId, thread: scope.threadId },
       });
       await recovered.text;
@@ -6188,7 +6188,7 @@ describe('Agent signals', () => {
       finishOwner();
       await transferStarted;
       pubsub.owners.set(key, winnerRunId);
-      const winning = agent.stream('winner input', {
+      const winning = agent.streamMessageList('winner input', {
         runId: winnerRunId,
         memory: { resource: scope.resourceId, thread: scope.threadId },
       });
@@ -6223,7 +6223,7 @@ describe('Agent signals', () => {
       expect(delivered).toEqual(['pending A', 'idle B']);
       expect(messages.filter(message => message.role === 'assistant')).toHaveLength(2);
       await vi.waitFor(() => expect(pubsub.owners.get(key)).toBeUndefined());
-      const next = await agent.stream('after handoff', {
+      const next = await agent.streamMessageList('after handoff', {
         memory: { resource: scope.resourceId, thread: scope.threadId },
       });
       await next.text;
@@ -6260,7 +6260,7 @@ describe('Agent signals', () => {
       const subscription = await agent.subscribeToThread(scope);
       const winner = new AgentThreadStreamRuntime();
       const winnerSubscription = await winner.subscribeToThread(agent, scope, pubsub);
-      const stream = await agent.stream('first', { memory: { resource: scope.resourceId, thread: scope.threadId } });
+      const stream = await agent.streamMessageList('first', { memory: { resource: scope.resourceId, thread: scope.threadId } });
       let releaseTransfer!: () => void;
       const transferGate = new Promise<void>(resolve => {
         releaseTransfer = resolve;
@@ -6369,7 +6369,7 @@ describe('Agent signals', () => {
           pubsub,
         });
         const subscription = await agent.subscribeToThread(scope);
-        const stream = await agent.stream('first', {
+        const stream = await agent.streamMessageList('first', {
           memory: { thread: scope.threadId, resource: scope.resourceId },
           abortSignal: upstream.signal,
         });
@@ -6426,7 +6426,7 @@ describe('Agent signals', () => {
       pubsub,
     });
     const subscription = await agent.subscribeToThread(scope);
-    const stream = await agent.stream('first', { memory: { thread: scope.threadId, resource: scope.resourceId } });
+    const stream = await agent.streamMessageList('first', { memory: { thread: scope.threadId, resource: scope.resourceId } });
     const queuedAbort = new AbortController();
 
     try {
@@ -6476,7 +6476,7 @@ describe('Agent signals', () => {
       pubsub,
     });
     const subscription = await agent.subscribeToThread(scope);
-    const stream = await agent.stream('initial', { memory: { thread: scope.threadId, resource: scope.resourceId } });
+    const stream = await agent.streamMessageList('initial', { memory: { thread: scope.threadId, resource: scope.resourceId } });
 
     try {
       await vi.waitFor(() => expect(getStreamCount()).toBe(1));
@@ -6957,7 +6957,7 @@ describe('Agent signals', () => {
       resourceId: 'active-priority-notification-user',
     });
 
-    const stream = await agent.stream('Hello', {
+    const stream = await agent.streamMessageList('Hello', {
       memory: { thread: 'active-priority-notification-thread', resource: 'active-priority-notification-user' },
     });
     await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
@@ -7053,7 +7053,7 @@ describe('Agent signals', () => {
     const iterator = subscription.stream[Symbol.asyncIterator]();
     const firstRun = readNextRunWithParts(iterator);
 
-    const stream = await agent.stream('Hello', {
+    const stream = await agent.streamMessageList('Hello', {
       memory: { thread: 'high-active-thread', resource: 'high-active-user' },
     });
     const streamText = stream.text;
@@ -7265,7 +7265,7 @@ describe('Agent signals', () => {
       summary: 'Jane mentioned you',
       summaryAt: new Date('2026-05-30T12:00:00Z'),
     });
-    const stream = await agent.stream('Hello', {
+    const stream = await agent.streamMessageList('Hello', {
       memory: { thread: 'medium-active-thread', resource: 'medium-active-user' },
     });
     const streamText = stream.text;
@@ -7712,7 +7712,7 @@ describe('Agent signals', () => {
       resourceId: 'active-message-user',
     });
 
-    const stream = await agent.stream('Hello', {
+    const stream = await agent.streamMessageList('Hello', {
       memory: { thread: 'active-message-thread', resource: 'active-message-user' },
     });
     await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
@@ -8423,7 +8423,7 @@ describe('Agent signals', () => {
     const iterator = subscription.stream[Symbol.asyncIterator]();
     const firstRun = readNextRunWithParts(iterator);
 
-    const stream = await agent.stream('Hello', {
+    const stream = await agent.streamMessageList('Hello', {
       memory: { thread: 'queue-message-thread', resource: 'queue-message-user' },
     });
     await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
@@ -9234,7 +9234,7 @@ describe('Agent signals', () => {
       const includedRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
       const excludedRun = readNextRunWithParts(allExcluded.stream[Symbol.asyncIterator]());
       try {
-        const output = await agent.stream('hello', {
+        const output = await agent.streamMessageList('hello', {
           memory: { thread: target.threadId, resource: target.resourceId },
           hideSignals: typeof exclusions === 'boolean' ? exclusions : exclusions ? [...exclusions] : undefined,
           onChunk,
@@ -9346,7 +9346,7 @@ describe('Agent signals', () => {
       memory,
     });
 
-    const stream = await agent.stream('Hello', {
+    const stream = await agent.streamMessageList('Hello', {
       memory: { thread: 'transient-active-persist-thread', resource: 'transient-active-persist-user' },
     });
     try {
@@ -9419,7 +9419,7 @@ describe('Agent signals', () => {
       }),
     });
 
-    const stream = await agent.stream('Hello', {
+    const stream = await agent.streamMessageList('Hello', {
       memory: { thread: 'active-discard-thread', resource: 'active-discard-user' },
     });
     await agent.sendSignal(
@@ -10008,7 +10008,7 @@ describe('Agent signals', () => {
       expect(resolved).toBe(true);
     });
 
-    it('serializes two concurrent agent.stream() calls on the same thread', async () => {
+    it('serializes two concurrent agent.streamMessageList() calls on the same thread', async () => {
       let concurrent = 0;
       let maxConcurrent = 0;
       const model = new MockLanguageModelV2({
@@ -10044,8 +10044,8 @@ describe('Agent signals', () => {
       const memory = { thread: 'concurrent-stream-thread', resource: 'concurrent-stream-user' };
 
       const [first, second] = await Promise.all([
-        agent.stream('first message', { memory }),
-        agent.stream('second message', { memory }),
+        agent.streamMessageList('first message', { memory }),
+        agent.streamMessageList('second message', { memory }),
       ]);
       await Promise.all([first.consumeStream(), second.consumeStream()]);
 
@@ -11050,7 +11050,7 @@ describe('Agent signals', () => {
     const iterator = subscription.stream[Symbol.asyncIterator]();
     const firstRunPromise = readNextRun(iterator);
 
-    const stream = await agent.stream('Hello', {
+    const stream = await agent.streamMessageList('Hello', {
       memory: { thread: 'active-thread', resource: 'active-user' },
     });
     await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
@@ -11235,7 +11235,7 @@ describe('Agent signals', () => {
       }
     })();
 
-    const stream = await agent.stream('Hello', {
+    const stream = await agent.streamMessageList('Hello', {
       memory: { thread: 'tool-interjection-thread', resource: 'tool-interjection-user' },
     });
     await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
@@ -11332,7 +11332,7 @@ describe('Agent signals', () => {
     const iterator = subscription.stream[Symbol.asyncIterator]();
     const runPromise = readNextRun(iterator);
 
-    const stream = await agent.stream('Hello', {
+    const stream = await agent.streamMessageList('Hello', {
       memory: { thread: 'interleaved-reasoning-thread', resource: 'interleaved-reasoning-user' },
     });
     await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
@@ -11657,7 +11657,7 @@ describe('Agent signals', () => {
     const iterator = subscription.stream[Symbol.asyncIterator]();
     const firstRunPromise = readNextRun(iterator);
 
-    const firstStream = await firstAgent.stream('Hello', {
+    const firstStream = await firstAgent.streamMessageList('Hello', {
       memory: { thread: 'cross-agent-thread', resource: 'cross-agent-user' },
     });
     const firstText = firstStream.text;
@@ -11769,7 +11769,7 @@ describe('Agent signals', () => {
     const firstRunPromise = readNextRun(firstSubscription.stream[Symbol.asyncIterator]());
     const secondRunPromise = readNextRun(secondSubscription.stream[Symbol.asyncIterator]());
 
-    const stream = await agent.stream('Hello', {
+    const stream = await agent.streamMessageList('Hello', {
       memory: { thread: 'multi-thread', resource: 'multi-user' },
     });
 
@@ -11805,7 +11805,7 @@ describe('Agent signals', () => {
     const otherResourceNext = readNextRun(otherResourceSubscription.stream[Symbol.asyncIterator]());
     const otherThreadNext = readNextRun(otherThreadSubscription.stream[Symbol.asyncIterator]());
 
-    const stream = await agent.stream('Hello', {
+    const stream = await agent.streamMessageList('Hello', {
       memory: { thread: 'isolated-thread', resource: 'isolated-user' },
     });
 
@@ -11828,7 +11828,7 @@ describe('Agent signals', () => {
       model: createTextStreamModel('late response'),
     });
 
-    const stream = await agent.stream('Hello', {
+    const stream = await agent.streamMessageList('Hello', {
       memory: { thread: 'late-thread', resource: 'late-user' },
     });
     await stream.text;
@@ -11903,7 +11903,7 @@ describe('Agent signals', () => {
       const iterator = subscription.stream[Symbol.asyncIterator]();
       const firstRunPromise = readNextRunWithParts(iterator);
 
-      const stream = await agent.stream('Hello', {
+      const stream = await agent.streamMessageList('Hello', {
         memory: { thread: 'run-id-thread', resource: 'run-id-user' },
       });
       await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);

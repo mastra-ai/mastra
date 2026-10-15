@@ -78,7 +78,7 @@ describe('Agent client observability extraction (v6 toolMetadata)', () => {
       },
     ];
 
-    await agent.generate(messages);
+    await agent.generateMessageList(messages);
 
     expect(receive).toHaveBeenCalledTimes(1);
     expect(receive).toHaveBeenCalledWith(payload, parentContext);

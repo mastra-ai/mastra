@@ -2,7 +2,7 @@
  * DurableAgent Delegation Tests
  *
  * Verifies that per-call `delegation` hooks (`onDelegationStart`,
- * `onDelegationComplete`) flow through `DurableAgent.stream()` /
+ * `onDelegationComplete`) flow through `DurableAgent.streamMessageList()` /
  * `prepare()` into the sub-agent CoreTool wrappers stored on the
  * in-process run registry.
  *
@@ -146,7 +146,7 @@ describe('DurableAgent delegation hooks', () => {
 
     const durableAgent = createDurableAgent({ agent: supervisor, pubsub });
 
-    const { fullStream, cleanup } = await durableAgent.stream('Research dolphins', {
+    const { fullStream, cleanup } = await durableAgent.streamMessageList('Research dolphins', {
       maxSteps: 3,
       delegation: { onDelegationStart },
     });
@@ -310,7 +310,7 @@ describe('DurableAgent delegation hooks', () => {
         messages.filter(message => message.role === 'user'),
       );
       const durableAgent = createDurableAgent({ agent: supervisor, pubsub });
-      const { fullStream, cleanup } = await durableAgent.stream('Write a caption for the sunset photo', {
+      const { fullStream, cleanup } = await durableAgent.streamMessageList('Write a caption for the sunset photo', {
         runId,
         maxSteps: 3,
         delegation: { messageFilter },
@@ -356,7 +356,7 @@ describe('DurableAgent delegation hooks', () => {
     });
     const messageFilter = vi.fn(({ messages }: { messages: ModelMessage[] }) => messages);
     const agent = engine === 'durable' ? createDurableAgent({ agent: supervisor, pubsub }) : supervisor;
-    const output = await agent.stream('Original user message', { maxSteps: 3, delegation: { messageFilter } });
+    const output = await agent.streamMessageList('Original user message', { maxSteps: 3, delegation: { messageFilter } });
     for await (const _chunk of output.fullStream) {
       // no-op
     }
@@ -403,7 +403,7 @@ describe('DurableAgent delegation hooks', () => {
       ],
     });
     const durableAgent = createDurableAgent({ agent: supervisor, pubsub });
-    const output = await durableAgent.stream('Real user request', { maxSteps: 3, delegation: { messageFilter } });
+    const output = await durableAgent.streamMessageList('Real user request', { maxSteps: 3, delegation: { messageFilter } });
     for await (const _chunk of output.fullStream) {
       // no-op
     }
@@ -477,7 +477,7 @@ describe('DurableAgent delegation hooks', () => {
             : []),
         ],
       };
-      const output = await durableAgent.stream([userMessage], { maxSteps: 3, delegation: { messageFilter } });
+      const output = await durableAgent.streamMessageList([userMessage], { maxSteps: 3, delegation: { messageFilter } });
       for await (const _chunk of output.fullStream) {
         // no-op
       }
@@ -529,7 +529,7 @@ describe('DurableAgent delegation hooks', () => {
       ],
     });
     const durableAgent = createDurableAgent({ agent: supervisor, pubsub });
-    const output = await durableAgent.stream('Original user message', { maxSteps: 3 });
+    const output = await durableAgent.streamMessageList('Original user message', { maxSteps: 3 });
     for await (const _chunk of output.fullStream) {
       // no-op
     }
@@ -555,7 +555,7 @@ describe('DurableAgent delegation hooks', () => {
 
     const durableAgent = createDurableAgent({ agent: supervisor, pubsub });
 
-    const { fullStream, cleanup } = await durableAgent.stream('Write a report', {
+    const { fullStream, cleanup } = await durableAgent.streamMessageList('Write a report', {
       maxSteps: 3,
       delegation: { onDelegationComplete },
     });
@@ -589,7 +589,7 @@ describe('DurableAgent delegation hooks', () => {
 
     const durableAgent = createDurableAgent({ agent: supervisor, pubsub });
 
-    const { fullStream, cleanup } = await durableAgent.stream('Research dolphins', {
+    const { fullStream, cleanup } = await durableAgent.streamMessageList('Research dolphins', {
       maxSteps: 3,
       memory: { thread: 'thread-1', resource: 'user-1' },
     });
@@ -634,7 +634,7 @@ describe('DurableAgent delegation hooks', () => {
 
     const durableAgent = createDurableAgent({ agent: supervisor, pubsub });
 
-    const { fullStream, cleanup } = await durableAgent.stream('Do the work', {
+    const { fullStream, cleanup } = await durableAgent.streamMessageList('Do the work', {
       maxSteps: 3,
       delegation: {
         onDelegationStart: context => {

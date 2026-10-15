@@ -14,7 +14,7 @@ import type { ToolsInput } from '../types';
  *
  * The updateWorkingMemory tool requires a Memory instance and either threadId
  * (for thread-scoped) or resourceId (for resource-scoped) to function.
- * When agent.stream() is called without memory options (no thread or resource
+ * When agent.streamMessageList() is called without memory options (no thread or resource
  * context), memory tools must NOT be injected — otherwise the model may call
  * the tool and trigger a runtime error.
  */
@@ -161,7 +161,7 @@ describe('Working memory tool context propagation', () => {
     const mockModel = createMockModelWithWorkingMemoryToolCall();
     const { agent, mockMemory, threadId, resourceId } = await createAgentWithThread(mockModel);
 
-    const stream = await agent.stream('Remember that my favorite greeting is hello world', {
+    const stream = await agent.streamMessageList('Remember that my favorite greeting is hello world', {
       memory: { thread: threadId, resource: resourceId },
       maxSteps: 3,
     });
@@ -275,7 +275,7 @@ describe('Working memory tool context propagation', () => {
       tools: { lookup: lookupTool },
     });
 
-    const stream = await agent.stream('Look up some info and remember it', {
+    const stream = await agent.streamMessageList('Look up some info and remember it', {
       memory: { thread: threadId, resource: resourceId },
       maxSteps: 3,
     });
@@ -316,7 +316,7 @@ describe('Working memory tool context propagation', () => {
       memory: mockMemory,
     });
 
-    const stream = await agent.stream('Hello', {
+    const stream = await agent.streamMessageList('Hello', {
       maxSteps: 1,
       // no memory option
     });
@@ -392,7 +392,7 @@ describe('Working memory tool context propagation', () => {
       inputSchema: z.object({ prompt: z.string() }),
       outputSchema: z.object({ text: z.string() }),
       execute: async ({ inputData }) => {
-        const stream = await agent.stream(inputData.prompt, {
+        const stream = await agent.streamMessageList(inputData.prompt, {
           memory: { thread: threadId, resource: resourceId },
           maxSteps: 3,
         });
@@ -473,7 +473,7 @@ describe('Working memory tool context propagation', () => {
           memory: mockMemory,
         });
 
-        const stream = await iterationAgent.stream(inputData.item, {
+        const stream = await iterationAgent.streamMessageList(inputData.item, {
           memory: { thread: foreachThreadId, resource: resourceId },
           maxSteps: 3,
         });
@@ -564,7 +564,7 @@ describe('Working memory tool context propagation', () => {
         },
       });
 
-      const stream = await agent.stream('Remember my name', {
+      const stream = await agent.streamMessageList('Remember my name', {
         memory: { thread: threadId, resource: resourceId },
         maxSteps: 3,
       });

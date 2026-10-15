@@ -78,7 +78,7 @@ describe('per-step reasoning (issue #21594)', () => {
     const agent = createAgent(createTwoStepReasoningModel());
 
     const stepFinishReasoning: { reasoningText: string; reasoning: string[] }[] = [];
-    const result = await agent.stream('hi', {
+    const result = await agent.streamMessageList('hi', {
       maxSteps: 3,
       onStepFinish: step => {
         stepFinishReasoning.push({

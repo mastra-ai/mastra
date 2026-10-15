@@ -133,7 +133,7 @@ describe('implicit maxProcessorRetries budget', () => {
       errorProcessors: [createAlwaysRetryProcessor()],
     });
 
-    await runExpectingFailure(() => agent.generate('hello'));
+    await runExpectingFailure(() => agent.generateMessageList('hello'));
 
     // 1 initial call + the implicit safety cap. Previously this was 11.
     expect(getCallCount()).toBe(DEFAULT_MAX_PROCESSOR_RETRIES + 1);
@@ -150,7 +150,7 @@ describe('implicit maxProcessorRetries budget', () => {
       errorProcessors: [createAlwaysRetryProcessor()],
     });
 
-    await runExpectingFailure(() => agent.generate('hello', { maxProcessorRetries: 0 }));
+    await runExpectingFailure(() => agent.generateMessageList('hello', { maxProcessorRetries: 0 }));
 
     expect(getCallCount()).toBe(1);
   });
@@ -167,7 +167,7 @@ describe('implicit maxProcessorRetries budget', () => {
     });
 
     // maxSteps is raised too, since processor retries consume the step budget.
-    await runExpectingFailure(() => agent.generate('hello', { maxProcessorRetries: 6, maxSteps: 30 }));
+    await runExpectingFailure(() => agent.generateMessageList('hello', { maxProcessorRetries: 6, maxSteps: 30 }));
 
     expect(getCallCount()).toBe(7);
   });
@@ -185,7 +185,7 @@ describe('implicit maxProcessorRetries budget', () => {
 
     // Processor retries re-run the same step, so they do not count against the
     // default 5-step budget: maxProcessorRetries alone bounds them (1 + 20 calls).
-    await runExpectingFailure(() => agent.generate('hello', { maxProcessorRetries: 20 }));
+    await runExpectingFailure(() => agent.generateMessageList('hello', { maxProcessorRetries: 20 }));
 
     expect(getCallCount()).toBe(21);
   });
@@ -201,7 +201,7 @@ describe('implicit maxProcessorRetries budget', () => {
       errorProcessors: [createAlwaysRetryProcessor()],
     });
 
-    const result = await agent.generate('hello');
+    const result = await agent.generateMessageList('hello');
 
     expect(result.text).toBe('recovered');
     expect(getCallCount()).toBe(2);
@@ -241,7 +241,7 @@ describe('implicit maxProcessorRetries warning', () => {
     });
     agent.__registerPrimitives({ logger });
 
-    await runExpectingFailure(() => agent.generate('hello'));
+    await runExpectingFailure(() => agent.generateMessageList('hello'));
 
     const warnings = logger.warn.mock.calls.filter(budgetWarning);
     expect(warnings.length).toBe(1);
@@ -259,7 +259,7 @@ describe('implicit maxProcessorRetries warning', () => {
     });
     agent.__registerPrimitives({ logger });
 
-    const result = await agent.generate('hello');
+    const result = await agent.generateMessageList('hello');
 
     // The framework default retry processor recovered the transient 500…
     expect(result.text).toBe('recovered');
@@ -282,7 +282,7 @@ describe('implicit maxProcessorRetries warning', () => {
     });
     agent.__registerPrimitives({ logger });
 
-    await runExpectingFailure(() => agent.generate('hello'));
+    await runExpectingFailure(() => agent.generateMessageList('hello'));
 
     expect(logger.warn.mock.calls.filter(budgetWarning).length).toBe(0);
   });

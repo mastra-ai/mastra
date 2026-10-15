@@ -72,7 +72,7 @@ Always follow this order.`,
     expect(threadBefore).toBeNull();
 
     // Start streaming with savePerStep
-    const stream = await agent.stream('Please process the data "test-data-123". First validate it, then process it.', {
+    const stream = await agent.streamMessageList('Please process the data "test-data-123". First validate it, then process it.', {
       memory: {
         thread: threadId,
         resource: resourceId,

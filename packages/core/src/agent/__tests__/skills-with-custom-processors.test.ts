@@ -193,7 +193,7 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
         inputProcessors: [new PassthroughProcessor()],
       });
 
-      await agent.generate('Hello');
+      await agent.generateMessageList('Hello');
 
       // Verify that skill tools are available
       const toolNames = getToolNames(capturedTools);
@@ -211,7 +211,7 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
         inputProcessors: [new PassthroughProcessor()],
       });
 
-      const result = await agent.stream('Hello');
+      const result = await agent.streamMessageList('Hello');
       // Consume the stream to trigger processing
       for await (const _ of result.fullStream) {
         // Just consume
@@ -234,7 +234,7 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
         workspace: mockWorkspace,
       });
 
-      await agent.generate('Hello', {
+      await agent.generateMessageList('Hello', {
         inputProcessors: [new PassthroughProcessor()],
       });
 
@@ -253,7 +253,7 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
         workspace: mockWorkspace,
       });
 
-      const result = await agent.stream('Hello', {
+      const result = await agent.streamMessageList('Hello', {
         inputProcessors: [new PassthroughProcessor()],
       });
       // Consume the stream to trigger processing
@@ -278,7 +278,7 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
         workspace: mockWorkspace,
       });
 
-      await agent.generate('Hello');
+      await agent.generateMessageList('Hello');
 
       // Verify that skill tools are available
       const toolNames = getToolNames(capturedTools);
@@ -298,7 +298,7 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
         inputProcessors: [new SkillSearchProcessor({ workspace: mockWorkspace, ttl: 0 })],
       });
 
-      await agent.generate('Hello');
+      await agent.generateMessageList('Hello');
 
       const toolNames = getToolNames(capturedTools);
       expect(toolNames).toContain('search_skills');
@@ -322,7 +322,7 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
         workspace: mockWorkspace,
       });
 
-      await agent.generate('Hello', {
+      await agent.generateMessageList('Hello', {
         inputProcessors: [new SkillSearchProcessor({ workspace: mockWorkspace, ttl: 0 })],
       });
 
@@ -348,7 +348,7 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
         workspace: mockWorkspace,
       });
 
-      const result = await agent.stream('Hello', {
+      const result = await agent.streamMessageList('Hello', {
         inputProcessors: [new SkillSearchProcessor({ workspace: mockWorkspace, ttl: 0 })],
       });
       for await (const _ of result.fullStream) {
@@ -378,7 +378,7 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
         inputProcessors: [new CustomOnDemandProcessorWithStepsField()],
       });
 
-      await agent.generate('Hello');
+      await agent.generateMessageList('Hello');
 
       const toolNames = getToolNames(capturedTools);
       expect(toolNames).toContain('skill_read');
@@ -400,7 +400,7 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
         inputProcessors: [new CollidingSkillSearchIdProcessor()],
       });
 
-      await agent.generate('Hello');
+      await agent.generateMessageList('Hello');
 
       const toolNames = getToolNames(capturedTools);
       expect(toolNames).toContain('skill');
@@ -425,7 +425,7 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
         ],
       });
 
-      await agent.generate('Hello');
+      await agent.generateMessageList('Hello');
 
       const toolNames = getToolNames(capturedTools);
       expect(toolNames).toContain('skill');
@@ -460,7 +460,7 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
         inputProcessors: [skillSearchWorkflow],
       });
 
-      await agent.generate('Hello');
+      await agent.generateMessageList('Hello');
 
       const toolNames = getToolNames(capturedTools);
       expect(toolNames).toContain('search_skills');
@@ -495,7 +495,7 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
         inputProcessors: [skillSearchWorkflow],
       });
 
-      await agent.generate('Hello');
+      await agent.generateMessageList('Hello');
 
       const toolNames = getToolNames(capturedTools);
       expect(toolNames).toContain('skill_read');
@@ -528,7 +528,7 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
         inputProcessors: [skillWorkflow],
       });
 
-      await agent.generate('Hello');
+      await agent.generateMessageList('Hello');
 
       const toolNames = getToolNames(capturedTools);
       expect(toolNames).toContain('skill');

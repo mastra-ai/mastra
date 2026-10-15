@@ -61,7 +61,7 @@ describe('processInputStep tripwire after a finished tool-call step', () => {
       inputProcessors: [abortBetweenSteps],
     });
 
-    const output = await agent.stream('hi');
+    const output = await agent.streamMessageList('hi');
     const chunks: { type: string; payload?: any }[] = [];
     for await (const chunk of output.fullStream) chunks.push(chunk as any);
 

@@ -153,7 +153,7 @@ describe('stateless skill tool behavior', () => {
         workspace: createMockWorkspace(),
       });
 
-      const result = await agent.stream('Activate find-skills');
+      const result = await agent.streamMessageList('Activate find-skills');
       const chunks: any[] = [];
       for await (const chunk of result.fullStream) {
         chunks.push(chunk);
@@ -219,13 +219,13 @@ describe('stateless skill tool behavior', () => {
       });
 
       // Turn 1
-      const result1 = await agent.stream('Hello');
+      const result1 = await agent.streamMessageList('Hello');
       for await (const _ of result1.fullStream) {
         // consume
       }
 
       // Turn 2
-      const result2 = await agent.stream('Hello again');
+      const result2 = await agent.streamMessageList('Hello again');
       for await (const _ of result2.fullStream) {
         // consume
       }
@@ -290,13 +290,13 @@ describe('stateless skill tool behavior', () => {
       });
 
       // Turn 1
-      const result1 = await agent.stream('Hello');
+      const result1 = await agent.streamMessageList('Hello');
       for await (const _ of result1.fullStream) {
         // consume
       }
 
       // Turn 2
-      const result2 = await agent.stream('Hello again');
+      const result2 = await agent.streamMessageList('Hello again');
       for await (const _ of result2.fullStream) {
         // consume
       }

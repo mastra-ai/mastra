@@ -176,7 +176,7 @@ describe('DurableAgent function-form requireToolApproval', () => {
     const prep = await durableAgent.prepare('Run both tools', { requireToolApproval: policy });
     const events = collectPubsubEvents(pubsub, prep.runId);
 
-    const { cleanup } = await durableAgent.stream('Run both tools', {
+    const { cleanup } = await durableAgent.streamMessageList('Run both tools', {
       runId: prep.runId,
       requireToolApproval: policy,
     });
@@ -231,7 +231,7 @@ describe('DurableAgent function-form requireToolApproval', () => {
 
     const policy = vi.fn(() => true);
     let suspendedData: unknown;
-    const initial = await durableAgent.stream('Run the tenant tool', {
+    const initial = await durableAgent.streamMessageList('Run the tenant tool', {
       requireToolApproval: policy,
       requestContext: new RequestContext([
         ['tenantId', 'initial-tenant'],
@@ -298,7 +298,7 @@ describe('DurableAgent function-form requireToolApproval', () => {
     const prep = await durableAgent.prepare('Run it', { requireToolApproval: policy });
     const events = collectPubsubEvents(pubsub, prep.runId);
 
-    const { cleanup } = await durableAgent.stream('Run it', {
+    const { cleanup } = await durableAgent.streamMessageList('Run it', {
       runId: prep.runId,
       requireToolApproval: policy,
     });

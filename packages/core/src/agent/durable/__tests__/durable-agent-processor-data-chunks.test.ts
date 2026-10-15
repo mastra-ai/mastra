@@ -137,7 +137,7 @@ describe('DurableAgent processor data-chunk persistence (#19375)', () => {
       pubsub,
     });
 
-    const result = await durableAgent.stream('hello', {
+    const result = await durableAgent.streamMessageList('hello', {
       memory: { thread: 'thread-data-step', resource: 'resource-data-step' },
     });
     const chunks = await drain(result.fullStream);
@@ -194,7 +194,7 @@ describe('DurableAgent processor data-chunk persistence (#19375)', () => {
       pubsub,
     });
 
-    const result = await durableAgent.stream('What is the weather in NYC?', {
+    const result = await durableAgent.streamMessageList('What is the weather in NYC?', {
       maxSteps: 3,
       memory: { thread: 'thread-data-tool', resource: 'resource-data-tool' },
     });
@@ -250,7 +250,7 @@ describe('DurableAgent processor data-chunk persistence (#19375)', () => {
       pubsub,
     });
 
-    const result = await durableAgent.stream('probe NYC', {
+    const result = await durableAgent.streamMessageList('probe NYC', {
       maxSteps: 3,
       memory: { thread: 'thread-tool-writer', resource: 'resource-tool-writer' },
     });
@@ -307,7 +307,7 @@ describe('DurableAgent processor data-chunk persistence (#19375)', () => {
     });
     await localMastra.startWorkers();
 
-    const result = await durableAgent.stream('probe NYC', {
+    const result = await durableAgent.streamMessageList('probe NYC', {
       maxSteps: 3,
       memory: { thread: 'thread-bg-awaited', resource: 'resource-bg-awaited' },
     });

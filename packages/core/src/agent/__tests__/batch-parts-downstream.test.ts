@@ -78,7 +78,7 @@ describe('BatchPartsProcessor with a downstream processor (issue #17094)', () =>
       outputProcessors: [new BatchPartsProcessor({ batchSize: 10 }), uppercaser as any],
     });
 
-    const stream = await agent.stream('What is the weather in Toronto?', {
+    const stream = await agent.streamMessageList('What is the weather in Toronto?', {
       stopWhen: ({ steps }: { steps: any[] }) =>
         steps.some(step => step.content?.some((item: any) => item.type === 'tool-call')),
     });

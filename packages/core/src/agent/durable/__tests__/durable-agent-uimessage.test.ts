@@ -234,7 +234,7 @@ describe('DurableAgent UIMessage handling', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { runId, cleanup } = await durableAgent.stream([
+      const { runId, cleanup } = await durableAgent.streamMessageList([
         {
           id: 'stream-msg',
           role: 'user',

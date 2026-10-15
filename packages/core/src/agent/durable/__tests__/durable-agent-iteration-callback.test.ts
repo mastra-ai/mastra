@@ -147,7 +147,7 @@ describe('DurableAgent onIterationComplete callback', () => {
 
     const onIterationComplete = vi.fn(() => ({ continue: false as const }));
 
-    const { fullStream, cleanup } = await durableAgent.stream('Go', {
+    const { fullStream, cleanup } = await durableAgent.streamMessageList('Go', {
       maxSteps: 10,
       onIterationComplete,
     });
@@ -183,7 +183,7 @@ describe('DurableAgent onIterationComplete callback', () => {
       return { continue: false as const };
     });
 
-    const { fullStream, cleanup } = await durableAgent.stream('Go', {
+    const { fullStream, cleanup } = await durableAgent.streamMessageList('Go', {
       maxSteps: 10,
       onIterationComplete,
     });
@@ -218,7 +218,7 @@ describe('DurableAgent onIterationComplete callback', () => {
       return undefined;
     });
 
-    const { fullStream, cleanup } = await durableAgent.stream('Go', {
+    const { fullStream, cleanup } = await durableAgent.streamMessageList('Go', {
       maxSteps: 10,
       onIterationComplete,
     });
@@ -254,7 +254,7 @@ describe('DurableAgent onIterationComplete callback', () => {
       return undefined;
     });
 
-    const { fullStream, cleanup } = await durableAgent.stream('Go', {
+    const { fullStream, cleanup } = await durableAgent.streamMessageList('Go', {
       maxSteps: 10,
       onIterationComplete,
     });
@@ -283,7 +283,7 @@ describe('DurableAgent onIterationComplete callback', () => {
       return undefined;
     });
 
-    const { fullStream, cleanup } = await durableAgent.stream('Go', {
+    const { fullStream, cleanup } = await durableAgent.streamMessageList('Go', {
       maxSteps: 10,
       onIterationComplete,
     });
@@ -322,7 +322,7 @@ describe('DurableAgent onIterationComplete callback', () => {
     const durableAgent = createDurableAgent({ agent, pubsub });
     const onIterationComplete = vi.fn(() => ({ continue: false as const }));
 
-    const { fullStream, cleanup } = await durableAgent.stream('Go', {
+    const { fullStream, cleanup } = await durableAgent.streamMessageList('Go', {
       maxSteps: 10,
       onIterationComplete,
     });
@@ -351,7 +351,7 @@ describe('DurableAgent onIterationComplete callback', () => {
       throw new Error('callback boom');
     });
 
-    const { fullStream, cleanup } = await durableAgent.stream('Go', {
+    const { fullStream, cleanup } = await durableAgent.streamMessageList('Go', {
       maxSteps: 10,
       onIterationComplete,
     });

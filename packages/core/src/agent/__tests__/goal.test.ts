@@ -350,7 +350,7 @@ describe('Agent objective methods', () => {
     const agent = makeAgent({}, singleStepModel('Finished.', 20));
     await agent.setObjective('Finish the task', { threadId: THREAD, resourceId: RESOURCE });
 
-    const stream = await agent.stream('go', {
+    const stream = await agent.streamMessageList('go', {
       memory: { resource: RESOURCE, thread: { id: THREAD } },
       maxSteps: 1,
     });
@@ -374,7 +374,7 @@ describe('Agent objective methods', () => {
     const threadState = await storage.getStore('threadState');
     const getState = vi.spyOn(threadState!, 'getState');
 
-    const stream = await agent.stream('go', {
+    const stream = await agent.streamMessageList('go', {
       memory: { resource: RESOURCE, thread: { id: THREAD } },
       maxSteps: 1,
     });
@@ -412,7 +412,7 @@ describe('in-loop goal scoring', () => {
     await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
 
     const goalChunks: any[] = [];
-    const stream = await agent.stream('go', {
+    const stream = await agent.streamMessageList('go', {
       memory: { resource: RESOURCE, thread: { id: THREAD } },
       maxSteps: 3,
     });
@@ -431,7 +431,7 @@ describe('in-loop goal scoring', () => {
     await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
 
     const goalChunks: any[] = [];
-    const stream = await agent.stream('go', {
+    const stream = await agent.streamMessageList('go', {
       memory: { resource: RESOURCE, thread: { id: THREAD } },
       maxSteps: 3,
     });
@@ -477,7 +477,7 @@ describe('in-loop goal scoring', () => {
       });
       new Mastra({ agents: { 'goal-agent': agent }, scorers, storage: new InMemoryStore(), logger: false });
       await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
-      const stream = await agent.stream('go', { memory: { resource: RESOURCE, thread: { id: THREAD } }, maxSteps: 3 });
+      const stream = await agent.streamMessageList('go', { memory: { resource: RESOURCE, thread: { id: THREAD } }, maxSteps: 3 });
       for await (const _chunk of stream.fullStream) {
         // drain
       }
@@ -527,7 +527,7 @@ describe('in-loop goal scoring', () => {
     await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
 
     const goalChunks: any[] = [];
-    const stream = await agent.stream('go', {
+    const stream = await agent.streamMessageList('go', {
       memory: { resource: RESOURCE, thread: { id: THREAD } },
       maxSteps: 10,
     });
@@ -583,7 +583,7 @@ describe('in-loop goal scoring', () => {
     await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
 
     const goalChunks: any[] = [];
-    const stream = await agent.stream('go', {
+    const stream = await agent.streamMessageList('go', {
       memory: { resource: RESOURCE, thread: { id: THREAD } },
       maxSteps: 10,
     });
@@ -606,7 +606,7 @@ describe('in-loop goal scoring', () => {
     await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
 
     const goalChunks: any[] = [];
-    const stream = await agent.stream('go', {
+    const stream = await agent.streamMessageList('go', {
       memory: { resource: RESOURCE, thread: { id: THREAD } },
       maxSteps: 10,
     });
@@ -641,7 +641,7 @@ describe('in-loop goal scoring', () => {
 
     const taskChunks: any[] = [];
     const goalChunks: any[] = [];
-    const stream = await agent.stream('go', {
+    const stream = await agent.streamMessageList('go', {
       memory: { resource: RESOURCE, thread: { id: THREAD } },
       maxSteps: 10,
       isTaskComplete: { scorers: [taskScorer as any] },
@@ -671,7 +671,7 @@ describe('in-loop goal scoring', () => {
     const agent = makeAgent({ judge: 'mock-model-id', scorer: passingScorer() as any });
 
     const goalChunks: any[] = [];
-    const stream = await agent.stream('go', {
+    const stream = await agent.streamMessageList('go', {
       memory: { resource: RESOURCE, thread: { id: THREAD } },
       maxSteps: 2,
     });
@@ -687,7 +687,7 @@ describe('in-loop goal scoring', () => {
     await agent.setObjective('Unreachable goal', { threadId: THREAD, resourceId: RESOURCE });
 
     const goalChunks: any[] = [];
-    const stream = await agent.stream('go', {
+    const stream = await agent.streamMessageList('go', {
       memory: { resource: RESOURCE, thread: { id: THREAD } },
       maxSteps: 10,
     });
@@ -726,7 +726,7 @@ describe('in-loop goal scoring', () => {
     const agent = makeAgent({ judge: judge as any, maxRuns: 1 });
     await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
 
-    const firstStream = await agent.stream('go', {
+    const firstStream = await agent.streamMessageList('go', {
       memory: { resource: RESOURCE, thread: { id: THREAD } },
       maxSteps: 10,
     });
@@ -739,7 +739,7 @@ describe('in-loop goal scoring', () => {
     expect((await agent.getObjective({ threadId: THREAD }))?.runsUsed).toBe(1);
 
     const goalChunks: any[] = [];
-    const secondStream = await agent.stream('again', {
+    const secondStream = await agent.streamMessageList('again', {
       memory: { resource: RESOURCE, thread: { id: THREAD } },
       maxSteps: 10,
     });
@@ -774,7 +774,7 @@ describe('in-loop goal scoring', () => {
     await agent.setObjective('Unreachable goal', { threadId: THREAD, resourceId: RESOURCE });
 
     // First run exhausts the budget (runsUsed → 2, status → paused).
-    const firstStream = await agent.stream('go', {
+    const firstStream = await agent.streamMessageList('go', {
       memory: { resource: RESOURCE, thread: { id: THREAD } },
       maxSteps: 10,
     });
@@ -787,7 +787,7 @@ describe('in-loop goal scoring', () => {
 
     // Second run on the same thread: a paused goal is gated out before scoring.
     const goalChunks: any[] = [];
-    const secondStream = await agent.stream('again', {
+    const secondStream = await agent.streamMessageList('again', {
       memory: { resource: RESOURCE, thread: { id: THREAD } },
       maxSteps: 10,
     });
@@ -828,7 +828,7 @@ describe('in-loop goal scoring', () => {
     await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
 
     const objectiveSignals: any[] = [];
-    const stream = await agent.stream('go', {
+    const stream = await agent.streamMessageList('go', {
       memory: { resource: RESOURCE, thread: { id: THREAD } },
       maxSteps: 6,
     });
@@ -872,7 +872,7 @@ describe('in-loop goal scoring', () => {
 
     const objectiveSignals: any[] = [];
     const goalChunks: any[] = [];
-    const stream = await agent.stream('go', {
+    const stream = await agent.streamMessageList('go', {
       memory: { resource: RESOURCE, thread: { id: THREAD } },
       maxSteps: 10,
     });
@@ -899,7 +899,7 @@ describe('in-loop goal scoring', () => {
     await agent.setObjective('Unreachable goal', { threadId: THREAD, resourceId: RESOURCE });
 
     // First run exhausts the (tiny) budget and parks the goal.
-    const firstStream = await agent.stream('go', {
+    const firstStream = await agent.streamMessageList('go', {
       memory: { resource: RESOURCE, thread: { id: THREAD } },
       maxSteps: 10,
     });
@@ -914,7 +914,7 @@ describe('in-loop goal scoring', () => {
     await agent.updateObjectiveOptions({ threadId: THREAD, maxRuns: 3, status: 'active' });
 
     const goalChunks: any[] = [];
-    const secondStream = await agent.stream('again', {
+    const secondStream = await agent.streamMessageList('again', {
       memory: { resource: RESOURCE, thread: { id: THREAD } },
       maxSteps: 10,
     });
@@ -935,7 +935,7 @@ describe('in-loop goal scoring', () => {
     await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
 
     const goalChunks: any[] = [];
-    const stream = await agent.stream('go', {
+    const stream = await agent.streamMessageList('go', {
       memory: { resource: RESOURCE, thread: { id: THREAD } },
       maxSteps: 3,
     });
@@ -959,7 +959,7 @@ describe('in-loop goal scoring', () => {
     await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
 
     const goalChunks: any[] = [];
-    const stream = await agent.stream('go', {
+    const stream = await agent.streamMessageList('go', {
       memory: { resource: RESOURCE, thread: { id: THREAD } },
       maxSteps: 3,
     });

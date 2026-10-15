@@ -84,7 +84,7 @@ describe('structured output when the run is aborted during structuring', () => {
     agent.__setLogger(logger);
 
     const schema = z.object({ summary: z.string(), filesFound: z.number() });
-    const result = await agent.stream('Summarize the directory.', {
+    const result = await agent.streamMessageList('Summarize the directory.', {
       abortSignal: abortController.signal,
       structuredOutput: {
         schema,

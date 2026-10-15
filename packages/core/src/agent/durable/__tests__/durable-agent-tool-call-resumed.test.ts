@@ -305,7 +305,7 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
     const durableAgent = createDurableAgent({ agent, pubsub });
     new Mastra({ agents: { durableAgent }, storage: new InMemoryStore(), logger: false });
 
-    const stream = await durableAgent.stream('ask', { memory, maxSteps: 3 });
+    const stream = await durableAgent.streamMessageList('ask', { memory, maxSteps: 3 });
     await runUntil(stream, 'tool-call-suspended');
 
     const resumed = await durableAgent.resume(stream.runId, { answer: 'blue' }, { toolCallId: 'tc-1', memory } as any);
@@ -374,7 +374,7 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
     };
 
     const firstAgent = createAgent();
-    const stream = await firstAgent.stream('ask', { memory, maxSteps: 3, requireToolApproval: () => false });
+    const stream = await firstAgent.streamMessageList('ask', { memory, maxSteps: 3, requireToolApproval: () => false });
     await runUntil(stream, 'tool-call-suspended');
     const workflows = (await store.getStore('workflows'))!;
     await vi.waitFor(async () => {
@@ -428,10 +428,10 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
     const durableAgent = createDurableAgent({ agent, pubsub });
     new Mastra({ agents: { durableAgent }, storage: new InMemoryStore(), logger: false });
 
-    const stream = await durableAgent.stream('go', { memory, maxSteps: 3 });
+    const stream = await durableAgent.streamMessageList('go', { memory, maxSteps: 3 });
     await runUntil(stream, 'tool-call-approval');
 
-    const chunks = await drain(await durableAgent.approveToolCall({ runId: stream.runId, toolCallId: 'tc-1', memory }));
+    const chunks = await drain(await durableAgent.approveToolCallMessageList({ runId: stream.runId, toolCallId: 'tc-1', memory }));
     const acks = chunks.filter(c => c.type === 'tool-call-resumed');
     expect(acks, chunks.map(c => c.type).join(',')).toHaveLength(1);
     expect(acks[0].payload).toMatchObject({ toolCallId: 'tc-1', kind: 'approval' });
@@ -458,14 +458,14 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
     const durableAgent = createDurableAgent({ agent, pubsub });
     new Mastra({ agents: { durableAgent }, storage: new InMemoryStore(), logger: false });
 
-    const stream = await durableAgent.stream('go', {
+    const stream = await durableAgent.streamMessageList('go', {
       memory,
       maxSteps: 3,
       transform: { targets: ['display'], transformToolPayload: ctx => `[redacted ${ctx.phase}]` },
     } as any);
     await runUntil(stream, 'tool-call-approval');
 
-    const chunks = await drain(await durableAgent.approveToolCall({ runId: stream.runId, toolCallId: 'tc-1', memory }));
+    const chunks = await drain(await durableAgent.approveToolCallMessageList({ runId: stream.runId, toolCallId: 'tc-1', memory }));
     const ack = chunks.find(c => c.type === 'tool-call-resumed');
     expect(ack, chunks.map(c => c.type).join(',')).toBeDefined();
     const display = ack.metadata?.mastra?.toolPayloadTransform?.display;

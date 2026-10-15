@@ -94,7 +94,7 @@ describe('Workflow tool MastraMemory isolation', () => {
       inputSchema: z.object({ prompt: z.string() }),
       outputSchema: z.object({ text: z.string() }),
       execute: async ({ inputData, requestContext }) => {
-        const stream = await subAgent.stream(inputData.prompt, {
+        const stream = await subAgent.streamMessageList(inputData.prompt, {
           memory: { thread: subAgentThreadId, resource: resourceId },
           requestContext,
           maxSteps: 1,
@@ -126,7 +126,7 @@ describe('Workflow tool MastraMemory isolation', () => {
 
     const requestContext = new RequestContext();
 
-    const stream = await parentAgent.stream('Do something', {
+    const stream = await parentAgent.streamMessageList('Do something', {
       memory: { thread: parentThreadId, resource: resourceId },
       requestContext,
       maxSteps: 5,
@@ -185,7 +185,7 @@ describe('Workflow tool MastraMemory isolation', () => {
 
     const requestContext = new RequestContext();
 
-    const stream = await parentAgent.stream('Do something', {
+    const stream = await parentAgent.streamMessageList('Do something', {
       memory: { thread: parentThreadId, resource: resourceId },
       requestContext,
       maxSteps: 5,

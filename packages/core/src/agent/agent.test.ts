@@ -228,7 +228,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       if (version === 'v1') {
         response = await agentOne.generateLegacy('Who won the 2016 US presidential election?');
       } else {
-        response = await agentOne.generate('Who won the 2016 US presidential election?');
+        response = await agentOne.generateMessageList('Who won the 2016 US presidential election?');
       }
 
       const { text, toolCalls } = response;
@@ -257,7 +257,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       if (version === 'v1') {
         response = await agentOne.streamLegacy('Who won the 2016 US presidential election?');
       } else {
-        response = await agentOne.stream('Who won the 2016 US presidential election?');
+        response = await agentOne.streamMessageList('Who won the 2016 US presidential election?');
       }
 
       let previousText = '';
@@ -338,7 +338,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       const result =
         version === 'v1'
           ? await agent.generateLegacy('Hello', { model: overrideModel })
-          : await agent.generate('Hello', { model: overrideModel });
+          : await agent.generateMessageList('Hello', { model: overrideModel });
 
       expect(result.text).toBe('override model');
       expect(overrideModelUsed).toBe(true);
@@ -368,7 +368,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           }),
         });
       } else {
-        response = await agentOne.generate('Who won the 2012 US presidential election?', {
+        response = await agentOne.generateMessageList('Who won the 2012 US presidential election?', {
           structuredOutput: {
             schema: z.object({
               winner: z.string(),
@@ -416,7 +416,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         expect(previousPartialObject['winner']).toBe('Barack Obama');
       } else {
-        response = await agentOne.stream('Who won the 2012 US presidential election?', {
+        response = await agentOne.streamMessageList('Who won the 2012 US presidential election?', {
           structuredOutput: {
             schema: z.object({
               winner: z.string(),
@@ -594,7 +594,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generate('What is the weather like today?', {
+        await agent.generateMessageList('What is the weather like today?', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -784,7 +784,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           requestContext,
         });
       } else {
-        await agent.generate('Test message', {
+        await agent.generateMessageList('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -816,7 +816,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           requestContext: standardContext,
         });
       } else {
-        await agent.generate('Test message', {
+        await agent.generateMessageList('Test message', {
           memory: {
             resource: 'user-2',
             thread: {
@@ -967,7 +967,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       if (version === 'v1') {
         await agent.generateLegacy('Test message');
       } else {
-        await agent.generate('Test message');
+        await agent.generateMessageList('Test message');
       }
 
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -979,7 +979,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       if (version === 'v1') {
         await agent.generateLegacy('Test message');
       } else {
-        await agent.generate('Test message');
+        await agent.generateMessageList('Test message');
       }
 
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -1147,7 +1147,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generate('Test message', {
+        await agent.generateMessageList('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -1181,7 +1181,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generate('Test message', {
+        await agent.generateMessageList('Test message', {
           memory: {
             resource: 'user-2',
             thread: {
@@ -1260,7 +1260,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generate('Test message', {
+        await agent.generateMessageList('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -1438,7 +1438,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generate('Test message', {
+        await agent.generateMessageList('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -1643,7 +1643,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           requestContext: japaneseContext,
         });
       } else {
-        await agent.generate('Test message', {
+        await agent.generateMessageList('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -1677,7 +1677,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           requestContext: englishContext,
         });
       } else {
-        await agent.generate('Test message', {
+        await agent.generateMessageList('Test message', {
           memory: {
             resource: 'user-2',
             thread: {
@@ -1815,7 +1815,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generate('What is the weather like today?', {
+        await agent.generateMessageList('What is the weather like today?', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -1955,7 +1955,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generate('Test message', {
+        await agent.generateMessageList('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -2083,7 +2083,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generate('Test message', {
+        await agent.generateMessageList('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -2302,7 +2302,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generate('Test message', {
+        await agent.generateMessageList('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -2340,7 +2340,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generate('Test message', {
+        await agent.generateMessageList('Test message', {
           memory: {
             resource: 'user-2',
             thread: {
@@ -2440,7 +2440,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generate('hello', {
+        await agent.generateMessageList('hello', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -2489,7 +2489,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generate('hello', {
+        await agent.generateMessageList('hello', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -2537,7 +2537,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generate('hello', {
+        await agent.generateMessageList('hello', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -2573,7 +2573,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        res = await agent.stream('hello', {
+        res = await agent.streamMessageList('hello', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -2717,7 +2717,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       if (version === 'v1') {
         response = await agent.generateLegacy('hello', { requestContext });
       } else {
-        response = await agent.generate('hello', { requestContext });
+        response = await agent.generateMessageList('hello', { requestContext });
       }
 
       expect(response.text).toBe('Logger test response');
@@ -2739,7 +2739,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       if (version === 'v1') {
         response = await agent.generateLegacy('hello');
       } else {
-        response = await agent.generate('hello');
+        response = await agent.generateMessageList('hello');
       }
 
       expect(response.text).toBe('Logger test response');
@@ -2763,7 +2763,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       if (version === 'v1') {
         response = await agent.generateLegacy('hello');
       } else {
-        response = await agent.generate('hello');
+        response = await agent.generateMessageList('hello');
       }
 
       expect(response.text).toBe('Logger test response');
@@ -2995,7 +2995,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         // This test only applies to V2
         // Simply verify that generate works with the system option
         // without throwing errors
-        const response = await agent.generate('Hello', {
+        const response = await agent.generateMessageList('Hello', {
           system: additionalSystem,
         });
 
@@ -3031,7 +3031,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         // This test only applies to V2
         // Simply verify that generate works with array system option
         // without throwing errors
-        const response = await agent.generate('Hello', {
+        const response = await agent.generateMessageList('Hello', {
           system: additionalSystem,
         });
 
@@ -3085,7 +3085,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(response.text).toBe('Dummy response');
       } else {
         // For v2, use generate
-        const response = await agent.generate('Hello', {
+        const response = await agent.generateMessageList('Hello', {
           instructions: {
             role: 'system',
             content: 'Override instructions',
@@ -3177,7 +3177,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           content: 'Be concise in your responses.',
         };
 
-        const stream = await agent.stream('Hello', {
+        const stream = await agent.streamMessageList('Hello', {
           system: additionalSystem,
         });
 
@@ -3204,7 +3204,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(response.text).toBe('Dummy response');
       } else {
         // For v2, use generate
-        const response = await agent.generate('Hello', {
+        const response = await agent.generateMessageList('Hello', {
           instructions: ['Override instruction 1', 'Override instruction 2'],
         });
         expect(response.text).toBe('Dummy response');
@@ -3261,7 +3261,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       if (version === 'v2') {
         try {
           // This will trigger the message list building
-          await agent.generate('Hello');
+          await agent.generateMessageList('Hello');
 
           // Check all addSystem calls
           const systemMessageCalls = addSystemSpy.mock.calls.filter(call => {
@@ -3465,7 +3465,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resourceId: 'resource-1-generate',
           });
         } else {
-          await agent.generate('repeat tool calls', {
+          await agent.generateMessageList('repeat tool calls', {
             memory: {
               thread: 'thread-1-generate',
               resource: 'resource-1-generate',
@@ -3510,7 +3510,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resourceId: `resource-2-${version}-generate`,
           });
         } else {
-          await agent.generate('no progress', {
+          await agent.generateMessageList('no progress', {
             memory: {
               thread: `thread-2-${version}-generate`,
               resource: `resource-2-${version}-generate`,
@@ -3556,7 +3556,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resourceId: 'resource-3-generate',
           });
         } else {
-          await agent.generate('interrupt before step', {
+          await agent.generateMessageList('interrupt before step', {
             memory: {
               thread: 'thread-3-generate',
               resource: 'resource-3-generate',
@@ -3636,7 +3636,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             },
           });
         } else {
-          await agent.generate('trigger error', {
+          await agent.generateMessageList('trigger error', {
             memory: {
               resource: 'user-err',
               thread: {
@@ -3694,7 +3694,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           instructions: 'You are a helpful assistant.',
         });
 
-        const result = await agent.stream('Hello', {
+        const result = await agent.streamMessageList('Hello', {
           onError: ({ error }) => {
             onErrorCallbackError = error;
           },
@@ -3752,7 +3752,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let onErrorCallbackError: any = null;
         let fullStreamError: any = null;
 
-        const result = await agent.stream('Hello', {
+        const result = await agent.streamMessageList('Hello', {
           onError: ({ error }) => {
             onErrorCallbackError = error;
           },
@@ -3831,7 +3831,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let onErrorCallbackError: any = null;
         let fullStreamError: any = null;
 
-        const result = await agent.stream('Hello', {
+        const result = await agent.streamMessageList('Hello', {
           onError: ({ error }) => {
             onErrorCallbackError = error;
           },
@@ -3934,7 +3934,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         // With the fix, tool-not-found errors no longer throw.
         // The error is returned to the model as a tool result, and the loop continues
         // until maxSteps is reached. The agent completes normally.
-        const result = await agent.generate('Please use a tool', { maxSteps: 2 });
+        const result = await agent.generateMessageList('Please use a tool', { maxSteps: 2 });
 
         // Should complete without throwing
         expect(result).toBeDefined();
@@ -3955,7 +3955,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         const model = createModelWithNonExistentToolCall();
         const agent = createAgentWithMismatchedTool(model);
 
-        const output = await agent.stream('Please use a tool', { maxSteps: 2 });
+        const output = await agent.streamMessageList('Please use a tool', { maxSteps: 2 });
 
         const toolErrorChunks: any[] = [];
         for await (const chunk of output.fullStream) {
@@ -4019,7 +4019,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
         const agent = createAgentWithMismatchedTool(selfCorrectingModel);
 
-        const result = await agent.generate('Please use a tool', { maxSteps: 5 });
+        const result = await agent.generateMessageList('Please use a tool', { maxSteps: 5 });
 
         // Should complete successfully — the model self-corrected
         expect(result).toBeDefined();
@@ -4088,7 +4088,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
         const agent = createAgentWithMismatchedTool(selfCorrectingModel);
 
-        const output = await agent.stream('Please use a tool', { maxSteps: 5 });
+        const output = await agent.streamMessageList('Please use a tool', { maxSteps: 5 });
 
         const toolErrorChunks: any[] = [];
         const toolResultChunks: any[] = [];
@@ -4130,7 +4130,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let errorCaught = false;
         let caughtError: any = null;
 
-        const stream = await agent.stream('Hello', {
+        const stream = await agent.streamMessageList('Hello', {
           onError: ({ error }) => {
             errorCaught = true;
             caughtError = error;
@@ -4160,7 +4160,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         const chunks: any[] = [];
 
-        const stream = await agent.stream('Hello', {
+        const stream = await agent.streamMessageList('Hello', {
           onChunk: chunk => {
             chunks.push(chunk);
           },
@@ -4222,7 +4222,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         let abortCalled = false;
         let abortEvent: any = null;
 
-        const stream = await agent.stream('Hello', {
+        const stream = await agent.streamMessageList('Hello', {
           onAbort: event => {
             abortCalled = true;
             abortEvent = event;
@@ -4402,7 +4402,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         if (version === 'v1') {
           result = await agentWithProcessor.generateLegacy('Hello world');
         } else {
-          result = await agentWithProcessor.generate('Hello world');
+          result = await agentWithProcessor.generateMessageList('Hello world');
         }
 
         // The processor should have added a message
@@ -4441,7 +4441,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         if (version === 'v1') {
           result = await agentWithProcessors.generateLegacy('Hello');
         } else {
-          result = await agentWithProcessors.generate('Hello');
+          result = await agentWithProcessors.generateMessageList('Hello');
         }
 
         expect(result.text).toContain('First processor');
@@ -4480,7 +4480,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         if (version === 'v1') {
           result = await agentWithAsyncProcessors.generateLegacy('Test async');
         } else {
-          result = await agentWithAsyncProcessors.generate('Test async');
+          result = await agentWithAsyncProcessors.generateMessageList('Test async');
         }
 
         // Processors run sequentially, so "First processor" should appear before "Second processor"
@@ -4512,7 +4512,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         if (version === 'v1') {
           result = await agentWithAbortProcessor.generateLegacy('This should be aborted');
         } else {
-          result = await agentWithAbortProcessor.generate('This should be aborted');
+          result = await agentWithAbortProcessor.generateMessageList('This should be aborted');
         }
 
         expect(result.tripwire).toBeDefined();
@@ -4543,7 +4543,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         if (version === 'v1') {
           result = await agentWithCustomAbort.generateLegacy('Custom abort test');
         } else {
-          result = await agentWithCustomAbort.generate('Custom abort test');
+          result = await agentWithCustomAbort.generateMessageList('Custom abort test');
         }
 
         expect(result.tripwire).toBeDefined();
@@ -4585,7 +4585,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         if (version === 'v1') {
           result = await agentWithAbortSequence.generateLegacy('Abort sequence test');
         } else {
-          result = await agentWithAbortSequence.generate('Abort sequence test');
+          result = await agentWithAbortSequence.generateMessageList('Abort sequence test');
         }
 
         expect(result.tripwire).toBeDefined();
@@ -4616,7 +4616,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         if (version === 'v1') {
           stream = await agentWithStreamProcessor.streamLegacy('Stream test');
         } else {
-          stream = await agentWithStreamProcessor.stream('Stream test');
+          stream = await agentWithStreamProcessor.streamMessageList('Stream test');
         }
 
         let fullText = '';
@@ -4651,7 +4651,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           expect(stream.tripwire).toBeDefined();
           expect(stream.tripwire?.reason).toBe('Stream aborted');
         } else {
-          stream = await agentWithStreamAbort.stream('Stream abort test');
+          stream = await agentWithStreamAbort.streamMessageList('Stream abort test');
 
           for await (const chunk of stream.fullStream) {
             expect(chunk.type).toBe('tripwire');
@@ -4692,7 +4692,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         if (version === 'v1') {
           stream = await agentWithDeployerAbort.streamLegacy('Deployer abort test');
         } else {
-          stream = await agentWithDeployerAbort.stream('Deployer abort test');
+          stream = await agentWithDeployerAbort.streamMessageList('Deployer abort test');
         }
 
         if (version === 'v1') {
@@ -4754,7 +4754,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             requestContext,
           });
         } else {
-          result = await agentWithDynamicProcessors.generate('Test dynamic', {
+          result = await agentWithDynamicProcessors.generateMessageList('Test dynamic', {
             requestContext,
           });
         }
@@ -4775,7 +4775,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         if (version === 'v1') {
           result = await agentWithEmptyProcessors.generateLegacy('No processors test');
         } else {
-          result = await agentWithEmptyProcessors.generate('No processors test');
+          result = await agentWithEmptyProcessors.generateMessageList('No processors test');
         }
 
         expect(result.text).toContain('processed:');
@@ -4812,7 +4812,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         if (version === 'v1') {
           result = await agentWithModifier.generateLegacy('Original user message');
         } else {
-          result = await agentWithModifier.generate('Original user message');
+          result = await agentWithModifier.generateMessageList('Original user message');
         }
 
         expect(result.text).toContain('MODIFIED: Original message was received');
@@ -4858,7 +4858,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         if (version === 'v1') {
           validResult = await agentWithValidator.generateLegacy('This is appropriate content');
         } else {
-          validResult = await agentWithValidator.generate('This is appropriate content');
+          validResult = await agentWithValidator.generateMessageList('This is appropriate content');
         }
         expect(validResult.text).toContain('Content validated');
 
@@ -4867,7 +4867,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         if (version === 'v1') {
           invalidResult = await agentWithValidator.generateLegacy('This contains inappropriate content');
         } else {
-          invalidResult = await agentWithValidator.generate('This contains inappropriate content');
+          invalidResult = await agentWithValidator.generateMessageList('This contains inappropriate content');
         }
         expect(invalidResult.tripwire).toBeDefined();
         expect(invalidResult.tripwire?.reason).toBe('Content validation failed');
@@ -4964,7 +4964,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generate(messagesWithMetadata, {
+        await agent.generateMessageList(messagesWithMetadata, {
           memory: {
             resource: 'customer-12345',
             thread: {
@@ -5035,7 +5035,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        stream = await agent.stream(messagesWithMetadata, {
+        stream = await agent.streamMessageList(messagesWithMetadata, {
           memory: {
             resource: 'user-mobile',
             thread: {
@@ -5123,7 +5123,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        await agent.generate(mixedMessages, {
+        await agent.generateMessageList(mixedMessages, {
           memory: {
             resource: 'mixed-user',
             thread: {
@@ -5196,7 +5196,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
 
       // Call stream without passing any options - should use defaultOptions
-      const result = version === 'v1' ? await agent.streamLegacy('How are you?') : await agent.stream('How are you?');
+      const result = version === 'v1' ? await agent.streamLegacy('How are you?') : await agent.streamMessageList('How are you?');
 
       // Consume the stream to trigger onFinish
       if (version === 'v1') {
@@ -5243,7 +5243,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       // Call stream with empty options - should still use defaultOptions
       const result =
-        version === 'v1' ? await agent.streamLegacy('How are you?', {}) : await agent.stream('How are you?', {});
+        version === 'v1' ? await agent.streamLegacy('How are you?', {}) : await agent.streamMessageList('How are you?', {});
 
       // Consume the stream to trigger onFinish
       if (version === 'v1') {
@@ -5296,7 +5296,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
                 finishData = data;
               },
             })
-          : await agent.stream('How are you?', {
+          : await agent.streamMessageList('How are you?', {
               onFinish: data => {
                 passedOnFinishCalled = true;
                 finishData = data;
@@ -5344,7 +5344,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           onFinish,
         });
       } else {
-        result = await agent.stream('How are you?', {
+        result = await agent.streamMessageList('How are you?', {
           onFinish,
         });
       }
@@ -5442,7 +5442,7 @@ describe('Agent Tests', () => {
       const { model, getResponseFormat } = createArrayModel([responseText]);
       const agent = new Agent({ id: 'array-agent', name: 'array-agent', instructions: 'list', model });
 
-      const result = await agent.generate('List greek letters', {
+      const result = await agent.generateMessageList('List greek letters', {
         structuredOutput: { schema: z.array(z.string()) },
       });
 
@@ -5462,7 +5462,7 @@ describe('Agent Tests', () => {
       const { model } = createArrayModel(['{"elements":[1,2,3]}']);
       const agent = new Agent({ id: 'array-agent', name: 'array-agent', instructions: 'list', model });
 
-      const result = await agent.generate('Count', { structuredOutput: { schema: z.array(z.number()) } });
+      const result = await agent.generateMessageList('Count', { structuredOutput: { schema: z.array(z.number()) } });
 
       expect(result.object).toEqual([1, 2, 3]);
     });
@@ -5471,7 +5471,7 @@ describe('Agent Tests', () => {
       const { model } = createArrayModel(['{"elements":["al', 'pha","be', 'ta",', '"gamma"]}']);
       const agent = new Agent({ id: 'array-agent', name: 'array-agent', instructions: 'list', model });
 
-      const stream = await agent.stream('List greek letters', {
+      const stream = await agent.streamMessageList('List greek letters', {
         structuredOutput: { schema: z.array(z.string()) },
       });
 
@@ -5493,7 +5493,7 @@ describe('Agent Tests', () => {
       const { model } = createArrayModel(['{"elements":[1', '23,4', '5]}']);
       const agent = new Agent({ id: 'array-agent', name: 'array-agent', instructions: 'list', model });
 
-      const stream = await agent.stream('Count', { structuredOutput: { schema: z.array(z.number()) } });
+      const stream = await agent.streamMessageList('Count', { structuredOutput: { schema: z.array(z.number()) } });
 
       let text = '';
       for await (const chunk of stream.textStream) {
@@ -5508,7 +5508,7 @@ describe('Agent Tests', () => {
       const { model } = createArrayModel(['{"elements":[1,"two"]}']);
       const agent = new Agent({ id: 'array-agent', name: 'array-agent', instructions: 'list', model });
 
-      await expect(agent.generate('Count', { structuredOutput: { schema: z.array(z.number()) } })).rejects.toThrow(
+      await expect(agent.generateMessageList('Count', { structuredOutput: { schema: z.array(z.number()) } })).rejects.toThrow(
         /Structured output validation failed/,
       );
     });
@@ -5530,7 +5530,7 @@ describe('Agent Tests', () => {
         }),
       });
 
-      const result = await agent.generate('List greek letters', {
+      const result = await agent.generateMessageList('List greek letters', {
         structuredOutput: { schema: z.array(z.string()), model: structuringModel },
       });
 
@@ -5584,7 +5584,7 @@ describe('Agent Tests', () => {
       });
       agent.__setLogger(noopLogger);
 
-      await agent.generate('Hello', {
+      await agent.generateMessageList('Hello', {
         maxSteps: 3,
         prepareStep: ({ stepNumber }) => (stepNumber >= 1 ? { toolChoice: 'none' } : undefined),
       });
@@ -5630,7 +5630,7 @@ describe('Agent Tests', () => {
       });
       agent.__setLogger(noopLogger);
 
-      await agent.generate('Hello', {
+      await agent.generateMessageList('Hello', {
         prepareStep: ({ tools }) => {
           return {
             tools: {
@@ -5683,7 +5683,7 @@ describe('Agent Tests', () => {
       });
       agent.__setLogger(noopLogger);
 
-      await agent.generate('Hello', {
+      await agent.generateMessageList('Hello', {
         prepareStep: () => {
           return {
             tools: {
@@ -5747,7 +5747,7 @@ describe('Agent Tests', () => {
 
       const structuredOutputConfigs: Array<{ stepNumber: number; hasStructuredOutput: boolean }> = [];
 
-      const result = await agent.generate('Analyze this data', {
+      const result = await agent.generateMessageList('Analyze this data', {
         prepareStep: async ({ stepNumber, structuredOutput }) => {
           structuredOutputConfigs.push({
             stepNumber,
@@ -5819,7 +5819,7 @@ describe('Agent Tests', () => {
       });
       agent.__setLogger(noopLogger);
 
-      const result = await agent.generate('Get user info', {
+      const result = await agent.generateMessageList('Get user info', {
         structuredOutput: { schema: initialSchema },
         prepareStep: async ({ stepNumber, structuredOutput }) => {
           capturedStructuredOutput = structuredOutput;
@@ -5916,7 +5916,7 @@ describe('Agent Tests', () => {
       });
       agent.__setLogger(noopLogger);
 
-      const result = await agent.generate('Analyze this text', {
+      const result = await agent.generateMessageList('Analyze this text', {
         prepareStep: async ({ stepNumber }) => {
           if (stepNumber === 0) {
             // Step 0: Force tool call with toolChoice
@@ -5974,7 +5974,7 @@ describe('Agent Tests', () => {
         model: 'anthropic/claude-3-7-sonnet-latest',
       });
 
-      const result = await agent.generate('Analyze the sentiment of: "I love this product!"', {
+      const result = await agent.generateMessageList('Analyze the sentiment of: "I love this product!"', {
         prepareStep: async ({ stepNumber }) => {
           if (stepNumber === 0) {
             return {
@@ -6200,7 +6200,7 @@ describe('Agent Tests', () => {
       });
       agent.__setLogger(noopLogger);
 
-      await agent.generate('Hello', {
+      await agent.generateMessageList('Hello', {
         prepareStep: async ({ messageList, stepNumber }) => {
           // Record what system messages we see at the start of this step
           const currentSystemMessages = messageList.getAllSystemMessages();
@@ -6260,7 +6260,7 @@ describe('Agent Tests', () => {
       });
       agent.__setLogger(noopLogger);
 
-      await agent.generate('Hello', {
+      await agent.generateMessageList('Hello', {
         providerOptions: {
           somethingElse: {
             test: 'test',
@@ -6316,7 +6316,7 @@ describe('Agent Tests', () => {
       });
       agent.__setLogger(noopLogger);
 
-      await agent.generate('Hello', {
+      await agent.generateMessageList('Hello', {
         prepareStep: async ({ stepNumber }) => {
           if (stepNumber === 0) {
             return {
@@ -6432,7 +6432,7 @@ describe('Agent Tests', () => {
         tools: { capture_workspace: workspaceCaptureTool },
       });
 
-      await agent.generate('Test workspace from prepareStep', {
+      await agent.generateMessageList('Test workspace from prepareStep', {
         prepareStep: async ({ stepNumber }) => {
           if (stepNumber === 0) {
             return { workspace };
@@ -6518,7 +6518,7 @@ describe('Agent Tests', () => {
         workspace: agentWorkspace,
       });
 
-      await agent.generate('Test workspace override', {
+      await agent.generateMessageList('Test workspace override', {
         prepareStep: async ({ stepNumber }) => {
           if (stepNumber === 0) {
             // Override the agent's workspace with a different one

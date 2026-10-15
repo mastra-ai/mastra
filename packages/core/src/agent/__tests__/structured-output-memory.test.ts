@@ -124,7 +124,7 @@ describe('Structured output with memory - assistant message in final position (#
       ],
     });
 
-    await agent.generate([{ role: 'assistant', content: 'Please select the best agent for research dolphins' }], {
+    await agent.generateMessageList([{ role: 'assistant', content: 'Please select the best agent for research dolphins' }], {
       memory: {
         thread: threadId,
         resource: resourceId,
@@ -178,7 +178,7 @@ describe('Structured output with memory - assistant message in final position (#
       model: mockModel,
     });
 
-    await agent.generate([{ role: 'assistant', content: 'Draft response' }], {
+    await agent.generateMessageList([{ role: 'assistant', content: 'Draft response' }], {
       structuredOutput: { schema: z.object({ answer: z.string() }) },
     });
 
@@ -209,7 +209,7 @@ describe('Structured output with memory - assistant message in final position (#
       model: mockModel,
     });
 
-    await agent.generate([{ role: 'assistant', content: 'Draft response' }], {
+    await agent.generateMessageList([{ role: 'assistant', content: 'Draft response' }], {
       structuredOutput: { schema: z.object({ answer: z.string() }) },
     });
 
@@ -240,7 +240,7 @@ describe('Structured output with memory - assistant message in final position (#
       model: mockModel,
     });
 
-    await agent.generate([{ role: 'assistant', content: 'Draft response' }], {
+    await agent.generateMessageList([{ role: 'assistant', content: 'Draft response' }], {
       structuredOutput: { schema: z.object({ answer: z.string() }) },
     });
 
@@ -271,7 +271,7 @@ describe('Structured output with memory - assistant message in final position (#
       model: mockModel,
     });
 
-    await agent.generate(
+    await agent.generateMessageList(
       [
         { role: 'user', content: 'Give me a verdict.' },
         { role: 'assistant', content: 'Draft response' },
@@ -306,7 +306,7 @@ describe('Structured output with memory - assistant message in final position (#
       model: mockModel,
     });
 
-    await agent.generate([
+    await agent.generateMessageList([
       { role: 'user', content: 'Give me a verdict.' },
       { role: 'assistant', content: 'Draft response' },
     ]);
@@ -349,7 +349,7 @@ describe('Structured output with memory - assistant message in final position (#
       ],
     });
 
-    await agent.generate([
+    await agent.generateMessageList([
       { role: 'user', content: 'Give me a verdict.' },
       { role: 'assistant', content: 'Draft response' },
     ]);
@@ -397,7 +397,7 @@ describe('Structured output with memory - assistant message in final position (#
       },
     });
 
-    const result = await agent.generate('Weather in SF?', { maxSteps: 3 });
+    const result = await agent.generateMessageList('Weather in SF?', { maxSteps: 3 });
 
     expect(result.text).toBe('Sunny.');
     expect(capturedPrompts).toHaveLength(2);
@@ -432,7 +432,7 @@ describe('Structured output with memory - assistant message in final position (#
       model: mockModel,
     });
 
-    await agent.generate([
+    await agent.generateMessageList([
       { role: 'user', content: 'Weather in SF?' },
       {
         role: 'assistant',
@@ -476,7 +476,7 @@ describe('Structured output with memory - assistant message in final position (#
       model: mockModel,
     });
 
-    await agent.generate([
+    await agent.generateMessageList([
       { role: 'user', content: 'Give me a verdict.' },
       { role: 'assistant', content: 'Draft response' },
     ]);
@@ -508,7 +508,7 @@ describe('Structured output with memory - assistant message in final position (#
       model: mockModel,
     });
 
-    await agent.generate(
+    await agent.generateMessageList(
       [
         { role: 'user', content: 'Give me a verdict.' },
         { role: 'assistant', content: 'Draft response' },
@@ -632,7 +632,7 @@ describe('Structured output with memory - assistant message in final position (#
     });
 
     // Call stream with assistant-role input + structuredOutput + memory
-    const response = await agent.stream(
+    const response = await agent.streamMessageList(
       [
         {
           role: 'assistant' as const,
@@ -777,21 +777,21 @@ describe('Structured output memory inheritance', () => {
 
     await mockMemory.createThread({ threadId, resourceId });
 
-    await agent.generate('My favorite color is violet.', {
+    await agent.generateMessageList('My favorite color is violet.', {
       memory: {
         thread: threadId,
         resource: resourceId,
       },
     });
 
-    await agent.generate('I grew up in Lisbon.', {
+    await agent.generateMessageList('I grew up in Lisbon.', {
       memory: {
         thread: threadId,
         resource: resourceId,
       },
     });
 
-    await agent.generate('My dog is named Mochi.', {
+    await agent.generateMessageList('My dog is named Mochi.', {
       memory: {
         thread: threadId,
         resource: resourceId,
@@ -802,7 +802,7 @@ describe('Structured output memory inheritance', () => {
     requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
     requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
 
-    const result = await agent.generate(
+    const result = await agent.generateMessageList(
       'Return my profile as structured data. If a field is missing from this message, fill it from earlier conversation memory.',
       {
         memory: {
@@ -888,7 +888,7 @@ describe('Structured output memory inheritance', () => {
     });
 
     await mockMemory.createThread({ threadId, resourceId });
-    await agent.generate('Remember the project is Wren.', {
+    await agent.generateMessageList('Remember the project is Wren.', {
       memory: { thread: threadId, resource: resourceId },
     });
     let requestCalls = 0;
@@ -907,7 +907,7 @@ describe('Structured output memory inheritance', () => {
     requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
     requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
 
-    const result = await agent.generate('Count the files.', {
+    const result = await agent.generateMessageList('Count the files.', {
       maxProcessorRetries: 1,
       memory: { thread: threadId, resource: resourceId },
       requestContext,
@@ -1010,7 +1010,7 @@ describe('Structured output memory inheritance', () => {
     requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
     requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
 
-    const result = await agent.generate('Return a short structured summary.', {
+    const result = await agent.generateMessageList('Return a short structured summary.', {
       memory: {
         thread: threadId,
         resource: resourceId,
@@ -1118,21 +1118,21 @@ describe('Structured output memory inheritance', () => {
 
     await mockMemory.createThread({ threadId, resourceId });
 
-    await agent.generate('My favorite color is violet.', {
+    await agent.generateMessageList('My favorite color is violet.', {
       memory: {
         thread: threadId,
         resource: resourceId,
       },
     });
 
-    await agent.generate('I grew up in Lisbon.', {
+    await agent.generateMessageList('I grew up in Lisbon.', {
       memory: {
         thread: threadId,
         resource: resourceId,
       },
     });
 
-    await agent.generate('My dog is named Mochi.', {
+    await agent.generateMessageList('My dog is named Mochi.', {
       memory: {
         thread: threadId,
         resource: resourceId,
@@ -1143,7 +1143,7 @@ describe('Structured output memory inheritance', () => {
     requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
     requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
 
-    const result = await agent.generate(
+    const result = await agent.generateMessageList(
       'Return my profile as structured data. If a field is missing from this message, fill it from earlier conversation memory.',
       {
         memory: {
@@ -1261,7 +1261,7 @@ describe('Structured output memory inheritance', () => {
 
     await mockMemory.createThread({ threadId, resourceId });
 
-    const result = await agent.stream('Summarize this briefly', {
+    const result = await agent.streamMessageList('Summarize this briefly', {
       memory: {
         thread: threadId,
         resource: resourceId,
@@ -1311,7 +1311,7 @@ describe('Structured output memory inheritance', () => {
 
 /**
  * Regression test for issue #14659:
- * `agent.stream()` with `structuredOutput` persists "[object Object]" as message text
+ * `agent.streamMessageList()` with `structuredOutput` persists "[object Object]" as message text
  *
  * Root cause: the stream path's `onFinish` handler computed `outputText` by calling
  * `.map(m => m.content).join('\n')` on the message list, which serialized content
@@ -1369,7 +1369,7 @@ describe('Structured output stream memory persistence (#14659)', () => {
 
     await mockMemory.createThread({ threadId, resourceId });
 
-    const response = await agent.stream('Select a primitive', {
+    const response = await agent.streamMessageList('Select a primitive', {
       memory: {
         thread: threadId,
         resource: resourceId,

@@ -128,7 +128,7 @@ describe('DurableAgent processor stepNumber', () => {
     const { processor, observed } = createCaptureProcessor();
     const durableAgent = createDurableAgent({ agent: createAgent(processor), pubsub });
 
-    const { output, cleanup } = await durableAgent.stream('go', { maxSteps: 2 });
+    const { output, cleanup } = await durableAgent.streamMessageList('go', { maxSteps: 2 });
     await drain(output.fullStream as unknown as ReadableStream<any>);
     await cleanup();
 
@@ -142,7 +142,7 @@ describe('DurableAgent processor stepNumber', () => {
     const { processor, observed } = createCaptureProcessor();
     const agent = createAgent(processor);
 
-    const result = await agent.stream('go', { maxSteps: 2 });
+    const result = await agent.streamMessageList('go', { maxSteps: 2 });
     await drain(result.fullStream as unknown as ReadableStream<any>);
 
     for (const hook of ['input', 'request', 'response', 'output'] as const) {

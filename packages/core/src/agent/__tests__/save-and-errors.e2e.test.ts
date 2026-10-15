@@ -98,7 +98,7 @@ function saveAndErrorE2ETests(version: 'v1' | 'v2') {
               },
             );
           } else {
-            await agent.generate('Please echo this and then use the error tool. Be verbose and take multiple steps.', {
+            await agent.generateMessageList('Please echo this and then use the error tool. Be verbose and take multiple steps.', {
               memory: {
                 thread: 'thread-partial-rescue-generate',
                 resource: 'resource-partial-rescue-generate',
@@ -184,7 +184,7 @@ function saveAndErrorE2ETests(version: 'v1' | 'v2') {
             savePerStep: true,
           });
         } else {
-          await agent.generate('Echo: Please echo this long message and explain why.', {
+          await agent.generateMessageList('Echo: Please echo this long message and explain why.', {
             memory: {
               thread: 'thread-echo-generate',
               resource: 'resource-echo-generate',
@@ -262,7 +262,7 @@ function saveAndErrorE2ETests(version: 'v1' | 'v2') {
             },
           );
         } else {
-          await agent.generate(
+          await agent.generateMessageList(
             'Echo: Please echo this message. Uppercase: please also uppercase this message. Explain both results.',
             {
               memory: {
@@ -307,7 +307,7 @@ describe('stream destructuring support', () => {
       instructions: 'You are a helpful assistant.',
     });
 
-    const result = await agent.stream('Say hello');
+    const result = await agent.streamMessageList('Say hello');
 
     // Test destructuring of various properties
     const { fullStream, textStream, text, usage, consumeStream, toolCalls, finishReason, request } = result;

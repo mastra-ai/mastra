@@ -161,7 +161,7 @@ describe('durable agent requestContextEntries across iterations', () => {
       const requestContext = new RequestContext();
       requestContext.set('tenantId', 'tenant-1');
 
-      const { cleanup } = await durableAgent.stream('Use the tool', { requestContext });
+      const { cleanup } = await durableAgent.streamMessageList('Use the tool', { requestContext });
       await new Promise(resolve => setTimeout(resolve, 800));
       cleanup();
 

@@ -109,7 +109,7 @@ describe('DurableAgent processOutputStep abort', () => {
     };
 
     const durableAgent = createAgent(model, processor, [inputProcessor]);
-    const { output } = await durableAgent.stream('Hello', { maxProcessorRetries: 3 });
+    const { output } = await durableAgent.streamMessageList('Hello', { maxProcessorRetries: 3 });
     const chunks = await drain(output.fullStream);
 
     expect(prompts).toHaveLength(2);
@@ -166,7 +166,7 @@ describe('DurableAgent processOutputStep abort', () => {
     };
 
     const durableAgent = createAgent(model, processor);
-    const { output } = await durableAgent.stream('Hello', { maxProcessorRetries: 3 });
+    const { output } = await durableAgent.streamMessageList('Hello', { maxProcessorRetries: 3 });
     await drain(output.fullStream);
 
     expect(calls).toBe(2);
@@ -188,7 +188,7 @@ describe('DurableAgent processOutputStep abort', () => {
     };
 
     const durableAgent = createAgent(model, processor);
-    const { output } = await durableAgent.stream('Hello', { maxProcessorRetries: 3 });
+    const { output } = await durableAgent.streamMessageList('Hello', { maxProcessorRetries: 3 });
     const chunks = await drain(output.fullStream);
 
     expect(prompts).toHaveLength(1);
@@ -213,7 +213,7 @@ describe('DurableAgent processOutputStep abort', () => {
     };
 
     const durableAgent = createAgent(model, processor);
-    const { output } = await durableAgent.stream('Hello', { maxProcessorRetries: 1 });
+    const { output } = await durableAgent.streamMessageList('Hello', { maxProcessorRetries: 1 });
     const chunks = await drain(output.fullStream);
 
     expect(prompts).toHaveLength(2);
@@ -291,7 +291,7 @@ describe('DurableAgent processOutputStep abort', () => {
       pubsub,
     });
 
-    const { output } = await durableAgent.stream('Hello', { memory: { thread: 't-26048', resource: 'r-26048' } });
+    const { output } = await durableAgent.streamMessageList('Hello', { memory: { thread: 't-26048', resource: 'r-26048' } });
     await drain(output.fullStream);
     const full = await output.getFullOutput();
 

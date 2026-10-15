@@ -448,7 +448,7 @@ describe('Resume API', () => {
       const resumeSpy = vi.spyOn(durableAgent, 'resume').mockResolvedValue({ output } as any);
       const memory = { thread: 'approval-thread', resource: 'approval-resource' };
 
-      const result = await durableAgent.approveToolCall({ runId: 'approval-run', memory });
+      const result = await durableAgent.approveToolCallMessageList({ runId: 'approval-run', memory });
 
       expect(result).toBe(output);
       expect(resumeSpy).toHaveBeenCalledWith('approval-run', { approved: true }, expect.objectContaining({ memory }));
@@ -466,7 +466,7 @@ describe('Resume API', () => {
       const resumeSpy = vi.spyOn(durableAgent, 'resume').mockResolvedValue({ output } as any);
       const memory = { thread: 'decline-thread', resource: 'decline-resource' };
 
-      const result = await durableAgent.declineToolCall({ runId: 'decline-run', memory });
+      const result = await durableAgent.declineToolCallMessageList({ runId: 'decline-run', memory });
 
       expect(result).toBe(output);
       expect(resumeSpy).toHaveBeenCalledWith('decline-run', { approved: false }, expect.objectContaining({ memory }));
@@ -750,7 +750,7 @@ describe('Resume with CachingPubSub Event Replay', () => {
     });
 
     // Start streaming - this will emit some events before suspending
-    const { runId, cleanup: initialCleanup } = await durableAgent.stream('Delete the file');
+    const { runId, cleanup: initialCleanup } = await durableAgent.streamMessageList('Delete the file');
 
     // Wait a bit for events to be cached
     await new Promise(resolve => setTimeout(resolve, 50));
@@ -801,7 +801,7 @@ describe('Resume with CachingPubSub Event Replay', () => {
     const runId = 'resume-until-idle-run';
     const threadId = 'resume-until-idle-thread';
     const resourceId = 'resume-until-idle-resource';
-    const initial = await durableAgent.stream('Start', {
+    const initial = await durableAgent.streamMessageList('Start', {
       runId,
       memory: { thread: threadId, resource: resourceId },
       closeOnSuspend: true,
@@ -949,7 +949,7 @@ describe('Resume with CachingPubSub Event Replay', () => {
     });
 
     // Start and get runId
-    const { runId, cleanup } = await durableAgent.stream('Hello');
+    const { runId, cleanup } = await durableAgent.streamMessageList('Hello');
 
     // Wait for events
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -1123,7 +1123,7 @@ describe('Resume State Preservation', () => {
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const { runId, cleanup } = await durableAgent.stream('Test message');
+    const { runId, cleanup } = await durableAgent.streamMessageList('Test message');
 
     // Run should be registered initially
     expect(durableAgent.runRegistry.has(runId)).toBe(true);
@@ -1186,7 +1186,7 @@ describe('Observe API', () => {
     });
 
     // Start a stream first
-    const { runId, cleanup: streamCleanup } = await durableAgent.stream('Start stream');
+    const { runId, cleanup: streamCleanup } = await durableAgent.streamMessageList('Start stream');
 
     // Wait for events to be cached
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -1217,7 +1217,7 @@ describe('Observe API', () => {
     });
 
     // Start a stream
-    const { runId, cleanup: streamCleanup } = await durableAgent.stream('Generate events');
+    const { runId, cleanup: streamCleanup } = await durableAgent.streamMessageList('Generate events');
 
     // Wait for events
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -1247,7 +1247,7 @@ describe('Observe API', () => {
       pubsub: cachingPubsub,
     });
 
-    const { runId, cleanup: streamCleanup } = await durableAgent.stream('Hello');
+    const { runId, cleanup: streamCleanup } = await durableAgent.streamMessageList('Hello');
     await new Promise(resolve => setTimeout(resolve, 100));
     streamCleanup();
 

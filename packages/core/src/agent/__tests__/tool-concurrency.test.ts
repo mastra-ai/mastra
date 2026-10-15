@@ -21,7 +21,7 @@ async function verifyToolExecutionOrder(
   agent: Agent,
   options?: { requireToolApproval?: boolean; toolCallConcurrency?: number },
 ) {
-  const stream = await agent.stream('Use both tools', {
+  const stream = await agent.streamMessageList('Use both tools', {
     memory: {
       thread: 'test-thread-concurrency',
       resource: 'user-test-concurrency',
@@ -105,7 +105,7 @@ async function verifyToolExecutionOrder(
 
     // Approve tool1 first if it needs approval
     if (tool1RequestedApproval && tool1CallId) {
-      const resumeStream1 = await agent.approveToolCall({ ...resumeOptions, toolCallId: tool1CallId });
+      const resumeStream1 = await agent.approveToolCallMessageList({ ...resumeOptions, toolCallId: tool1CallId });
       for await (const chunk of resumeStream1.fullStream) {
         const timestamp = Date.now();
         if (
@@ -171,7 +171,7 @@ async function verifyToolExecutionOrder(
     // If tool2 also needs approval and we have its call ID, approve it
     if (tool2RequestedApproval && tool2CallId) {
       await delay(100);
-      const resumeStream2 = await agent.approveToolCall({ ...resumeOptions, toolCallId: tool2CallId });
+      const resumeStream2 = await agent.approveToolCallMessageList({ ...resumeOptions, toolCallId: tool2CallId });
       for await (const chunk of resumeStream2.fullStream) {
         const timestamp = Date.now();
         if (

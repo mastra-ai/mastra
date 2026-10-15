@@ -170,7 +170,7 @@ describe('DurableAgent cross-process abort', () => {
     const durableAgent = createDurableAgent({ agent, pubsub });
     new Mastra({ agents: { 'cross-process-abort-agent': durableAgent as any }, storage, logger: false });
 
-    const { output, runId, cleanup } = await durableAgent.stream('Go');
+    const { output, runId, cleanup } = await durableAgent.streamMessageList('Go');
 
     const terminalEvents: string[] = [];
     await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {

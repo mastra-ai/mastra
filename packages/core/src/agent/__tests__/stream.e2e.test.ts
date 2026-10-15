@@ -118,7 +118,7 @@ function runStreamE2ETest(version: 'v1' | 'v2' | 'v3' | 'v4') {
           },
         );
       } else {
-        stream = await agent.stream(
+        stream = await agent.streamMessageList(
           'Please echo this and then use the error tool. Be verbose and you must take multiple steps. Call tools 2x in parallel.',
           {
             memory: {
@@ -214,7 +214,7 @@ function runStreamE2ETest(version: 'v1' | 'v2' | 'v3' | 'v4') {
           savePerStep: true,
         });
       } else {
-        stream = await agent.stream('Echo: Please echo this long message and explain why.', {
+        stream = await agent.streamMessageList('Echo: Please echo this long message and explain why.', {
           memory: {
             thread: 'thread-echo',
             resource: 'resource-echo',
@@ -294,7 +294,7 @@ function runStreamE2ETest(version: 'v1' | 'v2' | 'v3' | 'v4') {
           },
         );
       } else {
-        stream = await agent.stream(
+        stream = await agent.streamMessageList(
           'Echo: Please echo this message. Uppercase: please also uppercase this message. Explain both results.',
           {
             memory: {
@@ -342,7 +342,7 @@ function runStreamE2ETest(version: 'v1' | 'v2' | 'v3' | 'v4') {
         if (version === 'v1') {
           result = await agent.streamLegacy(`hello!`);
         } else {
-          result = await agent.stream(`hello!`);
+          result = await agent.streamMessageList(`hello!`);
         }
 
         const parts: any[] = [];
@@ -393,7 +393,7 @@ function runStreamE2ETest(version: 'v1' | 'v2' | 'v3' | 'v4') {
             { role: 'user', content: "I'm good, how are you?" },
           ]);
         } else {
-          result = await agent.stream([
+          result = await agent.streamMessageList([
             { role: `user`, content: `hello!` },
             { role: 'assistant', content: 'hi, how are you?' },
             { role: 'user', content: "I'm good, how are you?" },
@@ -497,7 +497,7 @@ function runStreamE2ETest(version: 'v1' | 'v2' | 'v3' | 'v4') {
             },
           });
         } else {
-          result = await agent.stream([{ role: 'user', content: "I'm good, how are you?" }], {
+          result = await agent.streamMessageList([{ role: 'user', content: "I'm good, how are you?" }], {
             memory: {
               thread: '1',
               resource: '2',
@@ -630,7 +630,7 @@ function runStreamE2ETest(version: 'v1' | 'v2' | 'v3' | 'v4') {
             }),
           ]);
         } else {
-          firstResponse = await agent.generate('What is the weather in London?', {
+          firstResponse = await agent.generateMessageList('What is the weather in London?', {
             memory: {
               thread: threadId,
               resource: resourceId,
@@ -674,7 +674,7 @@ function runStreamE2ETest(version: 'v1' | 'v2' | 'v3' | 'v4') {
             },
           });
         } else {
-          secondResponse = await agent.generate('What was the tool you just used?', {
+          secondResponse = await agent.generateMessageList('What was the tool you just used?', {
             memory: {
               thread: threadId,
               resource: resourceId,
@@ -718,7 +718,7 @@ describe('OpenAI WebSocket transport (router)', () => {
       model: 'openai/gpt-4o-mini',
     });
 
-    const stream = await agent.stream('Hello from websocket', {
+    const stream = await agent.streamMessageList('Hello from websocket', {
       providerOptions: {
         openai: {
           transport: 'websocket',
@@ -743,7 +743,7 @@ describe('OpenAI WebSocket transport (router)', () => {
       model: 'openai/gpt-4o-mini',
     });
 
-    const stream = await agent.stream('Hello from websocket', {
+    const stream = await agent.streamMessageList('Hello from websocket', {
       providerOptions: {
         openai: {
           transport: 'websocket',

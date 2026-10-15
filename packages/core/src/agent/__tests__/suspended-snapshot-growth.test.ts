@@ -93,7 +93,7 @@ async function runToSuspend(stepsBeforeSuspend: number) {
   });
   new Mastra({ logger: false, storage, agents: { hitl: agent } });
 
-  const stream = await agent.stream('go', { maxSteps: stepsBeforeSuspend + 2 });
+  const stream = await agent.streamMessageList('go', { maxSteps: stepsBeforeSuspend + 2 });
   for await (const _ of stream.fullStream) {
     // drain until the approval suspends the run
   }

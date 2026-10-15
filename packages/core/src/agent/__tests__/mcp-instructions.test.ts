@@ -97,7 +97,7 @@ describe('Agent MCP server instructions', () => {
       },
     });
 
-    await agent.generate('Run the migration');
+    await agent.generateMessageList('Run the migration');
 
     // Base instructions remain in their own system message
     expect(captured.systemMessages[0]).toBe('You are helpful.');
@@ -117,7 +117,7 @@ describe('Agent MCP server instructions', () => {
       model: createCapturingModel(captured),
     });
 
-    await agent.generate('Check both systems', {
+    await agent.generateMessageList('Check both systems', {
       toolsets: {
         zeta: {
           zetaTool: mcpTool({
@@ -172,7 +172,7 @@ describe('Agent MCP server instructions', () => {
       },
     });
 
-    await agent.generate('Run migration');
+    await agent.generateMessageList('Run migration');
 
     const allText = captured.systemMessages.join('\n');
     expect(allText.match(/Guidance from MCP server "db-tools"/g)).toHaveLength(1);
@@ -206,7 +206,7 @@ describe('Agent MCP server instructions', () => {
       },
     });
 
-    await agent.generate('Run checks');
+    await agent.generateMessageList('Run checks');
 
     const allText = captured.systemMessages.join('\n');
     expect(allText).toContain('## Guidance from MCP server "long"\n\n1234');
@@ -233,7 +233,7 @@ describe('Agent MCP server instructions', () => {
       },
     });
 
-    await agent.generate('Hello');
+    await agent.generateMessageList('Hello');
 
     // Only the base instructions system message, no MCP guidance
     const mcpMessage = captured.systemMessages.find(msg => msg.includes('Guidance from MCP server'));
@@ -256,7 +256,7 @@ describe('Agent MCP server instructions', () => {
       },
     });
 
-    await agent.generate('Run the migration');
+    await agent.generateMessageList('Run the migration');
 
     const mcpMessage = captured.systemMessages.find(msg => msg.includes('Guidance from MCP server'));
     expect(mcpMessage).toBeUndefined();

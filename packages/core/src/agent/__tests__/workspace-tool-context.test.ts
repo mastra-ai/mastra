@@ -163,7 +163,7 @@ function workspaceToolContextTest(version: 'v2' | 'v3') {
           workspace,
         });
 
-        const response = await agent.generate('Use the workspace-tool');
+        const response = await agent.generateMessageList('Use the workspace-tool');
         const toolCall = response.toolResults.find(
           (result: any) => result.payload.toolName === 'workspaceTool',
         ).payload;
@@ -200,7 +200,7 @@ function workspaceToolContextTest(version: 'v2' | 'v3') {
           workspace,
         });
 
-        const stream = await agent.stream('Use the workspace-tool');
+        const stream = await agent.streamMessageList('Use the workspace-tool');
         await stream.consumeStream();
         const toolCall = (await stream.toolResults).find(
           (result: any) => result.payload.toolName === 'workspaceTool',
@@ -246,7 +246,7 @@ function workspaceToolContextTest(version: 'v2' | 'v3') {
 
         const testAgent = mastra.getAgent('agent');
 
-        const response = await testAgent.generate('Use the workspace-tool');
+        const response = await testAgent.generateMessageList('Use the workspace-tool');
         const toolCall = response.toolResults.find(
           (result: any) => result.payload.toolName === 'workspaceTool',
         ).payload;
@@ -284,7 +284,7 @@ function workspaceToolContextTest(version: 'v2' | 'v3') {
           tools: { workspaceTool },
         });
 
-        const response = await agent.generate('Use the workspace-tool');
+        const response = await agent.generateMessageList('Use the workspace-tool');
         const toolCall = response.toolResults.find(
           (result: any) => result.payload.toolName === 'workspaceTool',
         ).payload;
@@ -331,7 +331,7 @@ function workspaceToolContextTest(version: 'v2' | 'v3') {
 
         const testAgent = mastra.getAgent('agent');
 
-        const response = await testAgent.generate('Use the workspace-tool');
+        const response = await testAgent.generateMessageList('Use the workspace-tool');
         const toolCall = response.toolResults.find(
           (result: any) => result.payload.toolName === 'workspaceTool',
         ).payload;
@@ -462,7 +462,7 @@ function workspaceToolContextTest(version: 'v2' | 'v3') {
           workspace,
         });
 
-        const response = await agent.generate('Use the file-tool');
+        const response = await agent.generateMessageList('Use the file-tool');
         const toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'fileTool').payload;
 
         expect(toolCall?.result?.success).toBe(true);
@@ -574,14 +574,14 @@ describe('Dynamic workspace configuration', () => {
 
     // First call with workspace-1
     const requestContext1 = new RequestContext([['workspaceId', 'workspace-1']]);
-    const response1 = await agent.generate('Use the workspace-tool', { requestContext: requestContext1 });
+    const response1 = await agent.generateMessageList('Use the workspace-tool', { requestContext: requestContext1 });
     const toolCall1 = response1.toolResults.find((result: any) => result.payload.toolName === 'workspaceTool').payload;
 
     expect(toolCall1?.result?.workspaceId).toBe('workspace-1');
 
     // Second call with workspace-2
     const requestContext2 = new RequestContext([['workspaceId', 'workspace-2']]);
-    const response2 = await agent.generate('Use the workspace-tool', { requestContext: requestContext2 });
+    const response2 = await agent.generateMessageList('Use the workspace-tool', { requestContext: requestContext2 });
     const toolCall2 = response2.toolResults.find((result: any) => result.payload.toolName === 'workspaceTool').payload;
 
     expect(toolCall2?.result?.workspaceId).toBe('workspace-2');
@@ -630,7 +630,7 @@ describe('Dynamic workspace configuration', () => {
     const testAgent = mastra.getAgent('agent');
     const requestContext = new RequestContext([['workspaceId', 'registered-workspace']]);
 
-    const response = await testAgent.generate('Use the workspace-tool', { requestContext });
+    const response = await testAgent.generateMessageList('Use the workspace-tool', { requestContext });
     const toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'workspaceTool').payload;
 
     expect(toolCall?.result?.workspaceId).toBe('registered-workspace');
@@ -667,7 +667,7 @@ describe('Dynamic workspace configuration', () => {
       },
     });
 
-    const response = await agent.generate('Use the workspace-tool');
+    const response = await agent.generateMessageList('Use the workspace-tool');
     const toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'workspaceTool').payload;
 
     expect(toolCall?.result?.workspaceId).toBe('async-workspace');
@@ -974,7 +974,7 @@ describe('Dynamic filesystem resolver in auto-injected workspace tools', () => {
 
     // Call as admin — should read from tempDirA
     const adminCtx = new RequestContext([['role', 'admin']]);
-    const adminResponse = await agent.generate('Read config', { requestContext: adminCtx });
+    const adminResponse = await agent.generateMessageList('Read config', { requestContext: adminCtx });
     const adminResult = adminResponse.toolResults.find((r: any) => r.payload.toolName === 'mastra_workspace_read_file')
       ?.payload?.result;
     // Tool returns a string containing the file content
@@ -982,7 +982,7 @@ describe('Dynamic filesystem resolver in auto-injected workspace tools', () => {
 
     // Call as user — should read from tempDirB
     const userCtx = new RequestContext([['role', 'user']]);
-    const userResponse = await agent.generate('Read config', { requestContext: userCtx });
+    const userResponse = await agent.generateMessageList('Read config', { requestContext: userCtx });
     const userResult = userResponse.toolResults.find((r: any) => r.payload.toolName === 'mastra_workspace_read_file')
       ?.payload?.result;
     expect(userResult).toContain('user config');
@@ -1027,7 +1027,7 @@ describe('Dynamic filesystem resolver in auto-injected workspace tools', () => {
       workspace,
     });
 
-    await agent.generate('Write a file', { requestContext: new RequestContext() });
+    await agent.generateMessageList('Write a file', { requestContext: new RequestContext() });
 
     // The tool error is caught by the framework — verify the write was blocked
     // The file should NOT exist (read-only enforcement prevented the write)

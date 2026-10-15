@@ -72,7 +72,7 @@ describe('OpenAI compat layer in agent.ts with structured output', () => {
     const model = createMockOpenAIModel({ modelId: 'gpt-4o' });
     const agent = new Agent({ id: 'test', name: 'test', instructions: 'test', model });
 
-    const result = await agent.generate('test', {
+    const result = await agent.generateMessageList('test', {
       structuredOutput: { schema: defaultCompletionSchema },
     });
 
@@ -85,7 +85,7 @@ describe('OpenAI compat layer in agent.ts with structured output', () => {
     // (happens in agent networks when model is inherited without explicit modelId)
     const model = createMockOpenAIModel({ modelId: undefined });
     const agent = new Agent({ id: 'test', name: 'test', instructions: 'test', model });
-    const result = await agent.generate('test', {
+    const result = await agent.generateMessageList('test', {
       structuredOutput: { schema: defaultCompletionSchema },
     });
 
@@ -97,7 +97,7 @@ describe('OpenAI compat layer in agent.ts with structured output', () => {
     const model = createMockOpenAIModel({ modelId: '' });
     const agent = new Agent({ id: 'test', name: 'test', instructions: 'test', model });
 
-    const result = await agent.generate('test', {
+    const result = await agent.generateMessageList('test', {
       structuredOutput: { schema: defaultCompletionSchema },
     });
 
@@ -109,7 +109,7 @@ describe('OpenAI compat layer in agent.ts with structured output', () => {
     const model = createMockOpenAIModel({ modelId: 'gpt-4o' });
     const agent = new Agent({ id: 'test', name: 'test', instructions: 'test', model });
 
-    const result = await agent.generate('test', {
+    const result = await agent.generateMessageList('test', {
       structuredOutput: { schema: defaultCompletionSchema },
     });
 
@@ -123,7 +123,7 @@ describe('OpenAI compat layer in agent.ts with structured output', () => {
     const model = createMockOpenAIModel({ modelId: undefined });
     const agent = new Agent({ id: 'test', name: 'test', instructions: 'test', model });
 
-    const result = await agent.generate('test', {
+    const result = await agent.generateMessageList('test', {
       structuredOutput: { schema: defaultCompletionSchema },
     });
 
@@ -141,7 +141,7 @@ describe('OpenAI compat layer in agent.ts with structured output', () => {
     });
     const agent = new Agent({ id: 'test', name: 'test', instructions: 'test', model });
 
-    await agent.generate('test', {
+    await agent.generateMessageList('test', {
       structuredOutput: {
         schema: z.object({
           name: z.string(),
@@ -183,7 +183,7 @@ describe('OpenAI compat layer in agent.ts with structured output', () => {
     (model as { supportsStructuredOutputs?: boolean }).supportsStructuredOutputs = true;
     const agent = new Agent({ id: 'test', name: 'test', instructions: 'test', model });
 
-    const result = await agent.generate('test', {
+    const result = await agent.generateMessageList('test', {
       structuredOutput: {
         schema: z.object({
           name: z.string(),
@@ -228,7 +228,7 @@ describe('OpenAI compat layer in agent.ts with structured output', () => {
       model: [{ model, providerOptions: { azureFoundry: { strictJsonSchema: true } } }],
     });
 
-    const result = await agent.generate('test', {
+    const result = await agent.generateMessageList('test', {
       providerOptions: { azureFoundry: { strictJsonSchema: false } },
       structuredOutput: { schema: z.object({ subject: z.string(), note: z.string().optional() }) },
     });

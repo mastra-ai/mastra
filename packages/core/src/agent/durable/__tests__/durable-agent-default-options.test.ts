@@ -1,12 +1,12 @@
 /**
  * Tests for DurableAgent honoring the wrapped agent's defaultOptions.
  *
- * Regression coverage for #17790: DurableAgent.stream()/prepare() previously
+ * Regression coverage for #17790: DurableAgent.streamMessageList()/prepare() previously
  * passed the per-request options straight into prepareForDurableExecution
  * without merging the wrapped agent's defaultOptions. As a result maxSteps
  * silently fell back to DurableAgentDefaults.MAX_STEPS (5) and providerOptions
  * were dropped. These tests assert the defaults now flow into the serialized
- * workflow input, mirroring the non-durable Agent.stream()/generate() paths.
+ * workflow input, mirroring the non-durable Agent.streamMessageList()/generate() paths.
  */
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
@@ -312,7 +312,7 @@ describe('DurableAgent defaultOptions (#17790)', () => {
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       // Note: no maxSteps passed here — it must come from the wrapped agent's defaultOptions.
-      const result = await durableAgent.stream('Loop until final answer');
+      const result = await durableAgent.streamMessageList('Loop until final answer');
       await drain(result.fullStream as ReadableStream<any>);
 
       // 6 tool calls + 1 final text response. Would be 5 if defaultOptions were ignored.

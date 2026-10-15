@@ -95,7 +95,7 @@ describe('agent.stopWhen', () => {
     let stopWhenCallCount = 0;
     const stopWhenCalls: { callNumber: number; steps: any[] }[] = [];
 
-    const stream = await agent.stream('What should i be doing in Toronto today?', {
+    const stream = await agent.streamMessageList('What should i be doing in Toronto today?', {
       stopWhen: ({ steps }) => {
         stopWhenCallCount++;
         // Store the call details
@@ -157,7 +157,7 @@ describe('agent.stopWhen', () => {
       return false;
     };
 
-    const stream = await agent.stream('What should i be doing in Toronto today?', {
+    const stream = await agent.streamMessageList('What should i be doing in Toronto today?', {
       stopWhen: trackStopWhenCalls,
     });
 
@@ -189,7 +189,7 @@ describe('agent.stopWhen', () => {
 
   it('should contain the correct content in the step results for both stopWhen and stream.steps', async () => {
     const stopWhenContent: any[] = [];
-    const stream = await agent.stream('What should i be doing in Toronto today?', {
+    const stream = await agent.streamMessageList('What should i be doing in Toronto today?', {
       stopWhen: ({ steps }) => {
         stopWhenContent.push(steps.at(-1)?.content);
         return false;
@@ -224,7 +224,7 @@ describe('agent.stopWhen', () => {
     });
 
     const stopWhenContent: any[] = [];
-    const stream = await agent.stream('What should i be doing in Toronto today?', {
+    const stream = await agent.streamMessageList('What should i be doing in Toronto today?', {
       stopWhen: ({ steps }) => {
         stopWhenContent.push(steps.at(-1)?.content);
         return false;

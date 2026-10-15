@@ -117,7 +117,7 @@ describe('issue #23295 (durable engine): the loop stops at a client-executed too
   it('ends the run at the client tool call and leaves it unanswered', async () => {
     const { durableAgent, modelCalls } = createAgent();
 
-    const { output } = await durableAgent.stream('test prompt', { maxSteps: 5 });
+    const { output } = await durableAgent.streamMessageList('test prompt', { maxSteps: 5 });
 
     const types: string[] = [];
     for await (const chunk of output.fullStream) {
@@ -148,13 +148,13 @@ describe('issue #23295 (durable engine): the loop stops at a client-executed too
   it('continues when the client result arrives on a follow-up request', async () => {
     const { durableAgent, modelCalls, prompts } = createAgent('client answered');
 
-    const first = await durableAgent.stream('test prompt', { maxSteps: 5 });
+    const first = await durableAgent.streamMessageList('test prompt', { maxSteps: 5 });
     await first.output.consumeStream();
     expect(modelCalls()).toBe(1);
 
     // Follow-up request shape from @mastra/client-js: previous assistant tool-call + the
     // client-produced tool result.
-    const second = await durableAgent.stream(
+    const second = await durableAgent.streamMessageList(
       [
         { role: 'user', content: [{ type: 'text', text: 'test prompt' }] },
         {
@@ -167,7 +167,7 @@ describe('issue #23295 (durable engine): the loop stops at a client-executed too
             { type: 'tool-result', toolCallId: TOOL_CALL_ID, toolName: 'client-tool', result: { confirmed: true } },
           ],
         },
-      ] satisfies Parameters<typeof durableAgent.stream>[0],
+      ] satisfies Parameters<typeof durableAgent.streamMessageList>[0],
       { maxSteps: 2 },
     );
     await second.output.consumeStream();

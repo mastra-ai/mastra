@@ -7,7 +7,7 @@
  *
  * Asserts:
  * - requestContext is available in tool execute function
- * - requestContext values match what was passed to agent.stream()
+ * - requestContext values match what was passed to agent.streamMessageList()
  * - Multiple tools in the same run receive the same requestContext
  */
 

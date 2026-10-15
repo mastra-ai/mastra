@@ -145,7 +145,7 @@ describe('DurableAgent ToolSearchProcessor meta-tool resolution (#19571)', () =>
       storage: new InMemoryStore(),
       pubsub,
     });
-    const result = await durableAgent.stream('What is the weather in NYC?', { maxSteps: 4 });
+    const result = await durableAgent.streamMessageList('What is the weather in NYC?', { maxSteps: 4 });
     return drain(result.fullStream);
   }
 
@@ -310,7 +310,7 @@ describe('DurableAgent ToolSearchProcessor keeps resolved catalog across steps (
       pubsub,
     });
 
-    const result = await durableAgent.generate('Use the echo tool to say hello.', { maxSteps: 3 });
+    const result = await durableAgent.generateMessageList('Use the echo tool to say hello.', { maxSteps: 3 });
 
     // Step 1: only the meta-tool is exposed; `echo` is withheld until searched.
     expect(visibleToolsByStep[0]).toEqual(['search_tools']);
@@ -327,7 +327,7 @@ describe('DurableAgent ToolSearchProcessor keeps resolved catalog across steps (
 
     // The regular Agent's generate() calls doGenerate, which the mock does not
     // implement; stream() exercises the same agentic loop via doStream.
-    const result = await agent.stream('Use the echo tool to say hello.', { maxSteps: 3 });
+    const result = await agent.streamMessageList('Use the echo tool to say hello.', { maxSteps: 3 });
     const text = await result.text;
 
     expect(visibleToolsByStep[0]).toEqual(['search_tools']);

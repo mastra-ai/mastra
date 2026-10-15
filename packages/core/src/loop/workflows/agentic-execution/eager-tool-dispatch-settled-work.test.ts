@@ -333,7 +333,7 @@ describe('eager tool dispatch — finished work survives every early exit', () =
       },
     });
 
-    const stream = await agent.stream('go', {
+    const stream = await agent.streamMessageList('go', {
       maxSteps: 2,
       eagerToolExecution: true,
       abortSignal: abortController.signal,
@@ -396,7 +396,7 @@ describe('eager tool dispatch — finished work survives every early exit', () =
       },
     });
 
-    const stream = await agent.stream('go', {
+    const stream = await agent.streamMessageList('go', {
       maxSteps: 2,
       eagerToolExecution: true,
       abortSignal: abortController.signal,
@@ -437,7 +437,7 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     const caller = new AbortController();
 
     for (let run = 0; run < 3; run++) {
-      await drain(await agent.stream('go', { maxSteps: 3, eagerToolExecution: true, abortSignal: caller.signal }));
+      await drain(await agent.streamMessageList('go', { maxSteps: 3, eagerToolExecution: true, abortSignal: caller.signal }));
     }
     expect(executions).toEqual(['a', 'a', 'a']);
 
@@ -583,7 +583,7 @@ describe('eager tool dispatch — finished work survives every early exit', () =
       ] as never,
     });
 
-    const stream = await agent.stream('go', { maxSteps: 3, eagerToolExecution: true });
+    const stream = await agent.streamMessageList('go', { maxSteps: 3, eagerToolExecution: true });
     await drain(stream);
     gate.release();
     await gate.settled;
@@ -634,7 +634,7 @@ describe('eager tool dispatch — finished work survives every early exit', () =
       },
     });
 
-    const stream = await agent.stream('go', { maxSteps: 3, eagerToolExecution: true });
+    const stream = await agent.streamMessageList('go', { maxSteps: 3, eagerToolExecution: true });
     await drain(stream);
     gate.release();
     await gate.settled;
@@ -702,7 +702,7 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     });
     new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
 
-    const stream = await agent.stream('go', { maxSteps: 3, eagerToolExecution: true });
+    const stream = await agent.streamMessageList('go', { maxSteps: 3, eagerToolExecution: true });
     const types: string[] = [];
     for await (const chunk of stream.fullStream) types.push((chunk as { type: string }).type);
 

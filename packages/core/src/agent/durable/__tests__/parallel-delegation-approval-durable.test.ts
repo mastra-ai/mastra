@@ -134,7 +134,7 @@ function makeSupervisorModel() {
 /**
  * Drain a stream until `stopWhen` returns true or the stream ends. Durable
  * streams close at the suspension boundary by default (parity with non-durable
- * `Agent.stream()`), so mid-flow legs stop at a condition rather than relying
+ * `Agent.streamMessageList()`), so mid-flow legs stop at a condition rather than relying
  * on the exact close point. Returns collected chunk types/approvals/text.
  */
 async function drainUntil(stream: AsyncIterable<any>, stopWhen: (state: { types: string[] }) => boolean, ms = 15000) {
@@ -235,7 +235,7 @@ describe('durable parallel delegation approvals', () => {
     // Two parallel delegations each emit their own SUSPENDED as they park, so
     // surfacing BOTH approvals on one reader relies on the default of keeping
     // the stream open across suspension.
-    const result = await durableAgent.stream('Do alpha and beta', { memory, maxSteps: 5 });
+    const result = await durableAgent.streamMessageList('Do alpha and beta', { memory, maxSteps: 5 });
     const leg1 = await drainUntil(
       result.fullStream,
       ({ types }) => types.filter(t => t === 'tool-call-approval').length >= 2,
@@ -282,7 +282,7 @@ describe('durable parallel delegation approvals', () => {
   ) => {
     // The run re-suspends afterwards (the sibling is still parked). Stop at the
     // delegation's tool-result, which arrives before that re-suspension.
-    const resumed = await durableAgent.approveToolCall({ runId, toolCallId, memory });
+    const resumed = await durableAgent.approveToolCallMessageList({ runId, toolCallId, memory });
     const leg = await drainUntil(resumed.fullStream, ({ types }) => types.includes('tool-result'));
     expect(leg.timedOut, `approving ${toolCallId} should produce a tool-result; got: ${leg.types.join(', ')}`).toBe(
       false,
@@ -298,7 +298,7 @@ describe('durable parallel delegation approvals', () => {
     memory: { thread: string; resource: string },
   ) => {
     // The last approval completes the run, so the stream closes on finish.
-    const resumed = await durableAgent.approveToolCall({ runId, toolCallId, memory });
+    const resumed = await durableAgent.approveToolCallMessageList({ runId, toolCallId, memory });
     const leg = await drainUntil(resumed.fullStream, () => false);
     expect(leg.timedOut, `final approval should complete the run; got: ${leg.types.join(', ')}`).toBe(false);
     expect(leg.types, `no errors after approving ${toolCallId}`).not.toContain('error');
@@ -398,7 +398,7 @@ describe('durable parallel delegation approvals', () => {
     const { storage, durableAgent } = setupSingle();
     const memory = { thread: 'solo-close-optin-thread', resource: 'solo-close-optin-resource' };
 
-    const result = await durableAgent.stream('Do the thing', { memory, maxSteps: 5, closeOnSuspend: true });
+    const result = await durableAgent.streamMessageList('Do the thing', { memory, maxSteps: 5, closeOnSuspend: true });
     // No stopWhen: drain to the natural end. With `closeOnSuspend: true` the
     // stream must end at the suspension boundary instead of hanging.
     const drained = await drainUntil(result.fullStream, () => false, 20000);
@@ -463,7 +463,7 @@ describe('durable parallel delegation approvals', () => {
     const { durableAgent } = setupSingle();
     const memory = { thread: 'solo-open-default-thread', resource: 'solo-open-default-resource' };
 
-    const result = await durableAgent.stream('Do the thing', { memory, maxSteps: 5 });
+    const result = await durableAgent.streamMessageList('Do the thing', { memory, maxSteps: 5 });
     // By default the stream stays open after suspension, so draining to
     // the (never-reached) end times out. Short budget keeps the test fast.
     const drained = await drainUntil(result.fullStream, () => false, 2000);

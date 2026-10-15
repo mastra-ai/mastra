@@ -506,7 +506,7 @@ async function runErrorDirect(engine: ParityEngine): Promise<ErrorCaseState> {
   let output: { fullStream: AsyncIterable<{ type: string }>; getFullOutput: () => Promise<unknown> } | undefined;
   try {
     if (engine === 'plain') {
-      output = (await agent.stream('go', options)) as never;
+      output = (await agent.streamMessageList('go', options)) as never;
     } else {
       // A settled stream is the harness's `the run settled` check: a run that hung would time out.
       const result = await (

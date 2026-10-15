@@ -237,7 +237,7 @@ describe('DurableAgent observability tracing', () => {
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
       registerWithMockObservability(durableAgent as unknown as Agent);
 
-      const { output, cleanup } = await durableAgent.stream('What is the weather in Paris?');
+      const { output, cleanup } = await durableAgent.streamMessageList('What is the weather in Paris?');
       await output.consumeStream();
 
       const finalCall = endGenerationCalls.find(call => call.output?.text === 'It is sunny in Paris.');
@@ -274,12 +274,12 @@ describe('DurableAgent observability tracing', () => {
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
       registerWithMockObservability(durableAgent as unknown as Agent);
 
-      const result = await durableAgent.stream('What is the weather in Paris?');
+      const result = await durableAgent.streamMessageList('What is the weather in Paris?');
       for await (const chunk of result.fullStream) {
         if (chunk.type === 'tool-call-approval') break;
       }
 
-      const resumed = await durableAgent.approveToolCall({ runId: result.runId });
+      const resumed = await durableAgent.approveToolCallMessageList({ runId: result.runId });
       for await (const _chunk of resumed.fullStream) {
         // Drain the resumed segment.
       }
@@ -309,7 +309,7 @@ describe('DurableAgent observability tracing', () => {
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
       registerWithMockObservability(durableAgent as unknown as Agent);
 
-      const { output, cleanup } = await durableAgent.stream('Hi');
+      const { output, cleanup } = await durableAgent.streamMessageList('Hi');
       await output.consumeStream();
 
       const finalCall = endGenerationCalls.find(call => call.output?.text === 'Hello');
@@ -334,7 +334,7 @@ describe('DurableAgent observability tracing', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { output, cleanup } = await durableAgent.stream('Hi');
+      const { output, cleanup } = await durableAgent.streamMessageList('Hi');
       await output.consumeStream();
 
       // The durable path used to create no agent_run span at all.
@@ -371,7 +371,7 @@ describe('DurableAgent observability tracing', () => {
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
       registerWithMockObservability(durableAgent as unknown as Agent);
 
-      const { output, cleanup } = await durableAgent.stream('Hi');
+      const { output, cleanup } = await durableAgent.streamMessageList('Hi');
       await output.consumeStream();
 
       // The mock tracker exposes the MODEL_GENERATION span as its current span.
@@ -395,7 +395,7 @@ describe('DurableAgent observability tracing', () => {
       });
       const eventedAgent = createEventedAgent({ agent: baseAgent, pubsub });
 
-      const { output, cleanup } = await eventedAgent.stream('Hi');
+      const { output, cleanup } = await eventedAgent.streamMessageList('Hi');
       await output.consumeStream();
 
       expect(agentSpans.length).toBe(1);
@@ -432,7 +432,7 @@ describe('DurableAgent observability tracing', () => {
             ? createDurableAgent({ agent: baseAgent, pubsub })
             : createEventedAgent({ agent: baseAgent, pubsub });
 
-        await expect(wrappedAgent.stream('Hi'), engine).rejects.toMatchObject({
+        await expect(wrappedAgent.streamMessageList('Hi'), engine).rejects.toMatchObject({
           id: 'AGENT_INPUT_PROCESSOR_ERROR',
           message: '[Agent:Trace Agent (input error)] - Input processor error',
         });
@@ -490,7 +490,7 @@ describe('DurableAgent observability tracing', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { output, cleanup } = await durableAgent.stream('Hi');
+      const { output, cleanup } = await durableAgent.streamMessageList('Hi');
       await output.consumeStream();
 
       expect(agentSpans.length).toBe(1);
@@ -523,7 +523,7 @@ describe('DurableAgent observability tracing', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { output, cleanup } = await durableAgent.stream('Hi');
+      const { output, cleanup } = await durableAgent.streamMessageList('Hi');
       await output.consumeStream();
 
       expect(agentSpans.length).toBe(1);
@@ -564,7 +564,7 @@ describe('DurableAgent observability tracing', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { output, cleanup } = await durableAgent.stream('Hi');
+      const { output, cleanup } = await durableAgent.streamMessageList('Hi');
       await output.consumeStream();
 
       expect(agentSpans.length).toBe(1);
@@ -605,7 +605,7 @@ describe('DurableAgent observability tracing', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { output, cleanup } = await durableAgent.stream('Hi', {
+      const { output, cleanup } = await durableAgent.streamMessageList('Hi', {
         memory: { thread: 'thread-trace-1', resource: 'resource-trace-1' },
       });
       await output.consumeStream();

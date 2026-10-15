@@ -163,7 +163,7 @@ describe('Agent browser integration', () => {
       });
 
       // Execute a generate call - this should inject browser context
-      const result = await agent.generate('Hello');
+      const result = await agent.generateMessageList('Hello');
 
       // Without a threadId, browser context injection calls isBrowserRunning and getBrowserState
       // hasThreadSession is only called when a threadId is provided
@@ -192,7 +192,7 @@ describe('Agent browser integration', () => {
       });
 
       // Previously threw: computeStateSignal requires Mastra memory
-      const result = await agent.generate('Hello');
+      const result = await agent.generateMessageList('Hello');
       expect(result.text).toBe('OK');
       expect(JSON.stringify(model.doGenerateCalls[0]!.prompt)).toContain('You have access to a browser (mock).');
 
@@ -238,7 +238,7 @@ describe('Agent browser integration', () => {
       });
 
       // Execute with a threadId in memory options
-      const result = await agent.generate('Hello', {
+      const result = await agent.generateMessageList('Hello', {
         memory: { thread: 'test-thread-123' },
       });
 
@@ -275,7 +275,7 @@ describe('Agent browser integration', () => {
         browser,
       });
 
-      const result = await agent.generate('Hello');
+      const result = await agent.generateMessageList('Hello');
 
       // Should not throw, returns degraded state instead of aborting
       expect(result.text).toBe('OK');

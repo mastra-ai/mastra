@@ -31,7 +31,7 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3' | 'v4') {
           resourceId: 'resource-1',
         });
       } else {
-        stream = await agent.stream('repeat tool calls', {
+        stream = await agent.streamMessageList('repeat tool calls', {
           memory: {
             thread: 'thread-1',
             resource: 'resource-1',
@@ -67,7 +67,7 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3' | 'v4') {
         const subscription = await agent.subscribeToThread({ threadId, resourceId });
 
         try {
-          const stream = await agent.stream('repeat tool calls', {
+          const stream = await agent.streamMessageList('repeat tool calls', {
             memory: { thread: threadId, resource: resourceId },
           });
           await stream.consumeStream();
@@ -124,7 +124,7 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3' | 'v4') {
           resourceId: 'resource-12566',
         });
       } else {
-        stream = await agent.stream('hello', {
+        stream = await agent.streamMessageList('hello', {
           memory: {
             thread: 'thread-12566',
             resource: 'resource-12566',
@@ -235,7 +235,7 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3' | 'v4') {
           resourceId: 'resource-2',
         });
       } else {
-        stream = await agent.stream('no progress', {
+        stream = await agent.streamMessageList('no progress', {
           memory: {
             thread: 'thread-2',
             resource: 'resource-2',
@@ -281,7 +281,7 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3' | 'v4') {
           resourceId: 'resource-3',
         });
       } else {
-        stream = await agent.stream('interrupt before step', {
+        stream = await agent.streamMessageList('interrupt before step', {
           memory: {
             thread: 'thread-3',
             resource: 'resource-3',
@@ -367,7 +367,7 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3' | 'v4') {
             // Should throw
           }
         } else {
-          stream = await agent.stream('trigger error', {
+          stream = await agent.streamMessageList('trigger error', {
             memory: {
               resource: 'user-err',
               thread: {
@@ -461,7 +461,7 @@ describe('stream text resolution without memory', () => {
       },
     });
 
-    const stream = await agent.stream('What is the answer?', { maxSteps: 3 });
+    const stream = await agent.streamMessageList('What is the answer?', { maxSteps: 3 });
     const streamedText: string[] = [];
     for await (const chunk of stream.fullStream) {
       if (chunk.type === 'text-delta') {

@@ -51,7 +51,7 @@ describe('PrefillErrorHandler E2E with Anthropic', { timeout: 60_000 }, () => {
 
       // Passing messages ending with an assistant turn should trigger the
       // Anthropic prefill error. PrefillErrorHandler should recover.
-      const result = await agent.generate(ASSISTANT_ENDING_MESSAGES);
+      const result = await agent.generateMessageList(ASSISTANT_ENDING_MESSAGES);
 
       expect(result.text).toBeTruthy();
       expect(result.text.length).toBeGreaterThan(0);
@@ -63,7 +63,7 @@ describe('PrefillErrorHandler E2E with Anthropic', { timeout: 60_000 }, () => {
     async () => {
       const agent = createAgent();
 
-      const response = await agent.stream(ASSISTANT_ENDING_MESSAGES);
+      const response = await agent.streamMessageList(ASSISTANT_ENDING_MESSAGES);
 
       // Consume the stream
       let text = '';

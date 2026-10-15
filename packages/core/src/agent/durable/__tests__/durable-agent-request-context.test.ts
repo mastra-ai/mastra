@@ -109,7 +109,7 @@ describe('DurableAgent RequestContext reserved keys', () => {
       const requestContext = new RequestContext();
       requestContext.set('userInfo', { role: 'admin' });
 
-      const { runId, cleanup } = await durableAgent.stream('Hello', {
+      const { runId, cleanup } = await durableAgent.streamMessageList('Hello', {
         requestContext,
       });
 
@@ -248,7 +248,7 @@ describe('DurableAgent RequestContext reserved keys', () => {
       requestContext.set('userId', 'user-123');
 
       // Stream to actually execute the tool
-      const { cleanup } = await durableAgent.stream('Use the tool', {
+      const { cleanup } = await durableAgent.streamMessageList('Use the tool', {
         requestContext,
       });
 

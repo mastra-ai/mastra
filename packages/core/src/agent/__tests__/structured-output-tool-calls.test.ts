@@ -173,7 +173,7 @@ describe('structuredOutput + generate() with tools (#13012)', () => {
     });
 
     await expect(
-      agent.generate('Look up test data and summarize', {
+      agent.generateMessageList('Look up test data and summarize', {
         maxSteps: 10, // High maxSteps — the loop should stop on its own after 'length'
         structuredOutput: { schema: outputSchema },
       }),
@@ -244,7 +244,7 @@ describe('structuredOutput + generate() with tools (#13012)', () => {
     });
 
     await expect(
-      agent.generate('Summarize this data', {
+      agent.generateMessageList('Summarize this data', {
         maxSteps: 10,
         structuredOutput: { schema: outputSchema },
       }),
@@ -299,7 +299,7 @@ describe('structuredOutput + generate() with tools (#13012)', () => {
       model: mockModel,
     });
 
-    const stream = await agent.stream('Summarize this data', {
+    const stream = await agent.streamMessageList('Summarize this data', {
       maxSteps: 10,
       structuredOutput: { schema: outputSchema },
     });
@@ -408,7 +408,7 @@ describe('structuredOutput + generate() with tools (#13012)', () => {
       tools: { lookup: lookupTool },
     });
 
-    const result = await agent.generate('Look up test data and summarize', {
+    const result = await agent.generateMessageList('Look up test data and summarize', {
       maxSteps: 5,
       structuredOutput: { schema: outputSchema },
     });
@@ -478,7 +478,7 @@ describe('structuredOutput + generate() with tools (#13012)', () => {
       tools: { lookup: lookupTool },
     });
 
-    const stream = await agent.stream('Look up test data and summarize', {
+    const stream = await agent.streamMessageList('Look up test data and summarize', {
       maxSteps: 5,
       structuredOutput: { schema: outputSchema },
     });
@@ -542,7 +542,7 @@ describe('structuredOutput + generate() with tools (#13012)', () => {
       tools: { lookup: lookupTool },
     });
 
-    const result = await agent.generate('Look up test data and summarize', {
+    const result = await agent.generateMessageList('Look up test data and summarize', {
       maxSteps: 1,
       structuredOutput: { schema: outputSchema },
     });

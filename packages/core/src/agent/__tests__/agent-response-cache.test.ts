@@ -138,23 +138,23 @@ describe('ResponseCache processor (integration via Agent)', () => {
 
   describe('generate()', () => {
     it('returns the cached FullOutput on the second identical call', async () => {
-      const first = await agent.generate('Hello');
+      const first = await agent.generateMessageList('Hello');
       expect(first.text).toBe('Cached response text');
       expect(model.doGenerateCalls).toHaveLength(1);
 
       await waitForSets(cache, 1);
       expect(cache.sets).toBe(1);
 
-      const second = await agent.generate('Hello');
+      const second = await agent.generateMessageList('Hello');
       expect(second.text).toBe('Cached response text');
       // No new LLM call.
       expect(model.doGenerateCalls).toHaveLength(1);
     });
 
     it('different prompts produce different cache entries', async () => {
-      await agent.generate('Hello');
+      await agent.generateMessageList('Hello');
       await waitForSets(cache, 1);
-      await agent.generate('Goodbye');
+      await agent.generateMessageList('Goodbye');
       await waitForSets(cache, 2);
 
       expect(cache.store.size).toBe(2);
@@ -176,7 +176,7 @@ describe('ResponseCache processor (integration via Agent)', () => {
         inputProcessors: [new ResponseCache({ cache, agentId: 'failing-agent' })],
       });
 
-      await expect(failingAgent.generate('please')).rejects.toThrow();
+      await expect(failingAgent.generateMessageList('please')).rejects.toThrow();
       // Failed runs should never write; give the (non-existent) write a chance to happen and assert it didn't.
       await new Promise(resolve => setTimeout(resolve, 10));
       expect(cache.sets).toBe(0);
@@ -184,7 +184,7 @@ describe('ResponseCache processor (integration via Agent)', () => {
 
     it('writes the configured TTL on cache writes (converts seconds to ms)', async () => {
       const ttlAgent = createAgent({ cache, ttl: 999, agentId: 'ttl-agent' });
-      await ttlAgent.agent.generate('Hi');
+      await ttlAgent.agent.generateMessageList('Hi');
       await waitForSets(cache, 1);
       // ResponseCache.ttl is seconds; MastraServerCache.set takes ms.
       expect(cache.ttls).toEqual([999_000]);
@@ -193,12 +193,12 @@ describe('ResponseCache processor (integration via Agent)', () => {
 
   describe('per-call overrides via RequestContext', () => {
     it('ResponseCache.context() bust forces a fresh LLM call but still updates the cache', async () => {
-      await agent.generate('Hello');
+      await agent.generateMessageList('Hello');
       await waitForSets(cache, 1);
       expect(model.doGenerateCalls).toHaveLength(1);
       expect(cache.sets).toBe(1);
 
-      await agent.generate('Hello', {
+      await agent.generateMessageList('Hello', {
         requestContext: ResponseCache.context({ bust: true }),
       });
       await waitForSets(cache, 2);
@@ -211,24 +211,24 @@ describe('ResponseCache processor (integration via Agent)', () => {
       ctx.set('caller-meta', { foo: 'bar' });
       ResponseCache.applyContext(ctx, { key: 'shared-key' });
 
-      await agent.generate('first prompt', { requestContext: ctx });
+      await agent.generateMessageList('first prompt', { requestContext: ctx });
       await waitForSets(cache, 1);
 
       const ctx2 = new RequestContext();
       ResponseCache.applyContext(ctx2, { key: 'shared-key' });
-      const second = await agent.generate('totally different prompt', { requestContext: ctx2 });
+      const second = await agent.generateMessageList('totally different prompt', { requestContext: ctx2 });
 
       expect(second.text).toBe('Cached response text');
       expect(model.doGenerateCalls).toHaveLength(1);
     });
 
     it('per-call key string is used verbatim across different prompts', async () => {
-      await agent.generate('first prompt', {
+      await agent.generateMessageList('first prompt', {
         requestContext: ResponseCache.context({ key: 'manual-shared-key' }),
       });
       await waitForSets(cache, 1);
 
-      const second = await agent.generate('totally different prompt', {
+      const second = await agent.generateMessageList('totally different prompt', {
         requestContext: ResponseCache.context({ key: 'manual-shared-key' }),
       });
 
@@ -243,11 +243,11 @@ describe('ResponseCache processor (integration via Agent)', () => {
         return 'fn-derived-key';
       });
 
-      await agent.generate('first', {
+      await agent.generateMessageList('first', {
         requestContext: ResponseCache.context({ key: keyFn }),
       });
       await waitForSets(cache, 1);
-      const second = await agent.generate('second different prompt', {
+      const second = await agent.generateMessageList('second different prompt', {
         requestContext: ResponseCache.context({ key: keyFn }),
       });
 
@@ -267,7 +267,7 @@ describe('ResponseCache processor (integration via Agent)', () => {
     });
 
     it('falls back to default key derivation when key function throws', async () => {
-      await agent.generate('Hello');
+      await agent.generateMessageList('Hello');
       await waitForSets(cache, 1);
       expect(cache.sets).toBe(1);
       const generateCallsBefore = model.doGenerateCalls.length;
@@ -275,7 +275,7 @@ describe('ResponseCache processor (integration via Agent)', () => {
       const throwing = vi.fn(() => {
         throw new Error('intentional');
       });
-      const second = await agent.generate('Hello', {
+      const second = await agent.generateMessageList('Hello', {
         requestContext: ResponseCache.context({ key: throwing }),
       });
 
@@ -290,11 +290,11 @@ describe('ResponseCache processor (integration via Agent)', () => {
         return 'async-derived-key';
       });
 
-      await agent.generate('first', {
+      await agent.generateMessageList('first', {
         requestContext: ResponseCache.context({ key: keyFn }),
       });
       await waitForSets(cache, 1);
-      const second = await agent.generate('second', {
+      const second = await agent.generateMessageList('second', {
         requestContext: ResponseCache.context({ key: keyFn }),
       });
 
@@ -306,13 +306,13 @@ describe('ResponseCache processor (integration via Agent)', () => {
     it('per-call scope override changes the cache key', async () => {
       const scopedAgent = createAgent({ cache, scope: null, agentId: 'scope-agent' });
 
-      await scopedAgent.agent.generate('Hello', {
+      await scopedAgent.agent.generateMessageList('Hello', {
         requestContext: ResponseCache.context({ scope: 'tenant-a' }),
       });
       await waitForSets(cache, 1);
 
       // Different scope = different key, so the second call still hits the model.
-      await scopedAgent.agent.generate('Hello', {
+      await scopedAgent.agent.generateMessageList('Hello', {
         requestContext: ResponseCache.context({ scope: 'tenant-b' }),
       });
 
@@ -327,13 +327,13 @@ describe('ResponseCache processor (integration via Agent)', () => {
 
       const ctxA = new RequestContext();
       ctxA.set(MASTRA_RESOURCE_ID_KEY, 'user-a');
-      await scopedAgent.agent.generate('shared prompt', { requestContext: ctxA });
+      await scopedAgent.agent.generateMessageList('shared prompt', { requestContext: ctxA });
       await waitForSets(cache, 1);
 
       // Different resource id -> different scope -> different cache key.
       const ctxB = new RequestContext();
       ctxB.set(MASTRA_RESOURCE_ID_KEY, 'user-b');
-      const second = await scopedAgent.agent.generate('shared prompt', { requestContext: ctxB });
+      const second = await scopedAgent.agent.generateMessageList('shared prompt', { requestContext: ctxB });
 
       expect(second.text).toBe('Cached response text');
       expect(scopedAgent.model.doGenerateCalls).toHaveLength(2);
@@ -345,14 +345,14 @@ describe('ResponseCache processor (integration via Agent)', () => {
 
       const ctxA = new RequestContext();
       ctxA.set(MASTRA_RESOURCE_ID_KEY, 'user-a');
-      await noScopeAgent.agent.generate('shared prompt', { requestContext: ctxA });
+      await noScopeAgent.agent.generateMessageList('shared prompt', { requestContext: ctxA });
       await waitForSets(cache, 1);
 
       // scope: null on the constructor opts out of all scoping, so the second
       // call hits the cache regardless of the resource id in context.
       const ctxB = new RequestContext();
       ctxB.set(MASTRA_RESOURCE_ID_KEY, 'user-b');
-      const second = await noScopeAgent.agent.generate('shared prompt', { requestContext: ctxB });
+      const second = await noScopeAgent.agent.generateMessageList('shared prompt', { requestContext: ctxB });
 
       expect(second.text).toBe('Cached response text');
       expect(noScopeAgent.model.doGenerateCalls).toHaveLength(1);
@@ -361,10 +361,10 @@ describe('ResponseCache processor (integration via Agent)', () => {
     it('falls back to the memory resource id when MASTRA_RESOURCE_ID_KEY is absent', async () => {
       const memAgent = createAgent({ cache, agentId: 'memory-tenant', memory: new MockMemory() });
 
-      await memAgent.agent.generate('shared prompt', { memory: { resource: 'user-alice', thread: 'thread-alice' } });
+      await memAgent.agent.generateMessageList('shared prompt', { memory: { resource: 'user-alice', thread: 'thread-alice' } });
       await waitForSets(cache, 1);
 
-      const second = await memAgent.agent.generate('shared prompt', {
+      const second = await memAgent.agent.generateMessageList('shared prompt', {
         memory: { resource: 'user-bob', thread: 'thread-bob' },
       });
 
@@ -376,11 +376,11 @@ describe('ResponseCache processor (integration via Agent)', () => {
     it('reuses the cache for the same memory resource', async () => {
       const memAgent = createAgent({ cache, agentId: 'memory-same', memory: new MockMemory() });
 
-      await memAgent.agent.generate('shared prompt', { memory: { resource: 'user-alice', thread: 'thread-1' } });
+      await memAgent.agent.generateMessageList('shared prompt', { memory: { resource: 'user-alice', thread: 'thread-1' } });
       await waitForSets(cache, 1);
 
       // Fresh thread so memory history does not change the prompt.
-      await memAgent.agent.generate('shared prompt', { memory: { resource: 'user-alice', thread: 'thread-2' } });
+      await memAgent.agent.generateMessageList('shared prompt', { memory: { resource: 'user-alice', thread: 'thread-2' } });
 
       expect(memAgent.model.doGenerateCalls).toHaveLength(1);
     });
@@ -390,7 +390,7 @@ describe('ResponseCache processor (integration via Agent)', () => {
 
       const ctxA = new RequestContext();
       ctxA.set(MASTRA_RESOURCE_ID_KEY, 'auth-user');
-      await memAgent.agent.generate('shared prompt', {
+      await memAgent.agent.generateMessageList('shared prompt', {
         requestContext: ctxA,
         memory: { resource: 'auth-user', thread: 'thread-a' },
       });
@@ -399,7 +399,7 @@ describe('ResponseCache processor (integration via Agent)', () => {
       // The memory resource is forced to the auth resource, so scope stays the same.
       const ctxB = new RequestContext();
       ctxB.set(MASTRA_RESOURCE_ID_KEY, 'auth-user');
-      await memAgent.agent.generate('shared prompt', {
+      await memAgent.agent.generateMessageList('shared prompt', {
         requestContext: ctxB,
         memory: { resource: 'other-user', thread: 'thread-b' },
       });
@@ -410,9 +410,9 @@ describe('ResponseCache processor (integration via Agent)', () => {
     it('explicit scope: null shares the cache across memory resources', async () => {
       const memAgent = createAgent({ cache, scope: null, agentId: 'memory-shared', memory: new MockMemory() });
 
-      await memAgent.agent.generate('shared prompt', { memory: { resource: 'user-alice', thread: 'thread-alice' } });
+      await memAgent.agent.generateMessageList('shared prompt', { memory: { resource: 'user-alice', thread: 'thread-alice' } });
       await waitForSets(cache, 1);
-      await memAgent.agent.generate('shared prompt', { memory: { resource: 'user-bob', thread: 'thread-bob' } });
+      await memAgent.agent.generateMessageList('shared prompt', { memory: { resource: 'user-bob', thread: 'thread-bob' } });
 
       expect(memAgent.model.doGenerateCalls).toHaveLength(1);
     });
@@ -420,7 +420,7 @@ describe('ResponseCache processor (integration via Agent)', () => {
 
   describe('stream()', () => {
     it('returns cached chunks without replaying the original inference timestamp', async () => {
-      const firstStream = await agent.stream('Stream me');
+      const firstStream = await agent.streamMessageList('Stream me');
       const firstChunks = [];
       for await (const chunk of firstStream.fullStream) {
         firstChunks.push(chunk);
@@ -435,7 +435,7 @@ describe('ResponseCache processor (integration via Agent)', () => {
       await waitForSets(cache, 1);
       expect(cache.sets).toBe(1);
 
-      const secondStream = await agent.stream('Stream me');
+      const secondStream = await agent.streamMessageList('Stream me');
       const collectedChunks = [];
       for await (const chunk of secondStream.fullStream) {
         collectedChunks.push(chunk);
@@ -451,11 +451,11 @@ describe('ResponseCache processor (integration via Agent)', () => {
     });
 
     it('preserves finishReason and usage on cache hit', async () => {
-      const first = await agent.stream('test');
+      const first = await agent.streamMessageList('test');
       await first.text;
       await waitForSets(cache, 1);
 
-      const second = await agent.stream('test');
+      const second = await agent.streamMessageList('test');
       const finishReason = await second.finishReason;
       const usage = await second.usage;
 

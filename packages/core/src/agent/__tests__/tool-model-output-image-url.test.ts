@@ -103,7 +103,7 @@ describe('Agent toModelOutput image-url passthrough (issue #22618)', () => {
       tools: { image_output: createImageTool() },
     });
 
-    const result = await agent.stream('Run the image tool');
+    const result = await agent.streamMessageList('Run the image tool');
     for await (const _chunk of result.fullStream) {
       // drain
     }

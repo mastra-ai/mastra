@@ -284,7 +284,7 @@ async function captureCheckpoints(kind: AgentKind, usages?: TestUsage[], observa
     return persist(args);
   };
 
-  const result = await original.durableAgent.stream('Look two things up');
+  const result = await original.durableAgent.streamMessageList('Look two things up');
   let text = '';
   for await (const chunk of result.fullStream) {
     if (chunk.type === 'text-delta') text += chunk.payload.text;

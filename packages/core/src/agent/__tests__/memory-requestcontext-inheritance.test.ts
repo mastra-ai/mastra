@@ -74,7 +74,7 @@ describe('RequestContext memory isolation - Issue #11651', () => {
 
     // Child agent calls stream with readOnly: false
     // The fix ensures the child's setting is respected, not the parent's
-    const response = await agent.stream('Hello!', {
+    const response = await agent.streamMessageList('Hello!', {
       memory: {
         thread: threadId,
         resource: resourceId,
@@ -119,7 +119,7 @@ describe('RequestContext memory isolation - Issue #11651', () => {
     });
 
     // Agent calls stream with readOnly: true
-    const response = await agent.stream('Hello!', {
+    const response = await agent.streamMessageList('Hello!', {
       memory: {
         thread: threadId,
         resource: resourceId,
@@ -169,7 +169,7 @@ describe('RequestContext memory isolation - Issue #11651', () => {
     const sharedRequestContext = new RequestContext();
 
     // Agent 1: readOnly: true (should NOT save)
-    const response1 = await agent1.stream('Hello from agent 1!', {
+    const response1 = await agent1.streamMessageList('Hello from agent 1!', {
       memory: {
         thread: thread1Id,
         resource: resourceId,
@@ -182,7 +182,7 @@ describe('RequestContext memory isolation - Issue #11651', () => {
     // Agent 2: readOnly: false (SHOULD save)
     // Even though agent 1 set MastraMemory with readOnly: true,
     // agent 2's setting should be respected
-    const response2 = await agent2.stream('Hello from agent 2!', {
+    const response2 = await agent2.streamMessageList('Hello from agent 2!', {
       memory: {
         thread: thread2Id,
         resource: resourceId,

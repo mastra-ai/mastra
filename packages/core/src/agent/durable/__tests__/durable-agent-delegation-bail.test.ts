@@ -109,7 +109,7 @@ describe('DurableAgent delegation bail', () => {
 
     const durableAgent = createDurableAgent({ agent: supervisor, pubsub });
 
-    const { fullStream, cleanup } = await durableAgent.stream('Go', {
+    const { fullStream, cleanup } = await durableAgent.streamMessageList('Go', {
       maxSteps: 5,
       delegation: { onDelegationComplete },
     });

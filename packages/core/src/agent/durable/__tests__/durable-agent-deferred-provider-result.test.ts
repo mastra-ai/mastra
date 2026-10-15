@@ -176,7 +176,7 @@ describe('DurableAgent deferred provider-executed tool results (#14282)', () => 
       deferredResult: { hits: 3, source: 'deferred-search' },
     });
 
-    const result = await durableAgent.stream('search and check weather', {
+    const result = await durableAgent.streamMessageList('search and check weather', {
       memory: { thread: 'thread-deferred-1', resource: 'resource-deferred-1' },
     });
     const chunks = await drain(result.fullStream);
@@ -223,7 +223,7 @@ describe('DurableAgent deferred provider-executed tool results (#14282)', () => 
       outputProcessors: [redactingProcessor],
     });
 
-    const result = await durableAgent.stream('search and check weather', {
+    const result = await durableAgent.streamMessageList('search and check weather', {
       memory: { thread: 'thread-deferred-2', resource: 'resource-deferred-2' },
     });
     const chunks = await drain(result.fullStream);
@@ -273,7 +273,7 @@ describe('DurableAgent deferred provider-executed tool results (#14282)', () => 
       deferredResult: { hits: 3, source: 'DEFERRED-SECRET-SOURCE' },
     });
 
-    const result = await durableAgent.stream('search and check weather', {
+    const result = await durableAgent.streamMessageList('search and check weather', {
       transform: policy,
       memory: { thread: 'thread-deferred-4', resource: 'resource-deferred-4' },
     });
@@ -325,7 +325,7 @@ describe('DurableAgent deferred provider-executed tool results (#14282)', () => 
       outputProcessors: [blockingProcessor],
     });
 
-    const result = await durableAgent.stream('search and check weather', {
+    const result = await durableAgent.streamMessageList('search and check weather', {
       memory: { thread: 'thread-deferred-3', resource: 'resource-deferred-3' },
     });
     const chunks = await drain(result.fullStream);

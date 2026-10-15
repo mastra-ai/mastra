@@ -142,7 +142,7 @@ describe('DurableAgent concurrent runs', () => {
 
     const runIds = await Promise.all(
       LETTERS.map(async letter => {
-        const result = await original.durableAgent.stream(`Look up ${secret(letter)}`, {
+        const result = await original.durableAgent.streamMessageList(`Look up ${secret(letter)}`, {
           memory: { thread: `thread-${letter}`, resource: `resource-${letter}` },
         });
         expect(await collectText(result)).toBe('done');

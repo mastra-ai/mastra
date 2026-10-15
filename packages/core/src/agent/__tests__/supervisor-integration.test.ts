@@ -169,7 +169,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         memory: new MockMemory(),
       });
 
-      await supervisorAgent.generate('Delegate task', {
+      await supervisorAgent.generateMessageList('Delegate task', {
         maxSteps: 3,
         delegation: {
           onDelegationStart,
@@ -238,7 +238,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         memory: new MockMemory(),
       });
 
-      await agent.generate('Use tool then respond', {
+      await agent.generateMessageList('Use tool then respond', {
         maxSteps: 3,
         onIterationComplete: (ctx: IterationCompleteContext) => {
           iterations.push(ctx.iteration);
@@ -264,7 +264,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         memory: new MockMemory(),
       });
 
-      await supervisorAgent.generate('Research dolphins', {
+      await supervisorAgent.generateMessageList('Research dolphins', {
         maxSteps: 3,
         delegation: { onDelegationStart },
       });
@@ -291,7 +291,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         memory: new MockMemory(),
       });
 
-      await supervisorAgent.generate('Write a report', {
+      await supervisorAgent.generateMessageList('Write a report', {
         maxSteps: 3,
         delegation: { onDelegationComplete },
       });
@@ -332,7 +332,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         memory: new MockMemory(),
       });
 
-      await supervisorAgent.generate('Check the weather', {
+      await supervisorAgent.generateMessageList('Check the weather', {
         maxSteps: 3,
         delegation: {
           onDelegationComplete: ctx => {
@@ -386,7 +386,7 @@ describe('Supervisor Pattern Integration Tests', () => {
       });
       const warnSpy = vi.spyOn(supervisorAgent['logger'], 'warn');
 
-      await supervisorAgent.generate('Look up x', {
+      await supervisorAgent.generateMessageList('Look up x', {
         maxSteps: 3,
         delegation: {
           onDelegationComplete: ctx => {
@@ -512,7 +512,7 @@ describe('Supervisor Pattern Integration Tests', () => {
       });
       const warnSpy = vi.spyOn(supervisorAgent['logger'], 'warn');
 
-      const stream = await supervisorAgent.stream('Look up x', {
+      const stream = await supervisorAgent.streamMessageList('Look up x', {
         maxSteps: 3,
         delegation: {
           onDelegationComplete: ctx => {
@@ -559,7 +559,7 @@ describe('Supervisor Pattern Integration Tests', () => {
       });
       const warnSpy = vi.spyOn(supervisorAgent['logger'], 'warn');
 
-      await supervisorAgent.generate('Add sku-1 to the cart', {
+      await supervisorAgent.generateMessageList('Add sku-1 to the cart', {
         maxSteps: 3,
         delegation: {
           onDelegationComplete: ctx => {
@@ -672,7 +672,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         memory: new MockMemory(),
       });
 
-      const stream = await supervisorAgent.stream('Add sku-1 to the cart', {
+      const stream = await supervisorAgent.streamMessageList('Add sku-1 to the cart', {
         maxSteps: 3,
         delegation: {
           onDelegationComplete: ctx => {
@@ -769,7 +769,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         memory: new MockMemory(),
       });
 
-      const stream = await supervisorAgent.stream('Answer this', {
+      const stream = await supervisorAgent.streamMessageList('Answer this', {
         maxSteps: 3,
         delegation: {
           onDelegationComplete: ctx => {
@@ -834,7 +834,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         memory: new MockMemory(),
       });
 
-      await supervisorAgent.generate('Do the thing', {
+      await supervisorAgent.generateMessageList('Do the thing', {
         maxSteps: 3,
         delegation: {
           onDelegationComplete: ({ result }) =>
@@ -915,7 +915,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         getTransports: vi.fn().mockReturnValue(new Map()),
       } as any);
 
-      await supervisorAgent.generate('Do the thing', {
+      await supervisorAgent.generateMessageList('Do the thing', {
         maxSteps: 3,
         delegation: { onDelegationComplete },
       });
@@ -952,7 +952,7 @@ describe('Supervisor Pattern Integration Tests', () => {
           memory: new MockMemory(),
         });
 
-        const result = await supervisorAgent.generate('Research dolphins', {
+        const result = await supervisorAgent.generateMessageList('Research dolphins', {
           maxSteps: 3,
           requestContext,
           delegation: {
@@ -985,7 +985,7 @@ describe('Supervisor Pattern Integration Tests', () => {
           memory: new MockMemory(),
         });
 
-        await supervisorAgent.generate('Do something', {
+        await supervisorAgent.generateMessageList('Do something', {
           maxSteps: 3,
           requestContext,
           delegation: {
@@ -1013,7 +1013,7 @@ describe('Supervisor Pattern Integration Tests', () => {
           memory: new MockMemory(),
         });
 
-        await supervisorAgent.generate('Write a report', {
+        await supervisorAgent.generateMessageList('Write a report', {
           maxSteps: 3,
           requestContext,
           delegation: {
@@ -1045,7 +1045,7 @@ describe('Supervisor Pattern Integration Tests', () => {
           memory: new MockMemory(),
         });
 
-        await supervisorAgent.generate('Write a report', {
+        await supervisorAgent.generateMessageList('Write a report', {
           maxSteps: 3,
           requestContext,
           delegation: { hookErrorStrategy: 'throw', onDelegationComplete },
@@ -1068,7 +1068,7 @@ describe('Supervisor Pattern Integration Tests', () => {
           memory: new MockMemory(),
         });
 
-        await supervisorAgent.generate('Research dolphins', {
+        await supervisorAgent.generateMessageList('Research dolphins', {
           maxSteps: 3,
           requestContext,
           delegation: {
@@ -1099,7 +1099,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         memory: new MockMemory(),
       });
 
-      await supervisorAgent.generate('Do something', {
+      await supervisorAgent.generateMessageList('Do something', {
         maxSteps: 3,
         delegation: {
           onDelegationStart: () => ({ proceed: false }),
@@ -1153,7 +1153,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         memory: new MockMemory(),
       });
 
-      await supervisorAgent.generate('Do something', {
+      await supervisorAgent.generateMessageList('Do something', {
         maxSteps: 3,
         delegation: {
           onDelegationStart: () => ({ proceed: true, modifiedPrompt: 'MODIFIED PROMPT' }),
@@ -1223,7 +1223,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         memory,
       });
 
-      await supervisorAgent.generate(secret, {
+      await supervisorAgent.generateMessageList(secret, {
         maxSteps: 3,
         delegation: {
           messageFilter: ({ messages }) => {
@@ -1254,7 +1254,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         memory: new MockMemory(),
       });
 
-      await supervisorAgent.generate('Task with context', {
+      await supervisorAgent.generateMessageList('Task with context', {
         maxSteps: 3,
         delegation: { messageFilter: messageFilterSpy },
       });
@@ -1294,7 +1294,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         memory: new MockMemory(),
       });
 
-      await supervisorAgent.generate('Ordered task', {
+      await supervisorAgent.generateMessageList('Ordered task', {
         maxSteps: 3,
         delegation: {
           onDelegationStart: () => {
@@ -1356,7 +1356,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         memory: new MockMemory(),
       });
 
-      await supervisorAgent.generate('Two-task job', {
+      await supervisorAgent.generateMessageList('Two-task job', {
         maxSteps: 10,
         onIterationComplete: () => {
           iterationsAfterBail++;
@@ -1420,7 +1420,7 @@ describe('Supervisor Pattern Integration Tests', () => {
       });
 
       // Verify delegation config is accepted without errors
-      await agent.generate('Test prompt', {
+      await agent.generateMessageList('Test prompt', {
         maxSteps: 1,
         delegation: delegationConfig,
       });
@@ -1468,7 +1468,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         memory: new MockMemory(),
       });
 
-      await agent.generate('Test prompt', {
+      await agent.generateMessageList('Test prompt', {
         maxSteps: 1,
         onIterationComplete: iterationHook,
       });
@@ -1731,7 +1731,7 @@ describe('Supervisor Pattern - Tool approval propagation', () => {
       storage: mockStorage,
     });
 
-    const stream = await supervisorAgent.stream('Find Alice', { maxSteps: 5 });
+    const stream = await supervisorAgent.streamMessageList('Find Alice', { maxSteps: 5 });
 
     let approvalChunkReceived = false;
     let approvalToolCallId = '';
@@ -1747,7 +1747,7 @@ describe('Supervisor Pattern - Tool approval propagation', () => {
     expect(approvalToolCallId).toBeTruthy();
 
     // Approve the tool call and verify execution continues
-    const resumeStream = await supervisorAgent.approveToolCall({
+    const resumeStream = await supervisorAgent.approveToolCallMessageList({
       runId: stream.runId,
       toolCallId: approvalToolCallId,
     });
@@ -1884,7 +1884,7 @@ describe('Supervisor Pattern - Tool approval propagation', () => {
       storage: mockStorage,
     });
 
-    const stream = await supervisorAgent.stream('Find Bob', { maxSteps: 5 });
+    const stream = await supervisorAgent.streamMessageList('Find Bob', { maxSteps: 5 });
 
     let approvalChunkReceived = false;
     let approvalToolCallId = '';
@@ -1900,7 +1900,7 @@ describe('Supervisor Pattern - Tool approval propagation', () => {
     expect(approvalToolCallId).toBeTruthy();
 
     // Decline the tool call and verify tool is not executed
-    const resumeStream = await supervisorAgent.declineToolCall({
+    const resumeStream = await supervisorAgent.declineToolCallMessageList({
       runId: stream.runId,
       toolCallId: approvalToolCallId,
     });
@@ -2166,7 +2166,7 @@ describe('Supervisor Pattern - Suspension propagation', () => {
     });
 
     // First generate: should suspend waiting for info
-    const output = await supervisorAgent.generate('Gather some info', {
+    const output = await supervisorAgent.generateMessageList('Gather some info', {
       maxSteps: 5,
       memory: {
         thread: 'test-thread-suspension',
@@ -2243,7 +2243,7 @@ describe('Supervisor Pattern - IsTaskComplete scorers', () => {
 
     const isTaskCompleteEvents: any[] = [];
 
-    const stream = await supervisorAgent.stream('Complete a task', {
+    const stream = await supervisorAgent.streamMessageList('Complete a task', {
       maxSteps: 3,
       isTaskComplete: { scorers: [mockScorer as any] },
     });
@@ -2294,7 +2294,7 @@ describe('Supervisor Pattern - IsTaskComplete scorers', () => {
       memory,
     });
 
-    const stream = await agent.stream('Do the task.', {
+    const stream = await agent.streamMessageList('Do the task.', {
       maxSteps: 4,
       isTaskComplete: { scorers: [passingScorer as any] },
       memory: { resource: 'res-1', thread: 'thread-1' },
@@ -2358,7 +2358,7 @@ describe('Supervisor Pattern - IsTaskComplete scorers', () => {
       memory: new MockMemory(),
     });
 
-    const stream = await agent.stream('Do the task.', {
+    const stream = await agent.streamMessageList('Do the task.', {
       maxSteps: 2,
       isTaskComplete: { scorers: [failingScorer as any] },
       memory: { resource: 'res-2', thread: 'thread-2' },
@@ -2433,7 +2433,7 @@ describe('Supervisor Pattern - IsTaskComplete scorers', () => {
     });
 
     const isTaskCompleteEvents: any[] = [];
-    const stream = await supervisorAgent.stream('Complete a task', {
+    const stream = await supervisorAgent.streamMessageList('Complete a task', {
       maxSteps: 5,
       isTaskComplete: { scorers: [adaptiveScorer as any] },
     });
@@ -2585,7 +2585,7 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
 
     const testAgent = mastra.getAgent('test-agent');
 
-    await testAgent.generate('Use tool then respond', {
+    await testAgent.generateMessageList('Use tool then respond', {
       maxSteps: 5,
       onIterationComplete: (ctx: IterationCompleteContext) => {
         iterations.push(ctx.iteration);
@@ -2687,7 +2687,7 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
 
     const testAgent = mastra.getAgent('counter-agent');
 
-    await testAgent.generate('Keep counting', {
+    await testAgent.generateMessageList('Keep counting', {
       maxSteps: 10,
       onIterationComplete: (ctx: IterationCompleteContext) => {
         iterations.push(ctx.iteration);
@@ -2783,7 +2783,7 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
 
     const testAgent = mastra.getAgent('feedback-stop-agent');
 
-    const result = await testAgent.stream('Find items', {
+    const result = await testAgent.streamMessageList('Find items', {
       maxSteps: 10,
       onIterationComplete: ctx => {
         iterations.push(ctx.iteration);
@@ -2875,7 +2875,7 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
 
     const testAgent = mastra.getAgent('stubborn-agent');
 
-    const result = await testAgent.stream('Fetch everything', {
+    const result = await testAgent.streamMessageList('Fetch everything', {
       maxSteps: 20,
       onIterationComplete: ctx => {
         iterations.push(ctx.iteration);
@@ -3007,7 +3007,7 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
     const testAgent = mastra.getAgent('feedback-agent');
 
     let iterationCount = 0;
-    await testAgent.generate('Generate response', {
+    await testAgent.generateMessageList('Generate response', {
       maxSteps: 3,
       onIterationComplete: () => {
         iterationCount++;
@@ -3094,7 +3094,7 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
 
     const testAgent = mastra.getAgent('continue-override-stream-agent');
 
-    const result = await testAgent.stream('Take multiple turns', {
+    const result = await testAgent.streamMessageList('Take multiple turns', {
       maxSteps: 5,
       onIterationComplete: ctx => {
         iterations.push(ctx.iteration);
@@ -3165,7 +3165,7 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
     const testAgent = mastra.getAgent('test-agent');
 
     // This should not throw an error
-    const result = await testAgent.generate('Test', {
+    const result = await testAgent.generateMessageList('Test', {
       maxSteps: 1,
       onIterationComplete: hookMock,
     });
@@ -3265,7 +3265,7 @@ describe('Supervisor Pattern - IsTaskComplete feedback', () => {
     });
 
     const isTaskCompleteEvents: any[] = [];
-    const stream = await supervisorAgent.stream('Complete a task', {
+    const stream = await supervisorAgent.streamMessageList('Complete a task', {
       maxSteps: 5,
       isTaskComplete: {
         scorers: [passingScorer as any, adaptiveScorer as any],
@@ -3334,7 +3334,7 @@ describe('Supervisor Pattern - IsTaskComplete feedback', () => {
     });
 
     const isTaskCompleteEvents: any[] = [];
-    const stream = await supervisorAgent.stream('Complete a task', {
+    const stream = await supervisorAgent.streamMessageList('Complete a task', {
       isTaskComplete: {
         scorers: [passingScorer as any, failingScorer as any],
         strategy: 'any',
@@ -3392,7 +3392,7 @@ describe('Supervisor Pattern - IsTaskComplete feedback', () => {
     });
 
     let isTaskCompleteEvent: any;
-    const stream = await supervisorAgent.stream('Do the task', {
+    const stream = await supervisorAgent.streamMessageList('Do the task', {
       isTaskComplete: { scorers: [mockScorer as any] },
     });
 
@@ -3451,7 +3451,7 @@ describe('Supervisor Pattern - IsTaskComplete feedback', () => {
     });
 
     let chunkWithSuppression: any;
-    const stream1 = await agentWithSuppression.stream('Do task', {
+    const stream1 = await agentWithSuppression.streamMessageList('Do task', {
       isTaskComplete: { scorers: [passingScorer as any], suppressFeedback: true },
     });
     for await (const chunk of stream1.fullStream) {
@@ -3469,7 +3469,7 @@ describe('Supervisor Pattern - IsTaskComplete feedback', () => {
     });
 
     let chunkDefault: any;
-    const stream2 = await agentDefault.stream('Do task', {
+    const stream2 = await agentDefault.streamMessageList('Do task', {
       isTaskComplete: { scorers: [passingScorer as any] },
     });
     for await (const chunk of stream2.fullStream) {
@@ -3532,7 +3532,7 @@ describe('Supervisor Pattern - IsTaskComplete feedback', () => {
       memory: new MockMemory(),
     });
 
-    const stream = await supervisorAgent.stream('Complete a complex task', {
+    const stream = await supervisorAgent.streamMessageList('Complete a complex task', {
       maxSteps: 5,
       isTaskComplete: { scorers: [mockScorer as any] },
       onIterationComplete: context => {
@@ -3613,7 +3613,7 @@ describe('Supervisor Pattern - IsTaskComplete feedback', () => {
     });
 
     const isTaskCompleteEvents: any[] = [];
-    const stream = await supervisorAgent.stream('Complete a task', {
+    const stream = await supervisorAgent.streamMessageList('Complete a task', {
       maxSteps: 2,
       isTaskComplete: { scorers: [mockScorer as any] },
     });
@@ -3703,7 +3703,7 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
     });
 
     // Pass multiple messages as conversation history to the supervisor
-    await supervisorAgent.generate(
+    await supervisorAgent.generateMessageList(
       [
         { role: 'user', content: 'My name is Alice.' },
         { role: 'user', content: 'What is my name?' },
@@ -3736,7 +3736,7 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
     let subAgentReceivedPrompts: any[] = [];
 
     // Sub-agent needs both doGenerate and doStream. When the supervisor calls stream(),
-    // sub-agents are also invoked via agent.stream(), so doStream is what captures prompts.
+    // sub-agents are also invoked via agent.streamMessageList(), so doStream is what captures prompts.
     const subAgentMockModel = new MockLanguageModelV2({
       doGenerate: async ({ prompt }) => {
         subAgentReceivedPrompts.push(prompt);
@@ -3935,7 +3935,7 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
     });
 
     const isTaskCompleteEvents: any[] = [];
-    const result = await supervisorAgent.stream('Complete a multi-part task', {
+    const result = await supervisorAgent.streamMessageList('Complete a multi-part task', {
       maxSteps: 6,
       isTaskComplete: { scorers: [mockScorer as any] },
     });
@@ -4042,7 +4042,7 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
     });
 
     // Pass two user messages, but the messageFilter will keep only the most recent one
-    await supervisorAgent.generate(
+    await supervisorAgent.generateMessageList(
       [
         { role: 'user', content: 'SECRET: do not share this' },
         { role: 'user', content: 'Do the task please' },
@@ -4182,7 +4182,7 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
       const delegation =
         includeSubAgentToolResultsInModelContext === undefined ? {} : { includeSubAgentToolResultsInModelContext };
 
-      const result = await supervisorAgent.generate('Delegate this task', {
+      const result = await supervisorAgent.generateMessageList('Delegate this task', {
         maxSteps: 5,
         delegation,
       });
@@ -4306,7 +4306,7 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
     const threadId = globalThis.crypto.randomUUID();
 
     // Supervisor conversation has multiple user messages
-    await supervisorAgent.generate(
+    await supervisorAgent.generateMessageList(
       [
         { role: 'user', content: 'My name is Alice.' },
         { role: 'user', content: 'I live in Paris.' },
@@ -4455,7 +4455,7 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
     requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
     requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
 
-    await supervisorAgent.generate([{ role: 'user', content: 'What is my name?' }], {
+    await supervisorAgent.generateMessageList([{ role: 'user', content: 'What is my name?' }], {
       maxSteps: 3,
       requestContext,
       memory: {
@@ -4590,7 +4590,7 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
         memory: new MockMemory(),
       });
 
-      await supervisorAgent.generate('Research TypeScript', { maxSteps: 3 });
+      await supervisorAgent.generateMessageList('Research TypeScript', { maxSteps: 3 });
 
       const allSystemText = capturedSystemMessages.join('\n');
       expect(allSystemText).toContain('You are a research assistant. Always cite your sources.');
@@ -4649,7 +4649,7 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
         memory: new MockMemory(),
       });
 
-      await supervisorAgent.generate('Help me', { maxSteps: 3 });
+      await supervisorAgent.generateMessageList('Help me', { maxSteps: 3 });
 
       const allSystemText = capturedSystemMessages.join('\n');
       expect(allSystemText).toContain('You are a helpful assistant. Be thorough.');
@@ -4946,7 +4946,7 @@ describe('Supervisor Pattern - Output processor propagation in streaming delegat
       storage: mockStorage,
     });
 
-    const stream = await supervisorAgent.stream('Test prompt', { maxSteps: 5 });
+    const stream = await supervisorAgent.streamMessageList('Test prompt', { maxSteps: 5 });
 
     // Collect tool-result chunks to verify the sub-agent result text seen by the supervisor
     let subAgentResultText = '';

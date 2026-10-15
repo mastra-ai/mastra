@@ -116,7 +116,7 @@ function createSetup(storage: InMemoryStore, toolCallId?: string) {
 }
 
 async function streamToApproval(agent: Agent, prompt = 'Find the user with name - Dero Israel') {
-  const stream = await agent.stream(prompt, { memory: { thread: crypto.randomUUID(), resource: crypto.randomUUID() } });
+  const stream = await agent.streamMessageList(prompt, { memory: { thread: crypto.randomUUID(), resource: crypto.randomUUID() } });
   let toolCallId = '';
   for await (const chunk of stream.fullStream) {
     if (chunk.type === 'tool-call-approval') {
@@ -142,7 +142,7 @@ describe('approveToolCall with a slow-to-persist (large) suspend snapshot (#2241
     const { runId, toolCallId } = await streamToApproval(agent);
     expect(toolCallId).toBeTruthy();
 
-    const resumeStream = await agent.approveToolCall({ runId, toolCallId });
+    const resumeStream = await agent.approveToolCallMessageList({ runId, toolCallId });
     for await (const _chunk of resumeStream.fullStream) {
       // drain
     }
@@ -161,7 +161,7 @@ describe('approveToolCall with a slow-to-persist (large) suspend snapshot (#2241
     expect(toolCallId).toBeTruthy();
 
     const start = Date.now();
-    await expect(agent.approveToolCall({ runId, toolCallId: 'does-not-exist' })).rejects.toThrow(/not suspended/i);
+    await expect(agent.approveToolCallMessageList({ runId, toolCallId: 'does-not-exist' })).rejects.toThrow(/not suspended/i);
     // Must not hang to the safety ceiling: a different tool call is suspended, so
     // this is a genuine (fast) rejection.
     expect(Date.now() - start).toBeLessThan(2000);
@@ -174,7 +174,7 @@ describe('approveToolCall with a slow-to-persist (large) suspend snapshot (#2241
     const { agent } = createSetup(storage);
 
     const { runId, toolCallId } = await streamToApproval(agent);
-    const resumeStream = await agent.approveToolCall({ runId, toolCallId });
+    const resumeStream = await agent.approveToolCallMessageList({ runId, toolCallId });
     for await (const _chunk of resumeStream.fullStream) {
       // drain
     }

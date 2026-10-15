@@ -207,7 +207,7 @@ describe('DurableAgent stopWhen callback', () => {
 
       const stopWhenCalled = vi.fn().mockReturnValue(false);
 
-      const { runId, cleanup } = await durableAgent.stream('What is the weather in Toronto?', {
+      const { runId, cleanup } = await durableAgent.streamMessageList('What is the weather in Toronto?', {
         stopWhen: stopWhenCalled,
       });
 
@@ -261,7 +261,7 @@ describe('DurableAgent stopWhen callback', () => {
         return steps.some((step: any) => step.content?.some((item: any) => item.type === 'tool-result'));
       });
 
-      const { runId, cleanup } = await durableAgent.stream('Get the data', {
+      const { runId, cleanup } = await durableAgent.streamMessageList('Get the data', {
         stopWhen,
         maxSteps: 10,
       });
@@ -291,7 +291,7 @@ describe('DurableAgent stopWhen callback', () => {
 
       const stopWhen = vi.fn().mockReturnValue(false);
 
-      const { runId, cleanup } = await durableAgent.stream('Search for test', {
+      const { runId, cleanup } = await durableAgent.streamMessageList('Search for test', {
         stopWhen,
         maxSteps: 5,
       });
@@ -315,7 +315,7 @@ describe('DurableAgent stopWhen callback', () => {
 
       const stopWhen = vi.fn().mockReturnValue(false);
 
-      const { runId, cleanup } = await durableAgent.stream('Hello', {
+      const { runId, cleanup } = await durableAgent.streamMessageList('Hello', {
         stopWhen,
         maxSteps: 3,
       });
@@ -348,7 +348,7 @@ describe('DurableAgent stopWhen callback', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await durableAgent.stream('Loop until final answer', {
+      const result = await durableAgent.streamMessageList('Loop until final answer', {
         maxSteps: 6,
       });
       await drain(result.fullStream as ReadableStream<any>);
@@ -371,7 +371,7 @@ describe('DurableAgent stopWhen callback', () => {
       // Stop immediately
       const stopWhen = vi.fn().mockReturnValue(true);
 
-      const { runId, cleanup } = await durableAgent.stream('Hello', {
+      const { runId, cleanup } = await durableAgent.streamMessageList('Hello', {
         stopWhen,
       });
 
@@ -436,7 +436,7 @@ describe('DurableAgent stopWhen edge cases', () => {
       return false;
     });
 
-    const { runId, cleanup } = await durableAgent.stream('Hello', {
+    const { runId, cleanup } = await durableAgent.streamMessageList('Hello', {
       stopWhen,
     });
 
@@ -457,7 +457,7 @@ describe('DurableAgent stopWhen edge cases', () => {
 
     const stopWhen = vi.fn().mockReturnValue(false);
 
-    const { runId, cleanup } = await durableAgent.stream('Hello', {
+    const { runId, cleanup } = await durableAgent.streamMessageList('Hello', {
       stopWhen,
     });
 
@@ -482,7 +482,7 @@ describe('DurableAgent stopWhen edge cases', () => {
       return steps.length > 0;
     });
 
-    const { runId, cleanup } = await durableAgent.stream('Hello', {
+    const { runId, cleanup } = await durableAgent.streamMessageList('Hello', {
       stopWhen,
     });
 
@@ -530,7 +530,7 @@ describe('DurableAgent stopWhen behavior', () => {
 
     const stopWhen = vi.fn().mockImplementation(({ steps }: { steps: any[] }) => steps.length >= 2);
 
-    const result = await durableAgent.stream('Loop until final answer', {
+    const result = await durableAgent.streamMessageList('Loop until final answer', {
       stopWhen,
       maxSteps: 10,
     });
@@ -572,7 +572,7 @@ describe('DurableAgent stopWhen behavior', () => {
 
     const stopWhen = vi.fn().mockReturnValue(false);
 
-    const result = await durableAgent.stream('Loop until final answer', {
+    const result = await durableAgent.streamMessageList('Loop until final answer', {
       stopWhen,
       maxSteps: 3,
     });

@@ -156,7 +156,7 @@ describe('attachment download recovery', () => {
     const pubsub = new EventEmitterPubSub();
     pubsubs.push(pubsub);
     const runner = durable ? createDurableAgent({ agent, pubsub }) : agent;
-    async function run(message: Parameters<Agent['stream']>[0], maxProcessorRetries = 1, abortSignal?: AbortSignal) {
+    async function run(message: Parameters<Agent['streamMessageList']>[0], maxProcessorRetries = 1, abortSignal?: AbortSignal) {
       const result = await runner.stream(message, {
         memory: { thread: 'thread', resource: 'resource' },
         maxSteps: 5,
@@ -180,7 +180,7 @@ describe('attachment download recovery', () => {
     return { agent, run, prompts, memory };
   }
 
-  function attachment(kind: 'image' | 'file' = 'file'): Parameters<Agent['stream']>[0] {
+  function attachment(kind: 'image' | 'file' = 'file'): Parameters<Agent['streamMessageList']>[0] {
     return [
       {
         role: 'user',
@@ -422,7 +422,7 @@ describe('attachment download recovery', () => {
         const processAPIError = vi.fn<NonNullable<Processor['processAPIError']>>(() => ({ retry: false }));
         const { run, prompts } = setup({ durable, errorProcessor: { id: 'decline', processAPIError } });
 
-        for (const input of [[message], 'Continue'] as Parameters<Agent['stream']>[0][]) {
+        for (const input of [[message], 'Continue'] as Parameters<Agent['streamMessageList']>[0][]) {
           const result = await run(input);
           expect(result.errors).toEqual([]);
           expect(result.text).toBe('ok');
@@ -670,10 +670,10 @@ describe('attachment download recovery', () => {
     });
     const { agent, memory, prompts } = setup({ errorProcessor: { id: 'repair', processAPIError } });
     const options = { memory: { thread: 'thread', resource: 'resource' }, maxSteps: 5, maxProcessorRetries: 1 };
-    expect((await agent.generate(attachment(), options)).text).toBe('ok');
+    expect((await agent.generateMessageList(attachment(), options)).text).toBe('ok');
     await waitForHistory(memory);
     failure = '404';
-    const result = await agent.generate('Continue', options);
+    const result = await agent.generateMessageList('Continue', options);
     expect(result.text).toBe('ok');
     expect(result.error).toBeUndefined();
     expect(processAPIError).toHaveBeenCalledTimes(1);

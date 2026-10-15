@@ -132,7 +132,7 @@ async function runDelegatedApproval(storage: InMemoryStore, memory: MockMemory, 
   const mastra = new Mastra({ agents: { supervisor: supervisor as Agent }, logger: false, storage });
   const agent = mastra.getAgent('supervisor');
 
-  const stream = await agent.stream('Process the order.', {
+  const stream = await agent.streamMessageList('Process the order.', {
     maxSteps: 6,
     memory: { resource: 'rep_r4', thread },
   });

@@ -198,7 +198,7 @@ describe('durable agent snapshot-persistence policy (issue #23915)', () => {
         tools: { echoTool },
       });
 
-      const result: any = await durableAgent.stream('Call the tool twice');
+      const result: any = await durableAgent.streamMessageList('Call the tool twice');
       const chunkTypes = await drain(result.fullStream);
       await waitForRunCleanup(result.runId);
 
@@ -258,7 +258,7 @@ describe('durable agent snapshot-persistence policy (issue #23915)', () => {
         tools: { blockingTool },
       });
 
-      const result: any = await durableAgent.stream('Call the tool');
+      const result: any = await durableAgent.streamMessageList('Call the tool');
       const drained = drain(result.fullStream);
       await vi.waitFor(() => expect(toolStarted).toBe(true), { timeout: 30000 });
 
@@ -329,7 +329,7 @@ describe('durable agent snapshot-persistence policy (issue #23915)', () => {
         tools: { searchTool },
       });
 
-      const result: any = await durableAgent.stream('Search for test');
+      const result: any = await durableAgent.streamMessageList('Search for test');
       let sawApproval = false;
       for await (const chunk of result.fullStream) {
         if (chunk.type === 'tool-call-approval') {
@@ -378,7 +378,7 @@ describe('durable agent snapshot-persistence policy (issue #23915)', () => {
         recovery: 'auto',
       });
 
-      const result: any = await durableAgent.stream('Call the tool');
+      const result: any = await durableAgent.streamMessageList('Call the tool');
       const drained = drain(result.fullStream);
 
       // Mid-run the running snapshot is on disk and discoverable.
@@ -417,7 +417,7 @@ describe('durable agent snapshot-persistence policy (issue #23915)', () => {
           workflowStatus === 'running',
       });
 
-      const result: any = await durableAgent.stream('Call the tool twice');
+      const result: any = await durableAgent.streamMessageList('Call the tool twice');
       await drain(result.fullStream);
       await waitForRunCleanup(result.runId);
 
@@ -443,7 +443,7 @@ describe('durable agent snapshot-persistence policy (issue #23915)', () => {
         shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus !== 'running' && workflowStatus !== 'failed',
       });
 
-      const result: any = await durableAgent.stream('Call the tool');
+      const result: any = await durableAgent.streamMessageList('Call the tool');
       await drain(result.fullStream);
       await waitForRunCleanup(result.runId);
 

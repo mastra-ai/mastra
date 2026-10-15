@@ -127,7 +127,7 @@ describe('tool approval: standalone Agent (no Mastra) vs Agent with Mastra', () 
     const agent = mastra.getAgent('userAgent');
 
     // Step 1: Start stream → should suspend for tool approval
-    const stream = await agent.stream('Find the user with name - Dero Israel', {
+    const stream = await agent.streamMessageList('Find the user with name - Dero Israel', {
       requireToolApproval: true,
     });
 
@@ -141,7 +141,7 @@ describe('tool approval: standalone Agent (no Mastra) vs Agent with Mastra', () 
     expect(toolCallId).toBeTruthy();
 
     // Step 2: Approve the tool call — no delay needed, snapshot is persisted before stream closes
-    const resumeStream = await agent.approveToolCall({ runId: stream.runId, toolCallId });
+    const resumeStream = await agent.approveToolCallMessageList({ runId: stream.runId, toolCallId });
 
     for await (const _chunk of resumeStream.fullStream) {
       // consume the stream
@@ -182,7 +182,7 @@ describe('tool approval: standalone Agent (no Mastra) vs Agent with Mastra', () 
     });
     const agent = mastra.getAgent('userAgent');
     const memory = { thread: 'send-tool-approval-thread', resource: 'send-tool-approval-resource' };
-    const stream = await agent.stream('Find the user with name - Dero Israel', { memory });
+    const stream = await agent.streamMessageList('Find the user with name - Dero Israel', { memory });
 
     let toolCallId = '';
     for await (const chunk of stream.fullStream) {
@@ -225,7 +225,7 @@ describe('tool approval: standalone Agent (no Mastra) vs Agent with Mastra', () 
     agent.__registerMastra(mastra);
 
     // Step 1: Start stream → should suspend for tool approval
-    const stream = await agent.stream('Find the user with name - Dero Israel', {
+    const stream = await agent.streamMessageList('Find the user with name - Dero Israel', {
       requireToolApproval: true,
     });
 
@@ -239,7 +239,7 @@ describe('tool approval: standalone Agent (no Mastra) vs Agent with Mastra', () 
     expect(toolCallId).toBeTruthy();
 
     // Step 2: Approve the tool call — no delay needed, snapshot is persisted before stream closes
-    const resumeStream = await agent.approveToolCall({ runId: stream.runId, toolCallId });
+    const resumeStream = await agent.approveToolCallMessageList({ runId: stream.runId, toolCallId });
 
     for await (const _chunk of resumeStream.fullStream) {
       // consume the stream
@@ -370,7 +370,7 @@ describe('resumeStream with input processors', () => {
 
     const agent = mastra.getAgent('userAgent');
 
-    const stream = await agent.stream('Find the user with name - Dero Israel', {
+    const stream = await agent.streamMessageList('Find the user with name - Dero Israel', {
       requireToolApproval: true,
     });
 
@@ -382,7 +382,7 @@ describe('resumeStream with input processors', () => {
     }
     expect(toolCallId).toBeTruthy();
 
-    const resumeResult = await agent.approveToolCall({ runId: stream.runId, toolCallId });
+    const resumeResult = await agent.approveToolCallMessageList({ runId: stream.runId, toolCallId });
 
     let tripwireDetected = false;
     for await (const chunk of resumeResult.fullStream) {
@@ -429,7 +429,7 @@ describe('resumeStream with input processors', () => {
 
     const agent = mastra.getAgent('userAgent');
 
-    const stream = await agent.stream('Find the user with name - Dero Israel');
+    const stream = await agent.streamMessageList('Find the user with name - Dero Israel');
 
     let suspended = false;
     for await (const chunk of stream.fullStream) {
@@ -557,7 +557,7 @@ describe('tool approval with ToolSearchProcessor', () => {
     });
 
     const agent = mastra.getAgent('userAgent');
-    const stream = await agent.stream('Load and use the approval tool', { maxSteps: 5 });
+    const stream = await agent.streamMessageList('Load and use the approval tool', { maxSteps: 5 });
 
     let toolCallId = '';
     for await (const chunk of stream.fullStream) {
@@ -568,7 +568,7 @@ describe('tool approval with ToolSearchProcessor', () => {
 
     expect(toolCallId).toBe('dynamic-call');
 
-    const resumeResult = await agent.approveToolCall({ runId: stream.runId, toolCallId });
+    const resumeResult = await agent.approveToolCallMessageList({ runId: stream.runId, toolCallId });
 
     const toolErrors: unknown[] = [];
     for await (const chunk of resumeResult.fullStream) {

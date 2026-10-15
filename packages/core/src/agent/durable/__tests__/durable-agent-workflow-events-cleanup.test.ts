@@ -52,7 +52,7 @@ describe('DurableAgent workflow.events.v2 topic cleanup (#20786)', () => {
     // #clearPubsubTopic calls — not the inner EventEmitterPubSub alone.
     const clearTopic = vi.spyOn(durableAgent.pubsub, 'clearTopic');
 
-    const { runId, cleanup } = await durableAgent.stream('hi');
+    const { runId, cleanup } = await durableAgent.streamMessageList('hi');
     // cleanup() is what #clearPubsubTopic is wired through; no need to drain.
     cleanup();
 

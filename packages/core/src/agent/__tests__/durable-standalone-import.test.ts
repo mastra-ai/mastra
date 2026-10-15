@@ -3,11 +3,11 @@
  *
  *   import { Agent } from '@mastra/core/agent';
  *   const agent = new Agent({ ..., durable: true });
- *   await agent.stream(...);
+ *   await agent.streamMessageList(...);
  *
  * The user in this codepath never imports `createDurableAgent`, never
  * imports `DurableAgent`, and never attaches the agent to a `Mastra`
- * instance. `Agent.stream()` must still route through the durable
+ * instance. `Agent.streamMessageList()` must still route through the durable
  * execution path — implemented via a lazy dynamic `import()` of the
  * durable module inside `Agent.stream` so no eager import cycle is
  * introduced.
@@ -55,7 +55,7 @@ describe('standalone durable Agent — only `@mastra/core/agent` imported', () =
     const spy = vi.spyOn(DurableAgent.prototype as any, 'stream').mockImplementation(async () => 'ok');
 
     try {
-      const result = await (agent.stream('hi') as unknown as Promise<string>);
+      const result = await (agent.streamMessageList('hi') as unknown as Promise<string>);
       expect(result).toBe('ok');
       expect(spy).toHaveBeenCalledTimes(1);
     } finally {

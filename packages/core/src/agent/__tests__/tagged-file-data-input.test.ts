@@ -47,7 +47,7 @@ describe('Agent with AI SDK v7 tagged FileData in ModelMessage input', () => {
     const { model, prompts } = createRecordingModel();
     const agent = new Agent({ id: 'tagged-file-agent', name: 'tagged-file-agent', instructions: 'test', model });
 
-    const result = await agent.stream([
+    const result = await agent.streamMessageList([
       {
         role: 'user',
         content: [{ type: 'text', text: 'Describe this image' }, { type: 'file', mediaType: 'image/png', data } as any],

@@ -108,7 +108,7 @@ describe('Credential/Auth Error Fallback', () => {
         ],
       });
 
-      const result = await agent.stream('Hello');
+      const result = await agent.streamMessageList('Hello');
       const fullText = await result.text;
 
       expect(fullText).toBe('Secondary model response');
@@ -131,7 +131,7 @@ describe('Credential/Auth Error Fallback', () => {
         ],
       });
 
-      const result = await agent.stream('Hello');
+      const result = await agent.streamMessageList('Hello');
       const fullText = await result.text;
 
       expect(fullText).toBe('Secondary model response');
@@ -154,7 +154,7 @@ describe('Credential/Auth Error Fallback', () => {
         ],
       });
 
-      const result = await agent.stream('Hello');
+      const result = await agent.streamMessageList('Hello');
       const fullText = await result.text;
 
       expect(fullText).toBe('Secondary model response');
@@ -177,7 +177,7 @@ describe('Credential/Auth Error Fallback', () => {
         ],
       });
 
-      const result = await agent.stream('Hello');
+      const result = await agent.streamMessageList('Hello');
       const fullText = await result.text;
 
       expect(fullText).toBe('Secondary model response');
@@ -202,7 +202,7 @@ describe('Credential/Auth Error Fallback', () => {
         ],
       });
 
-      const result = await agent.generate('Hello');
+      const result = await agent.generateMessageList('Hello');
       expect(result.text).toBe('Secondary model response');
     });
 
@@ -223,7 +223,7 @@ describe('Credential/Auth Error Fallback', () => {
         ],
       });
 
-      const result = await agent.generate('Hello');
+      const result = await agent.generateMessageList('Hello');
       expect(result.text).toBe('Secondary model response');
     });
   });
@@ -242,7 +242,7 @@ describe('Credential/Auth Error Fallback', () => {
         model: [{ model: primaryModel, maxRetries: 0 }],
       });
 
-      await expect(agent.generate('Hello')).rejects.toThrow();
+      await expect(agent.generateMessageList('Hello')).rejects.toThrow();
     });
 
     it('should surface error when both models fail with auth errors', async () => {
@@ -262,7 +262,7 @@ describe('Credential/Auth Error Fallback', () => {
         ],
       });
 
-      await expect(agent.generate('Hello')).rejects.toThrow();
+      await expect(agent.generateMessageList('Hello')).rejects.toThrow();
     });
   });
 
@@ -288,7 +288,7 @@ describe('Credential/Auth Error Fallback', () => {
           ],
         });
 
-        const result = await agent.stream('Hello');
+        const result = await agent.streamMessageList('Hello');
         const fullText = await result.text;
 
         // Fallback works correctly
@@ -315,7 +315,7 @@ describe('Credential/Auth Error Fallback', () => {
           ],
         });
 
-        const result = await agent.stream('Hello');
+        const result = await agent.streamMessageList('Hello');
         const fullText = await result.text;
 
         expect(fullText).toBe('Fallback success');
@@ -341,7 +341,7 @@ describe('Credential/Auth Error Fallback', () => {
           ],
         });
 
-        const result = await agent.stream('Hello');
+        const result = await agent.streamMessageList('Hello');
         const fullText = await result.text;
 
         expect(fullText).toBe('Fallback success');
@@ -367,7 +367,7 @@ describe('Credential/Auth Error Fallback', () => {
           ],
         });
 
-        const result = await agent.stream('Hello');
+        const result = await agent.streamMessageList('Hello');
         const fullText = await result.text;
 
         expect(fullText).toBe('Fallback success');
@@ -395,7 +395,7 @@ describe('Credential/Auth Error Fallback', () => {
           ],
         });
 
-        const result = await agent.generate('Hello');
+        const result = await agent.generateMessageList('Hello');
 
         expect(result.text).toBe('Fallback success');
 
@@ -420,7 +420,7 @@ describe('Credential/Auth Error Fallback', () => {
           ],
         });
 
-        const result = await agent.generate('Hello');
+        const result = await agent.generateMessageList('Hello');
 
         expect(result.text).toBe('Fallback success');
 
@@ -445,7 +445,7 @@ describe('Credential/Auth Error Fallback', () => {
           ],
         });
 
-        const result = await agent.generate('Hello');
+        const result = await agent.generateMessageList('Hello');
 
         expect(result.text).toBe('Fallback success');
 
@@ -470,7 +470,7 @@ describe('Credential/Auth Error Fallback', () => {
           ],
         });
 
-        const result = await agent.generate('Hello');
+        const result = await agent.generateMessageList('Hello');
 
         expect(result.text).toBe('Fallback success');
 
@@ -508,7 +508,7 @@ describe('Credential/Auth Error Fallback', () => {
         ],
       });
 
-      const result = await agent.stream('Hello', {
+      const result = await agent.streamMessageList('Hello', {
         memory: { thread: 'fallback-stream-thread', resource: 'fallback-resource' },
       });
       await result.consumeStream();
@@ -549,7 +549,7 @@ describe('Credential/Auth Error Fallback', () => {
         ],
       });
 
-      const result = await agent.generate('Hello', {
+      const result = await agent.generateMessageList('Hello', {
         memory: { thread: 'fallback-generate-thread', resource: 'fallback-resource' },
       });
 

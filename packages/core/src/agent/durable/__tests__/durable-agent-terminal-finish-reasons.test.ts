@@ -89,7 +89,7 @@ describe('DurableAgent terminal finish reasons', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { output, cleanup } = await durableAgent.stream('go', { maxSteps: 4 });
+      const { output, cleanup } = await durableAgent.streamMessageList('go', { maxSteps: 4 });
       const chunks = await drain(output.fullStream as unknown as ReadableStream<any>);
       await cleanup();
 

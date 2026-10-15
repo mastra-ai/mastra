@@ -68,7 +68,7 @@ async function run(toolName: string, agentId: string) {
   void new Mastra({ agents: { [agentId]: durableAgent }, logger: false });
 
   let error: unknown;
-  const { output, cleanup } = await durableAgent.stream('go', {
+  const { output, cleanup } = await durableAgent.streamMessageList('go', {
     maxSteps: 3,
     toolsets: { ts: { shout } },
     memory: { thread: 'thread-1', resource: 'user-1' },

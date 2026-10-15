@@ -209,7 +209,7 @@ describe('DurableAgent tool approval workflow execution', () => {
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
     let suspendedData: any = null;
-    const { cleanup } = await durableAgent.stream('Search for test', {
+    const { cleanup } = await durableAgent.streamMessageList('Search for test', {
       requireToolApproval: true,
       onSuspended: data => {
         suspendedData = data;
@@ -255,7 +255,7 @@ describe('DurableAgent tool approval workflow execution', () => {
     });
 
     let suspendedData: any = null;
-    const { runId, cleanup } = await durableAgent.stream('Search for test', {
+    const { runId, cleanup } = await durableAgent.streamMessageList('Search for test', {
       requireToolApproval: true,
       onSuspended: data => {
         suspendedData = data;
@@ -322,7 +322,7 @@ describe('DurableAgent tool approval workflow execution', () => {
     });
 
     let approvalData: any = null;
-    const { runId, cleanup } = await durableAgent.stream('Use the interactive approval tool', {
+    const { runId, cleanup } = await durableAgent.streamMessageList('Use the interactive approval tool', {
       onSuspended: data => {
         approvalData = data;
       },
@@ -389,7 +389,7 @@ describe('DurableAgent tool approval workflow execution', () => {
     });
 
     let suspendedData: any = null;
-    const { runId, cleanup } = await durableAgent.stream('Search for test', {
+    const { runId, cleanup } = await durableAgent.streamMessageList('Search for test', {
       requireToolApproval: true,
       onSuspended: data => {
         suspendedData = data;
@@ -444,7 +444,7 @@ describe('DurableAgent tool approval workflow execution', () => {
     const prep = await durableAgent.prepare('Use the tool', { requireToolApproval: true });
     const events = collectPubsubEvents(pubsub, prep.runId);
 
-    const { cleanup } = await durableAgent.stream('Use the tool', {
+    const { cleanup } = await durableAgent.streamMessageList('Use the tool', {
       runId: prep.runId,
       requireToolApproval: true,
     });
@@ -506,7 +506,7 @@ describe('DurableAgent in-execution tool suspension', () => {
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
     let suspendedData: any = null;
-    const { cleanup } = await durableAgent.stream('Use the interactive tool', {
+    const { cleanup } = await durableAgent.streamMessageList('Use the interactive tool', {
       onSuspended: data => {
         suspendedData = data;
       },
@@ -554,7 +554,7 @@ describe('DurableAgent in-execution tool suspension', () => {
       resourceId: memory.resource,
     });
 
-    const result = await durableAgent.stream('Use the interactive approval tool', { memory });
+    const result = await durableAgent.streamMessageList('Use the interactive approval tool', { memory });
     let sawApproval = false;
     for await (const chunk of result.fullStream) {
       if (chunk.type === 'tool-call-approval') {
@@ -607,7 +607,7 @@ describe('DurableAgent in-execution tool suspension', () => {
     });
 
     let suspendedData: any = null;
-    const { runId, cleanup } = await durableAgent.stream('Use the interactive tool', {
+    const { runId, cleanup } = await durableAgent.streamMessageList('Use the interactive tool', {
       onSuspended: data => {
         suspendedData = data;
       },
@@ -663,7 +663,7 @@ describe('DurableAgent in-execution tool suspension', () => {
     });
 
     let suspendedData: any = null;
-    const { runId, cleanup } = await durableAgent.stream('Ask me a question', {
+    const { runId, cleanup } = await durableAgent.streamMessageList('Ask me a question', {
       onSuspended: data => {
         suspendedData = data;
       },
@@ -714,7 +714,7 @@ describe('DurableAgent in-execution tool suspension', () => {
     const prep = await durableAgent.prepare('Use the tool');
     const events = collectPubsubEvents(pubsub, prep.runId);
 
-    const { cleanup } = await durableAgent.stream('Use the tool', {
+    const { cleanup } = await durableAgent.streamMessageList('Use the tool', {
       runId: prep.runId,
     });
 
@@ -785,7 +785,7 @@ describe('DurableAgent message persistence before suspension', () => {
     expect(threadBefore).toBeNull();
 
     let suspendedData: any = null;
-    const { cleanup } = await durableAgent.stream('Find me a software engineer job', {
+    const { cleanup } = await durableAgent.streamMessageList('Find me a software engineer job', {
       memory: { thread: threadId, resource: resourceId },
       requireToolApproval: true,
       onSuspended: data => {
@@ -868,7 +868,7 @@ describe('DurableAgent message persistence before suspension', () => {
     expect(threadBefore).toBeNull();
 
     let suspendedData: any = null;
-    const { cleanup } = await durableAgent.stream('Process the data', {
+    const { cleanup } = await durableAgent.streamMessageList('Process the data', {
       memory: { thread: threadId, resource: resourceId },
       onSuspended: data => {
         suspendedData = data;
@@ -939,7 +939,7 @@ describe('DurableAgent foreach tool execution', () => {
     let finishData: any = null;
     const toolResults: any[] = [];
 
-    const { cleanup } = await durableAgent.stream('Echo hello', {
+    const { cleanup } = await durableAgent.streamMessageList('Echo hello', {
       onChunk: chunk => {
         if (chunk.type === 'tool-result') {
           toolResults.push(chunk);
@@ -991,7 +991,7 @@ describe('DurableAgent foreach tool execution', () => {
     let finishData: any = null;
     const toolResults: any[] = [];
 
-    const { cleanup } = await durableAgent.stream('Add 2+3 and multiply 4*5', {
+    const { cleanup } = await durableAgent.streamMessageList('Add 2+3 and multiply 4*5', {
       onChunk: chunk => {
         if (chunk.type === 'tool-result') {
           toolResults.push(chunk);
@@ -1035,7 +1035,7 @@ describe('DurableAgent foreach tool execution', () => {
 
     const toolErrors: any[] = [];
 
-    const { cleanup } = await durableAgent.stream('Use the error tool', {
+    const { cleanup } = await durableAgent.streamMessageList('Use the error tool', {
       onChunk: chunk => {
         if (chunk.type === 'tool-error') {
           toolErrors.push(chunk);
@@ -1118,7 +1118,7 @@ describe('DurableAgent workflow-as-tool suspension and resume', () => {
     });
 
     let suspendedData: any = null;
-    const { runId, cleanup } = await durableAgent.stream('Ask me about lunch', {
+    const { runId, cleanup } = await durableAgent.streamMessageList('Ask me about lunch', {
       onSuspended: data => {
         suspendedData = data;
       },

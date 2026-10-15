@@ -257,7 +257,7 @@ describe('DurableAgent usage accumulation', () => {
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
     let callbackUsage: PartialUsage | undefined;
-    const result = await durableAgent.stream('Run the tool', {
+    const result = await durableAgent.streamMessageList('Run the tool', {
       maxSteps: 3,
       onFinish: ({ usage }) => {
         callbackUsage = usage;
@@ -294,7 +294,7 @@ describe('DurableAgent usage accumulation', () => {
       tools: { usageTool },
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-    const result = await durableAgent.stream('Run the tool', { maxSteps: 3 });
+    const result = await durableAgent.streamMessageList('Run the tool', { maxSteps: 3 });
 
     try {
       for await (const _chunk of result.fullStream) {
@@ -332,7 +332,7 @@ describe('DurableAgent usage accumulation', () => {
       model: model as LanguageModelV2,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-    const result = await durableAgent.stream('Fail before reporting usage', { maxSteps: 3 });
+    const result = await durableAgent.streamMessageList('Fail before reporting usage', { maxSteps: 3 });
 
     try {
       const chunks: any[] = [];

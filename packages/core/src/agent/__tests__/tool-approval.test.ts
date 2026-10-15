@@ -144,7 +144,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
             resourceId: memory.resource,
           });
 
-          const stream = await agentOne.stream('Find the user with name - Dero Israel', { memory });
+          const stream = await agentOne.streamMessageList('Find the user with name - Dero Israel', { memory });
           let toolName = '';
           let toolCallId = '';
           for await (const _chunk of stream.fullStream) {
@@ -159,7 +159,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           expect((await agentOne.getObjective({ threadId: memory.thread }))?.activeDurationMs).toBe(durationAtApproval);
 
           if (toolName) {
-            const resumeStream = await agentOne.approveToolCall({ runId: stream.runId, toolCallId });
+            const resumeStream = await agentOne.approveToolCallMessageList({ runId: stream.runId, toolCallId });
             for await (const _chunk of resumeStream.fullStream) {
             }
 
@@ -227,7 +227,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         // Case 1: the policy returns true → the tool call suspends for approval and does not execute.
         const approveAll = vi.fn().mockReturnValue(true);
         const suspendingAgent = makeAgent();
-        const suspendStream = await suspendingAgent.stream('Find the user with name - Dero Israel', {
+        const suspendStream = await suspendingAgent.streamMessageList('Find the user with name - Dero Israel', {
           memory: { thread: globalThis.crypto.randomUUID(), resource: globalThis.crypto.randomUUID() },
           requireToolApproval: approveAll,
         });
@@ -246,7 +246,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         // Case 2: the policy returns false → the tool runs without requiring approval.
         const denyApproval = vi.fn().mockReturnValue(false);
         const runningAgent = makeAgent();
-        const runStream = await runningAgent.stream('Find the user with name - Dero Israel', {
+        const runStream = await runningAgent.streamMessageList('Find the user with name - Dero Israel', {
           memory: { thread: globalThis.crypto.randomUUID(), resource: globalThis.crypto.randomUUID() },
           requireToolApproval: denyApproval,
         });
@@ -338,7 +338,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         mockFindUser.mockClear();
 
         // First call: the function policy requires approval, so the tool suspends.
-        const suspendStream = await agent.stream('Find the user with name - Dero Israel', {
+        const suspendStream = await agent.streamMessageList('Find the user with name - Dero Israel', {
           memory,
           requireToolApproval,
         });
@@ -355,7 +355,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
 
         // Resume through the explicit approval boundary. The stored suspend payload
         // preserves the function policy even though the helper only needs run and call IDs.
-        const resumeStream = await agent.approveToolCall({ runId: suspendStream.runId, toolCallId });
+        const resumeStream = await agent.approveToolCallMessageList({ runId: suspendStream.runId, toolCallId });
         for await (const _chunk of resumeStream.fullStream) {
           // drain
         }
@@ -420,7 +420,7 @@ describe('goal activity at tool approval', () => {
     const memory = { thread: globalThis.crypto.randomUUID(), resource: globalThis.crypto.randomUUID() };
     await agent.setObjective('Finish after approval', { threadId: memory.thread, resourceId: memory.resource });
 
-    const result = await agent.stream('Use the approval tool', { memory });
+    const result = await agent.streamMessageList('Use the approval tool', { memory });
     for await (const chunk of result.fullStream) {
       if (chunk.type === 'tool-call-approval') break;
     }

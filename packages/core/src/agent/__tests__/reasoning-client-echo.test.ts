@@ -65,7 +65,7 @@ describe('client echo of a reasoning assistant message (#24052)', () => {
       const threadId = randomUUID();
       const memoryOpts = { memory: { thread: threadId, resource: 'r', options: { lastMessages: 10 } } };
 
-      const turn1 = await agent.stream([{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'q1' }] }], memoryOpts);
+      const turn1 = await agent.streamMessageList([{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'q1' }] }], memoryOpts);
       await turn1.consumeStream();
       const stored = turn1.messageList.get.all.db().find(m => m.role === 'assistant')!;
       expect(dbPartShape(stored)).toEqual(['reasoning:rs_1', 'text:msg_1']);
@@ -75,7 +75,7 @@ describe('client echo of a reasoning assistant message (#24052)', () => {
         role: 'assistant' as const,
         parts: [{ type: 'text' as const, text: 'Hi.', ...(echoKeepsItemId ? { providerMetadata: msg } : {}) }],
       };
-      const turn2 = await agent.stream(
+      const turn2 = await agent.streamMessageList(
         [
           { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'q1' }] },
           echoedTurn1,

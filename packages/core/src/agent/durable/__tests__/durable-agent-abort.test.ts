@@ -110,7 +110,7 @@ describe('DurableAgent abort signal', () => {
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
     let abortPayload: unknown;
-    const { output, runId, abort, cleanup } = await durableAgent.stream('Go', {
+    const { output, runId, abort, cleanup } = await durableAgent.streamMessageList('Go', {
       onAbort: data => {
         abortPayload = data;
       },
@@ -145,7 +145,7 @@ describe('DurableAgent abort signal', () => {
     const agent = createAgent({ agent: baseAgent, pubsub });
     const onAbort = vi.fn();
     const onFinish = vi.fn();
-    const result = await agent.stream('Go', { onAbort, onFinish });
+    const result = await agent.streamMessageList('Go', { onAbort, onFinish });
     const chunks: any[] = [];
     const consumption = (async () => {
       try {
@@ -178,7 +178,7 @@ describe('DurableAgent abort signal', () => {
     const agent = createAgent({ agent: baseAgent, pubsub });
     const onError = vi.fn();
     const onFinish = vi.fn();
-    const result = await agent.stream('Go', {
+    const result = await agent.streamMessageList('Go', {
       modelSettings: { maxRetries: 0 },
       onError,
       onFinish,
@@ -228,7 +228,7 @@ describe('DurableAgent abort signal', () => {
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
     let abortPayload: { steps: unknown[]; text?: string } | undefined;
-    const { output, abort, cleanup } = await durableAgent.stream('Go', {
+    const { output, abort, cleanup } = await durableAgent.streamMessageList('Go', {
       onAbort: data => {
         abortPayload = data;
       },
@@ -288,7 +288,7 @@ describe('DurableAgent abort signal', () => {
     const resourceId = 'resource-abort-persist';
 
     let abortPayload: { steps: unknown[]; text?: string } | undefined;
-    const { output, abort, cleanup } = await durableAgent.stream('Go', {
+    const { output, abort, cleanup } = await durableAgent.streamMessageList('Go', {
       memory: { thread: threadId, resource: resourceId },
       onAbort: data => {
         abortPayload = data;
@@ -370,7 +370,7 @@ describe('DurableAgent abort signal', () => {
     const threadId = 'thread-processor-abort';
     const resourceId = 'resource-processor-abort';
 
-    const { output, cleanup } = await durableAgent.stream('Go', {
+    const { output, cleanup } = await durableAgent.streamMessageList('Go', {
       memory: { thread: threadId, resource: resourceId },
     });
 
@@ -401,7 +401,7 @@ describe('DurableAgent abort signal', () => {
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const source = await durableAgent.stream('Go');
+    const source = await durableAgent.streamMessageList('Go');
     await new Promise(r => setTimeout(r, 10));
 
     let abortPayload: unknown;
@@ -464,7 +464,7 @@ describe('DurableAgent abort signal', () => {
     durableAgent.abortRunStream(runId);
 
     let abortPayload: unknown;
-    const { output, cleanup } = await durableAgent.stream('Go', {
+    const { output, cleanup } = await durableAgent.streamMessageList('Go', {
       runId,
       onAbort: data => {
         abortPayload = data;
@@ -507,7 +507,7 @@ describe('DurableAgent abort signal', () => {
       const resourceId = 'abort-thread-stream-resource';
 
       let abortPayload: { steps: { finishReason?: string }[] } | undefined;
-      const { output, runId, cleanup } = await durableAgent.stream('Go', {
+      const { output, runId, cleanup } = await durableAgent.streamMessageList('Go', {
         memory: { thread: threadId, resource: resourceId },
         onAbort: data => {
           abortPayload = data;
@@ -573,7 +573,7 @@ describe('DurableAgent abort signal', () => {
       const agent = createDurableAgent({ agent: baseAgent, pubsub });
       new Mastra({ agents: { agent }, pubsub, logger: false });
       const observer = observerState === 'disconnected' ? await agent.subscribeToThread(scope) : undefined;
-      const result = await agent.stream('initial', { memory: { thread: scope.threadId, resource: scope.resourceId } });
+      const result = await agent.streamMessageList('initial', { memory: { thread: scope.threadId, resource: scope.resourceId } });
       try {
         await modelCalled;
         observer?.unsubscribe();
@@ -619,7 +619,7 @@ describe('DurableAgent abort signal', () => {
     new Mastra({ agents: { agent }, pubsub, logger: false });
     const publish = vi.spyOn(pubsub, 'publish');
     let aborted = false;
-    const result = await agent.stream('initial', {
+    const result = await agent.streamMessageList('initial', {
       memory: { thread: scope.threadId, resource: scope.resourceId },
       onAbort: () => {
         aborted = true;
@@ -680,7 +680,7 @@ describe('DurableAgent abort signal', () => {
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
     let abortPayload: { steps: { finishReason?: string }[] } | undefined;
-    const { output, runId, cleanup } = await durableAgent.stream('Go', {
+    const { output, runId, cleanup } = await durableAgent.streamMessageList('Go', {
       memory: { thread: 'abort-run-stream-thread', resource: 'abort-run-stream-resource' },
       onAbort: data => {
         abortPayload = data;
@@ -713,7 +713,7 @@ describe('DurableAgent abort signal', () => {
     controller.abort();
 
     let abortPayload: unknown;
-    const { output, cleanup } = await durableAgent.stream('Go', {
+    const { output, cleanup } = await durableAgent.streamMessageList('Go', {
       abortSignal: controller.signal,
       onAbort: data => {
         abortPayload = data;

@@ -171,7 +171,7 @@ describe('#22291 — processor-forced retry must not destroy accepted steps', ()
       maxProcessorRetries: 3,
     });
 
-    const resp1 = await agent1.stream('Use the echo tool and then answer.', {
+    const resp1 = await agent1.streamMessageList('Use the echo tool and then answer.', {
       memory: { thread: threadId, resource: resourceId },
     });
     await resp1.consumeStream();
@@ -203,7 +203,7 @@ describe('#22291 — processor-forced retry must not destroy accepted steps', ()
       memory: mockMemory,
     });
 
-    const resp2 = await agent2.stream('Tell me more.', {
+    const resp2 = await agent2.streamMessageList('Tell me more.', {
       memory: { thread: threadId, resource: resourceId, options: { lastMessages: 10 } },
     });
     await resp2.consumeStream();

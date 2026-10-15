@@ -81,7 +81,7 @@ describe('Tool suspension memory persistence', () => {
     expect(threadBefore).toBeNull();
 
     // Start streaming
-    const stream = await agent.stream('find me a software engineer job', {
+    const stream = await agent.streamMessageList('find me a software engineer job', {
       memory: {
         thread: threadId,
         resource: resourceId,

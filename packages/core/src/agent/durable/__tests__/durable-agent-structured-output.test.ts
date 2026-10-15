@@ -284,7 +284,7 @@ describe('DurableAgent structured output', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { runId, cleanup } = await durableAgent.stream('Get user profile', {
+      const { runId, cleanup } = await durableAgent.streamMessageList('Get user profile', {
         structuredOutput: {
           schema: z.object({
             name: z.string(),
@@ -313,7 +313,7 @@ describe('DurableAgent structured output', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const producer = await durableAgent.stream('Return the answer', {
+      const producer = await durableAgent.streamMessageList('Return the answer', {
         structuredOutput: {
           schema: z.object({
             answer: z.string(),
@@ -361,7 +361,7 @@ describe('DurableAgent structured output', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { runId, cleanup } = await durableAgent.stream('Get complete user data', {
+      const { runId, cleanup } = await durableAgent.streamMessageList('Get complete user data', {
         structuredOutput: {
           schema: z.object({
             user: z.object({
@@ -412,7 +412,7 @@ describe('DurableAgent structured output', () => {
         selectionReason: z.string(),
       });
 
-      const { runId, cleanup } = await durableAgent.stream('What is the weather?', {
+      const { runId, cleanup } = await durableAgent.streamMessageList('What is the weather?', {
         structuredOutput: {
           schema: responseSchema,
         },
@@ -708,7 +708,7 @@ describe('DurableAgent compact structuredOutput.instructions (issue #23798)', ()
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const { cleanup } = await durableAgent.stream('Extract now.', { structuredOutput, onChunk: () => {} });
+    const { cleanup } = await durableAgent.streamMessageList('Extract now.', { structuredOutput, onChunk: () => {} });
     await calledPromise;
     await cleanup?.();
 

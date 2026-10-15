@@ -88,7 +88,7 @@ describe('EventedAgent on storage without atomic concurrent updates', () => {
     expect(capabilityWarnings).toHaveLength(1);
 
     // Most importantly: the agent still runs. This is the regression being prevented.
-    const { output, cleanup } = await agent.stream('Hi');
+    const { output, cleanup } = await agent.streamMessageList('Hi');
     await output.consumeStream();
     expect(await output.text).toBe('hello');
 

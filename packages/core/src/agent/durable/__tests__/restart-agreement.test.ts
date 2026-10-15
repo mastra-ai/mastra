@@ -1196,7 +1196,7 @@ async function t13Run(engine: 'durable' | 'evented') {
     build,
     start: async gen1 => {
       try {
-        // `DurableAgent.stream()` is async: it resolves once the run has started.
+        // `DurableAgent.streamMessageList()` is async: it resolves once the run has started.
         main = await drain(await gen1.runner.stream('Pay 42.', { memory, runId, maxSteps: 4 }), {
           stopOn: (c: any) => c.type === 'tool-call-suspended',
         });

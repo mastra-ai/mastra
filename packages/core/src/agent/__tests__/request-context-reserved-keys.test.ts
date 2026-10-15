@@ -63,7 +63,7 @@ describe('RequestContext reserved keys for resourceId and threadId', () => {
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'context-user-123');
       requestContext.set(MASTRA_THREAD_ID_KEY, 'context-thread-456');
 
-      await agent.generate('hello', {
+      await agent.generateMessageList('hello', {
         requestContext,
         // Intentionally NOT passing resourceId/threadId in options
         // The agent should use the values from RequestContext
@@ -91,7 +91,7 @@ describe('RequestContext reserved keys for resourceId and threadId', () => {
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'secure-user-from-middleware');
       requestContext.set(MASTRA_THREAD_ID_KEY, 'secure-thread-from-middleware');
 
-      await agent.generate('hello', {
+      await agent.generateMessageList('hello', {
         requestContext,
         // An attacker might try to hijack another user's memory by passing different values
         resourceId: 'attacker-trying-to-hijack',
@@ -124,7 +124,7 @@ describe('RequestContext reserved keys for resourceId and threadId', () => {
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'middleware-resource');
       requestContext.set(MASTRA_THREAD_ID_KEY, 'middleware-thread');
 
-      await agent.generate('hello', {
+      await agent.generateMessageList('hello', {
         requestContext,
         // Using the new memory option format - these should be overridden by RequestContext
         memory: {
@@ -186,7 +186,7 @@ describe('RequestContext reserved keys for resourceId and threadId', () => {
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'stream-context-user');
       requestContext.set(MASTRA_THREAD_ID_KEY, 'stream-context-thread');
 
-      const streamResult = await agent.stream('hello', {
+      const streamResult = await agent.streamMessageList('hello', {
         requestContext,
       });
 
@@ -212,7 +212,7 @@ describe('RequestContext reserved keys for resourceId and threadId', () => {
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'middleware-resource');
       requestContext.set(MASTRA_THREAD_ID_KEY, 'middleware-thread');
 
-      const streamResult = await agent.stream('hello', {
+      const streamResult = await agent.streamMessageList('hello', {
         requestContext,
         // Using the new memory option format - these should be overridden by RequestContext
         memory: {

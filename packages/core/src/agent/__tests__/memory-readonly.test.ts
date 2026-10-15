@@ -74,7 +74,7 @@ describe('Memory readOnly option', () => {
     });
 
     // Call stream with options.readOnly: true
-    const response = await agent.stream('Hello!', {
+    const response = await agent.streamMessageList('Hello!', {
       memory: {
         thread: threadId,
         resource: resourceId,
@@ -119,7 +119,7 @@ describe('Memory readOnly option', () => {
     });
 
     // Call generate with options.readOnly: true
-    await agent.generate('Hello!', {
+    await agent.generateMessageList('Hello!', {
       memory: {
         thread: threadId,
         resource: resourceId,
@@ -155,7 +155,7 @@ describe('Memory readOnly option', () => {
     });
 
     // Call stream WITHOUT readOnly (should save)
-    const response = await agent.stream('Hello!', {
+    const response = await agent.streamMessageList('Hello!', {
       memory: {
         thread: threadId,
         resource: resourceId,
@@ -194,7 +194,7 @@ describe('Memory readOnly option', () => {
     });
 
     // First, save some messages to memory (without readOnly)
-    const response1 = await agent.stream('Hello, my name is Alice!', {
+    const response1 = await agent.streamMessageList('Hello, my name is Alice!', {
       memory: {
         thread: threadId,
         resource: resourceId,
@@ -212,7 +212,7 @@ describe('Memory readOnly option', () => {
     // It should be able to READ the previous messages but NOT save new ones
     const saveMessagesSpy = vi.spyOn(mockMemory, 'saveMessages');
 
-    const response2 = await agent.stream('What is my name?', {
+    const response2 = await agent.streamMessageList('What is my name?', {
       memory: {
         thread: threadId,
         resource: resourceId,
@@ -257,7 +257,7 @@ describe('Memory readOnly option', () => {
     });
 
     // Call stream with options.readOnly: true AND savePerStep: true
-    const response = await agent.stream('Hello!', {
+    const response = await agent.streamMessageList('Hello!', {
       memory: {
         thread: threadId,
         resource: resourceId,

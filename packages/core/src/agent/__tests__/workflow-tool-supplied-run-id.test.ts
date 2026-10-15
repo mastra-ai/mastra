@@ -132,7 +132,7 @@ describe('workflow tool with model-supplied suspendedToolRunId on fresh calls', 
       { toolCallId: 'call-b', input: { inputData: { ticket: 'B' } } },
     ]);
 
-    await agent.generate('Run ticket A and ticket B.', { maxSteps: 3 });
+    await agent.generateMessageList('Run ticket A and ticket B.', { maxSteps: 3 });
 
     expect(createRunSpy).toHaveBeenCalledTimes(2);
     const runIds = createRunSpy.mock.calls.map(call => call[0]?.runId);
@@ -155,7 +155,7 @@ describe('workflow tool with model-supplied suspendedToolRunId on fresh calls', 
       },
     ]);
 
-    await agent.generate('Run ticket A and ticket B.', { maxSteps: 3 });
+    await agent.generateMessageList('Run ticket A and ticket B.', { maxSteps: 3 });
 
     expect(createRunSpy).toHaveBeenCalledTimes(2);
     const runIds = createRunSpy.mock.calls.map(call => call[0]?.runId);

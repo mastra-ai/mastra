@@ -238,7 +238,7 @@ describe('T20 step budget across recovery', () => {
       });
       scenarios.push(scenario);
       const original = await scenario.start(({ agent }) =>
-        agent.stream('Go.', streamOptions(runId, 'default', { calls: 0 })),
+        agent.streamMessageList('Go.', streamOptions(runId, 'default', { calls: 0 })),
       );
       // Graph 1 runs on past the checkpoint (its gate is released in afterEach);
       // its fate is not the subject, and this branch must not reject unhandled.
@@ -299,7 +299,7 @@ describe('T20 step budget across recovery', () => {
       });
       scenarios.push(scenario);
       const original = await scenario.start(({ agent }) =>
-        agent.stream('Go.', streamOptions(runId, 'ceiling', scorer)),
+        agent.streamMessageList('Go.', streamOptions(runId, 'ceiling', scorer)),
       );
       // Graph 1 is parked inside its second model call once the gate resolves; its
       // gate is released in afterEach, so its fate is not the subject here.

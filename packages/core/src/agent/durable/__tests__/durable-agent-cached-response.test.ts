@@ -86,7 +86,7 @@ describe('DurableAgent — processLLMRequest cached response (Bug 8)', () => {
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await durableAgent.stream('Hello', {
+    const result = await durableAgent.streamMessageList('Hello', {
       maxSteps: 1,
     });
 
@@ -149,7 +149,7 @@ describe('DurableAgent — processLLMRequest cached response (Bug 8)', () => {
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await durableAgent.stream('Hello', {
+    const result = await durableAgent.streamMessageList('Hello', {
       maxSteps: 1,
     });
 

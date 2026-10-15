@@ -82,7 +82,7 @@ describe("toolCallConcurrency strategy: 'called'", () => {
       },
     });
 
-    const stream = await agent.stream('go', { maxSteps: 1, toolCallConcurrency: 10 });
+    const stream = await agent.streamMessageList('go', { maxSteps: 1, toolCallConcurrency: 10 });
     await drain(stream);
 
     // Default 'available' strategy: registered approval tool forces sequential.
@@ -103,7 +103,7 @@ describe("toolCallConcurrency strategy: 'called'", () => {
       },
     });
 
-    const stream = await agent.stream('go', {
+    const stream = await agent.streamMessageList('go', {
       maxSteps: 1,
       toolCallConcurrency: { limit: 10, strategy: 'called' },
     });
@@ -126,7 +126,7 @@ describe("toolCallConcurrency strategy: 'called'", () => {
       },
     });
 
-    const stream = await agent.stream('go', {
+    const stream = await agent.streamMessageList('go', {
       maxSteps: 1,
       toolCallConcurrency: { limit: 10, strategy: 'called' },
     });
@@ -151,7 +151,7 @@ describe("toolCallConcurrency strategy: 'called'", () => {
       },
     });
 
-    const stream = await agent.stream('go', {
+    const stream = await agent.streamMessageList('go', {
       maxSteps: 1,
       toolCallConcurrency: { limit: 10, strategy: 'called' },
     });
@@ -176,7 +176,7 @@ describe("toolCallConcurrency strategy: 'called'", () => {
       },
     });
 
-    const stream = await agent.stream('go', {
+    const stream = await agent.streamMessageList('go', {
       maxSteps: 1,
       requireToolApproval: policy,
       toolCallConcurrency: { limit: 10, strategy: 'called' },
@@ -201,7 +201,7 @@ describe("toolCallConcurrency strategy: 'called'", () => {
       },
     });
 
-    const stream = await agent.stream('go', {
+    const stream = await agent.streamMessageList('go', {
       maxSteps: 1,
       requireToolApproval: policy,
       toolCallConcurrency: { limit: 10, strategy: 'called' },
@@ -248,7 +248,7 @@ describe("toolCallConcurrency default 'available' strategy with function approva
       },
     });
 
-    await drain(await agent.stream('go', { maxSteps: 1 }));
+    await drain(await agent.streamMessageList('go', { maxSteps: 1 }));
 
     expect(tracker.peak).toBe(2);
     expect(policy).toHaveBeenCalledTimes(2);
@@ -268,7 +268,7 @@ describe("toolCallConcurrency default 'available' strategy with function approva
       },
     });
 
-    await drain(await agent.stream('go', { maxSteps: 1, requireToolApproval: policy }));
+    await drain(await agent.streamMessageList('go', { maxSteps: 1, requireToolApproval: policy }));
 
     expect(tracker.peak).toBe(2);
     expect(policy).toHaveBeenCalledTimes(2);

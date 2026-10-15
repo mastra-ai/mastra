@@ -220,7 +220,7 @@ describe('DurableAgent Model Fallback', () => {
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       let text = '';
-      const { cleanup } = await durableAgent.stream('Hello', {
+      const { cleanup } = await durableAgent.streamMessageList('Hello', {
         memory: { thread: threadId, resource: resourceId },
         onChunk: chunk => {
           if (chunk.type === 'text-delta') {
@@ -263,7 +263,7 @@ describe('DurableAgent Model Fallback', () => {
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       let text = '';
-      const { cleanup } = await durableAgent.stream('Hello', {
+      const { cleanup } = await durableAgent.streamMessageList('Hello', {
         onChunk: chunk => {
           if (chunk.type === 'text-delta') {
             text += (chunk.payload as any).text;
@@ -303,7 +303,7 @@ describe('DurableAgent Model Fallback', () => {
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       let text = '';
-      const { cleanup } = await durableAgent.stream('Hello', {
+      const { cleanup } = await durableAgent.streamMessageList('Hello', {
         onChunk: chunk => {
           if (chunk.type === 'text-delta') {
             text += (chunk.payload as any).text;
@@ -337,7 +337,7 @@ describe('DurableAgent Model Fallback', () => {
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       let errorReceived: Error | string | null = null;
-      const { cleanup } = await durableAgent.stream('Hello', {
+      const { cleanup } = await durableAgent.streamMessageList('Hello', {
         onError: ({ error }) => {
           errorReceived = error;
         },
@@ -370,7 +370,7 @@ describe('DurableAgent Model Fallback', () => {
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       let text = '';
-      const { cleanup } = await durableAgent.stream('Hello', {
+      const { cleanup } = await durableAgent.streamMessageList('Hello', {
         onChunk: chunk => {
           if (chunk.type === 'text-delta') {
             text += (chunk.payload as any).text;

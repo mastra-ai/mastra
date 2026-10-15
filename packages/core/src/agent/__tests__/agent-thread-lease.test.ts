@@ -2,7 +2,7 @@
  * Every thread-bound run registered through `registerRun` must hold the
  * cross-process thread lease while it is live. PR #19806 made lease ownership
  * authoritative for run liveness (markActiveIfLive / #waitForRemoteRunToFinish
- * treat a lease-less run as a ghost), so a plain `agent.stream()` run that
+ * treat a lease-less run as a ghost), so a plain `agent.streamMessageList()` run that
  * never acquires the lease is invisible to contending instances — they start
  * competing runs instead of serializing behind it.
  *

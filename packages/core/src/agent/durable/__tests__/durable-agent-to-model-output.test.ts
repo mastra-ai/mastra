@@ -117,7 +117,7 @@ describe('DurableAgent toModelOutput parity', () => {
 
       let receivedError: unknown;
       let finished = false;
-      const { output, cleanup } = await agent.stream('Use the tool', {
+      const { output, cleanup } = await agent.streamMessageList('Use the tool', {
         onError: ({ error }) => {
           receivedError = error;
         },
@@ -185,7 +185,7 @@ describe('DurableAgent toModelOutput parity', () => {
       try {
         let receivedError: unknown;
         let finished = false;
-        const { output, cleanup } = await agent.stream('Use the tool', {
+        const { output, cleanup } = await agent.streamMessageList('Use the tool', {
           onError: ({ error }) => {
             receivedError = error;
           },
@@ -253,7 +253,7 @@ describe('DurableAgent toModelOutput parity', () => {
       storage: new InMemoryStore(),
     });
 
-    const result = await agent.stream('Use the test tool');
+    const result = await agent.streamMessageList('Use the test tool');
 
     // Consume the stream
     const chunks: any[] = [];
@@ -305,7 +305,7 @@ describe('DurableAgent toModelOutput parity', () => {
       storage: new InMemoryStore(),
     });
 
-    const result = await durableAgent.stream('Use the metadata tool');
+    const result = await durableAgent.streamMessageList('Use the metadata tool');
     for await (const _chunk of result.fullStream) {
       // drain
     }
@@ -349,7 +349,7 @@ describe('DurableAgent toModelOutput parity', () => {
       storage: new InMemoryStore(),
     });
 
-    const result = await durableAgent.stream('Find a cat image');
+    const result = await durableAgent.streamMessageList('Find a cat image');
 
     // Consume the stream
     for await (const _chunk of result.fullStream) {
@@ -397,7 +397,7 @@ describe('DurableAgent toModelOutput parity', () => {
       storage: new InMemoryStore(),
     });
 
-    const result = await durableAgent.stream('Read data.txt');
+    const result = await durableAgent.streamMessageList('Read data.txt');
 
     const errors: any[] = [];
     for await (const chunk of result.fullStream) {
@@ -456,7 +456,7 @@ describe('DurableAgent toModelOutput parity', () => {
 
       const threadId = 'thread-producer-guard';
       const resourceId = 'resource-producer-guard';
-      const result = await durableAgent.stream('Read data.txt', {
+      const result = await durableAgent.streamMessageList('Read data.txt', {
         memory: { thread: threadId, resource: resourceId },
       });
 
@@ -531,7 +531,7 @@ describe('DurableAgent toModelOutput parity', () => {
 
     // Follow-up request shape from @mastra/client-js: previous assistant
     // tool-call + the client-produced tool result.
-    const result = await durableAgent.stream([
+    const result = await durableAgent.streamMessageList([
       {
         role: 'assistant',
         content: [{ type: 'tool-call', toolCallId: 'tc-client-1', toolName: 'client-tool', args: {} }],
@@ -542,7 +542,7 @@ describe('DurableAgent toModelOutput parity', () => {
           { type: 'tool-result', toolCallId: 'tc-client-1', toolName: 'client-tool', result: { fileId: 'file-9' } },
         ],
       },
-    ] satisfies Parameters<typeof durableAgent.stream>[0]);
+    ] satisfies Parameters<typeof durableAgent.streamMessageList>[0]);
 
     for await (const _chunk of result.fullStream) {
       // drain

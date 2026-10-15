@@ -61,7 +61,7 @@ describe('agreement memory', () => {
       memory,
     });
 
-    const output = await agent.stream('Double 21.', { memory: { thread: 'am-thread', resource: 'am-resource' } });
+    const output = await agent.streamMessageList('Double 21.', { memory: { thread: 'am-thread', resource: 'am-resource' } });
     for await (const _ of output.fullStream) void _;
 
     const messages = await persisted(storage, 'am-thread', 'am-resource');

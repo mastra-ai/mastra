@@ -72,7 +72,7 @@ describe('Agent FGA checks', () => {
       requestContext.set('user', { id: 'user-1', organizationMembershipId: 'om-1' });
 
       try {
-        await agent.generate('test', { requestContext: requestContext as any });
+        await agent.generateMessageList('test', { requestContext: requestContext as any });
       } catch {
         // Expected to fail due to no real model
       }
@@ -103,7 +103,7 @@ describe('Agent FGA checks', () => {
       const requestContext = new RequestContext();
       requestContext.set('user', { id: 'user-1' });
 
-      await expect(agent.generate('test', { requestContext: requestContext as any })).rejects.toThrow(FGADeniedError);
+      await expect(agent.generateMessageList('test', { requestContext: requestContext as any })).rejects.toThrow(FGADeniedError);
     });
 
     it('should fail closed when FGA is configured and no user is available', async () => {
@@ -113,7 +113,7 @@ describe('Agent FGA checks', () => {
       const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model: {} as any });
       (agent as any).__registerMastra(mastra);
 
-      await expect(agent.generate('test', { requestContext: new RequestContext() as any })).rejects.toThrow(
+      await expect(agent.generateMessageList('test', { requestContext: new RequestContext() as any })).rejects.toThrow(
         FGADeniedError,
       );
       expect(fgaProvider.require).not.toHaveBeenCalled();
@@ -136,7 +136,7 @@ describe('Agent FGA checks', () => {
       requestContext.set('organizationId', 'org-1');
 
       try {
-        await agent.generate('test', {
+        await agent.generateMessageList('test', {
           requestContext: requestContext as any,
           actor: { actorKind: 'system', sourceWorkflow: 'nightly-workflow' },
         });
@@ -159,7 +159,7 @@ describe('Agent FGA checks', () => {
       const requestContext = new RequestContext();
       requestContext.set('user', { id: 'user-1' });
 
-      await agent.generate('test', { requestContext: requestContext as any });
+      await agent.generateMessageList('test', { requestContext: requestContext as any });
 
       expect(model.doGenerateCalls).toHaveLength(1);
     });
@@ -235,7 +235,7 @@ describe('Agent FGA checks', () => {
       requestContext.set('user', { id: 'user-1', organizationMembershipId: 'om-1' });
 
       await expect(
-        agent.generate('test', {
+        agent.generateMessageList('test', {
           memory: { thread: 'thread-1', resource: 'resource-1' },
           requestContext: requestContext as any,
         }),
@@ -258,7 +258,7 @@ describe('Agent FGA checks', () => {
       const requestContext = new RequestContext();
       requestContext.set('user', { id: 'user-1', organizationMembershipId: 'om-1' });
 
-      await agent.generate('test', {
+      await agent.generateMessageList('test', {
         memory: { thread: 'thread-1', resource: 'resource-1' },
         requestContext: requestContext as any,
       });
@@ -283,7 +283,7 @@ describe('Agent FGA checks', () => {
       requestContext.set('user', { id: 'user-1', organizationMembershipId: 'om-1' });
 
       try {
-        await agent.stream('test', { requestContext: requestContext as any });
+        await agent.streamMessageList('test', { requestContext: requestContext as any });
       } catch {
         // Expected to fail due to no real model
       }
@@ -314,7 +314,7 @@ describe('Agent FGA checks', () => {
       const requestContext = new RequestContext();
       requestContext.set('user', { id: 'user-1' });
 
-      await expect(agent.stream('test', { requestContext: requestContext as any })).rejects.toThrow(FGADeniedError);
+      await expect(agent.streamMessageList('test', { requestContext: requestContext as any })).rejects.toThrow(FGADeniedError);
     });
   });
 });
@@ -383,7 +383,7 @@ describe('DurableAgent FGA checks', () => {
 
     try {
       await expect(
-        durableAgent.generate('test', {
+        durableAgent.generateMessageList('test', {
           memory: { thread: 'thread-1', resource: 'resource-1' },
           requestContext,
         }),

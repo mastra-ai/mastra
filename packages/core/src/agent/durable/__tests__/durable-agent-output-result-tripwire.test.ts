@@ -56,7 +56,7 @@ describe('DurableAgent processOutputResult abort', () => {
     const durableAgent = createDurableAgent({ agent, pubsub });
     new Mastra({ agents: { 'gate-agent': durableAgent as any }, logger: false, storage: new InMemoryStore(), pubsub });
 
-    const { output, cleanup } = await durableAgent.stream('hi', {
+    const { output, cleanup } = await durableAgent.streamMessageList('hi', {
       memory: { thread: 'thread-1', resource: 'user-1' },
     });
     const chunks: any[] = [];

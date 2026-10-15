@@ -62,7 +62,7 @@ describe('T53 evented workflow agent suspend recovery in a fresh module graph', 
         suspendSchema: z.object({ text: z.string() }),
         execute: async ({ inputData, resumeData, suspend, suspendData }: any) => {
           if (resumeData) return { text: suspendData?.text ?? '', ok: resumeData.ok };
-          const output = await agent.generate(inputData.prompt);
+          const output = await agent.generateMessageList(inputData.prompt);
           suspensions.push(generation);
           return suspend({ text: output.text ?? '' });
         },

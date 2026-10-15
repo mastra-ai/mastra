@@ -180,7 +180,7 @@ function toolsTest(version: 'v1' | 'v2' | 'v3') {
         });
         toolCall = response.toolResults.find((result: any) => result.toolName === 'testTool');
       } else {
-        response = await agentOne.generate('Call testTool');
+        response = await agentOne.generateMessageList('Call testTool');
         toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'testTool').payload;
       }
 
@@ -240,7 +240,7 @@ function toolsTest(version: 'v1' | 'v2' | 'v3') {
       if (version === 'v1') {
         await agentOne.generateLegacy('Call testTool', { toolChoice: 'required' });
       } else {
-        await agentOne.generate('Call testTool');
+        await agentOne.generateMessageList('Call testTool');
       }
 
       expect(calls.slice(0, 2)).toEqual([
@@ -290,7 +290,7 @@ function toolsTest(version: 'v1' | 'v2' | 'v3') {
         });
         toolResult = response.toolResults.find((result: any) => result.toolName === 'testTool');
       } else {
-        const response = await agentOne.generate('Call testTool', {
+        const response = await agentOne.generateMessageList('Call testTool', {
           hooks: {
             beforeToolCall: runBeforeToolCall,
           },
@@ -333,7 +333,7 @@ function toolsTest(version: 'v1' | 'v2' | 'v3') {
       if (version === 'v1') {
         await agentOne.generateLegacy('Call testTool', { toolChoice: 'required' }).catch(() => undefined);
       } else {
-        await agentOne.generate('Call testTool').catch(() => undefined);
+        await agentOne.generateMessageList('Call testTool').catch(() => undefined);
       }
 
       expect(afterToolCall).toHaveBeenCalledWith(
@@ -503,7 +503,7 @@ function toolsTest(version: 'v1' | 'v2' | 'v3') {
         });
         toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
       } else {
-        response = await agentOne.generate('Find the user with name - Dero Israel');
+        response = await agentOne.generateMessageList('Find the user with name - Dero Israel');
         toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'findUserTool').payload;
       }
 
@@ -657,7 +657,7 @@ function toolsTest(version: 'v1' | 'v2' | 'v3') {
           },
         });
       } else {
-        result = await userAgent.generate('Make it green', {
+        result = await userAgent.generateMessageList('Make it green', {
           clientTools: {
             changeColor: {
               id: 'changeColor',
@@ -822,7 +822,7 @@ function toolsTest(version: 'v1' | 'v2' | 'v3') {
           },
         });
       } else {
-        result = await userAgent.stream('Make it green', {
+        result = await userAgent.streamMessageList('Make it green', {
           clientTools: {
             changeColor: {
               id: 'changeColor',
@@ -1008,7 +1008,7 @@ function toolsTest(version: 'v1' | 'v2' | 'v3') {
         });
         toolCall = response.toolResults.find(result => result.toolName === 'testTool');
       } else {
-        response = await testAgent.generate('Use the requestContext-test-tool with query "test"', {
+        response = await testAgent.generateMessageList('Use the requestContext-test-tool with query "test"', {
           toolChoice: 'required',
           requestContext: testRequestContext,
         });
@@ -1189,7 +1189,7 @@ function toolsTest(version: 'v1' | 'v2' | 'v3') {
 
         toolCall = (await stream.toolResults).find(result => result.toolName === 'testTool');
       } else {
-        stream = await testAgent.stream('Use the requestContext-test-tool with query "test"', {
+        stream = await testAgent.streamMessageList('Use the requestContext-test-tool with query "test"', {
           toolChoice: 'required',
           requestContext: testRequestContext,
         });
@@ -1338,7 +1338,7 @@ function toolsTest(version: 'v1' | 'v2' | 'v3') {
       });
 
       const agent = mastra.getAgent('test-agent');
-      const response = await agent.stream('Call the test tool with input hello');
+      const response = await agent.streamMessageList('Call the test tool with input hello');
 
       for await (const _chunk of response.fullStream) {
         // consume the stream
@@ -1531,7 +1531,7 @@ describe('requireApproval property preservation', () => {
       model: openai('gpt-4.1'),
     });
 
-    const result = await agent.stream('Use the critical-action tool with data "test"', {
+    const result = await agent.streamMessageList('Use the critical-action tool with data "test"', {
       toolsets: {
         actions: {
           criticalAction: criticalTool,

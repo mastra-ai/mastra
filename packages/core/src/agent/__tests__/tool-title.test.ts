@@ -77,7 +77,7 @@ describe('tool display title', () => {
       },
     });
 
-    const result = await agent.stream('find mastra', { memory: { thread: THREAD, resource: RESOURCE } });
+    const result = await agent.streamMessageList('find mastra', { memory: { thread: THREAD, resource: RESOURCE } });
 
     const toolChunks: Array<{ type: string; payload: { toolName: string; title?: string } }> = [];
     for await (const chunk of result.fullStream) {

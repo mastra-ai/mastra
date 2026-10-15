@@ -36,28 +36,28 @@ describe('Structured output memory inheritance (e2e)', { timeout: 180_000 }, () 
       memory,
     });
 
-    await agent.generate('Please remember this exactly: my favorite color is violet', {
+    await agent.generateMessageList('Please remember this exactly: my favorite color is violet', {
       memory: {
         thread: threadId,
         resource: resourceId,
       },
     });
 
-    await agent.generate('Please remember this too: I grew up in Lisbon', {
+    await agent.generateMessageList('Please remember this too: I grew up in Lisbon', {
       memory: {
         thread: threadId,
         resource: resourceId,
       },
     });
 
-    await agent.generate('One more fact to remember: my dog is named Mochi', {
+    await agent.generateMessageList('One more fact to remember: my dog is named Mochi', {
       memory: {
         thread: threadId,
         resource: resourceId,
       },
     });
 
-    const result = await agent.stream(
+    const result = await agent.streamMessageList(
       'Tell me a story and use details I mentioned already but dont use the specific nouns/names I mentioned please',
       {
         memory: {

@@ -113,7 +113,7 @@ describe('agent model-call retry honors Retry-After', () => {
       errorProcessorDefaults: false,
     });
 
-    await agent.generate('hi', { modelSettings: { maxRetries: 2 } }).catch(() => {});
+    await agent.generateMessageList('hi', { modelSettings: { maxRetries: 2 } }).catch(() => {});
 
     expect(provider.getCallCount()).toBe(1);
   });

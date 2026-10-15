@@ -98,7 +98,7 @@ describe('restart harness', () => {
     it(`${kind}: recovers a run blocked in a tool at step 2 in a fresh graph`, async () => {
       const runId = `restart-${kind}-gate`;
       const { scenario, gate, toolCalls } = toolScenario(kind, runId);
-      const original = await scenario.start(({ agent }) => agent.stream('Look two things up', { runId }));
+      const original = await scenario.start(({ agent }) => agent.streamMessageList('Look two things up', { runId }));
       await gate.reached;
 
       const checkpoint = await original.checkpoint();
@@ -118,7 +118,7 @@ describe('restart harness', () => {
   it('evented-fallback: runs on the default engine and recovers from the gate', async () => {
     const runId = 'restart-evented-fallback-gate';
     const { scenario, gate } = toolScenario('evented-fallback', runId);
-    const original = await scenario.start(({ agent }) => agent.stream('Look two things up', { runId }));
+    const original = await scenario.start(({ agent }) => agent.streamMessageList('Look two things up', { runId }));
     await gate.reached;
     const recovered = await scenario.restart(await original.checkpoint());
     expect(recovered.text).toBe('done');
@@ -131,7 +131,7 @@ describe('restart harness', () => {
     it(`${kind}: cuts graph 1 off — releasing the original run after restart changes nothing in graph 2`, async () => {
       const runId = `restart-isolation-${kind}`;
       const { scenario, gate, toolCalls, modelCalls } = toolScenario(kind, runId);
-      const original = await scenario.start(({ agent }) => agent.stream('Look two things up', { runId }));
+      const original = await scenario.start(({ agent }) => agent.streamMessageList('Look two things up', { runId }));
       await gate.reached;
       const recovered = await scenario.restart(await original.checkpoint());
       expect(recovered.text).toBe('done');
@@ -171,7 +171,7 @@ describe('restart harness', () => {
   it('gives graph 2 everything graph 1 persisted, not only the workflow rows', async () => {
     const runId = 'restart-seeding';
     const { scenario, gate } = toolScenario('durable', runId);
-    const original = await scenario.start(({ agent }) => agent.stream('Look two things up', { runId }));
+    const original = await scenario.start(({ agent }) => agent.streamMessageList('Look two things up', { runId }));
     await gate.reached;
 
     const checkpoint = await original.checkpoint();
@@ -224,7 +224,7 @@ describe('restart harness', () => {
   it('counts a FINISH published after restart returned (live counters)', async () => {
     const runId = 'restart-live-counter';
     const { scenario, gate } = toolScenario('durable', runId);
-    const original = await scenario.start(({ agent }) => agent.stream('Look two things up', { runId }));
+    const original = await scenario.start(({ agent }) => agent.streamMessageList('Look two things up', { runId }));
     await gate.reached;
     const recovered = await scenario.restart(await original.checkpoint());
     expect(recovered.finishEvents).toBe(1);
@@ -361,7 +361,7 @@ describe('restart harness', () => {
     const runId = 'restart-negative';
     const { scenario, gate } = toolScenario('durable', runId);
     gate.release();
-    const original = await scenario.start(({ agent }) => agent.stream('Look two things up', { runId }));
+    const original = await scenario.start(({ agent }) => agent.streamMessageList('Look two things up', { runId }));
     expect(await consumeText((await original.driven) as any)).toBe('done');
 
     // A finished run deleted its snapshots, so there is nothing to recover.

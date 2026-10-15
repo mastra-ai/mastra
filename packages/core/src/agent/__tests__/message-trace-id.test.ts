@@ -106,7 +106,7 @@ describe('assistant message trace correlation (#19891)', () => {
         memory: mockMemory,
       });
 
-      const res = await agent.stream('hello', {
+      const res = await agent.streamMessageList('hello', {
         memory: { resource: 'user-1', thread: { id: 'thread-trace-id' } },
       });
 
@@ -140,7 +140,7 @@ describe('assistant message trace correlation (#19891)', () => {
         memory: mockMemory,
       });
 
-      const res = await agent.stream('hello', {
+      const res = await agent.streamMessageList('hello', {
         memory: { resource: 'user-1', thread: { id: 'thread-trace-id-parity' } },
       });
 
@@ -168,7 +168,7 @@ describe('assistant message trace correlation (#19891)', () => {
       memory: mockMemory,
     });
 
-    const res = await agent.stream('hello', {
+    const res = await agent.streamMessageList('hello', {
       memory: { resource: 'user-1', thread: { id: 'thread-untraced' } },
     });
 
@@ -216,7 +216,7 @@ describe('durable agent trace correlation (#19891)', () => {
     });
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-    const { cleanup } = await durableAgent.stream('hello', {
+    const { cleanup } = await durableAgent.streamMessageList('hello', {
       memory: { thread: threadId, resource: 'user-1' },
     });
 

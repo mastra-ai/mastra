@@ -127,7 +127,7 @@ function instructionTests(version: 'v1' | 'v2') {
       if (version === 'v1') {
         response = await agent.generateLegacy('hello', { requestContext });
       } else {
-        response = await agent.generate('hello', { requestContext });
+        response = await agent.generateMessageList('hello', { requestContext });
       }
 
       expect(response.text).toBe('Logger test response');
@@ -149,7 +149,7 @@ function instructionTests(version: 'v1' | 'v2') {
       if (version === 'v1') {
         response = await agent.generateLegacy('hello');
       } else {
-        response = await agent.generate('hello');
+        response = await agent.generateMessageList('hello');
       }
 
       expect(response.text).toBe('Logger test response');
@@ -173,7 +173,7 @@ function instructionTests(version: 'v1' | 'v2') {
       if (version === 'v1') {
         response = await agent.generateLegacy('hello');
       } else {
-        response = await agent.generate('hello');
+        response = await agent.generateMessageList('hello');
       }
 
       expect(response.text).toBe('Logger test response');
@@ -405,7 +405,7 @@ function instructionTests(version: 'v1' | 'v2') {
         // This test only applies to V2
         // Simply verify that generate works with the system option
         // without throwing errors
-        const response = await agent.generate('Hello', {
+        const response = await agent.generateMessageList('Hello', {
           system: additionalSystem,
         });
 
@@ -441,7 +441,7 @@ function instructionTests(version: 'v1' | 'v2') {
         // This test only applies to V2
         // Simply verify that generate works with array system option
         // without throwing errors
-        const response = await agent.generate('Hello', {
+        const response = await agent.generateMessageList('Hello', {
           system: additionalSystem,
         });
 
@@ -495,7 +495,7 @@ function instructionTests(version: 'v1' | 'v2') {
         expect(response.text).toBe('Dummy response');
       } else {
         // For v2, use generate
-        const response = await agent.generate('Hello', {
+        const response = await agent.generateMessageList('Hello', {
           instructions: {
             role: 'system',
             content: 'Override instructions',
@@ -587,7 +587,7 @@ function instructionTests(version: 'v1' | 'v2') {
           content: 'Be concise in your responses.',
         };
 
-        const stream = await agent.stream('Hello', {
+        const stream = await agent.streamMessageList('Hello', {
           system: additionalSystem,
         });
 
@@ -614,7 +614,7 @@ function instructionTests(version: 'v1' | 'v2') {
         expect(response.text).toBe('Dummy response');
       } else {
         // For v2, use generate
-        const response = await agent.generate('Hello', {
+        const response = await agent.generateMessageList('Hello', {
           instructions: ['Override instruction 1', 'Override instruction 2'],
         });
         expect(response.text).toBe('Dummy response');
@@ -671,7 +671,7 @@ function instructionTests(version: 'v1' | 'v2') {
       if (version === 'v2') {
         try {
           // This will trigger the message list building
-          await agent.generate('Hello');
+          await agent.generateMessageList('Hello');
 
           // Check all addSystem calls
           const systemMessageCalls = addSystemSpy.mock.calls.filter(call => {

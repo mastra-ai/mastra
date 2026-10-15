@@ -116,7 +116,7 @@ describe('DurableAgent tool payload transform', () => {
       transformToolPayload: ctx => `[redacted ${ctx.phase} on ${ctx.target}]`,
     };
 
-    const { output, cleanup } = await durableAgent.stream('run it', {
+    const { output, cleanup } = await durableAgent.streamMessageList('run it', {
       transform: policy,
     });
 
@@ -229,7 +229,7 @@ describe('DurableAgent tool payload transform', () => {
       transformToolPayload: ctx => `[redacted ${ctx.phase} on ${ctx.target}]`,
     };
 
-    const result = await durableAgent.stream('run it', {
+    const result = await durableAgent.streamMessageList('run it', {
       transform: policy,
       memory: { thread: 'thread-transform-persist', resource: 'resource-transform-persist' },
     });
@@ -298,7 +298,7 @@ describe('DurableAgent tool payload transform', () => {
       transformToolPayload: ctx => `[redacted ${ctx.phase} on ${ctx.target}]`,
     };
 
-    const result = await durableAgent.stream('run it', {
+    const result = await durableAgent.streamMessageList('run it', {
       transform: policy,
       memory: { thread: 'thread-transform-error-persist', resource: 'resource-transform-error-persist' },
     });

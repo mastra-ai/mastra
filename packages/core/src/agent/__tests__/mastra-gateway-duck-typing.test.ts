@@ -58,7 +58,7 @@ describe('mastra gateway duck typing', () => {
       trace: vi.fn(),
     } as any);
 
-    const result = await agent.generate('hello', {
+    const result = await agent.generateMessageList('hello', {
       memory: {
         thread: { id: 'thread-1' },
         resource: 'resource-1',

@@ -185,7 +185,7 @@ describe('Stream ID Consistency', () => {
     const threadId = globalThis.crypto.randomUUID();
     const resourceId = 'test-resource';
 
-    const streamResult = await agent.stream('Hello!', {
+    const streamResult = await agent.streamMessageList('Hello!', {
       memory: { thread: threadId, resource: resourceId },
     });
 
@@ -267,7 +267,7 @@ describe('Stream ID Consistency', () => {
     const threadId = globalThis.crypto.randomUUID();
     const resourceId = 'test-resource';
 
-    const stream = await agent.stream('Hello!', { memory: { thread: threadId, resource: resourceId } });
+    const stream = await agent.streamMessageList('Hello!', { memory: { thread: threadId, resource: resourceId } });
 
     await stream.consumeStream();
     const res = await stream.response;
@@ -325,7 +325,7 @@ describe('Stream ID Consistency', () => {
 
     const threadId = globalThis.crypto.randomUUID();
     const resourceId = 'test-resource';
-    const stream = await agent.stream('Hello!', { memory: { thread: threadId, resource: resourceId } });
+    const stream = await agent.streamMessageList('Hello!', { memory: { thread: threadId, resource: resourceId } });
 
     for await (const _chunk of stream.fullStream) {
     }
@@ -398,7 +398,7 @@ describe('Stream ID Consistency', () => {
     const threadId = globalThis.crypto.randomUUID();
     const resourceId = 'test-resource';
 
-    const result = await agent.generate('Hello!', {
+    const result = await agent.generateMessageList('Hello!', {
       memory: { thread: threadId, resource: resourceId },
     });
 
@@ -501,7 +501,7 @@ describe('Stream ID Consistency', () => {
     const threadId = globalThis.crypto.randomUUID();
     const resourceId = 'test-resource';
 
-    const streamResult = await agent.stream('Use the test tool', {
+    const streamResult = await agent.streamMessageList('Use the test tool', {
       memory: { thread: threadId, resource: resourceId },
     });
 
@@ -569,7 +569,7 @@ describe('Stream ID Consistency', () => {
       const resourceId = 'structured-output-persisted-text';
       await memory.createThread({ threadId, resourceId });
 
-      const streamResult = await agent.stream([{ role: 'user', content: 'Extract the person data' }], {
+      const streamResult = await agent.streamMessageList([{ role: 'user', content: 'Extract the person data' }], {
         memory: { thread: threadId, resource: resourceId },
         structuredOutput: {
           schema: z.object({
@@ -643,7 +643,7 @@ describe('Stream ID Consistency', () => {
         age: z.number(),
       });
 
-      const response = await agent.generate(
+      const response = await agent.generateMessageList(
         [
           {
             role: 'user',
@@ -756,7 +756,7 @@ describe('Stream ID Consistency', () => {
       age: z.number(),
     });
 
-    const response = await agent.generate(
+    const response = await agent.generateMessageList(
       [
         {
           role: 'user',

@@ -344,7 +344,7 @@ describe('DurableAgent scoringData propagation', () => {
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const out = await durableAgent.generate('score me', { returnScorerData: true });
+    const out = await durableAgent.generateMessageList('score me', { returnScorerData: true });
 
     expect(out.text).toBe('Durable scored response');
     // Core regression for #22743: the flag must reach the durable stream
@@ -372,10 +372,10 @@ describe('DurableAgent scoringData propagation', () => {
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const out = await durableAgent.generate('hi');
+    const out = await durableAgent.generateMessageList('hi');
 
     expect(out.text).toBe('No scoring here');
-    // Parity with non-durable Agent.generate(): off by default.
+    // Parity with non-durable Agent.generateMessageList(): off by default.
     expect(out.scoringData).toBeUndefined();
   });
 
@@ -389,7 +389,7 @@ describe('DurableAgent scoringData propagation', () => {
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await durableAgent.stream('score me', { returnScorerData: true });
+    const result = await durableAgent.streamMessageList('score me', { returnScorerData: true });
     try {
       const out = await result.output.getFullOutput();
 
@@ -427,7 +427,7 @@ describe('DurableAgent scoringData propagation', () => {
       agents: { 'scoring-data-resume-agent': durableAgent as any },
     });
 
-    const first = await durableAgent.generate('search for mastra', {
+    const first = await durableAgent.generateMessageList('search for mastra', {
       requireToolApproval: true,
       returnScorerData: true,
     });
@@ -472,7 +472,7 @@ describe('DurableAgent scoringData propagation', () => {
       agents: { 'scoring-data-defaults-agent': durableAgent as any },
     });
 
-    const first = await durableAgent.generate('search for mastra', {
+    const first = await durableAgent.generateMessageList('search for mastra', {
       requireToolApproval: true,
       returnScorerData: true,
     });

@@ -185,7 +185,7 @@ describe('DurableAgent reasoning features', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { runId, cleanup } = await durableAgent.stream('Give me a thoughtful answer');
+      const { runId, cleanup } = await durableAgent.streamMessageList('Give me a thoughtful answer');
 
       expect(runId).toBeDefined();
       cleanup();
@@ -207,7 +207,7 @@ describe('DurableAgent reasoning features', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { runId, cleanup } = await durableAgent.stream('Process this');
+      const { runId, cleanup } = await durableAgent.streamMessageList('Process this');
 
       expect(runId).toBeDefined();
       cleanup();
@@ -389,7 +389,7 @@ describe('DurableAgent V3 usage format', () => {
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const { runId, cleanup } = await durableAgent.stream('Test V3 usage');
+    const { runId, cleanup } = await durableAgent.streamMessageList('Test V3 usage');
 
     expect(runId).toBeDefined();
     cleanup();

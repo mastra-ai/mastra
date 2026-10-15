@@ -206,7 +206,7 @@ describe('DurableAgent memory configuration', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await durableAgent.stream('Hello');
+      const result = await durableAgent.streamMessageList('Hello');
       for await (const _chunk of result.fullStream as AsyncIterable<any>) {
       }
 
@@ -242,7 +242,7 @@ describe('DurableAgent memory configuration', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await durableAgent.stream('user input', {
+      const result = await durableAgent.streamMessageList('user input', {
         memory: { thread: 'thread-persist-response', resource: 'resource-persist-response' },
       });
       for await (const _chunk of result.fullStream as AsyncIterable<any>) {
@@ -273,7 +273,7 @@ describe('DurableAgent memory configuration', () => {
       const threadId = 'thread-terminal-error';
       const resourceId = 'resource-terminal-error';
 
-      const result = await durableAgent.stream('user input', {
+      const result = await durableAgent.streamMessageList('user input', {
         memory: { thread: threadId, resource: resourceId },
       });
       try {
@@ -315,7 +315,7 @@ describe('DurableAgent memory configuration', () => {
       const threadId = 'thread-partial-terminal-error';
       const resourceId = 'resource-partial-terminal-error';
 
-      const result = await durableAgent.stream('user input', {
+      const result = await durableAgent.streamMessageList('user input', {
         memory: { thread: threadId, resource: resourceId },
       });
       try {
@@ -367,7 +367,7 @@ describe('DurableAgent memory configuration', () => {
         const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
         const threadId = `thread-${name}-input-processor-error`;
         const resourceId = `resource-${name}-input-processor-error`;
-        const result = await durableAgent.stream('user input', {
+        const result = await durableAgent.streamMessageList('user input', {
           memory: { thread: threadId, resource: resourceId },
         });
         try {
@@ -410,7 +410,7 @@ describe('DurableAgent memory configuration', () => {
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
       const threadId = 'thread-durable-tripwire';
       const resourceId = 'resource-durable-tripwire';
-      const result = await durableAgent.stream('user input', {
+      const result = await durableAgent.streamMessageList('user input', {
         memory: { thread: threadId, resource: resourceId },
       });
       for await (const _chunk of result.fullStream as AsyncIterable<any>) {
@@ -434,7 +434,7 @@ describe('DurableAgent memory configuration', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await durableAgent.stream('user input', {
+      const result = await durableAgent.streamMessageList('user input', {
         memory: {
           thread: 'thread-readonly',
           resource: 'resource-readonly',
@@ -638,7 +638,7 @@ describe('DurableAgent memory configuration', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { runId, threadId, resourceId, cleanup } = await durableAgent.stream('Hello', {
+      const { runId, threadId, resourceId, cleanup } = await durableAgent.streamMessageList('Hello', {
         memory: {
           thread: 'stream-thread-123',
           resource: 'stream-user-456',
@@ -662,7 +662,7 @@ describe('DurableAgent memory configuration', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { runId, cleanup } = await durableAgent.stream('Hello', {
+      const { runId, cleanup } = await durableAgent.streamMessageList('Hello', {
         memory: {
           thread: 'readonly-stream-thread',
           resource: 'readonly-stream-user',
@@ -877,7 +877,7 @@ describe('DurableAgent memory edge cases', () => {
       const generateTitle = vi.spyOn(baseAgent, 'genTitle').mockReturnValue(titlePending);
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await durableAgent.stream('What is the weather like today?', {
+      const result = await durableAgent.streamMessageList('What is the weather like today?', {
         memory: { thread: 'thread-title', resource: 'resource-title' },
       });
       for await (const _chunk of result.fullStream as AsyncIterable<any>) {
@@ -914,7 +914,7 @@ describe('DurableAgent memory edge cases', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await durableAgent.stream('user input', {
+      const result = await durableAgent.streamMessageList('user input', {
         memory: { thread: 'thread-titled', resource: 'resource-titled' },
       });
       for await (const _chunk of result.fullStream as AsyncIterable<any>) {

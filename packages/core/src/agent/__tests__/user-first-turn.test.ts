@@ -98,7 +98,7 @@ describe('leading assistant turn', () => {
       inputProcessors: [spy.processor],
     });
 
-    const result = await agent.stream(greetingFirst, { memory: { thread: 'thread-1', resource: 'resource-1' } });
+    const result = await agent.streamMessageList(greetingFirst, { memory: { thread: 'thread-1', resource: 'resource-1' } });
     await result.consumeStream();
 
     expect(turns(prompts[0]!)).toEqual(expected);
@@ -134,7 +134,7 @@ describe('leading assistant turn', () => {
         pubsub,
       });
 
-      const result = await durableAgent.stream(greetingFirst);
+      const result = await durableAgent.streamMessageList(greetingFirst);
       for await (const _chunk of result.fullStream as AsyncIterable<unknown>) {
         // drain
       }

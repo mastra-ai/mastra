@@ -107,7 +107,7 @@ describe('agentic-loop snapshot lifecycle', () => {
 
     const workflowsStore = (await mastra.getStorage()!.getStore('workflows'))!;
 
-    const stream = await agent.stream('Find the user with name - Dero Israel', {
+    const stream = await agent.streamMessageList('Find the user with name - Dero Israel', {
       requireToolApproval: true,
     });
 
@@ -132,7 +132,7 @@ describe('agentic-loop snapshot lifecycle', () => {
     // boundary (the same in-memory loop holds the registration).
     expect(mastra.__getRunScope(stream.runId)).toBeDefined();
 
-    const resumeStream = await agent.approveToolCall({ runId: stream.runId, toolCallId });
+    const resumeStream = await agent.approveToolCallMessageList({ runId: stream.runId, toolCallId });
     for await (const _chunk of resumeStream.fullStream) {
       // consume
     }
@@ -273,7 +273,7 @@ describe('agentic-loop snapshot lifecycle', () => {
     });
     const workflowsStore = (await mastra.getStorage()!.getStore('workflows'))!;
 
-    const stream = await agent.stream('hi');
+    const stream = await agent.streamMessageList('hi');
     for await (const _chunk of stream.fullStream) {
       // consume
     }
@@ -303,7 +303,7 @@ describe('agentic-loop snapshot lifecycle', () => {
     });
     const workflowsStore = (await mastra.getStorage()!.getStore('workflows'))!;
 
-    const stream = await agent.stream('Find the user with name - Dero Israel', {
+    const stream = await agent.streamMessageList('Find the user with name - Dero Israel', {
       requireToolApproval: true,
     });
 
@@ -319,7 +319,7 @@ describe('agentic-loop snapshot lifecycle', () => {
     // same memory/transport handles the original stream registered.
     expect(mastra.__getRunScope(stream.runId)).toBeDefined();
 
-    const resumeStream = await agent.declineToolCall({ runId: stream.runId, toolCallId });
+    const resumeStream = await agent.declineToolCallMessageList({ runId: stream.runId, toolCallId });
     for await (const _chunk of resumeStream.fullStream) {
       // consume
     }
@@ -349,7 +349,7 @@ describe('agentic-loop snapshot lifecycle', () => {
     });
     const workflowsStore = (await mastra.getStorage()!.getStore('workflows'))!;
 
-    const stream = await agent.stream('hi');
+    const stream = await agent.streamMessageList('hi');
     let sawError = false;
     for await (const chunk of stream.fullStream) {
       if (chunk.type === 'error') sawError = true;
@@ -394,7 +394,7 @@ describe('agentic-loop snapshot lifecycle', () => {
     const deleteSpy = vi.spyOn(workflowsStore, 'deleteWorkflowRunById').mockRejectedValue(new Error('storage offline'));
 
     try {
-      const stream = await agent.stream('hi');
+      const stream = await agent.streamMessageList('hi');
       let sawFinish = false;
       for await (const chunk of stream.fullStream) {
         if (chunk.type === 'finish') sawFinish = true;

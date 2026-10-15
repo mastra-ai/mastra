@@ -89,7 +89,7 @@ function createToolCallThenTextModel(toolName: string, args: Record<string, unkn
   });
 }
 
-describe('DurableAgent.generate()', () => {
+describe('DurableAgent.generateMessageList()', () => {
   let pubsub: EventEmitterPubSub;
 
   beforeEach(() => {
@@ -110,7 +110,7 @@ describe('DurableAgent.generate()', () => {
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const out = await durableAgent.generate('hi');
+    const out = await durableAgent.generateMessageList('hi');
 
     expect(out.text).toBe('Hello from durable generate');
     expect(out.finishReason).toBe('stop');
@@ -129,7 +129,7 @@ describe('DurableAgent.generate()', () => {
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const out = await durableAgent.generate('hi');
+    const out = await durableAgent.generateMessageList('hi');
 
     expect(out.runId).toBeDefined();
     // generate() owns the run and tears it down on its way out.
@@ -150,7 +150,7 @@ describe('DurableAgent.generate()', () => {
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    await expect(durableAgent.generate('boom')).rejects.toThrow(/model exploded/);
+    await expect(durableAgent.generateMessageList('boom')).rejects.toThrow(/model exploded/);
   });
 });
 
@@ -192,7 +192,7 @@ describe('DurableAgent.resumeGenerate()', () => {
     });
 
     // First turn: tool call requires approval → suspends.
-    const first = await durableAgent.generate('search for mastra', {
+    const first = await durableAgent.generateMessageList('search for mastra', {
       requireToolApproval: true,
     });
 

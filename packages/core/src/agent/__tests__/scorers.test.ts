@@ -28,7 +28,7 @@ function scorersTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
           returnScorerData: true,
         });
       } else {
-        result = await agent.generate('Make it green', {
+        result = await agent.generateMessageList('Make it green', {
           returnScorerData: true,
         });
       }
@@ -57,7 +57,7 @@ function scorersTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
           returnScorerData: false,
         });
       } else {
-        result = await agent.generate('Make it green', {
+        result = await agent.generateMessageList('Make it green', {
           returnScorerData: false,
         });
       }
@@ -77,7 +77,7 @@ function scorersTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
       if (version === 'v1') {
         result = await agent.generateLegacy('Make it green');
       } else {
-        result = await agent.generate('Make it green');
+        result = await agent.generateMessageList('Make it green');
       }
 
       expect(result.scoringData).toBeUndefined();
@@ -127,7 +127,7 @@ function scorersTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
       if (version === 'v1') {
         await agent.generateLegacy('Hello world');
       } else {
-        await agent.generate('Hello world');
+        await agent.generateMessageList('Hello world');
       }
 
       expect(runScorer).toHaveBeenCalledWith(
@@ -148,7 +148,7 @@ function scorersTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
           },
         });
       } else {
-        await agent.generate('Hello world', {
+        await agent.generateMessageList('Hello world', {
           scorers: {
             scorer1: { scorer: mastra.getScorer('scorer1') },
           },
@@ -185,7 +185,7 @@ function scorersTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
           },
         });
       } else {
-        result = await agent.stream('Hello world', {
+        result = await agent.streamMessageList('Hello world', {
           scorers: {
             scorer1: { scorer: mastra.getScorer('scorer1') },
           },
@@ -211,7 +211,7 @@ function scorersTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
           },
         });
       } else {
-        await agent.generate('Hello world', {
+        await agent.generateMessageList('Hello world', {
           scorers: {
             scorer1: { scorer: scorer1.name },
           },
@@ -236,7 +236,7 @@ function scorersTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
           },
         });
       } else {
-        await agent.generate('Hello world', {
+        await agent.generateMessageList('Hello world', {
           scorers: {
             scorer1: { scorer: scorer1.name },
           },
@@ -293,7 +293,7 @@ function scorersTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
           },
         });
       } else {
-        await agentWithMemory.generate('Hello world', {
+        await agentWithMemory.generateMessageList('Hello world', {
           memory: {
             thread: 'thread-123',
             resource: 'resource-456',

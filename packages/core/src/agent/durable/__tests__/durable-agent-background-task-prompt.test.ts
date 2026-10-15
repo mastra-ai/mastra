@@ -86,7 +86,7 @@ describe('Bug 3: background-task system prompt on durable', () => {
       agents: { 'bg-prompt-agent': durableAgent as any },
     });
 
-    const { cleanup } = await durableAgent.stream('hi', { onChunk: () => {} });
+    const { cleanup } = await durableAgent.streamMessageList('hi', { onChunk: () => {} });
     await calledPromise;
     cleanup();
 
@@ -156,7 +156,7 @@ describe('Bug 3: background-task system prompt on durable', () => {
       agents: { 'no-bg-agent': durableAgent as any },
     });
 
-    const { cleanup } = await durableAgent.stream('hi', { onChunk: () => {} });
+    const { cleanup } = await durableAgent.streamMessageList('hi', { onChunk: () => {} });
     await calledPromise;
     cleanup();
 

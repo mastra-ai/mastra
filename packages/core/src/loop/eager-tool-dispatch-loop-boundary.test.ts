@@ -13,7 +13,7 @@ import {
 } from './test-utils/utils';
 
 /**
- * `Agent.stream()` owns the eager-dispatch default: it resolves `eagerToolExecution`
+ * `Agent.streamMessageList()` owns the eager-dispatch default: it resolves `eagerToolExecution`
  * to a boolean before the options reach the agentic-execution workflow, and the
  * workflow starts a coordinator only for an explicit `true`.
  *

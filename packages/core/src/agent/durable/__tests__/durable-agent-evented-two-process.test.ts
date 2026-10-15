@@ -2,7 +2,7 @@
  * Real two-process topology for an EventedAgent: the dedicated-workers deploy.
  *
  * - Producer process: `MASTRA_WORKERS=false` (the API container). It calls
- *   `agent.stream()` and has no workflow consumer of its own.
+ *   `agent.streamMessageList()` and has no workflow consumer of its own.
  * - Worker process: the same Mastra setup with `startWorkers()`. It must pick up
  *   the run's `workflow.start`, execute the loop, and send the finish back.
  *

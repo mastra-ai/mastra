@@ -169,7 +169,7 @@ describe('DurableAgent isTaskComplete', () => {
     const scorer = passingScorer(1, 'great work');
     const onComplete = vi.fn();
 
-    const { output, cleanup } = await durableAgent.stream('go', {
+    const { output, cleanup } = await durableAgent.streamMessageList('go', {
       isTaskComplete: {
         scorers: [scorer as any],
         onComplete,
@@ -210,7 +210,7 @@ describe('DurableAgent isTaskComplete', () => {
 
     const scorer = passingScorer();
 
-    const { output, cleanup } = await durableAgent.stream('go', {
+    const { output, cleanup } = await durableAgent.streamMessageList('go', {
       isTaskComplete: {
         scorers: [scorer as any],
       } as any,
@@ -239,7 +239,7 @@ describe('DurableAgent isTaskComplete', () => {
 
     const scorer = failingScorer(0, 'incomplete');
 
-    const { output, cleanup } = await durableAgent.stream('go', {
+    const { output, cleanup } = await durableAgent.streamMessageList('go', {
       isTaskComplete: {
         scorers: [scorer as any],
       } as any,
@@ -276,7 +276,7 @@ describe('DurableAgent isTaskComplete', () => {
     requestContext.set('userId', 'user-123');
     requestContext.set('tenantId', 'tenant-abc');
 
-    const { output, cleanup } = await durableAgent.stream('go', {
+    const { output, cleanup } = await durableAgent.streamMessageList('go', {
       requestContext,
       isTaskComplete: {
         scorers: [scorer as any],
@@ -308,7 +308,7 @@ describe('DurableAgent isTaskComplete', () => {
 
     const scorer = failingScorer();
 
-    const { output, cleanup } = await durableAgent.stream('go', {
+    const { output, cleanup } = await durableAgent.streamMessageList('go', {
       isTaskComplete: {
         scorers: [scorer as any],
         suppressFeedback: true,
@@ -358,7 +358,7 @@ describe('DurableAgent isTaskComplete', () => {
 
     const scorer = failingScorer(0, 'incomplete');
 
-    const { output, cleanup } = await durableAgent.stream('go', {
+    const { output, cleanup } = await durableAgent.streamMessageList('go', {
       isTaskComplete: {
         scorers: [scorer as any],
       } as any,
@@ -415,7 +415,7 @@ describe('DurableAgent isTaskComplete', () => {
 
     const scorer = passingScorer(1, 'good enough');
 
-    const { output, cleanup } = await durableAgent.stream('go', {
+    const { output, cleanup } = await durableAgent.streamMessageList('go', {
       isTaskComplete: {
         scorers: [scorer as any],
       } as any,

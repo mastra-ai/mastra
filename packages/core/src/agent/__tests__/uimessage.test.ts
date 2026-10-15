@@ -100,7 +100,7 @@ function uiMessageTest(version: 'v1' | 'v2') {
           },
         });
       } else {
-        await agent.generate(messagesWithMetadata, {
+        await agent.generateMessageList(messagesWithMetadata, {
           memory: {
             resource: 'customer-12345',
             thread: {
@@ -169,7 +169,7 @@ function uiMessageTest(version: 'v1' | 'v2') {
           },
         });
       } else {
-        stream = await agent.stream(messagesWithMetadata, {
+        stream = await agent.streamMessageList(messagesWithMetadata, {
           memory: {
             resource: 'user-mobile',
             thread: {
@@ -256,7 +256,7 @@ function uiMessageTest(version: 'v1' | 'v2') {
           },
         });
       } else {
-        await agent.generate(mixedMessages, {
+        await agent.generateMessageList(mixedMessages, {
           memory: {
             resource: 'mixed-user',
             thread: {
@@ -306,7 +306,7 @@ function uiMessageTest(version: 'v1' | 'v2') {
       });
 
       if (version === 'v2') {
-        await agent.generate(
+        await agent.generateMessageList(
           [
             {
               role: 'user',

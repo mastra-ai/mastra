@@ -107,7 +107,7 @@ describe('OpenAI reasoning summary streaming', () => {
       ]),
     });
 
-    const response = await agent.stream('Explain your answer.');
+    const response = await agent.streamMessageList('Explain your answer.');
     await response.consumeStream();
 
     const assistantMessages = response.messageList.get.all.db().filter(m => m.role === 'assistant');
@@ -169,7 +169,7 @@ describe('OpenAI reasoning summary streaming', () => {
       ]),
     });
 
-    const response = await agent.stream('Explain your answer.');
+    const response = await agent.streamMessageList('Explain your answer.');
     await response.consumeStream();
 
     const assistantMessages = response.messageList.get.all.db().filter(m => m.role === 'assistant');
@@ -235,7 +235,7 @@ describe('OpenAI reasoning summary streaming', () => {
       ]),
     });
 
-    const response = await agent.stream('Explain your answer.');
+    const response = await agent.streamMessageList('Explain your answer.');
     await response.consumeStream();
 
     const assistantMessages = response.messageList.get.all.db().filter(m => m.role === 'assistant');

@@ -73,7 +73,7 @@ it('parts saved while history is being recalled are not sent again', async () =>
   });
   const agent = mastra.getAgent('agent');
 
-  const output = await agent.stream('go', { memory: { thread: threadId, resource: resourceId } });
+  const output = await agent.streamMessageList('go', { memory: { thread: threadId, resource: resourceId } });
   const run = (async () => {
     for await (const _ of output.fullStream);
     await nextTicks(20);

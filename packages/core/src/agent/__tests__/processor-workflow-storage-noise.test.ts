@@ -11,7 +11,7 @@
  * before falling back to in-memory state.
  *
  * When an agent with a processor is registered to a Mastra instance that has storage
- * configured, calling agent.generate()/stream() must:
+ * configured, calling agent.generateMessageList()/stream() must:
  *   1. NOT take the no-storage branch for the internal `<agentId>-input-processor` workflow
  *      (it now receives the parent Mastra reference).
  *   2. NOT persist a workflow snapshot for that throwaway internal processor workflow.

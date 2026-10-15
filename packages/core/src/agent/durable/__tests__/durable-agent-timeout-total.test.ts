@@ -134,7 +134,7 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
   it('terminates a hanging run as a failure with a total-timeout error chunk', async () => {
     const durableAgent = setup(hangingModel() as LanguageModelV2);
 
-    const result = await durableAgent.stream('hello', {
+    const result = await durableAgent.streamMessageList('hello', {
       modelSettings: { timeout: { totalMs: 150 } },
     });
     const chunks = await drain(result.fullStream);
@@ -157,7 +157,7 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
       { model: fallback as LanguageModelV2, maxRetries: 0 },
     ]);
 
-    const result = await durableAgent.stream('hello', {
+    const result = await durableAgent.streamMessageList('hello', {
       modelSettings: { timeout: { totalMs: 150 } },
     });
     const chunks = await drain(result.fullStream);
@@ -181,7 +181,7 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     });
     const durableAgent = setup(model as LanguageModelV2, { slowTool });
 
-    const result = await durableAgent.stream('hello', {
+    const result = await durableAgent.streamMessageList('hello', {
       modelSettings: { timeout: { totalMs: 200 } },
     });
     const chunks = await drain(result.fullStream);
@@ -197,7 +197,7 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
   it('leaves a run that finishes within the budget untouched', async () => {
     const durableAgent = setup(textModel('quick answer') as LanguageModelV2);
 
-    const result = await durableAgent.stream('hello', {
+    const result = await durableAgent.streamMessageList('hello', {
       modelSettings: { timeout: { totalMs: 30_000 } },
     });
     const chunks = await drain(result.fullStream);
@@ -211,7 +211,7 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
   it('is inert when no total budget is configured', async () => {
     const durableAgent = setup(textModel('no budget') as LanguageModelV2);
 
-    const result = await durableAgent.stream('hello');
+    const result = await durableAgent.streamMessageList('hello');
     const chunks = await drain(result.fullStream);
 
     expect(chunks.some((c: any) => c.type === 'error')).toBe(false);
@@ -224,7 +224,7 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     const controller = new AbortController();
     setTimeout(() => controller.abort(new Error('user cancelled')), 50);
 
-    const result = await durableAgent.stream('hello', {
+    const result = await durableAgent.streamMessageList('hello', {
       abortSignal: controller.signal,
       modelSettings: { timeout: { totalMs: 30_000 } },
     });

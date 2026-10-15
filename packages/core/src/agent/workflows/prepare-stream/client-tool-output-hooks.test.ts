@@ -527,7 +527,7 @@ describe('client tool onOutput through agent.generate (production path)', () => 
   }
 
   const followUpMessages = [toolCallMessage('call-1'), toolResultMessage('call-1', { ok: true })] satisfies Parameters<
-    Agent['generate']
+    Agent['generateMessageList']
   >[0];
 
   it('fires onOutput when a follow-up request carrying a client tool result runs end-to-end', async () => {
@@ -546,7 +546,7 @@ describe('client tool onOutput through agent.generate (production path)', () => 
         inputSchema: { type: 'object', properties: { q: { type: 'string' } } },
       },
     };
-    const result = await agent.generate(followUpMessages, { clientTools: serializedClientTools as ToolsInput });
+    const result = await agent.generateMessageList(followUpMessages, { clientTools: serializedClientTools as ToolsInput });
 
     expect(result.tripwire).toBeUndefined();
     expect(onOutput).toHaveBeenCalledTimes(1);
@@ -608,7 +608,7 @@ describe('client tool onOutput through agent.generate (production path)', () => 
       ],
     });
 
-    const result = await agent.generate(followUpMessages);
+    const result = await agent.generateMessageList(followUpMessages);
 
     expect(result.tripwire).toBeDefined();
     expect(result.tripwire?.reason).toBe('blocked by policy');
@@ -1022,7 +1022,7 @@ describe('client tool toModelOutput through agent.generate (production path)', (
         inputSchema: { type: 'object', properties: { q: { type: 'string' } } },
       },
     };
-    const result = await agent.generate(
+    const result = await agent.generateMessageList(
       [toolCallMessage('call-1'), toolResultMessage('call-1', { fileId: 'file-9' })],
       {
         clientTools: serializedClientTools as ToolsInput,

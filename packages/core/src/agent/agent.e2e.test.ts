@@ -122,7 +122,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
         precipitation: z.number().nullable(),
       });
 
-      const result = await agent.generate(
+      const result = await agent.generateMessageList(
         'What is the weather in London? You can omit wind speed, precipitation, and barometric pressure.',
         {
           structuredOutput: {
@@ -182,7 +182,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
         });
         toolCall = response.toolResults.find((result: any) => result.toolName === 'noSchemaTool');
       } else {
-        response = await agent.generate('Use the noSchemaTool to get test data');
+        response = await agent.generateMessageList('Use the noSchemaTool to get test data');
 
         toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'noSchemaTool')?.payload;
       }
@@ -227,7 +227,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
         });
         toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
       } else {
-        response = await agentOne.generate('Find the user with name - Dero Israel');
+        response = await agentOne.generateMessageList('Find the user with name - Dero Israel');
         toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'findUserTool')?.payload;
       }
 
@@ -260,7 +260,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        result = await userAgent.generate('Make it green', {
+        result = await userAgent.generateMessageList('Make it green', {
           clientTools: {
             changeColor: {
               id: 'changeColor',
@@ -304,7 +304,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
           },
         });
       } else {
-        result = await userAgent.stream('Make it green', {
+        result = await userAgent.streamMessageList('Make it green', {
           clientTools: {
             changeColor: {
               id: 'changeColor',
@@ -360,7 +360,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
         );
         toolCall = res.steps[0].toolResults.find((result: any) => result.toolName === 'findUserTool');
       } else {
-        res = await agentOne.generate(
+        res = await agentOne.generateMessageList(
           'Use the \"findUserTool\" to Find the user with name - Joe and return the name and email',
         );
         toolCall = res.toolResults.find((result: any) => result.payload.toolName === 'findUserTool').payload;
@@ -389,7 +389,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
           maxSteps: 7,
         });
       } else {
-        response = await agent.generate('Call testTool 10 times.', {
+        response = await agent.generateMessageList('Call testTool 10 times.', {
           toolChoice: 'required',
           stopWhen: stepCountIs(7),
         });
@@ -431,7 +431,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
         });
         agent.__setLogger(noopLogger);
 
-        const response = await agent.generate('Please call the flakey tool with input "test data"', {
+        const response = await agent.generateMessageList('Please call the flakey tool with input "test data"', {
           maxSteps: 5,
         });
 
@@ -496,7 +496,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
           context: [systemMessage, userMessage, complexSystemMessage],
         });
       } else {
-        result = await agent.stream('Tell me about yourself', {
+        result = await agent.streamMessageList('Tell me about yourself', {
           context: [systemMessage, userMessage, complexSystemMessage],
         });
       }
@@ -579,7 +579,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
           context: contextMessages,
         });
       } else {
-        result = await agent.stream('Current question', {
+        result = await agent.streamMessageList('Current question', {
           context: contextMessages,
         });
       }
@@ -673,7 +673,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
             },
           );
         } else {
-          await agent.generate('Please echo this and then use the error tool. Be verbose and take multiple steps.', {
+          await agent.generateMessageList('Please echo this and then use the error tool. Be verbose and take multiple steps.', {
             memory: {
               thread: 'thread-partial-rescue-generate',
               resource: 'resource-partial-rescue-generate',
@@ -754,7 +754,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
           savePerStep: true,
         });
       } else {
-        await agent.generate('Echo: Please echo this long message and explain why.', {
+        await agent.generateMessageList('Echo: Please echo this long message and explain why.', {
           memory: {
             thread: 'thread-echo-generate',
             resource: 'resource-echo-generate',
@@ -832,7 +832,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
           },
         );
       } else {
-        await agent.generate(
+        await agent.generateMessageList(
           'Echo: Please echo this message. Uppercase: please also uppercase this message. Explain both results.',
           {
             memory: {
@@ -873,7 +873,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
           instructions: 'You are a helpful assistant.',
         });
 
-        const result = await agent.stream('Say hello');
+        const result = await agent.streamMessageList('Say hello');
 
         const { fullStream, textStream, text, usage, consumeStream, toolCalls, finishReason, request } = result;
 
@@ -935,7 +935,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
       for await (const _ of result.fullStream) {
       }
     } else {
-      const result = await userAgent.stream('Make it green', {
+      const result = await userAgent.streamMessageList('Make it green', {
         clientTools: {
           changeColor: {
             id: 'changeColor',
@@ -988,7 +988,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
 
         expect(result.toolCalls.length).toBeGreaterThan(0);
       } else {
-        const result = await userAgent.generate('Make it green', {
+        const result = await userAgent.generateMessageList('Make it green', {
           clientTools: {
             changeColor: {
               id: 'changeColor',
@@ -1039,7 +1039,7 @@ describe('prepareStep (e2e)', () => {
     });
 
     let prepareStepCallArgs: ProcessInputStepArgs<any> | undefined;
-    const result = await agent.generate('Hello', {
+    const result = await agent.generateMessageList('Hello', {
       prepareStep: args => {
         prepareStepCallArgs = args;
         return {
@@ -1086,7 +1086,7 @@ describe('prepareStep (e2e)', () => {
     });
 
     let prepareStepCalls: any[] = [];
-    const result = await agent.generate('Hello', {
+    const result = await agent.generateMessageList('Hello', {
       maxSteps: 4,
       prepareStep: ({ stepNumber, tools, toolChoice }) => {
         prepareStepCalls.push({ stepNumber, tools: Object.keys(tools ?? {}), toolChoice });
@@ -1250,7 +1250,7 @@ describe('prepareStep (e2e)', () => {
     });
 
     let capturedModel: any;
-    const result = await agent.generate('Hello', {
+    const result = await agent.generateMessageList('Hello', {
       prepareStep: ({ model, stepNumber }) => {
         capturedModel = model;
         if (stepNumber === 0) {
@@ -1281,7 +1281,7 @@ describe('prepareStep (e2e)', () => {
       model: 'openai/gpt-4o',
     });
 
-    const output = await agent.stream('Hello', {
+    const output = await agent.streamMessageList('Hello', {
       prepareStep: ({ model, stepNumber }) => {
         if (stepNumber === 0) {
           expect(model.provider).toBe('openai');

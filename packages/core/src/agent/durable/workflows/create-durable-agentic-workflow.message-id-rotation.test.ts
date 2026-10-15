@@ -162,7 +162,7 @@ describe('DurableAgent messageId rotation between iterations', () => {
       logger: false,
     });
 
-    const result = await durableAgent.stream('Weather in Toronto?', {
+    const result = await durableAgent.streamMessageList('Weather in Toronto?', {
       memory: { thread: 'thread-rotation', resource: 'resource-rotation' },
     });
     for await (const _chunk of result.fullStream) {

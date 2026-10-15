@@ -131,7 +131,7 @@ describe('DurableAgent output processors for tool chunks', () => {
       pubsub,
     });
 
-    const result = await durableAgent.stream('What is the weather in NYC?', {
+    const result = await durableAgent.streamMessageList('What is the weather in NYC?', {
       maxSteps: 3,
     });
 
@@ -187,7 +187,7 @@ describe('DurableAgent output processors for tool chunks', () => {
       pubsub,
     });
 
-    const result = await durableAgent.stream('What is the weather in NYC?', {
+    const result = await durableAgent.streamMessageList('What is the weather in NYC?', {
       maxSteps: 3,
     });
 
@@ -241,7 +241,7 @@ describe('DurableAgent output processors for tool chunks', () => {
       pubsub,
     });
 
-    const result = await durableAgent.stream('What is the secret?', {
+    const result = await durableAgent.streamMessageList('What is the secret?', {
       maxSteps: 3,
     });
 
@@ -298,7 +298,7 @@ describe('DurableAgent output processors run once per tool chunk', () => {
       pubsub,
     });
 
-    const result = await durableAgent.stream('What is the weather in NYC?', { maxSteps: 3 });
+    const result = await durableAgent.streamMessageList('What is the weather in NYC?', { maxSteps: 3 });
     const chunks = await drain(result.fullStream);
     return { chunks, executeSpy };
   }
@@ -394,7 +394,7 @@ describe('DurableAgent output processors run once per tool chunk', () => {
       pubsub,
     });
 
-    const result = await durableAgent.stream('Hi', { maxSteps: 3 });
+    const result = await durableAgent.streamMessageList('Hi', { maxSteps: 3 });
     const chunks = await drain(result.fullStream);
 
     expect(chunks.filter(c => c.type === 'tool-error')).toHaveLength(1);
@@ -455,7 +455,7 @@ describe('DurableAgent output processors run once per tool chunk', () => {
       pubsub,
     });
 
-    const result = await durableAgent.stream('Search mastra', { maxSteps: 3 });
+    const result = await durableAgent.streamMessageList('Search mastra', { maxSteps: 3 });
     const chunks = await drain(result.fullStream);
 
     expect(chunks.filter(c => c.type === 'tool-result')).toHaveLength(1);
@@ -517,7 +517,7 @@ describe('DurableAgent output processors run once per tool chunk', () => {
       pubsub,
     });
 
-    const result = await durableAgent.stream('Search mastra', { maxSteps: 3 });
+    const result = await durableAgent.streamMessageList('Search mastra', { maxSteps: 3 });
     const chunks = await drain(result.fullStream);
 
     expect(chunks.filter(c => c.type === 'tool-result')).toHaveLength(1);
@@ -543,7 +543,7 @@ describe('DurableAgent output processors run once per tool chunk', () => {
       ],
     });
 
-    const result = await agent.stream('Search mastra', { maxSteps: 3 });
+    const result = await agent.streamMessageList('Search mastra', { maxSteps: 3 });
     const chunks = await drain(result.fullStream);
 
     expect(chunks.filter(c => c.type === 'tool-result')).toHaveLength(1);
@@ -577,7 +577,7 @@ describe('DurableAgent output processors run once per tool chunk', () => {
       ],
     });
 
-    const result = await agent.stream('What is the weather in NYC?', { maxSteps: 3 });
+    const result = await agent.streamMessageList('What is the weather in NYC?', { maxSteps: 3 });
     const chunks = await drain(result.fullStream);
 
     expect(chunks.filter(c => c.type === 'tool-result')).toHaveLength(1);
@@ -650,7 +650,7 @@ describe('DurableAgent output processors run once per tool chunk', () => {
       pubsub: cachingPubsub,
     });
 
-    const result = await durableAgent.stream('What is the weather in NYC?', { maxSteps: 3 });
+    const result = await durableAgent.streamMessageList('What is the weather in NYC?', { maxSteps: 3 });
     await drain(result.fullStream);
     expect(streamToolResults).toBe(1);
 

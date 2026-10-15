@@ -208,7 +208,7 @@ describe('DurableAgent background tasks via stream()', () => {
     });
 
     const chunks: any[] = [];
-    const { cleanup } = await durableAgent.stream('Research quantum', {
+    const { cleanup } = await durableAgent.streamMessageList('Research quantum', {
       onChunk: chunk => chunks.push(chunk),
     });
 
@@ -248,7 +248,7 @@ describe('DurableAgent background tasks via stream()', () => {
     });
 
     const chunks: any[] = [];
-    const { cleanup } = await durableAgent.stream('Greet Alice', {
+    const { cleanup } = await durableAgent.streamMessageList('Greet Alice', {
       onChunk: chunk => chunks.push(chunk),
     });
 
@@ -299,7 +299,7 @@ describe('DurableAgent background tasks via stream()', () => {
     await localMastra.startWorkers();
 
     const chunks: any[] = [];
-    const { cleanup, runId } = await durableAgent.stream('Research AI', {
+    const { cleanup, runId } = await durableAgent.streamMessageList('Research AI', {
       onChunk: chunk => chunks.push(chunk),
     });
 
@@ -364,7 +364,7 @@ describe('DurableAgent background tasks via stream()', () => {
     await localMastra.startWorkers();
 
     const chunks: any[] = [];
-    const { cleanup } = await durableAgent.stream('Research AI', {
+    const { cleanup } = await durableAgent.streamMessageList('Research AI', {
       onChunk: chunk => chunks.push(chunk),
       memory: {
         thread: 'thread-bg-readonly',
@@ -420,7 +420,7 @@ describe('DurableAgent background tasks via stream()', () => {
     await localMastra.startWorkers();
 
     const chunks: any[] = [];
-    const { cleanup } = await durableAgent.stream('Research ML', {
+    const { cleanup } = await durableAgent.streamMessageList('Research ML', {
       onChunk: chunk => chunks.push(chunk),
     });
 
@@ -489,7 +489,7 @@ describe('DurableAgent background tasks via stream()', () => {
     await localMastra.startWorkers();
 
     const chunks: any[] = [];
-    const { cleanup } = await durableAgent.stream('Research solana', {
+    const { cleanup } = await durableAgent.streamMessageList('Research solana', {
       onChunk: chunk => chunks.push(chunk),
     });
 
@@ -594,7 +594,7 @@ describe('DurableAgent background tasks via stream()', () => {
 
     const chunks: any[] = [];
     let finished = false;
-    const { cleanup } = await durableAgent.stream('Research test', {
+    const { cleanup } = await durableAgent.streamMessageList('Research test', {
       onChunk: chunk => chunks.push(chunk),
       onFinish: () => {
         finished = true;
@@ -730,7 +730,7 @@ describe('DurableAgent.streamUntilIdle', () => {
         args: {},
       });
 
-    const outer = await durableAgent.stream('hi', {
+    const outer = await durableAgent.streamMessageList('hi', {
       ...(runId ? { runId } : {}),
       memory: { thread: 'thread-2', resource: 'user-1' },
       untilIdle: true,
@@ -775,7 +775,7 @@ describe('DurableAgent.streamUntilIdle', () => {
     const suppliedRunId = callerRunId ? `durable-caller-initial-abort-${abortBy}` : undefined;
     const threadId = `durable-initial-abort-thread-${abortBy}-${callerRunId ? 'caller' : 'generated'}`;
     const resourceId = 'user-1';
-    const result = await durableAgent.stream('hi', {
+    const result = await durableAgent.streamMessageList('hi', {
       ...(suppliedRunId ? { runId: suppliedRunId } : {}),
       memory: { thread: threadId, resource: resourceId },
       untilIdle: true,
@@ -816,7 +816,7 @@ describe('DurableAgent.streamUntilIdle', () => {
       const runId = `durable-caller-abort-${abortBy}`;
       const threadId = `durable-abort-thread-${abortBy}`;
       const resourceId = 'user-1';
-      const result = await durableAgent.stream('hi', {
+      const result = await durableAgent.streamMessageList('hi', {
         runId,
         memory: { thread: threadId, resource: resourceId },
         untilIdle: true,
@@ -1305,7 +1305,7 @@ describe('DurableAgent.streamUntilIdle', () => {
 // stream({ untilIdle }) tests — validates the new option delegates correctly
 // ============================================================================
 
-describe('DurableAgent.stream({ untilIdle })', () => {
+describe('DurableAgent.streamMessageList({ untilIdle })', () => {
   const storage = new MockStore();
 
   let mastra: Mastra;
@@ -1339,7 +1339,7 @@ describe('DurableAgent.stream({ untilIdle })', () => {
     const durableAgent = createDurableAgent({ agent: baseAgent });
     plainMastra.addAgent(durableAgent as any, 'da-idle-plain');
 
-    const result = await durableAgent.stream('hi', { untilIdle: true });
+    const result = await durableAgent.streamMessageList('hi', { untilIdle: true });
     const chunks = await drain(result.fullStream as ReadableStream<any>);
 
     const textChunks = chunks.filter(c => c?.type?.includes('text')).length;
@@ -1363,7 +1363,7 @@ describe('DurableAgent.stream({ untilIdle })', () => {
     const durableAgent = createDurableAgent({ agent: baseAgent });
     mastra.addAgent(durableAgent as any, 'da-idle-1');
 
-    const result = await durableAgent.stream('hi', {
+    const result = await durableAgent.streamMessageList('hi', {
       untilIdle: true,
       memory: { thread: 'th-idle', resource: 'u-idle' },
     });
@@ -1392,7 +1392,7 @@ describe('DurableAgent.stream({ untilIdle })', () => {
     const durableAgent = createDurableAgent({ agent: baseAgent });
     mastra.addAgent(durableAgent as any, 'da-idle-ms');
 
-    const result = await durableAgent.stream('hi', {
+    const result = await durableAgent.streamMessageList('hi', {
       untilIdle: { maxIdleMs: 30_000 },
       memory: { thread: 'th-idle-ms', resource: 'u-idle-ms' },
     });

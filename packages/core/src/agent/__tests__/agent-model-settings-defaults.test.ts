@@ -45,7 +45,7 @@ describe('Agent default modelSettings', () => {
     });
 
     await (
-      await agent.stream('Hi')
+      await agent.streamMessageList('Hi')
     ).text;
 
     expect(model.doStreamCalls).toHaveLength(1);
@@ -63,7 +63,7 @@ describe('Agent default modelSettings', () => {
     });
 
     await (
-      await agent.stream('Hi', { modelSettings: { temperature: 0 } })
+      await agent.streamMessageList('Hi', { modelSettings: { temperature: 0 } })
     ).text;
 
     expect(model.doStreamCalls).toHaveLength(1);
@@ -80,7 +80,7 @@ describe('Agent default modelSettings', () => {
       model,
     });
 
-    await agent.generate('Hi');
+    await agent.generateMessageList('Hi');
 
     expect(model.doGenerateCalls).toHaveLength(1);
     expect(model.doGenerateCalls[0].temperature).toBeUndefined();
@@ -96,7 +96,7 @@ describe('Agent default modelSettings', () => {
       model,
     });
 
-    await agent.generate('Hi', { modelSettings: { temperature: 0 } });
+    await agent.generateMessageList('Hi', { modelSettings: { temperature: 0 } });
 
     expect(model.doGenerateCalls).toHaveLength(1);
     expect(model.doGenerateCalls[0].temperature).toBe(0);

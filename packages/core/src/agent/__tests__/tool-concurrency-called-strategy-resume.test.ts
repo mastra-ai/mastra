@@ -110,7 +110,7 @@ describe("toolCallConcurrency strategy: 'called' across resume (#24581)", () => 
     new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
 
     const toolCallConcurrency = { limit: 3, strategy: 'called' as const };
-    const stream = await agent.stream('go', { toolCallConcurrency });
+    const stream = await agent.streamMessageList('go', { toolCallConcurrency });
     const suspended: string[] = [];
     for await (const chunk of stream.fullStream) {
       if (chunk.type === 'tool-call-suspended') suspended.push(chunk.payload.toolCallId);
@@ -182,7 +182,7 @@ describe("toolCallConcurrency strategy: 'called' across resume (#24581)", () => 
     new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
 
     const toolCallConcurrency = { limit: 3, strategy: 'called' as const };
-    const stream = await agent.stream('go', { toolCallConcurrency });
+    const stream = await agent.streamMessageList('go', { toolCallConcurrency });
     const suspended: string[] = [];
     for await (const chunk of stream.fullStream) {
       if (chunk.type === 'tool-call-suspended') suspended.push(chunk.payload.toolCallId);

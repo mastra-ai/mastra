@@ -145,7 +145,7 @@ describe('DurableAgent — reasoning + tool call preservation (#19365)', () => {
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const { output, cleanup } = await durableAgent.stream('Echo hello.', { maxSteps: 4 });
+    const { output, cleanup } = await durableAgent.streamMessageList('Echo hello.', { maxSteps: 4 });
     await output.consumeStream();
 
     // Two model calls: reasoning+tool-call, then final text.
@@ -250,7 +250,7 @@ describe('DurableAgent — reasoning + tool call preservation (#19365)', () => {
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const { output, cleanup } = await durableAgent.stream('Echo hi.', { maxSteps: 4 });
+    const { output, cleanup } = await durableAgent.streamMessageList('Echo hi.', { maxSteps: 4 });
     await output.consumeStream();
 
     expect(prompts).toHaveLength(2);

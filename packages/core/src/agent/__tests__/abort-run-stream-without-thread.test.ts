@@ -120,8 +120,8 @@ function createControllableModel() {
   return { model, runs };
 }
 
-async function abortParkedRun(agent: Agent, runId: string, streamOptions: Parameters<Agent['stream']>[1] = {}) {
-  const stream = await agent.stream('hello', { ...streamOptions, runId });
+async function abortParkedRun(agent: Agent, runId: string, streamOptions: Parameters<Agent['streamMessageList']>[1] = {}) {
+  const stream = await agent.streamMessageList('hello', { ...streamOptions, runId });
   const text = stream.text;
   return { stream, text };
 }
@@ -237,10 +237,10 @@ describe('Agent.abortRunStream without a thread', () => {
     const runId = 'duplicate-threadless-run';
     const firstController = new AbortController();
 
-    const firstStream = await agent.stream('first', { runId, abortSignal: firstController.signal });
+    const firstStream = await agent.streamMessageList('first', { runId, abortSignal: firstController.signal });
     const firstText = firstStream.text;
     await runs[0]!.startedPromise;
-    const secondStream = await agent.stream('second', { runId });
+    const secondStream = await agent.streamMessageList('second', { runId });
     const secondText = secondStream.text;
     await runs[1]!.startedPromise;
 
@@ -361,7 +361,7 @@ describe('Agent.abortRunStream without a thread', () => {
     });
     const agent = new Agent({ id: 'finished-no-thread', name: 'Finished cleanup test', instructions: 'Test', model });
     const runId = 'finished-no-thread-run';
-    const stream = await agent.stream('hello', { runId });
+    const stream = await agent.streamMessageList('hello', { runId });
 
     await stream.text;
     await stream._waitUntilFinished();

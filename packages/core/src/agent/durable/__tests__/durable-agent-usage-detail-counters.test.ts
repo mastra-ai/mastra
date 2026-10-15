@@ -409,7 +409,7 @@ describe('T85 detail usage counters across recovery', () => {
         });
         scenarios.push(scenario);
 
-        const original = await scenario.start(({ agent }) => agent.stream('Go.', options));
+        const original = await scenario.start(({ agent }) => agent.streamMessageList('Go.', options));
         const drained = original.driven
           .then((result: any) => drain(result.fullStream))
           .then(

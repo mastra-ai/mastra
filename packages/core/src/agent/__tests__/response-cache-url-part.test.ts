@@ -234,7 +234,7 @@ describe('ResponseCache with URL file parts (integration via Agent)', () => {
       inputProcessors: [new ResponseCache({ cache, agentId: 'url-agent' })],
     });
 
-    await agent.generate([
+    await agent.generateMessageList([
       {
         role: 'user',
         content: [
@@ -248,7 +248,7 @@ describe('ResponseCache with URL file parts (integration via Agent)', () => {
 
     // Same text, different image URL: this must reach the model, not replay
     // the cat answer.
-    await agent.generate([
+    await agent.generateMessageList([
       {
         role: 'user',
         content: [

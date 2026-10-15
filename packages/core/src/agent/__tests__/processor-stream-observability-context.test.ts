@@ -15,7 +15,7 @@ import { Agent } from '../agent';
  * already skips inside the runner).
  *
  * The context is now resolved once per LLM step and reused for all chunks.
- * This test goes through the real `Agent.stream()` -> `MastraModelOutput`
+ * This test goes through the real `Agent.streamMessageList()` -> `MastraModelOutput`
  * path and asserts the derivation count does not grow with the chunk count.
  */
 
@@ -106,7 +106,7 @@ async function streamWithTracing(chunkCount: number) {
       model: createModel(chunkCount, text),
       outputProcessors: [{ id: 'final', processOutputResult: final }],
     });
-    const result = await agent.stream('hi');
+    const result = await agent.streamMessageList('hi');
     await result.consumeStream();
     expect(await result.text).toBe(text);
     expect(final).toHaveBeenCalledTimes(1);

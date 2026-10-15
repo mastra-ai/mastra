@@ -164,7 +164,7 @@ it('waits for async onSuspended before closing a re-suspended durable resume str
   new Mastra({ agents: { agent: durableAgent }, storage, logger: false });
 
   let initialSuspension: unknown;
-  const initial = await durableAgent.stream('Run the suspending tool.', {
+  const initial = await durableAgent.streamMessageList('Run the suspending tool.', {
     onSuspended: data => {
       initialSuspension = data;
     },
@@ -266,7 +266,7 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s agent queued schema-
       let initial: { runId: string; cleanup: () => void } | undefined;
 
       try {
-        initial = await registeredAgent.stream('Run both tool calls.', {
+        initial = await registeredAgent.streamMessageList('Run both tool calls.', {
           maxSteps: 6,
           memory: { thread: threadId, resource: resourceId },
         });

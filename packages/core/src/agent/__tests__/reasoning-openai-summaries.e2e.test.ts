@@ -50,13 +50,13 @@ describe('OpenAI reasoning summary streaming (e2e)', { timeout: 120_000 }, () =>
         let messageList: MessageList;
 
         if (engine === 'default') {
-          const response = await agent.stream(prompt, streamOptions);
+          const response = await agent.streamMessageList(prompt, streamOptions);
           fullStream = response.fullStream;
           messageList = response.messageList;
         } else {
           const durableAgent = createDurableAgent({ agent });
           new Mastra({ agents: { [agent.id]: durableAgent as any }, logger: false });
-          const result = await durableAgent.stream(prompt, streamOptions);
+          const result = await durableAgent.streamMessageList(prompt, streamOptions);
           fullStream = result.fullStream as unknown as AsyncIterable<any>;
           messageList = result.output.messageList;
         }

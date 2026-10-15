@@ -63,7 +63,7 @@ async function setup({ retainFullInput = false } = {}) {
   const threadId = randomUUID();
   const memoryOpts = { memory: { thread: threadId, resource: 'r', options: { lastMessages: 20, retainFullInput } } };
 
-  const turn1 = await agent.stream(
+  const turn1 = await agent.streamMessageList(
     [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'pick one' }] }],
     memoryOpts,
   );
@@ -73,7 +73,7 @@ async function setup({ retainFullInput = false } = {}) {
   )!;
 
   const stream = async (messages: any[]) => {
-    const output = await agent.stream(messages, memoryOpts);
+    const output = await agent.streamMessageList(messages, memoryOpts);
     await output.consumeStream();
     return prompts.at(-1) as any[];
   };
@@ -327,7 +327,7 @@ describe('client tool updates on an existing thread', () => {
     });
     const threadId = randomUUID();
 
-    const output = await agent.stream(
+    const output = await agent.streamMessageList(
       [
         { id: 'seed-u1', role: 'user', parts: [{ type: 'text', text: 'pick one' }] },
         echoedAssistant('seed-a1', { state: 'result', result: { color: 'red' } }),

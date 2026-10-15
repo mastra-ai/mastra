@@ -120,13 +120,13 @@ describe('Workspace tools with OpenAI strict mode', { timeout: 300_000 }, () => 
 
       it('list_files: tools only', { timeout: 60_000 }, async () => {
         const agent = createWorkspaceAgent(model);
-        const result = await agent.generate('Use the list_files tool to list files. Use defaults.');
+        const result = await agent.generateMessageList('Use the list_files tool to list files. Use defaults.');
         expect(result.text).toBeDefined();
       });
 
       it('execute_command: tools only', { timeout: 60_000 }, async () => {
         const agent = createWorkspaceAgent(model);
-        const result = await agent.generate('Use the execute_command tool to run: echo "test"');
+        const result = await agent.generateMessageList('Use the execute_command tool to run: echo "test"');
         expect(result.text).toBeDefined();
       });
 
@@ -139,7 +139,7 @@ describe('Workspace tools with OpenAI strict mode', { timeout: 300_000 }, () => 
           instructions: 'You are a helpful assistant.',
           model,
         });
-        const result = await agent.generate('Summarize: there are 3 files in the directory.', {
+        const result = await agent.generateMessageList('Summarize: there are 3 files in the directory.', {
           structuredOutput: { schema: structuredOutputSchema },
         });
         expect(result.object).toBeDefined();
@@ -150,7 +150,7 @@ describe('Workspace tools with OpenAI strict mode', { timeout: 300_000 }, () => 
 
       it('structured output + workspace tools: list_files', { timeout: 60_000 }, async () => {
         const agent = createWorkspaceAgent(model);
-        const result = await agent.generate('Use list_files to list files, then summarize what you found.', {
+        const result = await agent.generateMessageList('Use list_files to list files, then summarize what you found.', {
           structuredOutput: { schema: structuredOutputSchema },
         });
         expect(result.object).toBeDefined();
@@ -159,7 +159,7 @@ describe('Workspace tools with OpenAI strict mode', { timeout: 300_000 }, () => 
 
       it('structured output + workspace tools: grep', { timeout: 60_000 }, async () => {
         const agent = createWorkspaceAgent(model);
-        const result = await agent.generate('Use grep to search for "Hello" in all files, then summarize.', {
+        const result = await agent.generateMessageList('Use grep to search for "Hello" in all files, then summarize.', {
           structuredOutput: { schema: structuredOutputSchema },
         });
         expect(result.object).toBeDefined();
@@ -167,7 +167,7 @@ describe('Workspace tools with OpenAI strict mode', { timeout: 300_000 }, () => 
 
       it('structured output + workspace tools: execute_command', { timeout: 60_000 }, async () => {
         const agent = createWorkspaceAgent(model);
-        const result = await agent.generate('Use execute_command to run "ls" then summarize the output.', {
+        const result = await agent.generateMessageList('Use execute_command to run "ls" then summarize the output.', {
           structuredOutput: { schema: structuredOutputSchema },
         });
         expect(result.object).toBeDefined();
@@ -189,7 +189,7 @@ describe('Workspace tools with OpenAI strict mode', { timeout: 300_000 }, () => 
           throw new FileExistsError(filepath);
         });
         const agent = createWorkspaceAgent(model);
-        const result = await agent.generate('Use file_stat on "hello.txt" then summarize what you found.', {
+        const result = await agent.generateMessageList('Use file_stat on "hello.txt" then summarize what you found.', {
           structuredOutput: { schema: structuredOutputSchema },
         });
         expect(result.object).toBeDefined();
@@ -199,13 +199,13 @@ describe('Workspace tools with OpenAI strict mode', { timeout: 300_000 }, () => 
 
       it('web search + workspace tools (no structured output)', { timeout: 60_000 }, async () => {
         const agent = createWorkspaceAgent(model, { search: sdk.tools.webSearch({}) });
-        const result = await agent.generate('Use list_files to list the files in the workspace.');
+        const result = await agent.generateMessageList('Use list_files to list the files in the workspace.');
         expect(result.text).toBeDefined();
       });
 
       it('web search + workspace tools + structured output', { timeout: 60_000 }, async () => {
         const agent = createWorkspaceAgent(model, { search: sdk.tools.webSearch({}) });
-        const result = await agent.generate('Use list_files to list files, then summarize what you found.', {
+        const result = await agent.generateMessageList('Use list_files to list files, then summarize what you found.', {
           structuredOutput: { schema: structuredOutputSchema },
         });
         expect(result.object).toBeDefined();

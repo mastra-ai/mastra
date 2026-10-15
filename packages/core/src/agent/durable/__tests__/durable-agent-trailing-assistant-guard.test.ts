@@ -85,7 +85,7 @@ describe('DurableAgent trailing assistant guard', () => {
       pubsub,
     });
 
-    const result = await durableAgent.stream(
+    const result = await durableAgent.streamMessageList(
       [
         { role: 'user', content: 'question' },
         { role: 'assistant', content: 'draft' },

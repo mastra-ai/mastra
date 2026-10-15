@@ -232,7 +232,7 @@ describe('DurableAgent goal step', () => {
     });
     expect(setResult).toBeDefined();
 
-    const { output, cleanup } = await eventedAgent.stream('Implement feature X', {
+    const { output, cleanup } = await eventedAgent.streamMessageList('Implement feature X', {
       maxSteps: 3,
       memory: { thread: THREAD, resource: RESOURCE },
       untilIdle: true,
@@ -287,7 +287,7 @@ describe('DurableAgent goal step', () => {
     expect(setResult).toBeDefined();
     expect(setResult?.status).toBe('active');
 
-    const result = await durableAgent.stream('Implement feature X', {
+    const result = await durableAgent.streamMessageList('Implement feature X', {
       maxSteps: 3,
       memory: { thread: THREAD, resource: RESOURCE },
     });
@@ -339,7 +339,7 @@ describe('DurableAgent goal step', () => {
       threadId: THREAD,
       resourceId: RESOURCE,
     });
-    const result = await durableAgent.stream('Fail this primary turn', {
+    const result = await durableAgent.streamMessageList('Fail this primary turn', {
       maxSteps: 3,
       memory: { thread: THREAD, resource: RESOURCE },
     });
@@ -383,7 +383,7 @@ describe('DurableAgent goal step', () => {
     const threadState = await storage.getStore('threadState');
     const getState = vi.spyOn(threadState!, 'getState');
 
-    const result = await durableAgent.stream('Hello', {
+    const result = await durableAgent.streamMessageList('Hello', {
       maxSteps: 1,
       memory: { thread: THREAD, resource: RESOURCE },
     });
@@ -428,7 +428,7 @@ describe('DurableAgent goal step', () => {
     });
 
     // Don't set an objective — the goal step should no-op
-    const result = await durableAgent.stream('Hello', {
+    const result = await durableAgent.streamMessageList('Hello', {
       maxSteps: 1,
       memory: { thread: THREAD, resource: RESOURCE },
     });
@@ -480,7 +480,7 @@ describe('DurableAgent goal step', () => {
     });
     expect(setResult).toBeDefined();
 
-    const result = await durableAgent.stream('Build a spaceship', {
+    const result = await durableAgent.streamMessageList('Build a spaceship', {
       maxSteps: 3,
       memory: { thread: THREAD, resource: RESOURCE },
     });
@@ -540,7 +540,7 @@ describe('DurableAgent goal step', () => {
 
     // First run exhausts the budget while the judge answers `waiting`, which
     // deliberately leaves the record active.
-    const first = await durableAgent.stream('Build a spaceship', {
+    const first = await durableAgent.streamMessageList('Build a spaceship', {
       maxSteps: 3,
       memory: { thread: THREAD, resource: RESOURCE },
     });
@@ -550,7 +550,7 @@ describe('DurableAgent goal step', () => {
     expect((await durableAgent.getObjective({ threadId: THREAD }))?.status).toBe('active');
     expect((await durableAgent.getObjective({ threadId: THREAD }))?.runsUsed).toBe(1);
 
-    const second = await durableAgent.stream('keep going', {
+    const second = await durableAgent.streamMessageList('keep going', {
       maxSteps: 3,
       memory: { thread: THREAD, resource: RESOURCE },
     });

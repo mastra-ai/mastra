@@ -93,7 +93,7 @@ describe('DurableAgent callback bridge', () => {
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       const iterations: any[] = [];
-      const { output, cleanup } = await durableAgent.stream('Run it', {
+      const { output, cleanup } = await durableAgent.streamMessageList('Run it', {
         maxSteps: 5,
         onIterationComplete: ctx => {
           iterations.push(ctx);
@@ -152,7 +152,7 @@ describe('DurableAgent callback bridge', () => {
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       let abortPayload: any;
-      const { output, runId, cleanup } = await durableAgent.stream('Go', {
+      const { output, runId, cleanup } = await durableAgent.streamMessageList('Go', {
         onAbort: data => {
           abortPayload = data;
         },

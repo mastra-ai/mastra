@@ -168,7 +168,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
         if (version === 'v1') {
           result = await agentWithProcessor.generateLegacy('Hello world');
         } else {
-          result = await agentWithProcessor.generate('Hello world');
+          result = await agentWithProcessor.generateMessageList('Hello world');
         }
 
         // The processor should have added a message
@@ -213,7 +213,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
           inputProcessors: [processor1, processor2],
         });
 
-        const result = await agentWithProcessors.generate('Hello');
+        const result = await agentWithProcessors.generateMessageList('Hello');
 
         expect(processLLMRequest).toHaveBeenCalledTimes(1);
         expect(result.text).toContain('Request processor was here');
@@ -251,7 +251,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
         if (version === 'v1') {
           result = await agentWithProcessors.generateLegacy('Hello');
         } else {
-          result = await agentWithProcessors.generate('Hello');
+          result = await agentWithProcessors.generateMessageList('Hello');
         }
 
         expect(result.text).toContain('First processor');
@@ -290,7 +290,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
         if (version === 'v1') {
           result = await agentWithAsyncProcessors.generateLegacy('Test async');
         } else {
-          result = await agentWithAsyncProcessors.generate('Test async');
+          result = await agentWithAsyncProcessors.generateMessageList('Test async');
         }
 
         // Processors run sequentially, so "First processor" should appear before "Second processor"
@@ -322,7 +322,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
         if (version === 'v1') {
           result = await agentWithAbortProcessor.generateLegacy('This should be aborted');
         } else {
-          result = await agentWithAbortProcessor.generate('This should be aborted');
+          result = await agentWithAbortProcessor.generateMessageList('This should be aborted');
         }
 
         expect(result.tripwire).toBeDefined();
@@ -353,7 +353,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
         if (version === 'v1') {
           result = await agentWithCustomAbort.generateLegacy('Custom abort test');
         } else {
-          result = await agentWithCustomAbort.generate('Custom abort test');
+          result = await agentWithCustomAbort.generateMessageList('Custom abort test');
         }
 
         expect(result.tripwire).toBeDefined();
@@ -395,7 +395,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
         if (version === 'v1') {
           result = await agentWithAbortSequence.generateLegacy('Abort sequence test');
         } else {
-          result = await agentWithAbortSequence.generate('Abort sequence test');
+          result = await agentWithAbortSequence.generateMessageList('Abort sequence test');
         }
 
         expect(result.tripwire).toBeDefined();
@@ -426,7 +426,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
         if (version === 'v1') {
           stream = await agentWithStreamProcessor.streamLegacy('Stream test');
         } else {
-          stream = await agentWithStreamProcessor.stream('Stream test');
+          stream = await agentWithStreamProcessor.streamMessageList('Stream test');
         }
 
         let fullText = '';
@@ -461,7 +461,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
           expect(stream.tripwire).toBeDefined();
           expect(stream.tripwire?.reason).toBe('Stream aborted');
         } else {
-          stream = await agentWithStreamAbort.stream('Stream abort test');
+          stream = await agentWithStreamAbort.streamMessageList('Stream abort test');
 
           for await (const chunk of stream.fullStream) {
             expect(chunk.type).toBe('tripwire');
@@ -502,7 +502,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
         if (version === 'v1') {
           stream = await agentWithDeployerAbort.streamLegacy('Deployer abort test');
         } else {
-          stream = await agentWithDeployerAbort.stream('Deployer abort test');
+          stream = await agentWithDeployerAbort.streamMessageList('Deployer abort test');
         }
 
         if (version === 'v1') {
@@ -564,7 +564,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
             requestContext,
           });
         } else {
-          result = await agentWithDynamicProcessors.generate('Test dynamic', {
+          result = await agentWithDynamicProcessors.generateMessageList('Test dynamic', {
             requestContext,
           });
         }
@@ -585,7 +585,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
         if (version === 'v1') {
           result = await agentWithEmptyProcessors.generateLegacy('No processors test');
         } else {
-          result = await agentWithEmptyProcessors.generate('No processors test');
+          result = await agentWithEmptyProcessors.generateMessageList('No processors test');
         }
 
         expect(result.text).toContain('processed:');
@@ -622,7 +622,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
         if (version === 'v1') {
           result = await agentWithModifier.generateLegacy('Original user message');
         } else {
-          result = await agentWithModifier.generate('Original user message');
+          result = await agentWithModifier.generateMessageList('Original user message');
         }
 
         expect(result.text).toContain('MODIFIED: Original message was received');
@@ -668,7 +668,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
         if (version === 'v1') {
           validResult = await agentWithValidator.generateLegacy('This is appropriate content');
         } else {
-          validResult = await agentWithValidator.generate('This is appropriate content');
+          validResult = await agentWithValidator.generateMessageList('This is appropriate content');
         }
         expect(validResult.text).toContain('Content validated');
 
@@ -677,7 +677,7 @@ function inputProcessorTests(version: 'v1' | 'v2') {
         if (version === 'v1') {
           invalidResult = await agentWithValidator.generateLegacy('This contains inappropriate content');
         } else {
-          invalidResult = await agentWithValidator.generate('This contains inappropriate content');
+          invalidResult = await agentWithValidator.generateMessageList('This contains inappropriate content');
         }
         expect(invalidResult.tripwire).toBeDefined();
         expect(invalidResult.tripwire?.reason).toBe('Content validation failed');
@@ -739,7 +739,7 @@ describe('v2 - TripWire exits do not persist terminal error parts', () => {
       ],
     });
 
-    const stream = await agent.stream('blocked request', {
+    const stream = await agent.streamMessageList('blocked request', {
       memory: { thread: 'tripwire-thread', resource: 'tripwire-resource' },
       modelSettings: { maxRetries: 0 },
     });

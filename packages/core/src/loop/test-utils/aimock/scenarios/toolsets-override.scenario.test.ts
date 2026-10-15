@@ -7,7 +7,7 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
 /**
  * Regression class: request-level toolsets.
  *
- * `agent.stream({ toolsets })` merges additional tool sets into the available
+ * `agent.streamMessageList({ toolsets })` merges additional tool sets into the available
  * tools for that specific request, allowing dynamic tool availability without
  * reconstructing the agent. These scenarios pin that merge contract so refactors
  * to tool resolution don't accidentally drop request-level tools or break the

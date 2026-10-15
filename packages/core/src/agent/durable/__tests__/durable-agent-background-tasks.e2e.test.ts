@@ -135,7 +135,7 @@ describe('DurableAgent Background Tasks E2E', () => {
   });
 
   it('dispatches a background-eligible tool and returns a placeholder', async () => {
-    const result = await durableAgent.stream('Please research the topic "quantum computing"');
+    const result = await durableAgent.streamMessageList('Please research the topic "quantum computing"');
 
     const chunks: any[] = [];
     for await (const chunk of result.fullStream) {
@@ -166,7 +166,7 @@ describe('DurableAgent Background Tasks E2E', () => {
   }, 30_000);
 
   it('runs a foreground tool normally', async () => {
-    const result = await durableAgent.stream('Please greet someone named Alice');
+    const result = await durableAgent.streamMessageList('Please greet someone named Alice');
 
     const chunks: any[] = [];
     for await (const chunk of result.fullStream) {
@@ -187,7 +187,7 @@ describe('DurableAgent Background Tasks E2E', () => {
   }, 30_000);
 
   it('background task completes and result can be queried', async () => {
-    const result = await durableAgent.stream('Research "artificial intelligence" for me');
+    const result = await durableAgent.streamMessageList('Research "artificial intelligence" for me');
 
     const chunks: any[] = [];
     for await (const chunk of result.fullStream) {
@@ -210,7 +210,7 @@ describe('DurableAgent Background Tasks E2E', () => {
   }, 30_000);
 
   it('emits background-task-started chunk on the stream after task dispatches', async () => {
-    const result = await durableAgent.stream('Research "machine learning" please');
+    const result = await durableAgent.streamMessageList('Research "machine learning" please');
 
     const chunks: any[] = [];
     for await (const chunk of result.fullStream) {
@@ -265,7 +265,7 @@ describe('DurableAgent Background Tasks E2E', () => {
     await memoryMastra.startWorkers();
 
     try {
-      const stream1 = await memoryDurableAgent.stream('Please research "neural networks" for me', {
+      const stream1 = await memoryDurableAgent.streamMessageList('Please research "neural networks" for me', {
         memory: { thread: threadId, resource: resourceId },
       });
 
@@ -280,7 +280,7 @@ describe('DurableAgent Background Tasks E2E', () => {
 
       stream1.cleanup();
 
-      const stream2 = await memoryDurableAgent.stream('Now greet someone named Bob', {
+      const stream2 = await memoryDurableAgent.streamMessageList('Now greet someone named Bob', {
         memory: { thread: threadId, resource: resourceId },
       });
 
@@ -371,7 +371,7 @@ describe('DurableAgent Background Tasks E2E', () => {
     await memoryMastra.startWorkers();
 
     try {
-      const result = await memoryDurableAgent.stream('Please research "quantum computing" for me', {
+      const result = await memoryDurableAgent.streamMessageList('Please research "quantum computing" for me', {
         memory: { thread: threadId, resource: resourceId },
         untilIdle: true,
       });
@@ -442,7 +442,7 @@ describe('DurableAgent Background Tasks E2E', () => {
     await memoryMastra.startWorkers();
 
     try {
-      const result = await memoryDurableAgent.stream('Greet someone named Carol', {
+      const result = await memoryDurableAgent.streamMessageList('Greet someone named Carol', {
         memory: { thread: threadId, resource: resourceId },
         untilIdle: true,
       });

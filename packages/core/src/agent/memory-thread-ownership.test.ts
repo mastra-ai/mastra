@@ -59,20 +59,20 @@ describe('thread/resource ownership enforcement', () => {
   }
 
   it('allows the owning resource to reuse an existing thread', async () => {
-    await drain(await agent.stream('first', { memory: { thread: threadId, resource: 'resource-a' } }));
-    await drain(await agent.stream('second', { memory: { thread: threadId, resource: 'resource-a' } }));
+    await drain(await agent.streamMessageList('first', { memory: { thread: threadId, resource: 'resource-a' } }));
+    await drain(await agent.streamMessageList('second', { memory: { thread: threadId, resource: 'resource-a' } }));
 
     expect(modelCalls).toBe(2);
     expect((await memory.getThreadById({ threadId }))?.resourceId).toBe('resource-a');
   });
 
   it('rejects stream() for a thread owned by a different resource before calling the model', async () => {
-    await drain(await agent.stream('first', { memory: { thread: threadId, resource: 'resource-a' } }));
+    await drain(await agent.streamMessageList('first', { memory: { thread: threadId, resource: 'resource-a' } }));
     expect(modelCalls).toBe(1);
 
     await expect(
       (async () =>
-        drain(await agent.stream('must not run', { memory: { thread: threadId, resource: 'resource-b' } })))(),
+        drain(await agent.streamMessageList('must not run', { memory: { thread: threadId, resource: 'resource-b' } })))(),
     ).rejects.toThrow(/belongs to resource "resource-a"/);
 
     expect(modelCalls).toBe(1);
@@ -80,24 +80,24 @@ describe('thread/resource ownership enforcement', () => {
   });
 
   it('rejects generate() for a thread owned by a different resource', async () => {
-    await agent.generate('first', { memory: { thread: threadId, resource: 'resource-a' } });
+    await agent.generateMessageList('first', { memory: { thread: threadId, resource: 'resource-a' } });
     expect(modelCalls).toBe(1);
 
     await expect(
-      agent.generate('must not run', { memory: { thread: threadId, resource: 'resource-b' } }),
+      agent.generateMessageList('must not run', { memory: { thread: threadId, resource: 'resource-b' } }),
     ).rejects.toThrow(/belongs to resource "resource-a"/);
 
     expect(modelCalls).toBe(1);
   });
 
   it('throws a stable MastraError id and does not mutate thread metadata', async () => {
-    await agent.generate('first', {
+    await agent.generateMessageList('first', {
       memory: { thread: { id: threadId, metadata: { owner: 'a' } }, resource: 'resource-a' },
     });
 
     let caught: unknown;
     try {
-      await agent.generate('must not run', {
+      await agent.generateMessageList('must not run', {
         memory: { thread: { id: threadId, metadata: { owner: 'b' } }, resource: 'resource-b' },
       });
     } catch (error) {
@@ -124,7 +124,7 @@ describe('thread/resource ownership enforcement', () => {
       },
     });
 
-    await agent.generate('ok', { memory: { thread: threadId, resource: 'resource-a' } });
+    await agent.generateMessageList('ok', { memory: { thread: threadId, resource: 'resource-a' } });
     expect(modelCalls).toBe(1);
   });
 });

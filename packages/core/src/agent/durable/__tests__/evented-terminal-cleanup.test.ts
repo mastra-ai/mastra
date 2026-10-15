@@ -91,7 +91,7 @@ describe('EventedAgent terminal snapshot cleanup', () => {
   it('deletes both AGENTIC_LOOP and AGENTIC_EXECUTION rows after a successful run', async () => {
     const { agent, storage } = createSetup(createTextStreamModel('Hello!'), pubsub);
 
-    const { runId, output, cleanup } = await agent.stream('Hi');
+    const { runId, output, cleanup } = await agent.streamMessageList('Hi');
     await output.consumeStream();
 
     // Execution is fire-and-forget: the terminal event is processed
@@ -112,7 +112,7 @@ describe('EventedAgent terminal snapshot cleanup', () => {
   it('deletes snapshot rows after a failed run', async () => {
     const { agent, storage } = createSetup(createFailingModel(), pubsub);
 
-    const { runId, output, cleanup } = await agent.stream('Hi');
+    const { runId, output, cleanup } = await agent.streamMessageList('Hi');
     await output.consumeStream().catch(() => {});
 
     await vi.waitFor(async () => {

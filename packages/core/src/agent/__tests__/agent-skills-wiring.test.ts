@@ -138,7 +138,7 @@ describe('Agent-level skills wiring', () => {
         ],
       });
 
-      await agent.generate('Hello');
+      await agent.generateMessageList('Hello');
 
       // Skill tools should be registered
       const toolNames = getToolNames(capturedTools);
@@ -165,7 +165,7 @@ describe('Agent-level skills wiring', () => {
         ],
       });
 
-      const result = await agent.stream('Run tests');
+      const result = await agent.streamMessageList('Run tests');
       // Consume the stream
       for await (const _chunk of result.textStream) {
         // drain
@@ -196,7 +196,7 @@ describe('Agent-level skills wiring', () => {
         ],
       });
 
-      await agent.generate('Deploy the app');
+      await agent.generateMessageList('Deploy the app');
 
       const toolNames = getToolNames(capturedTools);
       expect(toolNames).toContain('skill');
@@ -286,7 +286,7 @@ describe('Agent-level skills wiring', () => {
         skills: resolver,
       });
 
-      await agent.generate('Hello');
+      await agent.generateMessageList('Hello');
       expect(resolver).toHaveBeenCalledTimes(1);
 
       // Skills still reach the model on the single resolution
@@ -304,8 +304,8 @@ describe('Agent-level skills wiring', () => {
         skills: resolver,
       });
 
-      await agent.generate('First');
-      await agent.generate('Second');
+      await agent.generateMessageList('First');
+      await agent.generateMessageList('Second');
 
       expect(resolver).toHaveBeenCalledTimes(2);
     });

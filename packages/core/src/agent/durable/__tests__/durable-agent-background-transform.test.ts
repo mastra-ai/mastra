@@ -157,7 +157,7 @@ describe('DurableAgent background tool-result transcript transforms (L22)', () =
       transformToolPayload: ctx => `[redacted ${ctx.phase} on ${ctx.target}]`,
     };
 
-    const { cleanup } = await durableAgent.stream('Research AI', {
+    const { cleanup } = await durableAgent.streamMessageList('Research AI', {
       transform: policy,
       memory: { thread: 'thread-bg-transform', resource: 'resource-bg-transform' },
     });
@@ -226,7 +226,7 @@ describe('DurableAgent background tool-result transcript transforms (L22)', () =
     });
     await localMastra.startWorkers();
 
-    const { cleanup } = await durableAgent.stream('Research ML', {});
+    const { cleanup } = await durableAgent.streamMessageList('Research ML', {});
 
     await waitFor(() => spy.mock.calls.length > 0);
     await Promise.all(spy.mock.results.map(r => r.value));

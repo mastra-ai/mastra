@@ -48,7 +48,7 @@ describe('EventedAgent without a Mastra host', () => {
     const warn = vi.fn();
     vi.spyOn(agent as any, 'logger', 'get').mockReturnValue({ ...noopLogger, warn });
 
-    const { output, cleanup } = await agent.stream('Hi');
+    const { output, cleanup } = await agent.streamMessageList('Hi');
     await output.consumeStream();
     expect(await output.text).toBe('hello');
 

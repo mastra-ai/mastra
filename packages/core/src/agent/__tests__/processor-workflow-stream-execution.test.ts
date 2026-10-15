@@ -50,7 +50,7 @@ describe('generated stream processor execution', () => {
     const createRun = vi.spyOn(workflow, 'createRun');
     const finalSteps = finals.map((_, i) => vi.spyOn(workflow.steps[`processor:final-${i}`]!, 'execute'));
     vi.spyOn(agent, 'listResolvedOutputProcessors').mockResolvedValue(processors);
-    const output = await agent.stream('test');
+    const output = await agent.streamMessageList('test');
     await output.consumeStream();
     expect(await output.text).toBe('x'.repeat(chunks));
     expect(stream.mock.calls.filter(([{ part }]) => part.type === 'text-delta')).toHaveLength(streamHook ? chunks : 0);

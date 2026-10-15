@@ -1,7 +1,7 @@
 /**
  * @file Generate() approval path scenario test
  * @description Tests the non-streaming approval methods (approveToolCallGenerate, declineToolCallGenerate)
- *              using shared Mastra storage across multiple agent.generate() calls.
+ *              using shared Mastra storage across multiple agent.generateMessageList() calls.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -47,7 +47,7 @@ describe('Generate() approval path scenario', () => {
     });
 
     // First generate() call - tool suspends for approval
-    const result1 = await agent.generate('Execute action-123', {
+    const result1 = await agent.generateMessageList('Execute action-123', {
       requireToolApproval: true,
     });
 
@@ -110,7 +110,7 @@ describe('Generate() approval path scenario', () => {
     });
 
     // First generate() call - tool suspends for approval
-    const result1 = await agent.generate('Destroy target-alpha', {
+    const result1 = await agent.generateMessageList('Destroy target-alpha', {
       requireToolApproval: true,
     });
 
@@ -174,7 +174,7 @@ describe('Generate() approval path scenario', () => {
       memory: new MockMemory(),
     });
 
-    const result1 = await agent.generate('Use the label "alpha".', {
+    const result1 = await agent.generateMessageList('Use the label "alpha".', {
       requireToolApproval: ({ toolName }) => toolName === 'do_the_thing',
       maxSteps: 5,
     });
@@ -243,7 +243,7 @@ describe('Generate() approval path scenario', () => {
     });
 
     // First call - approve
-    const result1 = await agent.generate('Increment 5', {
+    const result1 = await agent.generateMessageList('Increment 5', {
       requireToolApproval: true,
     });
     expect(result1.finishReason).toBe('suspended');
@@ -254,7 +254,7 @@ describe('Generate() approval path scenario', () => {
     expect(executionLog).toEqual([5]);
 
     // Second call - decline
-    const result3 = await agent.generate('Increment 10', {
+    const result3 = await agent.generateMessageList('Increment 10', {
       requireToolApproval: true,
     });
     expect(result3.finishReason).toBe('suspended');
@@ -265,7 +265,7 @@ describe('Generate() approval path scenario', () => {
     expect(executionLog).toEqual([5]); // No change
 
     // Third call - approve again
-    const result5 = await agent.generate('Increment 20', {
+    const result5 = await agent.generateMessageList('Increment 20', {
       requireToolApproval: true,
     });
     expect(result5.finishReason).toBe('suspended');

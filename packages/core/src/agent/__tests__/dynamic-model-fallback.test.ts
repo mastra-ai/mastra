@@ -129,7 +129,7 @@ describe('Dynamic Model Selection with Fallback', () => {
     const requestContext = new RequestContext();
     requestContext.set('foo', true);
 
-    const result = await agent.stream('Test message', { requestContext });
+    const result = await agent.streamMessageList('Test message', { requestContext });
 
     expect(await result.text).toBe('Premium v2 response');
     await expect(agent.getModelList(requestContext)).resolves.toBeNull();
@@ -216,7 +216,7 @@ describe('Dynamic Model Selection with Fallback', () => {
     });
 
     const requestContext = new RequestContext();
-    const streamResult = await agent.stream('Test message', { requestContext });
+    const streamResult = await agent.streamMessageList('Test message', { requestContext });
     const fullText = await streamResult.text;
 
     expect(fullText).toBe('Model 2 success');
@@ -321,7 +321,7 @@ describe('Dynamic Model Selection with Fallback', () => {
     const requestContext = new RequestContext();
     requestContext.set('useCustomModel', false);
 
-    const streamResult = await agent.stream('Test message', { requestContext });
+    const streamResult = await agent.streamMessageList('Test message', { requestContext });
     const fullText = await streamResult.text;
 
     expect(fullText).toBe('Success with config');
@@ -411,7 +411,7 @@ describe('Dynamic Model Selection with Fallback', () => {
     const requestContext = new RequestContext();
     requestContext.set('tier', 'premium');
 
-    const streamResult = await agent.stream('Test message', { requestContext });
+    const streamResult = await agent.streamMessageList('Test message', { requestContext });
     const fullText = await streamResult.text;
 
     // Should fallback to backup model after primary fails
@@ -562,7 +562,7 @@ describe('Dynamic Model Selection with Fallback', () => {
     });
 
     const requestContext = new RequestContext();
-    await expect(agent.generate('test', { requestContext })).rejects.toThrow(
+    await expect(agent.generateMessageList('test', { requestContext })).rejects.toThrow(
       'Dynamic function returned empty model array',
     );
   });
@@ -657,7 +657,7 @@ describe('Dynamic Model Selection with Fallback', () => {
 
     const requestContext = new RequestContext();
     requestContext.set('tier', 'premium');
-    const result = await agent.stream('test', { requestContext });
+    const result = await agent.streamMessageList('test', { requestContext });
     const fullText = await result.text;
 
     expect(fullText).toBe('Async success');
@@ -754,7 +754,7 @@ describe('Dynamic Model Selection with Fallback', () => {
     requestContext.set('useNested', true);
     requestContext.set('shouldFail', true);
 
-    const result = await agent.stream('test', { requestContext });
+    const result = await agent.streamMessageList('test', { requestContext });
     const fullText = await result.text;
 
     // Primary function should be called
@@ -835,7 +835,7 @@ describe('Dynamic Model Selection with Fallback', () => {
     });
 
     const requestContext = new RequestContext();
-    const result = await agent.stream('test', { requestContext });
+    const result = await agent.streamMessageList('test', { requestContext });
     const fullText = await result.text;
 
     // Should use the enabled model, skipping the disabled one
@@ -868,7 +868,7 @@ describe('Dynamic Model Selection with Fallback', () => {
     });
 
     const requestContext = new RequestContext();
-    await expect(agent.stream('test', { requestContext })).rejects.toThrow('No enabled models found in model list');
+    await expect(agent.streamMessageList('test', { requestContext })).rejects.toThrow('No enabled models found in model list');
   });
 
   describe('labeled { model, id } results', () => {
@@ -906,7 +906,7 @@ describe('Dynamic Model Selection with Fallback', () => {
         ],
       });
 
-      const result = await agent.stream('test');
+      const result = await agent.streamMessageList('test');
 
       expect(await result.text).toBe('labeled response');
       expect(seenIds).toEqual(['mastra/openai/gpt-5.5']);
@@ -921,7 +921,7 @@ describe('Dynamic Model Selection with Fallback', () => {
         model: [{ model: () => ({ model: textModel('fallback response'), id: 'mastra/anthropic/claude-opus-4-7' }) }],
       });
 
-      const result = await agent.stream('test');
+      const result = await agent.streamMessageList('test');
 
       expect(await result.text).toBe('fallback response');
       expect(((await agent.getModel()) as { id?: string }).id).toBe('mastra/anthropic/claude-opus-4-7');

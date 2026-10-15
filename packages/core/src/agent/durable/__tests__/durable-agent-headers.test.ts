@@ -92,7 +92,7 @@ describe('DurableAgent header handling', () => {
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const { output, cleanup } = await durableAgent.stream('Hello', {
+    const { output, cleanup } = await durableAgent.streamMessageList('Hello', {
       modelSettings: {
         headers: {
           'x-api-key': 'my-key',
@@ -145,7 +145,7 @@ describe('DurableAgent header handling', () => {
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const { output, cleanup } = await durableAgent.stream('Hello', {
+    const { output, cleanup } = await durableAgent.streamMessageList('Hello', {
       modelSettings: {
         headers: {
           'x-original': 'from-call',

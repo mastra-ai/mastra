@@ -108,7 +108,7 @@ describe('durable delegation with unverified model-supplied suspendedToolRunId',
     new Mastra({ agents: { durableAgent }, storage: new InMemoryStore(), logger: false });
 
     try {
-      const result = await durableAgent.stream('Do the work', { maxSteps: 3 });
+      const result = await durableAgent.streamMessageList('Do the work', { maxSteps: 3 });
       await drain(result.fullStream);
       expect(subAgentCalls).toBe(1);
     } finally {
@@ -198,7 +198,7 @@ describe('durable delegation with unverified model-supplied suspendedToolRunId',
     new Mastra({ agents: { durableAgent }, workflows: { workflow }, storage: new InMemoryStore(), logger: false });
 
     try {
-      const result = await durableAgent.stream('Run tickets A and B', { maxSteps: 3 });
+      const result = await durableAgent.streamMessageList('Run tickets A and B', { maxSteps: 3 });
       await drain(result.fullStream);
 
       expect(createRunSpy).toHaveBeenCalledTimes(2);

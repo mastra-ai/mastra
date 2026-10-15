@@ -112,7 +112,7 @@ describe('DurableAgent prepareStep', () => {
 
     const prepareStep = vi.fn().mockResolvedValue({ activeTools: ['allowedTool'] });
 
-    const { output, cleanup } = await durableAgent.stream('go', {
+    const { output, cleanup } = await durableAgent.streamMessageList('go', {
       prepareStep,
       maxSteps: 3,
     });

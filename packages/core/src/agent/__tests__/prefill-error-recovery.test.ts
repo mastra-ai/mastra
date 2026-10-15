@@ -153,7 +153,7 @@ describe('PrefillErrorHandler Recovery', () => {
       // The conversation in memory ends with an assistant message.
       // On the first call, the model will throw the prefill error.
       // PrefillErrorHandler should catch it, append the system reminder, and retry.
-      const result = await agent.generate('Continue the conversation', {
+      const result = await agent.generateMessageList('Continue the conversation', {
         memory: {
           thread: threadId,
           resource: resourceId,
@@ -259,7 +259,7 @@ describe('PrefillErrorHandler Recovery', () => {
       // The processor always asks to retry, so the implicit safety cap is what
       // makes this terminal — and the original API error surfaces rather than
       // an empty result.
-      await expect(agent.generate('Continue the conversation')).rejects.toThrow(
+      await expect(agent.generateMessageList('Continue the conversation')).rejects.toThrow(
         'This model does not support assistant message prefill',
       );
 
@@ -309,7 +309,7 @@ describe('PrefillErrorHandler Recovery', () => {
       // The processor keeps asking for a retry, so only the budget can make this
       // terminal — and the run then rejects with the original error.
       await expect(
-        agent.generate('Continue the conversation', {
+        agent.generateMessageList('Continue the conversation', {
           memory: { thread: threadId, resource: resourceId },
         }),
       ).rejects.toThrow('Budget exhausted prefill failure');
@@ -346,7 +346,7 @@ describe('PrefillErrorHandler Recovery', () => {
         errorProcessors: [new PrefillErrorHandler()],
       });
 
-      const result = await agent.generate([
+      const result = await agent.generateMessageList([
         { role: 'user', content: 'What is 2+2?' },
         { role: 'assistant', content: 'The answer is 4.' },
       ]);
@@ -421,7 +421,7 @@ describe('PrefillErrorHandler Recovery', () => {
         ],
       });
 
-      const result = await agent.generate('Hello');
+      const result = await agent.generateMessageList('Hello');
 
       expect(result.text).toBe('Recovered on secondary model');
       expect(seenModels).toEqual(['primary', 'secondary', 'secondary']);
@@ -467,7 +467,7 @@ describe('PrefillErrorHandler Recovery', () => {
 
       // Non-prefill error should NOT be caught by PrefillErrorHandler
       await expect(
-        agent.generate('Hello', {
+        agent.generateMessageList('Hello', {
           memory: {
             thread: threadId,
             resource: resourceId,
@@ -525,7 +525,7 @@ describe('PrefillErrorHandler Recovery', () => {
         errorProcessors: [new PrefillErrorHandler()],
       });
 
-      const result = await agent.stream('Continue', {
+      const result = await agent.streamMessageList('Continue', {
         memory: {
           thread: threadId,
           resource: resourceId,
@@ -624,7 +624,7 @@ describe('PrefillErrorHandler Recovery', () => {
         errorProcessors: [new PrefillErrorHandler()],
       });
 
-      const result = await agent.stream('Continue', {
+      const result = await agent.streamMessageList('Continue', {
         memory: {
           thread: threadId,
           resource: resourceId,

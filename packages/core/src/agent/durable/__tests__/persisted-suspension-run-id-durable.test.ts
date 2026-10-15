@@ -174,7 +174,7 @@ describe('durable delegated non-approval suspension persisted runId', () => {
     memory: { thread: string; resource: string },
     storage: InMemoryStore,
   ) => {
-    const result = await durableAgent.stream('Look up the data', { memory, maxSteps: 5 });
+    const result = await durableAgent.streamMessageList('Look up the data', { memory, maxSteps: 5 });
     let sawSuspension = false;
     const seen: string[] = [];
     for await (const chunk of result.fullStream) {

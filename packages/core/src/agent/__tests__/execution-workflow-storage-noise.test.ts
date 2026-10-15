@@ -2,7 +2,7 @@
  * Regression test for https://github.com/mastra-ai/mastra/issues/17137
  *
  * When an agent is registered to a Mastra instance that has storage configured,
- * calling agent.generate()/stream() must:
+ * calling agent.generateMessageList()/stream() must:
  *   1. NOT emit the debug log "Cannot get workflow run. Mastra storage is not initialized".
  *      That log fired because the internal `execution-workflow` never received the parent's
  *      Mastra reference, so its createRun() saw no storage and took the no-storage branch.

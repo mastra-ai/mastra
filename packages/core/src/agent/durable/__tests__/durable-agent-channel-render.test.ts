@@ -279,7 +279,7 @@ describe('a run on a channel-backed thread posts its answer to the channel', () 
   it('posts from a plain agent run', async () => {
     const { agent, postMessage } = await channelBackedAgent('channel-render-plain');
 
-    await drain(await agent.stream('hi', { memory: { thread: THREAD_ID, resource: RESOURCE_ID } }));
+    await drain(await agent.streamMessageList('hi', { memory: { thread: THREAD_ID, resource: RESOURCE_ID } }));
 
     expect(postMessage).toHaveBeenCalled();
   });
@@ -287,7 +287,7 @@ describe('a run on a channel-backed thread posts its answer to the channel', () 
   it('posts from a durable agent run', async () => {
     const { durableAgent, postMessage } = await channelBackedAgent('channel-render-durable');
 
-    await drain(await durableAgent.stream('hi', { memory: { thread: THREAD_ID, resource: RESOURCE_ID } }));
+    await drain(await durableAgent.streamMessageList('hi', { memory: { thread: THREAD_ID, resource: RESOURCE_ID } }));
 
     expect(postMessage).toHaveBeenCalled();
   });
@@ -314,7 +314,7 @@ describe('a run on a channel-backed thread posts its answer to the channel', () 
     );
 
     await drain(
-      await agent.stream('look it up', { memory: { thread: THREAD_ID, resource: RESOURCE_ID }, maxSteps: 3 }),
+      await agent.streamMessageList('look it up', { memory: { thread: THREAD_ID, resource: RESOURCE_ID }, maxSteps: 3 }),
     );
 
     expect(stepFinishes.map(step => step?.isContinued)).toEqual([true, false]);
@@ -330,7 +330,7 @@ describe('a run on a channel-backed thread posts its answer to the channel', () 
     );
 
     await drain(
-      await durableAgent.stream('look it up', { memory: { thread: THREAD_ID, resource: RESOURCE_ID }, maxSteps: 3 }),
+      await durableAgent.streamMessageList('look it up', { memory: { thread: THREAD_ID, resource: RESOURCE_ID }, maxSteps: 3 }),
     );
 
     // The tool step must not read as terminal, or the queue closes and the answer is dropped.
@@ -356,7 +356,7 @@ describe('a run on a channel-backed thread posts its answer to the channel', () 
     );
 
     await drain(
-      await durableAgent.stream('look it up', { memory: { thread: THREAD_ID, resource: RESOURCE_ID }, maxSteps: 3 }),
+      await durableAgent.streamMessageList('look it up', { memory: { thread: THREAD_ID, resource: RESOURCE_ID }, maxSteps: 3 }),
     );
 
     // The tool errored, so the loop runs a second turn even though the model said `stop`. Stamping the
@@ -378,7 +378,7 @@ describe('a run on a channel-backed thread posts its answer to the channel', () 
     const requestContext = new RequestContext([['tenantId', 'tenant-1']]);
 
     await drain(
-      await durableAgent.stream('hi', {
+      await durableAgent.streamMessageList('hi', {
         memory: { thread: THREAD_ID, resource: RESOURCE_ID },
         requestContext,
       }),
@@ -396,7 +396,7 @@ describe('a run on a channel-backed thread posts its answer to the channel', () 
   it('does not post again when a second reader observes the run', async () => {
     const { durableAgent, postMessage } = await channelBackedAgent('channel-render-observed');
 
-    const result = await durableAgent.stream('hi', { memory: { thread: THREAD_ID, resource: RESOURCE_ID } });
+    const result = await durableAgent.streamMessageList('hi', { memory: { thread: THREAD_ID, resource: RESOURCE_ID } });
     const runId = (result as unknown as { runId: string }).runId;
     await drain(result);
     const postsFromTheRun = postMessage.mock.calls.length;
@@ -443,7 +443,7 @@ describe('a run on a channel-backed thread posts its answer to the channel', () 
     await untilChatReady(agent);
     await seedChannelThread(storage);
 
-    const started = await durableAgent.stream('do the thing', {
+    const started = await durableAgent.streamMessageList('do the thing', {
       memory,
       maxSteps: 5,
       requestContext: new RequestContext([['tenantId', 'initial-tenant']]),

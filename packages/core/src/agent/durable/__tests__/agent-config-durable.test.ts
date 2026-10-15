@@ -7,7 +7,7 @@
  * needed.
  *
  * When the agent is used standalone (no `Mastra` registration), calls to
- * `agent.stream()` / `agent.generate()` lazily route through a
+ * `agent.streamMessageList()` / `agent.generateMessageList()` lazily route through a
  * `DurableAgent` wrapper so the durable execution path is still used.
  */
 
@@ -191,7 +191,7 @@ describe('AgentConfig.durable', () => {
     const spy = vi.spyOn(DurableAgent.prototype as any, 'stream').mockImplementation(async () => 'durable-result');
 
     try {
-      const result = await (agent.stream('hi') as unknown as Promise<string>);
+      const result = await (agent.streamMessageList('hi') as unknown as Promise<string>);
       expect(result).toBe('durable-result');
       expect(spy).toHaveBeenCalledTimes(1);
     } finally {
@@ -215,7 +215,7 @@ describe('AgentConfig.durable', () => {
       .mockImplementation(async () => 'durable-generate-result');
 
     try {
-      const result = await (agent.generate('hi') as unknown as Promise<string>);
+      const result = await (agent.generateMessageList('hi') as unknown as Promise<string>);
       expect(result).toBe('durable-generate-result');
       expect(spy).toHaveBeenCalledTimes(1);
     } finally {
@@ -291,7 +291,7 @@ describe('AgentConfig.durable', () => {
       .mockImplementation(async () => 'durable-approve-result');
 
     try {
-      const result = await (agent.approveToolCall({ runId: 'r1' } as any) as unknown as Promise<string>);
+      const result = await (agent.approveToolCallMessageList({ runId: 'r1' } as any) as unknown as Promise<string>);
       expect(result).toBe('durable-approve-result');
       expect(spy).toHaveBeenCalledTimes(1);
     } finally {
@@ -315,7 +315,7 @@ describe('AgentConfig.durable', () => {
       .mockImplementation(async () => 'durable-decline-result');
 
     try {
-      const result = await (agent.declineToolCall({ runId: 'r1' } as any) as unknown as Promise<string>);
+      const result = await (agent.declineToolCallMessageList({ runId: 'r1' } as any) as unknown as Promise<string>);
       expect(result).toBe('durable-decline-result');
       expect(spy).toHaveBeenCalledTimes(1);
     } finally {
@@ -361,7 +361,7 @@ describe('AgentConfig.durable', () => {
     try {
       // We don't care about the eventual outcome — just that the durable
       // path is not entered.
-      await agent.stream('hi').catch(() => {});
+      await agent.streamMessageList('hi').catch(() => {});
       expect(spy).not.toHaveBeenCalled();
     } finally {
       spy.mockRestore();

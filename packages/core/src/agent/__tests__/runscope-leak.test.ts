@@ -50,7 +50,7 @@ describe('agentic-loop RunScope leak vectors', () => {
     });
 
     const N = 8;
-    const streams = await Promise.all(Array.from({ length: N }, (_, i) => agent.stream(`req-${i}`)));
+    const streams = await Promise.all(Array.from({ length: N }, (_, i) => agent.streamMessageList(`req-${i}`)));
 
     // Every run must have a distinct runId — sanity check the harness.
     const runIds = streams.map(s => s.runId);
@@ -94,7 +94,7 @@ describe('agentic-loop RunScope leak vectors', () => {
     const runIds: string[] = [];
     let sawLiveScopeDuringRun = false;
     for (let i = 0; i < 20; i++) {
-      const s = await agent.stream(`seq-${i}`);
+      const s = await agent.streamMessageList(`seq-${i}`);
       runIds.push(s.runId);
       for await (const chunk of s.fullStream) {
         // Sample once per run: the scope must be live while the stream is
@@ -178,7 +178,7 @@ describe('agentic-loop RunScope leak vectors', () => {
       storage: new InMemoryStore(),
     });
 
-    const stream = await agent.stream('please', { requireToolApproval: true });
+    const stream = await agent.streamMessageList('please', { requireToolApproval: true });
     let approvalSeen = false;
     for await (const chunk of stream.fullStream) {
       if (chunk.type === 'tool-call-approval') approvalSeen = true;

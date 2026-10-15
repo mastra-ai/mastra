@@ -8,7 +8,7 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
 /**
  * Regression class: requestContext isolation between steps.
  *
- * Tests that requestContext passed to agent.stream() remains consistent and
+ * Tests that requestContext passed to agent.streamMessageList() remains consistent and
  * isolated across multiple tool execution steps within a single run. This pins
  * the regression where requestContext could be mutated or lost between steps.
  */

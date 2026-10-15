@@ -174,7 +174,7 @@ describe('MODEL_GENERATION span output tool calls (#24291)', () => {
         tools: { get_weather: getWeather },
       });
 
-      const res = await agent.stream('weather in Paris?');
+      const res = await agent.streamMessageList('weather in Paris?');
       await res.consumeStream();
 
       expect(endGenerationCalls).toHaveLength(1);
@@ -199,7 +199,7 @@ describe('MODEL_GENERATION span output tool calls (#24291)', () => {
         model: createTextOnlyModel(),
       });
 
-      const res = await agent.stream('hi');
+      const res = await agent.streamMessageList('hi');
       await res.consumeStream();
 
       expect(endGenerationCalls).toHaveLength(1);
@@ -224,7 +224,7 @@ describe('MODEL_GENERATION span output tool calls (#24291)', () => {
         tools: { get_weather: getWeather },
       });
 
-      const res = await agent.stream('weather in Paris?');
+      const res = await agent.streamMessageList('weather in Paris?');
       await res.consumeStream();
 
       expect(endGenerationCalls).toHaveLength(1);

@@ -151,7 +151,7 @@ describe('durable resume custom frames (#22277)', () => {
   });
 
   const runToApproval = async (durableAgent: any, memory: { thread: string; resource: string }) => {
-    const result = await durableAgent.stream(`Process order ${ORDER}`, { memory, maxSteps: 5 });
+    const result = await durableAgent.streamMessageList(`Process order ${ORDER}`, { memory, maxSteps: 5 });
     let sawApproval = false;
     const seen: string[] = [];
     for await (const chunk of result.fullStream) {
@@ -206,7 +206,7 @@ describe('durable resume custom frames (#22277)', () => {
     const entry = await getApprovalEntry(mockMemory, memory);
     expect(entry.runId).toBe(runId);
 
-    const resumed = await durableAgent.approveToolCall({ runId: entry.runId, toolCallId: entry.toolCallId, memory });
+    const resumed = await durableAgent.approveToolCallMessageList({ runId: entry.runId, toolCallId: entry.toolCallId, memory });
     const types = await drainResumed(resumed);
     const label = `resumed chunks: ${types.join(', ')}`;
 
@@ -247,7 +247,7 @@ describe('durable resume custom frames (#22277)', () => {
     // Delegated approval: the persisted pair targets the outer durable run.
     expect(entry.runId).toBe(runId);
 
-    const resumed = await durableAgent.approveToolCall({ runId: entry.runId, toolCallId: entry.toolCallId, memory });
+    const resumed = await durableAgent.approveToolCallMessageList({ runId: entry.runId, toolCallId: entry.toolCallId, memory });
     const types = await drainResumed(resumed);
     const label = `resumed chunks: ${types.join(', ')}`;
 
@@ -283,7 +283,7 @@ describe('durable resume custom frames (#22277)', () => {
     new Mastra({ agents: { durableAgent }, storage: new InMemoryStore(), logger: false });
 
     // Redact only the inner tool; everything else passes through unchanged.
-    const result = await durableAgent.stream(`Process order ${ORDER}`, {
+    const result = await durableAgent.streamMessageList(`Process order ${ORDER}`, {
       memory,
       maxSteps: 5,
       transform: {
@@ -297,7 +297,7 @@ describe('durable resume custom frames (#22277)', () => {
     }
     const entry = await getApprovalEntry(mockMemory, memory);
 
-    const resumed = await durableAgent.approveToolCall({ runId: entry.runId, toolCallId: entry.toolCallId, memory });
+    const resumed = await durableAgent.approveToolCallMessageList({ runId: entry.runId, toolCallId: entry.toolCallId, memory });
     const chunks: any[] = [];
     for await (const chunk of resumed.fullStream) chunks.push(chunk);
     const ack = chunks.find(c => c.type === 'tool-call-resumed');

@@ -61,7 +61,7 @@ describe('T44 input processors (plain, durable, evented)', () => {
               cleanup = result.cleanup;
               return result.output;
             })
-          : await agent.stream('hello', { runId: `t44-throws-${engine}-run` });
+          : await agent.streamMessageList('hello', { runId: `t44-throws-${engine}-run` });
         text = (await snapshotFromOutput(output)).text;
       } catch (error) {
         thrown = error;
@@ -130,7 +130,7 @@ describe('T44 input processors (plain, durable, evented)', () => {
               cleanup = result.cleanup;
               return result.output;
             })
-          : await agent.stream('hello', { runId: `t44-resolver-throws-${engine}-run` });
+          : await agent.streamMessageList('hello', { runId: `t44-resolver-throws-${engine}-run` });
         text = (await snapshotFromOutput(output)).text;
       } catch (error) {
         thrown = error;

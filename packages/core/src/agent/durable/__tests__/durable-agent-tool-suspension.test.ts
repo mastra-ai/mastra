@@ -224,7 +224,7 @@ describe('DurableAgent tool suspension', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { runId, cleanup } = await durableAgent.stream('Please confirm this action');
+      const { runId, cleanup } = await durableAgent.streamMessageList('Please confirm this action');
 
       expect(runId).toBeDefined();
       cleanup();
@@ -334,7 +334,7 @@ describe('DurableAgent tool suspension', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { runId, cleanup } = await durableAgent.stream('Start the chain');
+      const { runId, cleanup } = await durableAgent.streamMessageList('Start the chain');
 
       expect(runId).toBeDefined();
       cleanup();
@@ -405,7 +405,7 @@ describe('DurableAgent tool suspension', () => {
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       const chunks: any[] = [];
-      const result = await durableAgent.stream('Please confirm this action', {
+      const result = await durableAgent.streamMessageList('Please confirm this action', {
         onChunk: chunk => chunks.push(chunk),
         memory: {
           thread: 'thread-readonly-suspend',

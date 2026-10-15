@@ -142,7 +142,7 @@ function buildAgent(model: MockLanguageModelV2) {
 }
 
 async function streamUntilApproval(agent: Agent, threadId: string, prompt: string) {
-  const stream = await agent.stream(prompt, {
+  const stream = await agent.streamMessageList(prompt, {
     requireToolApproval: true,
     memory: { resource: 'user-1', thread: { id: threadId } },
   });
@@ -296,7 +296,7 @@ describe('issue #19445: requireApproval resume must not mutate the persisted ass
     expect([...before.values()].flatMap(output => output.reasoning)).toContain(PRE_APPROVAL_SIGNATURE);
     expect([...before.values()].flatMap(output => output.reasoning)).not.toContain(POST_APPROVAL_SIGNATURE);
 
-    const resumed = await agent.approveToolCall({ runId: stream.runId, toolCallId });
+    const resumed = await agent.approveToolCallMessageList({ runId: stream.runId, toolCallId });
     await drain(resumed);
     expect(mockExecute).toHaveBeenCalledTimes(1);
 
@@ -343,7 +343,7 @@ describe('issue #19445: requireApproval resume must not mutate the persisted ass
 
     const before = snapshotModelOutput(await loadAssistantRows(memory, threadId));
 
-    const resumed = await agent.declineToolCall({ runId: stream.runId, toolCallId });
+    const resumed = await agent.declineToolCallMessageList({ runId: stream.runId, toolCallId });
     await drain(resumed);
     // Declining must never execute the tool.
     expect(mockExecute).toHaveBeenCalledTimes(0);
@@ -388,12 +388,12 @@ describe('issue #19445: requireApproval resume must not mutate the persisted ass
     const threadId = 'thread-follow-up';
 
     const { stream, toolCallId } = await streamUntilApproval(agent, threadId, 'Do the sensitive thing');
-    const resumed = await agent.approveToolCall({ runId: stream.runId, toolCallId });
+    const resumed = await agent.approveToolCallMessageList({ runId: stream.runId, toolCallId });
     await drain(resumed);
 
     // A brand-new user turn on the same thread — this is the turn that used to
     // 400 because it replayed a mutated assistant message.
-    const followUp = await agent.stream('And what about tomorrow?', {
+    const followUp = await agent.streamMessageList('And what about tomorrow?', {
       memory: { resource: 'user-1', thread: { id: threadId } },
     });
     let followUpText = '';

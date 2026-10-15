@@ -275,7 +275,7 @@ describe('Reasoning + Memory Integration', () => {
     });
 
     // First request with reasoning
-    const resp1 = await agent1.stream('What is 2+2?', {
+    const resp1 = await agent1.streamMessageList('What is 2+2?', {
       threadId,
       resourceId,
     });
@@ -335,7 +335,7 @@ describe('Reasoning + Memory Integration', () => {
       memory: mockMemory,
     });
 
-    const resp = await agent.stream('What is 2+2?', {
+    const resp = await agent.streamMessageList('What is 2+2?', {
       threadId,
       resourceId,
     });
@@ -395,7 +395,7 @@ describe('Reasoning + Memory Integration', () => {
     });
 
     // First request with reasoning
-    const resp1 = await agent1.stream('What is 2+2?', {
+    const resp1 = await agent1.streamMessageList('What is 2+2?', {
       threadId,
       resourceId,
     });
@@ -428,7 +428,7 @@ describe('Reasoning + Memory Integration', () => {
     });
 
     // Second request - this should NOT fail with "reasoning item without required following item"
-    const resp2 = await agent2.stream('Hello', {
+    const resp2 = await agent2.streamMessageList('Hello', {
       memory: {
         thread: threadId,
         resource: resourceId,
@@ -471,7 +471,7 @@ describe('Reasoning + Memory Integration', () => {
     });
 
     // First request with reasoning
-    const resp1 = await agent1.stream('What is 2+2?', {
+    const resp1 = await agent1.streamMessageList('What is 2+2?', {
       threadId,
       resourceId,
     });
@@ -493,7 +493,7 @@ describe('Reasoning + Memory Integration', () => {
     });
 
     // Second request - this should NOT fail
-    const resp2 = await agent2.stream('Hello', {
+    const resp2 = await agent2.streamMessageList('Hello', {
       memory: {
         thread: threadId,
         resource: resourceId,
@@ -514,7 +514,7 @@ describe('Reasoning + Memory Integration', () => {
   });
 
   /**
-   * Test using agent.generate() instead of agent.stream() to match the reproduction code.
+   * Test using agent.generateMessageList() instead of agent.streamMessageList() to match the reproduction code.
    *
    * @see https://github.com/mastra-ai/mastra/issues/11481
    */
@@ -538,7 +538,7 @@ describe('Reasoning + Memory Integration', () => {
     });
 
     // First request with generate()
-    const resp1 = await agent1.generate('What is 2+2?', {
+    const resp1 = await agent1.generateMessageList('What is 2+2?', {
       threadId,
       resourceId,
     });
@@ -575,7 +575,7 @@ describe('Reasoning + Memory Integration', () => {
     });
 
     // Second request - this should NOT fail
-    const resp2 = await agent2.generate('Hello', {
+    const resp2 = await agent2.generateMessageList('Hello', {
       memory: {
         thread: threadId,
         resource: resourceId,
@@ -678,7 +678,7 @@ describe('Reasoning + Memory Integration', () => {
       memory: mockMemory,
     });
 
-    const resp = await agent.stream('Test message', {
+    const resp = await agent.streamMessageList('Test message', {
       threadId,
       resourceId,
     });
@@ -833,7 +833,7 @@ describe('Reasoning + Memory Integration', () => {
       memory: mockMemory,
     });
 
-    const resp = await agent.stream('Test message', {
+    const resp = await agent.streamMessageList('Test message', {
       threadId,
       resourceId,
     });
@@ -993,7 +993,7 @@ describe('Reasoning Data Spy: Response vs Request Comparison (Issue #12980)', ()
       memory: mockMemory,
     });
 
-    const resp1 = await agent1.stream('What is the meaning of life?', {
+    const resp1 = await agent1.streamMessageList('What is the meaning of life?', {
       memory: { thread: threadId, resource: resourceId },
     });
     await resp1.consumeStream();
@@ -1021,7 +1021,7 @@ describe('Reasoning Data Spy: Response vs Request Comparison (Issue #12980)', ()
       memory: mockMemory,
     });
 
-    const resp2 = await agent2.stream('Tell me more', {
+    const resp2 = await agent2.streamMessageList('Tell me more', {
       memory: { thread: threadId, resource: resourceId, options: { lastMessages: 10 } },
     });
     await resp2.consumeStream();

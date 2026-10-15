@@ -82,7 +82,7 @@ describe('Writable Stream from Tool', () => {
       },
     });
 
-    const mastraStream = await electionAgent.stream('Call the election-tool and tell me what it says.');
+    const mastraStream = await electionAgent.streamMessageList('Call the election-tool and tell me what it says.');
 
     const chunks: ChunkType[] = [];
     for await (const chunk of mastraStream.fullStream) {
@@ -161,7 +161,7 @@ describe('Writable Stream from Tool', () => {
     });
 
     // Stream with memory enabled
-    const stream = await agent.stream('Run a task called test', { memory: { thread: threadId, resource: resourceId } });
+    const stream = await agent.streamMessageList('Run a task called test', { memory: { thread: threadId, resource: resourceId } });
     for await (const _ of stream.fullStream) {
       // consume stream
     }
@@ -259,7 +259,7 @@ describe('Writable Stream from Tool', () => {
       },
     ];
 
-    const stream = await agent.stream(messagesFromUseChat as any, {
+    const stream = await agent.streamMessageList(messagesFromUseChat as any, {
       memory: { thread: threadId, resource: resourceId },
     });
     for await (const _ of stream.fullStream) {

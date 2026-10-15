@@ -102,7 +102,7 @@ async function runAgent({
     tools,
   });
 
-  const stream = await agent.stream('Use both tools', {
+  const stream = await agent.streamMessageList('Use both tools', {
     maxSteps: 1,
     activeTools,
     prepareStep,

@@ -173,7 +173,7 @@ describe('eager tool dispatch — execution context parity', () => {
           }),
         },
       });
-      await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: eager }));
+      await drain(await agent.streamMessageList('go', { maxSteps: 1, eagerToolExecution: eager }));
     };
 
     await run(false);
@@ -242,7 +242,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
       tools: { 'tool-a': recordingTool(record, { requireApproval: true }) },
     });
 
-    const chunks = await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
+    const chunks = await drain(await agent.streamMessageList('go', { maxSteps: 1, eagerToolExecution: true }));
 
     // `onInputAvailable` fires inside toolCallStep *before* the approval gate, so an eager
     // dispatch would show up here even though the body never ran.
@@ -366,7 +366,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
     }
 
     await drain(
-      await agent.stream('go', { maxSteps: 1, eagerToolExecution: true, ...testCase.streamOptions?.(record) }),
+      await agent.streamMessageList('go', { maxSteps: 1, eagerToolExecution: true, ...testCase.streamOptions?.(record) }),
     );
 
     for (const event of testCase.expectEvents ?? []) expect(events).toContain(event);
@@ -411,7 +411,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
       tools: { 'tool-a': recordingTool(record) },
     });
 
-    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
+    await drain(await agent.streamMessageList('go', { maxSteps: 1, eagerToolExecution: true }));
 
     expectExcluded(events, 'never-dispatched');
   });
@@ -450,7 +450,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
         },
       });
 
-      const chunks = await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: eager }));
+      const chunks = await drain(await agent.streamMessageList('go', { maxSteps: 1, eagerToolExecution: eager }));
       return { inputAvailable, bodyRuns, events, types: chunks.map(chunk => chunk.type) };
     };
 
@@ -502,7 +502,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
         },
       });
 
-      const chunks = await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: eager }));
+      const chunks = await drain(await agent.streamMessageList('go', { maxSteps: 1, eagerToolExecution: eager }));
       return chunks.map(chunk => chunk.type);
     };
 
@@ -559,7 +559,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
         },
       });
 
-      const chunks = await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: eager }));
+      const chunks = await drain(await agent.streamMessageList('go', { maxSteps: 1, eagerToolExecution: eager }));
       return { types: chunks.map(chunk => chunk.type), onOutputCalls, events };
     };
 
@@ -614,7 +614,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
         },
       });
 
-      const chunks = await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: eager }));
+      const chunks = await drain(await agent.streamMessageList('go', { maxSteps: 1, eagerToolExecution: eager }));
       return { types: chunks.map(chunk => chunk.type), events };
     };
 
@@ -672,7 +672,7 @@ describe('eager tool dispatch — entry points', () => {
       },
     });
 
-    await agent.generate('go', { maxSteps: 1, eagerToolExecution: true });
+    await agent.generateMessageList('go', { maxSteps: 1, eagerToolExecution: true });
 
     // Honest limitation: generate() resolves through `doGenerate`, so there is no
     // chunk-level window in which an eager dispatch could happen even without the
@@ -719,7 +719,7 @@ describe('eager tool dispatch — concurrency', () => {
       tools: { 'tool-a': peakTrackingTool('tool-a', peak, record) },
     });
 
-    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true, toolCallConcurrency: limit }));
+    await drain(await agent.streamMessageList('go', { maxSteps: 1, eagerToolExecution: true, toolCallConcurrency: limit }));
 
     expect(peak.max).toBe(limit);
   });
@@ -735,7 +735,7 @@ describe('eager tool dispatch — concurrency', () => {
     });
 
     await drain(
-      await agent.stream('go', {
+      await agent.streamMessageList('go', {
         maxSteps: 1,
         eagerToolExecution: true,
         toolCallConcurrency: { limit: 4, strategy: 'called' } satisfies ToolCallConcurrency,
@@ -778,7 +778,7 @@ describe('eager tool dispatch — ordering and exactly-once', () => {
     });
 
     const chunks = await drain(
-      await agent.stream('go', { maxSteps: 1, eagerToolExecution: true, toolCallConcurrency: 2 }),
+      await agent.streamMessageList('go', { maxSteps: 1, eagerToolExecution: true, toolCallConcurrency: 2 }),
     );
 
     // "fast" settles first, but the foreach remains the owner of result order.
@@ -819,7 +819,7 @@ describe('eager tool dispatch — ordering and exactly-once', () => {
     });
 
     await drain(
-      await agent.stream('go', {
+      await agent.streamMessageList('go', {
         maxSteps: 1,
         eagerToolExecution: true,
         toolCallConcurrency: 5,
@@ -868,7 +868,7 @@ describe('eager tool dispatch — unsafe terminations', () => {
       },
     });
 
-    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true, toolCallConcurrency: 1 }));
+    await drain(await agent.streamMessageList('go', { maxSteps: 1, eagerToolExecution: true, toolCallConcurrency: 1 }));
 
     const finishIndex = events.indexOf('finish');
     // The running call is adopted — a real side effect is never discarded. The queued one waited.
@@ -975,7 +975,7 @@ describe('eager tool dispatch — unsafe terminations', () => {
       outputProcessors: [new TripwireOnToolResult() as any],
     });
 
-    const chunks = await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution }));
+    const chunks = await drain(await agent.streamMessageList('go', { maxSteps: 1, eagerToolExecution }));
     // Anything dispatched early must have run before the effects are compared.
     await work.idle();
 
@@ -1026,7 +1026,7 @@ describe('eager tool dispatch — unsafe terminations', () => {
       outputProcessors: [{ id: 'stream-only-processor', processOutputStream: async ({ part }: any) => part } as any],
     });
 
-    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
+    await drain(await agent.streamMessageList('go', { maxSteps: 1, eagerToolExecution: true }));
 
     // Establish execution first: an absent body is `-1`, which would pass the ordering check.
     expect(events.filter(event => event === 'execute-a')).toHaveLength(1);
@@ -1115,7 +1115,7 @@ describe('eager tool dispatch — unsafe terminations', () => {
     });
 
     try {
-      await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
+      await drain(await agent.streamMessageList('go', { maxSteps: 1, eagerToolExecution: true }));
     } finally {
       releaseSlow!();
       stopSpy.mockRestore();
@@ -1308,7 +1308,7 @@ describe('eager tool dispatch — discarded model attempt', () => {
       },
     });
 
-    await drain(await agent.stream('go', { maxSteps: 3, eagerToolExecution: true })).catch(() => {});
+    await drain(await agent.streamMessageList('go', { maxSteps: 3, eagerToolExecution: true })).catch(() => {});
 
     // The second model call was really reached, and the tool ran once, eagerly.
     expect(prompts.length).toBe(2);
@@ -1340,7 +1340,7 @@ describe('eager tool dispatch — discarded model attempt', () => {
         errorProcessors: retryOnce,
         tools: { 'tool-a': abortAwareTool(record, started) },
       });
-      await drain(await agent.stream('go', { maxSteps: 3, eagerToolExecution })).catch(() => {});
+      await drain(await agent.streamMessageList('go', { maxSteps: 3, eagerToolExecution })).catch(() => {});
       await work.idle();
       vi.restoreAllMocks();
       // The retry really happened, so the run did not just die early.
@@ -1386,7 +1386,7 @@ describe('eager tool dispatch — discarded model attempt', () => {
         ] as any,
         tools: { 'tool-a': abortAwareTool(record, started) },
       });
-      await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution, toolCallConcurrency: 1 })).catch(
+      await drain(await agent.streamMessageList('go', { maxSteps: 1, eagerToolExecution, toolCallConcurrency: 1 })).catch(
         () => {},
       );
       // Any eager execution still running must surface before the assertion.
@@ -1476,7 +1476,7 @@ describe('eager tool dispatch across steps', () => {
       },
     });
 
-    await drain(await agent.stream('go', { maxSteps: 3, eagerToolExecution: true }));
+    await drain(await agent.streamMessageList('go', { maxSteps: 3, eagerToolExecution: true }));
 
     // Step 1 dispatched early, which the single-step tests already cover. The load-bearing
     // assertion is the second one: step 2's call also runs before that step's own output.
@@ -1817,7 +1817,7 @@ describe('eager tool dispatch — cancellation', () => {
 
     try {
       await drain(
-        await agent.stream('go', {
+        await agent.streamMessageList('go', {
           maxSteps: 1,
           eagerToolExecution: true,
           // Limit 1 keeps call-b queued while call-a is running, so the abort lands
@@ -2010,7 +2010,7 @@ describe('eager tool dispatch — runtime suspension handback', () => {
     });
     new Mastra({ agents: { agent }, logger: false, storage });
 
-    const stream = await agent.stream('go', { maxSteps: 1, eagerToolExecution: true });
+    const stream = await agent.streamMessageList('go', { maxSteps: 1, eagerToolExecution: true });
     const types = (await drain(stream)).map(chunk => chunk.type);
 
     expect(types).toContain('tool-call-suspended');
@@ -2070,7 +2070,7 @@ describe('eager tool dispatch — runtime suspension handback', () => {
       });
       new Mastra({ agents: { agent }, logger: false, storage });
 
-      const stream = await agent.stream('go', { maxSteps: 1, eagerToolExecution });
+      const stream = await agent.streamMessageList('go', { maxSteps: 1, eagerToolExecution });
       await drain(stream);
 
       const workflowsStore = (await storage.getStore('workflows'))!;
@@ -2146,7 +2146,7 @@ describe('eager tool dispatch — runtime suspension handback', () => {
     });
     new Mastra({ agents: { agent }, logger: false, storage });
 
-    const stream = await agent.stream('go', { maxSteps: 1, eagerToolExecution: true });
+    const stream = await agent.streamMessageList('go', { maxSteps: 1, eagerToolExecution: true });
     const firstChunks = await drain(stream);
     expect(siblingRuns).toBe(1);
     expect(firstChunks.map(chunk => chunk.type)).toContain('tool-call-suspended');
@@ -2193,7 +2193,7 @@ describe('eager tool dispatch — runtime suspension handback', () => {
       },
     });
 
-    const types = (await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }))).map(
+    const types = (await drain(await agent.streamMessageList('go', { maxSteps: 1, eagerToolExecution: true }))).map(
       chunk => chunk.type,
     );
 

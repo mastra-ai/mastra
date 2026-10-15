@@ -120,7 +120,7 @@ function setup() {
 }
 
 async function suspendOnApproval(agent: Agent, requestContext: RequestContext, threadId: string) {
-  const stream = await agent.stream('Find the user with name - Dero Israel', {
+  const stream = await agent.streamMessageList('Find the user with name - Dero Israel', {
     requestContext,
     memory: { thread: threadId, resource: 'resource-1' },
   });
@@ -151,7 +151,7 @@ describe('root agent version pinning across suspend/resume', () => {
     publish('v2');
     applyStoredOverrides.mockClear();
 
-    await drain(await agent.approveToolCall({ runId, toolCallId }));
+    await drain(await agent.approveToolCallMessageList({ runId, toolCallId }));
 
     // The resume must ask for the exact version the run started on, not the status selector.
     expect(selectorsFor('versioned-agent')).toEqual([{ versionId: 'v1' }]);
@@ -164,7 +164,7 @@ describe('root agent version pinning across suspend/resume', () => {
 
     const { runId, toolCallId } = await suspendOnApproval(agent, requestContext, 'thread-1');
     publish('v2');
-    await drain(await agent.approveToolCall({ runId, toolCallId }));
+    await drain(await agent.approveToolCallMessageList({ runId, toolCallId }));
 
     applyStoredOverrides.mockClear();
     await suspendOnApproval(agent, requestContext, 'thread-2');
@@ -182,7 +182,7 @@ describe('root agent version pinning across suspend/resume', () => {
 
     const { runId, toolCallId } = await suspendOnApproval(agent, requestContext, 'thread-1');
     publish('v2');
-    await drain(await agent.approveToolCall({ runId, toolCallId }));
+    await drain(await agent.approveToolCallMessageList({ runId, toolCallId }));
 
     expect(requestContext.get(MASTRA_VERSIONS_KEY)).toEqual({
       agents: { 'versioned-agent': { status: 'published' } },
@@ -198,7 +198,7 @@ describe('root agent version pinning across suspend/resume', () => {
     publish('v2');
     applyStoredOverrides.mockClear();
 
-    await drain(await agent.approveToolCall({ runId, toolCallId }));
+    await drain(await agent.approveToolCallMessageList({ runId, toolCallId }));
 
     expect(selectorsFor('versioned-agent')).toEqual([{ versionId: 'v1' }]);
   });
@@ -207,7 +207,7 @@ describe('root agent version pinning across suspend/resume', () => {
     const { agent, applyStoredOverrides } = setup();
 
     const { runId, toolCallId } = await suspendOnApproval(agent, new RequestContext(), 'thread-1');
-    await drain(await agent.approveToolCall({ runId, toolCallId }));
+    await drain(await agent.approveToolCallMessageList({ runId, toolCallId }));
 
     expect(applyStoredOverrides).not.toHaveBeenCalled();
   });
@@ -223,6 +223,6 @@ describe('root agent version pinning across suspend/resume', () => {
     publish('v2');
     deleteVersion('v1');
 
-    await expect(drain(await agent.approveToolCall({ runId, toolCallId }))).resolves.toBeUndefined();
+    await expect(drain(await agent.approveToolCallMessageList({ runId, toolCallId }))).resolves.toBeUndefined();
   });
 });

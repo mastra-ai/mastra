@@ -63,7 +63,7 @@ function makeAgent(model: MockLanguageModelV3, withProcessor: boolean) {
 }
 
 async function run(agent: Agent) {
-  const stream = await agent.stream('hi', { stopWhen: stopOnAsk as any });
+  const stream = await agent.streamMessageList('hi', { stopWhen: stopOnAsk as any });
   let deltas = '';
   for await (const chunk of stream.fullStream) {
     if (chunk.type === 'text-delta') deltas += chunk.payload.text;

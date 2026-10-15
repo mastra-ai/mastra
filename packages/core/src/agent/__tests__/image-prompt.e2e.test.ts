@@ -52,7 +52,7 @@ export function imagePromptTest({ version }: { version: 'v1' | 'v2' }) {
             },
           ]);
         } else {
-          result = await agent.generate([
+          result = await agent.generateMessageList([
             {
               role: 'user',
               content: [
@@ -85,7 +85,7 @@ imagePromptTest({ version: 'v2' });
  * provider intact.
  *
  * Only runs in record-capable modes: the durable engine always streams at the
- * provider boundary (DurableAgent.generate() is stream-based), but this file's
+ * provider boundary (DurableAgent.generateMessageList() is stream-based), but this file's
  * cassette was recorded via non-streaming generate(), so the durable request
  * cannot replay against it. Run with LLM_TEST_MODE=record (or update/live) and
  * a real OPENAI_API_KEY to exercise or re-record this leg.
@@ -108,7 +108,7 @@ describe('image prompt test (durable)', () => {
       const durableAgent = createDurableAgent({ agent });
       new Mastra({ agents: { [agent.id]: durableAgent as any }, logger: false });
 
-      const result = await durableAgent.generate([
+      const result = await durableAgent.generateMessageList([
         {
           role: 'user',
           content: [

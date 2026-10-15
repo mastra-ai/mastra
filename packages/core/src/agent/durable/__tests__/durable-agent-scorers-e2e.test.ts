@@ -114,7 +114,7 @@ describe('DurableAgent scorers — end-to-end parity', () => {
     // Wait for agent-level scorer auto-registration to complete.
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    const { fullStream, cleanup } = await durableAgent.stream('Hello durable');
+    const { fullStream, cleanup } = await durableAgent.streamMessageList('Hello durable');
     for await (const _chunk of fullStream) {
       /* drain */
     }
@@ -168,7 +168,7 @@ describe('DurableAgent scorers — end-to-end parity', () => {
     void mastra;
     await new Promise(resolve => setTimeout(resolve, 50));
 
-    const { fullStream, cleanup } = await durableAgent.stream('Hello override', {
+    const { fullStream, cleanup } = await durableAgent.streamMessageList('Hello override', {
       scorers: { override: { scorer: overrideScorer } },
     } as any);
     for await (const _chunk of fullStream) {
@@ -194,7 +194,7 @@ describe('DurableAgent scorers — end-to-end parity', () => {
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const { fullStream, cleanup } = await durableAgent.stream('Hello plain');
+    const { fullStream, cleanup } = await durableAgent.streamMessageList('Hello plain');
     for await (const _chunk of fullStream) {
       /* drain */
     }

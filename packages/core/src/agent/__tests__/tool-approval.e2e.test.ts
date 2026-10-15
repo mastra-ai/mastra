@@ -101,7 +101,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
 
         const agentOne = mastra.getAgent('userAgent');
 
-        const stream = await agentOne.stream('Find the user with name - Dero Israel', {
+        const stream = await agentOne.streamMessageList('Find the user with name - Dero Israel', {
           requireToolApproval: true,
         });
         let toolCallId = '';
@@ -111,7 +111,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           }
         }
         await new Promise(resolve => setTimeout(resolve, 1000));
-        const resumeStream = await agentOne.declineToolCall({ runId: stream.runId, toolCallId });
+        const resumeStream = await agentOne.declineToolCallMessageList({ runId: stream.runId, toolCallId });
         for await (const _chunk of resumeStream.fullStream) {
           // console.log(_chunk);
         }
@@ -160,7 +160,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           });
           toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
         } else {
-          const stream = await agentOne.stream('Find the user with name - Dero Israel', {
+          const stream = await agentOne.streamMessageList('Find the user with name - Dero Israel', {
             requireToolApproval: true,
           });
           let toolCallId = '';
@@ -170,7 +170,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
             }
           }
           await new Promise(resolve => setTimeout(resolve, 1000));
-          const resumeStream = await agentOne.approveToolCall({ runId: stream.runId, toolCallId });
+          const resumeStream = await agentOne.approveToolCallMessageList({ runId: stream.runId, toolCallId });
           for await (const _chunk of resumeStream.fullStream) {
           }
 
@@ -224,7 +224,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
 
         const agentOne = mastra.getAgent('parentAgent');
 
-        const stream = await agentOne.stream('Find the user with name - Dero Israel');
+        const stream = await agentOne.streamMessageList('Find the user with name - Dero Israel');
         let toolCallId = '';
         for await (const _chunk of stream.fullStream) {
           if (_chunk.type === 'tool-call-approval') {
@@ -233,7 +233,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         }
         expect(toolCallId).toBeTruthy();
         if (toolCallId) {
-          const resumeStream = await agentOne.approveToolCall({ runId: stream.runId, toolCallId });
+          const resumeStream = await agentOne.approveToolCallMessageList({ runId: stream.runId, toolCallId });
           for await (const _chunk of resumeStream.fullStream) {
           }
 
@@ -286,7 +286,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           });
           toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
         } else {
-          const stream = await agentOne.stream('Find the user with name - Dero Israel');
+          const stream = await agentOne.streamMessageList('Find the user with name - Dero Israel');
           let toolCallId = '';
           for await (const _chunk of stream.fullStream) {
             if (_chunk.type === 'tool-call-approval') {
@@ -294,7 +294,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
             }
           }
           await new Promise(resolve => setTimeout(resolve, 1000));
-          const resumeStream = await agentOne.approveToolCall({ runId: stream.runId, toolCallId });
+          const resumeStream = await agentOne.approveToolCallMessageList({ runId: stream.runId, toolCallId });
           for await (const _chunk of resumeStream.fullStream) {
           }
 
@@ -359,7 +359,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         const agentOne = mastra.getAgent('userAgent');
 
         let toolCall;
-        const stream = await agentOne.stream('Find the user with name - Dero Israel');
+        const stream = await agentOne.streamMessageList('Find the user with name - Dero Israel');
         let toolCallId = '';
         for await (const _chunk of stream.fullStream) {
           if (_chunk.type === 'tool-call-approval') {
@@ -367,7 +367,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           }
         }
         await new Promise(resolve => setTimeout(resolve, 1000));
-        const resumeStream = await agentOne.approveToolCall({ runId: stream.runId, toolCallId });
+        const resumeStream = await agentOne.approveToolCallMessageList({ runId: stream.runId, toolCallId });
         for await (const _chunk of resumeStream.fullStream) {
         }
 
@@ -413,7 +413,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         const agentOne = mastra.getAgent('userAgent');
 
         // Use generate with requireToolApproval
-        const output = await agentOne.generate('Find the user with name - Dero Israel', {
+        const output = await agentOne.generateMessageList('Find the user with name - Dero Israel', {
           requireToolApproval: true,
         });
 
@@ -468,7 +468,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         const agentOne = mastra.getAgent('userAgent');
 
         // Use generate with requireToolApproval
-        const output = await agentOne.generate('Find the user with name - Dero Israel', {
+        const output = await agentOne.generateMessageList('Find the user with name - Dero Israel', {
           requireToolApproval: true,
         });
 
@@ -534,7 +534,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         const agentOne = mastra.getAgent('userAgent');
 
         let toolCall;
-        const stream = await agentOne.stream('Find the user with name - Dero Israel');
+        const stream = await agentOne.streamMessageList('Find the user with name - Dero Israel');
         for await (const _chunk of stream.fullStream) {
         }
         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -603,7 +603,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         const agentOne = mastra.getAgent('parentAgent');
 
         let toolCall;
-        const stream = await agentOne.stream('Find the user with name - Dero Israel');
+        const stream = await agentOne.streamMessageList('Find the user with name - Dero Israel');
         for await (const _chunk of stream.fullStream) {
         }
 
@@ -662,7 +662,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
 
         const agentOne = mastra.getAgent('userAgent');
 
-        const output = await agentOne.generate('Find the user with name - Dero Israel');
+        const output = await agentOne.generateMessageList('Find the user with name - Dero Israel');
 
         expect(output.finishReason).toBe('suspended');
         expect(output.toolResults).toHaveLength(0);
@@ -755,7 +755,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           thread: globalThis.crypto.randomUUID(),
           resource: globalThis.crypto.randomUUID(),
         };
-        const stream = await agentOne.stream('Find the name, age and profession of the user - Dero Israel', {
+        const stream = await agentOne.streamMessageList('Find the name, age and profession of the user - Dero Israel', {
           memory,
         });
         for await (const _chunk of stream.fullStream) {
@@ -765,7 +765,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           }
         }
         if (suspendData.suspendPayload) {
-          const resumeStream = await agentOne.stream('He is 25 years old', {
+          const resumeStream = await agentOne.streamMessageList('He is 25 years old', {
             memory,
           });
           for await (const _chunk of resumeStream.fullStream) {
@@ -864,7 +864,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           thread: globalThis.crypto.randomUUID(),
           resource: globalThis.crypto.randomUUID(),
         };
-        const stream = await agentOne.stream('Find the name, email, age and profession of the user - Dero Israel', {
+        const stream = await agentOne.streamMessageList('Find the name, email, age and profession of the user - Dero Israel', {
           memory,
         });
         for await (const _chunk of stream.fullStream) {
@@ -876,7 +876,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
 
         await new Promise(resolve => setTimeout(resolve, 1000));
         if (suspendData.suspendPayload) {
-          const resumeStream = await agentOne.stream('He is 25 years old', {
+          const resumeStream = await agentOne.streamMessageList('He is 25 years old', {
             memory,
           });
           for await (const _chunk of resumeStream.fullStream) {
@@ -962,7 +962,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           thread: globalThis.crypto.randomUUID(),
           resource: globalThis.crypto.randomUUID(),
         };
-        const output = await agentOne.generate('Find the name, age and profession of the user - Dero Israel', {
+        const output = await agentOne.generateMessageList('Find the name, age and profession of the user - Dero Israel', {
           memory,
         });
 
@@ -974,7 +974,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
             message: 'Please provide the age of the user',
           },
         });
-        const resumeOutput = await agentOne.generate('He is 25 years old', {
+        const resumeOutput = await agentOne.generateMessageList('He is 25 years old', {
           memory,
         });
 
@@ -1053,7 +1053,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         const agentOne = mastra.getAgent('userAgent');
 
         let toolCall;
-        const stream = await agentOne.stream('Find the user with name - Dero Israel', {
+        const stream = await agentOne.streamMessageList('Find the user with name - Dero Israel', {
           memory: {
             thread: 'test-thread-1',
             resource: 'test-resource-1',
@@ -1161,7 +1161,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
 
         const agentOne = mastra.getAgent('userAgent');
 
-        const output = await agentOne.generate('Find the user with name - Dero Israel', {
+        const output = await agentOne.generateMessageList('Find the user with name - Dero Israel', {
           memory: {
             thread: 'test-thread-1',
             resource: 'test-resource-1',
@@ -1272,7 +1272,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           const agentOne = mastra.getAgent('userAgent');
 
           let toolCall;
-          const stream = await agentOne.stream('Find the user with name and age of - Dero Israel', {
+          const stream = await agentOne.streamMessageList('Find the user with name and age of - Dero Israel', {
             memory: {
               thread: 'test-thread',
               resource: 'test-resource',
@@ -1289,7 +1289,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
             }
           }
           if (suspendData.suspendPayload) {
-            const resumeStream = await agentOne.stream('He is 25 years old', {
+            const resumeStream = await agentOne.streamMessageList('He is 25 years old', {
               memory: {
                 thread: 'test-thread',
                 resource: 'test-resource',
@@ -1388,7 +1388,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
 
           const agentOne = mastra.getAgent('userAgent');
 
-          const output = await agentOne.generate('Find the user with name and age of - Dero Israel', {
+          const output = await agentOne.generateMessageList('Find the user with name and age of - Dero Israel', {
             memory: {
               thread: 'test-thread',
               resource: 'test-resource',
@@ -1402,7 +1402,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
               message: 'Please provide the age of the user',
             },
           });
-          const resumeOutput = await agentOne.generate('He is 25 years old', {
+          const resumeOutput = await agentOne.generateMessageList('He is 25 years old', {
             memory: {
               thread: 'test-thread',
               resource: 'test-resource',
@@ -1465,7 +1465,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           });
           toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
         } else {
-          const stream = await agentOne.stream(
+          const stream = await agentOne.streamMessageList(
             'First tell me about what tools you have. Then call the user tool to find the user with name - Dero Israel. Then tell me about what format you received the data and tell me what it would look like in human readable form.',
             {
               requireToolApproval: true,

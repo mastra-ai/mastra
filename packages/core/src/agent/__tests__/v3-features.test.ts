@@ -68,7 +68,7 @@ describe('V3 Agent Features', () => {
       });
 
       // Test streaming
-      const streamResult = await agent.stream('What is the meaning of life?');
+      const streamResult = await agent.streamMessageList('What is the meaning of life?');
       const streamParts: any[] = [];
       for await (const part of streamResult.fullStream) {
         streamParts.push(part);
@@ -122,7 +122,7 @@ describe('V3 Agent Features', () => {
         model: modelWithReasoning,
       });
 
-      const result = await agent.generate('What is the meaning of life?');
+      const result = await agent.generateMessageList('What is the meaning of life?');
 
       // Verify the response contains reasoning
       expect(result.response.messages).toBeDefined();
@@ -180,7 +180,7 @@ describe('V3 Agent Features', () => {
         model: modelWithEmptyReasoning,
       });
 
-      const streamResult = await agent.stream('Say hello');
+      const streamResult = await agent.streamMessageList('Say hello');
       const parts: any[] = [];
       for await (const part of streamResult.fullStream) {
         parts.push(part);
@@ -270,7 +270,7 @@ describe('V3 Agent Features', () => {
       });
 
       // Test streaming
-      const streamResult = await agent.stream('Tell me about the topic.');
+      const streamResult = await agent.streamMessageList('Tell me about the topic.');
       const streamParts: any[] = [];
       for await (const part of streamResult.fullStream) {
         streamParts.push(part);
@@ -335,7 +335,7 @@ describe('V3 Agent Features', () => {
         model: modelWithSources,
       });
 
-      const result = await agent.generate('Give me information.');
+      const result = await agent.generateMessageList('Give me information.');
 
       expect(result.text).toContain('Here is the information you requested');
       expect(result.response.messages.length).toBeGreaterThan(0);
@@ -393,7 +393,7 @@ describe('V3 Agent Features', () => {
       });
 
       // Test streaming
-      const streamResult = await agent.stream('Generate a file for me.');
+      const streamResult = await agent.streamMessageList('Generate a file for me.');
       const streamParts: any[] = [];
       for await (const part of streamResult.fullStream) {
         streamParts.push(part);
@@ -459,14 +459,14 @@ describe('V3 Agent Features', () => {
       });
 
       // Test generate
-      const generateResult = await agent.generate('Test');
+      const generateResult = await agent.generateMessageList('Test');
       expect(generateResult.usage).toBeDefined();
       expect(generateResult.usage.inputTokens).toBe(100);
       expect(generateResult.usage.outputTokens).toBe(50);
       expect(generateResult.usage.totalTokens).toBe(150);
 
       // Test stream
-      const streamResult = await agent.stream('Test');
+      const streamResult = await agent.streamMessageList('Test');
       await streamResult.consumeStream();
       const streamUsage = await streamResult.usage;
       expect(streamUsage).toBeDefined();
@@ -515,7 +515,7 @@ describe('V3 Agent Features', () => {
         model: modelWithDetailedUsage,
       });
 
-      const generateResult = await agent.generate('Test');
+      const generateResult = await agent.generateMessageList('Test');
 
       // Verify normalized usage
       expect(generateResult.usage.inputTokens).toBe(200);

@@ -254,7 +254,7 @@ function modelListTests(version: 'v1' | 'v2') {
           ],
         });
 
-        const streamResult = await agent.stream('Test message');
+        const streamResult = await agent.streamMessageList('Test message');
 
         const fullText = await streamResult.text;
         expect(fullText).toBe('Hello, Premium Title');
@@ -352,7 +352,7 @@ function modelListTests(version: 'v1' | 'v2') {
           ],
         });
 
-        const streamResult = await agent.stream('Test message');
+        const streamResult = await agent.streamMessageList('Test message');
 
         const fullText = await streamResult.text;
         expect(fullText).toBe('Hello, Premium Title');
@@ -476,7 +476,7 @@ function modelListTests(version: 'v1' | 'v2') {
           maxRetries: 2,
         });
 
-        const streamResult = await agent.stream('Test message');
+        const streamResult = await agent.streamMessageList('Test message');
 
         const fullText = await streamResult.text;
         expect(fullText).toBe('Hello, Premium Title');
@@ -601,7 +601,7 @@ function modelListTests(version: 'v1' | 'v2') {
           maxRetries: 2,
         });
 
-        const streamResult = await agent.stream('Test message');
+        const streamResult = await agent.streamMessageList('Test message');
 
         const fullText = await streamResult.text;
         expect(fullText).toBe('Hello, Premium Title');
@@ -759,7 +759,7 @@ function modelListTests(version: 'v1' | 'v2') {
           maxRetries: 2,
         });
 
-        const streamResult = await agent.stream('Test message');
+        const streamResult = await agent.streamMessageList('Test message');
 
         const fullText = await streamResult.text;
         expect(fullText).toBe('Hello, Premium Title');
@@ -849,28 +849,28 @@ function modelListTests(version: 'v1' | 'v2') {
         }
 
         try {
-          await agent.generate('Hello');
+          await agent.generateMessageList('Hello');
           expect.fail('Expected getLLM() to throw an error');
         } catch (err) {
           expect(err.message).toContain('Only v2/v3 models are allowed when an array of models is provided');
         }
 
         try {
-          await agent.stream('Hello');
+          await agent.streamMessageList('Hello');
           expect.fail('Expected getLLM() to throw an error');
         } catch (err) {
           expect(err.message).toContain('Only v2/v3 models are allowed when an array of models is provided');
         }
 
         try {
-          await agent.generate('Hello');
+          await agent.generateMessageList('Hello');
           expect.fail('Expected getLLM() to throw an error');
         } catch (err) {
           expect(err.message).toContain('Only v2/v3 models are allowed when an array of models is provided');
         }
 
         try {
-          await agent.stream('Hello');
+          await agent.streamMessageList('Hello');
           expect.fail('Expected getLLM() to throw an error');
         } catch (err) {
           expect(err.message).toContain('Only v2/v3 models are allowed when an array of models is provided');

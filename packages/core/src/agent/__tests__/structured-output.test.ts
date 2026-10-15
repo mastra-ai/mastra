@@ -378,7 +378,7 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' | 'v3' }) {
           ),
         });
       } else {
-        response = await agentOne.generate('Give me the winners of 2012 and 2016 US presidential elections', {
+        response = await agentOne.generateMessageList('Give me the winners of 2012 and 2016 US presidential elections', {
           structuredOutput: {
             schema: z.array(
               z.object({
@@ -437,7 +437,7 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' | 'v3' }) {
           },
         });
       } else {
-        response = await agentOne.generate('Give me the winners of 2012 and 2016 US presidential elections', {
+        response = await agentOne.generateMessageList('Give me the winners of 2012 and 2016 US presidential elections', {
           structuredOutput: {
             schema: {
               type: 'object',
@@ -547,7 +547,7 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' | 'v3' }) {
 
         const registeredAgent = mastra.getAgent('agent');
 
-        const result = await registeredAgent.generate('Summarize: there are 3 files in the directory.', {
+        const result = await registeredAgent.generateMessageList('Summarize: there are 3 files in the directory.', {
           structuredOutput: {
             schema: z.object({
               summary: z.string(),
@@ -642,7 +642,7 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' | 'v3' }) {
           model: primaryModel,
         });
 
-        const result = await agent.generate('Summarize: there are 3 files in the directory.', {
+        const result = await agent.generateMessageList('Summarize: there are 3 files in the directory.', {
           structuredOutput: {
             schema: z.object({
               summary: z.string(),
@@ -770,7 +770,7 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' | 'v3' }) {
           selectionReason: z.string(),
         });
 
-        const result = await routingAgent.generate('What is the weather?', {
+        const result = await routingAgent.generateMessageList('What is the weather?', {
           structuredOutput: {
             schema: responseSchema,
           },
@@ -864,7 +864,7 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' | 'v3' }) {
           selectionReason: z.string(),
         });
 
-        const streamResult = await routingAgent.stream('What is the weather?', {
+        const streamResult = await routingAgent.streamMessageList('What is the weather?', {
           structuredOutput: {
             schema: responseSchema,
           },
@@ -1004,7 +1004,7 @@ describe('separate-model structured output logging', () => {
       requestContext.set(MASTRA_THREAD_ID_KEY, 'structured-thread');
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'structured-resource');
       const model = textModel('[1,2,3]');
-      const result = await agent.generate('What is the answer?', {
+      const result = await agent.generateMessageList('What is the answer?', {
         requestContext,
         structuredOutput: { schema, model, useAgent: true, errorStrategy, fallbackValue },
       });
@@ -1048,7 +1048,7 @@ describe('separate-model structured output logging', () => {
         ]),
       }),
     });
-    const result = await agent.generate('What is the answer?', {
+    const result = await agent.generateMessageList('What is the answer?', {
       structuredOutput: { schema, model, errorStrategy: 'warn' },
     });
     expect(result.object).toBeUndefined();
@@ -1069,7 +1069,7 @@ describe('separate-model structured output logging', () => {
       model: textModel('Forty-two.'),
     });
     new Mastra({ agents: { agent }, logger, storage: new InMemoryStore() });
-    const result = await agent.generate('What is the answer?', {
+    const result = await agent.generateMessageList('What is the answer?', {
       structuredOutput: { schema, model: textModel('{"answer":"42"}'), errorStrategy: 'warn' },
     });
     expect(result.object).toEqual({ answer: '42' });
@@ -1088,7 +1088,7 @@ describe('separate-model structured output logging', () => {
       model: textModel('Forty-two.'),
     });
     new Mastra({ agents: { agent }, logger: false });
-    const result = await agent.generate('What is the answer?', {
+    const result = await agent.generateMessageList('What is the answer?', {
       structuredOutput: { schema, model: textModel('[1,2,3]'), errorStrategy, fallbackValue },
     });
     expect(result.object).toEqual(errorStrategy === 'fallback' ? fallbackValue : undefined);

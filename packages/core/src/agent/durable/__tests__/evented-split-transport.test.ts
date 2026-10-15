@@ -114,7 +114,7 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
   it('delivers text and finish chunks to the stream across split buses', async () => {
     const agent = createSetup(createTextStreamModel('Hello!'));
 
-    const { output, cleanup } = await agent.stream('Hi');
+    const { output, cleanup } = await agent.streamMessageList('Hi');
     const chunks = await collectStreamChunks(output.fullStream);
 
     const chunkTypes = chunks.map(chunk => chunk.type);
@@ -136,7 +136,7 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
     const agent = createSetup(createToolCallModel('searchTool', { query: 'test' }), { searchTool });
 
     let suspendedData: any = null;
-    const { cleanup } = await agent.stream('Search for test', {
+    const { cleanup } = await agent.streamMessageList('Search for test', {
       requireToolApproval: true,
       onSuspended: (data: any) => {
         suspendedData = data;

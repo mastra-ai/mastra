@@ -103,13 +103,13 @@ type EngineLeg = 'default' | 'durable';
  */
 async function streamWithEngine(engine: EngineLeg, agent: Agent, prompt: string) {
   if (engine === 'default') {
-    const response = await agent.stream(prompt);
+    const response = await agent.streamMessageList(prompt);
     return { fullStream: response.fullStream, text: response.text, cleanup: () => {} };
   }
 
   const durableAgent = createDurableAgent({ agent });
   new Mastra({ agents: { [agent.id!]: durableAgent as any }, logger: false });
-  const result = await durableAgent.stream(prompt);
+  const result = await durableAgent.streamMessageList(prompt);
   return { fullStream: result.fullStream, text: result.output.text, cleanup: result.cleanup };
 }
 

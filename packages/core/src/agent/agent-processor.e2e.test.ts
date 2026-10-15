@@ -53,7 +53,7 @@ describe('StructuredOutputProcessor Integration Tests', () => {
           model,
         });
 
-        const result = await agent.generate(
+        const result = await agent.generateMessageList(
           'Tell me about a vibrant sunset orange color. What are its properties and how does it make people feel? Keep your response really short.',
           {
             structuredOutput: {
@@ -123,7 +123,7 @@ describe('StructuredOutputProcessor Integration Tests', () => {
           For beginners, starting with simple algorithms like linear regression or decision trees is recommended.
         `;
 
-        const result = await agent.generate(`Analyze this article and extract key information:\n\n${articleText}`, {
+        const result = await agent.generateMessageList(`Analyze this article and extract key information:\n\n${articleText}`, {
           structuredOutput: {
             schema: articleSchema,
             model,
@@ -187,7 +187,7 @@ describe('StructuredOutputProcessor Integration Tests', () => {
           model,
         });
 
-        const result = await agent.generate('Tell me about the weather today in a casual way.', {
+        const result = await agent.generateMessageList('Tell me about the weather today in a casual way.', {
           structuredOutput: {
             schema: strictSchema,
             model: new MockLanguageModelV2({
@@ -224,7 +224,7 @@ describe('StructuredOutputProcessor Integration Tests', () => {
           model, // Use faster model for idea generation
         });
 
-        const result = await agent.generate(
+        const result = await agent.generateMessageList(
           'Come up with an innovative solution for reducing food waste in restaurants.',
           {
             structuredOutput: {
@@ -274,7 +274,7 @@ describe('StructuredOutputProcessor Integration Tests', () => {
         model: model,
       });
 
-      const result = await agent.stream(
+      const result = await agent.streamMessageList(
         `
               Come up with an innovative solution for reducing food waste in restaurants.
               Make sure to include an idea, category, feasibility, and resources.
@@ -322,7 +322,7 @@ describe('StructuredOutputProcessor Integration Tests', () => {
         model: model,
       });
 
-      const result = await agent.stream(
+      const result = await agent.streamMessageList(
         `
               Come up with an innovative solution for reducing food waste in restaurants.
               Make sure to include an idea, category, feasibility, and resources.

@@ -7,7 +7,7 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
 /**
  * Regression class: actor identity passthrough.
  *
- * The actor signal is forwarded to the agent.stream() call and can affect
+ * The actor signal is forwarded to the agent.streamMessageList() call and can affect
  * tool access via fine-grained authorization. This pins the actor passthrough
  * path, ensuring actor identity is preserved across the loop.
  */

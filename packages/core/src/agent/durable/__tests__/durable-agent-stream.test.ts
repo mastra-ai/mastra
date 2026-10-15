@@ -206,7 +206,7 @@ describe('DurableAgent streaming execution', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { output, cleanup } = await durableAgent.stream('Use the allowed tool', {
+      const { output, cleanup } = await durableAgent.streamMessageList('Use the allowed tool', {
         activeTools: ['allowedTool'],
       });
 
@@ -289,7 +289,7 @@ describe('DurableAgent streaming execution', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { output, cleanup } = await durableAgent.stream('Use tools', {
+      const { output, cleanup } = await durableAgent.streamMessageList('Use tools', {
         activeTools: ['allowedTool'],
       });
 
@@ -369,7 +369,7 @@ describe('DurableAgent streaming execution', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { output, cleanup } = await durableAgent.stream('Try a hidden tool', {
+      const { output, cleanup } = await durableAgent.streamMessageList('Try a hidden tool', {
         activeTools: ['allowedTool'],
       });
 
@@ -394,7 +394,7 @@ describe('DurableAgent streaming execution', () => {
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { output, runId, cleanup } = await durableAgent.stream('Say hello', {
+      const { output, runId, cleanup } = await durableAgent.streamMessageList('Say hello', {
         onChunk: chunk => {
           chunks.push(chunk);
         },
@@ -459,7 +459,7 @@ describe('DurableAgent streaming execution', () => {
       ];
 
       for (const testCase of cases) {
-        const { output, cleanup, runId } = await testCase.agent.stream('Run echo with hello.', { maxSteps: 4 });
+        const { output, cleanup, runId } = await testCase.agent.streamMessageList('Run echo with hello.', { maxSteps: 4 });
         const chunks = await collectStreamChunks(output.fullStream);
 
         const chunkTypes = chunks.map(chunk => chunk.type);
@@ -498,7 +498,7 @@ describe('DurableAgent streaming execution', () => {
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { output, cleanup } = await durableAgent.stream('Say hello in parts', {
+      const { output, cleanup } = await durableAgent.streamMessageList('Say hello in parts', {
         onChunk: chunk => {
           chunks.push(chunk);
         },
@@ -523,7 +523,7 @@ describe('DurableAgent streaming execution', () => {
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { runId, cleanup } = await durableAgent.stream('Test');
+      const { runId, cleanup } = await durableAgent.streamMessageList('Test');
 
       expect(runId).toBeDefined();
       expect(typeof runId).toBe('string');
@@ -552,7 +552,7 @@ describe('DurableAgent streaming execution', () => {
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { output, cleanup } = await durableAgent.stream('Test', {
+      const { output, cleanup } = await durableAgent.streamMessageList('Test', {
         onFinish: data => {
           finishData = data;
         },
@@ -585,7 +585,7 @@ describe('DurableAgent streaming execution', () => {
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { output, cleanup } = await durableAgent.stream('Test', {
+      const { output, cleanup } = await durableAgent.streamMessageList('Test', {
         onError: ({ error }) => {
           errorReceived = error;
         },
@@ -613,7 +613,7 @@ describe('DurableAgent streaming execution', () => {
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { output, cleanup } = await durableAgent.stream('Test', {
+      const { output, cleanup } = await durableAgent.streamMessageList('Test', {
         onStepFinish: result => {
           stepResults.push(result);
         },
@@ -729,7 +729,7 @@ describe('DurableAgent memory integration', () => {
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const { threadId, resourceId, cleanup } = await durableAgent.stream('Test', {
+    const { threadId, resourceId, cleanup } = await durableAgent.streamMessageList('Test', {
       memory: {
         thread: 'thread-123',
         resource: 'user-456',
@@ -754,7 +754,7 @@ describe('DurableAgent memory integration', () => {
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const { runId, cleanup } = await durableAgent.stream('Test', {
+    const { runId, cleanup } = await durableAgent.streamMessageList('Test', {
       memory: {
         thread: 'my-thread',
         resource: 'my-user',
@@ -782,7 +782,7 @@ describe('DurableAgent memory integration', () => {
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const { threadId, resourceId, cleanup } = await durableAgent.stream('Test');
+    const { threadId, resourceId, cleanup } = await durableAgent.streamMessageList('Test');
 
     expect(threadId).toBeUndefined();
     expect(resourceId).toBeUndefined();
@@ -802,7 +802,7 @@ describe('DurableAgent memory integration', () => {
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const { threadId, cleanup } = await durableAgent.stream('Test', {
+    const { threadId, cleanup } = await durableAgent.streamMessageList('Test', {
       memory: {
         thread: { id: 'thread-from-object' },
         resource: 'user-123',
@@ -848,7 +848,7 @@ describe('DurableAgent error handling', () => {
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const { output, cleanup } = await durableAgent.stream('Test', {
+    const { output, cleanup } = await durableAgent.streamMessageList('Test', {
       onError: ({ error }) => {
         errorReceived = error;
       },
@@ -901,7 +901,7 @@ describe('DurableAgent error handling', () => {
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const { output, runId, cleanup } = await durableAgent.stream('Test');
+    const { output, runId, cleanup } = await durableAgent.streamMessageList('Test');
 
     // Run should be registered initially
     expect(durableAgent.runRegistry.has(runId)).toBe(true);

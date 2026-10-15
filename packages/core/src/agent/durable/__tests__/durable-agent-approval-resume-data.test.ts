@@ -132,7 +132,7 @@ async function runApprovalGatedTool(
 
   const memory = { thread: 'approval-resume-data-thread', resource: 'approval-resume-data-resource' };
   let suspendedData: unknown;
-  const initial = await durableAgent.stream('Run the approval tool', {
+  const initial = await durableAgent.streamMessageList('Run the approval tool', {
     ...(useSendToolApproval ? { memory } : {}),
     onSuspended: data => {
       suspendedData = data;
@@ -229,7 +229,7 @@ describe('DurableAgent approval resume data', () => {
     });
 
     let suspendedData: unknown;
-    const initial = await eventedAgent.stream('Run the approval tool', {
+    const initial = await eventedAgent.streamMessageList('Run the approval tool', {
       memory: { thread: 'evented-approval-cleanup-thread', resource: 'evented-approval-cleanup-resource' },
       onSuspended: data => {
         suspendedData = data;
@@ -290,7 +290,7 @@ describe('DurableAgent approval resume data', () => {
     new Mastra({ logger: false, storage: new MockStore(), agents: { approvalResumeAbortAgent: durableAgent } });
 
     let suspendedData: unknown;
-    const initial = await durableAgent.stream('Run the approval tool', {
+    const initial = await durableAgent.streamMessageList('Run the approval tool', {
       onSuspended: data => {
         suspendedData = data;
       },

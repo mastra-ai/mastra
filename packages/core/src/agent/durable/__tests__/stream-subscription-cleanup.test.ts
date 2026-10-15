@@ -1,7 +1,7 @@
 /**
  * Auto-cleanup subscription leak (issue #24070).
  *
- * `DurableAgent.stream()`/`resume()`/`recover()` subscribe a reader to the
+ * `DurableAgent.streamMessageList()`/`resume()`/`recover()` subscribe a reader to the
  * per-run `agent.stream.<runId>` pubsub topic. When the stream ends they arm a
  * ~30s auto-cleanup timer that tears down the run registry and deletes the
  * pubsub topic. The bug: that timer deleted the topic WITHOUT calling
@@ -82,7 +82,7 @@ describe('DurableAgent auto-cleanup unsubscribes the stream reader (issue #24070
     // Spy on the CachingPubSub the run reader actually subscribes/unsubscribes on.
     const unsubscribeSpy = vi.spyOn(agent.pubsub, 'unsubscribe');
 
-    const { runId, output, cleanup } = await agent.stream('Hi');
+    const { runId, output, cleanup } = await agent.streamMessageList('Hi');
     await output.consumeStream();
 
     const topic = AGENT_STREAM_TOPIC(runId);
@@ -133,7 +133,7 @@ describe('DurableAgent auto-cleanup unsubscribes the stream reader (issue #24070
     const { agent } = createSetup(pubsub);
     const unsubscribeSpy = vi.spyOn(agent.pubsub, 'unsubscribe');
 
-    const { runId, output, cleanup } = await agent.stream('Hi');
+    const { runId, output, cleanup } = await agent.streamMessageList('Hi');
     await output.consumeStream();
 
     cleanup();

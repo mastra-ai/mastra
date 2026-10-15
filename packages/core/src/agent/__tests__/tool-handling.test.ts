@@ -873,7 +873,7 @@ describe('webSearchTool agent resolution', () => {
       },
     });
 
-    await agent.generate('search', { model: overrideModel });
+    await agent.generateMessageList('search', { model: overrideModel });
 
     const capturedWebSearchTool = Array.isArray(capturedTools)
       ? capturedTools.find(tool => tool.name === 'web_search')
@@ -924,7 +924,7 @@ describe('webSearchTool agent resolution', () => {
     });
 
     await (
-      await agent.stream('search', { model: overrideModel })
+      await agent.streamMessageList('search', { model: overrideModel })
     ).text;
 
     const capturedWebSearchTool = Array.isArray(capturedTools)
@@ -964,7 +964,7 @@ describe('webSearchTool agent resolution', () => {
       },
     });
 
-    await agent.generate('search', { model: overrideModel });
+    await agent.generateMessageList('search', { model: overrideModel });
 
     const capturedWebSearchTool = Array.isArray(capturedTools)
       ? capturedTools.find(tool => tool.name === 'web_search')

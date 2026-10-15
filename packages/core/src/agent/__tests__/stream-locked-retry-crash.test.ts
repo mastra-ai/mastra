@@ -120,7 +120,7 @@ describe('mid-stream provider error with output processors and a retrying error 
       ],
     });
 
-    const result = await agent.stream('hi', { maxSteps: 5 });
+    const result = await agent.streamMessageList('hi', { maxSteps: 5 });
     const chunks: { type: string }[] = [];
     for await (const chunk of result.fullStream) chunks.push(chunk);
     const text = await result.text;

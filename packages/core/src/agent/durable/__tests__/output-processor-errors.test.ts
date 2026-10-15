@@ -75,7 +75,7 @@ describe('durable output processor errors', () => {
       });
 
       const chunks: any[] = [];
-      const { output, cleanup } = await outputAgent.stream('Reveal the card number');
+      const { output, cleanup } = await outputAgent.streamMessageList('Reveal the card number');
 
       for await (const chunk of output.fullStream) {
         chunks.push(chunk);
@@ -112,7 +112,7 @@ describe('durable output processor errors', () => {
       ],
     });
 
-    const output = await agent.stream('Say hello');
+    const output = await agent.streamMessageList('Say hello');
     let streamError: unknown;
     try {
       for await (const _chunk of output.fullStream) {
@@ -170,7 +170,7 @@ describe('durable output processor errors', () => {
         logger: false,
       });
 
-      const { output, cleanup } = await outputAgent.stream('Say hello');
+      const { output, cleanup } = await outputAgent.streamMessageList('Say hello');
       let streamError: unknown;
       try {
         for await (const _chunk of output.fullStream) {
@@ -229,7 +229,7 @@ describe('durable output processor errors', () => {
       });
 
       const chunks: any[] = [];
-      const { output, cleanup } = await outputAgent.stream('Say hello');
+      const { output, cleanup } = await outputAgent.streamMessageList('Say hello');
       for await (const chunk of output.fullStream) {
         chunks.push(chunk);
       }
@@ -279,7 +279,7 @@ describe('durable output processor errors', () => {
 
     const threadId = 'thread-output-processor-error';
     const resourceId = 'resource-output-processor-error';
-    const { output, cleanup } = await durableAgent.stream('Reveal the card number', {
+    const { output, cleanup } = await durableAgent.streamMessageList('Reveal the card number', {
       memory: { thread: threadId, resource: resourceId },
     });
     for await (const _chunk of output.fullStream) {

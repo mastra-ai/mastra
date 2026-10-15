@@ -146,7 +146,7 @@ describe('delegated resume custom frames (#22217)', () => {
     const agent = buildSubAgent();
     new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
 
-    const stream = await agent.stream(`Process order ${ORDER}.`, { maxSteps: 3 });
+    const stream = await agent.streamMessageList(`Process order ${ORDER}.`, { maxSteps: 3 });
     const initialChunks = await collectChunks(stream);
     expect(initialChunks.some(c => c.type === 'tool-call-approval')).toBe(true);
 
@@ -214,7 +214,7 @@ describe('delegated resume custom frames (#22217)', () => {
     const agent = buildSubAgent();
     new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
 
-    const stream = await agent.stream(`Process order ${ORDER}.`, { maxSteps: 3 });
+    const stream = await agent.streamMessageList(`Process order ${ORDER}.`, { maxSteps: 3 });
     await collectChunks(stream);
 
     const resumed = await agent.resumeStream({ approved: true }, { runId: stream.runId });

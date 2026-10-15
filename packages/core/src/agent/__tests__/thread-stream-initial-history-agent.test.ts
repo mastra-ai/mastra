@@ -105,31 +105,31 @@ describe.each([
 ])('subscribeToThread withInitialHistory with a real agent (%s backlog)', (_mode, delayBacklog) => {
   it('a completed text run emits only thread-history', async () => {
     const { agent } = setup(delayBacklog);
-    await drain(await agent.stream('hello', { memory }));
+    await drain(await agent.streamMessageList('hello', { memory }));
 
     expect(await historyThenParts(agent)).toEqual(['thread-history']);
   });
 
   it('an approved and completed tool run does not replay its approval', async () => {
     const { agent } = setup(delayBacklog);
-    const first = await agent.stream('use the tool', { memory, requireToolApproval: true });
+    const first = await agent.streamMessageList('use the tool', { memory, requireToolApproval: true });
     expect(await drain(first)).toContain('tool-call-approval');
-    await drain(await agent.approveToolCall({ runId: first.runId, toolCallId: 'call-1' }));
+    await drain(await agent.approveToolCallMessageList({ runId: first.runId, toolCallId: 'call-1' }));
 
     expect(await historyThenParts(agent)).toEqual(['thread-history']);
   });
 
   it('does not replay an older completed run outside the perPage window', async () => {
     const { agent } = setup(delayBacklog);
-    await drain(await agent.stream('hello', { memory }));
-    await drain(await agent.stream('hello again', { memory }));
+    await drain(await agent.streamMessageList('hello', { memory }));
+    await drain(await agent.streamMessageList('hello again', { memory }));
 
     expect(await historyThenParts(agent, { perPage: 1 })).toEqual(['thread-history']);
   });
 
   it('still emits the approval of a run waiting on it', async () => {
     const { agent } = setup(delayBacklog);
-    await drain(await agent.stream('use the tool', { memory, requireToolApproval: true }));
+    await drain(await agent.streamMessageList('use the tool', { memory, requireToolApproval: true }));
 
     expect(await historyThenParts(agent)).toEqual(['thread-history', 'tool-call-approval']);
   });

@@ -86,7 +86,7 @@ function memoryMetadataTests(version: 'v1' | 'v2') {
           memory: mockMemory,
         });
 
-        const res = await agent.stream('hello', {
+        const res = await agent.streamMessageList('hello', {
           memory: {
             resource: 'user-1',
             thread: { id: 'thread-model-stream' },
@@ -129,7 +129,7 @@ function memoryMetadataTests(version: 'v1' | 'v2') {
           },
         });
       } else {
-        await agent.generate('hello', {
+        await agent.generateMessageList('hello', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -178,7 +178,7 @@ function memoryMetadataTests(version: 'v1' | 'v2') {
           },
         });
       } else {
-        await agent.generate('hello', {
+        await agent.generateMessageList('hello', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -224,7 +224,7 @@ function memoryMetadataTests(version: 'v1' | 'v2') {
           },
         });
       } else {
-        await agent.generate('hello', {
+        await agent.generateMessageList('hello', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -271,7 +271,7 @@ function memoryMetadataTests(version: 'v1' | 'v2') {
           },
         });
       } else {
-        await agent.generate('hello', {
+        await agent.generateMessageList('hello', {
           memory: {
             resource: 'user-1',
             thread: { id: 'thread-processor-metadata', metadata: { client: 'test' } },
@@ -323,7 +323,7 @@ function memoryMetadataTests(version: 'v1' | 'v2') {
           memory: { resource: 'user-1', thread: { id: 'thread-title-metadata' } },
         });
       } else {
-        await agent.generate('hello', {
+        await agent.generateMessageList('hello', {
           memory: { resource: 'user-1', thread: { id: 'thread-title-metadata' } },
         });
       }
@@ -367,7 +367,7 @@ function memoryMetadataTests(version: 'v1' | 'v2') {
           },
         });
       } else {
-        await agent.generate('hello', {
+        await agent.generateMessageList('hello', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -403,7 +403,7 @@ function memoryMetadataTests(version: 'v1' | 'v2') {
           },
         });
       } else {
-        res = await agent.stream('hello', {
+        res = await agent.streamMessageList('hello', {
           memory: {
             resource: 'user-1',
             thread: {

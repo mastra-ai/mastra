@@ -77,7 +77,7 @@ function createScenario() {
 
 async function runScenario(eagerToolExecution?: boolean) {
   const { agent, events } = createScenario();
-  const stream = await agent.stream('go', {
+  const stream = await agent.streamMessageList('go', {
     maxSteps: 1,
     ...(eagerToolExecution === undefined ? {} : ({ eagerToolExecution } as Record<string, unknown>)),
   });

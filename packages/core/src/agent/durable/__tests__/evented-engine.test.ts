@@ -65,7 +65,7 @@ describe('EventedAgent evented engine', () => {
       if (typeof event?.type === 'string') seen.push(event.type);
     });
 
-    const { output, cleanup } = await agent.stream('Hi');
+    const { output, cleanup } = await agent.streamMessageList('Hi');
     await output.consumeStream();
 
     await vi.waitFor(() => {
@@ -102,7 +102,7 @@ describe('EventedAgent evented engine', () => {
     });
 
     // Do NOT consume the stream — we only care whether execution finishes.
-    const { runId, cleanup } = await agent.stream('Hi');
+    const { runId, cleanup } = await agent.streamMessageList('Hi');
 
     const workflows = (await storage.getStore('workflows'))!;
     await vi.waitFor(

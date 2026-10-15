@@ -341,7 +341,7 @@ async function runStrictDirect(engine: ParityEngine): Promise<StrictCaseState> {
     | undefined;
   try {
     if (engine === 'plain') {
-      output = (await agent.stream('go', options)) as never;
+      output = (await agent.streamMessageList('go', options)) as never;
     } else {
       const result = await (
         runner as unknown as {

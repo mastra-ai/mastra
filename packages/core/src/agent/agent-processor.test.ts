@@ -189,7 +189,7 @@ describe('Input and Output Processors', () => {
         inputProcessors: [processor],
       });
 
-      const result = await agentWithProcessor.generate('Hello world');
+      const result = await agentWithProcessor.generateMessageList('Hello world');
 
       // The processor should have added a message
       expect((result.response.messages![0].content[0] as any).text).toContain('processed:');
@@ -223,7 +223,7 @@ describe('Input and Output Processors', () => {
         inputProcessors: [processor1, processor2],
       });
 
-      const result = await agentWithProcessors.generate('Hello');
+      const result = await agentWithProcessors.generateMessageList('Hello');
 
       expect((result.response.messages[0].content[0] as any).text).toContain('First processor');
       expect((result.response.messages[0].content[0] as any).text).toContain('Second processor');
@@ -257,7 +257,7 @@ describe('Input and Output Processors', () => {
         inputProcessors: [processor1, processor2],
       });
 
-      const result = await agentWithAsyncProcessors.generate('Test async');
+      const result = await agentWithAsyncProcessors.generateMessageList('Test async');
 
       // Processors run sequentially, so "First processor" should appear before "Second processor"
       expect((result.response.messages[0].content[0] as any).text).toContain('First processor');
@@ -282,7 +282,7 @@ describe('Input and Output Processors', () => {
         inputProcessors: [abortProcessor],
       });
 
-      const result = await agentWithAbortProcessor.generate('This should be aborted');
+      const result = await agentWithAbortProcessor.generateMessageList('This should be aborted');
 
       expect(result.tripwire).toBeDefined();
 
@@ -309,7 +309,7 @@ describe('Input and Output Processors', () => {
         inputProcessors: [customAbortProcessor],
       });
 
-      const result = await agentWithCustomAbort.generate('Custom abort test');
+      const result = await agentWithCustomAbort.generateMessageList('Custom abort test');
 
       expect(result.tripwire).toBeDefined();
       expect(result.tripwire?.reason).toBe('Custom abort reason');
@@ -345,7 +345,7 @@ describe('Input and Output Processors', () => {
         inputProcessors: [abortProcessor, shouldNotRunProcessor],
       });
 
-      const result = await agentWithAbortSequence.generate('Abort sequence test');
+      const result = await agentWithAbortSequence.generateMessageList('Abort sequence test');
 
       expect(result.tripwire).toBeDefined();
       expect(secondProcessorExecuted).toBe(false);
@@ -380,7 +380,7 @@ describe('Input and Output Processors', () => {
       });
 
       // This should not throw an error about invalid system message format
-      const result = await agent.generate('Hello');
+      const result = await agent.generateMessageList('Hello');
 
       expect(result.text).toBeDefined();
       expect(result.text).toContain('processed:');
@@ -415,7 +415,7 @@ describe('Input and Output Processors', () => {
         inputProcessors: [assistantMessageProcessor],
       });
 
-      const result = await agent.generate('Continue from before');
+      const result = await agent.generateMessageList('Continue from before');
 
       expect(result.text).toBeDefined();
       expect(result.text).toContain('processed:');
@@ -441,7 +441,7 @@ describe('Input and Output Processors', () => {
         inputProcessors: [streamProcessor],
       });
 
-      const stream = await agentWithStreamProcessor.stream('Stream test');
+      const stream = await agentWithStreamProcessor.streamMessageList('Stream test');
 
       let fullText = '';
       for await (const chunk of stream.fullStream) {
@@ -471,7 +471,7 @@ describe('Input and Output Processors', () => {
         inputProcessors: [streamAbortProcessor],
       });
 
-      const stream = await agentWithStreamAbort.stream('Stream abort test');
+      const stream = await agentWithStreamAbort.streamMessageList('Stream abort test');
 
       const fullOutput = await stream.getFullOutput();
       expect(fullOutput.tripwire).toBeDefined();
@@ -511,7 +511,7 @@ describe('Input and Output Processors', () => {
         },
       });
 
-      const result = await agentWithDynamicProcessors.generate('Test dynamic', {
+      const result = await agentWithDynamicProcessors.generateMessageList('Test dynamic', {
         requestContext,
       });
 
@@ -542,7 +542,7 @@ describe('Input and Output Processors', () => {
         inputProcessors: [messageModifierProcessor],
       });
 
-      const result = await agentWithModifier.generate('Original user message');
+      const result = await agentWithModifier.generateMessageList('Original user message');
 
       expect((result.response.messages[0].content[0] as any).text).toContain('MODIFIED: Original message was received');
       expect((result.response.messages[0].content[0] as any).text).toContain('Original user message');
@@ -583,11 +583,11 @@ describe('Input and Output Processors', () => {
       });
 
       // Test valid content
-      const validResult = await agentWithValidator.generate('This is appropriate content');
+      const validResult = await agentWithValidator.generateMessageList('This is appropriate content');
       expect((validResult.response.messages[0].content[0] as any).text).toContain('Content validated');
 
       // Test invalid content
-      const invalidResult = await agentWithValidator.generate('This contains inappropriate content');
+      const invalidResult = await agentWithValidator.generateMessageList('This contains inappropriate content');
       expect(invalidResult.tripwire).toBeDefined();
       expect(invalidResult.tripwire?.reason).toBe('Content validation failed');
     });
@@ -601,7 +601,7 @@ describe('Input and Output Processors', () => {
         inputProcessors: [],
       });
 
-      const result = await agentWithEmptyProcessors.generate('No processors test');
+      const result = await agentWithEmptyProcessors.generateMessageList('No processors test');
 
       expect((result.response.messages[0].content[0] as any).text).toContain('processed:');
       expect((result.response.messages[0].content[0] as any).text).toContain('No processors test');
@@ -666,7 +666,7 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new TestOutputProcessor()],
       });
 
-      const result = await agent.generate('Hello');
+      const result = await agent.generateMessageList('Hello');
 
       // The output processors should modify the returned result
       expect((result.response.messages[0].content[0] as any).text).toBe('This is a TEST response with TEST words');
@@ -724,7 +724,7 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new TextTransformProcessor()],
       });
 
-      const result = await agent.generate('Test');
+      const result = await agent.generateMessageList('Test');
 
       // The result.text property should contain the processed text (uppercase)
       // not the original unprocessed text
@@ -743,7 +743,7 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new RedactAllTextProcessor()],
       });
 
-      const result = await agent.generate('Test');
+      const result = await agent.generateMessageList('Test');
 
       expect(result.text).toBe('');
       expect(result.steps.at(-1)?.text).toBe('');
@@ -825,7 +825,7 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new ReplaceProcessor(), new AddPrefixProcessor()],
       });
 
-      const result = await agent.generate('Test');
+      const result = await agent.generateMessageList('Test');
 
       // The output processors should modify the returned result
       expect((result.response.messages?.[0].content[0] as any).text).toBe('[PROCESSED] HELLO world');
@@ -885,7 +885,7 @@ describe('Input and Output Processors', () => {
       });
 
       // Should return tripwire result when processor aborts
-      const result = await agent.generate('Generate inappropriate content');
+      const result = await agent.generateMessageList('Generate inappropriate content');
 
       expect(result.tripwire).toBeDefined();
       expect(result.tripwire?.reason).toBe('Content flagged as inappropriate');
@@ -947,7 +947,7 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new IncompleteProcessor() as any, new CompleteProcessor()],
       });
 
-      const result = await agent.generate('Test incomplete processors');
+      const result = await agent.generateMessageList('Test incomplete processors');
 
       // Only the complete processor should have run
       expect((result.response.messages![0].content[0] as any).text).toBe('[COMPLETE] This is a test response');
@@ -964,7 +964,7 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new RedactAllTextProcessor()],
       });
 
-      const stream = await agent.stream('Test');
+      const stream = await agent.streamMessageList('Test');
       // Drain the stream so finalization runs before reading the resolved promises.
       for await (const _ of stream.textStream) {
       }
@@ -1005,7 +1005,7 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new ObservingProcessor()],
       });
 
-      const stream = await agent.stream('Hello');
+      const stream = await agent.streamMessageList('Hello');
       // Drain the stream; the provider error terminates it.
       try {
         for await (const _ of stream.fullStream) {
@@ -1053,7 +1053,7 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new TestOutputProcessor()],
       });
 
-      const stream = await agent.stream('Hello');
+      const stream = await agent.streamMessageList('Hello');
 
       let collectedText = '';
       for await (const chunk of stream.fullStream) {
@@ -1089,7 +1089,7 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new BlockingOutputProcessor()],
       });
 
-      const stream = await agent.stream('Hello');
+      const stream = await agent.streamMessageList('Hello');
 
       let collectedText = '';
       for await (const chunk of stream.fullStream) {
@@ -1124,7 +1124,7 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new AbortingOutputProcessor()],
       });
 
-      const stream = await agent.stream('Hello');
+      const stream = await agent.streamMessageList('Hello');
       const chunks: any[] = [];
 
       for await (const chunk of stream.fullStream) {
@@ -1194,7 +1194,7 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new ReplaceProcessor(), new AddPrefixProcessor()],
       });
 
-      const stream = await agent.stream('Test');
+      const stream = await agent.streamMessageList('Test');
 
       let collectedText = '';
       for await (const chunk of stream.fullStream) {
@@ -1300,7 +1300,7 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new StreamStructuredProcessor()],
       });
 
-      const response = await agent.stream('Who won the 2012 US presidential election?', {
+      const response = await agent.streamMessageList('Who won the 2012 US presidential election?', {
         structuredOutput: {
           schema: z.object({
             winner: z.string(),
@@ -1379,7 +1379,7 @@ describe('Input and Output Processors', () => {
           outputProcessors: [abortProcessor],
         });
 
-        const result = await agent.generate('Hello');
+        const result = await agent.generateMessageList('Hello');
 
         expect(result.tripwire).toBeDefined();
         expect(result.tripwire?.reason).toBe('Tripwire triggered by abort-output-processor');
@@ -1410,7 +1410,7 @@ describe('Input and Output Processors', () => {
           outputProcessors: [abortProcessor],
         });
 
-        const stream = await agent.stream('Hello');
+        const stream = await agent.streamMessageList('Hello');
         const chunks: any[] = [];
 
         for await (const chunk of stream.fullStream) {
@@ -1443,7 +1443,7 @@ describe('Input and Output Processors', () => {
           outputProcessors: [customAbortProcessor],
         });
 
-        const stream = await agent.stream('Custom abort test');
+        const stream = await agent.streamMessageList('Custom abort test');
         const chunks: any[] = [];
 
         for await (const chunk of stream.fullStream) {
@@ -1492,7 +1492,7 @@ describe('New Processor Features', () => {
         inputProcessors: [retryProcessor],
       });
 
-      const stream = await agent.stream('Hello');
+      const stream = await agent.streamMessageList('Hello');
       const chunks: any[] = [];
 
       for await (const chunk of stream.fullStream) {
@@ -1539,7 +1539,7 @@ describe('New Processor Features', () => {
         outputProcessors: [retryStreamProcessor],
       });
 
-      const stream = await agent.stream('Hello');
+      const stream = await agent.streamMessageList('Hello');
       const chunks: any[] = [];
 
       for await (const chunk of stream.fullStream) {
@@ -1596,7 +1596,7 @@ describe('New Processor Features', () => {
         inputProcessors: [piiProcessor],
       });
 
-      const stream = await agent.stream('My email is test@test.com');
+      const stream = await agent.streamMessageList('My email is test@test.com');
       const chunks: any[] = [];
 
       for await (const chunk of stream.fullStream) {
@@ -1657,7 +1657,7 @@ describe('New Processor Features', () => {
         outputProcessors: [toxicityProcessor],
       });
 
-      const stream = await agent.stream('Hello');
+      const stream = await agent.streamMessageList('Hello');
       const chunks: any[] = [];
 
       for await (const chunk of stream.fullStream) {
@@ -1703,7 +1703,7 @@ describe('New Processor Features', () => {
         inputProcessors: [retryAwareProcessor],
       });
 
-      await agent.generate('Hello');
+      await agent.generateMessageList('Hello');
 
       // First call should have retryCount = 0
       expect(receivedRetryCount).toBe(0);
@@ -1736,7 +1736,7 @@ describe('New Processor Features', () => {
         outputProcessors: [retryAwareOutputProcessor],
       });
 
-      await agent.generate('Hello');
+      await agent.generateMessageList('Hello');
 
       expect(receivedRetryCount).toBe(0);
     });
@@ -1777,7 +1777,7 @@ describe('New Processor Features', () => {
         outputProcessors: [retryAwareStreamProcessor],
       });
 
-      const stream = await agent.stream('Hello');
+      const stream = await agent.streamMessageList('Hello');
       for await (const _ of stream.fullStream) {
         // Consume the stream
       }
@@ -1848,7 +1848,7 @@ describe('New Processor Features', () => {
         maxProcessorRetries: 3,
       });
 
-      const result = await agent.generate('Hello', { structuredOutput: { schema: retrySchema } });
+      const result = await agent.generateMessageList('Hello', { structuredOutput: { schema: retrySchema } });
 
       expect(harness.callCount).toBe(2);
       expect(result.tripwire).toBeFalsy();
@@ -1869,7 +1869,7 @@ describe('New Processor Features', () => {
         maxProcessorRetries: 3,
       });
 
-      const stream = await agent.stream('Hello', { structuredOutput: { schema: retrySchema } });
+      const stream = await agent.streamMessageList('Hello', { structuredOutput: { schema: retrySchema } });
       for await (const _ of stream.fullStream) {
       }
       const fullOutput = await stream.getFullOutput();
@@ -1892,7 +1892,7 @@ describe('New Processor Features', () => {
         maxProcessorRetries: 3,
       });
 
-      const stream = await agent.stream('Hello', { structuredOutput: { schema: retrySchema } });
+      const stream = await agent.streamMessageList('Hello', { structuredOutput: { schema: retrySchema } });
       // documented usage: await `object` directly, never touching `fullStream`
       expect(await stream.object).toEqual({ answer: 'ACCEPTED', score: 9 });
       expect(harness.callCount).toBe(2);
@@ -1909,7 +1909,7 @@ describe('New Processor Features', () => {
         maxProcessorRetries: 3,
       });
 
-      const stream = await agent.stream('Hello', { structuredOutput: { schema: retrySchema } });
+      const stream = await agent.streamMessageList('Hello', { structuredOutput: { schema: retrySchema } });
       // materializes the promise before the first attempt is even rejected
       const objectPromise = stream.object;
       for await (const _ of stream.fullStream) {
@@ -1971,7 +1971,7 @@ describe('New Processor Features', () => {
         maxProcessorRetries: 3,
       });
 
-      const result = await agent.generate('Hello');
+      const result = await agent.generateMessageList('Hello');
 
       // Should have made 2 calls to the model
       expect(callCount).toBe(2);
@@ -2060,7 +2060,7 @@ describe('New Processor Features', () => {
         maxProcessorRetries: 3,
       });
 
-      const result = await agent.stream('Hello', { maxSteps: 10 });
+      const result = await agent.streamMessageList('Hello', { maxSteps: 10 });
       expect(await result.text).toBe('good response');
       expect(prompts).toHaveLength(5);
 
@@ -2126,7 +2126,7 @@ describe('New Processor Features', () => {
         maxProcessorRetries: 5,
       });
 
-      await agent.generate('Hello');
+      await agent.generateMessageList('Hello');
 
       // Should have received incrementing retry counts: 0, 1, 2
       expect(receivedRetryCounts).toEqual([0, 1, 2]);
@@ -2168,7 +2168,7 @@ describe('New Processor Features', () => {
         maxProcessorRetries: 2,
       });
 
-      const result = await agent.generate('Hello');
+      const result = await agent.generateMessageList('Hello');
 
       // Should have made maxProcessorRetries + 1 calls (initial + retries)
       expect(callCount).toBe(3);
@@ -2231,7 +2231,7 @@ describe('New Processor Features', () => {
         maxProcessorRetries: 3,
       });
 
-      const result = await agent.generate('What is the capital of France?');
+      const result = await agent.generateMessageList('What is the capital of France?');
 
       // Sanity: processor saw the rejected text
       expect(firstResponseText).toBe('fabricated response that should be rejected');
@@ -2309,7 +2309,7 @@ describe('New Processor Features', () => {
         maxProcessorRetries: 3,
       });
 
-      const stream = await agent.stream('What is the capital of France?');
+      const stream = await agent.streamMessageList('What is the capital of France?');
       // Consume the stream
       for await (const _ of stream.fullStream) {
       }
@@ -2365,7 +2365,7 @@ describe('New Processor Features', () => {
         inputProcessors: [identifiedProcessor],
       });
 
-      const stream = await agent.stream('Hello');
+      const stream = await agent.streamMessageList('Hello');
       const chunks: any[] = [];
 
       for await (const chunk of stream.fullStream) {
@@ -2411,7 +2411,7 @@ describe('New Processor Features', () => {
         outputProcessors: [identifiedStreamProcessor],
       });
 
-      const stream = await agent.stream('Hello');
+      const stream = await agent.streamMessageList('Hello');
       const chunks: any[] = [];
 
       for await (const chunk of stream.fullStream) {
@@ -2971,7 +2971,7 @@ describe('Workflow as Processor', () => {
     };
     agent.__setLogger(logger);
 
-    await expect(agent.generate('trigger failure')).rejects.toThrow('Input processor error');
+    await expect(agent.generateMessageList('trigger failure')).rejects.toThrow('Input processor error');
     expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('processor:failing-processor'));
     expect(logger.trackException).toHaveBeenCalled();
   });
@@ -3036,7 +3036,7 @@ describe('Workflow as Processor', () => {
         inputProcessors: [inputProcessorWorkflow],
       });
 
-      const result = await agent.generate('Hello world');
+      const result = await agent.generateMessageList('Hello world');
 
       expect(workflowExecuted).toBe(true);
       // The response should include the transformed message
@@ -3092,7 +3092,7 @@ describe('Workflow as Processor', () => {
         inputProcessors: [tripwireWorkflow],
       });
 
-      const stream = await agent.stream('This message contains blocked content');
+      const stream = await agent.streamMessageList('This message contains blocked content');
       const chunks: any[] = [];
 
       for await (const chunk of stream.fullStream) {
@@ -3160,7 +3160,7 @@ describe('Workflow as Processor', () => {
         outputProcessors: [outputProcessorWorkflow],
       });
 
-      const result = await agent.generate('Hello');
+      const result = await agent.generateMessageList('Hello');
 
       expect(workflowExecuted).toBe(true);
       // Output processors modify response.messages, not result.text
@@ -3213,7 +3213,7 @@ describe('Workflow as Processor', () => {
         outputProcessors: [outputTripwireWorkflow],
       });
 
-      const result = await agent.generate('Hello');
+      const result = await agent.generateMessageList('Hello');
 
       expect(result.tripwire).toBeDefined();
       expect(result.tripwire?.reason).toBe('Output contains inappropriate content');
@@ -3278,7 +3278,7 @@ describe('Workflow as Processor', () => {
         inputProcessors: [processorWorkflow],
       });
 
-      const result = await agent.generate('Hello');
+      const result = await agent.generateMessageList('Hello');
 
       expect(transformations).toEqual(['prefix', 'suffix']);
       // The response should include both prefix and suffix
@@ -3322,7 +3322,7 @@ describe('Workflow as Processor', () => {
         inputProcessors: [processInputStepProcessor],
       });
 
-      const stream = await agent.stream('Hello');
+      const stream = await agent.streamMessageList('Hello');
       const chunks: any[] = [];
 
       for await (const chunk of stream.fullStream) {
@@ -3368,7 +3368,7 @@ describe('Workflow as Processor', () => {
         inputProcessors: [processInputStepProcessor],
       });
 
-      const stream = await agent.stream('Hello');
+      const stream = await agent.streamMessageList('Hello');
       const chunks: any[] = [];
 
       for await (const chunk of stream.fullStream) {
@@ -3417,7 +3417,7 @@ describe('Workflow as Processor', () => {
         outputProcessors: [processOutputStepProcessor],
       });
 
-      const stream = await agent.stream('Hello');
+      const stream = await agent.streamMessageList('Hello');
       const chunks: any[] = [];
 
       for await (const chunk of stream.fullStream) {
@@ -3479,7 +3479,7 @@ describe('Workflow as Processor', () => {
         outputProcessors: [processOutputStepProcessor],
       });
 
-      const result = await agent.generate('Hello');
+      const result = await agent.generateMessageList('Hello');
 
       // The tripwire should be set on the result
       expect(result.tripwire).toBeDefined();
@@ -3513,7 +3513,7 @@ describe('Workflow as Processor', () => {
         model: mockModel,
       });
 
-      const stream = await agent.stream('Hello', {
+      const stream = await agent.streamMessageList('Hello', {
         prepareStep: ({ abort }) => {
           abort('Blocked by prepareStep', {
             metadata: { reason: 'content_moderation', score: 0.85 },
@@ -3556,7 +3556,7 @@ describe('Workflow as Processor', () => {
         model: mockModel,
       });
 
-      const stream = await agent.stream('Hello', {
+      const stream = await agent.streamMessageList('Hello', {
         prepareStep: ({ abort }) => {
           abort('Please rephrase your question', { retry: true });
         },
@@ -3841,7 +3841,7 @@ describe('Workflow as Processor', () => {
         inputProcessors: [trackingProcessor],
       });
 
-      const result = await agent.generate('Greet World');
+      const result = await agent.generateMessageList('Greet World');
 
       expect(result.text).toBe('Done!');
       expect(stepLog.length).toBeGreaterThanOrEqual(2);
@@ -3993,7 +3993,7 @@ describe('processOutputStep tripwire that ends the run drops the rejected reply 
 
     it(`generate(): ${label}`, async () => {
       const { agent, memory } = makeAgent(retry);
-      const result = await agent.generate('hello', { memory: { thread: 't1', resource: 'r1' } });
+      const result = await agent.generateMessageList('hello', { memory: { thread: 't1', resource: 'r1' } });
 
       expect(result.finishReason).toBe('tripwire');
       expect(result.tripwire).toBeDefined();
@@ -4007,7 +4007,7 @@ describe('processOutputStep tripwire that ends the run drops the rejected reply 
 
     it(`stream(): ${label}`, async () => {
       const { agent, memory } = makeAgent(retry);
-      const stream = await agent.stream('hello', { memory: { thread: 't1', resource: 'r1' } });
+      const stream = await agent.streamMessageList('hello', { memory: { thread: 't1', resource: 'r1' } });
       const full = await stream.getFullOutput();
 
       expect(stream.tripwire).toBeDefined();
@@ -4077,7 +4077,7 @@ describe('processOutputStep tripwire that ends the run drops the rejected reply 
       maxProcessorRetries: 1,
     });
 
-    const result = await agent.generate('hello', { memory: { thread: 't1', resource: 'r1' } });
+    const result = await agent.generateMessageList('hello', { memory: { thread: 't1', resource: 'r1' } });
     expect(result.finishReason).toBe('tripwire');
     expect(result.text).toBe('');
 
@@ -4208,7 +4208,7 @@ describe('error processors — shared stability defaults', () => {
     ]);
     const agent = bareAgent({ errorProcessorDefaults: false, errorProcessors: resolver });
 
-    await agent.generate('hello');
+    await agent.generateMessageList('hello');
 
     expect(resolver).toHaveBeenCalledTimes(1);
     expect(processLLMRequest).toHaveBeenCalledTimes(1);
@@ -4360,7 +4360,7 @@ describe('LLM request lane — error-phase processors', () => {
       errorProcessors: [processor],
     });
 
-    await agent.generate('hello');
+    await agent.generateMessageList('hello');
 
     expect(calls.processLLMRequest).toBeGreaterThan(0);
     expect(seenPrompts[0]).toBeTruthy();
@@ -4387,7 +4387,7 @@ describe('LLM request lane — error-phase processors', () => {
       errorProcessors: [processor],
     });
 
-    await agent.generate('hello');
+    await agent.generateMessageList('hello');
 
     // The widening reaches the provider-boundary lane only: the input steps must not run for it.
     expect(calls.processInput).toBe(0);
@@ -4469,7 +4469,7 @@ describe('LLM request lane — error-phase processors', () => {
       }),
     });
 
-    await agent.generate('hello', { errorProcessors: [processor] });
+    await agent.generateMessageList('hello', { errorProcessors: [processor] });
 
     // The call-time processor runs its prompt hook even though the agent
     // configured no error processors.
@@ -4494,7 +4494,7 @@ describe('LLM request lane — error-phase processors', () => {
       }),
     });
 
-    await agent.generate('hello', { errorProcessors: [] });
+    await agent.generateMessageList('hello', { errorProcessors: [] });
 
     // `errorProcessors: []` replaces the resolved list — defaults included — so
     // the default ProviderHistoryCompat must not rewrite the outbound prompt.
@@ -4576,7 +4576,7 @@ describe('anthropic tool id repair — prompt-scoped through the agent', () => {
 
     // A bare agent carries the shared stability defaults, so `ProviderHistoryCompat` runs in the
     // prompt lane without the caller wiring anything.
-    await agent.generate(history as never);
+    await agent.generateMessageList(history as never);
 
     expect(capturedPrompts).toHaveLength(1);
     const sentIds = promptToolIds(capturedPrompts[0]!);
@@ -4615,7 +4615,7 @@ describe('anthropic tool id repair — prompt-scoped through the agent', () => {
 
     const threadId = 'tool-id-repair-thread';
     const resourceId = 'tool-id-repair-resource';
-    await agent.generate(historyWithInvalidToolId() as never, { memory: { thread: threadId, resource: resourceId } });
+    await agent.generateMessageList(historyWithInvalidToolId() as never, { memory: { thread: threadId, resource: resourceId } });
 
     // The outbound prompt was sanitized.
     expect(promptToolIds(capturedPrompts[0]!)).toEqual(['call_abc_1', 'call_abc_1']);

@@ -78,7 +78,7 @@ function callbackTests(version: 'v1' | 'v2') {
       });
 
       // Call stream without passing any options - should use defaultOptions
-      const result = version === 'v1' ? await agent.streamLegacy('How are you?') : await agent.stream('How are you?');
+      const result = version === 'v1' ? await agent.streamLegacy('How are you?') : await agent.streamMessageList('How are you?');
 
       // Consume the stream to trigger onFinish
       if (version === 'v1') {
@@ -125,7 +125,7 @@ function callbackTests(version: 'v1' | 'v2') {
 
       // Call stream with empty options - should still use defaultOptions
       const result =
-        version === 'v1' ? await agent.streamLegacy('How are you?', {}) : await agent.stream('How are you?', {});
+        version === 'v1' ? await agent.streamLegacy('How are you?', {}) : await agent.streamMessageList('How are you?', {});
 
       // Consume the stream to trigger onFinish
       if (version === 'v1') {
@@ -178,7 +178,7 @@ function callbackTests(version: 'v1' | 'v2') {
                 finishData = data;
               },
             })
-          : await agent.stream('How are you?', {
+          : await agent.streamMessageList('How are you?', {
               onFinish: data => {
                 passedOnFinishCalled = true;
                 finishData = data;
@@ -226,7 +226,7 @@ function callbackTests(version: 'v1' | 'v2') {
           onFinish,
         });
       } else {
-        result = await agent.stream('How are you?', {
+        result = await agent.streamMessageList('How are you?', {
           onFinish,
         });
       }

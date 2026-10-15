@@ -67,7 +67,7 @@ describe('Agent requestContextSchema', () => {
         id: 'agent-forwarding-tool',
         description: 'Forwards context to an agent',
         requestContextSchema: z.object({ date: dateCodec }),
-        execute: async (_, { requestContext }) => agent.generate('Hello', { requestContext }),
+        execute: async (_, { requestContext }) => agent.generateMessageList('Hello', { requestContext }),
       });
       const requestContext = new RequestContext();
       requestContext.set('date', '2026-08-17T00:00:00.000Z');
@@ -92,7 +92,7 @@ describe('Agent requestContextSchema', () => {
       requestContext.set('userId', 'user-123');
       requestContext.set('apiKey', 'key-456');
 
-      const result = await agent.generate('Hello', { requestContext });
+      const result = await agent.generateMessageList('Hello', { requestContext });
 
       expect(result.text).toContain('Hello');
     });
@@ -110,7 +110,7 @@ describe('Agent requestContextSchema', () => {
       requestContext.set('userId', 'user-123');
       // Missing apiKey
 
-      await expect(agent.generate('Hello', { requestContext })).rejects.toThrow(
+      await expect(agent.generateMessageList('Hello', { requestContext })).rejects.toThrow(
         /Request context validation failed for agent/,
       );
     });
@@ -128,7 +128,7 @@ describe('Agent requestContextSchema', () => {
       requestContext.set('userId', 123 as any); // Wrong type
       requestContext.set('apiKey', 'key-456');
 
-      await expect(agent.generate('Hello', { requestContext })).rejects.toThrow(
+      await expect(agent.generateMessageList('Hello', { requestContext })).rejects.toThrow(
         /Request context validation failed for agent/,
       );
     });
@@ -145,7 +145,7 @@ describe('Agent requestContextSchema', () => {
       const requestContext = new RequestContext();
       // Empty context
 
-      await expect(agent.generate('Hello', { requestContext })).rejects.toThrow(/my-special-agent/);
+      await expect(agent.generateMessageList('Hello', { requestContext })).rejects.toThrow(/my-special-agent/);
     });
   });
 
@@ -164,7 +164,7 @@ describe('Agent requestContextSchema', () => {
       requestContext.set('apiKey', 'key-456');
 
       // If validation passes, stream() should not throw
-      const result = await agent.stream('Hello', { requestContext });
+      const result = await agent.streamMessageList('Hello', { requestContext });
       expect(result).toBeDefined();
       // Consume the stream
       await result.getFullOutput();
@@ -183,7 +183,7 @@ describe('Agent requestContextSchema', () => {
       requestContext.set('userId', 'user-123');
       // Missing apiKey
 
-      await expect(agent.stream('Hello', { requestContext })).rejects.toThrow(
+      await expect(agent.streamMessageList('Hello', { requestContext })).rejects.toThrow(
         /Request context validation failed for agent/,
       );
     });
@@ -201,7 +201,7 @@ describe('Agent requestContextSchema', () => {
       requestContext.set('userId', 123 as any); // Wrong type
       requestContext.set('apiKey', 'key-456');
 
-      await expect(agent.stream('Hello', { requestContext })).rejects.toThrow(
+      await expect(agent.streamMessageList('Hello', { requestContext })).rejects.toThrow(
         /Request context validation failed for agent/,
       );
     });
@@ -219,7 +219,7 @@ describe('Agent requestContextSchema', () => {
       const requestContext = new RequestContext();
       requestContext.set('anything', 'value');
 
-      const result = await agent.generate('Hello', { requestContext });
+      const result = await agent.generateMessageList('Hello', { requestContext });
 
       expect(result.text).toContain('Hello');
     });
@@ -232,7 +232,7 @@ describe('Agent requestContextSchema', () => {
         model: mockModel,
       });
 
-      const result = await agent.generate('Hello');
+      const result = await agent.generateMessageList('Hello');
 
       expect(result.text).toContain('Hello');
     });
@@ -246,7 +246,7 @@ describe('Agent requestContextSchema', () => {
       });
 
       // If no schema, stream() should not throw
-      const result = await agent.stream('Hello');
+      const result = await agent.streamMessageList('Hello');
       expect(result).toBeDefined();
       // Consume the stream
       await result.getFullOutput();
@@ -274,7 +274,7 @@ describe('Agent requestContextSchema', () => {
       const requestContext = new RequestContext<{ userName: string }>();
       requestContext.set('userName', 'John');
 
-      await agent.generate('Hello', { requestContext });
+      await agent.generateMessageList('Hello', { requestContext });
 
       expect(capturedContext.get('userName')).toBe('John');
       expect(capturedContext.all.userName).toBe('John');

@@ -41,7 +41,7 @@ describe('Base64 Images with Threads - Issue #10480', () => {
 
     // Before the fix, this would throw: "Error executing step prepare-memory-step: Error: Invalid URL: iVBORw0KG..."
     // After the fix, it should work correctly
-    const result = await agent.generate(
+    const result = await agent.generateMessageList(
       [
         {
           role: 'user',
@@ -86,7 +86,7 @@ describe('Base64 Images with Threads - Issue #10480', () => {
       memory: mockMemory,
     });
 
-    const result = await agent.generate(
+    const result = await agent.generateMessageList(
       [
         {
           role: 'user',
@@ -142,7 +142,7 @@ describe('Base64 Images with Threads - Issue #10480', () => {
       memory: mockMemory,
     });
 
-    const stream = await agent.stream(
+    const stream = await agent.streamMessageList(
       [
         {
           role: 'user',
@@ -192,7 +192,7 @@ describe('Base64 Images with Threads - Issue #10480', () => {
       memory: mockMemory,
     });
 
-    const result = await agent.generate(
+    const result = await agent.generateMessageList(
       [
         {
           role: 'user',
@@ -252,7 +252,7 @@ describe('Base64 Images with Threads - Issue #10480', () => {
     ];
 
     // This should not throw "Invalid URL" error
-    const result = await agent.generate(messages, {
+    const result = await agent.generateMessageList(messages, {
       memory: {
         thread: {
           id: 'attachment-thread',
@@ -286,7 +286,7 @@ describe('Base64 Images with Threads - Issue #10480', () => {
       memory: mockMemory,
     });
 
-    const result = await agent.generate(
+    const result = await agent.generateMessageList(
       [
         {
           role: 'user',
@@ -341,7 +341,7 @@ describe('Base64 Images with Threads - Issue #10480', () => {
       memory: mockMemory,
     });
 
-    const result = await agent.generate(
+    const result = await agent.generateMessageList(
       [
         {
           role: 'user',
@@ -398,7 +398,7 @@ describe('Base64 Images with Threads - Issue #10480', () => {
       } as CoreMessage,
     ];
 
-    const result = await agent.generate(messages, {
+    const result = await agent.generateMessageList(messages, {
       memory: {
         thread: {
           id: 'url-attachment-thread',

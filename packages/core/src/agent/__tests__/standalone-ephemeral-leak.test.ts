@@ -45,7 +45,7 @@ function scorerHookCount() {
 }
 
 async function streamAndDrain(agent: Agent, prompt: string, options?: AgentExecutionOptions) {
-  const result = options ? await agent.stream(prompt, options) : await agent.stream(prompt);
+  const result = options ? await agent.streamMessageList(prompt, options) : await agent.streamMessageList(prompt);
   for await (const _ of result.fullStream) {
     // drain
   }

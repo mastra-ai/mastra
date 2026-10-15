@@ -211,7 +211,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
           },
         });
       } else {
-        await agent.generate('What is the weather like today?', {
+        await agent.generateMessageList('What is the weather like today?', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -401,7 +401,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
           requestContext,
         });
       } else {
-        await agent.generate('Test message', {
+        await agent.generateMessageList('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -433,7 +433,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
           requestContext: standardContext,
         });
       } else {
-        await agent.generate('Test message', {
+        await agent.generateMessageList('Test message', {
           memory: {
             resource: 'user-2',
             thread: {
@@ -584,7 +584,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       if (version === 'v1') {
         await agent.generateLegacy('Test message');
       } else {
-        await agent.generate('Test message');
+        await agent.generateMessageList('Test message');
       }
 
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -596,7 +596,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       if (version === 'v1') {
         await agent.generateLegacy('Test message');
       } else {
-        await agent.generate('Test message');
+        await agent.generateMessageList('Test message');
       }
 
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -764,7 +764,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
           },
         });
       } else {
-        await agent.generate('Test message', {
+        await agent.generateMessageList('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -798,7 +798,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
           },
         });
       } else {
-        await agent.generate('Test message', {
+        await agent.generateMessageList('Test message', {
           memory: {
             resource: 'user-2',
             thread: {
@@ -946,7 +946,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
         });
         expect(titlePersisted).toBe(true);
       } else {
-        await agent.generate('Name this conversation', {
+        await agent.generateMessageList('Name this conversation', {
           serverless: { waitUntil },
           memory: {
             resource: 'user-await',
@@ -1073,7 +1073,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
           },
         });
       } else {
-        await agent.generate('Help me with my coding project', {
+        await agent.generateMessageList('Help me with my coding project', {
           memory: {
             resource: 'user-123',
             thread: threadId,
@@ -1197,7 +1197,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
           },
         });
       } else {
-        await agent.generate('Help me with my coding project', {
+        await agent.generateMessageList('Help me with my coding project', {
           memory: {
             resource: 'user-123',
             thread: threadId,
@@ -1280,7 +1280,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
           },
         });
       } else {
-        await agent.generate('Test message', {
+        await agent.generateMessageList('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -1458,7 +1458,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
           },
         });
       } else {
-        await agent.generate('Test message', {
+        await agent.generateMessageList('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -1663,7 +1663,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
           requestContext: japaneseContext,
         });
       } else {
-        await agent.generate('Test message', {
+        await agent.generateMessageList('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -1697,7 +1697,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
           requestContext: englishContext,
         });
       } else {
-        await agent.generate('Test message', {
+        await agent.generateMessageList('Test message', {
           memory: {
             resource: 'user-2',
             thread: {
@@ -1835,7 +1835,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
           },
         });
       } else {
-        await agent.generate('What is the weather like today?', {
+        await agent.generateMessageList('What is the weather like today?', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -1975,7 +1975,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
           },
         });
       } else {
-        await agent.generate('Test message', {
+        await agent.generateMessageList('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -2103,7 +2103,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
           },
         });
       } else {
-        await agent.generate('Test message', {
+        await agent.generateMessageList('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -2197,7 +2197,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       process.once('unhandledRejection', onUnhandledRejection);
 
       try {
-        await agent.generate('Test message', {
+        await agent.generateMessageList('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -2422,7 +2422,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
           },
         });
       } else {
-        await agent.generate('Test message', {
+        await agent.generateMessageList('Test message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -2460,7 +2460,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
           },
         });
       } else {
-        await agent.generate('Test message', {
+        await agent.generateMessageList('Test message', {
           memory: {
             resource: 'user-2',
             thread: {
@@ -2617,7 +2617,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
           },
         });
       } else {
-        await agent.generate('First message', {
+        await agent.generateMessageList('First message', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -2641,7 +2641,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
           },
         });
       } else {
-        await agent.generate('Second message', {
+        await agent.generateMessageList('Second message', {
           memory: {
             resource: 'user-1',
             thread: threadId,
@@ -3039,7 +3039,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
           },
         });
       } else {
-        await agent.generate('hi', {
+        await agent.generateMessageList('hi', {
           memory: {
             resource: 'user-1',
             thread: {
@@ -3424,7 +3424,7 @@ describe('onTitleGenerated callback', () => {
 
     let receivedTitle: string | undefined;
 
-    await agent.generate('Hello', {
+    await agent.generateMessageList('Hello', {
       memory: {
         resource: 'user-1',
         thread: { id: 'thread-cb-1', title: '' },
@@ -3446,7 +3446,7 @@ describe('onTitleGenerated callback', () => {
 
     let receivedTitle: string | undefined;
 
-    const result = await agent.stream('Hello', {
+    const result = await agent.streamMessageList('Hello', {
       memory: {
         resource: 'user-1',
         thread: { id: 'thread-cb-2', title: '' },
@@ -3473,7 +3473,7 @@ describe('onTitleGenerated callback', () => {
 
     let callbackFired = false;
 
-    await agent.generate('Hello', {
+    await agent.generateMessageList('Hello', {
       memory: {
         resource: 'user-1',
         thread: { id: 'thread-cb-3', title: 'Existing Title' },
@@ -3492,7 +3492,7 @@ describe('onTitleGenerated callback', () => {
     const { agentModel, titleModel } = createMockModels();
     const { agent } = createAgentWithTitleGen(agentModel, titleModel);
 
-    await agent.generate('Hello', {
+    await agent.generateMessageList('Hello', {
       memory: {
         resource: 'user-1',
         thread: { id: 'thread-cb-4', title: '' },
@@ -3534,7 +3534,7 @@ describe('onTitleGenerated callback', () => {
     let callbackFired = false;
     let titlePromise: Promise<unknown> | undefined;
 
-    await agent.generate('Hello', {
+    await agent.generateMessageList('Hello', {
       memory: {
         resource: 'user-1',
         thread: { id: 'thread-deleted-during-title', title: '' },
@@ -3574,7 +3574,7 @@ describe('onTitleGenerated callback', () => {
     let callbackFired = false;
     let titlePromise: Promise<unknown> | undefined;
 
-    await agent.generate('Hello', {
+    await agent.generateMessageList('Hello', {
       memory: {
         resource: 'user-1',
         thread: { id: threadId, title: '' },
@@ -3600,7 +3600,7 @@ describe('onTitleGenerated callback', () => {
     const { agentModel, titleModel } = createMockModels();
     const { agent, mockMemory } = createAgentWithTitleGen(agentModel, titleModel);
 
-    await agent.generate('Hello', {
+    await agent.generateMessageList('Hello', {
       memory: {
         resource: 'user-1',
         thread: { id: 'thread-title-metadata', title: '', metadata: { keep: 'me' } },
@@ -3714,7 +3714,7 @@ describe('title generation with resource-scoped memory recall', () => {
       ],
     });
 
-    await agent.generate('What is a good recipe for biryani?', {
+    await agent.generateMessageList('What is a good recipe for biryani?', {
       memory: {
         resource: 'user-1',
         thread: { id: 'new-thread', title: '' },
@@ -3834,7 +3834,7 @@ describe('generateTitle.emitEvent', () => {
     const { agentModel, titleModel } = createEmitEventMockModels();
     const { agent, mockMemory } = createEmitEventAgent(agentModel, titleModel, { model: titleModel, emitEvent: true });
 
-    const streamResult = await agent.stream('Hello', {
+    const streamResult = await agent.streamMessageList('Hello', {
       memory: { resource: 'user-1', thread: { id: 'thread-emit-1', title: '' } },
     });
 
@@ -3863,7 +3863,7 @@ describe('generateTitle.emitEvent', () => {
     const { agentModel, titleModel } = createEmitEventMockModels();
     const { agent, mockMemory } = createEmitEventAgent(agentModel, titleModel, { model: titleModel });
 
-    const streamResult = await agent.stream('Hello', {
+    const streamResult = await agent.streamMessageList('Hello', {
       memory: { resource: 'user-1', thread: { id: 'thread-emit-2', title: '' } },
     });
 
@@ -3886,7 +3886,7 @@ describe('generateTitle.emitEvent', () => {
 
     const abortController = new AbortController();
 
-    const streamResult = await agent.stream('Hello', {
+    const streamResult = await agent.streamMessageList('Hello', {
       memory: { resource: 'user-1', thread: { id: 'thread-emit-3', title: '' } },
       abortSignal: abortController.signal,
     });
@@ -3920,7 +3920,7 @@ describe('generateTitle.emitEvent', () => {
 
     // generate() returns JSON — no writer is passed, so the title (whose model
     // is deferred here) must not hold the response.
-    await agent.generate('Hello', {
+    await agent.generateMessageList('Hello', {
       memory: { resource: 'user-1', thread: { id: 'thread-emit-4', title: '' } },
     });
 
@@ -3942,7 +3942,7 @@ describe('generateTitle.emitEvent', () => {
 
     // First turn: two messages in the thread (user + assistant response) — below
     // minMessages: 3, no emission
-    const firstTurn = await agent.stream('Hello', {
+    const firstTurn = await agent.streamMessageList('Hello', {
       memory: { resource: 'user-1', thread: { id: 'thread-emit-5', title: '' } },
     });
     const firstTurnTypes: string[] = [];
@@ -3957,7 +3957,7 @@ describe('generateTitle.emitEvent', () => {
 
     // Second turn: the thread now has four messages (two per turn) — threshold
     // met, emit before finish
-    const secondTurn = await agent.stream('Follow up', {
+    const secondTurn = await agent.streamMessageList('Follow up', {
       memory: { resource: 'user-1', thread: { id: 'thread-emit-5' } },
     });
     const secondTurnChunks: any[] = [];

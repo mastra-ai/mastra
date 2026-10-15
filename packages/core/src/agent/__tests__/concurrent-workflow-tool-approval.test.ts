@@ -131,7 +131,7 @@ describe('concurrent workflow tool approvals', () => {
       })();
 
       try {
-        await registeredAgent.stream('Run workflow A and workflow B together.', {
+        await registeredAgent.streamMessageList('Run workflow A and workflow B together.', {
           maxSteps: 6,
           memory: { thread: threadId, resource: resourceId },
         });

@@ -71,13 +71,13 @@ describe('durable agent API-error retry', () => {
       });
       if (durable) {
         const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
-        const { fullStream, cleanup } = await durableAgent.stream('hello', { maxProcessorRetries: 1 });
+        const { fullStream, cleanup } = await durableAgent.streamMessageList('hello', { maxProcessorRetries: 1 });
         for await (const _ of fullStream) {
           // drain
         }
         await cleanup?.();
       } else {
-        const result = await agent.stream('hello', { maxProcessorRetries: 1 });
+        const result = await agent.streamMessageList('hello', { maxProcessorRetries: 1 });
         await result.consumeStream();
       }
       return seen;
@@ -112,7 +112,7 @@ describe('durable agent API-error retry', () => {
     });
 
     const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
-    const { fullStream, cleanup } = await durableAgent.stream('hello', {
+    const { fullStream, cleanup } = await durableAgent.streamMessageList('hello', {
       memory: { thread: threadId, resource: resourceId },
       maxProcessorRetries: 1,
     });
@@ -154,7 +154,7 @@ describe('durable agent API-error retry', () => {
     });
 
     const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
-    const { fullStream, cleanup } = await durableAgent.stream('hello', {
+    const { fullStream, cleanup } = await durableAgent.streamMessageList('hello', {
       maxProcessorRetries: 1,
       errorProcessors: [
         {
@@ -200,7 +200,7 @@ describe('durable agent API-error retry', () => {
     });
 
     const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
-    const { fullStream, cleanup } = await durableAgent.stream('hello');
+    const { fullStream, cleanup } = await durableAgent.streamMessageList('hello');
     for await (const _chunk of fullStream) {
     }
     await cleanup?.();
@@ -250,7 +250,7 @@ describe('durable agent API-error retry', () => {
     const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
     const threadId = 'thread-terminal-rotation';
     const resourceId = 'resource-terminal-rotation';
-    const { fullStream, cleanup } = await durableAgent.stream('hello', {
+    const { fullStream, cleanup } = await durableAgent.streamMessageList('hello', {
       memory: { thread: threadId, resource: resourceId },
       maxProcessorRetries: 1,
     });
@@ -297,7 +297,7 @@ describe('durable agent API-error retry', () => {
     });
 
     const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
-    const { fullStream, cleanup } = await durableAgent.stream('hello');
+    const { fullStream, cleanup } = await durableAgent.streamMessageList('hello');
     for await (const _chunk of fullStream) {
     }
     await cleanup?.();
@@ -383,7 +383,7 @@ describe('durable error-processor resolution', () => {
 
     const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
 
-    await expect(durableAgent.stream('hello')).rejects.toThrow('resolver unavailable');
+    await expect(durableAgent.streamMessageList('hello')).rejects.toThrow('resolver unavailable');
     expect(modelCall).not.toHaveBeenCalled();
     expect(redactor.processOutputStream).not.toHaveBeenCalled();
   });

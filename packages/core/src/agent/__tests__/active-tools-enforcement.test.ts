@@ -69,7 +69,7 @@ describe('activeTools enforcement at execution time', () => {
       },
     });
 
-    const result = await agent.generate('Hello', {
+    const result = await agent.generateMessageList('Hello', {
       maxSteps: 3,
       prepareStep: () => ({
         activeTools: ['allowedTool'],
@@ -140,7 +140,7 @@ describe('activeTools enforcement at execution time', () => {
       },
     });
 
-    await agent.generate('Hello', {
+    await agent.generateMessageList('Hello', {
       maxSteps: 3,
       prepareStep: () => ({
         activeTools: ['allowedTool'],
@@ -215,7 +215,7 @@ describe('activeTools enforcement at execution time', () => {
     });
 
     // No prepareStep = no activeTools restriction
-    await agent.generate('Hello', { maxSteps: 3 });
+    await agent.generateMessageList('Hello', { maxSteps: 3 });
 
     expect(tool1Execute).toHaveBeenCalledOnce();
     expect(tool2Execute).toHaveBeenCalledOnce();

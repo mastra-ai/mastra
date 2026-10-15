@@ -92,7 +92,7 @@ describe('durable stream adapter acknowledges every delivery', () => {
     });
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-    const { output, runId, cleanup } = await durableAgent.stream('Go');
+    const { output, runId, cleanup } = await durableAgent.streamMessageList('Go');
 
     await output.consumeStream();
 

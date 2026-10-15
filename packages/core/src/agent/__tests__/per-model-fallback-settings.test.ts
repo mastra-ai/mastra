@@ -72,7 +72,7 @@ describe('Per-fallback-entry settings', () => {
       });
 
       await (
-        await agent.stream('Hello')
+        await agent.streamMessageList('Hello')
       ).text;
 
       expect(primary.doStreamCalls[0]?.temperature).toBe(0.3);
@@ -92,7 +92,7 @@ describe('Per-fallback-entry settings', () => {
         ],
       });
 
-      const text = await (await agent.stream('Hello')).text;
+      const text = await (await agent.streamMessageList('Hello')).text;
 
       expect(text).toBe('secondary response');
       expect(secondary.doStreamCalls[0]?.temperature).toBe(0.9);
@@ -109,7 +109,7 @@ describe('Per-fallback-entry settings', () => {
       });
 
       await (
-        await agent.stream('Hello', { modelSettings: { temperature: 1, topP: 0.5 } as any })
+        await agent.streamMessageList('Hello', { modelSettings: { temperature: 1, topP: 0.5 } as any })
       ).text;
 
       expect(primary.doStreamCalls[0]?.temperature).toBe(0.25);
@@ -136,7 +136,7 @@ describe('Per-fallback-entry settings', () => {
       });
 
       await (
-        await agent.stream('Hello', { requestContext })
+        await agent.streamMessageList('Hello', { requestContext })
       ).text;
       expect(primary.doStreamCalls[0]?.temperature).toBe(0.1);
     });
@@ -160,7 +160,7 @@ describe('Per-fallback-entry settings', () => {
       });
 
       await (
-        await agent.stream('Hello', {
+        await agent.streamMessageList('Hello', {
           providerOptions: { openai: { user: 'abc' }, google: { thinkingConfig: { thinkingBudget: 0 } } } as any,
         })
       ).text;
@@ -197,7 +197,7 @@ describe('Per-fallback-entry settings', () => {
       });
 
       await (
-        await agent.stream('Hello', {
+        await agent.streamMessageList('Hello', {
           providerOptions: { openai: { user: 'abc' }, google: { thinkingConfig: { thinkingBudget: 0 } } } as any,
         })
       ).text;
@@ -233,7 +233,7 @@ describe('Per-fallback-entry settings', () => {
       });
 
       await (
-        await agent.stream('Hello', {
+        await agent.streamMessageList('Hello', {
           providerOptions: { openai: { user: 'abc' } } as any,
         })
       ).text;
@@ -266,7 +266,7 @@ describe('Per-fallback-entry settings', () => {
       });
 
       await (
-        await agent.stream('Hello')
+        await agent.streamMessageList('Hello')
       ).text;
 
       const po = secondary.doStreamCalls[0]?.providerOptions as Record<string, Record<string, unknown>>;
@@ -291,7 +291,7 @@ describe('Per-fallback-entry settings', () => {
       });
 
       await (
-        await agent.stream('Hello', {
+        await agent.streamMessageList('Hello', {
           providerOptions: { google: { thinkingConfig: { includeThoughts: true } } } as any,
         })
       ).text;
@@ -322,7 +322,7 @@ describe('Per-fallback-entry settings', () => {
       });
 
       await (
-        await agent.stream('Hello', { requestContext })
+        await agent.streamMessageList('Hello', { requestContext })
       ).text;
 
       const po = primary.doStreamCalls[0]?.providerOptions as Record<string, Record<string, unknown>>;
@@ -342,7 +342,7 @@ describe('Per-fallback-entry settings', () => {
       });
 
       await (
-        await agent.stream('Hello')
+        await agent.streamMessageList('Hello')
       ).text;
 
       const sent = (primary.doStreamCalls[0]?.headers ?? {}) as Record<string, string>;
@@ -361,7 +361,7 @@ describe('Per-fallback-entry settings', () => {
       });
 
       await (
-        await agent.stream('Hello', { modelSettings: { headers: { 'x-region': 'us' } } as any })
+        await agent.streamMessageList('Hello', { modelSettings: { headers: { 'x-region': 'us' } } as any })
       ).text;
 
       const sent = (primary.doStreamCalls[0]?.headers ?? {}) as Record<string, string>;
@@ -387,7 +387,7 @@ describe('Per-fallback-entry settings', () => {
       });
 
       await (
-        await agent.stream('Hello', { requestContext })
+        await agent.streamMessageList('Hello', { requestContext })
       ).text;
 
       const sent = (primary.doStreamCalls[0]?.headers ?? {}) as Record<string, string>;
@@ -432,7 +432,7 @@ describe('Per-fallback-entry settings', () => {
         ],
       });
 
-      const text = await (await agent.stream('Hello')).text;
+      const text = await (await agent.streamMessageList('Hello')).text;
 
       expect(text).toBe('ok');
       expect(modelFactoryCalled).toBe(false);

@@ -132,7 +132,7 @@ describe('DurableAgent client-tool callbacks (Bug 10)', () => {
       storage: new InMemoryStore(),
     });
 
-    const { output } = await durableAgent.stream('test prompt', {
+    const { output } = await durableAgent.streamMessageList('test prompt', {
       maxSteps: 3,
     });
 
@@ -175,7 +175,7 @@ describe('DurableAgent client-tool callbacks (Bug 10)', () => {
       storage: new InMemoryStore(),
     });
 
-    const { output } = await durableAgent.stream('test prompt', {
+    const { output } = await durableAgent.streamMessageList('test prompt', {
       maxSteps: 3,
     });
 
@@ -228,7 +228,7 @@ describe('DurableAgent client-tool callbacks (Bug 10)', () => {
 
     // Follow-up request shape from @mastra/client-js: previous assistant
     // tool-call + the client-produced tool result.
-    const { output } = await durableAgent.stream(
+    const { output } = await durableAgent.streamMessageList(
       [
         {
           role: 'assistant',
@@ -238,7 +238,7 @@ describe('DurableAgent client-tool callbacks (Bug 10)', () => {
           role: 'tool',
           content: [{ type: 'tool-result', toolCallId: 'tc-client-1', toolName: 'client-tool', result: { ok: true } }],
         },
-      ] satisfies Parameters<typeof durableAgent.stream>[0],
+      ] satisfies Parameters<typeof durableAgent.streamMessageList>[0],
       { maxSteps: 2 },
     );
 
@@ -295,7 +295,7 @@ describe('DurableAgent client-tool callbacks (Bug 10)', () => {
       storage: new InMemoryStore(),
     });
 
-    const { output } = await durableAgent.stream(
+    const { output } = await durableAgent.streamMessageList(
       [
         {
           role: 'assistant',
@@ -305,7 +305,7 @@ describe('DurableAgent client-tool callbacks (Bug 10)', () => {
           role: 'tool',
           content: [{ type: 'tool-result', toolCallId: 'tc-client-1', toolName: 'client-tool', result: { ok: true } }],
         },
-      ] satisfies Parameters<typeof durableAgent.stream>[0],
+      ] satisfies Parameters<typeof durableAgent.streamMessageList>[0],
       { maxSteps: 2, memory: { thread: threadId, resource: resourceId } },
     );
 

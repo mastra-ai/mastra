@@ -169,7 +169,7 @@ describe.each([false, true])('DurableAgent signal drain (excluded: %s)', exclude
           return entry;
         });
 
-        const { fullStream, cleanup } = await durableAgent.stream('Hello', {
+        const { fullStream, cleanup } = await durableAgent.streamMessageList('Hello', {
           maxSteps: 3,
           hideSignals: excluded ? [type] : undefined,
         });
@@ -230,7 +230,7 @@ describe.each([false, true])('DurableAgent signal drain (excluded: %s)', exclude
         });
         vi.spyOn(globalRunRegistry, 'get').mockImplementation(getInterceptor);
 
-        const { fullStream, cleanup } = await durableAgent.stream('Hello', {
+        const { fullStream, cleanup } = await durableAgent.streamMessageList('Hello', {
           maxSteps: 3,
           hideSignals: excluded ? [type] : undefined,
         });
@@ -301,7 +301,7 @@ describe.each([false, true])('DurableAgent signal drain (excluded: %s)', exclude
         return entry;
       });
 
-      const { fullStream, cleanup } = await durableAgent.stream('Hello', {
+      const { fullStream, cleanup } = await durableAgent.streamMessageList('Hello', {
         maxSteps: 5,
         hideSignals: excluded ? [type] : undefined,
       });
@@ -382,7 +382,7 @@ describe.each([false, true])('DurableAgent signal drain (excluded: %s)', exclude
           return entry;
         });
 
-        const { fullStream, cleanup } = await durableAgent.stream('Hello', {
+        const { fullStream, cleanup } = await durableAgent.streamMessageList('Hello', {
           maxSteps: 5,
           hideSignals: excluded ? [type] : undefined,
         });
@@ -456,7 +456,7 @@ describe('EventedAgent inter-iteration signal drain', () => {
     });
 
     try {
-      const { fullStream, cleanup } = await eventedAgent.stream('Hello', { maxSteps: 5 });
+      const { fullStream, cleanup } = await eventedAgent.streamMessageList('Hello', { maxSteps: 5 });
       for await (const _chunk of fullStream) {
         // drain
       }

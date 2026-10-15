@@ -565,7 +565,7 @@ describe('direct agent call version resolution', () => {
     const ctx = new RequestContext();
     ctx.set(MASTRA_VERSIONS_KEY, { agents: { 'my-agent': { versionId: 'v1' } } } as VersionOverrides);
 
-    const result = await agent.generate('hello', { requestContext: ctx });
+    const result = await agent.generateMessageList('hello', { requestContext: ctx });
 
     expect(resolveSpy).toHaveBeenCalledWith(agent, { versionId: 'v1' });
     expect(result.text).toBe('versioned response');
@@ -588,7 +588,7 @@ describe('direct agent call version resolution', () => {
     const mastra = new Mastra({ agents: { agent } });
     const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent').mockResolvedValue(versionedAgent);
 
-    const result = await agent.generate('hello', {
+    const result = await agent.generateMessageList('hello', {
       versions: { agents: { 'my-agent': { status: 'published' } } },
     });
 
@@ -613,7 +613,7 @@ describe('direct agent call version resolution', () => {
     const mastra = new Mastra({ agents: { agent }, versions: { defaultStatus: 'published' } });
     const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent').mockResolvedValue(versionedAgent);
 
-    const result = await agent.generate('hello');
+    const result = await agent.generateMessageList('hello');
 
     expect(resolveSpy).toHaveBeenCalledWith(agent, { status: 'published' });
     expect(result.text).toBe('versioned response');
@@ -630,7 +630,7 @@ describe('direct agent call version resolution', () => {
     const mastra = new Mastra({ agents: { agent }, versions: { agents: { 'other-agent': { versionId: 'v1' } } } });
     const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent');
 
-    const result = await agent.generate('hello');
+    const result = await agent.generateMessageList('hello');
 
     expect(resolveSpy).not.toHaveBeenCalled();
     expect(result.text).toBe('code response');
@@ -647,7 +647,7 @@ describe('direct agent call version resolution', () => {
     const mastra = new Mastra({ agents: { agent }, versions: { agents: { 'my-agent': { versionId: 'v1' } } } });
     vi.spyOn(mastra, 'resolveVersionedAgent').mockRejectedValue(new Error('Editor not configured'));
 
-    const result = await agent.generate('hello');
+    const result = await agent.generateMessageList('hello');
 
     expect(result.text).toBe('code response');
   });
@@ -667,7 +667,7 @@ describe('direct agent call version resolution', () => {
     const ctx = new RequestContext();
     ctx.set(MASTRA_VERSIONS_KEY, { defaultStatus: 'published' } as VersionOverrides);
 
-    const result = await agent.generate('hello', { requestContext: ctx });
+    const result = await agent.generateMessageList('hello', { requestContext: ctx });
 
     expect(result.text).toBe('code response');
     expect(logger.warn.mock.calls.map(([message]) => message)).not.toContain(
@@ -693,7 +693,7 @@ describe('direct agent call version resolution', () => {
       editor: stubEditor,
     });
 
-    const result = await agent.generate('hello');
+    const result = await agent.generateMessageList('hello');
 
     expect(applyStoredOverrides).toHaveBeenCalledTimes(1);
     expect(result.text).toBe('code response');

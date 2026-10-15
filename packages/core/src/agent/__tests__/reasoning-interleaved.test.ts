@@ -109,7 +109,7 @@ describe('Reasoning with Interleaved Chunks (Issue #11480)', () => {
       model,
     });
 
-    const response = await agent.stream('Where is the capital of France?');
+    const response = await agent.streamMessageList('Where is the capital of France?');
 
     // Consume the stream
     await response.consumeStream();
@@ -165,7 +165,7 @@ describe('Reasoning with Interleaved Chunks (Issue #11480)', () => {
       model,
     });
 
-    const response = await agent.stream('Test question');
+    const response = await agent.streamMessageList('Test question');
 
     // Consume the stream
     await response.consumeStream();
@@ -264,7 +264,7 @@ describe('Reasoning with Interleaved Chunks (Issue #11480)', () => {
       model,
     });
 
-    const response = await agent.stream('Complex question');
+    const response = await agent.streamMessageList('Complex question');
     await response.consumeStream();
 
     const dbMessages = response.messageList.get.all.db();
@@ -346,7 +346,7 @@ describe('Reasoning with Interleaved Chunks (Issue #11480)', () => {
       model,
     });
 
-    const response = await agent.stream('What is the weather in Paris?');
+    const response = await agent.streamMessageList('What is the weather in Paris?');
     await response.consumeStream();
 
     const dbMessages = response.messageList.get.all.db();

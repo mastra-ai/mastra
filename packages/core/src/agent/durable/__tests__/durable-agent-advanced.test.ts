@@ -917,7 +917,7 @@ describe('DurableAgent ID generation', () => {
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
     const customRunId = 'my-custom-run-id-12345';
-    const { runId, cleanup } = await durableAgent.stream('Test', {
+    const { runId, cleanup } = await durableAgent.streamMessageList('Test', {
       runId: customRunId,
     });
 
@@ -1074,7 +1074,7 @@ describe('DurableAgent lazy initialization', () => {
     expect(durableAgent.agent).toBe(baseAgent);
 
     // stream() should work
-    const { cleanup } = await durableAgent.stream('Test');
+    const { cleanup } = await durableAgent.streamMessageList('Test');
     expect(durableAgent.agent).toBeDefined();
     cleanup();
   });

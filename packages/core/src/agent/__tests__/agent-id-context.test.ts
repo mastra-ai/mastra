@@ -48,7 +48,7 @@ describe('agentId in tool execution context', () => {
       tools: { 'agent-id-check': testTool },
     });
 
-    const response = await agent.generate('Use the tool');
+    const response = await agent.generateMessageList('Use the tool');
     const toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'agent-id-check').payload;
 
     expect(capturedAgentId).toBe('my-test-agent');

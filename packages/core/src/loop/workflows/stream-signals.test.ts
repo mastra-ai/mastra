@@ -46,7 +46,7 @@ describe.each(['initial', 'pre-run', 'drain-step', 'loop-predicate'] as const)(
         }
         return [];
       });
-      const output = await agent.stream(producer === 'initial' ? [signal.toDBMessage()] : 'hello', {
+      const output = await agent.streamMessageList(producer === 'initial' ? [signal.toDBMessage()] : 'hello', {
         maxSteps: 3,
         hideSignals: excluded ? [type] : [],
       });

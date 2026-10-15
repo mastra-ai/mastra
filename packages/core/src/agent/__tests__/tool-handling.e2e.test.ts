@@ -45,7 +45,7 @@ function toolhandlingE2ETests(version: 'v1' | 'v2' | 'v3' | 'v4') {
         });
         toolCalls = result.toolResults;
       } else {
-        result = await orchestratorAgent.generate('Use the research agent to find information about TypeScript');
+        result = await orchestratorAgent.generateMessageList('Use the research agent to find information about TypeScript');
         toolCalls = result.toolResults;
       }
 

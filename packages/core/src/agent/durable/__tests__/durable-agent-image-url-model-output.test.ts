@@ -124,7 +124,7 @@ describe('DurableAgent toModelOutput image-url passthrough (issue #22618)', () =
       storage: new InMemoryStore(),
     });
 
-    const result = await durableAgent.stream('Run the image tool');
+    const result = await durableAgent.streamMessageList('Run the image tool');
     for await (const _chunk of result.fullStream) {
       // drain
     }
