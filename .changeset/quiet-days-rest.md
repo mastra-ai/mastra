@@ -3,7 +3,7 @@
 '@mastra/client-js': patch
 ---
 
-`GET /observability/capabilities` can now report how long the observability store keeps traces, as an optional `traceRetentionDays`. Clients can use it to stop users picking dates whose traces are already gone. It's omitted when the store doesn't report a limit.
+Added an optional `traceRetentionDays` to the observability capabilities type and response schema, for hosts that serve `GET /observability/capabilities` themselves and know how long traces are kept. Clients can use it to stop users picking dates whose traces are already gone. Mastra's own server and built-in stores don't report a retention, so the field is omitted there.
 
 ```ts
 const { capabilities } = await client.getObservabilityCapabilities();
