@@ -448,8 +448,8 @@ export async function handleChatStream<OUTPUT = undefined>({
       ? await agentObj.resumeStream(resumeData, { ...baseOptions, structuredOutput })
       : await agentObj.resumeStream(resumeData, baseOptions as AgentExecutionOptionsBase<unknown>)
     : structuredOutput
-      ? await agentObj.stream(messagesToSend, { ...baseOptions, structuredOutput })
-      : await agentObj.stream(messagesToSend, baseOptions as AgentExecutionOptionsBase<unknown>);
+      ? await agentObj.streamMessageList(messagesToSend, { ...baseOptions, structuredOutput })
+      : await agentObj.streamMessageList(messagesToSend, baseOptions as AgentExecutionOptionsBase<unknown>);
 
   if (version === 'v6' || version === 'v7') {
     const createUIMessageStream = (

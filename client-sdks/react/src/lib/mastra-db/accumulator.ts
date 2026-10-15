@@ -1482,6 +1482,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
                 toolCallId: chunk.payload.toolCallId,
                 toolName: chunk.payload.toolName,
                 args: chunk.payload.args as Record<string, unknown>,
+                runId: chunk.runId,
               },
             },
           },
