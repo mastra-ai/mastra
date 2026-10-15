@@ -12,9 +12,23 @@ export interface KnowledgeImporterBindingInput {
   readonly scope: string;
 }
 
+/** Resolves the current cron binding set at fire time, e.g. one scope per active project. */
+export type KnowledgeImporterCronBindingsResolver = () =>
+  | readonly KnowledgeImporterBindingInput[]
+  | Promise<readonly KnowledgeImporterBindingInput[]>;
+
 export interface KnowledgeImporterCronTrigger {
   readonly schedule: string | readonly string[];
-  readonly bindings: readonly KnowledgeImporterBindingInput[];
+  /** Static binding set. Optional when `resolveBindings` is provided. */
+  readonly bindings?: readonly KnowledgeImporterBindingInput[];
+  /**
+   * Cron-side analog of the webhook trigger's `resolveBinding`: resolves the current
+   * binding set at each fire, letting one importer fan out to a dynamic set of scopes.
+   * Resolved bindings are unioned with `bindings`. Resolution failures skip the dynamic
+   * portion of that fire and the next fire retries; pair with a parameterized `access`
+   * map (e.g. `{ 'resource:$projectId': 'owner' }`) so resolved scopes are writable.
+   */
+  readonly resolveBindings?: KnowledgeImporterCronBindingsResolver;
 }
 
 export interface KnowledgeImporterWebhookBindingContext {
@@ -149,6 +163,11 @@ export interface KnowledgeImporterDefinition<TPayload = unknown> {
   readonly citations?: KnowledgeImporterCitationPolicy;
   readonly handler: KnowledgeImporterHandler<TPayload>;
 }
+
+/** Resolves the current set of importer definitions, e.g. from live platform connections. */
+export type KnowledgeImporterResolver = () => Promise<readonly KnowledgeImporterDefinition[]>;
+
+export type KnowledgeImportersInput = readonly KnowledgeImporterDefinition[] | KnowledgeImporterResolver;
 
 export interface KnowledgeImporterRegistrationContext<TPayload = unknown> {
   readonly importerId: string;

@@ -669,7 +669,7 @@ function isExactScope(scopeIds: string[], scopeId: string): boolean {
   return scopeIds.length === 1 && scopeIds[0] === scopeId;
 }
 
-function matchAddressPattern(pattern: string, address: string): Record<string, string> | null {
+export function matchAddressPattern(pattern: string, address: string): Record<string, string> | null {
   const names: string[] = [];
   const expression = pattern
     .split(/(\$[A-Za-z][A-Za-z0-9_]*)/g)
