@@ -234,14 +234,40 @@ export async function enforceThreadAccess({
 }
 
 /**
- * Validates that a workflow run belongs to the specified resourceId.
- * Throws 403 if the run exists but belongs to a different resource.
+ * Validates that a caller may act on a workflow run.
+ *
+ * Without `server.auth.mapUserToResourceId` there is no tenancy model, and only a mismatch
+ * between two present resource ids is denied. With a mapper, a resource-scoped caller may only
+ * act on runs it owns (an owner-less run is not its run). An unscoped caller is a
+ * privileged/service context (see getContextResourceId), but that privilege is only granted when
+ * an FGA provider authorizes the route; otherwise it is refused rather than granted implicitly,
+ * as on the thread-transfer route.
  */
 export async function validateRunOwnership(
   run: { resourceId?: string | null } | null | undefined,
   effectiveResourceId: string | undefined,
+  mastra?: { getServer?: () => { auth?: unknown; fga?: unknown } | undefined },
 ): Promise<void> {
-  if (run && effectiveResourceId && run.resourceId && run.resourceId !== effectiveResourceId) {
-    throw new HTTPException(403, { message: 'Access denied: workflow run belongs to a different resource' });
+  if (!run) return;
+  const server = mastra?.getServer?.();
+  const tenancy =
+    typeof (server?.auth as { mapUserToResourceId?: unknown } | undefined)?.mapUserToResourceId === 'function';
+  if (!tenancy) {
+    if (effectiveResourceId && run.resourceId && run.resourceId !== effectiveResourceId) {
+      throw new HTTPException(403, { message: 'Access denied: workflow run belongs to a different resource' });
+    }
+    return;
+  }
+  if (effectiveResourceId) {
+    if (run.resourceId !== effectiveResourceId) {
+      throw new HTTPException(403, { message: 'Access denied: workflow run belongs to a different resource' });
+    }
+    return;
+  }
+  if (!server?.fga) {
+    throw new HTTPException(403, {
+      message:
+        'Access denied: unscoped workflow run access requires explicit authorization. Configure an FGA provider to authorize privileged run access.',
+    });
   }
 }

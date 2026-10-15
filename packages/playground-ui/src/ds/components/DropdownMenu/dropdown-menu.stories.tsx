@@ -464,6 +464,9 @@ export const KitchenSink: Story = {
             <DropdownMenu.RadioItem value="medium">Radio medium</DropdownMenu.RadioItem>
           </DropdownMenu.RadioGroup>
           <DropdownMenu.Separator />
+          <DropdownMenu.Label inset>Inset label</DropdownMenu.Label>
+          <DropdownMenu.Item inset>Inset item</DropdownMenu.Item>
+          <DropdownMenu.Separator />
           <DropdownMenu.Sub>
             <DropdownMenu.SubTrigger>
               <UserPlus />

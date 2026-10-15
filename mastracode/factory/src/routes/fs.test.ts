@@ -252,19 +252,21 @@ function seedSessionSandbox(
     trackedChanges,
   }: { sessionRowId?: string; workdir?: string; comparisonBase?: string; trackedChanges?: string } = {},
 ) {
-  const executeCommand = vi.fn(async (command: string, args: string[] = []) => {
-    if (command === 'git' && args[2] === 'merge-base') {
-      return { exitCode: 0, stdout: comparisonBase + '\n', stderr: '' };
-    }
-    if (command === 'git' && args[2] === 'diff' && args.includes('--name-status')) {
-      return trackedChanges === undefined
-        ? { exitCode: 1, stdout: '', stderr: 'tracked diff not configured' }
-        : { exitCode: 0, stdout: trackedChanges, stderr: '' };
-    }
-    const script = args[1] ?? '';
-    const result = respond(script, command, args);
-    return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr ?? '' };
-  });
+  const executeCommand = vi.fn(
+    async (command: string, args: string[] = [], _options?: { maxRetainedBytes?: number }) => {
+      if (command === 'git' && args[2] === 'merge-base') {
+        return { exitCode: 0, stdout: comparisonBase + '\n', stderr: '' };
+      }
+      if (command === 'git' && args[2] === 'diff' && args.includes('--name-status')) {
+        return trackedChanges === undefined
+          ? { exitCode: 1, stdout: '', stderr: 'tracked diff not configured' }
+          : { exitCode: 0, stdout: trackedChanges, stderr: '' };
+      }
+      const script = args[1] ?? '';
+      const result = respond(script, command, args);
+      return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr ?? '' };
+    },
+  );
   // The memo derives the workdir from the constructed instance: a local
   // provider checks out under <workingDirectory>/<repo name>.
   getSessionSandbox(
@@ -402,6 +404,7 @@ describe('listSessionRenderedPath', () => {
       expect.objectContaining({ name: 'HISTORY.md', path: 'understand-pr/HISTORY.md', type: 'file', size: 5 }),
     ]);
     expect(executeCommand).toHaveBeenCalledTimes(1);
+    expect(executeCommand.mock.calls[0]?.[2]?.maxRetainedBytes).toBe(Infinity);
   });
 
   it('returns an empty listing when this process holds no sandbox for the session', async () => {
@@ -571,6 +574,11 @@ describe('workspace changes', () => {
       ],
     });
     expect(executeCommand).toHaveBeenCalledTimes(4);
+    // Parsed outputs must not be cut to the default 1 MiB tail; merge-base is a single SHA.
+    for (const [command, args, options] of executeCommand.mock.calls) {
+      if (command === 'git' && args?.[2] === 'merge-base') continue;
+      expect(options?.maxRetainedBytes).toBe(Infinity);
+    }
   });
 
   it('keeps committed session-branch changes visible after the worktree is clean', async () => {
@@ -766,6 +774,8 @@ describe('workspace changes', () => {
       expect.objectContaining({ path: 'src/new.ts', patch: 'new file diff' }),
     );
     expect(executeCommand).toHaveBeenCalledTimes(4);
+    const lsFiles = executeCommand.mock.calls.find(([, args]) => args?.includes('ls-files'));
+    expect(lsFiles?.[2]?.maxRetainedBytes).toBe(Infinity);
   });
 
   it('rejects diff paths that escape the workspace before running git', async () => {
