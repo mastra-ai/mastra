@@ -60,4 +60,10 @@ describe('ElevenLabsVoice per-model API keys', () => {
     const voice = new ElevenLabsVoice({ listeningModel: { name: 'scribe_v1', apiKey: 'listen-key' } });
     await expect(voice.speak('hi')).rejects.toThrow('ElevenLabs speech API key is not set');
   });
+
+  it('reports listening as disabled when no listening key is available', async () => {
+    const voice = new ElevenLabsVoice({ speechModel: { name: 'eleven_multilingual_v2', apiKey: 'speech-key' } });
+    expect(await voice.getListener()).toEqual({ enabled: false });
+    await expect(voice.listen(audio())).rejects.toThrow('ElevenLabs listening API key is not set');
+  });
 });

@@ -170,7 +170,7 @@ export class ElevenLabsVoice extends MastraVoice {
    * @returns {Promise<{ enabled: boolean }>}
    */
   async getListener() {
-    return { enabled: true };
+    return { enabled: !!this.listeningClient };
   }
 
   /**
