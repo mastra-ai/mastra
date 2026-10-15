@@ -249,8 +249,34 @@ function resolveOutputTextSkippingCompletionChecks(messageList: MessageList): st
   return lastConverted ? coreContentToString(lastConverted.content) : undefined;
 }
 
+/**
+ * A single entry of a stored message's part array.
+ */
 type StepMessagePart = MastraDBMessage['content']['parts'][number];
 
+/**
+ * Step text for the current iteration of the message that supplies the resolved output text.
+ *
+ * The iteration boundary is a property of a message's own part array, so the offset measured before
+ * processing must not be transplanted onto a message a processor produced. Resolve the boundary in
+ * this order:
+ *   1. the message's own `step-start` marker, when it has one;
+ *   2. for the same message, the pre-processing step text where it survives (an unchanged in-place
+ *      rewrite, or a split of the current iteration's text), the pre-processing offset while the
+ *      parts before it are unchanged, then the offset while the part count and part kinds are
+ *      unchanged (redaction or other rewrites that keep positions), then the unchanged prefix;
+ *   3. for a different message, the trailing text matching the pre-processing step text, which finds
+ *      the boundary when a processor replaced the id of the accumulated response;
+ *   4. otherwise the whole message, which then holds only this iteration.
+ *
+ * The rules below are heuristics over the processed parts, so a processor can defeat them. When it
+ * rewrites the current iteration's text (so the pre-processing step text no longer appears) *and*
+ * moves the boundary while keeping the part count and kinds (for example by merging an earlier
+ * iteration's parts and splitting the current one), the measured offset still matches by count and
+ * kind and the step text is taken from the wrong position. That information is gone from the parts —
+ * only a processor that preserves the boundary (a `step-start` part, or positions it does not move)
+ * can be resolved exactly.
+ */
 function resolveProcessedStepText({
   processedStepMessage,
   processedStepParts,
