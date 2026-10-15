@@ -9,11 +9,13 @@
   "files": [
     "dist",
     "theme.css",
+    "sources.css",
     "theme"
   ],
   "exports": {
     "./style.css": "./dist/style.css",
     "./theme.css": "./theme.css",
+    "./sources.css": "./sources.css",
     "./tokens": {
       "import": {
         "types": "./dist/tokens.d.ts",
