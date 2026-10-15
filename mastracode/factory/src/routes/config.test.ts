@@ -730,6 +730,46 @@ describe('GET /web/config/models', () => {
       models: [{ id: 'acme/fast-1', provider: 'acme', modelName: 'fast-1', hasApiKey: true }],
     });
   });
+
+  it("limits the personal catalog to the caller's own credentials", async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic', {
+      type: 'api_key',
+      key: 'sk-user',
+    });
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'deepseek', { type: 'api_key', key: 'sk-org' });
+    const orgFactory = await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'Shared' } });
+    const controller = {
+      listAvailableModels: async () => [
+        { id: 'anthropic/claude-fable-5', modelName: 'claude-fable-5', provider: 'anthropic', hasApiKey: false },
+        { id: 'deepseek/deepseek-flash', modelName: 'deepseek-flash', provider: 'deepseek', hasApiKey: false },
+      ],
+    };
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, { workosId: 'user-a', organizationId: 'org1' } as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({
+        auth: fakeRouteAuth(),
+        controller,
+        modelCredentials: seed.credentials,
+        factoryProjects: seed.projects,
+      }).routes(),
+    );
+    const ids = async (query: string) => {
+      const res = await app.request(`/web/config/models${query}`);
+      expect(res.status).toBe(200);
+      return ((await res.json()) as { models: { id: string }[] }).models.map(m => m.id);
+    };
+
+    expect(await ids('')).toEqual(['anthropic/claude-fable-5', 'deepseek/deepseek-flash']);
+    expect(await ids('?scope=user')).toEqual(['anthropic/claude-fable-5']);
+    // Personal defaults never run on org credentials, whichever Factory the page is in.
+    expect(await ids(`?scope=user&factoryId=${orgFactory.id}`)).toEqual(['anthropic/claude-fable-5']);
+  });
 });
 
 describe('default model routes with a tenant', () => {

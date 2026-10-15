@@ -303,7 +303,6 @@
     "anthropic/claude-sonnet-4-5",
     "anthropic/claude-sonnet-4-5-20250929",
     "anthropic/claude-sonnet-4-6",
-    "atria/atria-dawn-preview",
     "aws-bedrock/claude-haiku-4-5",
     "aws-bedrock/claude-haiku-4-5-20251001",
     "aws-bedrock/claude-opus-4-1-20250805",
@@ -364,11 +363,13 @@
     "cerebras/llama-3.3-70b-instruct",
     "cerebras/qwen3-235b-a22b-instruct-2507",
     "consensusprotocol/Qwen3.8-27B",
+    "consensusprotocol/deepseek-v4-flash",
     "consensusprotocol/deepseek-v4.1-flash",
     "consensusprotocol/gemma-4-31b-it",
     "consensusprotocol/glm-5.3-flash",
     "consensusprotocol/gpt-oss-20b",
     "consensusprotocol/mimo-v2.6-flash",
+    "consensusprotocol/minimax-m3",
     "deepinfra/deepseek-v3.2",
     "deepinfra/deepseek-v4-flash",
     "deepinfra/deepseek-v4-pro",
@@ -685,6 +686,7 @@
     "bytedance/seed-2-0-mini-260428",
     "bytedance/seed-2-0-pro-260328",
     "consensusprotocol/mimo-v2.6-flash",
+    "consensusprotocol/minimax-m3",
     "deepinfra/deepseek-v4.1-flash",
     "deepinfra/ling-3.0-flash-vl",
     "deepinfra/mimo-v2.6-flash",
@@ -848,6 +850,18 @@
       }
     ],
     "consensusprotocol/mimo-v2.6-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "consensusprotocol/minimax-m3": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "consensusprotocol/deepseek-v4-flash": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
@@ -2584,12 +2598,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "atria/atria-dawn-preview": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "mistral/glm-5.3": [

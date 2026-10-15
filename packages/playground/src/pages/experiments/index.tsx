@@ -8,7 +8,7 @@ import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-
 import { useDatasets } from '@mastra/react/hooks/datasets';
 import { useInfiniteExperiments } from '@mastra/react/hooks/experiments';
 import { useReviewSummary } from '@mastra/react/hooks/review';
-import { Play } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -20,7 +20,6 @@ import {
   NoExperimentsInfo,
 } from '@/domains/experiments';
 import { MAX_COMPARED_EXPERIMENTS } from '@/domains/experiments/components/comparison/constants';
-import { ExperimentsComparableLegend } from '@/domains/experiments/components/experiments-comparable-legend';
 import type { ExperimentsFilters } from '@/domains/experiments/components/experiments-filter-bar';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { buildReviewByExperimentMap } from '@/domains/review/review-maps';
@@ -205,35 +204,27 @@ export default function Experiments() {
     <PageLayout
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={
-        <Button
-          variant="primary"
-          size="sm"
-          icon={<Play />}
-          tooltip="Run an experiment"
-          onClick={() => setRunDialogOpen(true)}
-        >
-          Run Experiment
+        <Button variant="primary" size="sm" icon={<Plus />} onClick={() => setRunDialogOpen(true)}>
+          New experiment
         </Button>
       }
       actionRow={
-        <>
-          <ExperimentsToolbar
-            search={search}
-            statusFilter={statusFilter}
-            datasetFilter={datasetFilter}
-            datasetOptions={experimentDatasetOptions}
-            targetType={targetType}
-            targetId={targetId}
-            onFiltersChange={handleFiltersChange}
-            selection={{
-              selectedCount: selectedIds.length,
-              onClearSelection: () => setSelectedExperimentIds([]),
-              onCompare: executeCompare,
-              compareDisabledReason,
-            }}
-          />
-          <ExperimentsComparableLegend datasetId={comparableDatasetId} />
-        </>
+        <ExperimentsToolbar
+          search={search}
+          statusFilter={statusFilter}
+          datasetFilter={datasetFilter}
+          datasetOptions={experimentDatasetOptions}
+          targetType={targetType}
+          targetId={targetId}
+          onFiltersChange={handleFiltersChange}
+          selection={{
+            selectedCount: selectedIds.length,
+            onClearSelection: () => setSelectedExperimentIds([]),
+            onCompare: executeCompare,
+            compareDisabledReason,
+          }}
+          comparableDatasetId={comparableDatasetId}
+        />
       }
     >
       <h1 className="sr-only">Experiments</h1>

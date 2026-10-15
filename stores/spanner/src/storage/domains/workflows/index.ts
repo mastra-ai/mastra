@@ -11,6 +11,9 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
   normalizePerPage,
+  executeRetentionPrune,
+  resolveRetentionTargets,
+  retentionCutoffMs,
 } from '@mastra/core/storage';
 import type {
   ClaimRunOwnershipInput,
@@ -25,6 +28,10 @@ import type {
   WorkflowRuns,
   UpdateWorkflowStateOptions,
   CreateIndexOptions,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { SpannerDB, resolveSpannerConfig } from '../../db';
@@ -77,6 +84,15 @@ export class WorkflowsSpanner extends WorkflowsStorage {
   private readonly indexes?: CreateIndexOptions[];
 
   static readonly MANAGED_TABLES = [TABLE_WORKFLOW_SNAPSHOT] as const;
+
+  /**
+   * Tables `prune()` can clean up. Run ownership rows anchor on `updatedAt` (epoch ms), which every
+   * claim, renewal and release refreshes, so a live execution's row is never
+   * older than its renew interval.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    runOwnership: { table: TABLE_WORKFLOW_RUN_OWNERS, column: 'updatedAt', indexed: false, anchorType: 'epoch-ms' },
+  };
 
   constructor(config: SpannerDomainConfig) {
     super();
@@ -229,6 +245,22 @@ export class WorkflowsSpanner extends WorkflowsStorage {
   }
 
   /** Removes every workflow snapshot and run ownership row. Intended for tests. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveRetentionTargets({
+      policies,
+      descriptor: WorkflowsSpanner.retentionTables,
+      order: ['runOwnership'],
+    });
+    return executeRetentionPrune({
+      domain: 'workflows',
+      targets,
+      options,
+      cutoffFor: (target, now) => retentionCutoffMs(target.policy, now),
+      deleteBatch: (target, cutoff, limit) =>
+        this.db.pruneRunRows({ tableName: target.table, column: target.column, cutoff: cutoff as number, limit }),
+    });
+  }
+
   async dangerouslyClearAll(): Promise<void> {
     await this.db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
     await this.db.clearTable({ tableName: TABLE_WORKFLOW_RUN_OWNERS as TABLE_NAMES });

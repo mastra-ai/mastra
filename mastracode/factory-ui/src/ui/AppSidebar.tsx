@@ -1,20 +1,15 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
-import { useLocation } from 'react-router';
 
 import { SidebarUserMenu } from './domains/auth/components/SidebarUserMenu';
 import { FactorySection } from './domains/factory/components/FactorySection';
 import { SidebarAttention } from './domains/factory/components/SidebarAttention';
 import { SidebarGlobalSearchButton } from './domains/search/components/SidebarGlobalSearchButton';
 import { SettingsNavigation } from './domains/settings/components/SettingsNavigation';
+import { useSettingsOpen } from './domains/settings/hooks/useSettingsOpen';
 import { FactorySwitcher } from './domains/workspaces/components/FactorySwitcher';
 import { SessionsSection } from './domains/workspaces/components/SessionsSection';
-
-function useSettingsOpen() {
-  const { pathname } = useLocation();
-  return /^\/factories\/[^/]+\/settings(?:\/|$)/.test(pathname);
-}
 
 function BetaBadge() {
   return (

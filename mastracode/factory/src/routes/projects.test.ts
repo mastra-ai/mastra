@@ -49,7 +49,7 @@ describe('ProjectRoutes', () => {
     const created = (await createdResponse.json()) as {
       project: { id: string; name: string; description: string; modelScope: string };
     };
-    expect(created.project).toMatchObject({ name: 'Platform', description: 'Core services', modelScope: 'factory' });
+    expect(created.project).toMatchObject({ name: 'Platform', description: 'Core services', modelScope: 'hybrid' });
 
     const listed = (await (await app.request('/web/factory/projects')).json()) as { projects: Array<{ id: string }> };
     expect(listed.projects.map(project => project.id)).toEqual([created.project.id]);
@@ -152,13 +152,45 @@ describe('ProjectRoutes', () => {
     expect(denied.status).toBe(403);
     expect(await denied.json()).toMatchObject({ error: 'forbidden' });
     expect(isOrganizationAdmin).toHaveBeenCalledWith('org-1', 'member');
-    expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('factory');
+    expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('hybrid');
 
     expect((await patch({ name: 'Renamed' })).status).toBe(200);
 
     isOrganizationAdmin.mockResolvedValue(true);
     expect((await patch({ modelScope: 'user' })).status).toBe(200);
     expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('user');
+
+    isOrganizationAdmin.mockResolvedValue(false);
+    expect((await patch({ modelScope: 'hybrid' })).status).toBe(403);
+    expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('user');
+
+    isOrganizationAdmin.mockResolvedValue(true);
+    expect((await patch({ modelScope: 'hybrid' })).status).toBe(200);
+    expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('hybrid');
+  });
+
+  it('creates a project in the requested model scope and rejects unknown scopes', async () => {
+    const seed = await createFactoryStorageForTests();
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, projectRoutes(seed));
+    const create = (body: Record<string, unknown>) =>
+      app.request('/web/factory/projects', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    const created = await create({ name: 'Personal', modelScope: 'user' });
+    expect(created.status).toBe(201);
+    const { project } = (await created.json()) as { project: { id: string; modelScope: string } };
+    expect(project.modelScope).toBe('user');
+    expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('user');
+
+    expect((await create({ name: 'Bad', modelScope: 'org' })).status).toBe(400);
   });
 
   describe('apply default model', () => {
@@ -1102,6 +1134,24 @@ describe('ProjectRoutes', () => {
       const invalid = await patch(switched, project.id, { settings: { baseImage: 7 } });
       expect(invalid.status).toBe(400);
       expect(JSON.stringify(await invalid.json())).toContain('baseImage');
+    });
+
+    it('drops a stored value the schema now rejects instead of refusing every later update', async () => {
+      const { seed, project, app } = await seedEnvironment();
+      // Stored under an older, looser schema: below the current 512 minimum.
+      await seed.projects.update({
+        orgId: 'org-1',
+        id: project.id,
+        input: { sandboxSettings: { cpuCount: 4, memoryMb: 256 } },
+      });
+
+      const response = await patch(app, project.id, { settings: { cpuCount: 8 } });
+      expect(response.status).toBe(200);
+      expect((await seed.projects.getById({ id: project.id }))?.sandboxSettings).toEqual({ cpuCount: 8 });
+
+      // A patch that sets the rejected value itself is still refused.
+      const refused = await patch(app, project.id, { settings: { memoryMb: 256 } });
+      expect(refused.status).toBe(400);
     });
 
     it('reports no sandbox and refuses settings when the factory has none configured', async () => {
