@@ -4,6 +4,7 @@ import { simulateReadableStream } from '@internal/ai-sdk-v4';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
+import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 
 function modelListTests(version: 'v1' | 'v2') {
@@ -68,7 +69,7 @@ function modelListTests(version: 'v1' | 'v2') {
         const modelIds = modelList?.map(m => m.id) || [];
         const reversedModelIds = [...modelIds].reverse();
 
-        await agent.reorderModels(reversedModelIds);
+        agent.reorderModels(reversedModelIds);
 
         const reorderedModelList = await agent.getModelList();
 
@@ -111,7 +112,7 @@ function modelListTests(version: 'v1' | 'v2') {
 
         // Reorder with only 2 of 3 models — gpt-4.1 first, then gpt-4o
         // gpt-4o-mini is NOT in the list and should stay at the end
-        await agent.reorderModels([modelList[2]!.id, modelList[0]!.id]);
+        agent.reorderModels([modelList[2]!.id, modelList[0]!.id]);
 
         const reorderedModelList = await agent.getModelList();
         if (!reorderedModelList) {
@@ -151,7 +152,7 @@ function modelListTests(version: 'v1' | 'v2') {
         }
         const model1Id = modelList[1]?.id || '';
 
-        await agent.updateModelInModelList({
+        agent.updateModelInModelList({
           id: model1Id,
           model: openai('gpt-4'),
           maxRetries: 5,
@@ -169,82 +170,42 @@ function modelListTests(version: 'v1' | 'v2') {
         expect(updatedModel2.modelId).toBe('gpt-4.1');
       });
 
-      it('should keep stable ids for function-valued model lists', async () => {
-        const agent = new Agent({
-          id: 'test-agent',
-          name: 'Test Agent',
-          instructions: 'test agent instructions',
-          model: () => [{ model: openai('gpt-4o') }, { model: openai('gpt-4o-mini') }],
-        });
+      it('should refuse edits on function-valued model lists and keep per-request selection', async () => {
+        const modelFn = ({ requestContext }: { requestContext: RequestContext }) =>
+          requestContext.get('tier') === 'pro'
+            ? [{ id: 'pro', model: openai('gpt-4o') }]
+            : [
+                { id: 'a', model: openai('gpt-4o-mini') },
+                { id: 'b', model: openai('gpt-4.1') },
+              ];
+        const agent = new Agent({ id: 'fn', name: 'Fn', instructions: 'x', model: modelFn });
 
-        const first = await agent.getModelList();
-        const second = await agent.getModelList();
-        expect(first?.map(m => m.id)).toEqual(second?.map(m => m.id));
-      });
-
-      it('should not reuse an explicit id as a generated fallback id', async () => {
-        const agent = new Agent({
-          id: 'test-agent',
-          name: 'Test Agent',
-          instructions: 'test agent instructions',
-          model: () => [{ model: openai('gpt-4o') }, { id: 'model-0', model: openai('gpt-4o-mini') }],
-        });
-
-        const ids = (await agent.getModelList())!.map(m => m.id);
-        expect(new Set(ids).size).toBe(2);
-        expect(ids[1]).toBe('model-0');
-      });
-
-      it('should keep both concurrent edits on a function-valued model list', async () => {
-        const agent = new Agent({
-          id: 'test-agent',
-          name: 'Test Agent',
-          instructions: 'test agent instructions',
-          model: async () => [{ model: openai('gpt-4o') }, { model: openai('gpt-4o-mini') }],
-        });
-
-        const ids = (await agent.getModelList())!.map(m => m.id);
-        const results = await Promise.all([
-          agent.reorderModels([...ids].reverse()),
-          agent.updateModelInModelList({ id: ids[0]!, enabled: false }),
-        ]);
-        expect(results).toEqual([true, true]);
-
-        const list = (await agent.getModelList())!;
-        expect(list.map(m => m.id)).toEqual([...ids].reverse());
-        expect(list.find(m => m.id === ids[0])?.enabled).toBe(false);
-      });
-
-      it('should reorder and update function-valued model lists', async () => {
-        const agent = new Agent({
-          id: 'test-agent',
-          name: 'Test Agent',
-          instructions: 'test agent instructions',
-          model: () => [{ model: openai('gpt-4o') }, { model: openai('gpt-4o-mini') }],
-        });
-
-        const modelList = await agent.getModelList();
-        const ids = modelList!.map(m => m.id);
-
-        expect(await agent.reorderModels([...ids].reverse())).toBe(true);
-        const reordered = await agent.getModelList();
-        expect(reordered!.map(m => m.id)).toEqual([...ids].reverse());
-        expect((reordered![0]!.model as LanguageModelV2).modelId).toBe('gpt-4o-mini');
-
-        expect(await agent.updateModelInModelList({ id: ids[0]!, enabled: false })).toBe(true);
-        const updated = await agent.getModelList();
-        expect(updated!.find(m => m.id === ids[0])?.enabled).toBe(false);
-      });
-
-      it('should not apply mutations for unknown ids or single-model agents', async () => {
-        const modelFn = () => [{ model: openai('gpt-4o') }];
-        const agent = new Agent({ id: 'a', name: 'A', instructions: 'x', model: modelFn });
-        expect(await agent.updateModelInModelList({ id: 'missing', enabled: false })).toBe(false);
+        expect(agent.reorderModels(['b', 'a'])).toBe(false);
+        expect(agent.updateModelInModelList({ id: 'a', enabled: false })).toBe(false);
         expect(agent.__getOverridableFields().model).toBe(modelFn);
 
-        const single = new Agent({ id: 'b', name: 'B', instructions: 'x', model: openai('gpt-4o') });
-        expect(await single.reorderModels(['x'])).toBe(false);
-        expect(await single.updateModelInModelList({ id: 'x', enabled: false })).toBe(false);
+        const pro = new RequestContext();
+        pro.set('tier', 'pro');
+        expect((await agent.getModelList(pro))!.map(m => m.id)).toEqual(['pro']);
+        expect((await agent.getModelList())!.map(m => m.id)).toEqual(['a', 'b']);
+      });
+
+      it('should report whether static model list edits were applied', async () => {
+        const agent = new Agent({
+          id: 's',
+          name: 'S',
+          instructions: 'x',
+          model: [
+            { id: 'a', model: openai('gpt-4o-mini') },
+            { id: 'b', model: openai('gpt-4o') },
+          ],
+        });
+        expect(agent.reorderModels(['b', 'a'])).toBe(true);
+        expect(agent.updateModelInModelList({ id: 'a', enabled: false })).toBe(true);
+        expect(agent.updateModelInModelList({ id: 'missing', enabled: false })).toBe(false);
+
+        const single = new Agent({ id: 'one', name: 'One', instructions: 'x', model: openai('gpt-4o') });
+        expect(single.reorderModels(['x'])).toBe(false);
       });
 
       it('should use model list', async () => {

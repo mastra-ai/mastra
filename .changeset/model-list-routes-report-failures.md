@@ -2,4 +2,4 @@
 '@mastra/server': patch
 ---
 
-The agent model list reorder and update routes now return an error (400 or 404) instead of a success response when the edit cannot be applied, and resolve function-valued model lists with the request's context.
+Fixed the Studio Models panel reporting success when edits were silently dropped. The model list reorder and update routes now return 409 when the agent's `model` is a function (dynamic lists cannot be edited), and 400/404 when an edit cannot be applied, instead of always returning 200.
