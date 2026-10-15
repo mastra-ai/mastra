@@ -147,3 +147,4 @@ function TooltipArrowSvg() {
 }
 
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider };
+export type { TooltipContentProps };
