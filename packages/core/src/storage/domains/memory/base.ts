@@ -34,6 +34,7 @@ import type { PersistableAction } from '../../../new-message-format/types';
 import { StorageDomain } from '../base';
 
 export type { ListActionsQuery, PersistableAction };
+export { ACTION_FORMAT_VERSION, toStoredAction } from '../../../new-message-format/types';
 
 function isPlainObj(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

@@ -58,6 +58,7 @@ import {
   TABLE_RESOURCES,
   TABLE_THREADS,
   TABLE_SCHEMAS,
+  toStoredAction,
   validateStorageMetadataFilter,
 } from '@mastra/core/storage';
 
@@ -273,12 +274,27 @@ export class MemoryLibSQL extends MemoryStorage {
             run_id TEXT,
             type TEXT NOT NULL,
             created_at TEXT NOT NULL,
+            format_version INTEGER NOT NULL DEFAULT 1,
             data TEXT NOT NULL
           )`,
           args: [],
         },
+      ],
+      'write',
+    );
+    // Tables created before format_version existed.
+    const actionColumns = await this.#client.execute(`PRAGMA table_info(${TABLE_ACTIONS})`);
+    if (!actionColumns.rows.some(row => row.name === 'format_version')) {
+      await this.#client.execute(`ALTER TABLE ${TABLE_ACTIONS} ADD COLUMN format_version INTEGER NOT NULL DEFAULT 1`);
+    }
+    await this.#client.batch(
+      [
         { sql: `CREATE INDEX IF NOT EXISTS idx_actions_thread_id ON ${TABLE_ACTIONS} (thread_id, id)`, args: [] },
         { sql: `CREATE INDEX IF NOT EXISTS idx_actions_run_id ON ${TABLE_ACTIONS} (run_id, id)`, args: [] },
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_actions_resource_id ON ${TABLE_ACTIONS} (resource_id, id)`,
+          args: [],
+        },
       ],
       'write',
     );
@@ -900,12 +916,12 @@ export class MemoryLibSQL extends MemoryStorage {
   }
 
   override async saveActions({ actions }: { actions: PersistableAction[] }): Promise<void> {
-    const rows = actions.filter(action => !action.transient);
+    const rows = actions.filter(action => !action.transient).map(toStoredAction);
     if (rows.length === 0) return;
     await this.#write('saveActions', () =>
       this.#client.batch(
-        rows.map(({ id, threadId, resourceId, runId, type, createdAt, ...rest }) => ({
-          sql: `INSERT INTO ${TABLE_ACTIONS} (id, thread_id, resource_id, run_id, type, created_at, data) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        rows.map(({ id, threadId, resourceId, runId, type, createdAt, formatVersion, ...rest }) => ({
+          sql: `INSERT INTO ${TABLE_ACTIONS} (id, thread_id, resource_id, run_id, type, created_at, format_version, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           args: [
             id,
             threadId,
@@ -913,6 +929,7 @@ export class MemoryLibSQL extends MemoryStorage {
             runId ?? null,
             type,
             new Date(createdAt).toISOString(),
+            formatVersion ?? null,
             JSON.stringify(rest),
           ],
         })),
@@ -952,6 +969,7 @@ export class MemoryLibSQL extends MemoryStorage {
           ...(row.run_id != null ? { runId: row.run_id as string } : {}),
           type: row.type as string,
           createdAt: new Date(row.created_at as string),
+          formatVersion: Number(row.format_version),
         }) as PersistableAction,
     );
   }
@@ -1410,8 +1428,7 @@ export class MemoryLibSQL extends MemoryStorage {
             args: [threadId],
           });
           const row = result.rows?.[0] as
-            | (Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string })
-            | undefined;
+            (Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }) | undefined;
 
           if (!row) {
             throw new Error(`Thread "${threadId}" not found`);

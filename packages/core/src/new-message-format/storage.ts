@@ -1,5 +1,5 @@
 import type { MastraAction, MastraActionType, PersistableAction } from './types';
-import { isPersistable } from './types';
+import { isPersistable, toStoredAction } from './types';
 
 export type ListActionsQuery = {
   threadId: string;
@@ -20,7 +20,7 @@ export class InMemoryActionStorage {
       if (thread.some(existing => existing.id === action.id)) {
         throw new Error(`Action ${action.id} already exists; actions are append-only`);
       }
-      thread.push(structuredClone(action));
+      thread.push(structuredClone(toStoredAction(action)));
       this.#threads.set(action.threadId, thread);
     }
   }

@@ -207,8 +207,11 @@ export async function* streamActions(
       case 'tool-input-end':
         break;
       default: {
-        const unhandled: never = part;
-        throw new Error(`Unhandled AI SDK stream part: ${(unhandled as { type: string }).type}`);
+        // Exhaustive at compile time. At runtime a newer SDK may send parts this version doesn't know;
+        // skip them rather than fail the run.
+        const _unhandled: never = part;
+        void _unhandled;
+        break;
       }
     }
   }

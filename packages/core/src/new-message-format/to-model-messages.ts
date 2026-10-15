@@ -6,6 +6,7 @@ import type {
   ProviderOptions,
 } from '@internal/ai-v7';
 import type { PersistableAction, SignalAction, ToolResultAction } from './types';
+import { UnsupportedActionError, isReadableAction } from './types';
 
 type AssistantPart = Exclude<AssistantModelMessage['content'], string>[number];
 type ToolPart = ToolModelMessage['content'][number];
@@ -34,6 +35,7 @@ export function toModelMessages(actions: PersistableAction[]): ModelMessage[] {
   const tool = (part: ToolPart) => open('tool').content.push(part);
 
   for (const action of actions) {
+    if (!isReadableAction(action)) continue;
     const providerOptions = action.providerMetadata as ProviderOptions | undefined;
     const opts = providerOptions ? { providerOptions } : {};
     switch (action.type) {
@@ -103,9 +105,18 @@ export function toModelMessages(actions: PersistableAction[]): ModelMessage[] {
         if (current?.role === 'assistant' || current?.role === 'tool') current = undefined;
         break;
       // Lifecycle, bookkeeping, and UI-only content never reach the model.
+      case 'run-start':
       case 'turn-end':
       case 'run-end':
       case 'run-aborted':
+      case 'settings-changed':
+      case 'task-changed':
+      case 'goal-started':
+      case 'goal-changed':
+      case 'goal-ended':
+      // Not projected until the goal loop runs on actions; see IGNORABLE_ACTION_TYPES for why it isn't skippable.
+      case 'goal-evaluated':
+      case 'tool-started':
       case 'provider-event':
       case 'model-changed':
       case 'structured-output':
@@ -128,9 +139,12 @@ export function toModelMessages(actions: PersistableAction[]): ModelMessage[] {
       case 'background-tool-error':
       case 'background-tool-ended':
         break;
-      default:
-        if (action.type.startsWith('data-')) break;
-        throw new Error(`toModelMessages: unhandled action ${(action as { type: string }).type}`);
+      default: {
+        // A row from a newer writer: skip it if it's marked skippable, refuse it otherwise.
+        const unknown = action as { type: string; ignorable?: boolean; formatVersion?: number };
+        if (unknown.type.startsWith('data-') || unknown.ignorable) break;
+        throw new UnsupportedActionError(unknown.type, unknown.formatVersion);
+      }
     }
   }
   return messages;

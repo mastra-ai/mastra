@@ -19,11 +19,16 @@ const text = (threadId: string, runId: string, value: string): PersistableAction
   metadata: { source: 'test' },
 });
 
+/** What a store returns for an action written at the current format version. */
+const stored = (action: PersistableAction) => ({ ...action, formatVersion: 1 });
+
 describe('MemoryLibSQL actions', () => {
   let store: MemoryLibSQL;
+  let client: ReturnType<typeof createClient>;
 
   beforeEach(async () => {
-    store = new MemoryLibSQL({ client: createClient({ url: 'file::memory:' }), maxRetries: 1, initialBackoffMs: 10 });
+    client = createClient({ url: 'file::memory:' });
+    store = new MemoryLibSQL({ client, maxRetries: 1, initialBackoffMs: 10 });
     await store.init();
   });
 
@@ -42,7 +47,7 @@ describe('MemoryLibSQL actions', () => {
     await store.saveActions({ actions: [b, a].reverse() });
 
     const listed = await store.listActions({ threadId: 't1' });
-    expect(listed).toEqual([a, b]);
+    expect(listed).toEqual([stored(a), stored(b)]);
     expect(listed[0]!.createdAt).toBeInstanceOf(Date);
     expect(listed[1]).not.toHaveProperty('resourceId');
   });
@@ -75,13 +80,142 @@ describe('MemoryLibSQL actions', () => {
     const a = text('t1', 'r1', 'original');
     await store.saveActions({ actions: [a] });
     await expect(store.saveActions({ actions: [{ ...a, text: 'overwrite' } as PersistableAction] })).rejects.toThrow();
-    expect(await store.listActions({ threadId: 't1' })).toEqual([a]);
+    expect(await store.listActions({ threadId: 't1' })).toEqual([stored(a)]);
   });
 
   it('never stores transient actions', async () => {
     const a = text('t1', 'r1', 'kept');
     const delta = { ...a, id: id(), type: 'text-delta', transient: true, contentId: 'x', delta: 'd' };
     await store.saveActions({ actions: [a, delta as unknown as PersistableAction] });
-    expect(await store.listActions({ threadId: 't1' })).toEqual([a]);
+    expect(await store.listActions({ threadId: 't1' })).toEqual([stored(a)]);
+  });
+
+  it('round-trips thread events with format version and the ignorable flag', async () => {
+    const base = { threadId: 't1', runId: 'r1', createdAt: new Date('2026-10-15T10:00:00.000Z') };
+    const actions: PersistableAction[] = [
+      {
+        ...base,
+        id: id(),
+        type: 'run-start',
+        agentId: 'a1',
+        modelId: 'openai/gpt-4o-mini',
+        settings: { thinkingLevel: 'high', maxSteps: 5, toolNames: ['weather'] },
+      },
+      { ...base, id: id(), type: 'tool-started', toolCallId: 'c1', toolName: 'weather' },
+      { ...base, id: id(), type: 'goal-started', goalId: 'g1', objective: 'Ship it', options: { maxRuns: 10 } },
+      {
+        ...base,
+        id: id(),
+        type: 'goal-evaluated',
+        goalId: 'g1',
+        iteration: 1,
+        maxRuns: 10,
+        outcome: 'continue',
+        status: 'active',
+        reason: 'Tests missing',
+      },
+      {
+        ...base,
+        id: id(),
+        type: 'settings-changed',
+        setting: 'mode',
+        value: 'plan',
+        previousValue: 'build',
+        changedBy: { kind: 'user' },
+      },
+      {
+        ...base,
+        id: id(),
+        type: 'task-changed',
+        tasks: [{ id: 'x', content: 'Do x', status: 'pending', activeForm: 'Doing x' }],
+        changedBy: { kind: 'agent' },
+      },
+      { ...base, id: id(), type: 'run-end', finishReason: 'interrupted', usage: {} },
+    ];
+    await store.saveActions({ actions });
+
+    const listed = await store.listActions({ threadId: 't1' });
+    expect(listed.map(a => a.type)).toEqual(actions.map(a => a.type));
+    expect(listed.every(a => a.formatVersion === 1)).toBe(true);
+    // Model-visible types stay required; the rest are marked skippable for older readers.
+    expect(listed.filter(a => a.ignorable).map(a => a.type)).toEqual([
+      'run-start',
+      'tool-started',
+      'goal-started',
+      'settings-changed',
+      'task-changed',
+      'run-end',
+    ]);
+    expect(listed).toEqual(
+      actions.map(a => ({ ...stored(a), ...(a.type === 'goal-evaluated' ? {} : { ignorable: true }) })),
+    );
+  });
+
+  it('stores goal changes and verdicts exactly as written, with no merging or defaults', async () => {
+    const base = { threadId: 't1', runId: 'r1', createdAt: new Date('2026-10-15T10:00:00.000Z') };
+    const user = { kind: 'user' } as const;
+    const actions: PersistableAction[] = [
+      { ...base, id: id(), type: 'goal-changed', goalId: 'g2', options: { maxRuns: 3, prompt: 'p' }, changedBy: user },
+      { ...base, id: id(), type: 'goal-changed', goalId: 'g2', options: { maxRuns: 3 }, changedBy: user },
+      { ...base, id: id(), type: 'goal-changed', goalId: 'g2', status: 'active', changedBy: user },
+      {
+        ...base,
+        id: id(),
+        type: 'goal-evaluated',
+        goalId: 'g2',
+        outcome: 'waiting-for-user',
+        iteration: 3,
+        maxRuns: 3,
+        status: 'active',
+      },
+    ];
+    await store.saveActions({ actions });
+
+    const listed = await store.listActions({ threadId: 't1' });
+    expect(listed).toEqual(
+      actions.map(a => ({ ...stored(a), ...(a.type === 'goal-evaluated' ? {} : { ignorable: true }) })),
+    );
+    expect(listed[0]).not.toHaveProperty('status');
+    expect((listed[1] as { options: object }).options).toEqual({ maxRuns: 3 });
+    expect(listed[2]).not.toHaveProperty('pausedReason');
+    expect(listed[2]).not.toHaveProperty('options');
+    expect(listed[3]).toMatchObject({ outcome: 'waiting-for-user', iteration: 3, maxRuns: 3, status: 'active' });
+  });
+
+  it('keeps a format version set by the writer', async () => {
+    const a = { ...text('t1', 'r1', 'from the future'), formatVersion: 2 };
+    await store.saveActions({ actions: [a] });
+    expect((await store.listActions({ threadId: 't1' }))[0]!.formatVersion).toBe(2);
+  });
+
+  it('indexes actions by resource', async () => {
+    const indexes = await client.execute(`PRAGMA index_list(mastra_actions)`);
+    const names = indexes.rows.map(row => row.name);
+    expect(names).toContain('idx_actions_resource_id');
+    const columns = await client.execute(`PRAGMA index_info(idx_actions_resource_id)`);
+    expect(columns.rows.map(row => row.name)).toEqual(['resource_id', 'id']);
+  });
+
+  it('adds format_version to an actions table created without it', async () => {
+    const legacy = createClient({ url: 'file::memory:' });
+    await legacy.execute(`CREATE TABLE mastra_actions (
+      id TEXT PRIMARY KEY, thread_id TEXT NOT NULL, resource_id TEXT, run_id TEXT,
+      type TEXT NOT NULL, created_at TEXT NOT NULL, data TEXT NOT NULL)`);
+    await legacy.execute({
+      sql: `INSERT INTO mastra_actions (id, thread_id, run_id, type, created_at, data) VALUES (?, 't1', 'r1', 'text', ?, ?)`,
+      args: [
+        '01J00000000000000000000000',
+        '2026-10-15T10:00:00.000Z',
+        JSON.stringify({ role: 'user', text: 'old row' }),
+      ],
+    });
+    const upgraded = new MemoryLibSQL({ client: legacy, maxRetries: 1, initialBackoffMs: 10 });
+    await upgraded.init();
+
+    const [old] = await upgraded.listActions({ threadId: 't1' });
+    expect(old).toMatchObject({ type: 'text', text: 'old row', formatVersion: 1 });
+    const fresh = text('t1', 'r1', 'new row');
+    await upgraded.saveActions({ actions: [fresh] });
+    expect(await upgraded.listActions({ threadId: 't1' })).toHaveLength(2);
   });
 });
