@@ -64,6 +64,28 @@ export function TracesDataListInputCell({ input }: TracesDataListInputCellProps)
 }
 
 // ---------------------------------------------------------------------------
+// OutputCell
+// ---------------------------------------------------------------------------
+
+export interface TracesDataListOutputCellProps {
+  output?: string | null;
+  /** Shown instead of `output`, in the error color, when `status` is `'error'`. */
+  error?: string | null;
+  status?: string | null;
+}
+
+export function TracesDataListOutputCell({ output, error, status }: TracesDataListOutputCellProps) {
+  if (status === 'error') {
+    return (
+      <DataListTextCell font="mono" className={error ? 'text-destructive-foreground' : undefined}>
+        {error || '-'}
+      </DataListTextCell>
+    );
+  }
+  return <DataListTextCell font="mono">{output || '-'}</DataListTextCell>;
+}
+
+// ---------------------------------------------------------------------------
 // TypeCell
 // ---------------------------------------------------------------------------
 
