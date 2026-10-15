@@ -3721,6 +3721,8 @@ type Shared_Type_67 = {
   threadQuery: boolean;
   /** Span queries (POST /observability/spans/query) */
   spanQuery: boolean;
+  /** Days of traces the store keeps. Older traces are gone, so clients can stop users from picking dates before them. Omitted when the store does not report a limit. */
+  traceRetentionDays?: number | undefined;
   /** Feedback endpoints (/observability/feedback and /observability/feedback/*). Unsupported feedback routes return 501. */
   feedback: boolean;
 };
