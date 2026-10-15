@@ -48,6 +48,24 @@ describe('Meter', () => {
     ]);
   });
 
+  it('reads out how far over the allowance usage is when the caller gives no reading', () => {
+    render(<Meter value={112} max={100} aria-label="vCPU" />);
+
+    expect(screen.getByRole('meter').getAttribute('aria-valuetext')).toBe('112 of 100, 12 over');
+  });
+
+  it('keeps the caller reading over the allowance, units and all', () => {
+    render(<Meter value={112} max={100} aria-label="vCPU" aria-valuetext="112 of 100 vCPU-hours, 12 over" />);
+
+    expect(screen.getByRole('meter').getAttribute('aria-valuetext')).toBe('112 of 100 vCPU-hours, 12 over');
+  });
+
+  it('leaves the reading to aria-valuenow within the allowance', () => {
+    render(<Meter value={148} max={360} aria-label="Memory" />);
+
+    expect(screen.getByRole('meter').hasAttribute('aria-valuetext')).toBe(false);
+  });
+
   it('fills the whole bar at exactly the allowance, with nothing in red', () => {
     render(<Meter value={100} max={100} aria-label="vCPU" />);
 

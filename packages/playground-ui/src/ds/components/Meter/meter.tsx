@@ -1,4 +1,5 @@
 import type { CSSProperties, ComponentProps } from 'react';
+import { formatFullNumber } from '@/lib/cost';
 import { cn } from '@/lib/utils';
 
 export type MeterProps = Omit<ComponentProps<'span'>, 'children'> & {
@@ -12,6 +13,7 @@ export function Meter({ value, max, className, ...props }: MeterProps) {
   const over = Math.max(0, used - allowance);
   const within = used - over;
   const rest = allowance - within;
+  const overReading = over > 0 ? overallowanceReading(used, allowance, over) : undefined;
 
   return (
     <span
@@ -19,6 +21,7 @@ export function Meter({ value, max, className, ...props }: MeterProps) {
       aria-valuemin={0}
       aria-valuemax={allowance}
       aria-valuenow={within}
+      aria-valuetext={overReading}
       data-over={over > 0 || undefined}
       className={cn('flex h-1 w-full min-w-0 gap-0.5', className)}
       {...props}
@@ -28,6 +31,10 @@ export function Meter({ value, max, className, ...props }: MeterProps) {
       {(rest > 0 || used === 0) && <Segment part="rest" grow={rest || 1} />}
     </span>
   );
+}
+
+function overallowanceReading(used: number, allowance: number, over: number) {
+  return `${formatFullNumber(used)} of ${formatFullNumber(allowance)}, ${formatFullNumber(over)} over`;
 }
 
 const segmentClassNames = {
