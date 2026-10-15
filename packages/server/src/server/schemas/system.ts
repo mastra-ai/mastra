@@ -45,6 +45,11 @@ export const observabilityStorageCapabilitiesSchema = z.object({
     .boolean()
     .describe('Trace query field discovery (POST /observability/traces/query/fields and /values)'),
   traceQueryTenantScope: z.boolean().describe('Trusted tenant scoping of trace and thread queries'),
+  traceAggregate: z
+    .boolean()
+    .describe(
+      'Trace aggregation (POST /observability/traces/aggregate). Unlike `traceQuery`, clients should treat a missing value as unavailable.',
+    ),
   threadQuery: z.boolean().describe('Advanced thread queries (POST /observability/threads/query)'),
   spanQuery: z.boolean().describe('Span queries (POST /observability/spans/query)'),
   traceRetentionDays: z

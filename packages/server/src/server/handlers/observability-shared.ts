@@ -125,8 +125,12 @@ export function assertObservabilityTraceQuerySupported(observabilityStore: Obser
   });
 }
 
+export function supportsObservabilityTraceAggregate(observabilityStore: ObservabilityStorage) {
+  return getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_AGGREGATE_STORAGE_FEATURE) === true;
+}
+
 export function assertObservabilityTraceAggregateSupported(observabilityStore: ObservabilityStorage) {
-  if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_AGGREGATE_STORAGE_FEATURE)) return;
+  if (supportsObservabilityTraceAggregate(observabilityStore)) return;
 
   throw new HTTPException(501, {
     message: 'Trace aggregation is not supported by the configured observability store',
@@ -271,6 +275,7 @@ export type ObservabilityStorageCapabilities = {
   traceQueryContextIds: boolean;
   traceQueryDiscovery: boolean;
   traceQueryTenantScope: boolean;
+  traceAggregate: boolean;
   threadQuery: boolean;
   spanQuery: boolean;
   /** Days of traces the store keeps. Omitted when the store does not report a limit. */
@@ -295,6 +300,7 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   traceQueryContextIds: false,
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
+  traceAggregate: false,
   threadQuery: false,
   spanQuery: false,
   feedback: false,
@@ -372,6 +378,8 @@ export function getObservabilityStorageCapabilities(
       (traceQuery || threadQuery) &&
       coreFeatures.has(OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_CORE_FEATURE) &&
       declares(OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_STORAGE_FEATURE),
+    traceAggregate:
+      newApiCore && supportsTraceAggregateCore() && declares(OBSERVABILITY_TRACE_AGGREGATE_STORAGE_FEATURE),
     threadQuery,
     spanQuery: newApiCore && supportsSpanQueryCore() && declares(OBSERVABILITY_SPAN_QUERY_STORAGE_FEATURE),
     feedback: newApiCore && declares(OBSERVABILITY_FEEDBACK_STORAGE_FEATURE),

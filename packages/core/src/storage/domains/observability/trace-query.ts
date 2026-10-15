@@ -236,11 +236,37 @@ export const traceQueryObservedFieldDescriptorSchema = z
     occurrences: z.number().int().nonnegative(),
   })
   .strict();
+export const traceAggregateDimensionDescriptorSchema = z
+  .object({
+    path: z.string(),
+    valueKind: z.literal('string'),
+  })
+  .strict();
+export const traceAggregateMeasureDescriptorSchema = z
+  .object({
+    name: z.string(),
+    kind: z.enum(['count', 'duration', 'error', 'tokens', 'cost']),
+    statistic: z.enum(['avg', 'min', 'max', 'p50', 'p90', 'p95', 'p99', 'sum']).optional(),
+    unit: z.enum(['count', 'milliseconds', 'ratio', 'tokens', 'currency']),
+    approximate: z.boolean(),
+  })
+  .strict();
+export const traceAggregateDiscoverySchema = z
+  .object({
+    dimensions: z.array(traceAggregateDimensionDescriptorSchema),
+    measures: z.array(traceAggregateMeasureDescriptorSchema),
+  })
+  .strict()
+  .describe(
+    'What `aggregateTraces()` accepts. Present only for `predicateScope: "trace"` when the store supports aggregation. ' +
+      'Every observed field is also a groupable dimension, and `countDistinct.<field>` accepts any dimension or `traceId`.',
+  );
 export const getTraceQueryFieldsResponseSchema = z
   .object({
     canonicalFields: z.array(traceQueryCanonicalFieldDescriptorSchema),
     observedFields: z.array(traceQueryObservedFieldDescriptorSchema).max(TRACE_QUERY_DISCOVERY_MAX_LIMIT),
     observedFieldsTruncated: z.boolean(),
+    aggregate: traceAggregateDiscoverySchema.optional(),
   })
   .strict();
 export const getTraceQueryValuesResponseSchema = z
@@ -628,6 +654,7 @@ export type NormalizedGetTraceQueryValuesArgs = z.output<typeof getTraceQueryVal
 export type TraceQueryCanonicalFieldDescriptor = z.infer<typeof traceQueryCanonicalFieldDescriptorSchema>;
 export type TraceQueryObservedFieldDescriptor = z.infer<typeof traceQueryObservedFieldDescriptorSchema>;
 export type GetTraceQueryFieldsResponse = z.infer<typeof getTraceQueryFieldsResponseSchema>;
+export type TraceAggregateDiscovery = z.infer<typeof traceAggregateDiscoverySchema>;
 export type GetTraceQueryValuesResponse = z.infer<typeof getTraceQueryValuesResponseSchema>;
 
 export type TrustedTraceQueryScalarPredicate =
