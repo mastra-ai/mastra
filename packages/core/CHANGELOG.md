@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 1.78.0-alpha.7
+
+### Patch Changes
+
+- Fixed full agent output repeating earlier text after a feedback continuation. ([#26543](https://github.com/mastra-ai/mastra/pull/26543))
+
+- Fixed `createStep(agent)` running a `durable: true` agent as a plain agent. When the agent is registered with Mastra, the workflow step now runs through the registered durable wrapper on both the default and evented engines, so durable streaming and cleanup apply as expected. ([#27078](https://github.com/mastra-ai/mastra/pull/27078))
+
+  A step now logs a warning when a `durable: true` agent still has to run non-durably: when no durable wrapper for it is registered on the workflow's Mastra instance, or when it uses a legacy v1 model.
+
 ## 1.78.0-alpha.6
 
 ### Minor Changes
