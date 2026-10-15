@@ -67,6 +67,7 @@ import type { ActionRunOutput, ActionRunResult } from '../new-message-format/out
 import { lastRuns, runAgent } from '../new-message-format/run';
 import type { ActionStore, RunAgentOptions } from '../new-message-format/run';
 import type { ActionDraft, AgentInput } from '../new-message-format/to-actions';
+import { isReadableAction } from '../new-message-format/types';
 import { toV7Tools } from '../new-message-format/tools';
 import {
   resolveDeliveryFailureUpdate,
@@ -8790,7 +8791,7 @@ export class Agent<
     if (!threadId || !memory) {
       throw new Error('Resuming a tool approval requires memory with a thread.');
     }
-    const log = await memory.listActions({ threadId, runId: options.runId });
+    const log = (await memory.listActions({ threadId, runId: options.runId })).filter(isReadableAction);
     const answered = new Set(log.flatMap(a => (a.type === 'tool-approval-responded' ? [a.approvalId] : [])));
     const request = log.findLast(
       a =>
