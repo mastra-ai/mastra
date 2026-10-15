@@ -58,6 +58,8 @@ type DoStreamResultPromiseV4 = PromiseLike<Awaited<ReturnType<LanguageModelV4['d
 export type MastraLanguageModelV2 = Omit<LanguageModelV2, 'doGenerate' | 'doStream'> & {
   /** Full `provider/model` ID the model was resolved from, when known (see {@link IdentifiedModelConfig}). */
   id?: string;
+  /** Metadata for every assistant message this model writes (see {@link IdentifiedModelConfig}). */
+  messageMetadata?: Record<string, unknown>;
   doGenerate: (options: LanguageModelV2CallOptions) => DoStreamResultPromiseV2;
   doStream: (options: LanguageModelV2CallOptions) => DoStreamResultPromiseV2;
 };
@@ -66,6 +68,8 @@ export type MastraLanguageModelV2 = Omit<LanguageModelV2, 'doGenerate' | 'doStre
 export type MastraLanguageModelV3 = Omit<LanguageModelV3, 'doGenerate' | 'doStream'> & {
   /** Full `provider/model` ID the model was resolved from, when known (see {@link IdentifiedModelConfig}). */
   id?: string;
+  /** Metadata for every assistant message this model writes (see {@link IdentifiedModelConfig}). */
+  messageMetadata?: Record<string, unknown>;
   doGenerate: (options: LanguageModelV3CallOptions) => DoStreamResultPromiseV3;
   doStream: (options: LanguageModelV3CallOptions) => DoStreamResultPromiseV3;
 };
@@ -74,6 +78,8 @@ export type MastraLanguageModelV3 = Omit<LanguageModelV3, 'doGenerate' | 'doStre
 export type MastraLanguageModelV4 = Omit<LanguageModelV4, 'doGenerate' | 'doStream'> & {
   /** Full `provider/model` ID the model was resolved from, when known (see {@link IdentifiedModelConfig}). */
   id?: string;
+  /** Metadata for every assistant message this model writes (see {@link IdentifiedModelConfig}). */
+  messageMetadata?: Record<string, unknown>;
   doGenerate: (options: LanguageModelV4CallOptions) => DoStreamResultPromiseV4;
   doStream: (options: LanguageModelV4CallOptions) => DoStreamResultPromiseV4;
 };
@@ -105,10 +111,16 @@ type BaseModelConfig =
  * A model labeled with the full `provider/model` ID it was built from (including any route
  * prefix such as `mastra/`). Useful when a dynamic model function builds a model instance whose
  * own `provider`/`modelId` fields no longer carry that ID. The resolved model exposes it as `id`.
+ *
+ * `messageMetadata` describes how this instance answers, e.g. the reasoning effort it was built
+ * with. It lands in `content.metadata` of each assistant message the model writes, on the live
+ * `step-start` chunk and on the saved message alike. `modelId`, `provider` and `traceId` stay
+ * owned by Mastra and win over keys of the same name.
  */
 export type IdentifiedModelConfig = {
   model: BaseModelConfig;
   id: string;
+  messageMetadata?: Record<string, unknown>;
 };
 
 export type MastraModelConfig = BaseModelConfig | IdentifiedModelConfig;

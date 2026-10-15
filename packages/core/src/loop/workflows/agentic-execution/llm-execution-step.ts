@@ -432,10 +432,10 @@ async function addToolPayloadTransformToChunk<OUTPUT>(
 
 function buildResponseModelMetadata(
   runState: AgenticRunState,
-  model?: { provider?: string; modelId?: string },
+  model?: { provider?: string; modelId?: string; messageMetadata?: Record<string, unknown> },
   tracingContext?: TracingContext,
 ): { metadata: Record<string, unknown> } | undefined {
-  const metadata: Record<string, unknown> = {};
+  const metadata: Record<string, unknown> = { ...model?.messageMetadata };
   const modelId = model?.modelId ?? runState.state.responseMetadata?.modelId;
 
   if (modelId) {
@@ -2113,6 +2113,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                       startedAt: inferenceStartedAt,
                       modelId: currentStep.model.modelId,
                       provider: currentStep.model.provider,
+                      ...(currentStep.model.messageMetadata && {
+                        messageMetadata: currentStep.model.messageMetadata,
+                      }),
                     },
                   };
                 },

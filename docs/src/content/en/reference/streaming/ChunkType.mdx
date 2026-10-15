@@ -970,6 +970,13 @@ Signals the start of a processing step.
             description: 'Provider of the model this step calls',
           },
           {
+            name: 'messageMetadata',
+            type: 'Record<string, unknown>',
+            isOptional: true,
+            description:
+              'Metadata set on the model through `{ id, model, messageMetadata }`. Mastra also saves it on the assistant message (`content.metadata`). `modelId`, `provider`, and `traceId` keep the values Mastra sets.',
+          },
+          {
             name: 'request',
             type: 'object',
             description: 'Request information including body and other data',

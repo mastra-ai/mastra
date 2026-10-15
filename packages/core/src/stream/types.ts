@@ -314,6 +314,8 @@ export interface StepStartPayload {
   startedAt?: number;
   modelId?: string;
   provider?: string;
+  /** Host metadata for the message this step writes, from {@link IdentifiedModelConfig.messageMetadata}. */
+  messageMetadata?: Record<string, unknown>;
   request: {
     body?: string;
     [key: string]: unknown;

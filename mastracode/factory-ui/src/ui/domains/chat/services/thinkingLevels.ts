@@ -1,4 +1,4 @@
-import { getAvailableThinkingLevelsForModel, runThinkingLevel } from '@mastra/code-sdk/thinking';
+import { THINKING_LEVEL_VALUES, getAvailableThinkingLevelsForModel, runThinkingLevel } from '@mastra/code-sdk/thinking';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import type { ModelReasoningOption } from '@mastra/core/llm';
 import type { ThinkingLevelOption } from '@mastra/playground-ui/components/ThinkingLevel';
@@ -18,16 +18,22 @@ const THINKING_LEVEL_EMPHASIS: Partial<Record<ThinkingLevelSetting, ThinkingLeve
   max: 'warning',
 };
 
-export function thinkingLevelOptionsForModel(
-  modelId: string,
-  reasoningOptions: readonly ModelReasoningOption[] | undefined,
-): ThinkingLevelOption<ThinkingLevelSetting>[] {
-  return getAvailableThinkingLevelsForModel(modelId, reasoningOptions).map(level => ({
+function thinkingLevelOptions(levels: readonly ThinkingLevelSetting[]): ThinkingLevelOption<ThinkingLevelSetting>[] {
+  return levels.map(level => ({
     value: level,
     label: THINKING_LEVEL_LABELS[level],
     emphasis: THINKING_LEVEL_EMPHASIS[level],
   }));
 }
+
+export function thinkingLevelOptionsForModel(
+  modelId: string,
+  reasoningOptions: readonly ModelReasoningOption[] | undefined,
+): ThinkingLevelOption<ThinkingLevelSetting>[] {
+  return thinkingLevelOptions(getAvailableThinkingLevelsForModel(modelId, reasoningOptions));
+}
+
+export const ALL_THINKING_LEVEL_OPTIONS = thinkingLevelOptions(THINKING_LEVEL_VALUES);
 
 export type ThinkingLevelOrigin = 'session' | 'global';
 

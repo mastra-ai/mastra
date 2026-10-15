@@ -340,7 +340,12 @@ export class SessionRunEngine {
     const modelId = getString(stepStart.modelId);
     if (!modelId) return;
     const provider = getString(stepStart.provider);
-    message.content.metadata = { ...message.content.metadata, modelId, ...(provider ? { provider } : {}) };
+    message.content.metadata = {
+      ...message.content.metadata,
+      ...getRecord(stepStart.messageMetadata),
+      modelId,
+      ...(provider ? { provider } : {}),
+    };
   }
 
   private startCurrentMessage(state: StreamState): boolean {
