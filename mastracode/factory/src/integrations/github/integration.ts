@@ -1122,19 +1122,28 @@ export class GithubIntegration implements FactoryIntegration {
   async #publishCommitCheck(input: InputOf<'publishCommitCheck'>): Promise<CommitCheck> {
     const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
     const { status } = input;
-    const { data } = await octokit.checks.create({
-      ...parts,
-      name: input.name,
-      head_sha: input.headSha,
-      ...(status === 'in-progress'
-        ? { status: 'in_progress' as const }
-        : { status: 'completed' as const, conclusion: status, completed_at: new Date().toISOString() }),
-      output: {
-        title: input.title.slice(0, GITHUB_CHECK_TITLE_LIMIT),
-        summary: input.summary.slice(0, GITHUB_CHECK_TEXT_LIMIT),
-        ...(input.details ? { text: input.details.slice(0, GITHUB_CHECK_TEXT_LIMIT) } : {}),
-      },
-    });
+    const { data } = await octokit.checks
+      .create({
+        ...parts,
+        name: input.name,
+        head_sha: input.headSha,
+        ...(status === 'in-progress'
+          ? { status: 'in_progress' as const }
+          : { status: 'completed' as const, conclusion: status, completed_at: new Date().toISOString() }),
+        output: {
+          title: input.title.slice(0, GITHUB_CHECK_TITLE_LIMIT),
+          summary: input.summary.slice(0, GITHUB_CHECK_TEXT_LIMIT),
+          ...(input.details ? { text: input.details.slice(0, GITHUB_CHECK_TEXT_LIMIT) } : {}),
+        },
+      })
+      .catch((error: unknown) => {
+        if ((error as { status?: number } | null)?.status === 403) {
+          throw new Error(
+            'github cannot publish commit checks: the GitHub App lacks the "checks: write" permission; nothing was published.',
+          );
+        }
+        throw error;
+      });
     return { id: String(data.id), name: data.name, headSha: data.head_sha, status: input.status, url: data.html_url };
   }
 

@@ -405,12 +405,23 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
 
   const publishCommitCheck: NonNullable<VersionControl['publishCommitCheck']> = async input => {
     const context = await deps.contextForConnection(input.connection);
-    const status = await context.api.setCommitStatus(input.sourceId, input.headSha, {
+    const body = {
       state: GITLAB_COMMIT_STATUS_STATE[input.status],
       name: input.name,
       // GitLab commit statuses carry a single short description, so the title is the only text published.
       description: input.title.slice(0, GITLAB_COMMIT_STATUS_DESCRIPTION_LIMIT),
-    });
+    };
+    // GitLab answers 409 when two updates to the same status race; a short bounded retry settles it.
+    let status;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        status = await context.api.setCommitStatus(input.sourceId, input.headSha, body);
+        break;
+      } catch (error) {
+        if (attempt >= 3 || (error as { status?: number } | null)?.status !== 409) throw error;
+        await new Promise(resolve => setTimeout(resolve, 250 * attempt));
+      }
+    }
     return { id: String(status.id), name: status.name, headSha: status.sha, status: input.status, url: status.target_url };
   };
 
