@@ -17,7 +17,14 @@ type InputShared_Auxiliary_21 =
       [key: string]: InputShared_Auxiliary_21;
     };
 
-type InputShared_Auxiliary_205 =
+type InputShared_Auxiliary_115 = {
+  workflowId: string;
+  runId: string;
+  executionPath: number[];
+  parentWorkflow?: InputShared_Auxiliary_115 | undefined;
+};
+
+type InputShared_Auxiliary_207 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -66,41 +73,41 @@ type InputShared_Auxiliary_205 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_205[];
+      args: InputShared_Auxiliary_207[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_205;
+      arg: InputShared_Auxiliary_207;
     }
   | {
       spans:
         | {
-            some: InputShared_Auxiliary_228;
+            some: InputShared_Auxiliary_230;
           }
         | {
-            none: InputShared_Auxiliary_228;
+            none: InputShared_Auxiliary_230;
           };
     }
   | {
       scores:
         | {
-            some: InputShared_Auxiliary_228;
+            some: InputShared_Auxiliary_230;
           }
         | {
-            none: InputShared_Auxiliary_228;
+            none: InputShared_Auxiliary_230;
           };
     }
   | {
       feedback:
         | {
-            some: InputShared_Auxiliary_228;
+            some: InputShared_Auxiliary_230;
           }
         | {
-            none: InputShared_Auxiliary_228;
+            none: InputShared_Auxiliary_230;
           };
     };
 
-type InputShared_Auxiliary_228 =
+type InputShared_Auxiliary_230 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -149,33 +156,33 @@ type InputShared_Auxiliary_228 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_228[];
+      args: InputShared_Auxiliary_230[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_228;
+      arg: InputShared_Auxiliary_230;
     };
 
-type InputShared_Auxiliary_262 =
+type InputShared_Auxiliary_264 =
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_262[];
+      args: InputShared_Auxiliary_264[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_262;
+      arg: InputShared_Auxiliary_264;
     }
   | {
       traces:
         | {
-            some: InputShared_Auxiliary_205;
+            some: InputShared_Auxiliary_207;
           }
         | {
-            none: InputShared_Auxiliary_205;
+            none: InputShared_Auxiliary_207;
           };
     };
 
-type InputShared_Auxiliary_690 =
+type InputShared_Auxiliary_692 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -220,19 +227,19 @@ type InputShared_Auxiliary_690 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_690[];
+      args: InputShared_Auxiliary_692[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_690;
+      arg: InputShared_Auxiliary_692;
     };
 
-type InputShared_Auxiliary_764 = {
+type InputShared_Auxiliary_766 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_764[] | undefined;
+  children?: InputShared_Auxiliary_766[] | undefined;
 };
 
 type Shared_Auxiliary_764 = {
@@ -1799,7 +1806,7 @@ type InputShared_Type_88 = {
       }
     | undefined;
   steps: InputShared_Type_83[];
-  predicates: InputShared_Auxiliary_690[];
+  predicates: InputShared_Auxiliary_692[];
 };
 
 type InputShared_Type_89 = {
@@ -1813,7 +1820,7 @@ type InputShared_Type_89 = {
     | undefined;
   step: InputShared_Type_83;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_690;
+  predicate: InputShared_Auxiliary_692;
 };
 
 type InputShared_Type_90 =
@@ -3469,6 +3476,12 @@ type Shared_Type_61 = {
         [key: string]: unknown;
       } | null)
     | undefined;
+  /** Short text preview of the span input */
+  inputPreview?: (string | null) | undefined;
+  /** Short text preview of the span output */
+  outputPreview?: (string | null) | undefined;
+  /** Short text preview of the span error */
+  errorPreview?: (string | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
@@ -3505,6 +3518,8 @@ type Shared_Type_62 = {
       } | null)
     | undefined;
   inputPreview?: (string | null) | undefined;
+  outputPreview?: (string | null) | undefined;
+  errorPreview?: (string | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
@@ -3576,6 +3591,12 @@ type Shared_Type_63 = {
         [key: string]: unknown;
       } | null)
     | undefined;
+  /** Short text preview of the span input */
+  inputPreview?: (string | null) | undefined;
+  /** Short text preview of the span output */
+  outputPreview?: (string | null) | undefined;
+  /** Short text preview of the span error */
+  errorPreview?: (string | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
@@ -3593,6 +3614,8 @@ type Shared_Type_64 = {
     [key: string]: unknown;
   } | null;
   inputPreview: string | null;
+  outputPreview: string | null;
+  errorPreview: string | null;
   threadId: string | null;
   resourceId: string | null;
   startedAt: string;
@@ -5295,11 +5318,11 @@ export interface PostAgentsAgentIdQueueMessage_RouteContract {
 }
 
 // ============================================================================
-// Route: POST /agents/:agentId/signals
+// Route: POST /agents/:agentId/queue-signal
 // ============================================================================
-export type PostAgentsAgentIdSignals_PathParams = GetAgentsAgentId_PathParams;
+export type PostAgentsAgentIdQueueSignal_PathParams = GetAgentsAgentId_PathParams;
 
-export type PostAgentsAgentIdSignals_Body =
+export type PostAgentsAgentIdQueueSignal_Body =
   | {
       ifActive?: InputShared_Type_4 | undefined;
       runId: string;
@@ -5316,6 +5339,34 @@ export type PostAgentsAgentIdSignals_Body =
       ifIdle?: InputShared_Type_9 | undefined;
       signal: InputShared_Type_10 | InputShared_Type_11;
     };
+
+export type PostAgentsAgentIdQueueSignal_Response = PostAgentsAgentIdSendMessage_Response;
+
+export type PostAgentsAgentIdQueueSignal_Request = Simplify<
+  (PostAgentsAgentIdQueueSignal_PathParams extends never ? {} : { params: PostAgentsAgentIdQueueSignal_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdQueueSignal_Body extends never
+      ? {}
+      : {} extends PostAgentsAgentIdQueueSignal_Body
+        ? { body?: PostAgentsAgentIdQueueSignal_Body }
+        : { body: PostAgentsAgentIdQueueSignal_Body })
+>;
+
+export interface PostAgentsAgentIdQueueSignal_RouteContract {
+  pathParams: PostAgentsAgentIdQueueSignal_PathParams;
+  queryParams: never;
+  body: PostAgentsAgentIdQueueSignal_Body;
+  request: PostAgentsAgentIdQueueSignal_Request;
+  response: PostAgentsAgentIdQueueSignal_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agents/:agentId/signals
+// ============================================================================
+export type PostAgentsAgentIdSignals_PathParams = GetAgentsAgentId_PathParams;
+
+export type PostAgentsAgentIdSignals_Body = PostAgentsAgentIdQueueSignal_Body;
 
 export type PostAgentsAgentIdSignals_Response = PostAgentsAgentIdSendMessage_Response;
 
@@ -7871,6 +7922,7 @@ export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_PathParams = GetWorkflo
 export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body = {
   stepId: string;
   executionPath: number[];
+  parentWorkflow?: InputShared_Auxiliary_115 | undefined;
   stepResults: {
     [key: string]: unknown;
   };
@@ -10417,7 +10469,7 @@ export type PostObservabilityTracesQuery_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_205 | undefined;
+  where?: InputShared_Auxiliary_207 | undefined;
   group?:
     | {
         by: ['threadId'];
@@ -10507,7 +10559,7 @@ export type PostObservabilityTracesAggregate_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_205 | undefined;
+  where?: InputShared_Auxiliary_207 | undefined;
   groupBy?: string[];
   interval?: ('1m' | '5m' | '15m' | '1h' | '1d') | undefined;
   measures: (
@@ -10537,7 +10589,7 @@ export type PostObservabilityTracesAggregate_Body = {
       )
     | `countDistinct.${string}`
   )[];
-  having?: InputShared_Auxiliary_228 | undefined;
+  having?: InputShared_Auxiliary_230 | undefined;
   orderBy?: {
     field: string;
     direction: 'asc' | 'desc';
@@ -10619,9 +10671,9 @@ export type PostObservabilityThreadsQuery_Body = {
       from: string;
       to: string;
     };
-    where?: InputShared_Auxiliary_205 | undefined;
+    where?: InputShared_Auxiliary_207 | undefined;
   };
-  where?: InputShared_Auxiliary_262 | undefined;
+  where?: InputShared_Auxiliary_264 | undefined;
   page?: {
     limit?: number;
     after?: (string | null) | undefined;
@@ -10664,7 +10716,7 @@ export type PostObservabilitySpansQuery_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_228 | undefined;
+  where?: InputShared_Auxiliary_230 | undefined;
   orderBy?: {
     field: 'startedAt' | 'endedAt';
     direction: 'asc' | 'desc';
@@ -10697,6 +10749,8 @@ export type PostObservabilitySpansQuery_Response = {
     inputTruncated: boolean;
     outputPreview: string | null;
     outputTruncated: boolean;
+    errorPreview: string | null;
+    errorTruncated: boolean;
     cost:
       | {
           state: 'available';
@@ -18567,7 +18621,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_764[] | undefined;
+  files?: InputShared_Auxiliary_766[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -18625,7 +18679,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_764[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_766[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -23228,14 +23282,8 @@ export type PostAgentControllerControllerIdSessionsResourceIdSteer_PathParams =
 export type PostAgentControllerControllerIdSessionsResourceIdSteer_QueryParams =
   PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
-export type PostAgentControllerControllerIdSessionsResourceIdSteer_Body = {
-  message: string;
-  requestContext?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-};
+export type PostAgentControllerControllerIdSessionsResourceIdSteer_Body =
+  PostAgentControllerControllerIdSessionsResourceIdMessages_Body;
 
 export type PostAgentControllerControllerIdSessionsResourceIdSteer_Response =
   DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response;
@@ -23275,7 +23323,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_QueryParam
   PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_Body =
-  PostAgentControllerControllerIdSessionsResourceIdSteer_Body;
+  PostAgentControllerControllerIdSessionsResourceIdMessages_Body;
 
 export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_Response =
   DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response;
@@ -24110,6 +24158,7 @@ export interface RouteTypes {
   'POST /agents/:agentId/observe': PostAgentsAgentIdObserve_RouteContract;
   'POST /agents/:agentId/send-message': PostAgentsAgentIdSendMessage_RouteContract;
   'POST /agents/:agentId/queue-message': PostAgentsAgentIdQueueMessage_RouteContract;
+  'POST /agents/:agentId/queue-signal': PostAgentsAgentIdQueueSignal_RouteContract;
   'POST /agents/:agentId/signals': PostAgentsAgentIdSignals_RouteContract;
   'POST /agents/:agentId/threads/abort': PostAgentsAgentIdThreadsAbort_RouteContract;
   'POST /agents/:agentId/threads/signals/cancel': PostAgentsAgentIdThreadsSignalsCancel_RouteContract;
@@ -24746,6 +24795,9 @@ export interface Client {
   };
   '/agents/:agentId/queue-message': {
     POST: PostAgentsAgentIdQueueMessage_RouteContract;
+  };
+  '/agents/:agentId/queue-signal': {
+    POST: PostAgentsAgentIdQueueSignal_RouteContract;
   };
   '/agents/:agentId/recover': {
     POST: PostAgentsAgentIdRecover_RouteContract;

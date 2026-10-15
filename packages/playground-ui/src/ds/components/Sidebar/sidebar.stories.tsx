@@ -353,3 +353,50 @@ export const Raised: Story = {
     },
   },
 };
+
+const RECENT_THREADS = [
+  'Fix flaky deploy',
+  'Billing webhook',
+  'Docs typo',
+  'Rename env vars',
+  'Trace sampling',
+  'Retry policy',
+  'Slack alerts',
+];
+const FOLDED_THREAD_COUNT = 5;
+
+function ShowMoreStory() {
+  const [expanded, setExpanded] = useState(false);
+  const visibleThreads = expanded ? RECENT_THREADS : RECENT_THREADS.slice(0, FOLDED_THREAD_COUNT);
+  return (
+    <div className="flex h-screen">
+      <Sidebar>
+        <Sidebar.Nav>
+          <Sidebar.NavHeader icon={<ListTodo />}>Recent threads</Sidebar.NavHeader>
+          <Sidebar.NavList>
+            {visibleThreads.map(name => (
+              <Sidebar.NavLink key={name} link={{ name, url: '#' }} />
+            ))}
+          </Sidebar.NavList>
+          <Sidebar.NavShowMore
+            foldedCount={RECENT_THREADS.length - FOLDED_THREAD_COUNT}
+            expanded={expanded}
+            onExpandedChange={setExpanded}
+          />
+        </Sidebar.Nav>
+      </Sidebar>
+    </div>
+  );
+}
+
+export const ShowMore: Story = {
+  render: () => <ShowMoreStory />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'NavShowMore folds a long nav list to its first rows. It hides itself when the sidebar collapses to its rail and when nothing is folded.',
+      },
+    },
+  },
+};

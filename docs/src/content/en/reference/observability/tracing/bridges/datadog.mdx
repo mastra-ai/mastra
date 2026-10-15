@@ -36,6 +36,7 @@ interface DatadogBridgeConfig extends BaseExporterConfig {
   env?: string
   agentless?: boolean
   integrationsEnabled?: boolean
+  flushGraceMs?: number
   requestContextKeys?: string[]
 }
 ```
@@ -98,6 +99,13 @@ Extends `BaseExporterConfig`, which includes:
     type: 'string[]',
     description:
       'Keys from request context or span attributes to promote into flat, searchable LLM Observability tags (e.g., tenantId, agentId). Promoted keys are removed from annotations.metadata.',
+    required: false,
+  },
+  {
+    name: 'flushGraceMs',
+    type: 'number',
+    description:
+      'How long flush() waits, in milliseconds, after handing data to dd-trace. dd-trace sends LLM Observability data in the background and gives no way to await the request, so the wait keeps a process that exits right after flush() from cutting it off. Only waits when something was sent since the last flush. Set to 0 to disable. Default: 2000.',
     required: false,
   },
 ]}
@@ -176,6 +184,8 @@ async flush(): Promise<void>
 ```
 
 Force-flushes any buffered LLM Observability data to Datadog without shutting down the bridge. Useful in serverless environments where you need to ensure data is exported before the runtime terminates.
+
+The flush is best-effort: dd-trace sends LLM Observability data from a background writer and gives no way to await the request, so `flush()` waits `flushGraceMs` (default 2000 ms) after asking dd-trace to flush, then flushes the APM exporter. Each flush that sent new data costs that full wait, so a serverless handler that awaits `flush()` per request pays it per request. Raise it if spans from short-lived processes are missing in Datadog, or set it to `0` to skip the wait when something else keeps the process alive.
 
 ### `shutdown`
 
