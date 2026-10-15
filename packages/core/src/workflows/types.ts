@@ -614,11 +614,10 @@ export interface WorkflowOptions {
    * each write sends only what changed.
    *
    * Version 2 requires the default execution engine and a storage adapter that
-   * supports it, and can't be combined with `pruneSnapshot`. Runs keep the
-   * version they were created with: resuming a run after changing this option
-   * throws.
-   *
-   * @experimental
+   * supports it (in-memory, `@mastra/pg`, `@mastra/libsql`), and can't be
+   * combined with `pruneSnapshot`. Steps read earlier results with
+   * `getStepResultAsync`; sync `getStepResult` throws. Runs keep the version
+   * they were created with: resuming a run after changing this option throws.
    */
   storageVersion?: 1 | 2;
 
