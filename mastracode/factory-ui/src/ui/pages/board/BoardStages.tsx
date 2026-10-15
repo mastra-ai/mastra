@@ -16,7 +16,6 @@ export interface BoardStageView {
   groupOpen: boolean;
   onGroupOpenChange: (open: boolean) => void;
   createButton?: ReactNode;
-  intakeSwitch?: ReactNode;
   cards: ReactNode;
 }
 
@@ -51,7 +50,6 @@ export function BoardStages({
                   loading={stageView.loading}
                   collapsed={stageView.collapsed}
                   headerAction={stageView.createButton}
-                  headerExtras={stageView.intakeSwitch}
                 />
               ))}
             </div>
@@ -86,7 +84,6 @@ export function BoardStages({
                     open={stageView.groupOpen}
                     onOpenChange={stageView.onGroupOpenChange}
                     action={stageView.createButton}
-                    extras={stageView.intakeSwitch}
                     onDrop={onDrop}
                   >
                     {stageView.cards}
