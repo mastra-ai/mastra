@@ -62,7 +62,7 @@ export function WorkflowTimeline() {
               {rows.length} events
             </Txt>
             <span className="ml-auto">
-              <DisclosureChevron direction="right" className="size-4" />
+              <DisclosureChevron direction="right" />
             </span>
           </CollapsibleTrigger>
           {!isCollapsed && (

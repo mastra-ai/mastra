@@ -151,7 +151,6 @@
   ],
   "temperature": [
     "Qwen3.8-27B",
-    "atria-dawn-preview",
     "auto",
     "claude-haiku-4-5",
     "claude-haiku-4-5-20251001",
@@ -1267,12 +1266,6 @@
     "deepseek-v3.2": [
       {
         "type": "toggle"
-      }
-    ],
-    "atria-dawn-preview": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "hy4-preview": [

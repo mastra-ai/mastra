@@ -1,5 +1,25 @@
 # @mastra/factory
 
+## 0.23.0-alpha.5
+
+### Patch Changes
+
+- Kept workspace file listings, change lists and untracked-file lookups complete now that sandbox commands keep only the newest 1 MiB of output by default. ([#27106](https://github.com/mastra-ai/mastra/pull/27106))
+
+- Updated dependencies [[`f738a12`](https://github.com/mastra-ai/mastra/commit/f738a120225329f619211756d69f164a3f434c5d), [`f738a12`](https://github.com/mastra-ai/mastra/commit/f738a120225329f619211756d69f164a3f434c5d)]:
+  - @mastra/core@1.78.0-alpha.5
+  - @mastra/code-sdk@1.14.0-alpha.5
+
+## 0.23.0-alpha.4
+
+### Patch Changes
+
+- Fixed Slack mentions failing with "Tenant model credential policy could not be resolved". New Slack sessions now open directly on their Slack thread and no longer leave an extra empty thread behind. ([#27113](https://github.com/mastra-ai/mastra/pull/27113))
+
+- Updated dependencies [[`843d441`](https://github.com/mastra-ai/mastra/commit/843d4411284c3b96953edebd2c22c3ac9556bac2), [`6ea5f80`](https://github.com/mastra-ai/mastra/commit/6ea5f80919ae4ebc3e3fbba29390da74f043c69a)]:
+  - @mastra/core@1.78.0-alpha.4
+  - @mastra/code-sdk@1.14.0-alpha.4
+
 ## 0.23.0-alpha.3
 
 ### Minor Changes
