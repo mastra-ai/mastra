@@ -116,9 +116,12 @@ const ALLOWANCES: Allowance[] = [
 
 function AllowanceReading({ name, value, max, unit }: Allowance) {
   const labelId = useId();
-  const allowance = `of ${max.toLocaleString()}${unit ? ` ${unit}` : ''}`;
+  const unitSuffix = unit ? ` ${unit}` : '';
+  const allowance = `of ${max.toLocaleString()}${unitSuffix}`;
   const reading = `${value.toLocaleString()} ${allowance}`;
   const over = value - max;
+  const valueClassName = over > 0 ? 'text-destructive-indicator' : 'text-foreground';
+  const valueText = over > 0 ? `${reading}, ${over.toLocaleString()} over` : reading;
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between gap-3">
@@ -126,16 +129,10 @@ function AllowanceReading({ name, value, max, unit }: Allowance) {
           {name}
         </Txt>
         <Txt as="span" variant="body-sm" tone="muted" className="tabular-nums">
-          <span className={over > 0 ? 'text-destructive-indicator' : 'text-foreground'}>{value.toLocaleString()}</span>{' '}
-          {allowance}
+          <span className={valueClassName}>{value.toLocaleString()}</span> {allowance}
         </Txt>
       </div>
-      <Meter
-        value={value}
-        max={max}
-        aria-labelledby={labelId}
-        aria-valuetext={over > 0 ? `${reading}, ${over.toLocaleString()} over` : reading}
-      />
+      <Meter value={value} max={max} aria-labelledby={labelId} aria-valuetext={valueText} />
     </div>
   );
 }

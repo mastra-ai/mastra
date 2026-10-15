@@ -201,6 +201,7 @@ function BarPlot({
 
   const format = valueFormatter ?? compactNumber.format;
   const plotWidth = size.width - (showYAxis ? Y_AXIS_WIDTH : 0);
+  const margin = columnLabelKey ? { ...CHART_MARGIN, top: CHART_MARGIN.top + COLUMN_LABEL_SPACE } : CHART_MARGIN;
 
   return (
     <>
@@ -208,7 +209,7 @@ function BarPlot({
       <ChartPlot height={height} plotRef={ref} onResize={onResize} clickable={!!onBucketClick}>
         <ComposedChart
           data={data}
-          margin={columnLabelKey ? { ...CHART_MARGIN, top: CHART_MARGIN.top + COLUMN_LABEL_SPACE } : CHART_MARGIN}
+          margin={margin}
           onMouseMove={state => {
             const index = state?.activeTooltipIndex;
             setHovered.current(index === undefined || index === null ? undefined : Number(index));

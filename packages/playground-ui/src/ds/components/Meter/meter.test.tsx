@@ -54,10 +54,28 @@ describe('Meter', () => {
     expect(segments(screen.getByRole('meter'))).toEqual([{ part: 'meter-used', grow: '100' }]);
   });
 
-  it('shows an empty track when nothing is used', () => {
-    render(<Meter value={0} max={0} aria-label="Events" />);
+  it.each([
+    { max: 0, grow: '1' },
+    { max: 360, grow: '360' },
+  ])('shows an empty track with an allowance of $max when nothing is used', ({ max, grow }) => {
+    render(<Meter value={0} max={max} aria-label="Events" />);
 
-    expect(segments(screen.getByRole('meter'))).toEqual([{ part: 'meter-rest', grow: '1' }]);
+    const meter = screen.getByRole('meter');
+    expect(meter.getAttribute('aria-valuenow')).toBe('0');
+    expect(meter.getAttribute('aria-valuemax')).toBe(String(max));
+    expect(meter.hasAttribute('data-over')).toBe(false);
+    expect(segments(meter)).toEqual([{ part: 'meter-rest', grow }]);
+  });
+
+  it('reports usage with no allowance as entirely over the allowance', () => {
+    render(<Meter value={12} max={0} aria-label="Events" aria-valuetext="12 events, no allowance" />);
+
+    const meter = screen.getByRole('meter');
+    expect(meter.getAttribute('aria-valuenow')).toBe('0');
+    expect(meter.getAttribute('aria-valuemax')).toBe('0');
+    expect(meter.getAttribute('aria-valuetext')).toBe('12 events, no allowance');
+    expect(meter.hasAttribute('data-over')).toBe(true);
+    expect(segments(meter)).toEqual([{ part: 'meter-over', grow: '12' }]);
   });
 
   it('can be named by a visible label', () => {

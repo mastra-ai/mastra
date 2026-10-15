@@ -75,10 +75,11 @@ const insideHeaderStyles = [
 function TableHeader({ className, placement = 'above', ...props }: TableHeaderProps) {
   const variant = useTableVariant();
   const inside = variant === 'inset' && placement === 'inside';
+  const headerPlacement = inside ? 'inside' : undefined;
   return (
     <thead
       data-slot="table-header"
-      data-placement={inside ? 'inside' : undefined}
+      data-placement={headerPlacement}
       className={cn(
         variant === 'default' && '[&>tr]:h-table-header [&>tr]:border-b [&>tr]:border-border [&>tr]:bg-card',
         inside && insideHeaderStyles,

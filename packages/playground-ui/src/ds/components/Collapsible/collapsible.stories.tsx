@@ -199,7 +199,7 @@ const ALLOWANCES: AllowanceUsage[] = [
 
 function AllowanceRow({ allowance }: { allowance: AllowanceUsage }) {
   const { name, noun, value, max, unit, overNote, overage, projects } = allowance;
-  const isOver = value > max;
+  const valueClassName = value > max ? 'text-destructive-indicator' : 'text-foreground';
   return (
     <Collapsible>
       <CollapsibleTrigger className="flex w-full items-baseline gap-4 px-6 py-4 text-left">
@@ -209,7 +209,7 @@ function AllowanceRow({ allowance }: { allowance: AllowanceUsage }) {
         <span className="flex min-w-0 flex-1 flex-col gap-2">
           <span className="flex items-baseline gap-3">
             <Txt as="span" variant="body-sm" tone="muted" className="tabular-nums">
-              <span className={isOver ? 'text-destructive-indicator' : 'text-foreground'}>{value}</span> of {max} {unit}
+              <span className={valueClassName}>{value}</span> of {max} {unit}
             </Txt>
             {overNote && (
               <Txt as="span" variant="caption" tone="muted">

@@ -6,6 +6,7 @@ import { count, coldStartSeries, ms, requestsByHour, statusSeries } from '../Met
 import type { MetricsLineChartSeries } from '../MetricsLineChart';
 import { Txt } from '../Txt';
 import { MetricsStackedBarChart } from './metrics-stacked-bar-chart';
+import { formatFullNumber } from '@/utils/cost';
 
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact' });
 
@@ -92,7 +93,6 @@ export const OverIncluded: Story = {
 };
 
 const overageRate = 0.1;
-const cents = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 
 export const ColumnLabel: Story = {
   parameters: {
@@ -105,15 +105,18 @@ export const ColumnLabel: Story = {
   },
   args: {
     ...OverIncluded.args,
-    data: egress.map(({ time, total }, i) => ({
-      time,
-      included: Math.min(total, included),
-      over: Math.max(total - included, 0),
-      overage:
+    data: egress.map(({ time, total }, i) => {
+      const overage =
         i === egress.length - 1 && total > included
-          ? `${cents.format((total - included) * overageRate)} over`
-          : undefined,
-    })),
+          ? `${formatFullNumber((total - included) * overageRate, { currency: 'USD' })} over`
+          : undefined;
+      return {
+        time,
+        included: Math.min(total, included),
+        over: Math.max(total - included, 0),
+        overage,
+      };
+    }),
     columnLabelKey: 'overage',
   },
 };
