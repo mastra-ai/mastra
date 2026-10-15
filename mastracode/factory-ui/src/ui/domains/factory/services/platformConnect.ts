@@ -13,22 +13,82 @@
 import Nango, { AuthError } from '@nangohq/frontend';
 import type { AuthOptions } from '@nangohq/frontend';
 
-export type PlatformConnectProviderId = 'jira' | 'incident-io' | 'gitlab';
+export type PlatformConnectProviderId =
+  | 'jira'
+  | 'incident-io'
+  | 'gitlab'
+  | 'notion'
+  | 'confluence'
+  | 'linear'
+  | 'zendesk'
+  | 'fireflies';
 
 /** How the provider authorizes: OAuth consent popup or an API-key form. */
 export type PlatformConnectAuthKind = 'oauth' | 'apiKey';
+
+/**
+ * A connection-config field the SPA must collect before `nango.auth()` can
+ * run — e.g. Zendesk's tenant subdomain, which Nango needs to build the
+ * authorization URL. Collected in the same dialog pattern as the API-key
+ * form and passed as `params` to the headless auth call.
+ */
+export interface PlatformConnectParamField {
+  key: string;
+  label: string;
+  placeholder?: string;
+  /** One-line helper rendered under the input. */
+  hint?: string;
+}
 
 export interface PlatformConnectProviderMeta {
   id: PlatformConnectProviderId;
   displayName: string;
   authKind: PlatformConnectAuthKind;
+  /** Connection-config fields to collect before authorizing (OAuth params). */
+  connectParams?: readonly PlatformConnectParamField[];
 }
 
 export const PLATFORM_CONNECT_PROVIDERS: Record<PlatformConnectProviderId, PlatformConnectProviderMeta> = {
   jira: { id: 'jira', displayName: 'Jira', authKind: 'oauth' },
   'incident-io': { id: 'incident-io', displayName: 'incident.io', authKind: 'apiKey' },
   gitlab: { id: 'gitlab', displayName: 'GitLab', authKind: 'oauth' },
+  notion: { id: 'notion', displayName: 'Notion', authKind: 'oauth' },
+  confluence: { id: 'confluence', displayName: 'Confluence', authKind: 'oauth' },
+  linear: { id: 'linear', displayName: 'Linear', authKind: 'oauth' },
+  zendesk: {
+    id: 'zendesk',
+    displayName: 'Zendesk',
+    authKind: 'oauth',
+    // Nango's Zendesk authorization URL is tenant-scoped
+    // (https://<subdomain>.zendesk.com/oauth/authorizations/new), so headless
+    // auth must supply the subdomain as a connection param.
+    connectParams: [
+      {
+        key: 'subdomain',
+        label: 'Zendesk subdomain',
+        placeholder: 'your-company',
+        hint: 'The part before .zendesk.com in your Zendesk URL.',
+      },
+    ],
+  },
+  // Fireflies is an API_KEY integration in the Nango catalog — no OAuth
+  // consent screen exists, so Connect collects the key in-app.
+  fireflies: { id: 'fireflies', displayName: 'Fireflies', authKind: 'apiKey' },
 };
+
+/**
+ * Subset of {@link PlatformConnectProviderId} that Factory's Knowledge
+ * Importers settings section exposes. `jira` is excluded because it has no
+ * knowledge importer — it's a work-intake source, surfaced via the
+ * intake/general Connections section.
+ */
+export const KNOWLEDGE_IMPORTER_PROVIDER_IDS: readonly PlatformConnectProviderId[] = [
+  'notion',
+  'confluence',
+  'linear',
+  'zendesk',
+  'fireflies',
+];
 
 export interface PlatformProviderConnection {
   id: string;
@@ -36,6 +96,8 @@ export interface PlatformProviderConnection {
   status: 'active' | 'needs_reauth';
   accountLabel: string | null;
   displayName?: string | null;
+  /** ISO-8601 timestamp when the OAuth connection was minted. */
+  connectedAt?: string | null;
 }
 
 export interface PlatformConnectSession {
@@ -102,6 +164,32 @@ export function isPlatformConnectUnavailableError(error: unknown): boolean {
   return status === 403 || status === 404;
 }
 
+/**
+ * A single row from the Platform integration catalog, projected to the SPA's
+ * provider slug. `logoUrl` is the Nango-served template logo URL if the
+ * Platform catalog knows about this integration, otherwise `null`.
+ */
+export interface PlatformCatalogEntry {
+  provider: PlatformConnectProviderId;
+  integrationId: string;
+  displayName: string | null;
+  logoUrl: string | null;
+}
+
+/**
+ * Load the Platform integration catalog. Returns one row per registered
+ * connect provider — the server projects `PLATFORM_CONNECT_PROVIDERS` onto
+ * the Platform's `/v2/integrations` response so the SPA never has to
+ * discover slugs of its own.
+ */
+export async function listPlatformCatalog(baseUrl: string): Promise<PlatformCatalogEntry[]> {
+  const { integrations } = await requestJson<{ integrations: PlatformCatalogEntry[] }>(
+    baseUrl,
+    `/web/integrations/platform/catalog`,
+  );
+  return integrations;
+}
+
 /** List the org's Platform connections for one provider (all auth variants). */
 export async function listPlatformConnections(
   baseUrl: string,
@@ -112,6 +200,48 @@ export async function listPlatformConnections(
     `/web/integrations/platform/${provider}/connections`,
   );
   return connections;
+}
+
+/**
+ * Where one connection's knowledge imports land: every Factory project
+ * (`mode: 'all'`, the default) or a selected subset. Mirrors the server's
+ * `knowledge_importer_routing` row.
+ */
+export interface KnowledgeImporterRouting {
+  mode: 'all' | 'selected';
+  projectIds: string[];
+}
+
+/** Load a connection's import routing. Unset routing comes back as mode `all`. */
+export async function getKnowledgeImporterRouting(
+  baseUrl: string,
+  provider: PlatformConnectProviderId,
+  connectionId: string,
+): Promise<KnowledgeImporterRouting> {
+  const { routing } = await requestJson<{ routing: KnowledgeImporterRouting }>(
+    baseUrl,
+    `/web/integrations/platform/${provider}/connections/${encodeURIComponent(connectionId)}/routing`,
+  );
+  return routing;
+}
+
+/** Save a connection's import routing. */
+export async function putKnowledgeImporterRouting(
+  baseUrl: string,
+  provider: PlatformConnectProviderId,
+  connectionId: string,
+  routing: KnowledgeImporterRouting,
+): Promise<KnowledgeImporterRouting> {
+  const response = await requestJson<{ routing: KnowledgeImporterRouting }>(
+    baseUrl,
+    `/web/integrations/platform/${provider}/connections/${encodeURIComponent(connectionId)}/routing`,
+    {
+      method: 'PUT',
+      headers: { Accept: 'application/json', 'content-type': 'application/json' },
+      body: JSON.stringify(routing),
+    },
+  );
+  return response.routing;
 }
 
 /** Mint a Nango connect session for a new provider connection. */
@@ -153,15 +283,19 @@ export class HeadlessAuthError extends Error {
  * Complete a minted connect/reconnect session headlessly. OAuth providers get
  * the provider's own consent popup; API-key providers submit the credential
  * directly with no popup. Mirrors Mastra Platform's own headless connect.
+ * `params` carries provider connection config (e.g. Zendesk's subdomain)
+ * that Nango needs to build the authorization URL.
  */
 export async function runHeadlessAuth(input: {
   session: PlatformConnectSession;
   credentials?: Record<string, string>;
+  params?: Record<string, string>;
 }): Promise<void> {
   const nango = new Nango({ connectSessionToken: input.session.sessionToken });
   const options: AuthOptions = {};
   if (input.credentials) options.credentials = input.credentials;
   else options.detectClosedAuthWindow = true;
+  if (input.params) options.params = input.params;
   try {
     await nango.auth(input.session.integrationId, options);
   } catch (error) {

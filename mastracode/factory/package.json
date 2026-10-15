@@ -63,6 +63,7 @@
     "@mastra/auth-studio": "workspace:*",
     "@mastra/auth-workos": "workspace:*",
     "@mastra/code-sdk": "workspace:*",
+    "@mastra/connect": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/slack": "workspace:*",
     "@octokit/auth-app": "^8.0.0",

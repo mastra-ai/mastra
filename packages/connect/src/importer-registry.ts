@@ -18,10 +18,10 @@ export interface ImporterScopesContext {
 
 /**
  * Resolves the current set of destination scope addresses at cron-fire time,
- * e.g. one `resource:<projectId>` per active project. Receives the importer's
+ * e.g. one `project:<projectId>` per active project. Receives the importer's
  * connection so per-connection routing can produce different destinations for
  * different connections of the same provider. Pair with a parameterized
- * `access` map (`{ 'resource:$projectId': 'owner' }`) so resolved scopes are writable.
+ * `access` map (`{ 'project:$projectId': 'owner' }`) so resolved scopes are writable.
  */
 export type ImporterScopesResolver = (context: ImporterScopesContext) => readonly string[] | Promise<readonly string[]>;
 

@@ -2489,6 +2489,9 @@ importers:
       '@mastra/code-sdk':
         specifier: workspace:*
         version: link:../sdk
+      '@mastra/connect':
+        specifier: workspace:*
+        version: link:../../packages/connect
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core

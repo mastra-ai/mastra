@@ -1,11 +1,13 @@
 import type { AgentControllerSessionSettings } from '@mastra/client-js';
 import { useEffect } from 'react';
-import { useLocation, useParams } from 'react-router';
+import { Navigate, useLocation, useParams } from 'react-router';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 
+import { useServerFeatures } from '../../../../hooks/useServerFeatures';
 import { useChatPermissions } from '../../chat/context/useChatPermissions';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { useSettingsSection } from '../hooks/useSettingsSection';
+import { settingsSectionPath } from '../settingsSections';
 import { useAgentControllerSettings } from '../../../../hooks/useAgentControllerSettings';
 import { useAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
 import {
@@ -19,6 +21,7 @@ import { AccountSettingsSection } from './AccountSettingsSection';
 import { FactoryManagementSection } from './FactoryManagementSection';
 import { FactorySkillsSection } from './FactorySkillsSection';
 import { IntakeSection } from './IntakeSection';
+import { KnowledgeSection } from './KnowledgeSection';
 import { RepositoriesSection } from './RepositoriesSection';
 import { SettingsSubsection } from './SettingsSubsection';
 import { BehaviorSettings, GeneralSettings } from './SettingsPanel.parts';
@@ -84,6 +87,7 @@ export function SettingsPanel() {
       {section === 'repositories' && <RepositoriesSection />}
       {section === 'environment' && <EnvironmentSection />}
       {section === 'intake' && <IntakeSection />}
+      {section === 'knowledge' && <KnowledgeSettingsRoute factoryId={factoryId} />}
       {section === 'models' && (
         <FactoryModelsSettings models={models} settings={settings} onBehaviorChange={onBehaviorChange} />
       )}
@@ -109,4 +113,20 @@ export function SettingsPanel() {
       )}
     </section>
   );
+}
+
+/**
+ * Renders the Knowledge settings page, or bounces to Preferences (the
+ * always-available Sources landing) when the server doesn't advertise the
+ * knowledge feature. The nav item is hidden in that case too, so this
+ * redirect only fires for deep-linked URLs or bookmarked routes after a
+ * deploy flipped the flag off.
+ */
+function KnowledgeSettingsRoute({ factoryId }: { factoryId: string | undefined }) {
+  const features = useServerFeatures();
+  if (features.isPending || !factoryId) return null;
+  if (!features.data?.knowledge) {
+    return <Navigate to={settingsSectionPath(factoryId, 'preferences')} replace />;
+  }
+  return <KnowledgeSection />;
 }

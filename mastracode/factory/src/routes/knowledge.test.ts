@@ -1922,6 +1922,103 @@ describe('KnowledgeRoutes', () => {
     await expect(replacementHistory.json()).resolves.toEqual({ runs: [] });
   });
 
+  it("shows each connection's import runs in its own project's Imports view only", async () => {
+    const runtime = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      importers: [
+        { id: 'connect:notion:conn-1', handler: async () => {} },
+        { id: 'connect:linear:conn-2', handler: async () => {} },
+      ],
+    });
+    const h = await createHarness({ knowledgeRuntime: runtime });
+    const run = (id: string, importerId: string, source: string, scope: string) =>
+      runtime.createImportRun({
+        id,
+        importerId,
+        binding: knowledgeImporterBindingKey({ source, scope }),
+        importKind: 'static',
+        triggerKind: 'programmatic',
+      });
+    const projectScope = `project:${h.projectId}`;
+    const notionRun = await run('run-own-notion', 'connect:notion:conn-1', 'notion:conn-1', projectScope);
+    const linearRun = await run('run-own-linear', 'connect:linear:conn-2', 'linear:conn-2', projectScope);
+    const foreignRuns = await Promise.all(
+      ['project:00000000-0000-4000-8000-000000000099', `${projectScope}0`].map((scope, index) =>
+        run(`run-foreign-${index}`, 'connect:notion:conn-1', 'notion:conn-1', scope),
+      ),
+    );
+    const importerPath = (id: string) =>
+      `/web/factory/projects/${h.projectId}/knowledge/importers/${encodeURIComponent(id)}`;
+
+    for (const [importerId, own] of [
+      ['connect:notion:conn-1', notionRun],
+      ['connect:linear:conn-2', linearRun],
+    ] as const) {
+      const runs = await h.app.request(`${importerPath(importerId)}/runs`);
+      expect(runs.status).toBe(200);
+      const body = await runs.json();
+      expect(body).toMatchObject({ runs: [{ id: own.id, scope: projectScope }] });
+      expect(body.runs).toHaveLength(1);
+      expect((await h.app.request(`${importerPath(importerId)}/runs/${own.id}`)).status).toBe(200);
+    }
+    for (const foreign of foreignRuns) {
+      expect((await h.app.request(`${importerPath('connect:notion:conn-1')}/runs/${foreign.id}`)).status).toBe(404);
+    }
+  });
+
+  it('lists an importer with only dynamic bindings before its first run', async () => {
+    let resolveCount = 0;
+    const runtime = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      importers: [
+        {
+          id: 'connect:notion:conn-1',
+          access: { 'project:$projectId': 'owner' },
+          triggers: {
+            cron: {
+              schedule: '0 * * * *',
+              // Platform importers declare no static bindings — destinations
+              // resolve per Factory project at fire time.
+              resolveBindings: async () => {
+                resolveCount += 1;
+                if (resolveCount > 1) throw new Error('platform unavailable');
+                return [
+                  // Platform importers bind each connection to the project scope.
+                  { source: 'notion:conn-1', scope: `project:${h.projectId}` },
+                  { source: 'notion:conn-1', scope: 'project:00000000-0000-4000-8000-000000000099' },
+                  // A project id that merely shares this one's prefix is another project.
+                  { source: 'notion:conn-1', scope: `project:${h.projectId}0` },
+                ];
+              },
+            },
+          },
+          handler: async () => {},
+        },
+      ],
+    });
+    const h = await createHarness({ knowledgeRuntime: runtime });
+
+    // No runs yet: the importer is listed via its resolved binding, filtered
+    // to this project's scope only.
+    const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers`);
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.importers).toHaveLength(1);
+    expect(body.importers[0]).toMatchObject({
+      id: 'connect:notion:conn-1',
+      triggers: ['programmatic', 'cron'],
+      bindings: [{ source: 'notion:conn-1' }],
+    });
+    expect(JSON.stringify(body)).not.toContain('00000000-0000-4000-8000-000000000099');
+
+    // Resolution failure degrades to the static (empty) set instead of 500ing.
+    const degraded = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers`);
+    expect(degraded.status).toBe(200);
+    await expect(degraded.json()).resolves.toEqual({ importers: [] });
+  });
+
   it('applies trigger filters before run pagination', async () => {
     const runtime = new Knowledge({
       id: 'mastra',
@@ -1962,6 +2059,113 @@ describe('KnowledgeRoutes', () => {
     await expect(response.json()).resolves.toMatchObject({ runs: [{ id: expected.id }] });
   });
 
+  it('manually triggers an import run for the bindings visible to the project view', async () => {
+    const handled: string[] = [];
+    const runtime = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      importers: [
+        {
+          id: 'connect:notion:conn-1',
+          access: { 'project:$projectId': 'owner' },
+          triggers: {
+            cron: {
+              schedule: '0 * * * *',
+              resolveBindings: async () => [
+                { source: 'notion:conn-1', scope: `project:${h.projectId}` },
+                { source: 'notion:conn-1', scope: 'project:00000000-0000-4000-8000-000000000099' },
+              ],
+            },
+          },
+          handler: async () => {
+            handled.push('ran');
+          },
+        },
+      ],
+    });
+    const h = await createHarness({ knowledgeRuntime: runtime });
+
+    const response = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/importers/connect:notion:conn-1/run`,
+      { method: 'POST' },
+    );
+    expect(response.status).toBe(202);
+    const body = await response.json();
+    expect(body.runs).toHaveLength(1);
+    expect(body.runs[0]).toMatchObject({ id: expect.any(String), source: 'notion:conn-1' });
+    // Only the binding belonging to this project view is enqueued.
+    expect(JSON.stringify(body)).not.toContain('00000000-0000-4000-8000-000000000099');
+
+    await vi.waitFor(() => expect(handled).toHaveLength(1));
+  });
+
+  it('reconciles resolver importers before answering a manual trigger for a fresh connection', async () => {
+    // Simulates the connect flow: the resolver knows about the new connection
+    // but the runner has not reconciled it into the registry yet.
+    const runtime = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      importers: async () => [
+        {
+          id: 'connect:linear:conn-9',
+          access: { 'project:$projectId': 'owner' },
+          triggers: {
+            cron: {
+              schedule: '0 * * * *',
+              resolveBindings: async () => [{ source: 'linear:conn-9', scope: `project:${h.projectId}` }],
+            },
+          },
+          handler: async () => {},
+        },
+      ],
+    });
+    const h = await createHarness({ knowledgeRuntime: runtime });
+
+    const response = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/importers/connect:linear:conn-9/run`,
+      { method: 'POST' },
+    );
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({
+      runs: [{ id: expect.any(String), source: 'linear:conn-9' }],
+    });
+  });
+
+  it('rejects manual triggers for unknown, foreign-only, and cron-less importers', async () => {
+    const runtime = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      importers: [
+        { id: 'calendar', handler: async () => {} },
+        {
+          id: 'connect:zendesk:conn-2',
+          access: { 'project:$projectId': 'owner' },
+          triggers: {
+            cron: {
+              schedule: '0 * * * *',
+              resolveBindings: async () => [
+                { source: 'zendesk:conn-2', scope: 'project:00000000-0000-4000-8000-000000000099' },
+              ],
+            },
+          },
+          handler: async () => {},
+        },
+      ],
+    });
+    const h = await createHarness({ knowledgeRuntime: runtime });
+    const base = `/web/factory/projects/${h.projectId}/knowledge/importers`;
+
+    const unknown = await h.app.request(`${base}/nope/run`, { method: 'POST' });
+    expect(unknown.status).toBe(404);
+
+    const foreignOnly = await h.app.request(`${base}/connect:zendesk:conn-2/run`, { method: 'POST' });
+    expect(foreignOnly.status).toBe(404);
+
+    const cronless = await h.app.request(`${base}/calendar/run`, { method: 'POST' });
+    expect(cronless.status).toBe(409);
+    await expect(cronless.json()).resolves.toMatchObject({ error: 'importer_not_triggerable' });
+  });
+
   it('gates importer run metadata at organization-admin trust', async () => {
     const runtime = new Knowledge({
       id: 'mastra',
@@ -1973,5 +2177,11 @@ describe('KnowledgeRoutes', () => {
     const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers`);
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toEqual({ error: 'forbidden' });
+
+    // Sync now starts imports, so it sits behind the same trust as the importer list.
+    const trigger = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers/calendar/run`, {
+      method: 'POST',
+    });
+    expect(trigger.status).toBe(403);
   });
 });

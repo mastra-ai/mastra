@@ -44,7 +44,7 @@ describe('importer-runtime helpers', () => {
 
     it('excludes parameterized access keys from static bindings — they are authority, not destinations', () => {
       const trigger = importerCronTrigger('linear:c2', {
-        access: { 'resource:$projectId': 'owner', 'org:acme': 'edit' },
+        access: { 'project:$projectId': 'owner', 'org:acme': 'edit' },
         schedule: '0 * * * *',
         connection: conn('c2'),
       });
@@ -53,7 +53,7 @@ describe('importer-runtime helpers', () => {
 
     it("only treats core's `$letter` parameter grammar as a pattern — a literal `$` stays a concrete destination", () => {
       const trigger = importerCronTrigger('notion:c5', {
-        access: { 'org:acme$2026': 'owner', 'resource:$projectId': 'owner' },
+        access: { 'org:acme$2026': 'owner', 'project:$projectId': 'owner' },
         schedule: '0 * * * *',
         connection: conn('c5'),
       });
@@ -62,7 +62,7 @@ describe('importer-runtime helpers', () => {
 
     it('surfaces dynamic scopes as resolveBindings mapped to the provider source', async () => {
       const trigger = importerCronTrigger('linear:c3', {
-        access: { 'resource:$projectId': 'owner' },
+        access: { 'project:$projectId': 'owner' },
         schedule: '0 * * * *',
         scopes: async () => ['resource:one', 'resource:two'],
         connection: conn('c3'),
@@ -78,7 +78,7 @@ describe('importer-runtime helpers', () => {
     it('passes the importer connection to the scopes resolver for per-connection routing', async () => {
       const seen: string[] = [];
       const trigger = importerCronTrigger('notion:c6', {
-        access: { 'resource:$projectId': 'owner' },
+        access: { 'project:$projectId': 'owner' },
         schedule: '0 * * * *',
         scopes: ({ connection }) => {
           seen.push(connection.id);
@@ -92,7 +92,7 @@ describe('importer-runtime helpers', () => {
 
     it('keeps concrete keys as static bindings alongside a dynamic scopes resolver', async () => {
       const trigger = importerCronTrigger('zendesk:c4', {
-        access: { 'org:acme': 'edit', 'resource:$projectId': 'owner' },
+        access: { 'org:acme': 'edit', 'project:$projectId': 'owner' },
         schedule: '0 * * * *',
         scopes: () => ['resource:one'],
         connection: conn('c4'),

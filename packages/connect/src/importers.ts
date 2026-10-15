@@ -24,8 +24,8 @@ export interface ImportersIntegrationOptions {
   access?: ImporterAccess;
   /**
    * Dynamic destination scopes, resolved at each cron fire (e.g. one
-   * `resource:<projectId>` per active project). Requires an explicit `access`
-   * map — use parameterized keys (`{ 'resource:$projectId': 'owner' }`) so the
+   * `project:<projectId>` per active project). Requires an explicit `access`
+   * map — use parameterized keys (`{ 'project:$projectId': 'owner' }`) so the
    * resolved scopes are writable. Concrete `access` keys still sync as static
    * destinations alongside the dynamic set.
    */
@@ -199,7 +199,7 @@ function resolveAccess(integrationId: string, opts: ImportersIntegrationOptions)
   if (opts.scopes) {
     throw new MastraConnectError(
       'invalid_options',
-      `Importer '${integrationId}' dynamic 'scopes' requires an explicit 'access' map (e.g. { 'resource:$projectId': 'owner' }).`,
+      `Importer '${integrationId}' dynamic 'scopes' requires an explicit 'access' map (e.g. { 'project:$projectId': 'owner' }).`,
     );
   }
   const scope = opts.scope?.trim();

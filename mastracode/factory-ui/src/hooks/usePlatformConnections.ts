@@ -5,11 +5,17 @@ import { queryKeys } from '../api/keys';
 import {
   createPlatformConnectSession,
   createPlatformReconnectSession,
+  getKnowledgeImporterRouting,
+  listPlatformCatalog,
   listPlatformConnections,
+  putKnowledgeImporterRouting,
   runHeadlessAuth,
   waitForActiveConnection,
 } from '../ui/domains/factory/services/platformConnect';
-import type { PlatformConnectProviderId } from '../ui/domains/factory/services/platformConnect';
+import type {
+  KnowledgeImporterRouting,
+  PlatformConnectProviderId,
+} from '../ui/domains/factory/services/platformConnect';
 
 /**
  * The org's Platform connections for one provider. Server responds 403/404
@@ -23,6 +29,22 @@ export function usePlatformConnectionsQuery(provider: PlatformConnectProviderId,
     queryFn: () => listPlatformConnections(baseUrl, provider),
     enabled,
     retry: false,
+  });
+}
+
+/**
+ * Load the Platform integration catalog. Cached longer than the connection
+ * list because the catalog is org-wide and stable — this powers logos and
+ * display names across every knowledge-importer/settings card.
+ */
+export function usePlatformCatalogQuery(enabled: boolean = true) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.platformCatalog(),
+    queryFn: () => listPlatformCatalog(baseUrl),
+    enabled,
+    retry: false,
+    staleTime: 60_000,
   });
 }
 
@@ -63,12 +85,47 @@ export function useConnectPlatformProviderMutation(provider: PlatformConnectProv
   const { baseUrl } = useApiConfig();
   const invalidate = useInvalidateProviderState(provider);
   return useMutation({
-    mutationFn: async (input: { credentials?: Record<string, string> } = {}) => {
+    mutationFn: async (input: { credentials?: Record<string, string>; params?: Record<string, string> } = {}) => {
       const session = await createPlatformConnectSession(baseUrl, provider);
-      await runHeadlessAuth({ session, ...(input.credentials ? { credentials: input.credentials } : {}) });
+      await runHeadlessAuth({
+        session,
+        ...(input.credentials ? { credentials: input.credentials } : {}),
+        ...(input.params ? { params: input.params } : {}),
+      });
       return waitForActiveConnection(baseUrl, provider, session.connectionId);
     },
     onSettled: invalidate,
+  });
+}
+
+/**
+ * A connection's knowledge import routing. Unset routing resolves as
+ * `mode: 'all'` — the server's default when no row was ever saved.
+ */
+export function useKnowledgeImporterRoutingQuery(
+  provider: PlatformConnectProviderId,
+  connectionId: string,
+  enabled: boolean = true,
+) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.knowledgeImporterRouting(connectionId),
+    queryFn: () => getKnowledgeImporterRouting(baseUrl, provider, connectionId),
+    enabled,
+    retry: false,
+  });
+}
+
+/** Save a connection's knowledge import routing and refresh the cached copy. */
+export function useSaveKnowledgeImporterRoutingMutation(provider: PlatformConnectProviderId, connectionId: string) {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (routing: KnowledgeImporterRouting) =>
+      putKnowledgeImporterRouting(baseUrl, provider, connectionId, routing),
+    onSuccess: routing => {
+      queryClient.setQueryData(queryKeys.knowledgeImporterRouting(connectionId), routing);
+    },
   });
 }
 
@@ -77,9 +134,17 @@ export function useReconnectPlatformProviderMutation(provider: PlatformConnectPr
   const { baseUrl } = useApiConfig();
   const invalidate = useInvalidateProviderState(provider);
   return useMutation({
-    mutationFn: async (input: { connectionId: string; credentials?: Record<string, string> }) => {
+    mutationFn: async (input: {
+      connectionId: string;
+      credentials?: Record<string, string>;
+      params?: Record<string, string>;
+    }) => {
       const session = await createPlatformReconnectSession(baseUrl, provider, input.connectionId);
-      await runHeadlessAuth({ session, ...(input.credentials ? { credentials: input.credentials } : {}) });
+      await runHeadlessAuth({
+        session,
+        ...(input.credentials ? { credentials: input.credentials } : {}),
+        ...(input.params ? { params: input.params } : {}),
+      });
       return waitForActiveConnection(baseUrl, provider, input.connectionId);
     },
     onSettled: invalidate,

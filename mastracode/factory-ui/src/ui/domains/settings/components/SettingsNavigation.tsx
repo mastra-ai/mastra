@@ -12,6 +12,7 @@ import {
   CircleUserRound,
   GitBranch,
   Inbox,
+  Network,
   Palette,
   SlidersHorizontal,
 } from 'lucide-react';
@@ -19,6 +20,7 @@ import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 import { useCloseSettings } from '../hooks/useCloseSettings';
+import { useServerFeatures } from '../../../../hooks/useServerFeatures';
 import { useSettingsSection } from '../hooks/useSettingsSection';
 import { SETTINGS_SECTION_LABELS, settingsSectionPath, type SettingsSection } from '../settingsSections';
 
@@ -123,6 +125,12 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         searchText: 'work intake sources tasks issues pull requests github linear feed sync',
       },
       {
+        id: 'knowledge',
+        label: SETTINGS_SECTION_LABELS.knowledge,
+        icon: Network,
+        searchText: 'knowledge importers notion confluence linear zendesk fireflies sync sources documents transcripts',
+      },
+      {
         id: 'factory',
         label: SETTINGS_SECTION_LABELS.factory,
         icon: Building2,
@@ -132,6 +140,18 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
   },
 ];
 
+/**
+ * Server features that hide individual nav items. Currently just knowledge —
+ * a deploy without `MASTRA_PLATFORM_ACCESS_TOKEN` (or with the flag
+ * explicitly off) shouldn't advertise a Knowledge page that immediately
+ * bounces the user back to preferences.
+ */
+const FEATURE_GATED_SECTIONS: Partial<
+  Record<SettingsSection, keyof NonNullable<ReturnType<typeof useServerFeatures>['data']>>
+> = {
+  knowledge: 'knowledge',
+};
+
 export function SettingsNavigation() {
   const section = useSettingsSection();
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -140,9 +160,15 @@ export function SettingsNavigation() {
   const { state } = useSidebar();
   const [query, setQuery] = useState('');
   const normalizedQuery = query.trim().toLowerCase();
+  const features = useServerFeatures();
   const filteredGroups = SETTINGS_GROUPS.map(group => ({
     ...group,
-    items: normalizedQuery ? group.items.filter(({ searchText }) => searchText.includes(normalizedQuery)) : group.items,
+    items: group.items
+      .filter(({ id }) => {
+        const featureKey = FEATURE_GATED_SECTIONS[id];
+        return featureKey ? features.data?.[featureKey] === true : true;
+      })
+      .filter(({ searchText }) => !normalizedQuery || searchText.includes(normalizedQuery)),
   })).filter(group => group.items.length > 0);
 
   if (!factoryId) return null;

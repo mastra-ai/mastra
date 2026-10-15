@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type * as authStudioModule from '@mastra/auth-studio';
 import { getDynamicInstructions } from '@mastra/code-sdk/agents/instructions';
+import type { ImportersOptions } from '@mastra/connect';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
@@ -429,6 +430,194 @@ describe('MastraFactory.prepare', () => {
     expect(config.knowledge).toEqual(knowledge);
   });
 
+  describe('importers config (auto-constructed Knowledge)', () => {
+    /**
+     * Snapshot & restore just the env vars this branch touches so tests
+     * don't leak state or interact with the real host environment.
+     */
+    function withEnv(vars: Record<string, string | undefined>): () => void {
+      const keys = [
+        'MASTRA_PLATFORM_ACCESS_TOKEN',
+        'MASTRA_PLATFORM_SECRET_KEY',
+        'MASTRA_PROJECT_ID',
+        'MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS',
+      ] as const;
+      const snapshot = new Map<string, string | undefined>(keys.map(k => [k, process.env[k]]));
+      for (const key of keys) delete process.env[key];
+      for (const [key, value] of Object.entries(vars)) {
+        if (value !== undefined) process.env[key] = value;
+      }
+      return () => {
+        for (const [key, value] of snapshot) {
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+      };
+    }
+
+    it('boots model-free with platform env and registers the knowledge importer and connect routes', async () => {
+      const restore = withEnv({ MASTRA_PLATFORM_ACCESS_TOKEN: 'test-token', MASTRA_PROJECT_ID: 'proj-42' });
+      try {
+        const config = await prepareFactory({ storage: fakeStorage() });
+        expect(config.knowledge?.instance).toBeInstanceOf(Knowledge);
+        const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+        const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+        expect(paths).toEqual(
+          expect.arrayContaining([
+            '/web/factory/projects/:id/knowledge/importers',
+            '/web/integrations/platform/catalog',
+            '/web/integrations/platform/:provider/connections',
+            '/web/integrations/platform/:provider/connect-session',
+            '/web/integrations/platform/:provider/connections/:connectionId/routing',
+          ]),
+        );
+      } finally {
+        restore();
+      }
+    });
+
+    it('auto-constructs a Knowledge instance when the host passes an explicit importers array', async () => {
+      const restore = withEnv({});
+      try {
+        const config = await prepareFactory({ storage: fakeStorage(), importers: [] });
+        expect(config.knowledge).toMatchObject({ key: 'factory' });
+        expect(config.knowledge?.instance).toBeInstanceOf(Knowledge);
+        expect(config.knowledge?.instance.id).toBe('factory');
+      } finally {
+        restore();
+      }
+    });
+
+    it('auto-constructs a Knowledge instance when the host passes an explicit importers resolver', async () => {
+      const restore = withEnv({});
+      try {
+        const resolver = async () => [];
+        const config = await prepareFactory({ storage: fakeStorage(), importers: resolver });
+        expect(config.knowledge).toMatchObject({ key: 'factory' });
+        expect(config.knowledge?.instance).toBeInstanceOf(Knowledge);
+      } finally {
+        restore();
+      }
+    });
+
+    it('MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS=1 auto-constructs an empty-importer Knowledge even without platform env', async () => {
+      const restore = withEnv({ MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS: '1' });
+      try {
+        const config = await prepareFactory({ storage: fakeStorage() });
+        expect(config.knowledge).toMatchObject({ key: 'factory' });
+        expect(config.knowledge?.instance).toBeInstanceOf(Knowledge);
+      } finally {
+        restore();
+      }
+    });
+
+    it('skips auto-construction silently when platform env and dev flag are both absent', async () => {
+      const restore = withEnv({});
+      try {
+        const config = await prepareFactory({ storage: fakeStorage() });
+        expect(config.knowledge).toBeUndefined();
+      } finally {
+        restore();
+      }
+    });
+
+    it('calls importers() from @mastra/connect when platform env is present', async () => {
+      const restore = withEnv({
+        MASTRA_PLATFORM_ACCESS_TOKEN: 'token',
+        MASTRA_PROJECT_ID: 'proj-1',
+      });
+      try {
+        const config = await prepareFactory({
+          storage: fakeStorage(),
+          importersOptions: {
+            // Prevent real network by pointing at a URL that would never resolve —
+            // resolver only runs when the runner ticks, not at construction time.
+            // The `importers()` call itself just captures options.
+          },
+        });
+        expect(config.knowledge).toMatchObject({ key: 'factory' });
+        expect(config.knowledge?.instance).toBeInstanceOf(Knowledge);
+      } finally {
+        restore();
+      }
+    });
+
+    it('importers: false disables auto-construction even when platform env is present', async () => {
+      const restore = withEnv({
+        MASTRA_PLATFORM_ACCESS_TOKEN: 'token',
+        MASTRA_PROJECT_ID: 'proj-1',
+        MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS: '1',
+      });
+      try {
+        const config = await prepareFactory({ storage: fakeStorage(), importers: false });
+        expect(config.knowledge).toBeUndefined();
+      } finally {
+        restore();
+      }
+    });
+
+    it('a host-supplied Knowledge instance takes precedence over importers config', async () => {
+      const restore = withEnv({});
+      try {
+        const instance = new Knowledge({ id: 'host-owned' });
+        const knowledge = { key: 'host-owned', instance };
+        const config = await prepareFactory({
+          storage: fakeStorage(),
+          knowledge,
+          importers: [],
+        });
+        expect(config.knowledge).toEqual(knowledge);
+      } finally {
+        restore();
+      }
+    });
+
+    it('skips silently when platform env is absent (no throw, no warn)', async () => {
+      // Only ACCESS_TOKEN set — PROJECT_ID missing → platformEnvPresent is false.
+      // We fall through to the "no auto-construction" branch silently. This is
+      // the do-not-crash-on-boot invariant: a local dev host without full
+      // platform env must not warn about a call that was never attempted.
+      const restore = withEnv({
+        MASTRA_PLATFORM_ACCESS_TOKEN: 'token',
+      });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const config = await prepareFactory({ storage: fakeStorage() });
+        expect(config.knowledge).toBeUndefined();
+        expect(warn).not.toHaveBeenCalledWith(expect.stringMatching(/factory:knowledge/));
+      } finally {
+        warn.mockRestore();
+        restore();
+      }
+    });
+
+    it('warns once and skips auto-construction if importers() throws', async () => {
+      // Full platform env present, so `platformEnvPresent` is true and
+      // `importersFromConnect(importersOptions)` is actually called. Passing
+      // `ttlMs: -1` makes importers() throw `invalid_options` at call time —
+      // this is what exercises the try/catch in resolveEffectiveKnowledge.
+      const restore = withEnv({
+        MASTRA_PLATFORM_ACCESS_TOKEN: 'token',
+        MASTRA_PROJECT_ID: 'proj_test',
+      });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const config = await prepareFactory({
+          storage: fakeStorage(),
+          importersOptions: { ttlMs: -1 } as unknown as ImportersOptions,
+        });
+        expect(config.knowledge).toBeUndefined();
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringMatching(/factory:knowledge.*Skipping auto-construction/),
+          expect.anything(),
+        );
+      } finally {
+        warn.mockRestore();
+        restore();
+      }
+    });
+  });
+
   it('throws when called twice', async () => {
     const factory = new MastraFactory({ secretEncryption, storage: fakeStorage() });
     await factory.prepare();
@@ -681,6 +870,7 @@ describe('MastraFactory.prepare', () => {
       'queue-health',
       'integrations',
       'projects',
+      'importer-routing',
       'filesystem',
       'source-control',
       'channel-identity',
