@@ -200,6 +200,29 @@ describe('Needs you', () => {
     expect(await screen.findByText('Nothing archived.')).toBeVisible();
   });
 
+  it('lists an archived followed discussion under Archived instead of saying nothing is archived', async () => {
+    const archivedDiscussion = { ...activityItem('item-4', 'Loader retry landed'), read: true, archived: true };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, ({ request }) => {
+        const archivedView = new URL(request.url).searchParams.get('view') === 'archived';
+        const visible = archivedView ? [archivedDiscussion] : [];
+        return HttpResponse.json({
+          items: itemsOfRequestedKinds(request, visible),
+          kinds: attentionKindSummaries([archivedDiscussion]),
+          hasMore: false,
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    renderNeedsYou();
+
+    expect(await screen.findByText('Nothing needs you right now.')).toBeVisible();
+    await pickPropertyOption(user, 'Needs you properties', 'Show', 'Archived');
+
+    expect(await screen.findByText('Loader retry landed')).toBeVisible();
+    expect(screen.queryByText('Nothing archived.')).not.toBeInTheDocument();
+  });
+
   it('releases a suggested run from the inbox row', async () => {
     let items = [proposedItem('decision-8', 'Fix the flaky auth test')];
     const settled: string[] = [];

@@ -219,6 +219,24 @@ describe('Factory feed', () => {
     expect(olderPush.compareDocumentPosition(oldMove) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it('keeps reading the trail when its first page holds nothing to show yet', async () => {
+    stubBoard([card('Old card', [{ stage: 'done', enteredAt: hoursAgo(5), by: 'agent:builder' }])]);
+    server.use(
+      http.get('*/web/factory/projects/:id/audit', ({ request }) =>
+        new URL(request.url).searchParams.get('before') === 'page-2'
+          ? HttpResponse.json({ events: [], actors: {} })
+          : HttpResponse.json({ events: [], actors: {}, nextCursor: 'page-2' }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderActivity();
+
+    await user.click(await screen.findByRole('button', { name: 'Load more activity' }));
+
+    expect(await screen.findByRole('link', { name: 'Old card' })).toBeInTheDocument();
+    expect(screen.queryByText('Nothing has happened yet.')).not.toBeInTheDocument();
+  });
+
   it('names an audit actor by the id its events carry', async () => {
     stubBoard([]);
     stubAudit(
