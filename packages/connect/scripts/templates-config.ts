@@ -56,17 +56,16 @@ const PIN_708: TemplatePin = {
 };
 
 /**
- * NangoHQ/integration-templates#724 fixes fireflies get-transcript rejecting
- * every real transcript: the API returns sentence speaker_id as a number and
- * start_time/end_time as float seconds, but the template's schema declared
- * all three as strings. The pinned commit is that PR's head — upstream main
- * (which already contains the merged #708 fireflies/linear fixes) plus the
- * change — served directly by the upstream repository. Fold back into
- * TEMPLATE_SHA once #724 merges.
+ * NangoHQ/integration-templates#724 (merged) fixes fireflies get-transcript
+ * rejecting every real transcript: the API returns sentence speaker_id as a
+ * number and start_time/end_time as float seconds, but the template's schema
+ * declared all three as strings. The pinned commit is the upstream main merge
+ * commit of that PR. Fold back into TEMPLATE_SHA the next time the main pin
+ * is bumped past it.
  */
 const PIN_724: TemplatePin = {
   repo: 'NangoHQ/integration-templates',
-  sha: 'bea793df8163c4cf153d541b48cf5e7123c24fb1',
+  sha: '9f836014ab8bd0043dfa5200ad15d298c7149dc6',
 };
 
 /**
