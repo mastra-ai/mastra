@@ -109,7 +109,9 @@ export async function resolveModelConfig(
   if (isIdentifiedModelConfig(modelConfig)) {
     const resolved = await resolveModelConfig(modelConfig.model, requestContext, mastra);
     if ('specificationVersion' in resolved && resolved.specificationVersion !== 'v1') {
-      (resolved as MastraLanguageModel).id = modelConfig.id;
+      const identified = resolved as MastraLanguageModel;
+      identified.id = modelConfig.id;
+      identified.messageMetadata = modelConfig.messageMetadata;
     }
     return resolved;
   }

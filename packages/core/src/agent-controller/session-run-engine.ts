@@ -338,9 +338,17 @@ export class SessionRunEngine {
 
   private stampResponseModel(message: MastraDBMessage, stepStart: StreamChunkPayload): void {
     const modelId = getString(stepStart.modelId);
-    if (!modelId) return;
-    const provider = getString(stepStart.provider);
-    message.content.metadata = { ...message.content.metadata, modelId, ...(provider ? { provider } : {}) };
+    const messageMetadata = getRecord(stepStart.messageMetadata);
+    if (!modelId && !messageMetadata) return;
+    const current = message.content.metadata ?? {};
+    const mastraOwnedMetadata = Object.fromEntries(
+      Object.entries({
+        modelId: modelId ?? current.modelId,
+        provider: getString(stepStart.provider) ?? current.provider,
+        traceId: current.traceId,
+      }).filter(([, value]) => value !== undefined),
+    );
+    message.content.metadata = { ...current, ...messageMetadata, ...mastraOwnedMetadata };
   }
 
   private startCurrentMessage(state: StreamState): boolean {
