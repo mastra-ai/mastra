@@ -7,7 +7,7 @@ description: "Browse OpenCode model IDs, capabilities, context windows, and pric
 
 # <img src="https://models.dev/logos/opencode.svg" alt="OpenCode logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenCode
 
-Access 122 OpenCode models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
+Access 123 OpenCode models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
 
 Learn more in the [OpenCode documentation](https://opencode.ai/v2/docs/console/models/).
 
@@ -296,6 +296,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 384000,
     "inputCost": 0.3,
     "outputCost": 1.2
+  },
+  {
+    "model": "opencode/deepseek-v4.1-flash-free",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 32000,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "opencode/gemini-3-flash",

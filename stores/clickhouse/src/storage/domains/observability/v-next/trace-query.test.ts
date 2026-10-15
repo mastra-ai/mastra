@@ -101,7 +101,7 @@ describe('ClickHouse advanced trace query', () => {
     // The delta index has no tenant columns: it is limited to the tenant's window roots before grouping.
     const deltaCte = compiled.query.slice(
       compiled.query.indexOf('delta_candidates AS ('),
-      compiled.query.indexOf('current_root_keys AS ('),
+      compiled.query.indexOf('root_scope AS ('),
     );
     expect(deltaCte).toMatch(/FROM mastra_trace_roots_delta[\s\S]*AND traceId IN \([\s\S]*FROM mastra_trace_roots\s/);
     const scoped = compileClickHouseTraceQuery(
