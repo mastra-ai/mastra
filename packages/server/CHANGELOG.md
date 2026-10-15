@@ -1,5 +1,21 @@
 # @mastra/server
 
+## 1.78.0-alpha.8
+
+### Minor Changes
+
+- Added an optional `traceRetentionDays` to the observability capabilities type and response schema, for hosts that serve `GET /observability/capabilities` themselves and know how long traces are kept. Clients can use it to stop users picking dates whose traces are already gone. Mastra's own server and built-in stores don't report a retention, so the field is omitted there. ([#27166](https://github.com/mastra-ai/mastra/pull/27166))
+
+  ```ts
+  const { capabilities } = await client.getObservabilityCapabilities();
+  capabilities.traceRetentionDays; // e.g. 180, or undefined
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`03646c5`](https://github.com/mastra-ai/mastra/commit/03646c587b915ced4c9fad3189391909a296f441), [`d7bd3cd`](https://github.com/mastra-ai/mastra/commit/d7bd3cda0fb2e46c68d164af2e0cb1815be03572)]:
+  - @mastra/core@1.78.0-alpha.8
+
 ## 1.78.0-alpha.7
 
 ### Patch Changes

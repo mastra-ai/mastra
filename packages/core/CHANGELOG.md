@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 1.78.0-alpha.8
+
+### Patch Changes
+
+- Fixed model inference spans so they record the messages sent to the model. Observability backends that read the inference span, such as Langfuse through the OpenTelemetry exporter or Datadog, now show the input for every model call instead of an empty value. ([#26995](https://github.com/mastra-ai/mastra/pull/26995))
+
+- Fixed agents sending the same request until `maxSteps` when a text-only response ended with a non-standard finish reason, such as `other`. The run now ends after that response, so the text and token usage are no longer repeated. ([#26905](https://github.com/mastra-ai/mastra/pull/26905))
+
 ## 1.78.0-alpha.7
 
 ### Patch Changes
