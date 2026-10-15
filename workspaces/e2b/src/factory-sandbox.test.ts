@@ -1,4 +1,4 @@
-import { describeFactorySandbox, isFactorySandbox } from '@mastra/core/workspace';
+import { describeFactorySandbox, isFactorySandbox, normalizeFactorySandboxSettings } from '@mastra/core/workspace';
 import type { FactorySandboxContext } from '@mastra/core/workspace';
 import { Template } from 'e2b';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -87,6 +87,22 @@ describe('E2BFactorySandbox', () => {
       'idleTimeoutMinutes',
     ]);
     expect(description.capabilities).toEqual({ template: true, builds: { available: true, history: true } });
+  });
+
+  it('offers memory as labelled sizes up to 8 GB and rejects anything else', async () => {
+    const sandbox = new E2BFactorySandbox({ apiKey: 'e2b_test' });
+    const memory = describeFactorySandbox(sandbox).settingsSchema.properties?.memoryMb as { oneOf?: unknown };
+    expect(memory.oneOf).toEqual([
+      { const: 512, title: '512 MB' },
+      { const: 1024, title: '1 GB' },
+      { const: 2048, title: '2 GB' },
+      { const: 4096, title: '4 GB' },
+      { const: 8192, title: '8 GB' },
+    ]);
+    const schema = normalizeFactorySandboxSettings(sandbox);
+    expect((await schema['~standard'].validate({ memoryMb: 8192 })).issues).toBeUndefined();
+    expect((await schema['~standard'].validate({ memoryMb: 3000 })).issues).toBeDefined();
+    expect((await schema['~standard'].validate({ memoryMb: 16384 })).issues).toBeDefined();
   });
 
   it('resolves the same sha-tagged ref as createRepoTemplate(ctx), with settings over defaults', async () => {

@@ -57,11 +57,15 @@ describe('Settings ownership', () => {
         keyBody = await request.json();
         return HttpResponse.json({ ok: true });
       }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
+        HttpResponse.json({ project: { ...settingsFactory, modelScope: 'factory' } }),
+      ),
     );
     const user = userEvent.setup();
     renderSettings('personal-models');
 
     expect(await screen.findByText('Your defaults')).toBeInTheDocument();
+    expect(await screen.findByText('This Factory uses organization credentials only')).toBeInTheDocument();
     expect(screen.queryByText('Factory defaults')).not.toBeInTheDocument();
     expect(screen.queryByText('Chat defaults')).not.toBeInTheDocument();
     expect(screen.queryByText('Custom providers')).not.toBeInTheDocument();

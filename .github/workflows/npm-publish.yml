@@ -96,6 +96,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      # npm trusted publishing (OIDC) has no token fallback, and npm only
+      # allows a trusted publisher on a package that already exists — a
+      # brand-new package fails mid-publish (E404 PUT /
+      # ERR_PNPM_AUTH_TOKEN_EXCHANGE) after earlier packages have gone out, as
+      # does a package with no trusted publisher for this repo and workflow.
+      # Fail before anything publishes. --oidc runs the same OIDC token
+      # exchange pnpm runs at publish time, per package, and discards the
+      # token. --retry-404 waits out registry propagation lag for a package an
+      # npm org admin fixed minutes ago with scripts/npm-placeholder-publish.mjs
+      # (the recovery flow for this failure).
+      - name: Preflight - verify publishable packages exist on npm and trust this workflow
+        run: node .github/scripts/check-npm-packages-exist.mjs --oidc --retry-404 300000
+
       - name: Run build
         run: pnpm build
 
@@ -301,6 +314,20 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install
+
+      # npm trusted publishing (OIDC) has no token fallback, and npm only
+      # allows a trusted publisher on a package that already exists — a
+      # brand-new package fails mid-publish (E404 PUT /
+      # ERR_PNPM_AUTH_TOKEN_EXCHANGE) after earlier packages have gone out, as
+      # does a package with no trusted publisher for this repo and workflow.
+      # Fail before the version commit is pushed to main and before anything
+      # publishes. --oidc runs the same OIDC token exchange pnpm runs at
+      # publish time, per package, and discards the token. --retry-404 waits
+      # out registry propagation lag for a package an npm org admin fixed
+      # minutes ago with scripts/npm-placeholder-publish.mjs (the recovery flow
+      # for this failure).
+      - name: Preflight - verify publishable packages exist on npm and trust this workflow
+        run: node .github/scripts/check-npm-packages-exist.mjs --oidc --retry-404 300000
 
       - name: Exit prerelease mode
         if: steps.check_files.outputs.files_exists == 'true'
@@ -551,6 +578,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      # Same new-package preflight as the other publish jobs, scoped to the
+      # playground subgraph this job publishes. See the prerelease job.
+      - name: Preflight - verify publishable packages exist on npm and trust this workflow
+        run: node .github/scripts/check-npm-packages-exist.mjs --oidc --retry-404 300000 --pnpm-filter '@mastra/playground-ui...'
+
       - name: Build playground UI and dependencies
         run: pnpm turbo build --filter '@mastra/playground-ui...'
 
@@ -655,6 +687,11 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install
+
+      # Same new-package preflight as the prerelease job: snapshot publishes
+      # are unfiltered, so a brand-new package fails them the same way.
+      - name: Preflight - verify publishable packages exist on npm and trust this workflow
+        run: node .github/scripts/check-npm-packages-exist.mjs --oidc --retry-404 300000
 
       - name: Generate slugified branch name
         id: slugify

@@ -42,14 +42,14 @@ function renderPage() {
 }
 
 describe('DatasetPage actions', () => {
-  it('places "View experiments" next to "Run Experiment" in the header actions', async () => {
+  it('places "View experiments" next to "New experiment" in the header actions', async () => {
     renderPage();
 
-    const runButton = await screen.findByRole('button', { name: /run experiment/i });
+    const runButton = await screen.findByRole('button', { name: /new experiment/i });
     const link = within(runButton.parentElement as HTMLElement).getByRole('link', { name: /view experiments/i });
 
     expect(link.getAttribute('href')).toBe(`/experiments?dataset=${DATASET_ID}`);
-    // Order: View experiments → version selector → Run Experiment.
+    // Order: View experiments → version selector → New experiment.
     expect(link.compareDocumentPosition(runButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

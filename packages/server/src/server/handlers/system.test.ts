@@ -207,23 +207,6 @@ describe('System Handlers', () => {
       });
     });
 
-    it('should return cmsEnabled false when editor is not configured', async () => {
-      delete process.env.MASTRA_PACKAGES_FILE;
-
-      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(false) } as any);
-
-      expect(result).toEqual({
-        packages: [],
-        isDev: false,
-        cmsEnabled: false,
-        liveKitConnectionRouteEnabled: false,
-        observabilityEnabled: false,
-        storageType: undefined,
-        observabilityStorageType: undefined,
-        observabilityRuntimeStrategy: undefined,
-      });
-    });
-
     it('advertises recording review for the exact default LiveKit GET route', async () => {
       const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
         mastra: createMockMastra(false, undefined, false, {

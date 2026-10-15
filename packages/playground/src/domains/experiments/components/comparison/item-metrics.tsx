@@ -1,7 +1,7 @@
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import type { ExperimentItemUsage } from '@mastra/react/hooks/experiments';
-import { ClockIcon, CoinsIcon, HashIcon } from 'lucide-react';
+import { ClockIcon, CoinsIcon, GaugeIcon, HashIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import {
   costDeltaFormatter,
@@ -34,10 +34,12 @@ export interface ItemMetricsParams {
   costDelta?: number;
   tokenDelta?: number;
   durationDeltaMs?: number | null;
+  /** Mean of the item scores, listed after the duration. Omitted to leave the line out. */
+  averageScore?: { value: number | null; delta?: number };
   scores: ItemMetricScore[];
 }
 
-/** Measurable lines of one experiment item, in reading order: Cost, Duration, Tokens, then one line per scorer. */
+/** Measurable lines of one experiment item, in reading order: Cost, Duration, Avg score, Tokens, then one line per scorer. */
 export function itemMetrics({
   usage,
   showUsage,
@@ -45,6 +47,7 @@ export function itemMetrics({
   costDelta,
   tokenDelta,
   durationDeltaMs,
+  averageScore,
   scores,
 }: ItemMetricsParams): ComparisonMetric[] {
   const costUnit = usage?.costUnit;
@@ -91,9 +94,22 @@ export function itemMetrics({
           },
         ];
 
+  const average: ComparisonMetric[] = averageScore
+    ? [
+        {
+          id: 'avg-score',
+          icon: <GaugeIcon />,
+          label: 'Avg score',
+          value: formatScore(averageScore.value),
+          delta: averageScore.delta ?? null,
+        },
+      ]
+    : [];
+
   return [
     ...cost,
     ...duration,
+    ...average,
     ...tokens,
     ...scores.map(score => ({
       id: `scorer:${score.scorerId}`,
