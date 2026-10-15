@@ -3,6 +3,7 @@ import type { WorkflowRunState } from '@mastra/core/workflows';
 import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, it, expect, beforeEach } from 'vitest';
 import { checkWorkflowSnapshot, createSampleSuspendedSnapshotWithThread, createSampleWorkflowSnapshot } from './data';
+import { createWorkflowEngineTests } from './engine';
 import { createRunJournalTests } from './run-journal';
 
 export interface WorkflowsTestOptions {
@@ -24,6 +25,7 @@ export function createWorkflowsTests({ storage, workflowResultsNoopWhenRunMissin
   });
 
   createRunJournalTests({ getStore: () => workflowsStorage });
+  createWorkflowEngineTests({ storage, getStore: () => workflowsStorage });
 
   describe('listWorkflowRuns', () => {
     beforeEach(async () => {
