@@ -221,6 +221,7 @@ import type { AgentScopesSnapshot, ResolvedAgentScopes } from './scopes';
 import type { CreatedAgentSignal } from './signals';
 import { signalSpanAttributes } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
+import { delegateGenerate, delegateStream } from './subagent';
 import type { SubAgent, SubAgentToolCall, SubAgentToolResult } from './subagent';
 import { agentThreadStreamRuntime } from './thread-stream-runtime';
 import type { ActiveThreadRun } from './thread-stream-runtime';
@@ -6208,7 +6209,7 @@ export class Agent<
                         allowDelegationDispatch: false,
                       },
                     })
-                  : await resolvedAgent.generate(messagesForSubAgent, {
+                  : await delegateGenerate(resolvedAgent)(messagesForSubAgent, {
                       requestContext: subAgentRequestContext,
                       actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
@@ -6347,7 +6348,7 @@ export class Agent<
                         allowDelegationDispatch: false,
                       },
                     })
-                  : await resolvedAgent.stream(messagesForSubAgent, {
+                  : await delegateStream(resolvedAgent)(messagesForSubAgent, {
                       requestContext: subAgentRequestContext,
                       actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),

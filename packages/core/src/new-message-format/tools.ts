@@ -23,9 +23,7 @@ export function toV7Tools(tools: Record<string, any>, ctx: ToolAdapterContext): 
       out[name] = tool({
         description: vercel.description,
         inputSchema: vercel.inputSchema ?? vercel.parameters,
-        execute: vercel.execute
-          ? (input: unknown, options: unknown) => vercel.execute!(input, options)
-          : undefined,
+        execute: vercel.execute ? (input: unknown, options: unknown) => vercel.execute!(input, options) : undefined,
       } as Parameters<typeof tool>[0]);
       continue;
     }

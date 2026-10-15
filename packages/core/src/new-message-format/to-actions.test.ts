@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createSignal } from '../agent/signals';
 import { toActions } from './to-actions';
 
 describe('toActions', () => {
@@ -133,5 +134,27 @@ describe('toActions', () => {
 
   it('rejects unknown parts', () => {
     expect(() => toActions({ role: 'user', content: [{ type: 'nope' }] })).toThrow(/nope/);
+  });
+
+  it('created signals → signal actions, mixed with strings', () => {
+    const signal = createSignal({
+      type: 'notification',
+      tagName: 'ci',
+      contents: 'build failed',
+      attributes: { job: 'lint' },
+    });
+    expect(toActions(['hi', signal]).actions).toEqual([
+      { type: 'text', role: 'user', text: 'hi' },
+      {
+        type: 'signal',
+        category: 'notification',
+        tagName: 'ci',
+        contents: [{ type: 'text', text: 'build failed' }],
+        attributes: { job: 'lint' },
+      },
+    ]);
+    expect(() => toActions(createSignal({ type: 'notification', contents: 'x', transient: true }))).toThrow(
+      /Transient/,
+    );
   });
 });

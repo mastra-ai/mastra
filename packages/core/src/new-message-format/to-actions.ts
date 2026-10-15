@@ -1,3 +1,4 @@
+import type { CreatedAgentSignal } from '../agent/signals';
 import type { MastraProviderMetadata } from '../agent/message-list/state/types';
 import type { ActionBase, PersistableAction } from './types';
 
@@ -22,12 +23,13 @@ export type ToActionsResult = {
  * - AI SDK v4 CoreMessage (tool-call `args`, tool-result `result`)
  * - AI SDK v5/v6/v7 ModelMessage (tool-call `input`, tool-result `output`)
  * - AI SDK v4 UIMessage (`toolInvocations`) and v5/v6/v7 UIMessage (`parts`)
+ * - signals from `createSignal` (non-state, non-transient)
  *
  * Inputs come from callers, so parts are read structurally rather than trusted to match one SDK version.
  */
-export type AgentInput = string | AnyMessage | AnyMessage[] | string[];
+export type AgentInput = string | AnyMessage | CreatedAgentSignal | Array<string | AnyMessage | CreatedAgentSignal>;
 
-type AnyMessage = { role: string; content?: unknown; parts?: unknown[]; [key: string]: unknown };
+type AnyMessage = { role: string; content?: unknown; parts?: unknown[]; toolInvocations?: unknown[] };
 type AnyPart = { type: string; [key: string]: unknown };
 
 export function toActions(input: AgentInput): ToActionsResult {
@@ -38,10 +40,40 @@ export function toActions(input: AgentInput): ToActionsResult {
       result.actions.push({ type: 'text', role: 'user', text: message });
       continue;
     }
+    if ('__isCreatedSignal' in message) {
+      result.actions.push(signalToAction(message));
+      continue;
+    }
     convertMessage(message, result);
   }
   linkApprovals(result.actions);
   return result;
+}
+
+function signalToAction(signal: CreatedAgentSignal): ActionDraft {
+  if (signal.type === 'state') throw new Error('State signals are not supported on action-native runs yet');
+  if (signal.transient) throw new Error('Transient signals are not supported on action-native runs yet');
+  const contents =
+    typeof signal.contents === 'string'
+      ? [{ type: 'text' as const, text: signal.contents }]
+      : signal.contents.map(part =>
+          part.type === 'text'
+            ? { type: 'text' as const, text: part.text }
+            : {
+                type: 'file' as const,
+                data: dataToString(part.data),
+                mediaType: part.mediaType,
+                ...(part.filename ? { filename: part.filename } : {}),
+              },
+        );
+  return {
+    type: 'signal',
+    category: signal.type,
+    contents,
+    ...(signal.tagName ? { tagName: signal.tagName } : {}),
+    ...(signal.attributes ? { attributes: signal.attributes } : {}),
+    ...(signal.metadata ? { metadata: signal.metadata } : {}),
+  };
 }
 
 /** v7 approval parts carry only `approvalId` (and the request only `toolCallId`); fill refs from earlier actions. */
