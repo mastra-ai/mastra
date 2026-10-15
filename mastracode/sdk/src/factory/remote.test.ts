@@ -88,6 +88,31 @@ describe('RemoteSession', () => {
     expect(remote.followUp).toHaveBeenCalledWith('more');
   });
 
+  it('maps the Factory echo of a sent user message onto the local id', async () => {
+    const { session, emit } = await connected();
+    const seen: any[] = [];
+    session.subscribe(event => void seen.push(event));
+    const signal = session.sendSignal({ type: 'user', content: 'hi' } as any);
+    await signal.persisted;
+
+    const echo = {
+      id: 'server-1',
+      role: 'signal',
+      content: { format: 2, parts: [], metadata: { signal: { type: 'user' } } },
+    };
+    const stateSignal = {
+      id: 'state-1',
+      role: 'signal',
+      content: { format: 2, parts: [], metadata: { signal: { type: 'state' } } },
+    };
+    emit({ type: 'message_start', message: echo });
+    emit({ type: 'message_end', message: echo });
+    emit({ type: 'message_start', message: stateSignal });
+    emit({ type: 'message_start', message: { id: 'a-1', role: 'assistant', content: {} } });
+
+    expect(seen.map(e => e.message.id)).toEqual([signal.id, signal.id, 'state-1', 'a-1']);
+  });
+
   it('forwards model switches with positional args', async () => {
     const { session, remote } = await connected();
     await session.model.switch('openai/gpt-5', { thinkingLevel: 'high' });

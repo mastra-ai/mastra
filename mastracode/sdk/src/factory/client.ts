@@ -1,5 +1,6 @@
 import { MastraClient } from '@mastra/client-js';
 
+import { getPlatformSession } from '../platform/index.js';
 import type { PlatformSession } from '../platform/index.js';
 
 /** The agent controller every Factory serves its coding sessions under. */
@@ -107,7 +108,32 @@ export async function createFactoryUserSession(
   return { ...session, title: session.title ?? undefined };
 }
 
+/**
+ * Platform access tokens expire while a long-lived TUI is open. On a 401,
+ * refresh the session and replay the request once with the new token; a
+ * rejected request never ran, so the replay cannot duplicate a command.
+ */
+export function refreshingFetch(
+  address: FactoryAddress,
+  refresh: () => Promise<PlatformSession | null> = getPlatformSession,
+  baseFetch: typeof fetch = fetch,
+): typeof fetch {
+  const withAuth = (init: RequestInit | undefined) => {
+    const headers = new Headers(init?.headers);
+    for (const [key, value] of Object.entries(factoryHeaders(address))) headers.set(key, value);
+    return { ...init, headers };
+  };
+  return async (input, init) => {
+    const res = await baseFetch(input, withAuth(init));
+    if (res.status !== 401) return res;
+    const session = await refresh();
+    if (!session || session.token === address.session.token) return res;
+    address.session = session;
+    return baseFetch(input, withAuth(init));
+  };
+}
+
 export function createFactoryClient(address: FactoryAddress): MastraClient {
   // Session commands are not idempotent; a silent retry would duplicate messages.
-  return new MastraClient({ baseUrl: address.url.replace(/\/$/, ''), headers: factoryHeaders(address), retries: 0 });
+  return new MastraClient({ baseUrl: address.url.replace(/\/$/, ''), retries: 0, fetch: refreshingFetch(address) });
 }

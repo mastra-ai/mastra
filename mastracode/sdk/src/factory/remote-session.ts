@@ -81,6 +81,8 @@ export class RemoteSession {
   #running = false;
   #state: Record<string, unknown> = {};
   #displayState: AgentControllerDisplayState = defaultDisplayState();
+  #pendingUserIds: string[] = [];
+  readonly #userIdMap = new Map<string, string>();
 
   constructor(address: FactoryAddress, resourceId: string, remote?: RemoteHandle) {
     this.#resourceId = resourceId;
@@ -114,8 +116,31 @@ export class RemoteSession {
     if (snapshot.tasks) this.#displayState = { ...this.#displayState, tasks: snapshot.tasks };
   }
 
+  /**
+   * The TUI renders a user message as soon as it is sent, keyed by the id
+   * `sendSignal` returned. The Factory echoes it back under its own id, so map
+   * that echo onto the local id to keep it from rendering twice.
+   */
+  #adoptLocalUserId(e: Record<string, any>): void {
+    const message = e.message as
+      | { id?: string; role?: string; content?: { metadata?: { signal?: { type?: string } } } }
+      | undefined;
+    const isUser =
+      message?.role === 'user' || (message?.role === 'signal' && message.content?.metadata?.signal?.type === 'user');
+    if (!message?.id || !isUser) return;
+    let localId = this.#userIdMap.get(message.id);
+    if (!localId && e.type === 'message_start') {
+      localId = this.#pendingUserIds.shift();
+      if (localId) this.#userIdMap.set(message.id, localId);
+    }
+    if (localId) e.message = { ...message, id: localId };
+  }
+
   #receive(event: AgentControllerEvent): void {
     const e = event as AgentControllerEvent & Record<string, any>;
+    if (e.type === 'message_start' || e.type === 'message_update' || e.type === 'message_end') {
+      this.#adoptLocalUserId(e);
+    }
     switch (e.type) {
       case 'mode_changed':
         this.#modeId = e.modeId;
@@ -347,10 +372,15 @@ export class RemoteSession {
         : Array.isArray(content)
           ? content.map(part => (typeof part === 'string' ? part : ((part as { text?: string })?.text ?? ''))).join('')
           : JSON.stringify(content);
+    const id = randomUUID();
+    this.#pendingUserIds.push(id);
     const sent = this.#running ? this.#remote.followUp(text) : this.#remote.sendMessage(text);
+    sent.catch(() => {
+      this.#pendingUserIds = this.#pendingUserIds.filter(pending => pending !== id);
+    });
     const accepted = sent.then(() => ({ accepted: true as const }));
     accepted.catch(() => {});
-    return { id: randomUUID(), type: 'user' as const, accepted, persisted: sent };
+    return { id, type: 'user' as const, accepted, persisted: sent };
   }
 
   async steer({ content }: { content: string }) {
