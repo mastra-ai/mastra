@@ -4,7 +4,7 @@
 
 Fixed `DurableAgent.observe(runId)` when attaching to a run from another process.
 
-- Restored the agent's configured output processors, request context, and `returnScorerData` setting.
+- Restored the agent's configured output processors, request context, and `returnScorerData` setting, including when the observing process also runs durable steps.
 - Preserved live call-time processors, request context, and scorer data when another wrapper observes the run within the same Mastra instance.
 - **Behavior change:** Cross-process `DurableAgent.observe(runId)` now throws `DURABLE_AGENT_OBSERVE_AGENT_MISMATCH` when the persisted run belongs to an agent with a different ID, matching `resume()` and `recover()`. Use the same agent ID in the observing process as in the process that started the run.
 - Made durable stream `onChunk` callbacks run serially and in order.

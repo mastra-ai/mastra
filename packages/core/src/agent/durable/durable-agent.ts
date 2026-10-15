@@ -4883,12 +4883,14 @@ export class DurableAgent<
     let returnScorerData = observedEntry?.returnScorerData;
     let requestContext = observedEntry?.requestContext;
     let messageList = observedEntry?.messageList ?? this.#runRegistry.getMessageList(runId);
+    // Worker entries can carry runtime dependencies without the caller's live transcript.
+    const liveEntry = messageList ? observedEntry : undefined;
     let workflowInput: DurableAgenticWorkflowInput | undefined;
     let loopSnapshot: WorkflowRunState | undefined;
     let workflowInputSnapshot: WorkflowRunState | undefined;
-    const workflowsStore = !observedEntry ? await this.#mastra?.getStorage()?.getStore('workflows') : undefined;
+    const workflowsStore = !liveEntry ? await this.#mastra?.getStorage()?.getStore('workflows') : undefined;
 
-    if (!structuredOutput || !observedEntry) {
+    if (!structuredOutput || !liveEntry) {
       const snapshotStore = workflowsStore ?? (await this.#mastra?.getStorage()?.getStore('workflows'));
 
       for (const workflowName of [DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION]) {
@@ -4909,7 +4911,7 @@ export class DurableAgent<
       }
     }
 
-    if (!observedEntry && workflowInput && workflowInput.agentId !== this.id) {
+    if (!liveEntry && workflowInput && workflowInput.agentId !== this.id) {
       throw new MastraError({
         id: 'DURABLE_AGENT_OBSERVE_AGENT_MISMATCH',
         domain: ErrorDomain.AGENT,
@@ -4934,7 +4936,7 @@ export class DurableAgent<
       }
     }
 
-    if (!observedEntry && workflowInput) {
+    if (!liveEntry && workflowInput) {
       requestContext = workflowInput.requestContextEntries
         ? new RequestContext(
             Object.entries(workflowInput.requestContextEntries) as Iterable<readonly [string, unknown]>,

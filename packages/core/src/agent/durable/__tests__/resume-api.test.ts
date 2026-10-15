@@ -27,6 +27,7 @@ import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import type { WorkflowRunState } from '../../../workflows/types';
 import { Agent } from '../../agent';
+import { MessageList } from '../../message-list';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import { globalRunRegistry } from '../run-registry';
@@ -199,7 +200,10 @@ async function seedSuspendedRun(
   agentId: string,
   memory: { threadId: string; resourceId: string },
   status: WorkflowRunState['status'] = 'suspended',
+  prompt?: string,
 ) {
+  const messageList = new MessageList(memory);
+  if (prompt) messageList.add({ role: 'user', content: prompt }, 'input');
   const workflows = (await store.getStore('workflows'))!;
   await workflows.persistWorkflowSnapshot({
     workflowName: DurableStepIds.AGENTIC_LOOP,
@@ -214,7 +218,7 @@ async function seedSuspendedRun(
           __workflowKind: 'durable-agent',
           runId,
           agentId,
-          messageListState: { memoryInfo: memory },
+          messageListState: prompt ? messageList.serialize() : { memoryInfo: memory },
           requestContextEntries: { tenantId: 'tenant-1' },
           state: memory,
         },
@@ -1338,6 +1342,93 @@ describe('Observe API', () => {
       globalRunRegistry.delete(runId);
       resolveProcessors.mockRestore();
     }
+  });
+
+  describe.each(['placeholder', 'rebuilt', 'absent'] as const)('with a %s worker registry entry', entryKind => {
+    it('restores persisted context, processors, and transcript without live state', async () => {
+      const store = new InMemoryStore();
+      const baseAgent = new Agent({
+        id: 'partial-observe-agent',
+        name: 'Partial Observe Agent',
+        instructions: 'Test partial worker state',
+        model: createTextModel('unused') as LanguageModelV2,
+        outputProcessors: [{ id: 'persisted-observer-processor', processOutputStream: ({ part }) => part }],
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub: cachingPubsub });
+      new Mastra({ agents: { durableAgent }, storage: store, logger: false });
+      const runId = `observe-${entryKind}-worker-run`;
+      await seedSuspendedRun(
+        store,
+        runId,
+        durableAgent.id,
+        { threadId: 'persisted-thread', resourceId: 'persisted-resource' },
+        'suspended',
+        'Persisted observer prompt',
+      );
+      if (entryKind !== 'absent') {
+        globalRunRegistry.set(runId, {
+          isPlaceholder: entryKind === 'placeholder',
+          ...(entryKind === 'rebuilt' ? { tools: {}, outputProcessors: [], processorStates: new Map() } : {}),
+        } as Parameters<typeof globalRunRegistry.set>[1]);
+      }
+      const resolveProcessors = vi.spyOn(baseAgent, 'listOutputProcessors');
+      let result: Awaited<ReturnType<typeof durableAgent.observe>> | undefined;
+      try {
+        result = await durableAgent.observe(runId);
+        const fullOutput = result.output.getFullOutput();
+        await emitFinishEvent(cachingPubsub, runId, {
+          output: { text: '', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 }, steps: [] },
+          stepResult: { reason: 'stop', warnings: [], isContinued: false },
+        });
+        const output = await fullOutput;
+        expect(resolveProcessors).toHaveBeenCalledOnce();
+        const context = resolveProcessors.mock.calls[0]![0];
+        expect(context?.get('tenantId')).toBe('tenant-1');
+        expect(JSON.stringify(output.messages)).toContain('Persisted observer prompt');
+      } finally {
+        result?.detach();
+        globalRunRegistry.delete(runId);
+        resolveProcessors.mockRestore();
+      }
+    });
+
+    it('rejects a foreign persisted run without live state', async () => {
+      const store = new InMemoryStore();
+      const baseAgent = new Agent({
+        id: 'partial-owner-observe-agent',
+        name: 'Partial Owner Observe Agent',
+        instructions: 'Test partial worker ownership',
+        model: createTextModel('unused') as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub: cachingPubsub });
+      new Mastra({ agents: { durableAgent }, storage: store, logger: false });
+      const runId = `observe-${entryKind}-foreign-worker-run`;
+      await seedSuspendedRun(store, runId, 'foreign-agent', {
+        threadId: 'foreign-thread',
+        resourceId: 'foreign-resource',
+      });
+      if (entryKind !== 'absent') {
+        globalRunRegistry.set(runId, {
+          isPlaceholder: entryKind === 'placeholder',
+          ...(entryKind === 'rebuilt' ? { tools: {}, outputProcessors: [], processorStates: new Map() } : {}),
+        } as Parameters<typeof globalRunRegistry.set>[1]);
+      }
+      let result: Awaited<ReturnType<typeof durableAgent.observe>> | undefined;
+      try {
+        await expect(
+          durableAgent.observe(runId).then(observed => {
+            result = observed;
+            return observed;
+          }),
+        ).rejects.toMatchObject({
+          id: 'DURABLE_AGENT_OBSERVE_AGENT_MISMATCH',
+          details: { runId, ownerAgentId: 'foreign-agent' },
+        });
+      } finally {
+        result?.detach();
+        globalRunRegistry.delete(runId);
+      }
+    });
   });
 
   it('continues observing when configured processor resolution fails', async () => {
