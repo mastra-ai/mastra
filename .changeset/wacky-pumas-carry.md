@@ -18,4 +18,6 @@ import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 </InfoTooltip>;
 ```
 
+`TooltipContent` takes `keepMounted` to keep a closed tooltip in the page (hidden), for example so its trigger can point `aria-describedby` at it.
+
 Deprecated `RequestContextLabel` (`@mastra/playground-ui/domains/request-context/components/request-context-label`). It still works and now renders `FieldLabel` with `info`; use that directly instead.

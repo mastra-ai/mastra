@@ -7,21 +7,26 @@ import * as React from 'react';
 import { comboboxItemClass, comboboxStyles, comboboxTriggerClass } from './combobox-styles';
 import type { ComboboxVariant } from './combobox-styles';
 import { isIconButtonSize } from '@/ds/components/Button/Button';
-import type { ButtonSize } from '@/ds/components/Button/Button';
+import type { ButtonSize, TextButtonSize } from '@/ds/components/Button/Button';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import { menuLabelClass, menuSeparatorClass } from '@/ds/primitives/menu-item';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
+import type { PortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
 
 /**
  * The field the list opens under, set by ComboboxInput or ComboboxChips. Without one (a compact
  * ComboboxTrigger with ComboboxSearch in the popup) the popup anchors to the trigger.
  */
-type FieldAnchor = { field: HTMLElement | null; setField: (field: HTMLElement | null) => void };
-const FieldAnchorContext = React.createContext<FieldAnchor | null>(null);
+type FieldAnchor = {
+  field?: HTMLElement;
+  /** A ref callback: React passes `null` when the field unmounts. */
+  setField: (field: HTMLElement | null) => void;
+};
+const FieldAnchorContext = React.createContext<FieldAnchor | undefined>(undefined);
 
 /**
  * Root. Same props as Base UI's `Combobox.Root` (`items`, `value`, `onValueChange`, `multiple`,
@@ -34,10 +39,10 @@ const FieldAnchorContext = React.createContext<FieldAnchor | null>(null);
 function ComboboxRoot<Value, Multiple extends boolean | undefined = false>(
   props: BaseCombobox.Root.Props<Value, Multiple>,
 ) {
+  // Set through a ref callback, which reports `null` on detach; read as `undefined` below.
   const [field, setField] = React.useState<HTMLElement | null>(null);
-  const anchor = React.useMemo(() => ({ field, setField }), [field]);
   return (
-    <FieldAnchorContext.Provider value={anchor}>
+    <FieldAnchorContext.Provider value={{ field: field ?? undefined, setField }}>
       <BaseCombobox.Root {...props} />
     </FieldAnchorContext.Provider>
   );
@@ -47,16 +52,17 @@ function ComboboxRoot<Value, Multiple extends boolean | undefined = false>(
  * The field surface: today's trigger look, focus shown while the input inside has focus. The
  * chevron ends every field, at the same padding as today's Combobox trigger.
  */
-const fieldClass = cn(
-  comboboxTriggerClass({ variant: 'default', size: 'md' }),
-  // The Button recipe brightens icons on hover; a field's chevron stays muted.
-  'cursor-text gap-2 focus-within:[--surface-rim:var(--field-rim-focus)] not-disabled:hover:[&_svg]:text-muted-foreground',
-  // Disabled like other form elements (muted text, not-allowed cursor). Keyed off the input because
-  // Base UI marks the input group, not the chips field, with `data-disabled`.
-  'has-[input:disabled]:cursor-not-allowed has-[input:disabled]:bg-field-disabled has-[input:disabled]:[&_*]:cursor-not-allowed has-[input:disabled]:[&_*]:text-muted-foreground',
-  // The input inside carries `aria-invalid`; the field shows it like other invalid fields.
-  'has-[[aria-invalid=true]]:[--field-rim-focus:var(--destructive-indicator)] has-[[aria-invalid=true]]:[--field-rim:var(--destructive-indicator)]',
-);
+const fieldClass = (size: TextButtonSize = 'md') =>
+  cn(
+    comboboxTriggerClass({ variant: 'default', size }),
+    // The Button recipe brightens icons on hover; a field's chevron stays muted.
+    'cursor-text gap-2 focus-within:[--surface-rim:var(--field-rim-focus)] not-disabled:hover:[&_svg]:text-muted-foreground',
+    // Disabled like other form elements (muted text, not-allowed cursor). Keyed off the input because
+    // Base UI marks the input group, not the chips field, with `data-disabled`.
+    'has-[input:disabled]:cursor-not-allowed has-[input:disabled]:bg-field-disabled has-[input:disabled]:[&_*]:cursor-not-allowed has-[input:disabled]:[&_*]:text-muted-foreground',
+    // The input inside carries `aria-invalid`; the field shows it like other invalid fields.
+    'has-[[aria-invalid=true]]:[--field-rim-focus:var(--destructive-indicator)] has-[[aria-invalid=true]]:[--field-rim:var(--destructive-indicator)]',
+  );
 
 /**
  * Text starts 0.9em in (the Button recipe's padding, shared with Select and today's Combobox).
@@ -189,7 +195,11 @@ function ComboboxClear({ className, ...props }: BaseCombobox.Clear.Props) {
   );
 }
 
-type ComboboxInputProps = BaseCombobox.Input.Props & {
+type ComboboxInputProps = Omit<BaseCombobox.Input.Props, 'size'> & {
+  /** The field height, from the control sizes. `md` by default. */
+  size?: TextButtonSize;
+  /** Shown before the text, e.g. the selected item's icon. */
+  start?: React.ReactNode;
   /** The chevron button at the end. On by default. */
   showTrigger?: boolean;
   /** An × before the chevron that clears the value. */
@@ -206,6 +216,8 @@ function ComboboxInput({
   children,
   showTrigger = true,
   showClear = false,
+  size,
+  start,
   onFocus,
   ...props
 }: ComboboxInputProps) {
@@ -214,9 +226,10 @@ function ComboboxInput({
     <BaseCombobox.InputGroup
       ref={anchor?.setField}
       data-slot="combobox-input"
-      className={cn(fieldClass, className)}
+      className={cn(fieldClass(size), className)}
       style={fieldStyle}
     >
+      {start ? <span className="flex shrink-0 items-center">{start}</span> : null}
       <BaseCombobox.Input
         onFocus={event => {
           moveCaretToEnd(event);
@@ -253,12 +266,13 @@ function ComboboxSearch({ className, ...props }: BaseCombobox.Input.Props) {
 type ComboboxContentProps = BaseCombobox.Popup.Props &
   Pick<BaseCombobox.Positioner.Props, 'side' | 'align' | 'sideOffset' | 'alignOffset' | 'anchor'> & {
     /** Where the popup portals to. Defaults to the nearest dialog or drawer, so it stays interactive there. */
-    container?: HTMLElement | null | React.RefObject<HTMLElement | null>;
+    container?: PortalContainer;
   };
 
 /**
  * The popup. Under a field (ComboboxInput or ComboboxChips) it opens at the field's width; under a
- * compact ComboboxTrigger it sizes to its content, at least as wide as the trigger.
+ * compact ComboboxTrigger it takes the trigger's width, at least 11rem. Either way the width never
+ * follows the filtered items, so it holds still while you type; long labels truncate.
  */
 function ComboboxContent({
   className,
@@ -270,7 +284,7 @@ function ComboboxContent({
   container,
   ...props
 }: ComboboxContentProps) {
-  const field = React.useContext(FieldAnchorContext)?.field ?? null;
+  const field = React.useContext(FieldAnchorContext)?.field;
   const resolvedContainer = usePortalContainer(container);
   return (
     <BaseCombobox.Portal container={resolvedContainer}>
@@ -281,13 +295,17 @@ function ComboboxContent({
         alignOffset={alignOffset}
         // Base UI anchors to the input (or the trigger when the input is in the popup); chips need
         // the whole field instead.
-        anchor={anchor ?? field ?? undefined}
+        anchor={anchor ?? field}
         positionMethod={FLOATING_POSITION_METHOD}
         className={comboboxStyles.positioner}
       >
         <BaseCombobox.Popup
           data-slot="combobox-content"
-          className={cn(comboboxStyles.popup, field && 'w-(--anchor-width)', className)}
+          className={cn(
+            comboboxStyles.popup,
+            field ? 'w-(--anchor-width)' : 'w-[max(11rem,var(--anchor-width))]',
+            className,
+          )}
           {...props}
         />
       </BaseCombobox.Positioner>
@@ -419,7 +437,7 @@ function ComboboxChips({ className, children, ...props }: BaseCombobox.Chips.Pro
       data-slot="combobox-chips"
       data-multiline={multiline ? '' : undefined}
       style={chipsFieldStyle}
-      className={cn(fieldClass, 'h-auto min-h-control-md items-start data-multiline:rounded-xl', className)}
+      className={cn(fieldClass(), 'h-auto min-h-control-md items-start data-multiline:rounded-xl', className)}
       {...props}
     >
       <span className="flex min-w-0 flex-1 flex-wrap gap-[3px]">{children}</span>

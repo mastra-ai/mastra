@@ -87,6 +87,8 @@ const ProgressBar = ({
   const textColorFilled = isProcessing ? 'text-info-subtle-foreground' : 'text-background';
   const tokenBg = isProcessing ? 'bg-info-subtle' : 'bg-fill';
   const tokenTextColor = isProcessing ? 'text-info-subtle-foreground' : 'text-muted-foreground';
+  // The observer handles messages and the reflector handles observations.
+  const settingsOwner = label === 'Messages' ? 'Observer' : 'Reflector';
 
   return (
     <div className="min-w-0 flex-1">
@@ -94,13 +96,10 @@ const ProgressBar = ({
         <Txt as="span" variant="meta" tone="muted" className="uppercase">
           {label}
         </Txt>
-        <InfoTooltip
-          aria-label={`${label === 'Messages' ? 'Observer' : 'Reflector'} settings`}
-          contentClassName="max-w-xs"
-        >
+        <InfoTooltip aria-label={`${settingsOwner} settings`} contentClassName="max-w-xs">
           <div className="space-y-1.5">
             <Txt as="p" variant="column" tone="ink">
-              {label === 'Messages' ? 'Observer' : 'Reflector'} Settings
+              {settingsOwner} Settings
             </Txt>
             <div className="space-y-0.5">
               <Txt as="p" variant="caption">

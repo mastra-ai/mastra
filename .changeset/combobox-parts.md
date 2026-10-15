@@ -2,7 +2,9 @@
 '@mastra/playground-ui': minor
 ---
 
-Added composable Combobox parts, so a combobox can search right in the field, show multi-select picks as removable chips, and render grouped or rich items (title, description, end detail). The parts follow shadcn's Combobox structure. `ComboboxRoot` is the root, since `Combobox` stays the options-based component.
+Comboboxes in forms now search right in the field. Inside a `Field`, a `Combobox` is a text field you type into to filter, and a `multiple` one shows its picks as removable chips (× or Backspace removes one) instead of "N selected". Comboboxes outside a `Field` (toolbars, breadcrumbs, inline pickers), `ghost` and icon-size triggers keep the trigger with the search in the popup. The `Combobox` props are unchanged.
+
+`Combobox` is now built on new composable parts, also exported, for pickers its `options` prop can't describe: groups with labels, items with a title, description and end detail, or a custom field. They follow shadcn's Combobox structure; the root is `ComboboxRoot` because `Combobox` is the options-based component.
 
 ```tsx
 import {
