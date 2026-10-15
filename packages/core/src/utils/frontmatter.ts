@@ -15,7 +15,7 @@ export interface ParsedFrontmatter {
  * Split a markdown document into YAML frontmatter and body.
  *
  * A frontmatter block starts with `---` on the first line and ends at the next
- * line that is exactly `---`. An optional language tag may follow the opening
+ * line that is exactly `---` (a longer dash run or `--- !tag` is not a delimiter). An optional language tag may follow the opening
  * delimiter (`---yaml`); only YAML and JSON are accepted, and a `js`/`javascript`
  * tag throws instead of being evaluated. Documents that do not start with `---`
  * are returned unchanged with empty data.
@@ -38,10 +38,20 @@ export function parseFrontmatter(input: string): ParsedFrontmatter {
     rest = firstLineEnd === -1 ? '' : rest.slice(firstLineEnd);
   }
 
-  const closeIndex = rest.indexOf(CLOSE);
+  // Only a line that is exactly `---` (trailing spaces allowed) closes the block;
+  // `----`, `---foo` and `--- !tag` are not delimiters.
+  let closeIndex = rest.indexOf(CLOSE);
+  let closeEnd = -1;
+  while (closeIndex !== -1) {
+    closeEnd = closeIndex + CLOSE.length;
+    while (rest[closeEnd] === ' ' || rest[closeEnd] === '\t') closeEnd++;
+    const after = rest.charAt(closeEnd);
+    if (after === '' || after === '\n' || after === '\r') break;
+    closeIndex = rest.indexOf(CLOSE, closeIndex + 1);
+  }
   // Normalize CRLF inside the block so a Windows-authored file parses the same as a Unix one.
   const block = (closeIndex === -1 ? rest : rest.slice(0, closeIndex)).replace(/\r(?=\n|$)/g, '');
-  let content = closeIndex === -1 ? '' : rest.slice(closeIndex + CLOSE.length);
+  let content = closeIndex === -1 ? '' : rest.slice(closeEnd);
   // Drop the newline that terminates the closing delimiter (`\r\n` or `\n`).
   if (content.startsWith('\r')) content = content.slice(1);
   if (content.startsWith('\n')) content = content.slice(1);

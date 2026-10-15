@@ -18,6 +18,20 @@ describe('parseFrontmatter', () => {
     expect(parseFrontmatter('----\nname: foo\n---\nbody')).toEqual({ data: {}, content: '----\nname: foo\n---\nbody' });
   });
 
+  it('allows trailing whitespace on the closing delimiter line', () => {
+    expect(parseFrontmatter('---\nname: foo\n---  \nbody')).toEqual({ data: { name: 'foo' }, content: 'body' });
+    expect(parseFrontmatter('---\nname: foo\n---\t\r\nbody')).toEqual({ data: { name: 'foo' }, content: 'body' });
+    expect(parseFrontmatter('---\nname: foo\n--- ')).toEqual({ data: { name: 'foo' }, content: '' });
+  });
+
+  it('does not treat ---- or ---foo lines as the closing delimiter', () => {
+    // Such lines are never valid YAML inside a mapping, so the parser reports the real
+    // problem instead of silently truncating the block there and leaking the rest into the body.
+    expect(() => parseFrontmatter('---\nname: foo\n----\n---\nbody')).toThrow();
+    expect(() => parseFrontmatter('---\nname: foo\n---foo\n---\nbody')).toThrow();
+    expect(() => parseFrontmatter('---\nname: foo\n--- !tag\n---\nbody')).toThrow();
+  });
+
   it('strips a leading byte-order mark', () => {
     expect(parseFrontmatter('﻿---\nname: foo\n---\nbody').data).toEqual({ name: 'foo' });
   });
