@@ -505,16 +505,7 @@ async function channelOutcome(
   steps.push(
     provider
       ? makeStep('present in resolved provider map', undefined, 'pass', `connection ${connection.id}`)
-      : makeStep(
-          'present in resolved provider map',
-          undefined,
-          'fail',
-          id === 'microsoft-teams' && !process.env.MASTRA_ENCRYPTION_KEY
-            ? 'active connection did not resolve — the Teams channel requires MASTRA_ENCRYPTION_KEY ' +
-                '(its install store persists per-agent bot secrets); with an active Teams connection ' +
-                'channels() resolution fails hard without it'
-            : 'active connection did not resolve',
-        ),
+      : makeStep('present in resolved provider map', undefined, 'fail', 'active connection did not resolve'),
   );
 
   if (provider) {

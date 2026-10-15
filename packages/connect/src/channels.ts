@@ -2,7 +2,7 @@ import type { ChannelProvider } from '@mastra/core/channels';
 
 import type { ConnectClientOptions, ProjectConnection } from './client.js';
 import { getConnectionContext, getCredential, listProjectConnections, resolveClient } from './client.js';
-import { MastraConnectConfigError, MastraConnectError } from './errors.js';
+import { MastraConnectError } from './errors.js';
 import type { ChannelInstance, ChannelProviderRegistration, ChannelRuntime } from './providers/channel-provider.js';
 import type {
   DiscordReservedProviderOption,
@@ -247,10 +247,6 @@ export async function channels(options: ChannelsOptions = {}): Promise<ChannelsR
     try {
       state.instance = await registration.create(overrides.providerOptions ?? {}, runtime);
     } catch (error) {
-      // Caller/environment configuration mistakes (e.g. Teams without
-      // MASTRA_ENCRYPTION_KEY) must fail resolution at startup, not be
-      // silently downgraded to a skipped channel.
-      if (error instanceof MastraConnectConfigError) throw error;
       // Warn-and-skip so one broken integration (e.g. a failed module load)
       // never takes down the others. The skipped channel gets no routes and
       // never appears in the resolved map.
@@ -312,11 +308,6 @@ export async function channels(options: ChannelsOptions = {}): Promise<ChannelsR
       // working from provider-managed storage.
       state.connectionId = connectionId;
       if (!connectionId) continue; // warned + skipped (or simply not connected)
-
-      // An active connection means the project actually uses this channel, so
-      // environment misconfiguration (e.g. Teams without MASTRA_ENCRYPTION_KEY)
-      // fails resolution loudly instead of warn-and-skipping the provider.
-      state.registration.assertUsable?.();
 
       if (state.instance.sync) {
         try {

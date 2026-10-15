@@ -60,12 +60,4 @@ export interface ChannelProviderRegistration<Options = Record<string, unknown>> 
    * credentials arrive later through `runtime` (lazily, or on `sync()`).
    */
   create(options: Options | undefined, runtime: ChannelRuntime): Promise<ChannelInstance>;
-  /**
-   * Assert environment prerequisites once an active connection for this
-   * integration is matched at resolution time. Throw `MastraConnectConfigError`
-   * to fail `channels()` resolution loudly — this only affects projects that
-   * actually use the channel, so misconfiguration never breaks callers who
-   * have no connection for it.
-   */
-  assertUsable?(): void;
 }
