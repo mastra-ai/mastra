@@ -141,7 +141,12 @@ function NewExperimentDialog({ open, onOpenChange, onSuccess, ...initial }: Expe
     }
   };
 
-  const advancedToggle = <CollapsibleTrigger variant="disclosure">Advanced</CollapsibleTrigger>;
+  // `mr-auto` pushes the footer's actions to the right while the toggle sits there; in the body it does nothing.
+  const advancedToggle = (
+    <CollapsibleTrigger variant="disclosure" className="mr-auto">
+      Advanced
+    </CollapsibleTrigger>
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} pending={state.isRunning}>
@@ -333,7 +338,8 @@ function NewExperimentDialog({ open, onOpenChange, onSuccess, ...initial }: Expe
             </div>
           </DialogBody>
 
-          <DialogFooter start={state.advancedOpen ? undefined : advancedToggle}>
+          <DialogFooter>
+            {!state.advancedOpen && advancedToggle}
             <DialogCancel>Cancel</DialogCancel>
             <DialogAction onConfirm={state.run} disabled={!state.canRun}>
               {state.isRunning ? (
