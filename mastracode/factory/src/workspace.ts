@@ -599,9 +599,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
 
     if (!session || !sourceControl) {
       // No factory session, no workspace. Chat still works; workspace tools
-      // are simply not registered. Host-cwd behavior is opt-in via a
-      // LocalSandbox callback rooted wherever the deployer wants — the
-      // resolver never hands out the server host's own filesystem.
+      // are simply not registered. Session workspaces always come from the
+      // factory's sandbox: the host's explicit one, or the default (the
+      // Platform sandbox, else a local sandbox rooted under
+      // ~/.mastracode/factory/sandboxes) — never the server's own cwd.
       return undefined;
     }
 

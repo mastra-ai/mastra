@@ -90,6 +90,7 @@ import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
 import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
 import { CallbackFactorySandbox } from './sandbox/callback-factory-sandbox.js';
+import { defaultLocalSandboxRoot, resolveDefaultFactorySandbox } from './sandbox/default-factory-sandbox.js';
 import { isValidGitRef } from './sandbox/git-ref.js';
 import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
 import type { MastraFactorySandboxOption } from './sandbox/session-sandbox.js';
@@ -212,8 +213,11 @@ export interface MastraFactoryConfig {
    * `new PlatformFactorySandbox({ ... })`, which owns the session sandbox
    * constructor, the repo template and the schema of environment settings.
    * A bare callback is also accepted and wrapped as a `provider: 'custom'`
-   * sandbox with no settings. Omitted → repository sandboxes are
-   * disabled.
+   * sandbox with no settings. Omitted → a `PlatformFactorySandbox` when
+   * `MASTRA_PLATFORM_ACCESS_TOKEN` or `MASTRA_PLATFORM_SECRET_KEY` plus
+   * `MASTRA_PROJECT_ID` and `MASTRA_ENVIRONMENT_ID` are set, otherwise a
+   * `LocalFactorySandbox` under `~/.mastracode/factory/sandboxes` with an
+   * allowlisted host environment.
    */
   sandbox?: MastraFactorySandboxOption;
   /**
@@ -633,7 +637,18 @@ export class MastraFactory {
 
     const sandboxOption = this.#config.sandbox;
     let sandboxConfig: FactorySandbox | undefined;
-    if (sandboxOption === undefined || isFactorySandbox(sandboxOption)) {
+    if (sandboxOption === undefined) {
+      sandboxConfig = resolveDefaultFactorySandbox();
+      if (sandboxConfig.provider === 'platform') {
+        console.info(`[factory] no 'sandbox' configured; using the Mastra Platform sandbox`);
+      } else {
+        console.info(`[factory] no 'sandbox' configured; using a local sandbox`);
+        console.warn(
+          `[factory] sessions run on this host under ${defaultLocalSandboxRoot()}. ` +
+            `Pass an explicit 'sandbox' to MastraFactory for production deployments.`,
+        );
+      }
+    } else if (isFactorySandbox(sandboxOption)) {
       sandboxConfig = sandboxOption;
     } else if (typeof sandboxOption === 'function') {
       sandboxConfig = new CallbackFactorySandbox(sandboxOption);

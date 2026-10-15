@@ -64,6 +64,7 @@
     "@mastra/auth-workos": "workspace:*",
     "@mastra/code-sdk": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@mastra/platform-workspace": "workspace:*",
     "@mastra/slack": "workspace:*",
     "@octokit/auth-app": "^8.0.0",
     "chat": "^4.37.0",

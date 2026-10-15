@@ -2492,6 +2492,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/platform-workspace':
+        specifier: workspace:*
+        version: link:../../workspaces/platform-workspace
       '@mastra/slack':
         specifier: workspace:*
         version: link:../../channels/slack

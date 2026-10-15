@@ -14,7 +14,7 @@ import { FactorySandbox, FACTORY_SANDBOX_BRAND, isFactorySandbox, LocalSandbox }
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector } from '@mastra/pg';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestBoard } from './boards/test-utils.js';
 import type { VersionControl } from './capabilities/version-control.js';
 import { MastraFactory } from './factory.js';
@@ -695,9 +695,80 @@ describe('MastraFactory.prepare', () => {
     expect(storage.domainNames().every(name => storage.isDomainReady(name))).toBe(true);
   });
 
-  it('passes no sandbox callback when the slot is omitted', async () => {
-    const ctx = await prepareIntegrationContext({ storage: fakeStorage() });
-    expect(ctx.sandbox).toBeUndefined();
+  describe('default sandbox', () => {
+    const platformEnvKeys = [
+      'MASTRA_PLATFORM_ACCESS_TOKEN',
+      'MASTRA_PLATFORM_SECRET_KEY',
+      'MASTRA_PROJECT_ID',
+      'MASTRA_ENVIRONMENT_ID',
+    ] as const;
+
+    function stubPlatformEnv(values: Partial<Record<(typeof platformEnvKeys)[number], string>>) {
+      for (const key of platformEnvKeys) vi.stubEnv(key, values[key] ?? '');
+    }
+
+    const completePlatformEnv = {
+      MASTRA_PLATFORM_SECRET_KEY: 'sk_platform_test',
+      MASTRA_PROJECT_ID: 'proj',
+      MASTRA_ENVIRONMENT_ID: 'env',
+    };
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      vi.restoreAllMocks();
+    });
+
+    it('passes a local default sandbox when the slot is omitted and no platform env is set', async () => {
+      stubPlatformEnv({});
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const ctx = await prepareIntegrationContext({ storage: fakeStorage() });
+      expect(isFactorySandbox(ctx.sandbox)).toBe(true);
+      expect(ctx.sandbox!.provider).toBe('local');
+      const sandboxWarnings = warn.mock.calls.filter(([message]) =>
+        String(message).includes('sessions run on this host'),
+      );
+      expect(sandboxWarnings).toHaveLength(1);
+      expect(String(sandboxWarnings[0]![0])).toContain(join('.mastracode', 'factory', 'sandboxes'));
+    });
+
+    it('defaults to the Platform sandbox when the platform env is complete', async () => {
+      stubPlatformEnv(completePlatformEnv);
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const factory = new MastraFactory({ secretEncryption, storage: fakeStorage() });
+      await factory.prepare();
+      expect(factory.sandboxDescription?.provider).toBe('platform');
+      expect(info).toHaveBeenCalledWith(expect.stringContaining('using the Mastra Platform sandbox'));
+      expect(warn.mock.calls.some(([message]) => String(message).includes('sessions run on this host'))).toBe(false);
+    });
+
+    it('falls back to local when the platform env lacks an environment id', async () => {
+      stubPlatformEnv({ MASTRA_PLATFORM_SECRET_KEY: 'sk_platform_test', MASTRA_PROJECT_ID: 'proj' });
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const factory = new MastraFactory({ secretEncryption, storage: fakeStorage() });
+      await factory.prepare();
+      expect(factory.sandboxDescription?.provider).toBe('local');
+    });
+
+    it('keeps an explicit sandbox over a complete platform env and logs no default', async () => {
+      stubPlatformEnv(completePlatformEnv);
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+      class StubFactorySandbox extends FactorySandbox {
+        readonly provider = 'stub';
+        create = vi.fn(() => ({ id: 'sb' }) as never);
+      }
+      const factory = new MastraFactory({
+        secretEncryption,
+        storage: fakeStorage(),
+        sandbox: new StubFactorySandbox(),
+      });
+      await factory.prepare();
+      expect(factory.sandboxDescription?.provider).toBe('stub');
+      const logged = [...warn.mock.calls, ...info.mock.calls].map(([message]) => String(message));
+      expect(logged.some(message => message.includes("no 'sandbox' configured"))).toBe(false);
+      expect(logged.some(message => message.includes('sessions run on this host'))).toBe(false);
+    });
   });
 
   it('boots with a sandbox callback without provisioning anything', async () => {
