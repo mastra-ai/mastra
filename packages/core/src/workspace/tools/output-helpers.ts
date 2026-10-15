@@ -134,6 +134,20 @@ export async function applyTokenLimitSandwich(
 }
 
 /**
+ * Tell the model when the sandbox dropped the start of a stream (retention limit),
+ * so it doesn't read the newest output as all of it.
+ */
+export function noteDroppedOutput(
+  output: string,
+  droppedBytes: number | undefined,
+  stream: 'stdout' | 'stderr',
+): string {
+  if (!droppedBytes) return output;
+  const note = `[${stream}: the first ${droppedBytes} bytes were dropped; only the newest output was kept. Redirect output to a file to read all of it.]`;
+  return output ? `${note}\n${output}` : note;
+}
+
+/**
  * Apply both tail (line-based) and token limit (safety net) to output.
  */
 export async function truncateOutput(

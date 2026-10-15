@@ -1,5 +1,5 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -181,15 +181,40 @@ describe('experiments comparison table', () => {
   });
 
   describe('when scores are known', () => {
-    it('shows the delta once, on the contender, without the scorer reason', async () => {
+    it('shows the delta once, on the contender', async () => {
       renderComparison();
 
       await waitFor(() => {
         expect(within(sideOf('item-a', 'Contender 1')).getByRole('link', { name: 'Open accuracy' })).toBeTruthy();
       });
-      expect(within(sideOf('item-a', 'Baseline')).queryByText('Missing the country')).toBeNull();
       expect(within(sideOf('item-a', 'Contender 1')).getByText('0.40', { exact: false })).toBeTruthy();
       expect(within(sideOf('item-a', 'Baseline')).queryByText('0.40', { exact: false })).toBeNull();
+    });
+  });
+
+  describe('when a scorer explains its score', () => {
+    it('reveals the reason of that side when its info icon is hovered', async () => {
+      renderComparison();
+
+      const trigger = await waitFor(() =>
+        within(sideOf('item-a', 'Baseline')).getByRole('button', { name: 'Show accuracy reason' }),
+      );
+      expect(screen.queryByText('Missing the country')).toBeNull();
+
+      fireEvent.mouseEnter(trigger);
+
+      expect(await screen.findByText('Missing the country')).toBeTruthy();
+    });
+  });
+
+  describe('when a scorer gives no reason', () => {
+    it('shows no info icon for that score', async () => {
+      renderComparison();
+
+      await waitFor(() => {
+        expect(within(sideOf('item-a', 'Baseline')).getByRole('link', { name: 'Open relevancy' })).toBeTruthy();
+      });
+      expect(within(sideOf('item-a', 'Baseline')).queryByRole('button', { name: 'Show relevancy reason' })).toBeNull();
     });
   });
 
@@ -346,6 +371,35 @@ describe('experiments comparison table', () => {
     });
   });
 
+  describe('when the experiments ran on different dataset versions', () => {
+    it('shows each experiment the version it ran on, linked to the dataset at that version', async () => {
+      renderComparison();
+
+      const baseline = await screen.findByRole('columnheader', { name: 'Baseline' });
+      const contender = screen.getByRole('columnheader', { name: 'Contender 1' });
+      expect(within(baseline).getByRole('link', { name: 'Open dataset v1' }).getAttribute('href')).toBe(
+        `/datasets/${DATASET_ID}?version=1`,
+      );
+      expect(within(contender).getByRole('link', { name: 'Open dataset v2' }).getAttribute('href')).toBe(
+        `/datasets/${DATASET_ID}?version=2`,
+      );
+    });
+  });
+
+  describe('when an experiment has no dataset version', () => {
+    it('shows no dataset version on its header', async () => {
+      server.use(
+        http.get(`${experimentsBase}/${BASELINE_ID}`, () =>
+          HttpResponse.json({ ...makeExperiment(BASELINE_ID, 1), datasetVersion: null }),
+        ),
+      );
+      renderComparison();
+
+      const baseline = await screen.findByRole('columnheader', { name: 'Baseline' });
+      expect(within(baseline).queryByRole('link', { name: /^Open dataset v/ })).toBeNull();
+    });
+  });
+
   describe('when a contender has a different dataset version than the baseline', () => {
     it('flags the version on that contender header only', async () => {
       useThreeWayComparison();
@@ -353,13 +407,13 @@ describe('experiments comparison table', () => {
 
       const contender = await screen.findByRole('columnheader', { name: 'Contender 1' });
       await waitFor(() => {
-        expect(within(contender).getByText(/different dataset version/)).toBeTruthy();
+        expect(within(contender).getByText(/differs from baseline/)).toBeTruthy();
       });
       expect(
-        within(screen.getByRole('columnheader', { name: 'Baseline' })).queryByText(/different dataset version/),
+        within(screen.getByRole('columnheader', { name: 'Baseline' })).queryByText(/differs from baseline/),
       ).toBeNull();
       expect(
-        within(screen.getByRole('columnheader', { name: 'Contender 2' })).queryByText(/different dataset version/),
+        within(screen.getByRole('columnheader', { name: 'Contender 2' })).queryByText(/differs from baseline/),
       ).toBeNull();
     });
   });

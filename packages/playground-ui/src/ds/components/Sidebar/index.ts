@@ -8,6 +8,7 @@ export { SidebarMeter, type SidebarMeterProps, type SidebarMeterTone } from './f
 export { SidebarNav, type SidebarNavProps } from './nav/sidebar-nav';
 export { SidebarNavHeader, type SidebarNavHeaderProps } from './nav/sidebar-nav-header';
 export { SidebarNavLink, type SidebarLink, type SidebarNavLinkProps } from './nav/sidebar-nav-link';
+export { SidebarNavShowMore, type SidebarNavShowMoreProps } from './nav/sidebar-nav-show-more';
 export { navItemClasses, type SidebarNavItemSize } from './nav/sidebar-nav-item-classes';
 export { getIsLinkActive } from './nav/sidebar-link-active';
 export {

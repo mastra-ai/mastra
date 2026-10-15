@@ -1,6 +1,5 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { Knowledge } from '@mastra/core/knowledge';
-import type { GatewayLanguageModel } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
@@ -16,7 +15,7 @@ import { getOmScope } from '../utils/project.js';
 import { getActiveMemoryRoute, resolveModel } from './model.js';
 
 /** Route-backed OM fallback entry. */
-type MemoryModelRouteEntry = { id: string; model: GatewayLanguageModel };
+type MemoryModelRouteEntry = { id: string; model: ReturnType<typeof resolveModel> };
 
 /**
  * Resolve the active model route's memory models, starting at a same-thread
@@ -26,7 +25,7 @@ type MemoryModelRouteEntry = { id: string; model: GatewayLanguageModel };
 function resolveRouteMemoryModels(
   state: MastraCodeState | undefined,
   threadId: string | null | undefined,
-  resolve: (modelId: string) => GatewayLanguageModel,
+  resolve: (modelId: string) => ReturnType<typeof resolveModel>,
 ): MemoryModelRouteEntry[] | 'auto' | undefined {
   const memoryRoute = getActiveMemoryRoute(state, threadId);
   if (memoryRoute[0]?.memoryModelId === 'auto') return 'auto';
@@ -98,7 +97,7 @@ function resolveOmRoleModelForRequest(
   requestContext: RequestContext,
   settingsPath?: string,
   options?: { disableSettingsOmSeed?: boolean },
-): 'auto' | GatewayLanguageModel | MemoryModelRouteEntry[] {
+): 'auto' | ReturnType<typeof resolveModel> | MemoryModelRouteEntry[] {
   const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = controller?.getState() as MastraCodeState | undefined;
   const resolveOptions = { remapForCodexOAuth: true, requestContext, anthropicPromptCacheScope: 'system' } as const;

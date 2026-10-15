@@ -6,8 +6,10 @@ import { describe, expect, it, onTestFinished } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import type { FactoryUserSession } from '../../services/user-sessions';
-import { UserSessionsSection } from '../UserSessionsSection';
+import { SessionsSection } from '../SessionsSection';
+import { testChatSession } from './fixtures/sessionsSection';
 
 const projectRepositoryId = 'ghp-1';
 const sessionId = 'sess-1';
@@ -31,9 +33,11 @@ const session: FactoryUserSession = {
 function renderSection() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/factories/fp-1']}>
-      <Routes>
-        <Route path="/factories/:factoryId" element={<UserSessionsSection />} />
-      </Routes>
+      <ChatSessionContext.Provider value={testChatSession('fp-1', projectRepositoryId)}>
+        <Routes>
+          <Route path="/factories/:factoryId" element={<SessionsSection />} />
+        </Routes>
+      </ChatSessionContext.Provider>
     </MemoryRouter>,
   );
 }
@@ -66,9 +70,7 @@ describe('User sessions deletion', () => {
           ],
         }),
       ),
-      http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
-        HttpResponse.json({ sessions }),
-      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions })),
       http.delete(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, ({ params }) => {
         deletedSessions.push(String(params.sessionId));
         sessions = sessions.filter(item => item.sessionId !== params.sessionId);

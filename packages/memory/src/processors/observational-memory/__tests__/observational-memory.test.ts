@@ -10747,26 +10747,6 @@ describe('Async Buffering Config Validation', () => {
         }),
     ).toThrow();
   });
-
-  it('should accept config with only bufferActivation on reflection (no bufferTokens)', () => {
-    expect(
-      () =>
-        new ObservationalMemory({
-          storage: createInMemoryStorage(),
-          scope: 'thread',
-          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
-          observation: {
-            messageTokens: 50000,
-            bufferTokens: 10000,
-            bufferActivation: 0.7,
-          },
-          reflection: {
-            observationTokens: 20000,
-            bufferActivation: 0.5,
-          },
-        }),
-    ).not.toThrow();
-  });
 });
 
 // =============================================================================

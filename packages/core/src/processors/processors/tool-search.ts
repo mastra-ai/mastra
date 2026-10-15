@@ -112,9 +112,13 @@ export interface ToolSearchProcessorOptions {
    *   anonymous requests share a `'default'` entry.
    * - `'context'`: derived from the conversation messages. A tool is loaded iff a
    *   prior `search_tools`/`load_tool` result naming it is still present in the
-   *   conversation. Restart-safe, requires no memory, and de-loads automatically
-   *   when the result block is no longer present in the messages — parity with
-   *   native provider tool-search.
+   *   conversation. Works without memory, but the loaded set then lasts only for the
+   *   current process and only for requests with a real thread ID — anonymous requests
+   *   retain nothing between calls unless the caller resends the relevant messages.
+   *   Survives a restart whenever the messages are available again: Agent memory with
+   *   message history, or the caller resending the conversation. De-loads automatically
+   *   when the result block is no longer present in the messages — parity with native
+   *   provider tool-search.
    *
    * @default 'in-memory'
    */

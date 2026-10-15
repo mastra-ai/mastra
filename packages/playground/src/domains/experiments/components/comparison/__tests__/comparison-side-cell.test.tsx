@@ -34,6 +34,10 @@ const metricTerms = () =>
   within(metricsRegion())
     .getAllByRole('term')
     .map(term => term.textContent);
+const metricValue = (label: string) =>
+  within(metricsRegion())
+    .getAllByRole('term')
+    .find(term => term.textContent === label)?.nextElementSibling?.textContent;
 
 const pricedTiming = {
   startedAt: '2026-01-01T00:00:00.000Z',
@@ -115,6 +119,66 @@ describe('ComparisonSideCell', () => {
       renderCell(makeColumn(pricedTiming));
 
       expect(metricTerms()).toEqual(['Duration']);
+    });
+  });
+
+  describe('when the item has several scores', () => {
+    const scored = {
+      ...pricedTiming,
+      scores: [
+        { scorerId: 'accuracy', value: 0.5, reason: null },
+        { scorerId: 'relevancy', value: 0.9, reason: null },
+      ],
+    };
+
+    it('lists the average score after the duration, before the tokens and the scorers', () => {
+      renderCell(makeColumn(scored), { showUsage: true });
+
+      expect(metricTerms()).toEqual(['Cost', 'Duration', 'Avg score', 'Tokens', 'accuracy', 'relevancy']);
+    });
+
+    it('shows the average of the item scores', () => {
+      renderCell(makeColumn(scored));
+
+      expect(metricValue('Avg score')).toBe('0.70');
+    });
+  });
+
+  describe('when a scorer returned no value', () => {
+    it('averages the scores that have one', () => {
+      renderCell(
+        makeColumn({
+          scores: [
+            { scorerId: 'accuracy', value: null, reason: null },
+            { scorerId: 'relevancy', value: 0.6, reason: null },
+          ],
+        }),
+      );
+
+      expect(metricValue('Avg score')).toBe('0.60');
+    });
+  });
+
+  describe('when a contender averages a higher score than the baseline', () => {
+    it('shows the gain as an improvement', () => {
+      renderCell(
+        makeColumn({
+          role: 'contender',
+          averageScoreDelta: 0.2,
+          scores: [{ scorerId: 'accuracy', value: 0.9, reason: null }],
+        }),
+      );
+
+      const delta = within(metricsRegion()).getByText(/^\+0\.20$/);
+      expect(delta.className).toContain('text-success-indicator');
+    });
+  });
+
+  describe('when the item has no score', () => {
+    it('leaves the average score out of the metrics', () => {
+      renderCell(makeColumn(pricedTiming), { showUsage: true });
+
+      expect(metricTerms()).not.toContain('Avg score');
     });
   });
 });

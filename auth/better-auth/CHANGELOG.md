@@ -1,5 +1,11 @@
 # @mastra/auth-better-auth
 
+## 1.1.7
+
+### Patch Changes
+
+- security: bump better-auth to ^1.7.7 and @modelcontextprotocol/sdk to ^1.32.1 for Vanta/Aikido findings (AIKIDO-2026-373183, AIKIDO-2026-261025, AIKIDO-2026-365378/156139/344432). ([#26773](https://github.com/mastra-ai/mastra/pull/26773))
+
 ## 1.1.7-alpha.0
 
 ### Patch Changes

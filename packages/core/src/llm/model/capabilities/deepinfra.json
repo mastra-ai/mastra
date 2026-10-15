@@ -20,6 +20,7 @@
     "XiaomiMiMo/MiMo-V2.5-Pro",
     "XiaomiMiMo/MiMo-V2.6-Flash",
     "XiaomiMiMo/MiMo-V2.6-Pro",
+    "anthropic/claude-fable-5",
     "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
     "deepseek-ai/DeepSeek-V4.1-Flash",
     "google/gemma-3-12b-it",
@@ -138,6 +139,7 @@
     "XiaomiMiMo/MiMo-V2.5-Pro",
     "XiaomiMiMo/MiMo-V2.6-Flash",
     "XiaomiMiMo/MiMo-V2.6-Pro",
+    "anthropic/claude-fable-5",
     "deepseek-ai/DeepSeek-R1-0528",
     "deepseek-ai/DeepSeek-V3",
     "deepseek-ai/DeepSeek-V3-0324",
@@ -181,6 +183,12 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
+    "anthropic/claude-fable-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "tencent/Hy4-preview": [
       {
         "type": "effort",

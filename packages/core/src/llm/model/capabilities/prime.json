@@ -9,12 +9,14 @@
     "anthropic/claude-opus-5.5",
     "anthropic/claude-sonnet-4.6",
     "anthropic/claude-sonnet-5",
+    "deepseek/deepseek-v4.1-flash",
     "google/gemini-3-flash-preview",
     "google/gemini-3.1-pro-preview",
     "google/gemini-3.5-flash",
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
+    "google/gemini-4-argon",
     "google/gemma-3-27b-it",
     "mistralai/mistral-large-2512",
     "mistralai/mistral-small-2603",
@@ -65,6 +67,7 @@
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
+    "google/gemini-4-argon",
     "google/gemma-3-27b-it",
     "meta-llama/llama-3.3-70b-instruct",
     "mistralai/mistral-large-2512",
@@ -109,6 +112,7 @@
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
+    "google/gemini-4-argon",
     "google/gemma-3-27b-it",
     "meta-llama/llama-3.3-70b-instruct",
     "mistralai/mistral-large-2512",
@@ -294,6 +298,12 @@
       }
     ],
     "google/gemini-3.8-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "google/gemini-4-argon": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]

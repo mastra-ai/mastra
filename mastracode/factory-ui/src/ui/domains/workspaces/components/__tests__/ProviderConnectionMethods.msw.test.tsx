@@ -60,7 +60,7 @@ describe('provider method and scope are independent choices', () => {
     expect(dialog.getByText(/Everyone in your organization can use this key\./)).toBeInTheDocument();
     await user.type(dialog.getByLabelText('API key for Anthropic'), 'test-key');
     await user.click(dialog.getByRole('button', { name: 'Save' }));
-    expect(await screen.findByRole('combobox')).toHaveTextContent('anthropic/claude-fable-5');
+    expect(await screen.findByRole('combobox')).toHaveTextContent('Claude Fable 5');
     expect(writes).toEqual([{ key: 'test-key', envVar: 'ANTHROPIC_API_KEY', scope: 'org' }]);
   });
 
@@ -70,7 +70,7 @@ describe('provider method and scope are independent choices', () => {
     const user = userEvent.setup();
     renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
     await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
-    expect(await screen.findByRole('combobox')).toHaveTextContent('anthropic/claude-fable-5');
+    expect(await screen.findByRole('combobox')).toHaveTextContent('Claude Fable 5');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
