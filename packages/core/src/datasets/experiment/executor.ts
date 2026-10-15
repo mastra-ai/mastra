@@ -311,7 +311,7 @@ async function executeAgent(
   let rawResult: unknown;
   try {
     rawResult = isSupportedLanguageModel(model)
-      ? await agent.generate(input, {
+      ? await agent.generateMessageList(input, {
           scorers: {},
           returnScorerData: true,
           abortSignal: generateSignal,

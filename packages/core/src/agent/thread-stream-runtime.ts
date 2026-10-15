@@ -309,8 +309,7 @@ type PendingContinuation<OUTPUT = unknown> = {
 };
 
 type ClaimedThreadOwnerStreamOptions =
-  | AgentExecutionOptions<any>
-  | (() => AgentExecutionOptions<any> | Promise<AgentExecutionOptions<any>>);
+  AgentExecutionOptions<any> | (() => AgentExecutionOptions<any> | Promise<AgentExecutionOptions<any>>);
 
 type ClaimedThreadOwner<OUTPUT = unknown> = {
   agent: Agent<any, any, any, any>;
@@ -1761,7 +1760,7 @@ export class AgentThreadStreamRuntime {
       }
 
       try {
-        const output = await owner.agent.stream(signal, {
+        const output = await owner.agent.streamMessageList(signal, {
           ...(streamOptions as any),
           runId,
           memory: withThreadMemory(streamOptions?.memory, owner.resourceId, owner.threadId),
@@ -2136,8 +2135,7 @@ export class AgentThreadStreamRuntime {
         try {
           if (cancelled) return;
           const source = (output.__getUnfilteredFullStream?.() ?? output.fullStream) as
-            | ReadableStream<unknown>
-            | undefined;
+            ReadableStream<unknown> | undefined;
           if (!source) return;
 
           if (typeof source.getReader === 'function') {
@@ -2238,7 +2236,8 @@ export class AgentThreadStreamRuntime {
       }
       if (cutoffAt === undefined || cutoff <= trimmedThrough) return;
       trimmedThrough = cutoff;
-      void runtime.#getPubSub(pubsub)
+      void runtime
+        .#getPubSub(pubsub)
         .trimTopic(runtime.#threadTopic(key), { runId: output.runId, producedBefore: cutoffAt })
         .catch(() => {});
       let keep = cutoff + 1;
@@ -3460,7 +3459,7 @@ export class AgentThreadStreamRuntime {
         }
 
         state.startingQueuedRunIds.add(nextRunId);
-        const output = await previousRun.agent.stream(signal, {
+        const output = await previousRun.agent.streamMessageList(signal, {
           ...(previousRun.streamOptions as any),
           // Cancellation belongs to the finished run, not its queued follow-up.
           abortSignal: undefined,
@@ -3610,7 +3609,7 @@ export class AgentThreadStreamRuntime {
     state.activeThreadRunIds.set(key, pending.runId);
     state.threadKeysByRunId.set(pending.runId, key);
     void pending.agent
-      .stream(pending.messages, {
+      .streamMessageList(pending.messages, {
         ...(pending.streamOptions as any),
         runId: pending.runId,
         memory: withThreadMemory(pending.streamOptions?.memory, pending.resourceId, pending.threadId),
@@ -3810,7 +3809,7 @@ export class AgentThreadStreamRuntime {
       state.drainingIdleSignalsByThread.delete(key);
       this.#notifyThreadEvents(state);
       state.startingQueuedRunIds.add(pendingIdle.runId);
-      const output = await pendingIdle.agent.stream(pendingIdle.signal, {
+      const output = await pendingIdle.agent.streamMessageList(pendingIdle.signal, {
         ...(pendingIdle.streamOptions as any),
         runId: pendingIdle.runId,
         memory: withThreadMemory(pendingIdle.streamOptions?.memory, pendingIdle.resourceId, pendingIdle.threadId),
@@ -5509,7 +5508,7 @@ export class AgentThreadStreamRuntime {
       // that outlive the TTL, then kick off the stream.
       this.#startLeaseRenewal(resolvedPubSub, reservedKey, reservedRunId);
       try {
-        const output = await agent.stream(signal, {
+        const output = await agent.streamMessageList(signal, {
           ...(target.ifIdle?.streamOptions as any),
           untilIdle: true,
           runId: reservedRunId,

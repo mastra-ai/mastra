@@ -314,7 +314,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
 
       const structuringRequestContext = requestContext ? new RequestContext(requestContext.entries()) : undefined;
 
-      return this.agent.stream(messages, {
+      return this.agent.streamMessageList(messages, {
         model: this.structuringModel,
         requestContext: structuringRequestContext,
         toolChoice: 'none',
@@ -336,7 +336,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     }
 
     // Fallback: use the bare internal structuring agent (no conversation context)
-    return this.structuringAgent.stream(
+    return this.structuringAgent.streamMessageList(
       `Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details. Rely on the provided text and conversation history.\n\n${this.buildStructuringPrompt(streamParts)}`,
       {
         structuredOutput,
