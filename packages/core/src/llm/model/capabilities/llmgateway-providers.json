@@ -398,6 +398,7 @@
     "embercloud/glm-5.2",
     "embercloud/qwen3-coder-next",
     "entrim/deepseek-v4.1-flash",
+    "entrim/glm-5.3",
     "entrim/glm-5.3-flash",
     "fireworks/deepseek-v4-flash",
     "fireworks/deepseek-v4.1-flash",
@@ -694,6 +695,7 @@
     "deepinfra/muse-glimmer-30b",
     "deepinfra/qwen3.5-9b",
     "entrim/deepseek-v4.1-flash",
+    "entrim/glm-5.3",
     "entrim/glm-5.3-flash",
     "fireworks/deepseek-v4-flash",
     "fireworks/deepseek-v4.1-flash",
@@ -814,6 +816,12 @@
       }
     ],
     "entrim/deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "entrim/glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]

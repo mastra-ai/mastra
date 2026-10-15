@@ -186,6 +186,20 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /agents/:agentId/queue-signal": {
+    "method": "POST",
+    "path": "/agents/:agentId/queue-signal",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /agents/:agentId/signals": {
     "method": "POST",
     "path": "/agents/:agentId/signals",
