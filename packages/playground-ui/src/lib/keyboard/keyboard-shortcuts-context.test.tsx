@@ -342,11 +342,19 @@ describe('useKeydown inside KeyboardShortcutsProvider', () => {
       expect(onPage).not.toHaveBeenCalled();
     });
 
-    it('when the page loads first (child effects run before parent), then the page still wins', () => {
+    it('when the page mounts after the global binding, then the page still wins', () => {
       const onGlobal = vi.fn();
       const onPage = vi.fn();
-      renderApp(true, onGlobal, onPage);
+      const { rerender } = renderApp(false, onGlobal, onPage);
 
+      rerender(
+        <KeyboardShortcutsProvider>
+          <Shortcuts bindings={{ 'g$+t': onGlobal }} />
+          <Page>
+            <Shortcuts bindings={{ 'g$+t': onPage }} />
+          </Page>
+        </KeyboardShortcutsProvider>,
+      );
       pressSequence('g', 't');
 
       expect(onPage).toHaveBeenCalledTimes(1);

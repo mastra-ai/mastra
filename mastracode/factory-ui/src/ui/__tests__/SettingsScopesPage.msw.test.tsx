@@ -57,15 +57,19 @@ describe('Settings ownership', () => {
         keyBody = await request.json();
         return HttpResponse.json({ ok: true });
       }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
+        HttpResponse.json({ project: { ...settingsFactory, modelScope: 'factory' } }),
+      ),
     );
     const user = userEvent.setup();
     renderSettings('personal-models');
 
     expect(await screen.findByText('Your defaults')).toBeInTheDocument();
+    expect(await screen.findByText('This Factory uses organization credentials only')).toBeInTheDocument();
     expect(screen.queryByText('Factory defaults')).not.toBeInTheDocument();
     expect(screen.queryByText('Chat defaults')).not.toBeInTheDocument();
     expect(screen.queryByText('Custom providers')).not.toBeInTheDocument();
-    expect(screen.getByText('The model new chats start on. Applies to every mode.')).toBeInTheDocument();
+    expect(screen.getByText('The model new chats start on.')).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Connect with API key' }));
     expect(await screen.findByText('Covered by org')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Add API key for OpenAI' }));
@@ -123,7 +127,7 @@ describe('Settings ownership', () => {
     );
     const user = userEvent.setup();
     renderSettings('memory');
-    const input = await screen.findByDisplayValue('1000');
+    const input = await screen.findByDisplayValue('1,000');
     expect(requestedFactoryId).toBeNull();
     await user.clear(input);
     await user.type(input, '3000');
@@ -146,9 +150,9 @@ describe('Settings ownership', () => {
     );
     const user = userEvent.setup();
     renderSettings('memory');
-    await screen.findByDisplayValue('1000');
+    await screen.findByDisplayValue('1,000');
     await user.click(screen.getByRole('link', { name: 'Factory memory' }));
-    const input = await screen.findByDisplayValue('1000');
+    const input = await screen.findByDisplayValue('1,000');
     await waitFor(() => expect(requestedFactoryIds).toContain('fp-1'));
     expect(screen.queryByRole('group', { name: 'Who these settings apply to' })).not.toBeInTheDocument();
     await user.clear(input);

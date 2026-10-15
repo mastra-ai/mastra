@@ -266,7 +266,7 @@
       }
     },
     {
-      "hash": "712629f2fe44a089",
+      "hash": "04946c6df87a04f5",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -290,7 +290,7 @@
               "type": "function_call",
               "call_id": "call_rjYcEPR3jUF8HpR4s7FEpLN8",
               "name": "research",
-              "arguments": "{\"topic\":\"neural networks\",\"_background\":{\"enabled\":true,\"disposition\":\"deferred\",\"timeoutMs\":30000,\"maxRetries\":3}}"
+              "arguments": "{\"_background\":{\"disposition\":\"deferred\",\"enabled\":true,\"maxRetries\":3,\"timeoutMs\":30000},\"topic\":\"neural networks\"}"
             },
             {
               "type": "function_call_output",
@@ -496,7 +496,7 @@
       }
     },
     {
-      "hash": "389cbdc2bba03e06",
+      "hash": "6296a35ce8dbef85",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -520,7 +520,7 @@
               "type": "function_call",
               "call_id": "call_rjYcEPR3jUF8HpR4s7FEpLN8",
               "name": "research",
-              "arguments": "{\"topic\":\"neural networks\",\"_background\":{\"enabled\":true,\"disposition\":\"deferred\",\"timeoutMs\":30000,\"maxRetries\":3}}"
+              "arguments": "{\"_background\":{\"disposition\":\"deferred\",\"enabled\":true,\"maxRetries\":3,\"timeoutMs\":30000},\"topic\":\"neural networks\"}"
             },
             {
               "type": "function_call_output",
@@ -719,7 +719,7 @@
       }
     },
     {
-      "hash": "0ee9c5f417610b88",
+      "hash": "77de4e9605a58fbe",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -743,7 +743,7 @@
               "type": "function_call",
               "call_id": "call_rjYcEPR3jUF8HpR4s7FEpLN8",
               "name": "research",
-              "arguments": "{\"topic\":\"neural networks\",\"_background\":{\"enabled\":true,\"disposition\":\"deferred\",\"timeoutMs\":30000,\"maxRetries\":3}}"
+              "arguments": "{\"_background\":{\"disposition\":\"deferred\",\"enabled\":true,\"maxRetries\":3,\"timeoutMs\":30000},\"topic\":\"neural networks\"}"
             },
             {
               "type": "function_call_output",

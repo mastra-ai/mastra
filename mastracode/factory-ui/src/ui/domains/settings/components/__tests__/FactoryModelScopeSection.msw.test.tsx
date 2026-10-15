@@ -18,7 +18,7 @@ function renderSection() {
   );
 }
 
-function stubProject(modelScope: 'factory' | 'user', patchStatus = 200) {
+function stubProject(modelScope: 'factory' | 'user' | 'hybrid', patchStatus = 200) {
   const patchedBodies: unknown[] = [];
   let saved = modelScope;
 
@@ -37,7 +37,7 @@ function stubProject(modelScope: 'factory' | 'user', patchStatus = 200) {
         typeof body !== 'object' ||
         body === null ||
         !('modelScope' in body) ||
-        (body.modelScope !== 'factory' && body.modelScope !== 'user')
+        (body.modelScope !== 'factory' && body.modelScope !== 'user' && body.modelScope !== 'hybrid')
       ) {
         return HttpResponse.json({ error: 'invalid_project' }, { status: 400 });
       }
@@ -50,11 +50,11 @@ function stubProject(modelScope: 'factory' | 'user', patchStatus = 200) {
   return patchedBodies;
 }
 
-async function chooseFactoryScope(user: ReturnType<typeof userEvent.setup>) {
+async function chooseScope(user: ReturnType<typeof userEvent.setup>, label = 'Factory model and credentials') {
   const combobox = screen.getByRole('combobox', { name: 'Model scope' });
   await waitFor(() => expect(combobox).toBeEnabled());
   await user.click(combobox);
-  const option = await screen.findByRole('option', { name: 'Factory model and credentials' });
+  const option = await screen.findByRole('option', { name: label });
   fireEvent.pointerDown(option, { pointerType: 'mouse' });
   fireEvent.click(option, { detail: 1 });
   return combobox;
@@ -69,6 +69,11 @@ describe('FactoryModelScopeSection', () => {
     const combobox = screen.getByRole('combobox', { name: 'Model scope' });
     await waitFor(() => expect(combobox).toBeEnabled());
     expect(combobox).toHaveTextContent("Each user's model and credentials");
+    expect(
+      screen.getByText(
+        "Hybrid: sessions use their owner's credentials and default model, while work items use organization credentials and the Factory default. Factory and User apply one of those to both. Changing the scope never replaces a model a thread already selected.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it('saves the selected model scope and updates the displayed value', async () => {
@@ -76,11 +81,32 @@ describe('FactoryModelScopeSection', () => {
     const user = userEvent.setup();
     const { client } = renderSection();
 
-    const combobox = await chooseFactoryScope(user);
+    const combobox = await chooseScope(user);
     await waitForMutationsIdle(client);
 
     expect(patchedBodies).toEqual([{ modelScope: 'factory' }]);
     expect(combobox).toHaveTextContent('Factory model and credentials');
+  });
+
+  it('renders a hybrid Factory with the hybrid label', async () => {
+    stubProject('hybrid');
+
+    renderSection();
+
+    const combobox = screen.getByRole('combobox', { name: 'Model scope' });
+    await waitFor(() => expect(combobox).toHaveTextContent('Personal for sessions, Factory for work items'));
+  });
+
+  it('offers the hybrid scope and saves it', async () => {
+    const patchedBodies = stubProject('factory');
+    const user = userEvent.setup();
+    const { client } = renderSection();
+
+    const combobox = await chooseScope(user, 'Personal for sessions, Factory for work items');
+    await waitForMutationsIdle(client);
+
+    expect(patchedBodies).toEqual([{ modelScope: 'hybrid' }]);
+    expect(combobox).toHaveTextContent('Personal for sessions, Factory for work items');
   });
 
   it('shows an inline error when saving fails', async () => {
@@ -88,7 +114,7 @@ describe('FactoryModelScopeSection', () => {
     const user = userEvent.setup();
     const { client } = renderSection();
 
-    await chooseFactoryScope(user);
+    await chooseScope(user);
     await waitForMutationsIdle(client);
 
     expect(screen.getByText('Failed to update Factory model scope (400)')).toBeInTheDocument();

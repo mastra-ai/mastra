@@ -20,7 +20,7 @@ export function ExperimentsBulkActions({
   const isEmpty = selectedCount === 0;
 
   return (
-    <div className="flex min-h-8 items-center gap-1 whitespace-nowrap">
+    <div className="flex items-center gap-1 whitespace-nowrap">
       <Button
         variant="ghost"
         size="sm"

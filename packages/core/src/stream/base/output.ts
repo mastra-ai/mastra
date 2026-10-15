@@ -996,7 +996,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   ...otherMetadata,
                   modelId:
                     (chunk.payload.metadata?.modelId as string) || (chunk.payload.metadata?.model as string) || '',
-                  messages: chunk.payload.messages?.nonUser || [],
+                  messages: (chunk.payload as any)?._durableResponseMessages ?? chunk.payload.messages?.nonUser ?? [],
                   dbMessages: self.messageList.get.response.db(),
                   // We have to cast this until messageList can take generics also and type metadata, it was too
                   // complicated to do this in this PR, it will require a much bigger change.
@@ -1195,6 +1195,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   messages: messageList.get.response.aiV5.model(),
                   uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
                 };
+              } else if (self.#bufferedSteps.length > 0) {
+                // Durable finish chunks carry no model metadata; the last step's response
+                // already holds the run's response messages and model id (#26780).
+                response = { ...self.#bufferedSteps[self.#bufferedSteps.length - 1]!.response };
               }
 
               if (self.#finishUsageIsTotal) {

@@ -1767,6 +1767,8 @@ describe('createToolCallStep tool approval workflow', () => {
           args: { param: 'test' },
         },
         __streamState: 'serialized-state',
+        // Recorded unconditionally so a resume can tell "held no scopes" from a pre-upgrade snapshot.
+        __resolvedScopes: [],
       },
       {
         resumeLabel: 'test-call-id',

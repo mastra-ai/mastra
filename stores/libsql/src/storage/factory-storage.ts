@@ -473,9 +473,6 @@ export class LibSQLFactoryStorage extends FactoryStorage {
 
   async withTransaction<T>(fn: (ops: FactoryStorageOps) => Promise<T>): Promise<T> {
     return withClientWriteLock(this.#client, async () => {
-      if (this.#config.url.includes(':memory:')) {
-        return fn(new LibSQLFactoryStorageOps(this.#client, this.#schemas, runWithoutWriteLock));
-      }
       const transaction = await this.#client.transaction('write');
       try {
         const result = await fn(new LibSQLFactoryStorageOps(transaction, this.#schemas, runWithoutWriteLock));
