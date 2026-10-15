@@ -1,15 +1,11 @@
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
-import {
-  MASTRA_RESOURCE_ID_KEY,
-  MASTRA_SCOPES_KEY,
-  MASTRA_THREAD_ID_KEY,
-  RequestContext,
-} from '@mastra/core/request-context';
+import { MASTRA_SCOPES_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
+import { RESERVED_REQUEST_CONTEXT_KEYS } from '@mastra/server/server-adapter';
 import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -87,24 +83,10 @@ function toolCallingModel(toolName: string) {
 }
 
 /**
- * Mirrors RESERVED_CONTEXT_KEYS in packages/server/src/server/constants.ts.
- * Every one of these is forged in a request body below and must never reach
- * the tool's request context. If the server adds a reserved key, add it here.
+ * Every reserved key the server refuses from a request body. Each one is forged
+ * in a request body below and must never reach the tool's request context.
  */
-const RESERVED_KEYS = [
-  MASTRA_RESOURCE_ID_KEY,
-  MASTRA_THREAD_ID_KEY,
-  MASTRA_SCOPES_KEY,
-  'mastra__user',
-  'mastra__userPermissions',
-  'mastra__userRoles',
-  'mastra__authToken',
-  'mastra__isStudio',
-  'mastra__authMode',
-  'mastra__inheritedMemory',
-  'mastra__factoryMemorySettings',
-  'organizationId',
-] as const;
+const RESERVED_KEYS = RESERVED_REQUEST_CONTEXT_KEYS;
 
 type ToolSighting = {
   scopes: unknown;
