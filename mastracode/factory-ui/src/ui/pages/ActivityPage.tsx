@@ -4,27 +4,39 @@ import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/co
 import { useSearchParams } from 'react-router';
 
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
-import { ActivityTimeline } from '../domains/factory/components/activity/ActivityTimeline';
 import { CodebaseActivity } from '../domains/factory/components/activity/codebase/CodebaseActivity';
-import { NeedsYou } from '../domains/factory/components/activity/NeedsYou';
+import { NeedsYou } from '../domains/factory/components/activity/needs-you/NeedsYou';
+import { ActivityTimeline } from '../domains/factory/components/activity/timeline/ActivityTimeline';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 
-const ACTIVITY_VIEWS = [
-  { value: 'factory', label: 'Factory' },
-  { value: 'codebase', label: 'Codebase' },
-] as const;
+const VIEW_PARAM = 'view';
+const CODEBASE_VIEW = 'codebase';
 
-type ActivityView = (typeof ACTIVITY_VIEWS)[number]['value'];
+function ActivityBody({ codebase }: { codebase: boolean }) {
+  const factory = useActiveFactory();
 
-function activityView(value: string | null): ActivityView {
-  return ACTIVITY_VIEWS.find(view => view.value === value)?.value ?? 'factory';
+  if (codebase) return <CodebaseActivity factoryId={factory.id} repositories={factory.repositories} />;
+
+  return (
+    <>
+      <NeedsYou factoryId={factory.id} />
+      <ActivityTimeline factoryId={factory.id} />
+    </>
+  );
 }
 
 export function ActivityPage() {
-  const factory = useActiveFactory();
   const slots = useSidebarHeaderSlots();
   const [searchParams, setSearchParams] = useSearchParams();
-  const view = activityView(searchParams.get('view'));
+  const codebase = searchParams.get(VIEW_PARAM) === CODEBASE_VIEW;
+
+  const showCodebase = (next: boolean) => {
+    setSearchParams(current => {
+      if (next) current.set(VIEW_PARAM, CODEBASE_VIEW);
+      else current.delete(VIEW_PARAM);
+      return current;
+    });
+  };
 
   return (
     <PageLayout
@@ -37,34 +49,18 @@ export function ActivityPage() {
             <SegmentedControl
               aria-label="Activity view"
               size="sm"
-              value={view}
-              onValueChange={next =>
-                setSearchParams(current => {
-                  if (next === 'factory') current.delete('view');
-                  else current.set('view', next);
-                  return current;
-                })
-              }
+              value={codebase ? CODEBASE_VIEW : 'factory'}
+              onValueChange={next => showCodebase(next === CODEBASE_VIEW)}
             >
-              {ACTIVITY_VIEWS.map(option => (
-                <SegmentedControlItem key={option.value} value={option.value}>
-                  {option.label}
-                </SegmentedControlItem>
-              ))}
+              <SegmentedControlItem value="factory">Factory</SegmentedControlItem>
+              <SegmentedControlItem value={CODEBASE_VIEW}>Codebase</SegmentedControlItem>
             </SegmentedControl>
           </PageHeader.Action>
         </PageHeader>
       }
     >
       <div className="flex flex-col gap-10 pt-6 pb-16">
-        {view === 'factory' ? (
-          <>
-            <NeedsYou factoryId={factory.id} />
-            <ActivityTimeline factoryId={factory.id} />
-          </>
-        ) : (
-          <CodebaseActivity factoryId={factory.id} repositories={factory.repositories} />
-        )}
+        <ActivityBody codebase={codebase} />
       </div>
     </PageLayout>
   );

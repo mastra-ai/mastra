@@ -4,13 +4,17 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
-import { attentionKindSummaries } from '../../../../../../e2e/ui/attention';
-import { server } from '../../../../../../e2e/ui/msw-server';
-import { closePropertiesMenus, openPropertiesMenu, pickPropertyOption } from '../../../../../../e2e/ui/properties-menu';
-import { renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
-import type { FactoryActivityAttentionItem, FactoryAutomationFailedAttentionItem } from '../../services/attention';
-import type { WorkItemStageEntry } from '../../services/workItems';
-import { ActivityTimeline } from './ActivityTimeline';
+import { attentionKindSummaries, itemsOfRequestedKinds } from '../../../../../../../e2e/ui/attention';
+import { server } from '../../../../../../../e2e/ui/msw-server';
+import {
+  closePropertiesMenus,
+  openPropertiesMenu,
+  pickPropertyOption,
+} from '../../../../../../../e2e/ui/properties-menu';
+import { renderWithProviders, waitForMutationsIdle } from '../../../../../../../e2e/ui/render';
+import type { FactoryActivityAttentionItem, FactoryAutomationFailedAttentionItem } from '../../../services/attention';
+import type { WorkItemStageEntry } from '../../../services/workItems';
+import { ActivityTimeline } from '../timeline/ActivityTimeline';
 
 const FACTORY_ID = 'factory-1';
 
@@ -55,8 +59,12 @@ function stubAudit(events: unknown[], actors: Record<string, unknown> = {}) {
 
 function stubOpenAttention(items: Array<FactoryAutomationFailedAttentionItem | FactoryActivityAttentionItem>) {
   server.use(
-    http.get('*/web/factory/projects/:id/attention', () =>
-      HttpResponse.json({ items, kinds: attentionKindSummaries(items), hasMore: false }),
+    http.get('*/web/factory/projects/:id/attention', ({ request }) =>
+      HttpResponse.json({
+        items: itemsOfRequestedKinds(request, items),
+        kinds: attentionKindSummaries(items),
+        hasMore: false,
+      }),
     ),
   );
 }

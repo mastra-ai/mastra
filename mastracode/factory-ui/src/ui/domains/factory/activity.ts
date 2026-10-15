@@ -188,6 +188,51 @@ export function auditEntries(events: AuditEvent[], cards: Map<string, ActivityCa
   return entries.sort((left, right) => right.at - left.at);
 }
 
+export type ActivityGrouping = 'similar' | 'none';
+
+export function activityCards(items: WorkItem[]): Map<string, ActivityCard> {
+  return new Map(items.map(item => [item.id, { title: item.title, board: itemBoard(item) }]));
+}
+
+/** Stage moves from the board, everything else from the trail. */
+export function boardAndTrailEntries(
+  items: WorkItem[],
+  events: AuditEvent[],
+  showsBoardMoves: boolean,
+): ActivityEntry[] {
+  const moves = showsBoardMoves ? collapseRuns(factoryActivity(items)) : [];
+  return [...moves, ...factoryDeeds(events, activityCards(items))];
+}
+
+/** Board moves span all time, so they wait at the trail's cursor until the deeds beside them have loaded. */
+export function newestFirstUpToTrailCursor(
+  entries: ActivityEntry[],
+  events: AuditEvent[],
+  trailHasMore: boolean,
+): ActivityEntry[] {
+  const cursorAt = trailHasMore
+    ? Math.min(...events.flatMap(event => eventTime(event) ?? []))
+    : Number.NEGATIVE_INFINITY;
+  return entries.filter(entry => entry.at >= cursorAt).toSorted((left, right) => right.at - left.at);
+}
+
+export function entryTarget(entry: ActivityEntry): { id: string; board: string } | undefined {
+  return entry.kind === 'move' ? { id: entry.id, board: entry.board } : entry.item;
+}
+
+/** The pinned section already lists what needs action; the feed points at each such card once, on its latest line. */
+export function newestEntryPerCard(entries: ActivityEntry[], cardIds: ReadonlySet<string>): ReadonlySet<ActivityEntry> {
+  const seen = new Set<string>();
+  const flagged = new Set<ActivityEntry>();
+  for (const entry of entries) {
+    const cardId = entryTarget(entry)?.id;
+    if (cardId === undefined || !cardIds.has(cardId) || seen.has(cardId)) continue;
+    seen.add(cardId);
+    flagged.add(entry);
+  }
+  return flagged;
+}
+
 /** Only neighbours collapse, and only under one actor, so the stream keeps its order and a change of hands stays visible. */
 export function collapseRuns(moves: MovedItem[]): ActivityMove[] {
   const runs: ActivityMove[] = [];

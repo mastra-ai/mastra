@@ -132,12 +132,18 @@ const ATTENTION_GROUP_OF_KIND: Record<FactoryAttentionKind, FactoryAttentionGrou
   'automation-proposed': 'queue',
   activity: 'activity',
 };
-export const ATTENTION_KINDS = Object.keys(ATTENTION_GROUP_OF_KIND) as FactoryAttentionKind[];
+
+function isAttentionKind(key: string): key is FactoryAttentionKind {
+  return Object.hasOwn(ATTENTION_GROUP_OF_KIND, key);
+}
+
+export const ATTENTION_KINDS = Object.keys(ATTENTION_GROUP_OF_KIND).filter(isAttentionKind);
 
 export const INTERRUPTING_KINDS = ATTENTION_KINDS.filter(kind => ATTENTION_GROUP_OF_KIND[kind] === 'attention');
 
-/** Followed discussions are news, not something waiting on a person. */
 export const NEEDS_YOU_KINDS = ATTENTION_KINDS.filter(kind => ATTENTION_GROUP_OF_KIND[kind] !== 'activity');
+
+export const FOLLOWED_KINDS = ATTENTION_KINDS.filter(kind => ATTENTION_GROUP_OF_KIND[kind] === 'activity');
 
 export interface FactoryAttentionLatest {
   key: string;

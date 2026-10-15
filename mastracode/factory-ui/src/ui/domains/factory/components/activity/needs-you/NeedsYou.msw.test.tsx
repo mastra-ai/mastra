@@ -4,17 +4,17 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
-import { attentionKindSummaries } from '../../../../../../e2e/ui/attention';
-import { server } from '../../../../../../e2e/ui/msw-server';
-import { pickPropertyOption } from '../../../../../../e2e/ui/properties-menu';
-import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import { attentionKindSummaries, itemsOfRequestedKinds } from '../../../../../../../e2e/ui/attention';
+import { server } from '../../../../../../../e2e/ui/msw-server';
+import { pickPropertyOption } from '../../../../../../../e2e/ui/properties-menu';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../../e2e/ui/render';
 import type {
   FactoryActivityAttentionItem,
   FactoryAttentionItem,
   FactoryAutomationFailedAttentionItem,
   FactoryAutomationProposedAttentionItem,
   FactoryMentionAttentionItem,
-} from '../../services/attention';
+} from '../../../services/attention';
 import { NeedsYou } from './NeedsYou';
 
 const FACTORY_ID = 'factory-1';
@@ -126,8 +126,12 @@ describe('Needs you', () => {
           ],
         }),
       ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, () =>
-        HttpResponse.json({ items: [failure], kinds: attentionKindSummaries([failure]), hasMore: false }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, ({ request }) =>
+        HttpResponse.json({
+          items: itemsOfRequestedKinds(request, [failure]),
+          kinds: attentionKindSummaries([failure]),
+          hasMore: false,
+        }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () => {
         events.push('board-fetch');
@@ -156,7 +160,11 @@ describe('Needs you', () => {
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, ({ request }) => {
         const archivedView = new URL(request.url).searchParams.get('view') === 'archived';
         const visible = items.filter(attentionItem => attentionItem.archived === archivedView);
-        return HttpResponse.json({ items: visible, kinds: attentionKindSummaries(items), hasMore: false });
+        return HttpResponse.json({
+          items: itemsOfRequestedKinds(request, visible),
+          kinds: attentionKindSummaries(items),
+          hasMore: false,
+        });
       }),
       http.post(
         `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention/automation-failed/:decisionId/:occurrence/:action`,
@@ -196,8 +204,12 @@ describe('Needs you', () => {
     let items = [proposedItem('decision-8', 'Fix the flaky auth test')];
     const settled: string[] = [];
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, () =>
-        HttpResponse.json({ items, kinds: attentionKindSummaries(items), hasMore: false }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, ({ request }) =>
+        HttpResponse.json({
+          items: itemsOfRequestedKinds(request, items),
+          kinds: attentionKindSummaries(items),
+          hasMore: false,
+        }),
       ),
       http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions/:decisionId/:action`, ({ params }) => {
         settled.push(`${params.action}:${params.decisionId}`);
@@ -220,8 +232,12 @@ describe('Needs you', () => {
     let items = [proposedItem('decision-7', 'Drop the dead flag')];
     const settled: string[] = [];
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, () =>
-        HttpResponse.json({ items, kinds: attentionKindSummaries(items), hasMore: false }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, ({ request }) =>
+        HttpResponse.json({
+          items: itemsOfRequestedKinds(request, items),
+          kinds: attentionKindSummaries(items),
+          hasMore: false,
+        }),
       ),
       http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions/:decisionId/:action`, ({ params }) => {
         settled.push(`${params.action}:${params.decisionId}`);
@@ -247,14 +263,15 @@ describe('Needs you', () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, ({ request }) => {
         const before = new URL(request.url).searchParams.get('before');
-        requestedCursors.push(before);
         const firstPage = [mentionItem('comment-1', 'Fix login bug'), item('decision-1', 'Fix the loader', false)];
         const secondPage = [item('decision-2', 'Repair auth', false)];
+        const pagesOlder = before !== KIND_CURSOR && itemsOfRequestedKinds(request, secondPage).length > 0;
+        requestedCursors.push(before);
         return HttpResponse.json({
-          items: before === KIND_CURSOR ? secondPage : firstPage,
+          items: itemsOfRequestedKinds(request, before === KIND_CURSOR ? secondPage : firstPage),
           kinds: attentionKindSummaries([...firstPage, ...secondPage]),
-          hasMore: before !== KIND_CURSOR,
-          ...(before !== KIND_CURSOR ? { nextCursor: KIND_CURSOR } : {}),
+          hasMore: pagesOlder,
+          ...(pagesOlder ? { nextCursor: KIND_CURSOR } : {}),
         });
       }),
       http.post(
@@ -284,41 +301,46 @@ describe('Needs you', () => {
     expect(requestedCursors.filter(cursor => cursor !== null)).toEqual([KIND_CURSOR]);
   });
 
-  it('lists followed discussions too, under what waits on a person even when newer', async () => {
+  it('lists followed discussions on their own, under what waits on a person even when newer', async () => {
     const items: FactoryAttentionItem[] = [
       activityItem('item-4', 'Loader retry landed'),
       mentionItem('comment-1', 'Fix login bug'),
       item('decision-1', 'Fix the loader', false),
     ];
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, ({ request }) => {
-        const kinds = new URL(request.url).searchParams.getAll('kind');
-        const visible = items.filter(attentionItem => kinds.length === 0 || kinds.includes(attentionItem.kind));
-        return HttpResponse.json({ items: visible, kinds: attentionKindSummaries(items), hasMore: false });
-      }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, ({ request }) =>
+        HttpResponse.json({
+          items: itemsOfRequestedKinds(request, items),
+          kinds: attentionKindSummaries(items),
+          hasMore: false,
+        }),
+      ),
     );
     renderNeedsYou();
 
-    expect(await screen.findByText('Loader retry landed')).toBeVisible();
+    const followed = await screen.findByRole('region', { name: 'Discussions you follow' });
+    expect(within(followed).getByRole('link', { name: 'View card for Loader retry landed' })).toBeVisible();
     expect(screen.getAllByRole('link').map(link => link.getAttribute('aria-label'))).toEqual([
       'View card for Fix login bug',
       'View card for Fix the loader',
       'View card for Loader retry landed',
     ]);
+    expect(screen.getByText('2', { selector: 'span' })).toBeVisible();
   });
 
   it('offers older items when a page comes back empty but the scan has more', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, ({ request }) => {
-        const older = [item('decision-3', 'Old failure', false)];
-        return new URL(request.url).searchParams.get('before') === 'scan-200'
-          ? HttpResponse.json({ items: older, kinds: attentionKindSummaries(older), hasMore: false })
-          : HttpResponse.json({
-              items: [],
-              kinds: attentionKindSummaries(older),
-              hasMore: true,
-              nextCursor: 'scan-200',
-            });
+        const older = itemsOfRequestedKinds(request, [item('decision-3', 'Old failure', false)]);
+        if (older.length === 0 || new URL(request.url).searchParams.get('before') === 'scan-200') {
+          return HttpResponse.json({ items: older, kinds: attentionKindSummaries(older), hasMore: false });
+        }
+        return HttpResponse.json({
+          items: [],
+          kinds: attentionKindSummaries(older),
+          hasMore: true,
+          nextCursor: 'scan-200',
+        });
       }),
     );
     const user = userEvent.setup();
@@ -333,8 +355,12 @@ describe('Needs you', () => {
   it('marks everything read in one go, then drops the control', async () => {
     let items: FactoryAttentionItem[] = [item('decision-1', 'Fix the loader', false), mentionItem('c-1', 'Fix login')];
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, () =>
-        HttpResponse.json({ items, kinds: attentionKindSummaries(items), hasMore: false }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, ({ request }) =>
+        HttpResponse.json({
+          items: itemsOfRequestedKinds(request, items),
+          kinds: attentionKindSummaries(items),
+          hasMore: false,
+        }),
       ),
       http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention/read-all`, () => {
         items = items.map(attentionItem => ({ ...attentionItem, read: true }));
@@ -355,8 +381,12 @@ describe('Needs you', () => {
       item('decision-1', 'Fix the loader', false),
     ];
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, () =>
-        HttpResponse.json({ items, kinds: attentionKindSummaries(items), hasMore: false }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, ({ request }) =>
+        HttpResponse.json({
+          items: itemsOfRequestedKinds(request, items),
+          kinds: attentionKindSummaries(items),
+          hasMore: false,
+        }),
       ),
     );
     renderNeedsYou();
