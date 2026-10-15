@@ -3951,16 +3951,14 @@ export class Agent<
     };
   }
 
-  reorderModels(modelIds: string[]) {
-    if (!Array.isArray(this.model)) {
+  async reorderModels(modelIds: string[], requestContext: RequestContext = new RequestContext()) {
+    const modelSelection = await this.resolveModelSelection(this.model, requestContext);
+    if (!Array.isArray(modelSelection)) {
       this.logger.warn('Model is not an array', { agent: this.name });
       return;
     }
 
-    // TypeScript sees this.model as ModelWithRetries[] | ModelFallbacks after Array.isArray check.
-    // At runtime, arrays are always normalized to ModelFallbacks (with required id) in the constructor.
-    // The cast tells TypeScript to trust this runtime invariant.
-    this.model = (this.model as ModelFallbacks).sort((a, b) => {
+    this.model = modelSelection.sort((a, b) => {
       const aIndex = modelIds.indexOf(a.id);
       const bIndex = modelIds.indexOf(b.id);
       const aPos = aIndex === -1 ? Infinity : aIndex;
@@ -3969,26 +3967,27 @@ export class Agent<
     });
   }
 
-  updateModelInModelList({
-    id,
-    model,
-    enabled,
-    maxRetries,
-  }: {
-    id: string;
-    model?: DynamicArgument<MastraModelConfig>;
-    enabled?: boolean;
-    maxRetries?: number;
-  }) {
-    if (!Array.isArray(this.model)) {
+  async updateModelInModelList(
+    {
+      id,
+      model,
+      enabled,
+      maxRetries,
+    }: {
+      id: string;
+      model?: DynamicArgument<MastraModelConfig>;
+      enabled?: boolean;
+      maxRetries?: number;
+    },
+    requestContext: RequestContext = new RequestContext(),
+  ) {
+    const modelSelection = await this.resolveModelSelection(this.model, requestContext);
+    if (!Array.isArray(modelSelection)) {
       this.logger.warn('Model is not an array', { agent: this.name });
       return;
     }
 
-    // TypeScript sees this.model as ModelWithRetries[] | ModelFallbacks after Array.isArray check.
-    // At runtime, arrays are always normalized to ModelFallbacks (with required id) in the constructor.
-    // The cast tells TypeScript to trust this runtime invariant.
-    const modelArray = this.model as ModelFallbacks;
+    const modelArray = modelSelection;
     const modelToUpdate = modelArray.find(m => m.id === id);
     if (!modelToUpdate) {
       this.logger.warn('Model not found', { agent: this.name, modelId: id });

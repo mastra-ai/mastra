@@ -3634,16 +3634,16 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
   description: 'Reorders the model list for agents with multiple model configurations',
   tags: ['Agents', 'Models'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, reorderedModelIds }) => {
+  handler: async ({ mastra, agentId, reorderedModelIds, requestContext }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
-      const modelList = await agent.getModelList();
+      const modelList = await agent.getModelList(requestContext);
       if (!modelList || modelList.length === 0) {
         throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
       }
 
-      agent.reorderModels(reorderedModelIds);
+      await agent.reorderModels(reorderedModelIds, requestContext);
 
       return { message: 'Model list reordered' };
     } catch (error) {
@@ -3663,11 +3663,11 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
   description: 'Updates a specific model configuration in the agent model list',
   tags: ['Agents', 'Models'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, modelConfigId, model: bodyModel, maxRetries, enabled }) => {
+  handler: async ({ mastra, agentId, modelConfigId, model: bodyModel, maxRetries, enabled, requestContext }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
-      const modelList = await agent.getModelList();
+      const modelList = await agent.getModelList(requestContext);
       if (!modelList || modelList.length === 0) {
         throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
       }
@@ -3687,7 +3687,7 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
         ...(enabled !== undefined ? { enabled } : {}),
       };
 
-      agent.updateModelInModelList(updated);
+      await agent.updateModelInModelList(updated, requestContext);
 
       return { message: 'Model updated in model list' };
     } catch (error) {
