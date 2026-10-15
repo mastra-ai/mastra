@@ -126,6 +126,7 @@ import { stateSchema } from './schema.js';
 import type { MastraCodeState } from './schema.js';
 
 import { mastraBrand } from './theme-palette.js';
+import type { ThinkingLevelSetting } from './thinking.js';
 import { DiscardingScoresStorage } from './utils/discarding-scores-storage.js';
 import { syncGateways } from './utils/gateway-sync.js';
 import { registerSessionAndWaitForMaintenance, UNKNOWN_OWNER, unregisterSession } from './utils/maintenance-lock.js';
@@ -335,6 +336,15 @@ export interface MastraCodeConfig {
   settingsPath?: string;
   /** Initial state overrides (yolo, thinkingLevel, etc.) */
   initialState?: Partial<MastraCodeState>;
+  /**
+   * Host-owned thinking default for a request without its own level. When set,
+   * it replaces the settings.json defaults (`preferences.thinkingLevel` and the
+   * per-mode defaults); a session's own level still wins. Called on every model
+   * resolution, so a changed default applies to the next request.
+   */
+  resolveDefaultThinkingLevel?: (ctx: {
+    requestContext: RequestContext;
+  }) => ThinkingLevelSetting | Promise<ThinkingLevelSetting>;
   /** Create a thread during local boot when no existing thread matches. Default: true */
   createInitialThread?: boolean;
   /** Trusted host instructions resolved outside mutable session state. */
@@ -1235,7 +1245,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     },
     // `settingsPath` matches the source `createMastraCode()` reads from so the
     // per-mode thinking defaults resolve against the same config file.
-    model: withCredentialTenantPreparation(ctx => getDynamicModel(ctx, config?.settingsPath, { modeless })),
+    model: withCredentialTenantPreparation(async ctx =>
+      getDynamicModel(ctx, config?.settingsPath, {
+        modeless,
+        defaultThinkingLevel: await config?.resolveDefaultThinkingLevel?.(ctx),
+      }),
+    ),
     // Deferred notifications are re-dispatched by the core notification
     // dispatch workflow long after the originating send; the delivery policy
     // rebuilds the request context (model selection included) at delivery time
@@ -1388,6 +1403,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         maxProcessorRetries: MASTRACODE_MAX_PROCESSOR_RETRIES,
         settingsPath: config?.settingsPath,
         modeless,
+        resolveDefaultThinkingLevel: config?.resolveDefaultThinkingLevel,
       }),
     ],
     // Individual processors have tighter limits; this remains a defensive

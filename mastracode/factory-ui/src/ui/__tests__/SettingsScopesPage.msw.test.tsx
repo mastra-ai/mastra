@@ -13,7 +13,6 @@ import {
   settingsMemory,
   settingsProviders,
   settingsSession,
-  settingsThinking,
 } from './fixtures/settingsScopes';
 
 const PROVIDERS_URL = `${TEST_BASE_URL}/web/config/providers`;
@@ -44,7 +43,6 @@ beforeEach(() => {
     http.get(PROVIDERS_URL, () => HttpResponse.json(settingsProviders)),
     http.get(`${TEST_BASE_URL}/web/config/custom-providers`, () => HttpResponse.json({ providers: [] })),
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json(settingsDefaultModel)),
-    http.get(`${TEST_BASE_URL}/web/config/thinking`, () => HttpResponse.json(settingsThinking)),
     http.get(OM_URL, () => HttpResponse.json({ config: settingsMemory })),
   );
 });
@@ -90,8 +88,9 @@ describe('Settings ownership', () => {
     renderSettings('models');
 
     expect(await screen.findByText('Factory defaults')).toBeInTheDocument();
-    expect(screen.getByText('Chat defaults')).toBeInTheDocument();
-    expect(screen.getByText('Thinking defaults')).toBeInTheDocument();
+    expect(await screen.findByRole('slider', { name: 'Thinking level' })).toBeInTheDocument();
+    expect(screen.queryByText('Chat defaults')).not.toBeInTheDocument();
+    expect(screen.queryByText('Thinking defaults')).not.toBeInTheDocument();
     expect(screen.queryByText('Your defaults')).not.toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Connect with API key' }));
     await user.click(await screen.findByRole('button', { name: 'Update key for OpenAI' }));

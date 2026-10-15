@@ -1,3 +1,5 @@
+import { THINKING_LEVEL_VALUES } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { z } from 'zod';
 
 import { FACTORY_ROLE_STAGES } from '../rules/types.js';
@@ -5,6 +7,7 @@ import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/valid
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
 
 const FACTORY_ROLE_VALUES = Object.keys(FACTORY_ROLE_STAGES) as [string, ...string[]];
+const THINKING_LEVELS = THINKING_LEVEL_VALUES as [ThinkingLevelSetting, ...ThinkingLevelSetting[]];
 
 export type FactoryRouteContract = {
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
@@ -58,6 +61,7 @@ export const updateProjectBodySchema = z
     description: nullableTrimmed(2_000).optional(),
     defaultModelId: nullableTrimmed(200).optional(),
     modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
+    defaultThinkingLevel: z.enum(THINKING_LEVELS).optional(),
     autoRunEnabled: z.boolean().optional(),
     autoApprovePlans: z.boolean().optional(),
   })

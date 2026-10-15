@@ -169,6 +169,43 @@ describe('ProjectRoutes', () => {
     expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('hybrid');
   });
 
+  it('requires an organization admin to change the thinking default and rejects unknown levels', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Shared' } });
+    expect(project.defaultThinkingLevel).toBe('off');
+    const isOrganizationAdmin = vi.fn(async () => false);
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'member', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as never,
+      projectRoutes(seed, undefined, undefined, undefined, { auth: fakeRouteAuth({ isOrganizationAdmin }) }),
+    );
+    const patch = (body: Record<string, unknown>) =>
+      app.request(`/web/factory/projects/${project.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    const denied = await patch({ defaultThinkingLevel: 'high' });
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({
+      error: 'forbidden',
+      message: 'Organization administrator access is required to change the thinking default.',
+    });
+    expect((await seed.projects.getById({ id: project.id }))?.defaultThinkingLevel).toBe('off');
+
+    isOrganizationAdmin.mockResolvedValue(true);
+    expect((await patch({ defaultThinkingLevel: 'enormous' })).status).toBe(400);
+    const saved = await patch({ defaultThinkingLevel: 'high' });
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toMatchObject({ project: { defaultThinkingLevel: 'high' } });
+    expect((await seed.projects.getById({ id: project.id }))?.defaultThinkingLevel).toBe('high');
+  });
+
   it('creates a project in the requested model scope and rejects unknown scopes', async () => {
     const seed = await createFactoryStorageForTests();
     const app = new Hono();
