@@ -723,7 +723,7 @@ describe('trusted Factory credential policy', () => {
     const unavailable = new RequestContext();
     await expect(
       prepareSessionRunContext(unavailable, 'missing-session', { sessions: deps.sourceControl }),
-    ).resolves.toBe('unavailable');
+    ).resolves.toBe('session-not-found');
     await expect(prepareCredentialTenant(unavailable)).rejects.toThrow('could not be resolved');
   });
 
