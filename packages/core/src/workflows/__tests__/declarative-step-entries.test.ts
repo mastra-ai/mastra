@@ -347,15 +347,65 @@ describe.each(ENGINES)('declarative step runtime ($name engine)', ({ evented }) 
     const mastra = bind(wf, { agents: { customRegistrationKey: agent } });
     const wrapper = mastra.getAgentById(agent.id);
     expect(wrapper).not.toBe(agent);
-    const stream = vi.spyOn(wrapper, 'stream');
+    const originalStream = wrapper.stream.bind(wrapper);
+    const cleanups: ReturnType<typeof vi.fn>[] = [];
+    const stream = vi.spyOn(wrapper, 'stream').mockImplementation(async (...args: any[]) => {
+      const streamResult: any = await originalStream(...args);
+      const cleanup = vi.fn(streamResult.cleanup);
+      cleanups.push(cleanup);
+      return { ...streamResult, cleanup };
+    });
 
     const run = await wf.createRun();
     const result = await run.start({ inputData: { prompt: 'say hi' } });
     expect(result.status).toBe('success');
     expect(stream).toHaveBeenCalledOnce();
+    expect(cleanups).toHaveLength(1);
+    expect(cleanups[0]).toHaveBeenCalledOnce();
     if (result.status === 'success') {
       expect(result.result).toEqual({ text: 'durable response' });
     }
+  });
+
+  it('createStep() keeps a plain agent plain when an explicit durable wrapper of it is registered', async () => {
+    const base = textAgent('explicit-wrapper-agent', 'plain response');
+    const durable = createDurableAgent({ agent: base, cleanupTimeoutMs: 0 });
+    const wf = createWorkflow({
+      id: 'explicit-wrapper-agent-wf',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.any(),
+    })
+      .then(createStep(base))
+      .commit();
+    const mastra = bind(wf, { agents: { durable } });
+    const wrapperStream = vi.spyOn(mastra.getAgentById(base.id), 'stream');
+
+    const run = await wf.createRun();
+    const result = await run.start({ inputData: { prompt: 'say hi' } });
+    expect(result.status).toBe('success');
+    expect(wrapperStream).not.toHaveBeenCalled();
+    if (result.status === 'success') {
+      expect(result.result).toEqual({ text: 'plain response' });
+    }
+  });
+
+  it('createStep() warns when a durable: true agent is registered on a different Mastra', async () => {
+    const agent = textAgent('other-mastra-agent', 'plain response', true);
+    new Mastra({ agents: { agent }, logger: false });
+    const wf = createWorkflow({
+      id: 'other-mastra-agent-wf',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.any(),
+    })
+      .then(createStep(agent))
+      .commit();
+    const mastra = bind(wf);
+    const warn = vi.spyOn(mastra.getLogger(), 'warn');
+
+    const run = await wf.createRun();
+    const result = await run.start({ inputData: { prompt: 'say hi' } });
+    expect(result.status).toBe('success');
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('registered on a different Mastra instance'));
   });
 
   it('createStep() keeps an unrelated agent that shares an id with a registered durable agent', async () => {

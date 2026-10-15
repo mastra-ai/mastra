@@ -15,18 +15,45 @@ import type { EntryExecuteContext } from './types';
 /**
  * Returns the runtime registered for `agent` on `mastra`. Registering a
  * `durable: true` agent stores a durable wrapper instead of the original, so a
- * step holding the original must run through that wrapper. Matching is by
- * identity of the wrapped agent, so unrelated agents sharing an id are ignored.
+ * step holding the original must run through that wrapper. Only agents built
+ * with `durable` are swapped: an explicit `createDurableAgent({ agent })` leaves
+ * the plain handle plain. Matching is by identity of the wrapped agent, so
+ * unrelated agents sharing an id are ignored.
  */
 export function resolveRegisteredAgent<T>(agent: T, mastra?: Mastra): T {
-  const agents = mastra?.listAgents?.();
-  if (!agents) return agent;
-  for (const registered of Object.values(agents)) {
+  const candidate = agent as { durable?: unknown; id?: string; getMastraInstance?: () => Mastra | undefined };
+  if (!candidate?.durable) return agent;
+
+  for (const registered of Object.values(mastra?.listAgents?.() ?? {})) {
     if (registered !== agent && isDurableAgentLike(registered) && registered.agent === agent) {
       return registered as T;
     }
   }
+
+  // Attached to a Mastra the original skips its standalone durable path, so
+  // without a wrapper on this Mastra it runs non-durably.
+  const owner = candidate.getMastraInstance?.();
+  if (owner) {
+    (mastra ?? owner)
+      .getLogger()
+      ?.warn(
+        `Agent "${candidate.id}" has durable enabled but is registered on a different Mastra instance than this workflow, so the step runs it non-durably. Register the agent on the workflow's Mastra instance.`,
+      );
+  }
   return agent;
+}
+
+/**
+ * Warns when a durable agent runs through `streamLegacy()`: v1 models have no
+ * durable execution path, so the step runs non-durably.
+ */
+export function warnLegacyDurableFallback(agent: unknown, mastra?: Mastra): void {
+  if (!isDurableAgentLike(agent)) return;
+  mastra
+    ?.getLogger()
+    ?.warn(
+      `Agent "${agent.id}" is durable but uses a legacy v1 model, which has no durable execution path, so the step runs it non-durably.`,
+    );
 }
 
 /**
@@ -116,6 +143,7 @@ export async function runAgentEntry(
       (await agent.getModel({ requestContext })).specificationVersion === 'v1' &&
       typeof agent.streamLegacy === 'function'
     ) {
+      warnLegacyDurableFallback(agent, registry);
       const { fullStream } = await agent.streamLegacy((inputData as { prompt: string }).prompt, {
         ...agentOptions,
         requestContext,
