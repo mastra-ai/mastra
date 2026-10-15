@@ -16,12 +16,12 @@ import { z } from 'zod';
 import { MastraServer } from '../index';
 
 /**
- * Sentinel §5: agent-scope security contracts exercised through the REAL HTTP
- * routes (Hono MastraServer adapter + app.request), not handler unit mocks.
+ * Agent-scope security contracts exercised through the real HTTP routes
+ * (Hono MastraServer adapter + app.request), not handler unit mocks.
  *
  * 1. Identity scopes (`resource:`/`thread:`) never reach tool execution context —
- *    a knowledge-style tool must see only non-identity scopes in `mastra__scopes`.
- * 2. A request body can never pick the Knowledge resource: body `scopes` is
+ *    a tool must see only non-identity scopes in `mastra__scopes`.
+ * 2. A request body cannot choose the run's scopes or identity: body `scopes` is
  *    stripped by the handlers, and every reserved request-context key (scopes,
  *    identity, user, permissions, auth, memory, tenant — see RESERVED_KEYS
  *    below) in body `requestContext` is dropped individually by the server
@@ -30,8 +30,14 @@ import { MastraServer } from '../index';
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
-function stream(parts: unknown[]) {
-  return new ReadableStream({
+type DoStream = Extract<
+  NonNullable<NonNullable<ConstructorParameters<typeof MastraLanguageModelV2Mock>[0]>['doStream']>,
+  (...args: never[]) => unknown
+>;
+type StreamPart = Awaited<ReturnType<DoStream>>['stream'] extends ReadableStream<infer P> ? P : never;
+
+function stream(parts: StreamPart[]) {
+  return new ReadableStream<StreamPart>({
     start(controller) {
       for (const part of parts) controller.enqueue(part);
       controller.close();
@@ -59,7 +65,7 @@ function toolCallingModel(toolName: string) {
     },
     doStream: async () => {
       calls++;
-      const parts =
+      const parts: StreamPart[] =
         calls === 1
           ? [
               { type: 'tool-call', toolCallId: `call-${calls}`, toolName, input: '{}' },
@@ -74,7 +80,7 @@ function toolCallingModel(toolName: string) {
       return {
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],
-        stream: stream([{ type: 'stream-start', warnings: [] }, ...parts]) as any,
+        stream: stream([{ type: 'stream-start', warnings: [] }, ...parts]),
       };
     },
   });
@@ -113,15 +119,15 @@ type ToolSighting = {
 
 function buildApp(agentScopes?: string[]) {
   const sightings: ToolSighting[] = [];
-  const knowledgeTool = createTool({
-    id: 'knowledge-tool',
-    description: 'Captures the request context a knowledge tool would read scopes from',
+  const scopeProbeTool = createTool({
+    id: 'scope-probe-tool',
+    description: 'Captures the request context a scoped tool would read scopes from',
     inputSchema: z.object({}),
     execute: (_input, context) => {
       // Memory identity lands on the nested agent execution context, which the
       // generic createTool context type does not surface.
       const agentContext = (context as typeof context & { agent?: { threadId?: string; resourceId?: string } }).agent;
-      const requestContext = (context?.requestContext ?? new RequestContext()) as RequestContext;
+      const requestContext = context?.requestContext ?? new RequestContext();
       sightings.push({
         scopes: requestContext.get(MASTRA_SCOPES_KEY),
         reservedLeaks: RESERVED_KEYS.filter(key => requestContext.get(key) !== undefined),
@@ -137,8 +143,8 @@ function buildApp(agentScopes?: string[]) {
     id: 'scoped-agent',
     name: 'Scoped Agent',
     instructions: 'Test agent',
-    model: toolCallingModel('knowledgeTool'),
-    tools: { knowledgeTool },
+    model: toolCallingModel('scopeProbeTool'),
+    tools: { scopeProbeTool },
     memory: new MockMemory({ storage: new InMemoryStore() }),
     ...(agentScopes ? { scopes: agentScopes } : {}),
   });
