@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { DatasetRecord } from '@mastra/client-js';
+import type { DatasetRecord, GetScoresScorers_Response } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -43,7 +43,7 @@ const emptyVersionsResponse = { versions: [], pagination: { total: 0, page: 0, p
 function setupHandlers({
   datasets = defaultDatasets,
   scorers = {},
-}: { datasets?: DatasetRecord[]; scorers?: object } = {}) {
+}: { datasets?: DatasetRecord[]; scorers?: GetScoresScorers_Response } = {}) {
   const triggerCalls: Array<{ datasetId: string; body: Record<string, unknown> }> = [];
 
   server.use(
@@ -370,6 +370,20 @@ describe('ExperimentTriggerDialog', () => {
       fireEvent.click(runButton());
       await waitFor(() => expect(triggerCalls).toHaveLength(1));
       expect(triggerCalls[0].body.scorerIds).toEqual(['quality']);
+    });
+
+    it('shows a chip for a default scorer the list does not offer, and sends it', async () => {
+      const { triggerCalls } = setupHandlers({
+        datasets: [buildDataset({ scorerIds: ['retired-scorer'] })],
+        scorers: itemScorers,
+      });
+      renderDialog();
+
+      await waitFor(() => expect(chipLabels()).toEqual(['retired-scorer']));
+      await pickAgentOne();
+      fireEvent.click(runButton());
+      await waitFor(() => expect(triggerCalls).toHaveLength(1));
+      expect(triggerCalls[0].body.scorerIds).toEqual(['retired-scorer']);
     });
 
     it('sends no scorers once the defaults are removed', async () => {

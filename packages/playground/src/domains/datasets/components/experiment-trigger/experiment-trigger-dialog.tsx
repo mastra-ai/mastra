@@ -128,7 +128,11 @@ function NewExperimentDialog({ open, onOpenChange, onSuccess, ...initial }: Expe
     items: state.targetOptions.filter(option => option.type === group.type),
   })).filter(group => group.items.length > 0);
   const dataset = state.datasets.find(option => option.value === state.datasetId) ?? null;
-  const pickedScorers = state.scorerOptions.filter(option => state.scorerIds.includes(option.value));
+  // Every scorer that will be sent gets a chip, including ids the list doesn't offer (unregistered,
+  // or still loading), so the field never hides what Run submits.
+  const pickedScorers: ScorerOption[] = state.scorerIds.map(
+    id => state.scorerOptions.find(option => option.value === id) ?? { value: id, label: id },
+  );
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && state.canRun) {
