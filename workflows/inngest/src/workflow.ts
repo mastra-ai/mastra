@@ -46,6 +46,10 @@ function durableAgentWorkflowError(error: unknown): { error: Error; delivery?: '
   };
   const isMarkedStopWhenError =
     serialized?.code === DURABLE_STOP_WHEN_ERROR_ID || serialized?.id === DURABLE_STOP_WHEN_ERROR_ID;
+  // Inngest's serve transport serializes predicate failures as StepErrors and drops
+  // the MastraError id/details. Keep this prefix in sync with the memoized step id
+  // in create-inngest-agentic-workflow.ts; any failure in that step is classified
+  // as a stopWhen failure.
   const isStopWhenStepError = typeof serialized?.stepId === 'string' && serialized.stepId.startsWith('stop-when-');
   if (isMarkedStopWhenError || isStopWhenStepError) {
     const normalized = new Error(

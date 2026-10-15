@@ -388,7 +388,10 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         // cross-worker resume the entry is absent and we fall back to maxSteps.
         // The lookup happens inside a memoized step so Inngest replays reuse the
         // recorded decision (even on a worker without the registry entry) instead
-        // of re-invoking (possibly stateful) user predicates.
+        // of re-invoking (possibly stateful) user predicates. The `stop-when-`
+        // prefix is also the serve transport's failure classifier because Inngest
+        // StepError serialization drops the MastraError id/details; keep it in sync
+        // with durableAgentWorkflowError in workflow.ts.
         const stopped = await step.run(`stop-when-${state.runId}-${state.iterationCount}`, async () => {
           const stopWhen = getRunRegistryEntry(state.runId, mastra)?.stopWhen;
           if (!stopWhen || state.accumulatedSteps.length === 0) {
