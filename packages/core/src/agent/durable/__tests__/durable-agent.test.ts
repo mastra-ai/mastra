@@ -772,7 +772,7 @@ describe('createDurableAgentStream', () => {
     cleanup();
   });
 
-  it('should wait for the full CHUNK delivery before processing FINISH', async () => {
+  it('should wait for onChunk before FINISH without waiting for transport acknowledgement', async () => {
     const { createDurableAgentStream } = await import('../stream-adapter');
     let subscribedCallback!: EventCallback;
     vi.spyOn(pubsub, 'subscribeWithReplay').mockImplementation(async (_topic, callback) => {
@@ -783,7 +783,11 @@ describe('createDurableAgentStream', () => {
     const ackBlocked = new Promise<void>(resolve => {
       releaseAck = resolve;
     });
-    const onChunk = vi.fn();
+    let releaseCallback!: () => void;
+    const callbackBlocked = new Promise<void>(resolve => {
+      releaseCallback = resolve;
+    });
+    const onChunk = vi.fn(() => callbackBlocked);
     const onFinish = vi.fn();
     const runId = 'test-finish-chunk-delivery';
     const { output, cleanup, ready } = createDurableAgentStream({
@@ -795,38 +799,46 @@ describe('createDurableAgentStream', () => {
       onFinish,
     });
 
-    await ready;
-    const chunkDelivery = subscribedCallback(
-      {
-        type: AgentStreamEventTypes.CHUNK,
+    try {
+      await ready;
+      const ack = vi.fn(() => ackBlocked);
+      const chunkDelivery = subscribedCallback(
+        {
+          type: AgentStreamEventTypes.CHUNK,
+          runId,
+          data: { type: 'text-delta', payload: { text: 'test' } },
+        },
+        ack,
+      );
+      await vi.waitFor(() => expect(onChunk).toHaveBeenCalledOnce());
+
+      const finishDelivery = subscribedCallback({
+        type: AgentStreamEventTypes.FINISH,
         runId,
-        data: { type: 'text-delta', payload: { text: 'test' } },
-      },
-      async () => {
-        await ackBlocked;
-      },
-    );
-    await vi.waitFor(() => expect(onChunk).toHaveBeenCalledOnce());
+        data: {
+          output: { text: 'done', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
+          stepResult: { reason: 'stop', warnings: [], isContinued: false },
+        },
+      });
+      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(onFinish).not.toHaveBeenCalled();
 
-    const finishDelivery = subscribedCallback({
-      type: AgentStreamEventTypes.FINISH,
-      runId,
-      data: {
-        output: { text: 'done', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
-        stepResult: { reason: 'stop', warnings: [], isContinued: false },
-      },
-    });
-    await Promise.resolve();
-    expect(onFinish).not.toHaveBeenCalled();
-
-    releaseAck();
-    await chunkDelivery;
-    await finishDelivery;
-    for await (const _chunk of output.fullStream) {
-      // Drain the stream after FINISH completes.
+      releaseCallback();
+      await vi.waitFor(() => {
+        expect(ack).toHaveBeenCalledOnce();
+        expect(onFinish).toHaveBeenCalledOnce();
+      });
+      await finishDelivery;
+      for await (const _chunk of output.fullStream) {
+        // Drain the stream while the transport acknowledgement is still blocked.
+      }
+      releaseAck();
+      await chunkDelivery;
+    } finally {
+      releaseCallback();
+      releaseAck();
+      cleanup();
     }
-    expect(onFinish).toHaveBeenCalledOnce();
-    cleanup();
   });
 
   it('should stop the idle timer while FINISH waits for chunk delivery', async () => {
