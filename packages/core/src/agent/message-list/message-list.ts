@@ -444,7 +444,13 @@ export class MessageList {
 
   public addSignal(signal: CreatedAgentSignal, options?: { source?: MessageSource }): CreatedAgentSignal {
     const source = options?.source ?? 'input';
-    const createdAt = this.generateCreatedAt(source, new Date());
+    // A signal that names the message it precedes (e.g. memory's temporal-gap reminder)
+    // sorts just before that message instead of being stamped at arrival time.
+    const precedesMessageId = signal.metadata?.precedesMessageId;
+    const precededMessage = typeof precedesMessageId === 'string' ? this.getMessageById(precedesMessageId) : undefined;
+    const createdAt = precededMessage
+      ? new Date(precededMessage.createdAt.getTime() - 1)
+      : this.generateCreatedAt(source, new Date());
     const acceptedAt = signal.acceptedAt ?? signal.createdAt;
     const signalInput = {
       id: signal.id,
@@ -452,6 +458,7 @@ export class MessageList {
       contents: signal.contents,
       attributes: signal.attributes,
       metadata: signal.metadata,
+      author: signal.author,
       providerOptions: signal.providerOptions,
       createdAt,
       acceptedAt,
@@ -698,6 +705,14 @@ export class MessageList {
     getSource: (message: MastraDBMessage) => MessageSource | null;
   } {
     return this.stateManager.createSourceChecker();
+  }
+
+  /**
+   * Ids of every message that entered this list from memory or as input, including messages
+   * later promoted to the response or replaced by a copy with the same id.
+   */
+  public getRememberedAndInputMessageIds(): Set<string> {
+    return new Set([...this.memoryMessagesPersisted, ...this.newUserMessagesPersisted].map(message => message.id));
   }
 
   public getLatestUserContent(): string | null {

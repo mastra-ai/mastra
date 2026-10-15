@@ -127,6 +127,13 @@ The first `execute` parameter is the validated value from `inputSchema`. Destruc
     isOptional: true,
   },
   {
+    name: 'beforeApproval',
+    type: '(input, context) => void | { proceed: false; output: unknown } | Promise<...>',
+    description:
+      'Runs before the approval gate for calls that require approval, receiving the input validated against `inputSchema` (defaults applied) and a context with `toolCallId`, `toolName`, `requestContext`, and `workspace`. Return `{ proceed: false, output }` to reject the call: the agent does not pause for approval, `execute` is not called, and `output` is returned to the model as the tool result. Return nothing to continue to the approval gate. Not run when the input fails `inputSchema` validation (`execute` reports the validation error after approval) or when resuming after an approval decision. If the hook throws, the error is logged and the call proceeds to the approval gate, so keep validating inside `execute` as well.',
+    isOptional: true,
+  },
+  {
     name: 'mcp',
     type: 'MCPToolProperties',
     description:

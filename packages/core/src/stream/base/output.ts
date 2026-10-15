@@ -225,12 +225,15 @@ export type FullOutput<OUTPUT = undefined> = {
  * processor deliberately clearing the text to `''`. Never collapse the two with
  * a truthiness check: a redacting processor must be able to produce empty text.
  */
-function resolveOutputTextSkippingCompletionChecks(messageList: MessageList): string | undefined {
+function resolveOutputMessageSkippingCompletionChecks(messageList: MessageList): MastraDBMessage | undefined {
   const responseDbMessages = messageList.get.response.db();
-  const hasCompletionCheckMessages = responseDbMessages.some(m => m.content?.metadata?.completionResult);
-  const lastRealMessage = hasCompletionCheckMessages
+  return responseDbMessages.some(m => m.content?.metadata?.completionResult)
     ? responseDbMessages.findLast(m => !m.content?.metadata?.completionResult)
     : responseDbMessages[responseDbMessages.length - 1];
+}
+
+function resolveOutputTextSkippingCompletionChecks(messageList: MessageList): string | undefined {
+  const lastRealMessage = resolveOutputMessageSkippingCompletionChecks(messageList);
   if (!lastRealMessage) return undefined;
   if (lastRealMessage.role === 'assistant' && lastRealMessage.content?.parts) {
     const stepParts = messageList.partsSinceStepBoundary(lastRealMessage);
@@ -238,11 +241,160 @@ function resolveOutputTextSkippingCompletionChecks(messageList: MessageList): st
       return stepParts.map(p => (p.type === 'text' ? p.text : '')).join('');
     }
   }
+  const hasCompletionCheckMessages = messageList.get.response.db().some(m => m.content?.metadata?.completionResult);
   const converted = hasCompletionCheckMessages
     ? convertMessages([lastRealMessage]).to('AIV4.Core')
     : messageList.get.response.aiV4.core();
   const lastConverted = converted[converted.length - 1];
   return lastConverted ? coreContentToString(lastConverted.content) : undefined;
+}
+
+/**
+ * A single entry of a stored message's part array.
+ */
+type StepMessagePart = MastraDBMessage['content']['parts'][number];
+
+/**
+ * Step text for the current iteration of the message that supplies the resolved output text.
+ *
+ * The iteration boundary is a property of a message's own part array, so the offset measured before
+ * processing must not be transplanted onto a message a processor produced. Resolve the boundary in
+ * this order:
+ *   1. the message's own `step-start` marker, when it has one;
+ *   2. for the same message, the pre-processing step text where it survives (an unchanged in-place
+ *      rewrite, or a split of the current iteration's text), the pre-processing offset while the
+ *      parts before it are unchanged, then the offset while the part count and part kinds are
+ *      unchanged (redaction or other rewrites that keep positions), then the unchanged prefix;
+ *   3. for a different message, the trailing text matching the pre-processing step text, which finds
+ *      the boundary when a processor replaced the id of the accumulated response;
+ *   4. otherwise the whole message, which then holds only this iteration.
+ */
+function resolveProcessedStepText({
+  processedStepMessage,
+  processedStepParts,
+  originalMessageId,
+  originalIterationPartOffset,
+  originalPartCount,
+  originalParts,
+  originalStepText,
+  outputText,
+}: {
+  processedStepMessage: MastraDBMessage | undefined;
+  processedStepParts: StepMessagePart[] | undefined;
+  originalMessageId: string | undefined;
+  originalIterationPartOffset: number | undefined;
+  originalPartCount: number | undefined;
+  originalParts: StepMessagePart[] | undefined;
+  originalStepText: string | undefined;
+  outputText: string | undefined;
+}): string {
+  if (!processedStepMessage || !processedStepParts) return outputText ?? '';
+
+  const textWithin = (parts: StepMessagePart[]) => parts.map(part => (part.type === 'text' ? part.text : '')).join('');
+
+  // A `step-start` part in the processed message marks where its current iteration begins.
+  const boundaryIndex = processedStepParts.findLastIndex(part => part.type === 'step-start');
+  if (boundaryIndex !== -1) {
+    return textWithin(processedStepParts.slice(boundaryIndex + 1));
+  }
+
+  if (processedStepMessage.id === originalMessageId && originalParts) {
+    const sliceFrom = (index: number) => textWithin(processedStepParts.slice(index));
+    const offset = originalIterationPartOffset;
+
+    // The pre-processing step text still ends the current iteration when its text positions survived
+    // processing — an in-place rewrite, or a split that left the earlier parts untouched.
+    const textOffset = findIterationOffsetInParts(processedStepParts, originalStepText);
+    if (textOffset !== undefined) return sliceFrom(textOffset);
+
+    // The measured offset still applies while the parts before it are unchanged.
+    if (
+      offset !== undefined &&
+      offset > 0 &&
+      processedStepParts.length >= offset &&
+      originalParts.slice(0, offset).every((part, index) => partMatches(part, processedStepParts[index]))
+    ) {
+      return sliceFrom(offset);
+    }
+
+    // A rewrite that keeps the part count and each part's kind preserves positions even when the text
+    // changed (redaction), so the measured offset still applies.
+    if (
+      offset !== undefined &&
+      originalPartCount !== undefined &&
+      processedStepParts.length === originalPartCount &&
+      originalParts.slice(0, offset).every((part, index) => part?.type === processedStepParts[index]?.type)
+    ) {
+      return sliceFrom(offset);
+    }
+
+    // A changed part count or kind means positions moved; the unchanged prefix still marks the boundary.
+    let common = 0;
+    while (
+      common < originalParts.length &&
+      common < processedStepParts.length &&
+      partMatches(originalParts[common], processedStepParts[common])
+    ) {
+      common++;
+    }
+    if (common > 0) return sliceFrom(common);
+
+    return textWithin(processedStepParts);
+  }
+
+  // A message the processor produced may still carry earlier iterations (its id was replaced), so find
+  // where the pre-processing step text ends. When it is not found the message holds only this iteration.
+  const offset = findIterationOffsetInParts(processedStepParts, originalStepText);
+  return offset !== undefined ? textWithin(processedStepParts.slice(offset)) : textWithin(processedStepParts);
+}
+
+/** Whether two parts carry the same content, for matching an unchanged prefix across processing. */
+function partMatches(a: StepMessagePart | undefined, b: StepMessagePart | undefined): boolean {
+  if (!a || !b || a.type !== b.type) return false;
+  if (a.type === 'text') return a.text === (b as typeof a).text;
+  if (a.type === 'reasoning') return a.reasoning === (b as typeof a).reasoning;
+  if (a.type === 'tool-invocation') {
+    return a.toolInvocation?.toolCallId === (b as typeof a).toolInvocation?.toolCallId;
+  }
+  if (a.type === 'step-start') return Number(a.createdAt) === Number((b as typeof a).createdAt);
+  return true;
+}
+
+/** Index in `parts` where the trailing text that equals `stepText` begins, or undefined. */
+function findIterationOffsetInParts(parts: StepMessagePart[], stepText: string | undefined): number | undefined {
+  if (!stepText) return undefined;
+
+  let suffixText = '';
+  for (let index = parts.length - 1; index >= 0; index--) {
+    const part = parts[index];
+    if (part?.type === 'text') suffixText = part.text + suffixText;
+    if (suffixText === stepText) return index;
+    if (!stepText.endsWith(suffixText)) return undefined;
+  }
+  return undefined;
+}
+
+function findIterationPartOffset(
+  messageList: MessageList,
+  message: MastraDBMessage,
+  stepText: string,
+): number | undefined {
+  const parts = message.content?.parts;
+  if (!parts) return undefined;
+
+  const stepParts = messageList.partsSinceStepBoundary(message);
+  if (stepParts.length < parts.length) return parts.length - stepParts.length;
+  if (!stepText) return parts.length;
+
+  let suffixText = '';
+  for (let index = parts.length - 1; index >= 0; index--) {
+    const part = parts[index];
+    if (part?.type === 'text') suffixText = part.text + suffixText;
+    if (suffixText === stepText) return index;
+    if (!stepText.endsWith(suffixText)) return undefined;
+  }
+
+  return undefined;
 }
 
 export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
@@ -334,6 +486,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     totalTokens: undefined,
   };
   #usageCountMissing = new Set<(typeof primaryUsageCountKeys)[number]>();
+  /**
+   * Usage of the most recently completed step. Kept apart from `#bufferedSteps`
+   * because goal truncation clears that buffer while usage keeps accumulating.
+   */
+  #lastStepUsage: LLMStepResult<OUTPUT>['usage'] | undefined = undefined;
   #finishUsageIsTotal = false;
   #tripwire: StepTripwireData | undefined = undefined;
   #wasSuspended = false;
@@ -607,7 +764,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
             }
           },
           flush() {
-            processorRunner.endStreamProcessorSpans(processorStates);
+            // Only this step's model stream ended; the step's tool results are still to come.
+            processorRunner.endStreamProcessorSpans(processorStates, { keepStepScopedSpans: true });
           },
           cancel() {
             processorRunner.endStreamProcessorSpans(processorStates);
@@ -991,7 +1149,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   ...otherMetadata,
                   modelId:
                     (chunk.payload.metadata?.modelId as string) || (chunk.payload.metadata?.model as string) || '',
-                  messages: chunk.payload.messages?.nonUser || [],
+                  messages: (chunk.payload as any)?._durableResponseMessages ?? chunk.payload.messages?.nonUser ?? [],
                   dbMessages: self.messageList.get.response.db(),
                   // We have to cast this until messageList can take generics also and type metadata, it was too
                   // complicated to do this in this PR, it will require a much bigger change.
@@ -1006,6 +1164,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               });
 
               self.#bufferedSteps.push(stepResult);
+              self.#lastStepUsage = stepResult.usage;
 
               // `text` is excluded from a rejected attempt via the empty `stepText`
               // above; the structured object needs the same treatment. Drop the
@@ -1189,6 +1348,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   messages: messageList.get.response.aiV5.model(),
                   uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
                 };
+              } else if (self.#bufferedSteps.length > 0) {
+                // Durable finish chunks carry no model metadata; the last step's response
+                // already holds the run's response messages and model id (#26780).
+                response = { ...self.#bufferedSteps[self.#bufferedSteps.length - 1]!.response };
               }
 
               if (self.#finishUsageIsTotal) {
@@ -1244,14 +1407,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 },
               };
 
+              let outputResultTripwire: StepTripwireData | undefined;
               try {
                 if (self.processorRunner && !self.#options.isLLMExecutionStep) {
                   // Run output processors when NOT in LLM execution step context
                   // (i.e., when this is the final MastraModelOutput for the agent)
 
-                  // Capture original text before processing for comparison
                   const lastStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
-                  const originalText = lastStep?.text || '';
+                  const lastStepText = lastStep?.text || '';
 
                   const outputResult: OutputResult = {
                     text: self.#bufferedText.join(''),
@@ -1274,6 +1437,16 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     );
                   }
 
+                  const outputTextBeforeProcessing = resolveOutputTextSkippingCompletionChecks(self.messageList);
+                  const stepMessage = resolveOutputMessageSkippingCompletionChecks(self.messageList);
+                  const stepMessageParts = stepMessage?.content?.parts;
+                  const iterationPartOffset = stepMessage
+                    ? findIterationPartOffset(self.messageList, stepMessage, lastStepText)
+                    : undefined;
+                  // Snapshot the parts before processing so the reconciliation can tell whether the
+                  // prefix of the response survived unchanged (a processor may rewrite the array in place).
+                  const originalStepMessageParts = stepMessageParts ? [...stepMessageParts] : undefined;
+
                   self.messageList = await self.processorRunner.runOutputProcessors(
                     self.messageList,
                     resolveObservabilityContext(options),
@@ -1283,27 +1456,46 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     outputResult,
                   );
 
-                  // Get text from the latest response message (the last assistant message)
+                  const responseMessages = self.messageList.get.response.db();
+                  // Reconcile against the message the resolved output text is read from, not the
+                  // pre-processing message matched by id: a processor can retain that message and
+                  // append a revised response, in which case the id match returns the stale original
+                  // and the step text disagrees with `getFullOutput()`. Fall back to the id match in
+                  // the corner case where no non-completion response remains to resolve text from.
+                  const processedStepMessage = stepMessage
+                    ? (resolveOutputMessageSkippingCompletionChecks(self.messageList) ??
+                      responseMessages.find(message => message.id === stepMessage.id))
+                    : undefined;
                   const outputText = resolveOutputTextSkippingCompletionChecks(self.messageList);
+                  const processedStepParts = processedStepMessage?.content?.parts;
+                  const stepText =
+                    outputText !== outputTextBeforeProcessing
+                      ? resolveProcessedStepText({
+                          processedStepMessage,
+                          processedStepParts,
+                          originalMessageId: stepMessage?.id,
+                          originalIterationPartOffset: iterationPartOffset,
+                          originalPartCount: stepMessageParts?.length,
+                          originalParts: originalStepMessageParts,
+                          originalStepText: lastStepText,
+                          outputText,
+                        })
+                      : undefined;
 
-                  // Only update the last step's text if output processors actually modified it
-                  // This preserves text from retry scenarios where step.text is already correct.
-                  // Compare against undefined, not truthiness, so a processor clearing the text
-                  // to '' still overwrites the step text instead of leaking the original.
-                  if (
-                    self.#status !== 'canceled' &&
-                    lastStep &&
-                    outputText !== undefined &&
-                    outputText !== originalText
-                  ) {
-                    lastStep.text = outputText;
+                  // Earlier buffered steps retain their model text, so only the final step of a continuation
+                  // is reconciled against the processor's output. Compare against undefined, not truthiness,
+                  // so clearing to '' applies when the processor removes that iteration's response.
+                  if (self.#status !== 'canceled' && lastStep && stepText !== undefined && stepText !== lastStepText) {
+                    lastStep.text = stepText;
                   }
 
                   // Use the processed text when a response message exists, even if the
-                  // processor intentionally emptied it. Only fall back to the raw model
-                  // text when there is no processed message at all.
+                  // processor intentionally emptied it. When the processor removed that
+                  // iteration's response entirely, resolve to '' so the text promise stays
+                  // consistent with the cleared step text. Only fall back to the raw model
+                  // text when there was no response message to process at all.
                   this.resolvePromises({
-                    text: outputText ?? originalText,
+                    text: outputText ?? (stepMessage ? '' : lastStepText),
                     finishReason: self.#finishReason,
                   });
 
@@ -1312,8 +1504,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
                     response = {
                       ...otherMetadata,
-                      messages: messageList.get.response.aiV5.model(),
-                      uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
+                      messages: self.messageList.get.response.aiV5.model(),
+                      uiMessages:
+                        self.messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
                     };
                   }
 
@@ -1343,6 +1536,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     metadata: error.options?.metadata,
                     processorId: error.processorId,
                   };
+                  outputResultTripwire = self.#tripwire;
                   // A tripwire rejects the output without erasing it; keep `text` in sync with
                   // steps/response messages and report the rejection via `tripwire`.
                   self.resolvePromises({
@@ -1453,7 +1647,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
                 if (!self.#finishCallbackSent) {
                   self.#finishCallbackSent = true;
-                  await options?.onFinish?.(onFinishPayload, { writer: outputResultWriter });
+                  await options?.onFinish?.(onFinishPayload, {
+                    writer: outputResultWriter,
+                    ...(outputResultTripwire && { outputResultTripwire }),
+                  });
                 }
               }
 
@@ -2171,6 +2368,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #createAbortedOnFinishPayload(): MastraOnFinishCallbackArgs<OUTPUT> {
     // Capture only text buffered before the abort event. Providers may continue producing
     // chunks after cancellation, but those chunks cannot extend this terminal snapshot.
+    const emptyUsage = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
+    // Steps that completed before the abort were already billed by the provider, so keep their usage.
     return {
       finishReason: 'aborted',
       text: this.#bufferedText.join(''),
@@ -2185,13 +2384,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       dynamicToolCalls: [],
       dynamicToolResults: [],
       content: [],
-      usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+      usage: this.#lastStepUsage ?? emptyUsage,
       warnings: [],
       providerMetadata: undefined,
       request: {},
       response: {},
       steps: [],
-      totalUsage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+      totalUsage: this.#lastStepUsage ? this.#getTotalUsage() : emptyUsage,
       object: undefined as OUTPUT,
     };
   }
@@ -2390,6 +2589,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       request: this.#request,
       usageCount: this.#usageCount,
       usageCountMissing: [...this.#usageCountMissing],
+      lastStepUsage: this.#lastStepUsage,
       tripwire: this.#tripwire,
       wasSuspended: this.#wasSuspended,
       messageList: this.messageList.serialize(),
@@ -2437,6 +2637,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     }
 
     this.#tripwire = state.tripwire;
+    this.#lastStepUsage = state.lastStepUsage ?? state.bufferedSteps?.at(-1)?.usage;
     this.#wasSuspended = state.wasSuspended ?? state.status === 'suspended';
     this.messageList = this.messageList.deserialize(state.messageList);
     // Buffered steps hold only the IDs of the response messages they had seen;

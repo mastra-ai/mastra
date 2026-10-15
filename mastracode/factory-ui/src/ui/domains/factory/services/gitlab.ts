@@ -16,7 +16,7 @@ export interface GitLabStatus {
   connections?: GitLabConnection[];
   accounts?: string[];
   reauthRequired: boolean;
-  reason?: 'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready';
+  reason?: 'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready' | 'unavailable';
 }
 
 export interface GitLabIssue {
@@ -135,10 +135,10 @@ export async function fetchGitLabStatus(baseUrl: string): Promise<GitLabStatus> 
     if (res.status === 401) {
       return { enabled: false, configured: false, reauthRequired: false, reason: 'auth_required' };
     }
-    if (!res.ok) return { enabled: false, configured: false, reauthRequired: false };
+    if (!res.ok) return { enabled: false, configured: false, reauthRequired: false, reason: 'unavailable' };
     return (await res.json()) as GitLabStatus;
   } catch {
-    return { enabled: false, configured: false, reauthRequired: false };
+    return { enabled: false, configured: false, reauthRequired: false, reason: 'unavailable' };
   }
 }
 

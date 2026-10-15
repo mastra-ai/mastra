@@ -560,7 +560,7 @@ describe('DuckDB advanced trace query', () => {
       page: { next: expect.any(String) },
     });
     if (!('traces' in response)) throw new Error('Expected trace results');
-    expect(Object.keys(response.traces[0]!)).toHaveLength(16);
+    expect(Object.keys(response.traces[0]!)).toHaveLength(18);
     expect(response.traces[0]).toMatchObject({
       name: 'Agent run',
       entityId: 'agent-1',
@@ -568,6 +568,8 @@ describe('DuckDB advanced trace query', () => {
       createdAt: '2026-01-01T12:00:00.000Z',
       metadata: { customer: { id: 'customer-1' }, count: 2 },
       inputPreview: 'Help with my order',
+      outputPreview: 'Sure, which order?',
+      errorPreview: null,
     });
     expect(response.traces[0]).not.toHaveProperty('input');
   });
@@ -577,7 +579,7 @@ describe('DuckDB advanced trace query', () => {
       ...traceRow('trace-a', '2026-01-01T12:00:00.000Z'),
       entityId: null,
       metadata: null,
-      input: null,
+      inputPreview: '',
     };
     const query = vi.fn().mockResolvedValue([row]);
     const response = await queryTraces({ query } as unknown as DuckDBConnection, plan());
@@ -648,7 +650,9 @@ function traceRow(traceId: string, startedAt: string) {
     entityId: 'agent-1',
     parentSpanId: null,
     metadata: JSON.stringify({ customer: { id: 'customer-1' }, count: 2 }),
-    input: JSON.stringify({ messages: [{ role: 'user', content: 'Help with my order' }] }),
+    inputPreview: 'Help with my order',
+    outputPreview: 'Sure, which order?',
+    errorPreview: '',
     threadId: null,
     resourceId: null,
     startedAt: new Date(startedAt),

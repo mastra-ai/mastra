@@ -1,0 +1,496 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as TableStories from './table.stories';
+
+<Meta of={TableStories} />
+
+# Table
+
+`Table` has two visual variants. The existing `default` variant is unchanged; `variant="inset"` gives it the raised DataList surface and content-sized rows. Both variants are built from the native table elements: `table`, `thead`, `tbody`, `tr`, `th`, and `td`. The compound parts render those elements and accept their native props. What goes inside a cell is up to you.
+
+```tsx
+import { Table } from '@mastra/playground-ui/components/Table';
+```
+
+<Canvas of={TableStories.Inset} />
+
+```tsx
+<Table variant="inset" aria-labelledby="credit-history">
+  <Table.Header>
+    <Table.Row>
+      <Table.Head>Type</Table.Head>
+      <Table.Head>Amount</Table.Head>
+      <Table.Head className="w-full">Description</Table.Head>
+      <Table.Head align="end">Balance</Table.Head>
+    </Table.Row>
+  </Table.Header>
+  <Table.Body>
+    {credits.map(credit => (
+      <Table.Row key={credit.id}>
+        <Table.Cell>{credit.type}</Table.Cell>
+        <Table.Cell>{credit.amount}</Table.Cell>
+        <Table.Cell>{credit.title}</Table.Cell>
+        <Table.Cell align="end">{credit.balance}</Table.Cell>
+      </Table.Row>
+    ))}
+  </Table.Body>
+</Table>
+```
+
+## Table or DataList
+
+The inset Table variant and DataList draw the same surface, so a page can mix them. They do different jobs.
+
+- **`Table`** is for rows of data people read and compare, such as credit history, usage, plans, invoices, and settings records. Interaction lives in cells (a link, a menu, an input) or in an optional whole-row link.
+- **`DataList`** is for lists of entities people click into, such as agents, traces, runs, logs, and datasets. It adds the gliding row hover, keyboard row navigation, sticky and reorderable columns, virtualization, and infinite loading.
+
+Choose `DataList` when the rendered view needs its list-specific navigation, sticky or reorderable columns, or virtualization. Total record count is not the deciding factor: a million-record dataset rendered as 25-row pages is still a Table use case.
+
+## Variants and compatibility
+
+Import both variants from the existing `@mastra/playground-ui/components/Table` entrypoint. There is no separate table package or new entrypoint.
+
+- **`variant="default"`**, or omit `variant`: keeps the existing table markup, sizing, styling, selection, and row keyboard behavior. `size="default"` and `size="small"` keep their existing meaning.
+- **`variant="inset"`**: adds the raised surface and horizontal scroll area. Rows have a 36px minimum and grow with their contents. `size` does not change inset row density; use content composition rather than a fixed height.
+- **`columnDividers`** is off by default and applies only to inset tables. It separates body columns, not the header labels. It is not a horizontal-border variant.
+
+Existing imports (`Thead`, `Th`, `Tbody`, `Row`, `Cell`, `TxtCell`, `EntryCell`, and `DateTimeCell`) keep working. These parts also read the inset variant from the table, so opting into it does not require switching to compound names.
+
+The two header shapes are intentionally different:
+
+```tsx
+<Table>
+  <Thead>
+    <Th>Name</Th>
+    <Th>Status</Th>
+  </Thead>
+  <Tbody>{rows}</Tbody>
+</Table>
+
+<Table variant="inset">
+  <Table.Header>
+    <Table.Row>
+      <Table.Head>Name</Table.Head>
+      <Table.Head>Status</Table.Head>
+    </Table.Row>
+  </Table.Header>
+  <Table.Body>{rows}</Table.Body>
+</Table>
+```
+
+`Thead` renders both `thead` and its `tr`, preserving its original API. `Table.Header` renders only `thead`, so you supply `Table.Row` explicitly. Do not put a row inside `Thead`; that would nest two `tr` elements.
+
+<Canvas of={TableStories.Default} />
+
+## Parts and props
+
+The recipes below use `variant="inset"`. Every compound part spreads the rest of its props onto its element, so `id`, `aria-*`, `data-*`, `ref`, event handlers, and `colSpan` work the way they do in plain HTML. `className` is for layout only: width, placement, and display. The look comes from the props below.
+
+### `Table`
+
+Renders a `table`. The inset variant adds a raised card and horizontal scroll area around it.
+
+- `variant?: 'default' | 'inset'`, default `'default'`.
+- `size?: 'default' | 'small'`, default `'default'`; applies to the default variant.
+- In inset mode, `className` applies to the outer card, while `style`, `ref`, events, and native table attributes apply to the `table`. In default mode, both `className` and `style` apply to the `table`.
+- `columnDividers?: boolean` draws a 1px line between columns.
+- Name the table with `aria-label`, or with `aria-labelledby` pointing at the visible heading.
+
+### `Table.Header`
+
+Renders `thead`. Holds one header row.
+
+### `Table.Body`
+
+Renders `tbody` (the same component as `Tbody`). In inset mode it holds the data rows, rounds the top of the first row, and separates rows with a 1px gap.
+
+### `Table.Row`
+
+Renders `tr` (the same component as `Row`). The default variant preserves existing `selected`, `isActive`, and row-action behavior; `selected` has no effect in inset tables. In inset mode a row that contains a `Table.RowLink` highlights on hover and keyboard focus.
+
+### `Table.Head`
+
+Renders `th` (the same component as `Th`). The alignment below applies to inset tables.
+
+- `align?: 'start' | 'center' | 'end'`, default `'start'`. Use `'end'` for numeric columns.
+- Set `aria-sort` on a sortable column.
+
+### `Table.Cell`
+
+Renders `td` (the same component as `Cell`). In inset mode it renders children directly, without the legacy flex wrapper. The props below apply to inset tables.
+
+- `align?: 'start' | 'center' | 'end'`, default `'start'`. Use `'end'` for numbers, matching the column's head.
+- `tone?: 'ink' | 'muted'`, default `'ink'`. Leave data cells at `'ink'`; see **Text color** below for when `'muted'` applies.
+
+### `Table.RowButton`
+
+Renders a `button` whose click area covers the whole row, for an action that stays on the page, such as opening a drawer.
+
+- Takes every `button` prop except `type`, which is always `"button"`.
+- Put it in the cell that names the row. Its text is the button's accessible name.
+
+### `Table.SortButton`
+
+Renders a `button` that wraps a `Table.Head` label with a sort arrow.
+
+- `direction?: 'ascending' | 'descending' | 'none'`, default `'none'`. Pass the same value to the head's `aria-sort`.
+- Takes every `button` prop, including `onClick`. The label is the accessible name, so it needs no `aria-label`.
+
+### `Table.RowLink`
+
+Renders `a`, or the element you pass to `render`.
+
+- Takes every `a` prop, including `href`.
+- `render` swaps in a router link: `render={<Link to="/projects/1" />}`.
+- Its click area covers the whole row.
+
+### `Table.Pagination`
+
+Numbered page navigation: Previous, page numbers, and Next. It is a ready-made composition of `Pagination` from `@mastra/playground-ui/components/Pagination`; compose those parts yourself for links with URLs or for Previous and Next only (see **Navigation / Pagination**). Render it **after** the `Table`, never inside `table`, `thead`, or `tbody`. It renders a `nav` landmark containing native buttons.
+
+- `page: number` is the **zero-based** current page. `page={0}` highlights “1”.
+- `pageCount: number` is the total number of pages.
+- `onPageChange: (page: number) => void` receives the zero-based page the person chose. The pager never changes its own page.
+- `aria-label` names the landmark, default `"Pagination"`. Name it after the table when a page has more than one pager, for example `"Credit history pages"`.
+- With seven pages or fewer, every page shows. Beyond that, the first and last pages stay visible and distant pages collapse into `…` around the current page.
+- Previous and Next stay in place on the first and last page, marked `aria-disabled`, so the layout and keyboard focus never jump.
+- The current page wears a raised pill that slides to the new page, and a hover highlight glides under the pointer, the same fluid treatment as the menus. Both respect reduced motion.
+
+The prop type is exported as `TablePaginationProps`.
+
+## Sizing and layout
+
+The following sizing rules apply to the inset variant.
+
+**Row height comes from the content.** Every row is at least 36px tall, the same as a `DataList` row, so rows stay even when one of them holds a button. A cell with two lines of text or a wrapped paragraph makes its row taller. The header row is 40px.
+
+**Columns size to their content.** The widest value in a column sets its width. To give the spare width to one column, put `className="w-full"` on its `Table.Head`. For a fixed width, put a width class such as `w-32` on the head, or use a native `<colgroup>`.
+
+**Text is left-aligned. Numbers are right-aligned.** A header label lines up with the edge of its column, including sortable headers and icon-only columns such as row actions, which take `align="end"` like the button below them. Leave `align` at its default for text, badges, dates, and controls. Set `align="end"` on the `Table.Head` and every `Table.Cell` of a numeric column: amounts, balances, counts, durations, sizes, and numeric inputs. Right alignment lines digits up by place value, so people compare sizes at a glance. Do not center columns.
+
+**Text color is the same across columns.** Leave data cells at the default `tone="ink"`. Do not mute some columns, such as dates or balances, while others stay full strength; mixed column colors read as a hierarchy that isn't there. The exceptions:
+
+- A table may keep its first column, which names the row, at full strength and set `tone="muted"` on every other column. Apply it to the whole table, never to a few columns.
+- Secondary text inside a cell, such as a caption under a title, uses `Txt tone="muted"`.
+- A negative amount uses `tone="muted"` on its cell, as described next.
+
+**Negative amounts are muted, not red.** Format money with `formatFullNumber(value, { currency: 'USD' })` from `@mastra/playground-ui/utils/cost`, which keeps the minus sign (`-$12.40`), and set `tone="muted"` on the cell when the value is below zero. Usage and charges are normal activity, not errors, so they must not look like a problem. The minus sign carries the meaning; the lighter gray only helps it scan.
+
+**Text stays on one line.** Cells do not wrap, so a short value such as `18 vCPU-hours` never breaks. When a cell holds prose, wrap it in your own element that allows wrapping, and give it a minimum width:
+
+```tsx
+<Table.Cell>
+  <Txt as="p" variant="body-sm" className="min-w-64 whitespace-normal">
+    {agent.notes}
+  </Txt>
+</Table.Cell>
+```
+
+**Numbers use tabular figures** across the whole table, so digits line up from row to row without an extra class.
+
+**Wide tables scroll sideways** inside the card instead of widening the page. Inset tables are keyboard-focusable: Tab to the table, then use the arrow keys to scroll its overflow area. Row links and cell controls remain subsequent Tab stops. The native `tabIndex` prop can override this, but do not remove the only focusable element from a read-only scroll area.
+
+## Recipes
+
+### A title with a second line
+
+Stack two elements in the cell. Use `Txt` for the second line so it takes the caption size and the muted tone.
+
+```tsx
+<Table.Cell>
+  <div className="flex flex-col">
+    <span>{credit.title}</span>
+    <Txt as="span" variant="caption" tone="muted">
+      {credit.reason}
+    </Txt>
+  </div>
+</Table.Cell>
+```
+
+### Column dividers, wrapping, and editable cells
+
+Keep one row per record. `columnDividers` draws a 1px line between columns. Inputs, switches, and selects work in any cell. Numeric inputs follow the number rule: right-align the column.
+
+<Canvas of={TableStories.InsetComposition} />
+
+```tsx
+<Table variant="inset" columnDividers aria-labelledby="agent-usage">
+  <Table.Header>
+    <Table.Row>
+      <Table.Head>Agent</Table.Head>
+      <Table.Head className="w-full">Notes</Table.Head>
+      <Table.Head align="end">Cost</Table.Head>
+      <Table.Head align="end">Monthly budget</Table.Head>
+      <Table.Head>Paused</Table.Head>
+    </Table.Row>
+  </Table.Header>
+  <Table.Body>
+    {agents.map(agent => (
+      <Table.Row key={agent.id}>
+        <Table.Cell>{agent.name}</Table.Cell>
+        <Table.Cell>
+          <Txt as="p" variant="body-sm" className="min-w-64 whitespace-normal">
+            {agent.note}
+          </Txt>
+        </Table.Cell>
+        <Table.Cell align="end">{formatFullNumber(agent.cost, { currency: 'USD' })}</Table.Cell>
+        <Table.Cell align="end">
+          <Input aria-label={`Monthly budget for ${agent.name}`} size="sm" className="ml-auto w-20 text-end" />
+        </Table.Cell>
+        <Table.Cell>
+          <Switch aria-label={`Pause ${agent.name}`} />
+        </Table.Cell>
+      </Table.Row>
+    ))}
+  </Table.Body>
+</Table>
+```
+
+Avoid `rowSpan` for grouping. Merged cells are hard to scan and read out of order. Repeat the value on each row, or move the detail to its own table.
+
+### Rows that link
+
+Put a `Table.RowLink` in the cell that names the row. It is a real link: Tab reaches it, Enter follows it, and Cmd-click opens it in a new tab. Its click area stretches over the whole row, and the row highlights on hover and keyboard focus. Buttons, menus, and inputs in the same row sit above the link and keep their own clicks, with no extra code.
+
+<Canvas of={TableStories.InsetLinkedRows} />
+
+```tsx
+<Table.Row>
+  <Table.Cell>
+    <Table.RowLink render={<Link to={`/projects/${project.id}`} />}>{project.name}</Table.RowLink>
+  </Table.Cell>
+  <Table.Cell>{project.size}</Table.Cell>
+  <Table.Cell align="end">
+    <Button variant="ghost" size="icon-sm" aria-label={`More actions for ${project.name}`} tooltip="More">
+      <Ellipsis />
+    </Button>
+  </Table.Cell>
+</Table.Row>
+```
+
+Use one `Table.RowLink` per row. For a row that opens something on the page instead, use `Table.RowButton`.
+
+### Rows that open something
+
+When clicking a row opens a drawer, dialog, or side panel instead of navigating, use `Table.RowButton`. It behaves like `Table.RowLink`: the click area covers the row, the row highlights on hover and focus, and other controls in the row keep their own clicks. Enter and Space activate it.
+
+<Canvas of={TableStories.InsetRowButtons} />
+
+```tsx
+<Table.Row>
+  <Table.Cell>
+    <Table.RowButton onClick={() => setSelected(credit)}>{credit.type}</Table.RowButton>
+  </Table.Cell>
+  <Table.Cell align="end">{formatFullNumber(credit.amount, { currency: 'USD' })}</Table.Cell>
+</Table.Row>
+```
+
+Use one `Table.RowLink` or `Table.RowButton` per row, never both. Whole-row targets need `variant="inset"`; in a default table they render as a plain link or button in their cell. Never put `onClick` on `Table.Row` itself: a `tr` can't take keyboard focus, so the row would only work with a mouse.
+
+### Showing and hiding columns
+
+Columns are just the cells you render, so the caller keeps the visible set and renders the matching `Table.Head` and `Table.Cell`s. A `DropdownMenu` with `CheckboxItem`s in the `ActionRow` is the control. Keep the first column, which names the row, always visible.
+
+<Canvas of={TableStories.InsetColumnPicker} />
+
+```tsx
+const [hidden, setHidden] = useState<ReadonlySet<ColumnId>>(new Set());
+const visible = columns.filter(column => !hidden.has(column.id));
+
+<DropdownMenu>
+  <DropdownMenu.Trigger
+    render={
+      <Button variant="ghost" icon={<Columns3 />}>
+        Columns
+      </Button>
+    }
+  />
+  <DropdownMenu.Content align="end">
+    <DropdownMenu.Label>Show columns</DropdownMenu.Label>
+    {columns.map(column => (
+      <DropdownMenu.CheckboxItem
+        key={column.id}
+        checked={!hidden.has(column.id)}
+        disabled={column.required}
+        onCheckedChange={() => toggle(column.id)}
+      >
+        {column.label}
+      </DropdownMenu.CheckboxItem>
+    ))}
+  </DropdownMenu.Content>
+</DropdownMenu>
+
+<Table variant="inset" aria-label="Credit history">
+  <Table.Header>
+    <Table.Row>
+      {visible.map(column => (
+        <Table.Head key={column.id} align={column.align}>
+          {column.label}
+        </Table.Head>
+      ))}
+    </Table.Row>
+  </Table.Header>
+  <Table.Body>
+    {rows.map(row => (
+      <Table.Row key={row.id}>
+        {visible.map(column => (
+          <Table.Cell key={column.id} align={column.align}>
+            {column.cell(row)}
+          </Table.Cell>
+        ))}
+      </Table.Row>
+    ))}
+  </Table.Body>
+</Table>
+```
+
+To remember the choice across visits, store the hidden set where the page keeps its preferences, such as local storage or the URL. Filtering rows by a column's value is separate: use the search and filter recipe below.
+
+### Search and filters
+
+Controls go in an `ActionRow` above the table: search and filters in `ActionRow.Start`, everything else in `ActionRow.End`. When the table has an `ActionRow`, put section links such as “Open billing portal” at the end of it rather than beside the heading, so every control sits on one line above the table. Filter the rows yourself and render the empty row when nothing matches.
+
+<Canvas of={TableStories.InsetSearchAndFilter} />
+
+```tsx
+<ActionRow>
+  <ActionRow.Start>
+    <ListSearch label="Search credits" placeholder="Search credits" value={search} onSearch={setSearch} />
+  </ActionRow.Start>
+  <ActionRow.End>
+    <Combobox
+      aria-label="Filter by status"
+      multiple
+      options={statusOptions}
+      placeholder="Status"
+      value={statuses}
+      onValueChange={setStatuses}
+      className="w-40"
+    />
+  </ActionRow.End>
+</ActionRow>
+<Table variant="inset" aria-labelledby="credit-history">…</Table>
+```
+
+For filters on several fields, use `PropertyFilterCreator`, and show the applied filters with `PropertyFilterApplied`.
+
+<Canvas of={TableStories.InsetPropertyFilter} />
+
+### Sorting
+
+Keep the sort in your own state, sort the rows before rendering them, and put a `Table.SortButton` in each sortable `Table.Head`. Set `aria-sort` on the head so screen readers announce the order.
+
+<Canvas of={TableStories.InsetSorting} />
+
+```tsx
+<Table.Head align="end" aria-sort={sort.key === 'balance' ? sort.direction : 'none'}>
+  <Table.SortButton direction={sort.key === 'balance' ? sort.direction : 'none'} onClick={() => onSort('balance')}>
+    Balance
+  </Table.SortButton>
+</Table.Head>
+```
+
+The whole header label is the button, so the label stays aligned with its column. The arrow sits on the inner side of the label: after it in a left-aligned column, before it in a right-aligned one, so the label's outer edge always lines up with the cells below. The arrow shows the active direction; on unsorted columns it appears on hover and keyboard focus.
+
+When the server sorts, keep the sort in the URL with `useUrlSort` from `@mastra/playground-ui/sort/use-url-sort` and render the rows the API returns.
+
+### Pagination
+
+<Canvas of={TableStories.InsetPagination} />
+
+The caller owns the page, the page size, and the rows. Filter and sort the full list first, then slice it. Reset to the first page whenever the search, filters, sort, or page size changes, so a shorter result never strands someone on an empty page.
+
+```tsx
+const pageSize = 25;
+const [page, setPage] = useState(0);
+const [search, setSearch] = useState('');
+const filtered = credits.filter(credit => matchesSearch(credit, search));
+const pageCredits = filtered.slice(page * pageSize, (page + 1) * pageSize);
+
+<ListSearch
+  label="Search credits"
+  placeholder="Search credits"
+  value={search}
+  onSearch={value => {
+    setSearch(value);
+    setPage(0);
+  }}
+/>
+<Table variant="inset" aria-label="Credit history">
+  <CreditHeader />
+  <Table.Body>
+    <CreditRows credits={pageCredits} />
+  </Table.Body>
+</Table>
+<Table.Pagination
+  aria-label="Credit history pages"
+  page={page}
+  pageCount={Math.ceil(filtered.length / pageSize)}
+  onPageChange={setPage}
+/>
+```
+
+For server-side pages, pass the page index you requested and compute `pageCount` from the response's total, `Math.ceil(total / perPage)`. Render the rows the server returned without slicing them again, and send search, sort, and filters to the server. With React Query, `placeholderData` keeps the previous page on screen while the next one loads; set `aria-busy` on the table meanwhile. Translate a one-based API page at the request boundary, because the pager is zero-based.
+
+Numbered pages need a total. For a cursor API that only reports whether more rows exist, use Previous and Next controls, such as `DataList.Pagination`, instead.
+
+With many pages, the first and last stay visible and the rest collapse around the current page:
+
+<Canvas of={TableStories.InsetPaginationManyPages} />
+
+### Loading
+
+Render the real header right away and fill the body with `SkeletonText` placeholders, one per cell. Set `aria-busy` on the table while it loads. The header and the surface stay put when the data arrives.
+
+<Canvas of={TableStories.InsetLoading} />
+
+```tsx
+<Table variant="inset" aria-labelledby="credit-history" aria-busy={isLoading}>
+  <CreditHeader />
+  <Table.Body>
+    {isLoading
+      ? placeholderIds.map(id => (
+          <Table.Row key={id}>
+            {columns.map(column => (
+              <Table.Cell key={column}>
+                <SkeletonText className="w-16" />
+              </Table.Cell>
+            ))}
+          </Table.Row>
+        ))
+      : rows}
+  </Table.Body>
+</Table>
+```
+
+### Empty
+
+Keep the header and render one row with a cell that spans every column. Say what is empty, and keep the table on the page so nothing jumps when rows appear.
+
+<Canvas of={TableStories.InsetEmpty} />
+
+```tsx
+<Table.Row>
+  <Table.Cell colSpan={6} tone="muted">
+    No credits match your filters
+  </Table.Cell>
+</Table.Row>
+```
+
+When the table is the only thing on the page and there has never been any data, show `EmptyState` in place of the table.
+
+## Accessibility
+
+- Name every table. Point `aria-labelledby` at the visible section heading, or pass `aria-label` when there is none.
+- `Table.Head` renders `th`, so a screen reader reads the column name with each cell. Give an icon-only column a hidden label: `<Table.Head><span className="sr-only">Actions</span></Table.Head>`.
+- A row link's text is what screen readers announce, so put it in the cell that names the row: the project name, not the price.
+- Give every icon button in a row an `aria-label` that names the row, such as `More actions for support-agent`.
+- For an inset navigation row, do not put `onClick` on `Table.Row`. Use `Table.RowLink` for native navigation, Cmd-click, and an accessible link name. The existing legacy row-action behavior remains available but is not a substitute for a link.
+- Set `aria-sort` on sortable heads and `aria-busy` on a table that is loading.
+- Keep `Table.Pagination` outside the table markup, and name it with `aria-label` when a page has more than one pager. The current page is marked with `aria-current="page"`.
+
+## Avoid
+
+- Restyling a part with `className`: colors, text sizes, padding, heights, borders, radius, or shadows. Use `align`, `tone`, and `columnDividers`, or compose the content. If a table needs a look the props do not cover, ask for a new prop.
+- Wrapping an inset `Table` in a `Card`. The table already draws its own raised surface.
+- Joining several facts in one cell with `·`. Give each fact its own column.
+- Adding TanStack Table to sort or filter a few dozen rows. In the caller that is a `.toSorted()` and a `.filter()`.

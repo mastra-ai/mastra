@@ -420,6 +420,16 @@
                       "id2": "tacos",
                       "environment": "test"
                     },
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You can execute workflows using the workflow executor tool"
+                      },
+                      {
+                        "role": "user",
+                        "content": "Execute the simpleWorkflow with test input"
+                      }
+                    ],
                     "output": {
                       "text": "",
                       "toolCalls": [
@@ -928,6 +938,24 @@
                       "id2": "tacos",
                       "environment": "test"
                     },
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You can execute workflows using the workflow executor tool"
+                      },
+                      {
+                        "role": "user",
+                        "content": "Execute the simpleWorkflow with test input"
+                      },
+                      {
+                        "role": "assistant",
+                        "content": "[tool: workflowExecutor]"
+                      },
+                      {
+                        "role": "tool",
+                        "content": "[tool-result: workflowExecutor]"
+                      }
+                    ],
                     "output": {
                       "text": "Mock V2 generate response",
                       "toolCalls": []

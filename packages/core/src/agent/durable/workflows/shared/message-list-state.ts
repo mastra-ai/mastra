@@ -8,7 +8,7 @@ import { createStoredMessageLoader, isMemoryMessageRef } from '../../../message-
 import type { DehydratedMessageListState, StoredMessageLoader } from '../../../message-list/memory-message-refs';
 import type { SerializedMessageListState } from '../../../message-list/state';
 import { getRunMessageRefs, peekRunMessageRefs, releaseRunMessageRefs } from '../../run-message-refs';
-import { globalRunRegistry } from '../../run-registry';
+import { getRunRegistryEntry } from '../../run-registry';
 import type { SerializableDurableState } from '../../types';
 import { restoreRequestContext } from '../../utils/resolve-runtime';
 
@@ -259,7 +259,7 @@ function runTranscriptRefs(params: TranscriptParams) {
 
 /** The run's memory: the live instance in this process, else re-resolved from the agent. */
 async function runMemory(params: TranscriptParams, run: RunIdentity): Promise<MastraMemory | undefined> {
-  const memory = run.runId ? globalRunRegistry.get(run.runId)?.memory : undefined;
+  const memory = run.runId ? getRunRegistryEntry(run.runId, params.mastra)?.memory : undefined;
   if (memory || !params.mastra || !run.agentId) return memory;
   const agent = params.mastra.getAgentById(run.agentId);
   return agent.getMemory({ requestContext: restoreRequestContext(run.requestContextEntries, params.requestContext) });

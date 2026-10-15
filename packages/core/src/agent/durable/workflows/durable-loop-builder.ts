@@ -20,7 +20,7 @@ import { createStep } from '../../../workflows/workflow';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
 import { DurableStepIds, DurableAgentDefaults } from '../constants';
 import { isExecutionFenceError, isForeignExecutionContext, withExecutionFence } from '../execution-fence';
-import { globalRunRegistry } from '../run-registry';
+import { getRunRegistryEntry, globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -65,6 +65,20 @@ const COLLECT_TOOL_RESULTS_STEP_ID = 'collect-tool-results';
  * The outer step that publishes FINISH. Recovery reads its saved status to tell
  * whether FINISH already went out before a crash.
  */
+
+/**
+ * Copies step params with some fields overridden, keeping accessors intact.
+ * A spread would invoke the lazy `writer` getter (see `defineLazyWriter`) and
+ * allocate a ToolStream the step never uses.
+ */
+function withParams<T extends object, O extends object>(params: T, overrides: O): Omit<T, keyof O> & O {
+  const descriptors: PropertyDescriptorMap = Object.getOwnPropertyDescriptors(params);
+  for (const [key, value] of Object.entries(overrides)) {
+    descriptors[key] = { value, enumerable: true, configurable: true, writable: true };
+  }
+  return Object.defineProperties({}, descriptors) as Omit<T, keyof O> & O;
+}
+
 export const MAP_FINAL_OUTPUT_STEP_ID = 'map-final-output';
 
 /**
@@ -255,7 +269,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
     const initData = predicateParams.getInitData() as DurableAgenticWorkflowInput;
     const mastra = predicateParams.mastra as Mastra | undefined;
     const runId = state.runId ?? initData.runId;
-    const registryEntry = globalRunRegistry.get(runId);
+    const registryEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
     return {
       runId,
       agentId: state.agentId ?? initData.agentId,
@@ -407,6 +421,40 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
     const signalDrainStep = withExecutionFence(this.signalDrainStep());
     const isTaskCompleteStep = withExecutionFence(this.isTaskCompleteStep());
     const goalStep = withExecutionFence(this.goalStep());
+    const executeLLM = llmExecutionStep.execute;
+    llmExecutionStep.execute = async params => {
+      let workflowState = params.state;
+      const setState: typeof params.setState = async nextState => {
+        await params.setState(nextState);
+        workflowState = nextState;
+      };
+      const llmOutput = await executeLLM(withParams(params, { setState }));
+      if (llmOutput && llmOutput.stepResult.reason === 'abort') {
+        const initData = params.getInitData() as IterationState;
+        // Preserve transcript, usage and span bookkeeping, then finish only this
+        // iteration. The outer loop still runs its normal terminal side effects.
+        const executionOutput = await llmMappingStep.execute(
+          withParams(params, {
+            state: workflowState,
+            bail: params.bail<unknown>,
+            inputData: {
+              llmOutput,
+              toolResults: [],
+              runId: initData.runId,
+              agentId: initData.agentId,
+              messageId: initData.messageId,
+              state: llmOutput.state ?? initData.state,
+            },
+          }),
+        );
+        if (!executionOutput) return executionOutput;
+        return params.bail<IterationState>({
+          ...createBaseIterationStateUpdate({ currentState: initData, executionOutput }),
+          modelList: initData.modelList,
+        });
+      }
+      return llmOutput;
+    };
 
     return (
       this.workflowFactory()({
@@ -596,6 +644,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       const initData = params.getInitData() as DurableAgenticWorkflowInput;
       const rt = this.resolveRuntime(params);
 
+      // Opened once per step; the abort exits below emit before it is opened.
+      let transcript: Awaited<ReturnType<typeof openMessageListState>> | undefined;
       const emitStepFinish = async (isContinued: boolean) => {
         if (state.lastStepResult) {
           state.lastStepResult.isContinued = isContinued;
@@ -604,6 +654,17 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         const deferredChunk = buildDeferredStepFinishChunk(state, isContinued);
         state.deferredStepFinishChunk = undefined;
         if (!deferredChunk) return;
+
+        // Carry the step's response messages so `onStepFinish(event).response.messages` and
+        // `output.steps[i].response.messages` match the regular loop (#26780).
+        try {
+          const list = createRunMessageList({ mastra: rt.mastra }).deserialize(
+            (transcript ?? (await openMessageListState(params, state))).read(),
+          );
+          deferredChunk.payload._durableResponseMessages = list.get.response.aiV5.model();
+        } catch (error) {
+          rt.logger?.warn?.(`[DurableAgent] Could not rebuild step-finish messages: ${error}`);
+        }
 
         try {
           await this.emitChunk(rt, deferredChunk);
@@ -645,7 +706,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       // The transcript lives in workflow state, or on the iteration state for
       // runs that thread it through step payloads. Writes below land on
       // whichever object holds it; both persist into the next iteration.
-      const transcript = await openMessageListState(params, state);
+      transcript = await openMessageListState(params, state);
 
       // ── Inter-iteration signal drain ──────────────────────────────
       // Mirror the non-durable agentic-loop predicate: drain pending
@@ -1002,7 +1063,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({
                 requestContext,
               });
-              const reg = globalRunRegistry.has(initData.runId) ? globalRunRegistry.get(initData.runId) : undefined;
+              const reg = getRunRegistryEntry(initData.runId, mastra as Mastra | undefined);
               const modelSpanData = reg?.resumeModelSpanData ?? initData.modelSpanData;
               const agentSpanData = reg?.resumeAgentSpanData ?? initData.agentSpanData;
               if (observability) {

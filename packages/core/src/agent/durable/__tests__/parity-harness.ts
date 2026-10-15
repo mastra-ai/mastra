@@ -1131,6 +1131,7 @@ const KNOWN_CHUNK_DIFFERENCES: readonly KnownChunkDifference[] = [
     paths: [
       'type',
       '_durableStepContent',
+      '_durableResponseMessages',
       'processorRetryCount',
       'metadata.modelMetadata',
       'metadata.modelProvider',

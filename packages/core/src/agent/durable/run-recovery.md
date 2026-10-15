@@ -45,7 +45,7 @@ The checks happen in that order. The claim in step 4 is atomic with the check, s
 9. **Register the stream** and, for a run on a memory thread, the thread run.
 10. **Restart** the workflow from the snapshot under the claim. On a non-suspended terminal, while still owned, delete the run's snapshots, as `stream()` and `resume()` do.
 
-If setup fails before the workflow restarts, any claim taken is settled and released, and `recover()` throws. A failure after the restart is published as an error event on the run stream (and passed to `onError`), unless another execution took the run over, in which case the thread lease and run topic are left to that execution.
+If setup fails after ownership is acquired but before the workflow restarts, the claim is settled and released and `recover()` throws. While that attempt still owns the run, a genuine setup failure also publishes a generation-fenced error event on the run stream. A snapshot disappearing or the run becoming suspended or otherwise inactive during the claim is a refusal, not a terminal failure, so those outcomes stay silent. Failures after the restart are likewise published as error events (and passed to `onError`). If another execution took the run over, the superseded attempt stays silent and leaves the thread lease and run topic to the new owner.
 
 ## What the redo does
 

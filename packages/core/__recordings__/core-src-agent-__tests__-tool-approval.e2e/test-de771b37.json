@@ -400,7 +400,7 @@
       }
     },
     {
-      "hash": "75f8890e9b0856af",
+      "hash": "4618b6ca09faf208",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -440,7 +440,7 @@
             {
               "type": "function_call_output",
               "call_id": "call_6osmn0mP41d8igUOQ3j0sFqg",
-              "output": "{\"name\":\"Dero Israel\",\"email\":\"test@test.com\"}"
+              "output": "{\"email\":\"test@test.com\",\"name\":\"Dero Israel\"}"
             }
           ],
           "tools": [
