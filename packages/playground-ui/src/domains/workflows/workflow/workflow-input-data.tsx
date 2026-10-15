@@ -218,7 +218,7 @@ export const WorkflowInputData = ({
   return (
     <Collapsible defaultOpen>
       <CollapsibleTrigger className="flex w-full items-center gap-2 pb-3 text-left">
-        <DisclosureChevron direction="right" className="text-muted-foreground" />
+        <DisclosureChevron direction="right" className="size-4 text-muted-foreground" />
         {headingSlot ?? defaultHeading}
       </CollapsibleTrigger>
 
