@@ -1,8 +1,6 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { type OnboardingStep } from '../../services/onboardingFlow';
-import { STEP_META } from '../../services/onboardingSteps';
-
-const PROGRESS_STEPS: OnboardingStep[] = ['vcs', 'project-management', 'model-setup', 'model-provider', 'review'];
+import { onboardingSteps, STEP_META } from '../../services/onboardingSteps';
 
 export function OnboardingProgress({
   step,
@@ -13,7 +11,7 @@ export function OnboardingProgress({
   editingReview: boolean;
   local?: boolean;
 }) {
-  const steps = PROGRESS_STEPS.filter(item => !local || item !== 'model-setup');
+  const steps: OnboardingStep[] = onboardingSteps(undefined, local).filter(item => item !== 'initial');
   const activeStep = step === 'personal-provider' ? 'model-provider' : step;
   const progressIndex = editingReview ? steps.length - 1 : steps.indexOf(activeStep);
   return (

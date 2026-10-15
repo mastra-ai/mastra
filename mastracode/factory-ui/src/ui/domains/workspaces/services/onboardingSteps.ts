@@ -1,4 +1,4 @@
-import type { OnboardingModelScope, OnboardingStep } from './onboardingFlow';
+import type { OnboardingDraft, OnboardingModelScope, OnboardingStep } from './onboardingFlow';
 
 export const SETUP_LABELS: Record<OnboardingModelScope, string> = {
   factory: 'Company account',
@@ -16,6 +16,24 @@ export function onboardingSteps(scope?: OnboardingModelScope, local = false): On
     ...(scope === 'user' || scope === 'hybrid' ? (['personal-provider'] as const) : []),
     'review',
   ];
+}
+
+export function firstModelStep(scope?: OnboardingModelScope): OnboardingStep {
+  return scope === 'user' ? 'personal-provider' : 'model-provider';
+}
+
+const ACCOUNT_STEPS: Partial<Record<OnboardingStep, true>> = {
+  'model-setup': true,
+  'model-provider': true,
+  'personal-provider': true,
+  review: true,
+};
+
+export function restoredOnboardingStep(saved: OnboardingStep, draft: OnboardingDraft, local: boolean): OnboardingStep {
+  if (saved !== 'initial' && !draft.repository) return 'vcs';
+  if (!ACCOUNT_STEPS[saved]) return saved;
+  if (!local && !draft.modelScope) return 'model-setup';
+  return onboardingSteps(draft.modelScope, local).includes(saved) ? saved : firstModelStep(draft.modelScope);
 }
 
 export const STEP_META: Record<OnboardingStep, { label: string; title: string; description?: string }> = {

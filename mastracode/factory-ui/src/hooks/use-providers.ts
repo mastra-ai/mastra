@@ -1,6 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
 
+import type { ApiClient } from '../api/client';
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import type {
@@ -31,11 +32,17 @@ function invalidateCredentialDependentQueries(queryClient: QueryClient) {
   ]);
 }
 
+export function providersQueryOptions(client: ApiClient) {
+  return queryOptions({
+    queryKey: queryKeys.providers(),
+    queryFn: () => client.get<ProvidersResponse>('/web/config/providers'),
+  });
+}
+
 export function useProvidersQuery() {
   const { client } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.providers(),
-    queryFn: () => client.get<ProvidersResponse>('/web/config/providers'),
+    ...providersQueryOptions(client),
     select: (body: ProvidersResponse): ProviderInfo[] => body.providers,
   });
 }
@@ -49,8 +56,7 @@ export function useProvidersQuery() {
 export function useOrgKeyAdminQuery() {
   const { client } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.providers(),
-    queryFn: () => client.get<ProvidersResponse>('/web/config/providers'),
+    ...providersQueryOptions(client),
     select: (body: ProvidersResponse): boolean => body.orgKeyAdmin ?? true,
   });
 }

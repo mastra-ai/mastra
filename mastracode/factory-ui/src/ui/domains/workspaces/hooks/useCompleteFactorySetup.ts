@@ -1,11 +1,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { useApiConfig } from '../../../../api/config';
-import type { ProvidersResponse } from '../../../../api/types';
-import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { isProviderConnected } from './useProviderConnection';
 import { queryKeys } from '../../../../api/keys';
 import { availableModelsQueryOptions } from '../../../../hooks/useAvailableModels';
+import { providersQueryOptions } from '../../../../hooks/use-providers';
 import { useLinkRepositoryMutation } from '../../../../hooks/useFactories';
 import { useSetDefaultModel } from '../../../../hooks/use-default-model';
 import {
@@ -19,7 +18,7 @@ import {
 import {
   clearOnboardingFlow,
   completeOnboardingSchema,
-  onboardingModelChoices,
+  onboardingModelPlan,
   persistOnboardingFactory,
   persistOnboardingLinkedRepositories,
   readOnboardingFactory,
@@ -36,9 +35,8 @@ async function findPendingFactory(baseUrl: string, pendingId: string) {
   }
 }
 
-export function useCompleteFactorySetup() {
+export function useCompleteFactorySetup({ local }: { local: boolean }) {
   const { baseUrl, client } = useApiConfig();
-  const auth = useFactoryAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const link = useLinkRepositoryMutation();
@@ -50,13 +48,11 @@ export function useCompleteFactorySetup() {
       const setup = parsed.data;
       const repo = setup.repository;
       const modelScope = setup.modelScope;
-      const factoryModel = setup.modelScope === 'user' ? setup.personal.modelId : setup.model.modelId;
-      const personalModel = setup.modelScope === 'factory' ? undefined : setup.personal.modelId;
-      const choices = onboardingModelChoices(setup);
+      const plan = onboardingModelPlan(setup);
       const [providers, catalogs] = await Promise.all([
-        client.get<ProvidersResponse>('/web/config/providers'),
+        queryClient.fetchQuery({ ...providersQueryOptions(client), staleTime: 0 }),
         Promise.all(
-          choices.map(({ scope }) =>
+          plan.checks.map(({ scope }) =>
             queryClient.fetchQuery({
               ...availableModelsQueryOptions(baseUrl, { scope }),
               staleTime: 0,
@@ -64,13 +60,13 @@ export function useCompleteFactorySetup() {
           ),
         ),
       ]);
-      for (const [index, { scope, choice }] of choices.entries()) {
+      for (const [index, { scope, choice }] of plan.checks.entries()) {
         const account = scope === 'org' ? 'the company account' : 'your account';
         if (!catalogs[index].some(model => model.id === choice.modelId && model.provider === choice.providerId)) {
           throw new Error(`${choice.modelId} is no longer available for ${account}. Choose another model.`);
         }
         const provider = providers.providers.find(item => item.provider === choice.providerId);
-        if (!provider || !isProviderConnected(provider, auth.data?.authEnabled ? scope : undefined, choice.method)) {
+        if (!provider || !isProviderConnected(provider, local ? undefined : scope, choice.method)) {
           throw new Error(`The connection for ${account} has changed. Review your provider connection.`);
         }
       }
@@ -101,8 +97,8 @@ export function useCompleteFactorySetup() {
         },
       });
       await Promise.all([
-        updateFactoryDefaultModel(baseUrl, factory.id, factoryModel),
-        personalModel ? setPersonalDefault.mutateAsync(personalModel) : undefined,
+        updateFactoryDefaultModel(baseUrl, factory.id, plan.factoryModelId),
+        plan.personalModelId ? setPersonalDefault.mutateAsync(plan.personalModelId) : undefined,
       ]);
       return factory.id;
     },

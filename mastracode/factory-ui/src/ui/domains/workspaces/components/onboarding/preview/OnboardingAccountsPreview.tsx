@@ -88,7 +88,11 @@ export function OnboardingAccountsPreview({
               model={shared ? model : personalModel}
             />
             {!shared && (
-              <OnboardingPersonalConnectionStatus providerId={personalProviderId} method={personalConnectionMethod} />
+              <OnboardingPersonalConnectionStatus
+                providerId={personalProviderId}
+                method={personalConnectionMethod}
+                local={local}
+              />
             )}
           </div>
         </div>

@@ -465,8 +465,7 @@ describe('Draft Factory onboarding', () => {
 });
 
 describe('Personal Factory model', () => {
-  it('requires a personal model when shared access is no longer available while editing review', async () => {
-    const writes = registerSetup();
+  function registerMemberWithoutCompanyAccount() {
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
         HttpResponse.json({
@@ -475,51 +474,48 @@ describe('Personal Factory model', () => {
         }),
       ),
     );
+  }
+
+  it('sends members back to setup when shared access is no longer available while editing review', async () => {
+    const writes = registerSetup();
+    registerMemberWithoutCompanyAccount();
     persistOnboardingDraft({ modelScope: 'factory', repository: repo, model });
     sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
     const user = userEvent.setup();
     renderOnboarding();
     await user.click(await screen.findByRole('button', { name: 'Edit model' }));
-    await user.click(await screen.findByRole('button', { name: 'Continue with personal access' }));
-    expect(screen.getByRole('heading', { name: 'Choose your model.' })).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'Change setup' }));
+    expect(await screen.findByRole('heading', { name: 'Choose your setup.' })).toBeInTheDocument();
+    expect(readOnboardingDraft().modelScope).toBe('factory');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(await screen.findByRole('heading', { name: 'Choose your model.' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Create factory' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Review setup' })).not.toBeInTheDocument();
     expect(writes).toEqual([]);
     await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
     await user.click(await screen.findByRole('button', { name: 'Review setup' }));
-    expect(
-      within(screen.getByRole('region', { name: 'Review factory setup' })).getByText('anthropic/claude-fable-5'),
-    ).toBeInTheDocument();
+    const review = within(screen.getByRole('region', { name: 'Review factory setup' }));
+    expect(review.getByText('Personal accounts')).toBeInTheDocument();
+    expect(review.getByText('anthropic/claude-fable-5')).toBeInTheDocument();
   });
 
-  it('confirms a personal Factory model for members without shared access', async () => {
+  it('only offers personal accounts to members without shared access', async () => {
     const writes = registerSetup();
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
-        HttpResponse.json({
-          orgKeyAdmin: false,
-          providers: [{ provider: 'anthropic', source: 'stored-user', userCredential: 'api_key' }],
-        }),
-      ),
-    );
-    persistOnboardingDraft({
-      repository: repo,
-      modelScope: 'factory',
-    });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model-provider');
+    registerMemberWithoutCompanyAccount();
+    persistOnboardingDraft({ repository: repo });
+    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model-setup');
     const user = userEvent.setup();
     renderOnboarding();
-    await user.click(await screen.findByRole('button', { name: 'Continue with personal access' }));
-    expect(await screen.findByRole('heading', { name: 'Choose your model.' })).toBeInTheDocument();
+    expect(await screen.findByRole('radio', { name: 'Company account' })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('radio', { name: 'Personal accounts' })).toBeChecked();
+    expect(screen.queryByRole('switch', { name: 'Personal accounts for sessions' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
     await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
     await user.click(await screen.findByRole('button', { name: 'Review setup' }));
     expect(writes).toEqual([]);
     const review = within(screen.getByRole('region', { name: 'Review factory setup' }));
-    expect(review.getByText('anthropic/claude-fable-5')).toBeInTheDocument();
     expect(review.getByText('API key · your default for work and sessions')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Create factory' }));
     await screen.findByRole('heading', { name: 'Factory ready' });
-    // Without an organization model, Factory runs couldn't run in hybrid scope, so the Factory stays on personal credentials.
     expect(writes.find(item => item.path === 'create')?.body).toEqual({ name: repo.name, modelScope: 'user' });
     expect(writes.find(item => item.path === 'model')?.body).toEqual({ defaultModelId: 'anthropic/claude-fable-5' });
     expect(writes.find(item => item.path === 'personal-model')?.body).toEqual({
@@ -535,7 +531,7 @@ describe('Personal Factory model', () => {
     renderOnboarding();
     expect(await screen.findByRole('heading', { name: 'Choose your setup.' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Create factory' })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await user.click(await screen.findByRole('button', { name: 'Continue' }));
     expect(await screen.findByRole('combobox')).toHaveTextContent('GPT-5.6 Sol');
     expect(readOnboardingDraft().repository).toEqual(repo);
     expect(writes).toEqual([]);
@@ -655,7 +651,7 @@ describe('Account presets', () => {
     const user = userEvent.setup();
     const view = renderOnboarding();
     await user.click(await screen.findByRole('button', { name: 'Edit setup' }));
-    await user.click(screen.getByRole('switch', { name: 'Personal accounts for sessions' }));
+    await user.click(await screen.findByRole('switch', { name: 'Personal accounts for sessions' }));
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     view.unmount();
     renderOnboarding();
@@ -665,6 +661,21 @@ describe('Account presets', () => {
     await user.click(await screen.findByRole('button', { name: 'Create factory' }));
     await screen.findByRole('heading', { name: 'Factory ready' });
     expect(writes.some(item => item.path === 'personal-model')).toBe(false);
+  });
+
+  it('returns to review when the setup edit keeps the same accounts', async () => {
+    const writes = registerSetup();
+    persistOnboardingDraft({ repository: repo, modelScope: 'hybrid', model, personal: personalModel });
+    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
+    const user = userEvent.setup();
+    renderOnboarding();
+    await user.click(await screen.findByRole('button', { name: 'Edit setup' }));
+    await user.click(await screen.findByRole('switch', { name: 'Personal accounts for sessions' }));
+    await user.click(screen.getByRole('switch', { name: 'Personal accounts for sessions' }));
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(await screen.findByRole('heading', { name: 'Ready to create.' })).toBeInTheDocument();
+    expect(readOnboardingDraft()).toMatchObject({ modelScope: 'hybrid', model, personal: personalModel });
+    expect(writes).toEqual([]);
   });
 
   it('skips policy selection for local single-user setups', async () => {
@@ -681,5 +692,6 @@ describe('Account presets', () => {
     await user.click(await screen.findByRole('button', { name: 'Create factory' }));
     await screen.findByRole('heading', { name: 'Factory ready' });
     expect(writes.filter(item => item.path === 'personal-model')).toEqual([]);
+    expect(writes.find(item => item.path === 'create')?.body).toEqual({ name: repo.name, modelScope: 'factory' });
   });
 });

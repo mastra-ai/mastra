@@ -61,14 +61,14 @@ const repositorySchema: z.ZodType<SourceControlRepository> = z.union([
   }),
 ]);
 const connectionSchema = z.object({ providerId: z.string(), method: z.enum(['api_key', 'oauth']) });
+const modelChoiceSchema = connectionSchema.extend({ modelId: z.string().min(1) });
 const draftSchema = z.object({
   repository: repositorySchema.optional(),
   modelScope: z.enum(['factory', 'user', 'hybrid']).optional(),
   model: connectionSchema.extend({ modelId: z.string() }).optional(),
-  personal: connectionSchema.extend({ modelId: z.string().optional() }).optional(),
+  personal: modelChoiceSchema.optional().catch(undefined),
 });
 
-const modelChoiceSchema = connectionSchema.extend({ modelId: z.string().min(1) });
 /** Only the active preset's choices are submitted; cached choices from other presets are stripped. */
 export const completeOnboardingSchema = z.discriminatedUnion('modelScope', [
   z.object({ repository: repositorySchema, modelScope: z.literal('factory'), model: modelChoiceSchema }),
@@ -83,17 +83,38 @@ export const completeOnboardingSchema = z.discriminatedUnion('modelScope', [
 
 export type CompleteOnboardingSetup = z.infer<typeof completeOnboardingSchema>;
 
-/** Account scopes to validate; inactive cached choices never influence creation. */
-export function onboardingModelChoices(setup: CompleteOnboardingSetup) {
-  if (setup.modelScope === 'factory') return [{ scope: 'org', choice: setup.model } as const];
-  if (setup.modelScope === 'user') return [{ scope: 'user', choice: setup.personal } as const];
-  return [{ scope: 'org', choice: setup.model } as const, { scope: 'user', choice: setup.personal } as const];
+interface ModelCheck {
+  scope: 'org' | 'user';
+  choice: OnboardingModelChoice;
+}
+
+/** Only the active preset's choices are validated and written; inactive cached choices never influence creation. */
+export function onboardingModelPlan(setup: CompleteOnboardingSetup): {
+  checks: ModelCheck[];
+  factoryModelId: string;
+  personalModelId?: string;
+} {
+  if (setup.modelScope === 'factory')
+    return { checks: [{ scope: 'org', choice: setup.model }], factoryModelId: setup.model.modelId };
+  if (setup.modelScope === 'user')
+    return {
+      checks: [{ scope: 'user', choice: setup.personal }],
+      factoryModelId: setup.personal.modelId,
+      personalModelId: setup.personal.modelId,
+    };
+  return {
+    checks: [
+      { scope: 'org', choice: setup.model },
+      { scope: 'user', choice: setup.personal },
+    ],
+    factoryModelId: setup.model.modelId,
+    personalModelId: setup.personal.modelId,
+  };
 }
 
 export type OnboardingDraft = z.infer<typeof draftSchema>;
 export type OnboardingModelScope = NonNullable<OnboardingDraft['modelScope']>;
 export type OnboardingModelChoice = NonNullable<OnboardingDraft['model']>;
-export type OnboardingConnectionChoice = NonNullable<OnboardingDraft['personal']>;
 
 /** Only non-secret choices survive redirects. Account credentials stay on the server. */
 export function readOnboardingDraft(): OnboardingDraft {

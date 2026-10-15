@@ -1,6 +1,11 @@
 import { OnboardingProgress } from './onboarding/OnboardingProgress';
 import { OnboardingSetupStep } from './onboarding/OnboardingSetupStep';
-import { onboardingSteps, onboardingStepMeta } from '../services/onboardingSteps';
+import {
+  firstModelStep,
+  onboardingSteps,
+  onboardingStepMeta,
+  restoredOnboardingStep,
+} from '../services/onboardingSteps';
 import { useState } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
@@ -16,6 +21,7 @@ import {
   type OnboardingDraft,
   persistOnboardingStep,
   readOnboardingStep,
+  type OnboardingModelScope,
   type OnboardingStep as Step,
 } from '../services/onboardingFlow';
 import { Button } from '@mastra/playground-ui/components/Button';
@@ -23,7 +29,9 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowLeft } from 'lucide-react';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { OnboardingPreview } from './onboarding/preview/OnboardingPreview';
+import { companyAccountNeedsAdmin, useProviderConnection } from '../hooks/useProviderConnection';
 import type { ProviderConnectionMethod } from '../hooks/useProviderConnection';
+import { SkeletonRows } from '../../../ui/SkeletonRows';
 import type { WorkSource } from '../hooks/useWorkSourceConnections';
 import { InitialFactoryStep } from './InitialFactoryStep';
 import { ModelProviderFactoryStep } from './ModelProviderFactoryStep';
@@ -33,6 +41,7 @@ import { VcsFactoryStep } from './VcsFactoryStep';
 import { OnboardingReviewStep } from './onboarding/OnboardingReviewStep';
 
 interface StepPreview {
+  modelScope?: OnboardingModelScope;
   repository?: SourceControlRepository;
   providerId?: string;
   method?: ProviderConnectionMethod;
@@ -50,22 +59,12 @@ function shownModel(previewedModel?: string, previewedProvider?: string, savedMo
 
 export function FactoryOnboarding({ local }: { local: boolean }) {
   const { baseUrl } = useApiConfig();
-  const complete = useCompleteFactorySetup();
+  const complete = useCompleteFactorySetup({ local });
   const [draft, setDraft] = useState<OnboardingDraft>(() => {
     const saved = readOnboardingDraft();
     return local ? { ...saved, modelScope: 'factory' } : saved;
   });
-  const [step, setStep] = useState<Step>(() => {
-    const saved = readOnboardingStep();
-    if (saved !== 'initial' && !draft.repository) return 'vcs';
-    if (['model-provider', 'personal-provider', 'review', 'model-setup'].includes(saved)) {
-      if (!local && !draft.modelScope) return 'model-setup';
-      if (local && (saved === 'model-setup' || saved === 'personal-provider')) return 'model-provider';
-      if (saved === 'model-provider' && draft.modelScope === 'user') return 'personal-provider';
-      if (saved === 'personal-provider' && draft.modelScope === 'factory') return 'model-provider';
-    }
-    return saved;
-  });
+  const [step, setStep] = useState<Step>(() => restoredOnboardingStep(readOnboardingStep(), draft, local));
   const [returnToReview, setReviewReturn] = useState(readOnboardingReviewReturn);
   const setReturnToReview = (value: boolean) => {
     persistOnboardingReviewReturn(value);
@@ -97,6 +96,10 @@ export function FactoryOnboarding({ local }: { local: boolean }) {
   const model = shownModel(preview.model, preview.providerId, draft.model?.modelId);
   const personalModel = shownModel(preview.personalModel, preview.personalProviderId, draft.personal?.modelId);
   const meta = onboardingStepMeta(step, draft.modelScope, local);
+  const companyAccess = useProviderConnection({ scope: 'org' });
+  const companyLocked = companyAccountNeedsAdmin(companyAccess);
+  const setupScope = companyLocked ? 'user' : (preview.modelScope ?? draft.modelScope ?? 'factory');
+  const previewScope = step === 'model-setup' ? setupScope : (draft.modelScope ?? 'factory');
 
   return (
     <main className="onboarding-page bg-background text-foreground min-h-dvh pb-20">
@@ -173,30 +176,35 @@ export function FactoryOnboarding({ local }: { local: boolean }) {
                   onContinue={() => advance(local ? 'model-provider' : 'model-setup')}
                 />
               )}
-              {step === 'model-setup' && (
-                <OnboardingSetupStep
-                  scope={draft.modelScope ?? 'factory'}
-                  onChange={modelScope => updateDraft({ ...draft, modelScope })}
-                  onContinue={() => {
-                    const modelScope = draft.modelScope ?? 'factory';
-                    updateDraft({ ...draft, modelScope });
-                    setReturnToReview(false);
-                    goTo(modelScope === 'user' ? 'personal-provider' : 'model-provider');
-                  }}
-                />
-              )}
+              {step === 'model-setup' &&
+                (companyAccess.isPending ? (
+                  <SkeletonRows label="Loading account options" rows={2} />
+                ) : (
+                  <OnboardingSetupStep
+                    scope={setupScope}
+                    companyLocked={companyLocked}
+                    onChange={modelScope => previewWith({ modelScope })}
+                    onContinue={() => {
+                      const nextStep = firstModelStep(setupScope);
+                      const scopeChanged = setupScope !== draft.modelScope;
+                      updateDraft({ ...draft, modelScope: setupScope });
+                      if (scopeChanged) {
+                        setReturnToReview(false);
+                        goTo(nextStep);
+                      } else {
+                        advance(nextStep);
+                      }
+                    }}
+                  />
+                ))}
               {step === 'model-provider' && (
                 <ModelProviderFactoryStep
                   initialChoice={draft.model}
                   onPreviewModel={previewed => previewWith({ model: previewed })}
                   onPreviewProvider={(providerId, method) => previewWith({ providerId, method, model: undefined })}
+                  onChangeSetup={() => goTo('model-setup')}
                   onComplete={model => {
-                    updateDraft({ ...draft, model, modelScope: model ? draft.modelScope : 'user' });
-                    if (!model) {
-                      setReturnToReview(false);
-                      goTo('personal-provider');
-                      return;
-                    }
+                    updateDraft({ ...draft, model });
                     advance(draft.modelScope === 'hybrid' ? 'personal-provider' : 'review');
                   }}
                 />
@@ -204,7 +212,6 @@ export function FactoryOnboarding({ local }: { local: boolean }) {
               {step === 'personal-provider' && (
                 <PersonalProviderFactoryStep
                   initialChoice={draft.personal}
-                  requireModel
                   onPreviewModel={previewed => previewWith({ personalModel: previewed })}
                   onContinue={personal => {
                     updateDraft({ ...draft, personal });
@@ -236,7 +243,7 @@ export function FactoryOnboarding({ local }: { local: boolean }) {
 
         <OnboardingPreview
           step={step}
-          modelScope={draft.modelScope ?? 'factory'}
+          modelScope={previewScope}
           local={local}
           repository={repository}
           source={previewSource}

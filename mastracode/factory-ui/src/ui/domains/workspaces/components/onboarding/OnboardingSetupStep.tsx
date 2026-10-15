@@ -2,16 +2,19 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowRight, Building2, Users } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { OnboardingModelScope } from '../../services/onboardingFlow';
 
 export function OnboardingSetupStep({
   scope,
+  companyLocked,
   onChange,
   onContinue,
 }: {
   scope: OnboardingModelScope;
+  companyLocked: boolean;
   onChange: (scope: OnboardingModelScope) => void;
   onContinue: () => void;
 }) {
@@ -28,11 +31,8 @@ export function OnboardingSetupStep({
           label="Company account"
           selected={company}
           icon={<Building2 />}
-          detail={
-            scope === 'hybrid'
-              ? 'A shared account and model for Factory work.'
-              : 'A shared account and model for Factory work and sessions.'
-          }
+          disabled={companyLocked}
+          detail={companyOptionDetail(scope, companyLocked)}
         />
         <SetupOption
           value="personal"
@@ -73,22 +73,34 @@ export function OnboardingSetupStep({
   );
 }
 
+function companyOptionDetail(scope: OnboardingModelScope, companyLocked: boolean) {
+  if (companyLocked) return 'An admin needs to connect the company account first.';
+  if (scope === 'hybrid') return 'A shared account and model for Factory work.';
+  return 'A shared account and model for Factory work and sessions.';
+}
+
 function SetupOption({
   value,
   label,
   detail,
   icon,
   selected,
+  disabled = false,
 }: {
   value: string;
   label: string;
   detail: string;
   icon: ReactNode;
   selected: boolean;
+  disabled?: boolean;
 }) {
   return (
     <label
-      className={`hover:bg-fill focus-within:bg-fill flex cursor-pointer items-start gap-3 rounded-lg p-4 transition-colors ${selected ? 'bg-fill' : ''}`}
+      className={cn(
+        'flex items-start gap-3 rounded-lg p-4 transition-colors',
+        disabled ? 'cursor-not-allowed opacity-60' : 'hover:bg-fill focus-within:bg-fill cursor-pointer',
+        selected && 'bg-fill',
+      )}
     >
       <span className="text-muted-foreground mt-0.5 size-4 shrink-0 [&>svg]:size-4" aria-hidden="true">
         {icon}
@@ -101,7 +113,7 @@ function SetupOption({
           {detail}
         </Txt>
       </span>
-      <RadioGroupItem value={value} aria-label={label} className="mt-0.5 shrink-0" />
+      <RadioGroupItem value={value} aria-label={label} disabled={disabled} className="mt-0.5 shrink-0" />
     </label>
   );
 }
