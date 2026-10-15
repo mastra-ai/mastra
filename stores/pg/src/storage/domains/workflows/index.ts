@@ -1,11 +1,16 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
+  getSnapshotMemoryInfo,
+  materializeWorkflowRun,
   mergeWorkflowStepResult,
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_WORKFLOW_RUN_OWNERS,
+  TABLE_WORKFLOW_RUNS,
+  TABLE_WORKFLOW_RUN_ENTRIES,
   TABLE_SCHEMAS,
   RUN_FENCING_TABLE_SCHEMAS,
+  WORKFLOW_RUN_JOURNAL_TABLE_CONFIGS,
   matchesExpectedWorkflowStatus,
   WorkflowsStorage,
   createStorageErrorId,
@@ -22,6 +27,9 @@ import type {
   UpdateWorkflowStateOptions,
   StorageListWorkflowRunsInput,
   WorkflowRun,
+  WorkflowRunChanges,
+  WorkflowRunEntry,
+  WorkflowRunHeader,
   WorkflowRuns,
   CreateIndexOptions,
   TABLE_NAMES,
@@ -99,6 +107,14 @@ function workflowSnapshotStatusIndexSQL(indexName: string, schemaName?: string, 
   return `CREATE INDEX ${concurrently ? 'CONCURRENTLY ' : ''}IF NOT EXISTS "${indexName}" ON ${tableName} (workflow_name, (snapshot ->> 'status'), "createdAt" DESC)`;
 }
 
+/**
+ * Storage v2 index names share the long `<schema>_mastra_workflow_runs_` prefix, so a long
+ * schema name would collapse them to one 63-byte identifier under plain truncation; hash instead.
+ */
+function runIndexName(schemaPrefix: string, baseName: string): string {
+  return buildConstraintName({ baseName: `${schemaPrefix}${baseName}`, hashWhenTruncated: true });
+}
+
 /** Base name (before any schema prefix) of the expression index backing the threadId filter. */
 const WORKFLOW_SNAPSHOT_THREAD_ID_INDEX = 'mastra_workflow_snapshot_threadid_idx';
 
@@ -144,6 +160,69 @@ function workflowSnapshotThreadIdIndexSQL(indexName: string, schemaName?: string
   return `CREATE INDEX ${concurrently ? 'CONCURRENTLY ' : ''}IF NOT EXISTS "${indexName}" ON ${tableName} ((${WORKFLOW_SNAPSHOT_THREAD_ID_EXPR}))`;
 }
 
+/** A storage v2 entry as written: one element of the jsonb array the write statements unpack. */
+interface EntryInput {
+  kind: 'step' | 'state';
+  step_id: string | null;
+  payload: unknown;
+}
+
+/** A storage v2 entry as read back by `#entriesSql`. */
+interface EntryRow {
+  seq: number;
+  kind: 'step' | 'state';
+  step_id: string | null;
+  payload: unknown;
+  /** The payload was undefined when written (SQL NULL), as opposed to JSON null. */
+  absent: boolean;
+}
+
+/** The header columns of a storage v2 write. */
+interface RunWrite {
+  workflowName: string;
+  runId: string;
+  resourceId?: string;
+  threadId: string | null;
+  status: string;
+  header: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * The entries a storage v2 write adds: the listed steps and, when it changed, the state.
+ * A checkpoint (no `changes`) adds every `context` key and the state.
+ */
+function journalEntries(snapshot: WorkflowRunState, changes?: WorkflowRunChanges): EntryInput[] {
+  const stepIds = changes ? changes.stepIds : Object.keys(snapshot.context);
+  const entries: EntryInput[] = stepIds.map(stepId => ({
+    kind: 'step',
+    step_id: stepId,
+    payload: snapshot.context[stepId],
+  }));
+  if (!changes || changes.state) entries.push({ kind: 'state', step_id: null, payload: snapshot.value });
+  return entries;
+}
+
+/**
+ * Rows `e(elem, ord)` of the jsonb array parameter `param` of {@link EntryInput}, and the
+ * entry columns they insert. `elem -> 'payload'` keeps a JSON null apart from an undefined
+ * payload (dropped by `JSON.stringify`), which becomes SQL NULL.
+ */
+const entryRows = (param: string) => `jsonb_array_elements(${param}::jsonb) WITH ORDINALITY AS e(elem, ord)`;
+const ENTRY_VALUES = `e.elem ->> 'kind', e.elem ->> 'step_id', e.elem -> 'payload'`;
+
+/** Rebuilds a storage v2 run's state; an undefined payload reads back as undefined, as in v1. */
+function materializeRun(header: WorkflowRunHeader, rows: EntryRow[]): WorkflowRunState {
+  const entries = rows.map((row): WorkflowRunEntry => {
+    const payload = row.absent ? undefined : row.payload;
+    return row.kind === 'step'
+      ? { seq: row.seq, kind: 'step', stepId: row.step_id!, result: payload }
+      : { seq: row.seq, kind: 'state', state: payload as Record<string, any> };
+  });
+  return materializeWorkflowRun(header, entries);
+}
+
 export class WorkflowsPG extends WorkflowsStorage {
   #db: PgDB;
   #schema: string;
@@ -151,7 +230,7 @@ export class WorkflowsPG extends WorkflowsStorage {
   #indexes?: CreateIndexOptions[];
 
   /** Tables managed by this domain */
-  static readonly MANAGED_TABLES = [TABLE_WORKFLOW_SNAPSHOT] as const;
+  static readonly MANAGED_TABLES = [TABLE_WORKFLOW_SNAPSHOT, TABLE_WORKFLOW_RUNS, TABLE_WORKFLOW_RUN_ENTRIES] as const;
 
   /**
    * Workflow run snapshots accumulate as runs execute. Anchored on the
@@ -207,6 +286,28 @@ export class WorkflowsPG extends WorkflowsStorage {
         table: TABLE_WORKFLOW_SNAPSHOT,
         columns: ['workflow_name', 'createdAt DESC'],
       },
+      // Storage v2 runs: the same listing, status and thread indexes as v1, on plain columns.
+      {
+        name: runIndexName(schemaPrefix, 'mastra_workflow_runs_name_createdat_idx'),
+        table: TABLE_WORKFLOW_RUNS,
+        columns: ['workflow_name', 'createdAt DESC'],
+      },
+      {
+        name: runIndexName(schemaPrefix, 'mastra_workflow_runs_name_status_createdat_idx'),
+        table: TABLE_WORKFLOW_RUNS,
+        columns: ['workflow_name', 'status', 'createdAt DESC'],
+      },
+      {
+        name: runIndexName(schemaPrefix, 'mastra_workflow_runs_threadid_idx'),
+        table: TABLE_WORKFLOW_RUNS,
+        columns: ['threadId'],
+      },
+      // Backs the latest-entry-per-step read.
+      {
+        name: runIndexName(schemaPrefix, 'mastra_workflow_run_entries_step_idx'),
+        table: TABLE_WORKFLOW_RUN_ENTRIES,
+        columns: ['workflow_name', 'run_id', 'kind', 'step_id', 'seq'],
+      },
     ];
   }
 
@@ -228,6 +329,18 @@ export class WorkflowsPG extends WorkflowsStorage {
         includeAllConstraints: true,
       }),
     );
+
+    for (const [tableName, config] of Object.entries(WORKFLOW_RUN_JOURNAL_TABLE_CONFIGS)) {
+      statements.push(
+        generateTableSQL({
+          tableName: tableName as TABLE_NAMES,
+          schema: config.columns,
+          schemaName,
+          compositePrimaryKey: config.compositePrimaryKey,
+          includeAllConstraints: true,
+        }),
+      );
+    }
 
     for (const idx of WorkflowsPG.getDefaultIndexDefs(schemaPrefix)) {
       statements.push(generateIndexSQL(idx, schemaName));
@@ -308,6 +421,13 @@ export class WorkflowsPG extends WorkflowsStorage {
       tableName: TABLE_WORKFLOW_RUN_OWNERS as TABLE_NAMES,
       schema: RUN_FENCING_TABLE_SCHEMAS[TABLE_WORKFLOW_RUN_OWNERS],
     });
+    for (const [tableName, config] of Object.entries(WORKFLOW_RUN_JOURNAL_TABLE_CONFIGS)) {
+      await this.#db.createTable({
+        tableName: tableName as TABLE_NAMES,
+        schema: config.columns,
+        compositePrimaryKey: config.compositePrimaryKey,
+      });
+    }
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -335,9 +455,23 @@ export class WorkflowsPG extends WorkflowsStorage {
         this.logger?.warn?.(`Failed to create retention index for ${entry.table}:`, error);
       }
     }
+    if (!policies.workflowSnapshot) return;
+    try {
+      await this.#db.ensureIndex({
+        indexName: `${prefix}mastra_workflow_runs_retention_idx`,
+        tableName: TABLE_WORKFLOW_RUNS,
+        column: 'updatedAtZ',
+      });
+    } catch (error) {
+      this.logger?.warn?.(`Failed to create retention index for ${TABLE_WORKFLOW_RUNS}:`, error);
+    }
   }
 
-  /** Delete workflow run snapshots and run ownership rows older than their policy's `maxAge`, batched. */
+  /**
+   * Delete workflow runs and run ownership rows older than their policy's `maxAge`, batched.
+   * The `workflowSnapshot` policy covers both storage versions: storage v2 runs are pruned by
+   * their header's last write, together with their entries.
+   */
   async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
     await this.ensureRetentionIndexes(policies);
     const targets = resolveTargets({
@@ -345,7 +479,38 @@ export class WorkflowsPG extends WorkflowsStorage {
       descriptor: WorkflowsPG.retentionTables,
       order: ['workflowSnapshot', 'runOwnership'],
     });
-    return runPrune({ db: this.#db, domain: 'workflows', targets, options });
+    const snapshotTarget = targets.findIndex(target => target.table === TABLE_WORKFLOW_SNAPSHOT);
+    if (snapshotTarget !== -1) {
+      targets.splice(snapshotTarget + 1, 0, { ...targets[snapshotTarget]!, table: TABLE_WORKFLOW_RUNS });
+    }
+    return runPrune({
+      db: this.#db,
+      domain: 'workflows',
+      targets,
+      options,
+      deleteBatch: (target, cutoff, limit) =>
+        target.table === TABLE_WORKFLOW_RUNS ? this.#pruneRunsBatch(cutoff, limit) : undefined,
+    });
+  }
+
+  /** Deletes up to `limit` aged storage v2 runs, header and entries together, in one statement. */
+  async #pruneRunsBatch(cutoff: Date | number, limit: number): Promise<number> {
+    const result = await this.#db.client.query(
+      `WITH doomed AS (
+         SELECT workflow_name, run_id FROM ${this.#runsTable()}
+         WHERE "updatedAtZ" < $1
+         ORDER BY "updatedAtZ"
+         LIMIT $2
+         FOR UPDATE SKIP LOCKED
+       ), entries AS (
+         DELETE FROM ${this.#entriesTable()} e USING doomed d
+         WHERE e.workflow_name = d.workflow_name AND e.run_id = d.run_id
+       )
+       DELETE FROM ${this.#runsTable()} r USING doomed d
+       WHERE r.workflow_name = d.workflow_name AND r.run_id = d.run_id`,
+      [cutoff, limit],
+    );
+    return result.rowCount ?? 0;
   }
 
   /**
@@ -369,6 +534,193 @@ export class WorkflowsPG extends WorkflowsStorage {
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
     await this.#db.clearTable({ tableName: TABLE_WORKFLOW_RUN_OWNERS as TABLE_NAMES });
+    await this.#db.clearTable({ tableName: TABLE_WORKFLOW_RUNS as TABLE_NAMES });
+    await this.#db.clearTable({ tableName: TABLE_WORKFLOW_RUN_ENTRIES as TABLE_NAMES });
+  }
+
+  supportsRunJournal(): boolean {
+    return true;
+  }
+
+  #runsTable(): string {
+    return getTableName({ indexName: TABLE_WORKFLOW_RUNS, schemaName: getSchemaName(this.#schema) });
+  }
+
+  #entriesTable(): string {
+    return getTableName({ indexName: TABLE_WORKFLOW_RUN_ENTRIES, schemaName: getSchemaName(this.#schema) });
+  }
+
+  /**
+   * A jsonb array of {@link EntryRow} for the storage v2 run `alias` refers to: each step's
+   * latest entry and the latest state entry, ordered by when each was first written so
+   * `context` keys keep their write order.
+   */
+  #entriesSql(alias: string): string {
+    return `(SELECT COALESCE(jsonb_agg(jsonb_build_object(
+          'seq', x.seq, 'kind', x.kind, 'step_id', x.step_id, 'payload', x.payload, 'absent', x.payload IS NULL
+        ) ORDER BY x.first_seq), '[]'::jsonb)
+      FROM (
+        SELECT e.seq, e.kind, e.step_id, e.payload,
+          ROW_NUMBER() OVER (PARTITION BY e.kind, e.step_id ORDER BY e.seq DESC) AS rn,
+          MIN(e.seq) OVER (PARTITION BY e.kind, e.step_id) AS first_seq
+        FROM ${this.#entriesTable()} e
+        WHERE e.workflow_name = ${alias}.workflow_name AND e.run_id = ${alias}.run_id
+      ) x
+      WHERE x.rn = 1)`;
+  }
+
+  /**
+   * Selects v1 snapshot rows and storage v2 runs as one result, newest first. Each version
+   * has its own WHERE clause; `null` leaves it out. Storage v2 rows carry their header and
+   * entries, or in summary mode only the summary snapshot. `page` is appended to the
+   * combined, ordered rows (e.g. `LIMIT 1`).
+   */
+  async #runsQuery({
+    v1Where,
+    v2Where,
+    v1Snapshot = 'snapshot',
+    summary,
+    page = '',
+  }: {
+    v1Where: string | null;
+    v2Where: string | null;
+    v1Snapshot?: string;
+    summary?: boolean;
+    page?: string;
+  }): Promise<string> {
+    const branches: string[] = [];
+    if (v1Where !== null) {
+      // Legacy snapshot tables may lack these columns; v1 reads used to select `*`.
+      const optional = { resourceId: 'text', createdAtZ: 'timestamptz', updatedAtZ: 'timestamptz' };
+      const columns: Record<string, string> = {};
+      for (const [column, type] of Object.entries(optional)) {
+        const exists = (await this.#db.getColumnType(TABLE_WORKFLOW_SNAPSHOT, column)) !== null;
+        columns[column] = exists ? `"${column}"` : `NULL::${type} AS "${column}"`;
+      }
+      branches.push(
+        `SELECT workflow_name, run_id, ${columns.resourceId}, ${v1Snapshot} AS snapshot, NULL::jsonb AS header,
+           "createdAt", ${columns.createdAtZ}, "updatedAt", ${columns.updatedAtZ}, 1 AS version
+         FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} ${v1Where}`,
+      );
+    }
+    if (v2Where !== null) {
+      const columns = summary
+        ? `jsonb_build_object('status', header -> 'status', 'timestamp', header -> 'timestamp') AS snapshot, NULL::jsonb AS header`
+        : `NULL AS snapshot, header`;
+      branches.push(
+        `SELECT workflow_name, run_id, "resourceId", ${columns},
+           "createdAt", "createdAtZ", "updatedAt", "updatedAtZ", 2 AS version
+         FROM ${this.#runsTable()} ${v2Where}`,
+      );
+    }
+    const entries = summary ? '' : `, CASE WHEN p.version = 2 THEN ${this.#entriesSql('p')} END AS entries`;
+    return `SELECT p.*${entries}
+      FROM (${branches.join(' UNION ALL ')} ORDER BY "createdAt" DESC ${page}) p
+      ORDER BY p."createdAt" DESC`;
+  }
+
+  /** Parses a row of `#runsQuery`. */
+  #parseRun(row: Record<string, any>): WorkflowRun {
+    if (row.version !== 2) return this.parseWorkflowRun(row);
+    const snapshot = row.entries ? materializeRun(row.header, row.entries) : row.snapshot;
+    return { ...this.parseWorkflowRun({ ...row, snapshot }), storageVersion: 2 };
+  }
+
+  /**
+   * Writes a storage v2 run. An append is one statement: it bumps the header's `lastSeq` by
+   * the number of entries (holding the header's row lock until commit, so entries commit in
+   * `seq` order) and inserts the entries numbered up to it. It writes a checkpoint instead when
+   * the run has no header (never written, deleted or pruned).
+   */
+  async #persistRun(
+    run: RunWrite,
+    snapshot: WorkflowRunState,
+    changes: WorkflowRunChanges | undefined,
+    fence: RunFence | undefined,
+  ): Promise<void> {
+    if (changes) {
+      const appended = await withRunFence(
+        this.#db.client,
+        this.#runOwnersTable(),
+        fence,
+        'persistWorkflowSnapshot',
+        q => this.#appendRun(q, run, journalEntries(snapshot, changes)),
+      );
+      if (appended) return;
+    }
+    await this.#db.client.tx(async t => {
+      if (fence) await assertRunFence(t, this.#runOwnersTable(), fence, 'persistWorkflowSnapshot');
+      await this.#checkpointRun(t, run, journalEntries(snapshot));
+    });
+  }
+
+  async #appendRun(q: Queryable, run: RunWrite, entries: EntryInput[]): Promise<boolean> {
+    const { found } = await q.one<{ found: number }>(
+      `WITH h AS (
+         UPDATE ${this.#runsTable()}
+         SET "resourceId" = COALESCE($3, "resourceId"), "threadId" = $4, status = $5, header = $6::jsonb,
+             "lastSeq" = "lastSeq" + $7::int, "updatedAt" = $8, "updatedAtZ" = $9
+         WHERE workflow_name = $1 AND run_id = $2
+         RETURNING "lastSeq"
+       ), ins AS (
+         INSERT INTO ${this.#entriesTable()} (workflow_name, run_id, seq, kind, step_id, payload)
+         SELECT $1, $2, h."lastSeq" - $7::int + e.ord, ${ENTRY_VALUES}
+         FROM h, ${entryRows('$10')}
+       )
+       SELECT count(*)::int AS found FROM h`,
+      [
+        run.workflowName,
+        run.runId,
+        run.resourceId,
+        run.threadId,
+        run.status,
+        run.header,
+        entries.length,
+        run.updatedAt,
+        run.updatedAt,
+        toPgJson(entries),
+      ],
+    );
+    return found > 0;
+  }
+
+  /** Replaces a storage v2 run's entries. Must run in a transaction. */
+  async #checkpointRun(t: Queryable, run: RunWrite, entries: EntryInput[]): Promise<void> {
+    const { lastSeq } = await t.one<{ lastSeq: number }>(
+      `INSERT INTO ${this.#runsTable()} AS r
+         (workflow_name, run_id, "resourceId", "threadId", status, header, "lastSeq", "createdAt", "updatedAt", "createdAtZ", "updatedAtZ")
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::int, $8, $9, $10, $11)
+       ON CONFLICT (workflow_name, run_id) DO UPDATE
+       SET "resourceId" = COALESCE(EXCLUDED."resourceId", r."resourceId"), "threadId" = EXCLUDED."threadId",
+           status = EXCLUDED.status, header = EXCLUDED.header, "lastSeq" = r."lastSeq" + EXCLUDED."lastSeq",
+           "updatedAt" = EXCLUDED."updatedAt", "updatedAtZ" = EXCLUDED."updatedAtZ"
+       RETURNING "lastSeq"`,
+      [
+        run.workflowName,
+        run.runId,
+        run.resourceId,
+        run.threadId,
+        run.status,
+        run.header,
+        entries.length,
+        run.createdAt,
+        run.updatedAt,
+        run.createdAt,
+        run.updatedAt,
+      ],
+    );
+    // A new statement under READ COMMITTED: with the header locked above, it sees every
+    // append that committed before this checkpoint, so none of their entries survive it.
+    await t.none(`DELETE FROM ${this.#entriesTable()} WHERE workflow_name = $1 AND run_id = $2`, [
+      run.workflowName,
+      run.runId,
+    ]);
+    await t.none(
+      `INSERT INTO ${this.#entriesTable()} (workflow_name, run_id, seq, kind, step_id, payload)
+       SELECT $1, $2, $3::int - $4::int + e.ord, ${ENTRY_VALUES}
+       FROM ${entryRows('$5')}`,
+      [run.workflowName, run.runId, lastSeq, entries.length, toPgJson(entries)],
+    );
   }
 
   // Ownership reads and writes always go to the primary client: a replica's
@@ -520,6 +872,11 @@ export class WorkflowsPG extends WorkflowsStorage {
         );
 
         if (!existingSnapshotResult) {
+          const v2 = await t.oneOrNone(`SELECT 1 FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2`, [
+            workflowName,
+            runId,
+          ]);
+          if (v2) throw new Error(`updateWorkflowResults does not support storage v2 runs (run ${runId})`);
           return {};
         }
 
@@ -567,17 +924,45 @@ export class WorkflowsPG extends WorkflowsStorage {
     runId,
     opts,
     fence: explicitFence,
+    storageVersion,
   }: {
     workflowName: string;
     runId: string;
     opts: UpdateWorkflowStateOptions;
     fence?: RunFence;
+    storageVersion?: 1 | 2;
   }): Promise<WorkflowRunState | undefined> {
     const fence = resolveRunFence(this, explicitFence, runId);
     try {
       // Use a transaction with row-level locking to ensure atomicity
       return await this.#db.client.tx(async t => {
         if (fence) await assertRunFence(t, this.#runOwnersTable(), fence, 'updateWorkflowState');
+
+        if (storageVersion !== 1) {
+          const run = await t.oneOrNone<{ header: WorkflowRunHeader }>(
+            `SELECT header FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
+            [workflowName, runId],
+          );
+          if (run) {
+            const { expectedStatus, ...patch } = opts;
+            if (!matchesExpectedWorkflowStatus(run.header.status, expectedStatus)) {
+              return undefined;
+            }
+            const header = { ...run.header, ...patch };
+            const now = new Date();
+            // The header lock is held, so this statement sees every append committed before it.
+            const { entries } = await t.one<{ entries: EntryRow[] }>(
+              `UPDATE ${this.#runsTable()} r
+               SET header = $3::jsonb, status = $4, "updatedAt" = $5, "updatedAtZ" = $6
+               WHERE r.workflow_name = $1 AND r.run_id = $2
+               RETURNING ${this.#entriesSql('r')} AS entries`,
+              [workflowName, runId, toPgJson(header), header.status, now, now],
+            );
+            return materializeRun(header, entries);
+          }
+          if (storageVersion === 2) return undefined;
+        }
+
         const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) });
 
         // Load existing snapshot within transaction with FOR UPDATE to lock the row
@@ -646,6 +1031,8 @@ export class WorkflowsPG extends WorkflowsStorage {
     createdAt,
     updatedAt,
     fence,
+    storageVersion,
+    changes,
   }: {
     workflowName: string;
     runId: string;
@@ -654,11 +1041,32 @@ export class WorkflowsPG extends WorkflowsStorage {
     createdAt?: Date;
     updatedAt?: Date;
     fence?: RunFence;
+    storageVersion?: 1 | 2;
+    changes?: WorkflowRunChanges;
   }): Promise<void> {
     try {
       const now = new Date();
       const createdAtValue = createdAt ? createdAt : now;
       const updatedAtValue = updatedAt ? updatedAt : now;
+      if (storageVersion === 2) {
+        const { context, value, ...header } = snapshot;
+        await this.#persistRun(
+          {
+            workflowName,
+            runId,
+            resourceId,
+            threadId: getSnapshotMemoryInfo(snapshot)?.threadId ?? null,
+            status: snapshot.status,
+            header: toPgJson(header),
+            createdAt: createdAtValue,
+            updatedAt: updatedAtValue,
+          },
+          snapshot,
+          changes,
+          resolveRunFence(this, fence, runId),
+        );
+        return;
+      }
       // Sanitize the snapshot JSON to remove problematic Unicode sequences
       const sanitizedSnapshot = toPgJson(snapshot);
       await withRunFence(
@@ -701,11 +1109,22 @@ export class WorkflowsPG extends WorkflowsStorage {
   async loadWorkflowSnapshot({
     workflowName,
     runId,
+    storageVersion,
   }: {
     workflowName: string;
     runId: string;
+    storageVersion?: 1 | 2;
   }): Promise<WorkflowRunState | null> {
     try {
+      if (storageVersion !== 1) {
+        const run = await this.#db.client.oneOrNone<{ header: WorkflowRunHeader; entries: EntryRow[] }>(
+          `SELECT r.header, ${this.#entriesSql('r')} AS entries
+           FROM ${this.#runsTable()} r WHERE r.workflow_name = $1 AND r.run_id = $2`,
+          [workflowName, runId],
+        );
+        if (run) return materializeRun(run.header, run.entries);
+        if (storageVersion === 2) return null;
+      }
       const result = await this.#db.load<{ snapshot: WorkflowRunState }>({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         keys: { workflow_name: workflowName, run_id: runId },
@@ -727,9 +1146,11 @@ export class WorkflowsPG extends WorkflowsStorage {
   async getWorkflowRunById({
     runId,
     workflowName,
+    storageVersion,
   }: {
     runId: string;
     workflowName?: string;
+    storageVersion?: 1 | 2;
   }): Promise<WorkflowRun | null> {
     try {
       const conditions: string[] = [];
@@ -750,21 +1171,19 @@ export class WorkflowsPG extends WorkflowsStorage {
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-      const query = `
-          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })}
-          ${whereClause}
-          ORDER BY "createdAt" DESC LIMIT 1
-        `;
+      const query = await this.#runsQuery({
+        v1Where: storageVersion === 2 ? null : whereClause,
+        v2Where: storageVersion === 1 ? null : whereClause,
+        page: 'LIMIT 1',
+      });
 
-      const queryValues = values;
-
-      const result = await this.#db.readClient.oneOrNone(query, queryValues);
+      const result = await this.#db.readClient.oneOrNone(query, values);
 
       if (!result) {
         return null;
       }
 
-      return this.parseWorkflowRun(result);
+      return this.#parseRun(result);
     } catch (error) {
       throw new MastraError(
         {
@@ -790,18 +1209,20 @@ export class WorkflowsPG extends WorkflowsStorage {
     workflowName: string;
     fence?: RunFence;
   }): Promise<void> {
+    const resolvedFence = resolveRunFence(this, fence, runId);
     try {
-      await withRunFence(
-        this.#db.client,
-        this.#runOwnersTable(),
-        resolveRunFence(this, fence, runId),
-        'deleteWorkflowRunById',
-        q =>
-          q.none(
-            `DELETE FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} WHERE run_id = $1 AND workflow_name = $2`,
-            [runId, workflowName],
-          ),
-      );
+      await this.#db.client.tx(async t => {
+        if (resolvedFence) await assertRunFence(t, this.#runOwnersTable(), resolvedFence, 'deleteWorkflowRunById');
+        // The storage v2 header goes first: its row lock waits out an in-flight append, and the
+        // entries delete, a later statement, then sees that append's entries.
+        for (const table of [
+          this.#runsTable(),
+          this.#entriesTable(),
+          getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) }),
+        ]) {
+          await t.none(`DELETE FROM ${table} WHERE run_id = $1 AND workflow_name = $2`, [runId, workflowName]);
+        }
+      });
     } catch (error) {
       if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
@@ -831,12 +1252,15 @@ export class WorkflowsPG extends WorkflowsStorage {
     summary,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
+      // v1 rows filter on their snapshot JSON, storage v2 runs on their header columns.
       const conditions: string[] = [];
+      const v2Conditions: string[] = [];
       const values: any[] = [];
       let paramIndex = 1;
 
       if (workflowName) {
         conditions.push(`workflow_name = $${paramIndex}`);
+        v2Conditions.push(`workflow_name = $${paramIndex}`);
         values.push(workflowName);
         paramIndex++;
       }
@@ -856,6 +1280,7 @@ export class WorkflowsPG extends WorkflowsStorage {
             ? `snapshot ->> 'status'`
             : `regexp_replace(snapshot::text, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb ->> 'status'`;
         conditions.push(`${statusExpr} = $${paramIndex}`);
+        v2Conditions.push(`status = $${paramIndex}`);
         values.push(status);
         paramIndex++;
       }
@@ -864,11 +1289,12 @@ export class WorkflowsPG extends WorkflowsStorage {
         const hasResourceId = await this.#db.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
         if (hasResourceId) {
           conditions.push(`"resourceId" = $${paramIndex}`);
-          values.push(resourceId);
-          paramIndex++;
         } else {
           this.logger?.warn?.(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
         }
+        v2Conditions.push(`"resourceId" = $${paramIndex}`);
+        values.push(resourceId);
+        paramIndex++;
       }
 
       if (threadId) {
@@ -876,34 +1302,40 @@ export class WorkflowsPG extends WorkflowsStorage {
         // down only on jsonb columns, where the expression (and its backing index) can be
         // evaluated; legacy json/text snapshot columns skip it. Skipping only returns a
         // superset — callers (Agent.listSuspendedRuns) re-verify the thread id in-process.
+        // Storage v2 runs keep the thread id in a header column, set on every write.
         const snapshotType = await this.#db.getColumnType(TABLE_WORKFLOW_SNAPSHOT, 'snapshot');
         if (snapshotType === 'jsonb') {
           conditions.push(`${WORKFLOW_SNAPSHOT_THREAD_ID_EXPR} = $${paramIndex}`);
-          values.push(threadId);
-          paramIndex++;
         } else {
           this.logger?.warn?.(`[${TABLE_WORKFLOW_SNAPSHOT}] snapshot column is not jsonb. Skipping threadId filter.`);
         }
+        v2Conditions.push(`"threadId" = $${paramIndex}`);
+        values.push(threadId);
+        paramIndex++;
       }
 
       if (fromDate) {
         conditions.push(`"createdAt" >= $${paramIndex}`);
+        v2Conditions.push(`"createdAt" >= $${paramIndex}`);
         values.push(fromDate);
         paramIndex++;
       }
 
       if (toDate) {
         conditions.push(`"createdAt" <= $${paramIndex}`);
+        v2Conditions.push(`"createdAt" <= $${paramIndex}`);
         values.push(toDate);
         paramIndex++;
       }
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const v2WhereClause = v2Conditions.length > 0 ? `WHERE ${v2Conditions.join(' AND ')}` : '';
 
       let total = 0;
       const usePagination = typeof perPage === 'number' && typeof page === 'number';
       if (usePagination) {
         const countResult = await this.#db.client.one(
-          `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} ${whereClause}`,
+          `SELECT (SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} ${whereClause})
+             + (SELECT COUNT(*) FROM ${this.#runsTable()} ${v2WhereClause}) AS count`,
           values,
         );
         total = Number(countResult.count);
@@ -914,30 +1346,29 @@ export class WorkflowsPG extends WorkflowsStorage {
 
       // In summary mode only read status/timestamp out of the snapshot so large snapshots aren't transferred.
       // Legacy json/text columns get the same sanitizing path as the status filter so bad escapes can't fail the list.
-      let selectList = '*';
+      let v1Snapshot = 'snapshot';
       if (summary) {
         const snapshotType = await this.#db.getColumnType(TABLE_WORKFLOW_SNAPSHOT, 'snapshot');
         const snapshotJson =
           snapshotType === 'jsonb'
             ? 'snapshot'
             : `regexp_replace(snapshot::text, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb`;
-        selectList = `workflow_name, run_id, "resourceId", "createdAt", "createdAtZ", "updatedAt", "updatedAtZ", jsonb_build_object('status', ${snapshotJson} -> 'status', 'timestamp', ${snapshotJson} -> 'timestamp') AS snapshot`;
+        v1Snapshot = `jsonb_build_object('status', ${snapshotJson} -> 'status', 'timestamp', ${snapshotJson} -> 'timestamp')`;
       }
 
-      const query = `
-          SELECT ${selectList} FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })}
-          ${whereClause}
-          ORDER BY "createdAt" DESC
-          ${usePagination ? ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : ''}
-        `;
+      const query = await this.#runsQuery({
+        v1Where: whereClause,
+        v2Where: v2WhereClause,
+        v1Snapshot,
+        summary,
+        page: usePagination ? `LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : '',
+      });
 
       const queryValues = usePagination ? [...values, normalizedPerPage, offset] : values;
 
       const result = await this.#db.client.manyOrNone(query, queryValues);
 
-      const runs = (result || []).map(row => {
-        return this.parseWorkflowRun(row);
-      });
+      const runs = (result || []).map(row => this.#parseRun(row));
 
       return { runs, total: total || runs.length };
     } catch (error) {
