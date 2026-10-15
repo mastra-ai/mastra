@@ -608,6 +608,8 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       decisions: decisions.map(entry => ({ ...entry })),
       causalChain: [],
       now: new Date(),
+      // The bound agent's own tool call carries the same consent as its governed moves.
+      consentedBy: `agent:${binding.id}`,
     });
     if (committed.status !== 'committed' || !this.options.transitionService) return;
     for (const entry of decisions) {
