@@ -39,7 +39,7 @@ interface SessionOwnerProfile {
   avatarUrl?: string;
 }
 
-type SessionOwnerUserProvider = Pick<IUserProvider, 'getUser'> & Partial<Pick<IUserProvider, 'getUsers'>>;
+export type SessionOwnerUserProvider = Pick<IUserProvider, 'getUser'> & Partial<Pick<IUserProvider, 'getUsers'>>;
 
 export interface SourceControlSessionRoutesOptions {
   auth: RouteAuth;
@@ -148,7 +148,7 @@ function titleModel(modelId: string) {
     resolveModel(modelId, { remapForCodexOAuth: true, requestContext });
 }
 
-function createSessionOwnerProfileResolver(users: SessionOwnerUserProvider | undefined) {
+export function createSessionOwnerProfileResolver(users: SessionOwnerUserProvider | undefined) {
   const cache = new Map<string, { profile?: SessionOwnerProfile; expiresAt: number }>();
   const cacheProfile = (userId: string, profile: SessionOwnerProfile | undefined, expiresAt: number) => {
     cache.delete(userId);

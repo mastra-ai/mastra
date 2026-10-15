@@ -1,17 +1,9 @@
-import type { SessionPayer } from '@mastra/factory/routes/session-payer';
+import type { PayerCredential, SessionPayer } from '@mastra/factory/routes/session-payer';
 
 import { providerDisplayName } from '../../settings/components/provider-display-name';
 
-type CredentialKind = SessionPayer['credentials'][string];
-
-const SUBSCRIPTION_NAMES: Record<string, string> = {
-  anthropic: 'Claude Pro/Max',
-  openai: 'ChatGPT Plus/Pro',
-};
-
-function credentialName(provider: string, kind: CredentialKind): string {
-  if (kind === 'api_key') return `${providerDisplayName(provider)} API key`;
-  return SUBSCRIPTION_NAMES[provider] ?? `${providerDisplayName(provider)} subscription`;
+function credentialName(provider: string, credential: PayerCredential): string {
+  return credential.type === 'oauth' ? credential.subscription : `${providerDisplayName(provider)} API key`;
 }
 
 function payerPossessive(user: SessionPayer['user'], viewerId: string | undefined): string {
@@ -22,6 +14,8 @@ function payerPossessive(user: SessionPayer['user'], viewerId: string | undefine
 
 export function replyPayerLabel(payer: SessionPayer, sdkProvider: string, viewerId: string | undefined) {
   const [catalogProvider = sdkProvider] = sdkProvider.split('.');
-  const kind = payer.credentials[catalogProvider];
-  return kind ? `${payerPossessive(payer.user, viewerId)} ${credentialName(catalogProvider, kind)}` : undefined;
+  const credential = payer.credentials[catalogProvider];
+  return credential
+    ? `${payerPossessive(payer.user, viewerId)} ${credentialName(catalogProvider, credential)}`
+    : undefined;
 }

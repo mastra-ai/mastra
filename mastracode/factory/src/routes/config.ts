@@ -15,7 +15,7 @@ import { AMAZON_BEDROCK_GATEWAY_ID } from '@mastra/code-sdk/providers/amazon-bed
 import { MASTRA_GATEWAY_PREFIX } from '@mastra/code-sdk/providers/model-ids';
 import { getModelReasoningOptions } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
-import type { ApiRoute, IUserProvider } from '@mastra/core/server';
+import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 
 import type { Context } from 'hono';
@@ -43,12 +43,14 @@ import {
   listTenantCredentialsForRequest,
   resolveCredentialContext,
   tenantOrgId,
-  WEB_OAUTH_FLOW_KINDS,
+  WEB_OAUTH_PROVIDERS,
 } from './provider-credentials.js';
 import { Route } from './route.js';
 import type { RouteAuth, RouteDependencies } from './route.js';
-import { credentialKindsByModelProvider, resolvePayerUser } from './session-payer.js';
+import { payerCredentialsByModelProvider } from './session-payer.js';
 import type { SessionPayer } from './session-payer.js';
+import { createSessionOwnerProfileResolver } from './source-control-sessions.js';
+import type { SessionOwnerUserProvider } from './source-control-sessions.js';
 
 /** Widen a route-local Hono context to the plain `Context` the auth helpers take. */
 function loose(c: unknown): Context {
@@ -191,7 +193,7 @@ export async function listProviders({
       source = 'env';
     }
 
-    const flowKind = WEB_OAUTH_FLOW_KINDS[model.provider];
+    const flowKind = WEB_OAUTH_PROVIDERS[model.provider]?.flow;
     seen.set(model.provider, {
       provider: model.provider,
       envVar: model.apiKeyEnvVar,
@@ -612,7 +614,7 @@ export interface ConfigRoutesDeps extends RouteDependencies {
   /** Factory projects domain, used to derive OM fallbacks from a factory's default model. */
   factoryProjects?: FactoryProjectsStorage;
   /** Resolves who pays for a teammate's thread to a display name. */
-  users?: Pick<IUserProvider, 'getUser'>;
+  users?: SessionOwnerUserProvider;
   /** Custom-providers domain handle; absent when the app database is missing. */
   customProviders?: CustomProvidersStorage;
   /** Notifies the host after tenant credentials change so caches can be dropped. */
@@ -660,6 +662,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
     const { controller, authStorage, auth, deploymentProviders } = options;
     const onCredentialsChanged = options.onCredentialsChanged ?? (() => {});
     const onCustomProvidersChanged = options.onCustomProvidersChanged ?? (() => {});
+    const resolvePayerProfiles = createSessionOwnerProfileResolver(options.users);
 
     const resolveOMResponseContext = async (c: Context) => {
       const tenantCredentials = await listTenantCredentialsForRequest({
@@ -1012,17 +1015,12 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 }
                 sessionPolicy = { modelScope, defaultModelId };
                 // Without a Factory project the policy fell back to the caller, who may not be the one paying.
-                if (policy.factoryProjectId) {
-                  paidBy =
-                    modelScope === 'user'
-                      ? {
-                          user: await resolvePayerUser({
-                            payerUserId: policy.tenant.userId,
-                            viewerUserId: tenant.userId,
-                            users: options.users,
-                          }),
-                        }
-                      : {};
+                if (policy.factoryProjectId && modelScope === 'factory') {
+                  paidBy = {};
+                } else if (policy.factoryProjectId) {
+                  const payerUserId = policy.tenant.userId;
+                  const payerName = (await resolvePayerProfiles([payerUserId])).get(payerUserId)?.name;
+                  paidBy = { user: { id: payerUserId, ...(payerName ? { name: payerName } : {}) } };
                 }
               }
             } else if (allTenantCredentials && c.req.query('scope') === 'user') {
@@ -1086,7 +1084,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               paidBy && tenantCredentials
                 ? {
                     ...paidBy,
-                    credentials: credentialKindsByModelProvider(
+                    credentials: payerCredentialsByModelProvider(
                       models.map(model => model.provider),
                       tenantCredentials,
                     ),

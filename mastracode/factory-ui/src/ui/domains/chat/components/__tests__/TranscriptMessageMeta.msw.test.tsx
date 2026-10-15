@@ -152,8 +152,10 @@ describe('message meta', () => {
   });
 
   const ward = { id: 'ward', name: 'Ward Peeters' };
+  const claudeSubscription = { anthropic: { type: 'oauth', subscription: 'Claude Pro/Max' } } as const;
   const opus = { modelId: 'claude-opus-4-6', provider: 'anthropic.messages' };
   const gpt = { modelId: 'gpt-5', provider: 'openai.responses' };
+  const grok = { modelId: 'grok-4', provider: 'xai.chat' };
   const payerCases: Array<{
     payer: SessionPayer;
     viewerId: string;
@@ -161,31 +163,31 @@ describe('message meta', () => {
     label: string;
   }> = [
     {
-      payer: { user: ward, credentials: { anthropic: 'oauth' } },
+      payer: { user: ward, credentials: claudeSubscription },
       viewerId: 'damien',
       model: opus,
       label: 'Claude Opus 4.6 · Ward Peeters’s Claude Pro/Max',
     },
     {
-      payer: { user: ward, credentials: { anthropic: 'oauth' } },
+      payer: { user: ward, credentials: claudeSubscription },
       viewerId: 'ward',
       model: opus,
       label: 'Claude Opus 4.6 · Your Claude Pro/Max',
     },
     {
-      payer: { user: { id: 'ward' }, credentials: { openai: 'api_key' } },
+      payer: { user: { id: 'ward' }, credentials: { openai: { type: 'api_key' } } },
       viewerId: 'damien',
       model: gpt,
       label: 'GPT-5 · Personal OpenAI API key',
     },
     {
-      payer: { credentials: { openai: 'oauth' } },
+      payer: { credentials: { xai: { type: 'oauth', subscription: 'SuperGrok/X Premium+' } } },
       viewerId: 'damien',
-      model: gpt,
-      label: 'GPT-5 · Organization ChatGPT Plus/Pro',
+      model: grok,
+      label: 'Grok 4 · Organization SuperGrok/X Premium+',
     },
     {
-      payer: { user: ward, credentials: { openai: 'oauth' } },
+      payer: { user: ward, credentials: { openai: { type: 'api_key' } } },
       viewerId: 'damien',
       model: opus,
       label: 'Claude Opus 4.6',
