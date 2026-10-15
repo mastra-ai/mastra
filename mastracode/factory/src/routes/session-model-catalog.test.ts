@@ -79,6 +79,7 @@ async function setup(modelScope: 'hybrid' | 'user' | 'factory' = 'hybrid', visib
       modelCredentials: seed.credentials,
       modelDefaults: seed.modelDefaults,
       factoryProjects: seed.projects,
+      users: { getUser: async (id: string) => (id === 'owner' ? { id, name: 'Ward Peeters' } : null) },
       sourceControlSessions: createSourceControlSessionLookup([sourceControl]),
       workItems: seed.workItems,
     }).routes(),
@@ -129,6 +130,10 @@ describe('session-owner model catalog', () => {
       expect(body.modelScope).toBe('user');
       expect(body.defaultModelId).toBe('anthropic/claude-opus-4-6');
       expect(body.models.map((m: { id: string }) => m.id)).toEqual(['anthropic/claude-opus-4-6']);
+      expect(body.payer).toEqual({
+        user: { id: 'owner', name: 'Ward Peeters' },
+        credentials: { anthropic: 'api_key' },
+      });
       expect(JSON.stringify(body)).not.toContain('secret');
     },
   );
@@ -155,6 +160,7 @@ describe('session-owner model catalog', () => {
       const body = await response.json();
       expect(body.modelScope).toBe('factory');
       expect(body.defaultModelId).toBe('deepseek/deepseek-flash');
+      expect(body.payer).toEqual({ credentials: { deepseek: 'api_key' } });
       expect(body.models.map((m: { id: string }) => m.id)).toEqual(['deepseek/deepseek-flash']);
     },
   );

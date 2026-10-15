@@ -1,4 +1,5 @@
 import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
+import type { SessionPayer } from '@mastra/factory/routes/session-payer';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
@@ -149,4 +150,72 @@ describe('message meta', () => {
     expect(screen.getAllByText('Claude Opus 4.6')).toHaveLength(1);
     expect(screen.queryByText('GPT-5')).toBeNull();
   });
+
+  const ward = { id: 'ward', name: 'Ward Peeters' };
+  const opus = { modelId: 'claude-opus-4-6', provider: 'anthropic.messages' };
+  const gpt = { modelId: 'gpt-5', provider: 'openai.responses' };
+  const payerCases: Array<{
+    payer: SessionPayer;
+    viewerId: string;
+    model: { modelId: string; provider: string };
+    label: string;
+  }> = [
+    {
+      payer: { user: ward, credentials: { anthropic: 'oauth' } },
+      viewerId: 'damien',
+      model: opus,
+      label: 'Claude Opus 4.6 · Ward Peeters’s Claude Pro/Max',
+    },
+    {
+      payer: { user: ward, credentials: { anthropic: 'oauth' } },
+      viewerId: 'ward',
+      model: opus,
+      label: 'Claude Opus 4.6 · Your Claude Pro/Max',
+    },
+    {
+      payer: { user: { id: 'ward' }, credentials: { openai: 'api_key' } },
+      viewerId: 'damien',
+      model: gpt,
+      label: 'GPT-5 · Personal OpenAI API key',
+    },
+    {
+      payer: { credentials: { openai: 'oauth' } },
+      viewerId: 'damien',
+      model: gpt,
+      label: 'GPT-5 · Organization ChatGPT Plus/Pro',
+    },
+    {
+      payer: { user: ward, credentials: { openai: 'oauth' } },
+      viewerId: 'damien',
+      model: opus,
+      label: 'Claude Opus 4.6',
+    },
+  ];
+  it.each(payerCases)(
+    'labels a $model.provider reply for viewer $viewerId as “$label”',
+    ({ payer, viewerId, model, label }) => {
+      const reply: TimelineEntry = {
+        kind: 'message',
+        id: 'assistant-1',
+        message: {
+          id: 'assistant-1',
+          role: 'assistant',
+          createdAt: CREATED_AT,
+          content: { format: 2, parts: [{ type: 'text', text: 'shipped' }], metadata: model },
+        },
+      };
+
+      renderWithProviders(
+        <TranscriptEntries
+          entries={[reply]}
+          viewerId={viewerId}
+          payer={payer}
+          onApprove={() => {}}
+          onRespond={() => {}}
+        />,
+      );
+
+      expect(screen.getByText(label, { exact: true })).toBeVisible();
+    },
+  );
 });

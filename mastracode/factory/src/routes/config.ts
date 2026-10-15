@@ -15,7 +15,7 @@ import { AMAZON_BEDROCK_GATEWAY_ID } from '@mastra/code-sdk/providers/amazon-bed
 import { MASTRA_GATEWAY_PREFIX } from '@mastra/code-sdk/providers/model-ids';
 import { getModelReasoningOptions } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
-import type { ApiRoute } from '@mastra/core/server';
+import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 
 import type { Context } from 'hono';
@@ -47,6 +47,8 @@ import {
 } from './provider-credentials.js';
 import { Route } from './route.js';
 import type { RouteAuth, RouteDependencies } from './route.js';
+import { credentialKindsByModelProvider, resolvePayerUser } from './session-payer.js';
+import type { SessionPayer } from './session-payer.js';
 
 /** Widen a route-local Hono context to the plain `Context` the auth helpers take. */
 function loose(c: unknown): Context {
@@ -609,6 +611,8 @@ export interface ConfigRoutesDeps extends RouteDependencies {
   memorySettings?: MemorySettingsStorage;
   /** Factory projects domain, used to derive OM fallbacks from a factory's default model. */
   factoryProjects?: FactoryProjectsStorage;
+  /** Resolves who pays for a teammate's thread to a display name. */
+  users?: Pick<IUserProvider, 'getUser'>;
   /** Custom-providers domain handle; absent when the app database is missing. */
   customProviders?: CustomProvidersStorage;
   /** Notifies the host after tenant credentials change so caches can be dropped. */
@@ -962,6 +966,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             const tenant = auth.tenant(c);
             let tenantCredentials = allTenantCredentials;
             let sessionPolicy: { modelScope: 'factory' | 'user'; defaultModelId: string | null } | undefined;
+            let paidBy: Pick<SessionPayer, 'user'> | undefined;
             const resourceId = c.req.query('resourceId');
             const threadId = c.req.query('threadId');
             if (resourceId !== undefined || threadId !== undefined) {
@@ -1006,6 +1011,19 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                     (await options.modelDefaults.get({ orgId, userId: policy.tenant.userId }))?.modelId ?? null;
                 }
                 sessionPolicy = { modelScope, defaultModelId };
+                // Without a Factory project the policy fell back to the caller, who may not be the one paying.
+                if (policy.factoryProjectId) {
+                  paidBy =
+                    modelScope === 'user'
+                      ? {
+                          user: await resolvePayerUser({
+                            payerUserId: policy.tenant.userId,
+                            viewerUserId: tenant.userId,
+                            users: options.users,
+                          }),
+                        }
+                      : {};
+                }
               }
             } else if (allTenantCredentials && c.req.query('scope') === 'user') {
               // Settings still list the caller's own models; live threads resolve their owner above.
@@ -1064,8 +1082,19 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 // Fail soft: the catalog still serves the built-in models.
               }
             }
+            const payer: SessionPayer | undefined =
+              paidBy && tenantCredentials
+                ? {
+                    ...paidBy,
+                    credentials: credentialKindsByModelProvider(
+                      models.map(model => model.provider),
+                      tenantCredentials,
+                    ),
+                  }
+                : undefined;
             return c.json({
               ...sessionPolicy,
+              ...(payer ? { payer } : {}),
               models: catalog.sort((a, b) =>
                 a.provider === b.provider ? a.id.localeCompare(b.id) : a.provider.localeCompare(b.provider),
               ),
