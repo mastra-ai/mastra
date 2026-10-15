@@ -5,7 +5,8 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderHookWithProviders, waitForMutationsIdle } from '../../../e2e/ui/render';
-import { useProvidersQuery, useRemoveProviderKey, useSaveProviderKey } from '../use-providers';
+import { useDefaultModelQuery } from '../use-default-model';
+import { usePollProviderOAuth, useProvidersQuery, useRemoveProviderKey, useSaveProviderKey } from '../use-providers';
 import { anthropicProviderNoKey, openaiProvider, providersResponse } from './fixtures/providers';
 
 const PROVIDERS_URL = `${TEST_BASE_URL}/web/config/providers`;
@@ -104,6 +105,38 @@ describe('useRemoveProviderKey', () => {
       await waitForMutationsIdle(client);
 
       await waitFor(() => expect(result.current.query.data?.[0]?.source).toBe('none'));
+    });
+  });
+});
+
+describe('usePollProviderOAuth', () => {
+  describe('when the sign-in completes', () => {
+    it('refetches the default model the server prefilled from the new subscription', async () => {
+      let prefilled = false;
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+          HttpResponse.json({ modelId: prefilled ? 'openai/gpt-5.6-sol' : null }),
+        ),
+        http.post(`${PROVIDERS_URL}/openai/oauth/poll`, () => {
+          prefilled = true;
+          return HttpResponse.json({ status: 'complete', ok: true });
+        }),
+        http.get(PROVIDERS_URL, () => HttpResponse.json(providersResponse)),
+        http.get(`${TEST_BASE_URL}/web/config/available-models`, () => HttpResponse.json({ models: [] })),
+      );
+
+      const { result, client } = renderHookWithProviders(() => ({
+        defaultModel: useDefaultModelQuery(),
+        poll: usePollProviderOAuth(),
+      }));
+      await waitFor(() => expect(result.current.defaultModel.data?.modelId).toBeNull());
+
+      await act(async () => {
+        await result.current.poll.mutateAsync({ provider: 'openai', sessionId: 's-1' });
+      });
+      await waitForMutationsIdle(client);
+
+      await waitFor(() => expect(result.current.defaultModel.data?.modelId).toBe('openai/gpt-5.6-sol'));
     });
   });
 });

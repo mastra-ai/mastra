@@ -756,6 +756,8 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       authStorage: deps.authStorage,
       modelCredentials: deps.domains.modelCredentials,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
+      modelDefaults: deps.domains.modelDefaults,
+      projects: deps.domains.projects,
     }).routes(),
     ...new SkillRoutes({
       auth: deps.auth,

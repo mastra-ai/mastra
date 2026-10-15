@@ -26,6 +26,7 @@ import { pollCodexDeviceLogin, startCodexDeviceLogin } from '@mastra/code-sdk/au
 import type { CodexDeviceLoginPending } from '@mastra/code-sdk/auth/providers/openai-codex';
 import { pollXAIDeviceLogin, startXAIDeviceLogin } from '@mastra/code-sdk/auth/providers/xai';
 import type { XAIDeviceLoginPending } from '@mastra/code-sdk/auth/providers/xai';
+import { PROVIDER_DEFAULT_MODELS } from '@mastra/code-sdk/auth/storage';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { OAuthCredentials } from '@mastra/code-sdk/auth/types';
 import type { ApiRoute } from '@mastra/core/server';
@@ -34,6 +35,8 @@ import type { Context } from 'hono';
 
 import { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { LoginCredentialScope, LoginSessionKind, LoginSessionRow } from '../storage/domains/credentials/base.js';
+import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
+import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import { getAuthProviderId, resolveCredentialContext } from './provider-credentials.js';
 import type { CredentialContext } from './provider-credentials.js';
 import { Route } from './route.js';
@@ -230,6 +233,50 @@ async function persistOAuthCredential({
   await authStorage.addAccount(authProviderId, credentials);
 }
 
+/**
+ * Prefill the default model the new subscription serves, for whichever scope it
+ * was connected to: a personal sign-in seeds the caller's default, an org-wide
+ * one seeds every Factory in the org. A default someone already chose is kept.
+ */
+async function prefillSubscriptionDefaultModel({
+  ctx,
+  provider,
+  scope,
+  modelDefaults,
+  projects,
+}: {
+  ctx: CredentialContext;
+  provider: string;
+  scope: LoginCredentialScope | undefined;
+  modelDefaults: ModelDefaultsStorage | undefined;
+  projects: FactoryProjectsStorage | undefined;
+}): Promise<void> {
+  const modelId = PROVIDER_DEFAULT_MODELS[getAuthProviderId(provider)];
+  if (!modelId) return;
+  try {
+    if (ctx.mode === 'tenant' && scope === 'org') {
+      if (!projects) return;
+      await projects.ensureReady();
+      for (const project of await projects.list({ orgId: ctx.orgId })) {
+        if (project.defaultModelId) continue;
+        await projects.update({
+          orgId: ctx.orgId,
+          id: project.id,
+          input: async current => (current.defaultModelId ? null : { defaultModelId: modelId }),
+        });
+      }
+      return;
+    }
+    if (!modelDefaults) return;
+    await modelDefaults.ensureReady();
+    const tenant = ctx.mode === 'tenant' ? { orgId: ctx.orgId, userId: ctx.userId } : LOCAL_TENANT;
+    await modelDefaults.setIfUnset({ ...tenant, modelId });
+  } catch (error) {
+    // The sign-in itself succeeded; a missing default only means picking a model by hand.
+    console.warn('[oauth] Could not prefill the default model for the new sign-in.', error);
+  }
+}
+
 async function readJsonBody(c: Context): Promise<Record<string, unknown>> {
   try {
     const body = (await c.req.json()) as unknown;
@@ -246,6 +293,10 @@ export interface OAuthRoutesDeps extends RouteDependencies {
   modelCredentials?: ModelCredentialsStorage;
   /** Notifies the host after tenant credentials change so caches can be dropped. */
   onCredentialsChanged?: (tenant: { orgId: string; userId?: string }) => void;
+  /** Personal default models, prefilled from a personal sign-in. */
+  modelDefaults?: ModelDefaultsStorage;
+  /** Factories whose default model an org-wide sign-in prefills. */
+  projects?: FactoryProjectsStorage;
 }
 
 /**
@@ -258,7 +309,7 @@ export interface OAuthRoutesDeps extends RouteDependencies {
  */
 export class OAuthRoutes extends Route<OAuthRoutesDeps> {
   routes(): ApiRoute[] {
-    const { auth, authStorage, modelCredentials } = this.deps;
+    const { auth, authStorage, modelCredentials, modelDefaults, projects } = this.deps;
     const onCredentialsChanged = this.deps.onCredentialsChanged ?? (() => {});
 
     return [
@@ -378,6 +429,13 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
             authStorage,
             onCredentialsChanged,
           });
+          await prefillSubscriptionDefaultModel({
+            ctx,
+            provider,
+            scope: session.credentialScope,
+            modelDefaults,
+            projects,
+          });
           await (await sessionStore(ctx)).deleteLoginSession(sessionId);
           return c.json({ status: 'complete', ok: true });
         },
@@ -449,6 +507,13 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
               credentials: result.credentials,
               authStorage,
               onCredentialsChanged,
+            });
+            await prefillSubscriptionDefaultModel({
+              ctx,
+              provider,
+              scope: session.credentialScope,
+              modelDefaults,
+              projects,
             });
             await (await sessionStore(ctx)).deleteLoginSession(sessionId);
             return c.json({ status: 'complete', ok: true });

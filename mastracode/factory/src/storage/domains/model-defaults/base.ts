@@ -95,6 +95,31 @@ export class ModelDefaultsStorage extends FactoryStorageDomain {
     }
   }
 
+  /** Store `modelId` only when the user has no default yet; never overwrites a chosen default. */
+  async setIfUnset({
+    orgId,
+    userId,
+    modelId,
+  }: {
+    orgId: string;
+    userId: string;
+    modelId: string;
+  }): Promise<ModelDefaultRecord | null> {
+    try {
+      return toRecord(
+        await this.#db.insertOne<ModelDefaultDbRow>('user_default_models', {
+          org_id: orgId,
+          user_id: userId,
+          model_id: modelId,
+          updated_at: new Date(),
+        }),
+      );
+    } catch (error) {
+      if (error instanceof UniqueViolationError) return null;
+      throw error;
+    }
+  }
+
   async clear({ orgId, userId }: { orgId: string; userId: string }): Promise<boolean> {
     return (await this.#db.deleteMany('user_default_models', { org_id: orgId, user_id: userId })) > 0;
   }

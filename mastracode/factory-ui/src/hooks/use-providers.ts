@@ -31,6 +31,15 @@ function invalidateCredentialDependentQueries(queryClient: QueryClient) {
   ]);
 }
 
+/** A completed sign-in may also prefill the personal or Factory default model. */
+function invalidateSignInDependentQueries(queryClient: QueryClient) {
+  return Promise.all([
+    invalidateCredentialDependentQueries(queryClient),
+    queryClient.invalidateQueries({ queryKey: queryKeys.defaultModel() }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.factories() }),
+  ]);
+}
+
 export function useProvidersQuery() {
   const { client } = useApiConfig();
   return useQuery({
@@ -128,7 +137,7 @@ export function useCompleteProviderOAuth() {
         sessionId,
         code,
       }),
-    onSuccess: () => invalidateCredentialDependentQueries(queryClient),
+    onSuccess: () => invalidateSignInDependentQueries(queryClient),
   });
 }
 
@@ -146,7 +155,7 @@ export function usePollProviderOAuth() {
       }),
     onSuccess: response => {
       if (response.status === 'complete') {
-        return invalidateCredentialDependentQueries(queryClient);
+        return invalidateSignInDependentQueries(queryClient);
       }
     },
   });

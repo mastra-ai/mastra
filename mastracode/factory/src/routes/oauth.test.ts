@@ -1,3 +1,4 @@
+import { PROVIDER_DEFAULT_MODELS } from '@mastra/code-sdk/auth/storage';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -76,6 +77,8 @@ function buildApp(
       auth: fakeRouteAuth({ enabled: opts?.enabled, isOrganizationAdmin: opts?.isOrganizationAdmin }),
       authStorage,
       modelCredentials: opts?.noCredentials ? undefined : seed.credentials,
+      modelDefaults: seed.modelDefaults,
+      projects: seed.projects,
     }).routes(),
   );
   return app;
@@ -393,6 +396,52 @@ describe('provider login preserves OM selection intent', () => {
       observerModelId: 'openai/gpt-5.4-mini',
       reflectorModelId: null,
     });
+  });
+});
+
+describe('sign-in prefills the default model', () => {
+  it("sets the caller's personal default from a personal subscription and leaves Factories alone", async () => {
+    const factory = await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'F' } });
+    const app = buildApp(userA);
+    const { sessionId } = await (await post(app, '/web/config/providers/anthropic/oauth/start')).json();
+    await post(app, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
+
+    expect((await seed.modelDefaults.get(TENANT_A))?.modelId).toBe(PROVIDER_DEFAULT_MODELS.anthropic);
+    expect(await seed.modelDefaults.get({ orgId: 'org1', userId: 'user-b' })).toBeNull();
+    expect((await seed.projects.getById({ id: factory.id }))?.defaultModelId).toBeNull();
+  });
+
+  it('keeps a personal default the user already chose', async () => {
+    await seed.modelDefaults.set({ ...TENANT_A, modelId: 'openai/gpt-5.4-mini' });
+    pollCodexDeviceLogin.mockResolvedValue({ status: 'complete', credentials: CODEX_CREDS });
+    const app = buildApp(userA);
+    const { sessionId } = await (await post(app, '/web/config/providers/openai/oauth/start')).json();
+    await makePollable(sessionId);
+    await post(app, '/web/config/providers/openai/oauth/poll', { sessionId });
+
+    expect((await seed.modelDefaults.get(TENANT_A))?.modelId).toBe('openai/gpt-5.4-mini');
+  });
+
+  it("sets the org's Factory defaults from an org-wide subscription, keeping chosen ones", async () => {
+    const unset = await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'Unset' } });
+    const chosen = await seed.projects.create({
+      orgId: 'org1',
+      userId: 'user-a',
+      input: { name: 'Chosen', defaultModelId: 'anthropic/claude-fable-5' },
+    });
+    const otherOrg = await seed.projects.create({ orgId: 'org2', userId: 'user-c', input: { name: 'Other' } });
+    pollCodexDeviceLogin.mockResolvedValue({ status: 'complete', credentials: CODEX_CREDS });
+    const app = buildApp(userA);
+    const { sessionId } = await (await post(app, '/web/config/providers/openai/oauth/start', { scope: 'org' })).json();
+    await makePollable(sessionId);
+    await post(app, '/web/config/providers/openai/oauth/poll', { sessionId });
+
+    expect((await seed.projects.getById({ id: unset.id }))?.defaultModelId).toBe(
+      PROVIDER_DEFAULT_MODELS['openai-codex'],
+    );
+    expect((await seed.projects.getById({ id: chosen.id }))?.defaultModelId).toBe('anthropic/claude-fable-5');
+    expect((await seed.projects.getById({ id: otherOrg.id }))?.defaultModelId).toBeNull();
+    expect(await seed.modelDefaults.get(TENANT_A)).toBeNull();
   });
 });
 
