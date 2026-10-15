@@ -120,6 +120,30 @@ function modelListTests(version: 'v1' | 'v2') {
         expect(reorderedModelList?.map(model => model.id)).toEqual(reversedModelIds);
       });
 
+      it('should not reuse explicit IDs for generated dynamic model IDs', async () => {
+        let resolution = 0;
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: 'test agent instructions',
+          model: () => {
+            resolution++;
+            if (resolution === 1) {
+              return [{ id: 'primary', model: openai('gpt-4o') }, { model: openai('gpt-4o-mini') }];
+            }
+            return [{ model: openai('gpt-4o-mini') }, { id: 'primary', model: openai('gpt-4o') }];
+          },
+        });
+
+        await agent.getModelList();
+        const reorderedModelList = await agent.getModelList();
+        const modelIds = reorderedModelList?.map(model => model.id) ?? [];
+
+        expect(new Set(modelIds).size).toBe(2);
+        expect(modelIds[0]).not.toBe('primary');
+        expect(modelIds[1]).toBe('primary');
+      });
+
       it('should keep unlisted models at the end when reordering with a partial list', async () => {
         const agent = new Agent({
           id: 'test-agent',

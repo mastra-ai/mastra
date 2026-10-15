@@ -3672,11 +3672,25 @@ export class Agent<
       return models;
     }
 
+    const explicitIds = new Set(models.flatMap(model => (model.id ? [model.id] : [])));
+    const assignedIds = new Set<string>();
+
     return models.map((model, index) => {
-      const id = model.id ?? generatedIds?.[index] ?? globalThis.crypto.randomUUID();
+      if (model.id) {
+        assignedIds.add(model.id);
+        return Agent.toFallbackEntry(model, this.maxRetries ?? 0, this.#maxRetriesConfigured);
+      }
+
+      let id = generatedIds?.[index];
+      if (!id || explicitIds.has(id) || assignedIds.has(id)) {
+        do {
+          id = globalThis.crypto.randomUUID();
+        } while (explicitIds.has(id) || assignedIds.has(id));
+      }
       if (generatedIds) {
         generatedIds[index] = id;
       }
+      assignedIds.add(id);
       return Agent.toFallbackEntry({ ...model, id }, this.maxRetries ?? 0, this.#maxRetriesConfigured);
     }) as ModelFallbacks;
   }
