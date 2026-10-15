@@ -36,9 +36,11 @@ export function TracesGroupByMenu({ value, dimensions, onChange, disabledReason 
           value={value ?? NONE}
           onValueChange={next => onChange(dimensions.find(dimension => dimension === next))}
         >
-          <DropdownMenu.RadioItem value={NONE}>None</DropdownMenu.RadioItem>
+          <DropdownMenu.RadioItem value={NONE} closeOnClick>
+            None
+          </DropdownMenu.RadioItem>
           {dimensions.map(dimension => (
-            <DropdownMenu.RadioItem key={dimension} value={dimension}>
+            <DropdownMenu.RadioItem key={dimension} value={dimension} closeOnClick>
               {TRACE_GROUP_BY_DIMENSION_LABELS[dimension]}
             </DropdownMenu.RadioItem>
           ))}

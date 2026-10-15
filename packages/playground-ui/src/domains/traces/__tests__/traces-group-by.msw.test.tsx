@@ -121,6 +121,7 @@ describe('Traces group by', () => {
       limit: 50,
     });
     expect(screen.getByRole('button', { name: 'Group by: Agent / workflow' })).not.toBeNull();
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
   });
 
   it('shows measures and explains missing or partial tokens and cost', async () => {
