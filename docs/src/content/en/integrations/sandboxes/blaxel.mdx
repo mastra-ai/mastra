@@ -185,13 +185,13 @@ const handle = await sandbox.processes.spawn('node server.js', {
 })
 
 // Interact with the process
+await handle.sendStdin('hello\n')
+await handle.closeStdin()
 console.log(handle.stdout)
 await handle.kill()
 ```
 
-:::note
-Blaxel sandboxes don't support stdin. Calling `handle.sendStdin()` throws an error.
-:::
+Spawned processes have a writable stdin by default. Pass `stdinMode: 'ignore'` to start a process with stdin closed so commands that read stdin get EOF immediately.
 
 See [`SandboxProcessManager` reference](/reference/workspace/process-manager) for the full API.
 

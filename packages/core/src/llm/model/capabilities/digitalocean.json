@@ -6,6 +6,7 @@
     "anthropic-claude-4.1-opus",
     "anthropic-claude-4.5-sonnet",
     "anthropic-claude-4.6-sonnet",
+    "anthropic-claude-5.5-haiku",
     "anthropic-claude-fable-5",
     "anthropic-claude-fable-5.1",
     "anthropic-claude-haiku-4.5",
@@ -27,6 +28,7 @@
     "llama-4-maverick",
     "ministral-3-8b-instruct-2512",
     "nemotron-3-nano-omni",
+    "nemotron-3.5-super-vl",
     "nemotron-nano-12b-v2-vl",
     "openai-gpt-4.1",
     "openai-gpt-4o",
@@ -101,6 +103,7 @@
     "nemotron-3-nano-30b",
     "nemotron-3-nano-omni",
     "nemotron-3-ultra-550b",
+    "nemotron-3.5-super-vl",
     "nemotron-nano-12b-v2-vl",
     "nvidia-nemotron-3-super-120b",
     "openai-gpt-4.1",
@@ -115,6 +118,7 @@
   ],
   "structuredOutput": [
     "alibaba-qwen3-32b",
+    "anthropic-claude-5.5-haiku",
     "deepseek-r1-distill-llama-70b",
     "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
@@ -302,6 +306,12 @@
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "anthropic-claude-5.5-haiku": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "openai-o3": [

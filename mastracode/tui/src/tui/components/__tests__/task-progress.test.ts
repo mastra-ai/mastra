@@ -33,30 +33,18 @@ describe('TaskProgressComponent', () => {
     expect(component.render(120)).toEqual([]);
   });
 
-  it('keeps current task rendering when tasks are active', () => {
+  it('renders an item-aware summary when tasks are active', () => {
     const component = new TaskProgressComponent();
-
-    component.updateTasks([
-      { id: 'one', content: 'Do the thing', activeForm: 'Doing the thing', status: 'in_progress' },
-      { id: 'two', content: 'Do the next thing', activeForm: 'Doing the next thing', status: 'pending' },
-    ]);
-
-    const lines = component.render(120).map(line => stripAnsi(line));
-
-    expect(lines[0]).toBe('');
-    expect(lines[1]).toContain('Tasks [0/2 completed]');
-    expect(lines[2]).toContain('Doing the thing');
-    expect(lines[3]).toContain('Do the next thing');
-  });
-
-  it('renders an item-aware summary when quiet mode is active', () => {
-    const component = new TaskProgressComponent();
-    component.setQuietMode(true);
 
     component.updateTasks([
       { id: 'one', content: 'Inspect task progress', activeForm: 'Inspecting task progress', status: 'completed' },
-      { id: 'two', content: 'Implement quiet tasks', activeForm: 'Implementing quiet tasks', status: 'in_progress' },
-      { id: 'three', content: 'Verify quiet tasks', activeForm: 'Verifying quiet tasks', status: 'pending' },
+      {
+        id: 'two',
+        content: 'Implement compact tasks',
+        activeForm: 'Implementing compact tasks',
+        status: 'in_progress',
+      },
+      { id: 'three', content: 'Verify compact tasks', activeForm: 'Verifying compact tasks', status: 'pending' },
     ]);
 
     const lines = component.render(120).map(line => stripAnsi(line));
@@ -66,29 +54,28 @@ describe('TaskProgressComponent', () => {
     expect(lines[1]).toContain('1/3');
     expect(lines[1]).not.toContain('Tasks');
     expect(lines[1]).not.toContain('[1/3]');
-    expect(lines[1]).toContain('▶ Implementing quiet tasks');
-    expect(lines[1]).toContain('○ Verify quiet tasks');
+    expect(lines[1]).toContain('▶ Implementing compact tasks');
+    expect(lines[1]).toContain('○ Verify compact tasks');
     expect(lines[1]).toContain('✓ Inspect task progress');
-    expect(lines[1].indexOf('Inspect task progress')).toBeLessThan(lines[1].indexOf('Implementing quiet tasks'));
-    expect(lines[1].indexOf('Implementing quiet tasks')).toBeLessThan(lines[1].indexOf('Verify quiet tasks'));
+    expect(lines[1].indexOf('Inspect task progress')).toBeLessThan(lines[1].indexOf('Implementing compact tasks'));
+    expect(lines[1].indexOf('Implementing compact tasks')).toBeLessThan(lines[1].indexOf('Verify compact tasks'));
   });
 
-  it('wraps quiet summaries between tasks without wrapping individual task items', () => {
+  it('wraps compact summaries between tasks without wrapping individual task items', () => {
     const component = new TaskProgressComponent();
-    component.setQuietMode(true);
 
     component.updateTasks([
       { id: 'one', content: 'Inspect task progress', activeForm: 'Inspecting task progress', status: 'completed' },
       {
         id: 'two',
-        content: 'Implement item aware quiet task summary wrapping',
-        activeForm: 'Implementing item aware quiet task summary wrapping',
+        content: 'Implement item aware compact task summary wrapping',
+        activeForm: 'Implementing item aware compact task summary wrapping',
         status: 'in_progress',
       },
       {
         id: 'three',
-        content: 'Verify quiet task wrapping',
-        activeForm: 'Verifying quiet task wrapping',
+        content: 'Verify compact task wrapping',
+        activeForm: 'Verifying compact task wrapping',
         status: 'pending',
       },
     ]);
@@ -97,13 +84,12 @@ describe('TaskProgressComponent', () => {
 
     expect(lines).toHaveLength(4);
     expect(lines[1]).toContain('1/3  ✓ Inspect task progress');
-    expect(lines[2]).toBe('       ▶ Implementing item aware quiet task summary wrapping');
-    expect(lines[3]).toBe('       ○ Verify quiet task wrapping');
+    expect(lines[2]).toBe('       ▶ Implementing item aware compact task summary wrapping');
+    expect(lines[3]).toBe('       ○ Verify compact task wrapping');
   });
 
-  it('wraps quiet summaries using terminal display width for wide characters', () => {
+  it('wraps compact summaries using terminal display width for wide characters', () => {
     const component = new TaskProgressComponent();
-    component.setQuietMode(true);
 
     component.updateTasks([
       { id: 'one', content: '界'.repeat(35), activeForm: 'Doing wide work', status: 'pending' },
@@ -117,27 +103,8 @@ describe('TaskProgressComponent', () => {
     expect(lines[2]).toBe('       ○ Done');
   });
 
-  it('updates between expanded and quiet task rendering', () => {
-    const component = new TaskProgressComponent();
-
-    component.updateTasks([
-      { id: 'one', content: 'Do the thing', activeForm: 'Doing the thing', status: 'in_progress' },
-      { id: 'two', content: 'Do the next thing', activeForm: 'Doing the next thing', status: 'pending' },
-    ]);
-
-    expect(component.render(120).map(line => stripAnsi(line))).toHaveLength(4);
-
-    component.setQuietMode(true);
-    const quietLines = component.render(120).map(line => stripAnsi(line));
-
-    expect(quietLines).toHaveLength(2);
-    expect(quietLines[1]).toContain('Doing the thing');
-    expect(quietLines[1]).toContain('Do the next thing');
-  });
-
   it('renders nothing again after all tasks complete', () => {
     const component = new TaskProgressComponent();
-    component.setQuietMode(true);
 
     component.updateTasks([{ id: 'one', content: 'Done', activeForm: 'Doing', status: 'completed' }]);
 

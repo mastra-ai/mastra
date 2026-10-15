@@ -1,6 +1,5 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { Knowledge } from '@mastra/core/knowledge';
-import type { GatewayLanguageModel } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
@@ -16,7 +15,7 @@ import { getOmScope } from '../utils/project.js';
 import { getActiveMemoryRoute, resolveModel } from './model.js';
 
 /** Route-backed OM fallback entry. */
-type MemoryModelRouteEntry = { id: string; model: GatewayLanguageModel };
+type MemoryModelRouteEntry = { id: string; model: ReturnType<typeof resolveModel> };
 
 /**
  * Resolve the active model route's memory models, starting at a same-thread
@@ -26,7 +25,7 @@ type MemoryModelRouteEntry = { id: string; model: GatewayLanguageModel };
 function resolveRouteMemoryModels(
   state: MastraCodeState | undefined,
   threadId: string | null | undefined,
-  resolve: (modelId: string) => GatewayLanguageModel,
+  resolve: (modelId: string) => ReturnType<typeof resolveModel>,
 ): MemoryModelRouteEntry[] | 'auto' | undefined {
   const memoryRoute = getActiveMemoryRoute(state, threadId);
   if (memoryRoute[0]?.memoryModelId === 'auto') return 'auto';
@@ -98,7 +97,7 @@ function resolveOmRoleModelForRequest(
   requestContext: RequestContext,
   settingsPath?: string,
   options?: { disableSettingsOmSeed?: boolean },
-): 'auto' | GatewayLanguageModel | MemoryModelRouteEntry[] {
+): 'auto' | ReturnType<typeof resolveModel> | MemoryModelRouteEntry[] {
   const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = controller?.getState() as MastraCodeState | undefined;
   const resolveOptions = { remapForCodexOAuth: true, requestContext, anthropicPromptCacheScope: 'system' } as const;
@@ -259,6 +258,8 @@ export function getDynamicMemory(
   // Memory bound to one storage is never reused after storage changes.
   let cachedMemory: Memory | null = null;
   let cachedMemoryKey: string | null = null;
+  // Instances replaced by a config change may still have background work in flight.
+  const retiredMemories = new Set<Memory>();
 
   // Observer/reflector model functions — read the current model ID from
   // controller state via requestContext (propagated by OM's agent.generate).
@@ -273,7 +274,7 @@ export function getDynamicMemory(
   const resolveMemoryModel = (modelId: string, { requestContext }: { requestContext?: RequestContext }) =>
     resolveModel(modelId, { remapForCodexOAuth: true, requestContext, anthropicPromptCacheScope: 'system' });
 
-  return ({ requestContext }: { requestContext: RequestContext }) => {
+  const resolveMemory = ({ requestContext }: { requestContext: RequestContext }) => {
     const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
     const state = controller?.getState() as MastraCodeState | undefined;
     const subconsciousEnabled = isSubconsciousEnabled(vector);
@@ -339,6 +340,17 @@ export function getDynamicMemory(
       ? `${DYNAMIC_AGENTS_MD_INSTRUCTION}\n\n${CAVEMAN_OM_INSTRUCTION}`
       : DYNAMIC_AGENTS_MD_INSTRUCTION;
     const reflectionInstruction = caveman ? CAVEMAN_OM_INSTRUCTION : undefined;
+
+    if (cachedMemory) {
+      const retired = cachedMemory;
+      retiredMemories.add(retired);
+      // settled() rejects if the instance's OM engine failed to start; that must not surface as
+      // an unhandled rejection from a background retirement.
+      void retired
+        .settled()
+        .catch(() => {})
+        .finally(() => retiredMemories.delete(retired));
+    }
 
     cachedMemory = new Memory({
       storage,
@@ -407,4 +419,15 @@ export function getDynamicMemory(
 
     return cachedMemory;
   };
+
+  return Object.assign(resolveMemory, {
+    /**
+     * Wait for background memory work (buffered observations, reflections, indexing) in every
+     * instance this factory created. Await before closing storage.
+     */
+    async settled(): Promise<void> {
+      // Drain every instance even if one rejects, so teardown can still close storage.
+      await Promise.allSettled([cachedMemory?.settled(), ...[...retiredMemories].map(memory => memory.settled())]);
+    },
+  });
 }

@@ -1,6 +1,7 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { formatModelName } from '@mastra/playground-ui/utils/model';
 import type { MouseEvent } from 'react';
 import { useRef, useState } from 'react';
 import { useParams } from 'react-router';
@@ -64,8 +65,9 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
         description={
           <>
             <span>
-              Factory runs (triage, board work items) start on this model and use the Factory memory settings. Your
-              personal defaults don&apos;t apply to them.
+              {projectQuery.data?.modelScope === 'hybrid'
+                ? "Work items (triage, board runs) start on this model and run on organization credentials. Interactive sessions start on each owner's personal default instead."
+                : "Factory runs (triage, board work items) start on this model and use the Factory memory settings. Your personal defaults don't apply to them."}
             </span>
             {error && (
               <Txt as="span" variant="meta" className="text-destructive-foreground">
@@ -109,7 +111,9 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
       <AlertDialog open={!!confirmModelId} onOpenChange={setDialogOpen}>
         <AlertDialog.Content>
           <AlertDialog.Header>
-            <AlertDialog.Title>Also switch running sessions to {confirmModelId}?</AlertDialog.Title>
+            <AlertDialog.Title>
+              Also switch running sessions to {confirmModelId ? formatModelName(confirmModelId) : ''}?
+            </AlertDialog.Title>
             <AlertDialog.Description>
               New Factory runs will use this model. Running work and review sessions keep their current model unless you
               switch them. Switched sessions keep their work and pick up the new model on their next step.

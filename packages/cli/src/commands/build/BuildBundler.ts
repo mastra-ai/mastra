@@ -86,19 +86,24 @@ export class BuildBundler extends Bundler {
       mastra.__registerInternalWorkflow(scoreTracesWorkflow);
     }
 
-    try {
-      await mastra.restartAllActiveWorkflowRuns();
-    } catch (error) {
-      mastra.getLogger().error('Failed to restart active workflow runs during server startup', { error });
+    // Workflow restarts and durable-agent recovery work on different runs, so
+    // neither waits for the other; a long-running workflow can't hold up recovery.
+    const recoveries = [];
+    if (mastra.recoveryConfig?.workflows !== 'off') {
+      recoveries.push(
+        mastra.restartAllActiveWorkflowRuns().catch(error => {
+          mastra.getLogger().error('Failed to restart active workflow runs during server startup', { error });
+        }),
+      );
     }
-
     if (mastra.recoveryConfig?.durableAgents === 'auto') {
-      try {
-        await mastra.recoverAllDurableAgents();
-      } catch (error) {
-        mastra.getLogger().error('Failed to recover durable agent runs during server startup', { error });
-      }
+      recoveries.push(
+        mastra.recoverAllDurableAgents().catch(error => {
+          mastra.getLogger().error('Failed to recover durable agent runs during server startup', { error });
+        }),
+      );
     }
+    await Promise.all(recoveries);
     `;
   }
 

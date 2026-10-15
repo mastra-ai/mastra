@@ -179,6 +179,37 @@ describe('FileTransport', () => {
       expect(logs.total).toBe(1);
     });
 
+    describe('read failures', () => {
+      const missingPath = path.join(testDir, 'missing.log');
+
+      async function transportWithMissingFile() {
+        fs.writeFileSync(missingPath, '');
+        const transport = new FileTransport({ path: missingPath });
+        await new Promise(resolve => transport.fileStream.once('open', resolve));
+        fs.rmSync(missingPath);
+        return transport;
+      }
+
+      it('listLogs rejects when the log file cannot be read', async () => {
+        const transport = await transportWithMissingFile();
+        await expect(transport.listLogs()).rejects.toMatchObject({
+          id: 'FILE_TRANSPORT_LIST_LOGS_FAILED',
+          cause: expect.objectContaining({ code: 'ENOENT' }),
+        });
+        transport.fileStream.destroy();
+      });
+
+      it('listLogsByRunId rejects when the log file cannot be read', async () => {
+        const transport = await transportWithMissingFile();
+        await expect(transport.listLogsByRunId({ runId: 'run-1' })).rejects.toMatchObject({
+          id: 'FILE_TRANSPORT_LIST_LOGS_BY_RUN_ID_FAILED',
+          details: { runId: 'run-1' },
+          cause: expect.objectContaining({ code: 'ENOENT' }),
+        });
+        transport.fileStream.destroy();
+      });
+    });
+
     it('should skip malformed lines and return valid logs', async () => {
       fs.writeFileSync(testPath, '{"msg":"before","time":1}\n{"msg":\n{"msg":"after","time":2}\n');
 

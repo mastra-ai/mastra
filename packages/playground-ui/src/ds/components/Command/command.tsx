@@ -31,7 +31,7 @@ type CommandDialogVariant = 'default' | 'inset';
 
 const commandDialogContentClasses: Record<CommandDialogVariant, string> = {
   default: 'overflow-hidden py-0',
-  inset: 'top-1/4 translate-y-0 overflow-hidden rounded-[calc(var(--radius-xl)+--spacing(1))] bg-muted p-1',
+  inset: 'overflow-hidden sm:top-1/4 sm:translate-y-0 rounded-[calc(var(--radius-xl)+--spacing(1))] bg-muted p-1',
 };
 
 const commandDialogCommandClasses: Record<CommandDialogVariant, string> = {
@@ -244,8 +244,9 @@ const CommandList = React.forwardRef<React.ElementRef<typeof CommandPrimitive.Li
 
     if (!scrollArea) return list;
 
+    // The list fills Command's `rounded-xl` box, so its scrollbar takes that radius's inset.
     return (
-      <ScrollArea className={cn('min-h-0', scrollAreaClassName)} mask={scrollAreaMask}>
+      <ScrollArea className={cn('min-h-0 scrollbar-inset-xl', scrollAreaClassName)} mask={scrollAreaMask}>
         <ScrollAreaViewport className={scrollAreaViewportClassName}>{list}</ScrollAreaViewport>
       </ScrollArea>
     );

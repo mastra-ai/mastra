@@ -482,6 +482,58 @@ describe('WorkItemsStorage', () => {
     expect((await commit()).status).toBe('committed');
   });
 
+  it('persists nothing for a stale rule evaluation, so the same delivery can commit at the fresh revision', async () => {
+    const storage = await makeStorage();
+    const created = await storage.upsert({ orgId: 'org1', userId: 'u', factoryProjectId: 'p1', input });
+    const commit = (expectedRevision: number) =>
+      storage.commitRuleEvaluation({
+        orgId: 'org1',
+        factoryProjectId: 'p1',
+        workItemId: created.item.id,
+        ingress: { identity: 'github:delivery-1', triggerType: 'github.issueComment' },
+        configVersion: 'v1',
+        expectedRevision,
+        actor: { type: 'system', id: 'rules' },
+        outcome: { status: 'accepted' },
+        decisions: [{ type: 'transition', stage: 'done', idempotencyKey: 'decision-1' }] as never,
+        causalChain: [],
+        now: new Date(),
+      });
+
+    expect(await commit(created.item.revision - 1)).toEqual({ status: 'stale' });
+    expect(await storage.listDeferredDecisions('org1', 'p1')).toEqual([]);
+
+    const fresh = await commit(created.item.revision);
+    expect(fresh.status).toBe('committed');
+    expect(fresh.status === 'committed' && fresh.result).toMatchObject({ status: 'accepted' });
+    expect((await storage.listDeferredDecisions('org1', 'p1')).map(d => d.idempotencyKey)).toEqual(['decision-1']);
+
+    const other = await storage.upsert({
+      orgId: 'org1',
+      userId: 'u',
+      factoryProjectId: 'p1',
+      input: { ...input, externalSource: { integrationId: 'github', type: 'issue', externalId: 'other-card' } },
+    });
+    await storage.commitRuleEvaluation({
+      orgId: 'org1',
+      factoryProjectId: 'p1',
+      workItemId: other.item.id,
+      ingress: { identity: 'github:delivery-2', triggerType: 'github.issueComment' },
+      configVersion: 'v1',
+      expectedRevision: other.item.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'transition', stage: 'done', idempotencyKey: 'decision-2' }] as never,
+      causalChain: [],
+      now: new Date(),
+    });
+    const forCard = async (workItemId: string) =>
+      (await storage.listDeferredDecisions('org1', 'p1', { workItemId })).map(d => d.idempotencyKey);
+    expect(await forCard(created.item.id)).toEqual(['decision-1']);
+    expect(await forCard(other.item.id)).toEqual(['decision-2']);
+    expect(await forCard('some-other-card')).toEqual([]);
+  });
+
   it('claims deferred decisions by payload filter, paging past any backlog of filtered-out rows', async () => {
     const storage = await makeStorage();
     const scope = { orgId: 'org1', factoryProjectId: 'p1' };
@@ -524,6 +576,11 @@ describe('WorkItemsStorage', () => {
     const all = await storage.listDeferredDecisions('org1', 'p1');
     expect(all.filter(d => d.status === 'leased')).toHaveLength(4);
     expect(all.filter(d => d.status === 'pending')).toHaveLength(697);
+
+    const leased = await storage.listDeferredDecisions('org1', 'p1', { statuses: ['leased'] });
+    expect(leased).toHaveLength(4);
+    expect(leased.every(d => d.status === 'leased')).toBe(true);
+    expect(await storage.listDeferredDecisions('org1', 'p1', { statuses: ['failed'] })).toEqual([]);
   });
 
   it('lists newest-first within the org/project scope and updates atomically', async () => {

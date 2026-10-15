@@ -60,7 +60,11 @@ export interface SandboxCommandResult {
 /** Minimal sandbox surface the filesystem needs. */
 export interface SandboxExec {
   readonly id: string;
-  executeCommand(command: string, args?: string[], options?: { timeout?: number }): Promise<SandboxCommandResult>;
+  executeCommand(
+    command: string,
+    args?: string[],
+    options?: { timeout?: number; maxRetainedBytes?: number },
+  ): Promise<SandboxCommandResult>;
 }
 
 export interface SandboxFilesystemOptions {
@@ -190,7 +194,12 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   // ── Command helper ─────────────────────────────────────────────────────
 
   private async exec(script: string): Promise<SandboxCommandResult> {
-    return this.sandbox.executeCommand('sh', ['-c', script], { timeout: COMMAND_TIMEOUT_MS });
+    // File reads come back as base64 on stdout and listings/grep are parsed
+    // line by line, so dropping the oldest output would corrupt results.
+    return this.sandbox.executeCommand('sh', ['-c', script], {
+      timeout: COMMAND_TIMEOUT_MS,
+      maxRetainedBytes: Infinity,
+    });
   }
 
   /**

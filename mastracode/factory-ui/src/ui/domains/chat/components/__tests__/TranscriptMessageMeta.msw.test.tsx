@@ -1,9 +1,10 @@
-import type { MastraDBMessage } from '@mastra/core/agent-controller';
+import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
+import { initialTranscript, transcriptReducer } from '../../services/transcript';
 import type { TimelineEntry } from '../../services/transcript';
 import { TranscriptEntries } from '../Transcript';
 
@@ -123,5 +124,29 @@ describe('message meta', () => {
     const times = container.querySelectorAll('time');
     expect(times).toHaveLength(1);
     expect(screen.getByRole('group', { name: 'Tool: read' })).toContainElement(times[0]);
+  });
+
+  it('names the model that closed a live reply, not one an earlier step ran on', () => {
+    const liveStep = (id: string, text: string, modelId: string): AgentControllerEvent[] => [
+      {
+        type: 'message_start',
+        message: {
+          id,
+          role: 'assistant',
+          createdAt: CREATED_AT,
+          content: { format: 2, parts: [{ type: 'text', text }], metadata: { modelId } },
+        },
+      },
+      { type: 'message_end', id },
+    ];
+    const { entries } = [
+      ...liveStep('assistant-1', 'reading the file', 'gpt-5'),
+      ...liveStep('assistant-2', 'shipped', 'claude-opus-4-6'),
+    ].reduce((state, event) => transcriptReducer(state, { type: 'event', event }), initialTranscript);
+
+    renderEntries(entries);
+
+    expect(screen.getAllByText('Claude Opus 4.6')).toHaveLength(1);
+    expect(screen.queryByText('GPT-5')).toBeNull();
   });
 });

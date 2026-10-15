@@ -811,7 +811,7 @@
       }
     },
     {
-      "hash": "155c524724759676",
+      "hash": "36e498e06d9acfa4",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -855,7 +855,7 @@
             {
               "type": "function_call_output",
               "call_id": "call_Qz21m0KnceI3llaaSHjfmXRv",
-              "output": "{\"name\":\"Dero Israel\",\"age\":25,\"email\":\"test@test.com\"}"
+              "output": "{\"age\":25,\"email\":\"test@test.com\",\"name\":\"Dero Israel\"}"
             },
             {
               "type": "function_call_output",

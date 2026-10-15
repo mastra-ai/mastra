@@ -31,6 +31,7 @@ import type {
   DirectoryListing,
   WorkspaceChange,
   WorkspaceChanges,
+  WorkspaceChangesRepository,
   WorkspaceChangeStatus,
   WorkspaceDiff,
   WorkspaceFile,
@@ -54,6 +55,7 @@ export type {
   DirectoryListing,
   WorkspaceChange,
   WorkspaceChanges,
+  WorkspaceChangesRepository,
   WorkspaceChangeStatus,
   WorkspaceDiff,
   WorkspaceFile,
@@ -88,6 +90,8 @@ export interface FactorySkillInfo {
   description: string;
   /** SKILL.md body with the frontmatter removed. */
   content: string;
+  /** Set when the SKILL.md fails runtime parsing/validation; the agent will not be able to load the skill. */
+  error?: string;
 }
 
 export interface FactorySkillsResponse {
