@@ -333,6 +333,21 @@ describe('factory_message_origin', () => {
     );
   });
 
+  it('audits an interactive worker turn as the thread agent, not the row owner', async () => {
+    const env = setup();
+    const messageId = await messaged(env);
+    env.auditRecorder.record.mockClear();
+
+    await env.run({ ...WORKER, interactive: true }, 'factory_message_origin', {
+      message: 'Yes, all green.',
+      inReplyTo: messageId,
+    });
+
+    expect(env.auditRecorder.record).toHaveBeenCalledWith(
+      expect.objectContaining({ actorId: 'agent:thread-session-b', actorType: 'agent' }),
+    );
+  });
+
   it('refuses a second reply to the same message', async () => {
     const env = setup();
     const messageId = await messaged(env);
