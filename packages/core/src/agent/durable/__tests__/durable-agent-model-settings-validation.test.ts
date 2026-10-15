@@ -8,11 +8,8 @@
  *
  * Both variants drive `expectEngineParity`. The invalid variant rejects before
  * streaming, which the helper records as a failed run (`snapshot.error`) rather
- * than as `turn()` throwing, so it is compared like any other turn. The one
- * difference left is the failure's class: plain rejects with the plain `Error`
- * the argument validation raises, durable and evented with a `TypeError` for the
- * same input and message. That is COR-1419, declared per engine and pinned
- * below; the negative check at the end proves the declaration is still needed.
+ * than as `turn()` throwing, so it is compared like any other turn. Every engine
+ * must preserve the validation `TypeError` and reject with the same message.
  */
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { describe, expect, it } from 'vitest';
@@ -30,9 +27,6 @@ const VALID_TIMEOUT = { totalMs: 60_000, stepMs: 30_000 };
 
 /** Matches the harness check `/modelSettings\.timeout/` on either surface. */
 const TIMEOUT_ERROR = /modelSettings\.timeout/;
-
-const COR_1419_REASON =
-  'COR-1419: pre-stream rejection, same message, but plain reports `Error` where the wrapped engines report `TypeError`';
 
 function t17Agent({ model }: { model: LanguageModelV2 }) {
   return new Agent({
@@ -56,13 +50,7 @@ describe('T17 modelSettings.timeout validation (plain, durable, evented)', () =>
       },
     };
 
-    const results = await expectEngineParity({
-      ...scenario,
-      differences: {
-        durable: { reason: COR_1419_REASON, ignore: ['error'] },
-        evented: { reason: COR_1419_REASON, ignore: ['error'] },
-      },
-    });
+    const results = await expectEngineParity(scenario);
 
     for (const engine of ENGINES) {
       const turn = results[engine]!.turns[0]!;
@@ -71,19 +59,13 @@ describe('T17 modelSettings.timeout validation (plain, durable, evented)', () =>
       // chunks at all, and the failure carries the settings-validation message.
       expect(turn.chunks, `${engine}: no chunks before the rejection`).toEqual([]);
       expect(turn.error?.message, `${engine}: rejection message`).toMatch(TIMEOUT_ERROR);
-      // Same message on every engine; only the class differs. Asserted per
-      // engine so the declaration above cannot hide a drifting message or class.
       expect(turn.error).toStrictEqual({
-        name: engine === 'plain' ? 'Error' : 'TypeError',
+        name: 'TypeError',
         message: results.plain!.turns[0]!.error?.message,
       });
       // 'model never called with the invalid settings'
       expect(results[engine]!.requests, `${engine}: model calls`).toHaveLength(0);
     }
-
-    // The declaration is load-bearing: without it the differing class fails the
-    // comparison. (The helper's own self-test covers the same contract.)
-    await expect(expectEngineParity(scenario)).rejects.toThrow(/durable differs from plain at turns\[0\]\.error\.name/);
   });
 
   it('valid timeout: the run completes normally on every engine', async () => {

@@ -1,12 +1,20 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { MastraBase } from '@mastra/core/base';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import { createStorageErrorId, getDefaultValue, getSqlType, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  getDefaultValue,
+  getSqlType,
+  isRunFenceConflictError,
+  TABLE_WORKFLOW_SNAPSHOT,
+} from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
 import Cloudflare from 'cloudflare';
 import { deserializeValue } from '../domains/utils';
 import { createSqlBuilder } from '../sql-builder';
 import type { SqlParam, SqlQueryOptions } from '../sql-builder';
+import { executeFenced, runFenceGuard } from './run-fencing';
+import type { RunFenceCheck } from './run-fencing';
 
 export type D1QueryResult = Awaited<ReturnType<Cloudflare['d1']['database']['query']>>['result'];
 
@@ -209,6 +217,34 @@ export class D1DB extends MastraBase {
         error,
       );
     }
+  }
+
+  /**
+   * Delete up to `limit` rows keyed by `runId` whose epoch-ms `column` is older
+   * than `cutoff`. Used to prune the run fencing tables.
+   */
+  async pruneRunRows({
+    tableName,
+    column,
+    cutoff,
+    limit,
+  }: {
+    tableName: TABLE_NAMES;
+    column: string;
+    cutoff: number;
+    limit: number;
+  }): Promise<number> {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(column)) {
+      throw new Error(`Invalid retention identifier: ${tableName}.${column}`);
+    }
+    const table = this.getTableName(tableName);
+    const rows = (await this.executeQuery({
+      sql: `DELETE FROM ${table} WHERE runId IN (
+        SELECT runId FROM ${table} WHERE ${column} < ? ORDER BY ${column} LIMIT ?
+      ) RETURNING runId`,
+      params: [cutoff, limit],
+    })) as Record<string, unknown>[] | null;
+    return Array.isArray(rows) ? rows.length : 0;
   }
 
   async executeQuery(options: SqlQueryOptions): Promise<Record<string, any>[] | Record<string, any> | null> {
@@ -551,11 +587,21 @@ export class D1DB extends MastraBase {
    * Upsert multiple records in a batch operation
    * @param tableName The table to insert into
    * @param records The records to insert
+   * @param check Run fence every upsert must hold; a refused upsert throws and stops the batch
    */
-  async batchUpsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
+  async batchUpsert({
+    tableName,
+    records,
+    check,
+  }: {
+    tableName: TABLE_NAMES;
+    records: Record<string, any>[];
+    check?: RunFenceCheck;
+  }): Promise<void> {
     if (records.length === 0) return;
 
     const fullTableName = this.getTableName(tableName);
+    const guard = runFenceGuard(check);
 
     try {
       // Process records in batches for better performance
@@ -590,10 +636,9 @@ export class D1DB extends MastraBase {
               {} as Record<string, any>,
             );
 
-            const query = createSqlBuilder().insert(fullTableName, columns, values, ['id'], recordToUpsert);
+            const query = createSqlBuilder().insert(fullTableName, columns, values, ['id'], recordToUpsert, guard);
 
-            const { sql, params } = query.build();
-            await this.executeQuery({ sql, params });
+            await executeFenced(this, check, query.build());
           }
         }
 
@@ -604,6 +649,7 @@ export class D1DB extends MastraBase {
 
       this.logger.debug(`Successfully batch upserted ${records.length} records into ${tableName}`);
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('CLOUDFLARE_D1', 'BATCH_UPSERT', 'FAILED'),

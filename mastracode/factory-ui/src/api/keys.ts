@@ -15,6 +15,13 @@
  */
 export const INITIAL_THREAD_MESSAGE_LIMIT = 100;
 
+export interface AvailableModelsFilter {
+  factoryProjectId?: string;
+  scope?: 'user';
+  resourceId?: string;
+  threadId?: string;
+}
+
 export const queryKeys = {
   serverFeatures: () => ['server-features'] as const,
   factoryAuth: () => ['factory-auth'] as const,
@@ -23,14 +30,22 @@ export const queryKeys = {
   persistedFactories: () => ['factories', 'persisted'] as const,
   factoryCreateFlow: () => ['factories', 'create-flow'] as const,
   factoryProject: (factoryProjectId: string | undefined) => ['factory', 'project', factoryProjectId ?? null] as const,
+  factoryEnvironment: (factoryProjectId: string | undefined) =>
+    ['factory', 'environment', factoryProjectId ?? null] as const,
+  // Not under `factoryEnvironment`: the build query invalidates the environment when a build settles, and a
+  // shared prefix would cancel and restart that same fetch.
+  factoryEnvironmentBuilds: (factoryProjectId: string | undefined) =>
+    ['factory', 'environment-builds', factoryProjectId ?? null] as const,
+  factoryEnvironmentBuild: (factoryProjectId: string | undefined, buildId: string | undefined) =>
+    ['factory', 'environment-build', factoryProjectId ?? null, buildId ?? null] as const,
   githubStatus: () => ['github', 'status'] as const,
   githubPat: () => ['github', 'pat'] as const,
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
-  githubIssues: (githubProjectId: string | undefined, label?: string) =>
-    ['github', 'issues', githubProjectId ?? null, label ?? null] as const,
+  githubIssues: (projectRepositoryIds: readonly string[], label?: string) =>
+    ['github', 'issues', projectRepositoryIds, label ?? null] as const,
   githubIssue: (githubProjectId: string | undefined, number: number | undefined) =>
     ['github', 'issue', githubProjectId ?? null, number ?? null] as const,
-  githubPulls: (githubProjectId: string | undefined) => ['github', 'prs', githubProjectId ?? null] as const,
+  githubPulls: (projectRepositoryIds: readonly string[]) => ['github', 'prs', projectRepositoryIds] as const,
   githubPull: (githubProjectId: string | undefined, number: number | undefined) =>
     ['github', 'pr', githubProjectId ?? null, number ?? null] as const,
   repositorySettings: (projectRepositoryId: string | undefined) =>
@@ -92,10 +107,20 @@ export const queryKeys = {
     [...queryKeys.workItemCommentsRoot(workItemId), 'list', aroundCommentId ?? null] as const,
   factoryMembers: (factoryProjectId: string | undefined) =>
     ['factory', 'mention-roster', factoryProjectId ?? null] as const,
-  knowledgeGraph: (factoryProjectId: string | undefined, threadId?: string) =>
-    ['factory', 'knowledge-graph', factoryProjectId ?? null, threadId ?? null] as const,
-  knowledgeNode: (factoryProjectId: string | undefined, nodeId: string | undefined, threadId?: string) =>
-    ['factory', 'knowledge-node', factoryProjectId ?? null, nodeId ?? null, threadId ?? null] as const,
+  knowledgeScopes: (factoryProjectId: string | undefined, threadId?: string) =>
+    ['factory', 'knowledge-scopes', factoryProjectId ?? null, threadId ?? null] as const,
+  knowledgeSearch: (factoryProjectId: string | undefined, query: string, threadId?: string) =>
+    ['factory', 'knowledge-search', factoryProjectId ?? null, query, threadId ?? null] as const,
+  knowledgeGraph: (factoryProjectId: string | undefined, scopeLevel: string | undefined, threadId?: string) =>
+    ['factory', 'knowledge-subgraph', factoryProjectId ?? null, scopeLevel ?? null, threadId ?? null] as const,
+  knowledgeActivity: (factoryProjectId: string | undefined, scopeLevel: string | undefined, threadId?: string) =>
+    ['factory', 'knowledge-activity', factoryProjectId ?? null, scopeLevel ?? null, threadId ?? null] as const,
+  knowledgeNode: (
+    factoryProjectId: string | undefined,
+    nodeId: string | undefined,
+    scopeLevel: string | undefined,
+    threadId?: string,
+  ) => ['factory', 'knowledge-node', factoryProjectId ?? null, nodeId ?? null, scopeLevel, threadId ?? null] as const,
   /** Every decision list for a project, whatever status filter it was fetched with. */
   factoryDecisionsRoot: (githubProjectId: string | undefined) =>
     ['factory', 'decisions', githubProjectId ?? null] as const,
@@ -110,14 +135,15 @@ export const queryKeys = {
   factoryAudit: (githubProjectId: string | undefined, group: string, actorKey?: string) =>
     ['factory', 'audit', githubProjectId ?? null, group, actorKey ?? null] as const,
   factoryAuditPortal: () => ['factory', 'audit-portal'] as const,
-  sessions: (projectRepositoryId: string | undefined) => ['sessions', projectRepositoryId ?? null] as const,
-  workspaces: (projectRepositoryId: string | undefined) => ['sessions', projectRepositoryId ?? null] as const,
+  sessions: (factoryId: string | undefined) => ['sessions', factoryId ?? null] as const,
   userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,
   providers: () => ['providers'] as const,
-  availableModels: () => ['available-models'] as const,
+  availableModels: (filter?: AvailableModelsFilter) =>
+    filter ? (['available-models', filter] as const) : (['available-models'] as const),
   customProviders: () => ['custom-providers'] as const,
   defaultModel: () => ['default-model'] as const,
-  om: (resourceId: string | undefined, factoryId?: string) => ['om', resourceId ?? null, factoryId ?? null] as const,
+  om: (resourceId: string | undefined, scope?: string, factoryId?: string) =>
+    ['om', resourceId ?? null, scope ?? null, factoryId ?? null] as const,
   thinkingConfig: () => ['thinking-config'] as const,
   factorySkills: () => ['factory', 'skills'] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
@@ -139,8 +165,6 @@ export const queryKeys = {
     filePath: string | undefined,
     previousFilePath: string | undefined,
   ) => ['workspace-changes', workspacePath ?? null, 'diff', filePath ?? null, previousFilePath ?? null] as const,
-  agentControllerModes: (agentControllerId: string | undefined) =>
-    ['agent-controller', agentControllerId ?? null, 'modes'] as const,
   // Sessions are scoped per worktree (projectPath), so every session-derived key
   // includes the projectPath — two worktrees over the same resourceId are
   // independent sessions with independent state.

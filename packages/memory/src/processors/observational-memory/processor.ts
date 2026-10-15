@@ -5,14 +5,19 @@ import type { MemoryOperationAttributes, ObservabilityContext } from '@mastra/co
 import { SpanType } from '@mastra/core/observability';
 import type {
   Processor,
+  ProcessAPIErrorArgs,
+  ProcessAPIErrorResult,
   ProcessInputStepArgs,
   ProcessOutputResultArgs,
   ProcessorSpanPhase,
 } from '@mastra/core/processors';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
+import { runOMCommit } from './commit-queue';
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
+import { isContextOverflowError } from './context-overflow';
 import { omDebug } from './debug';
+import { getObservableMessages } from './message-utils';
 import type { ObservationTurn } from './observation-turn/index';
 import { loadMemoryContextMessages } from './observation-turn/load-memory-context';
 import type { ObservationalMemory } from './observational-memory';
@@ -61,7 +66,7 @@ export interface MemoryContextProvider {
  * Turn/Step abstraction.
  */
 function getOmObservabilityContext(
-  args: ProcessInputStepArgs | ProcessOutputResultArgs,
+  args: ProcessInputStepArgs | ProcessOutputResultArgs | ProcessAPIErrorArgs,
 ): ObservabilityContext | undefined {
   if (!args.tracing || !args.tracingContext || !args.loggerVNext || !args.metrics) {
     return undefined;
@@ -77,6 +82,9 @@ function getOmObservabilityContext(
 
 /** Key used to store gateway detection result in per-processor state. */
 const GATEWAY_STATE_KEY = '__isGatewayModel';
+
+/** Step number OM last recovered from a context-overflow error, so each step retries at most once. */
+const CONTEXT_OVERFLOW_STEP_KEY = '__omContextOverflowStep';
 
 /** Check if the model is routed through a Mastra gateway (duck-type check to avoid cross-package instanceof issues). */
 function isMastraGatewayModel(model: ProcessInputStepArgs['model']): boolean {
@@ -209,8 +217,13 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     const runState = memoryContext?.runState?.();
     const readOnly = memoryContext?.memoryConfig?.readOnly;
 
-    const actorModelContext = model?.modelId
-      ? { provider: model.provider, modelId: model.modelId, providerOptions: args.providerOptions }
+    const actorModelContext = model
+      ? {
+          provider: model.provider,
+          modelId: model.modelId,
+          providerOptions: args.providerOptions,
+          model,
+        }
       : undefined;
     state.__omActorModelContext = actorModelContext;
 
@@ -375,7 +388,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         // prepare() already counted the current unobserved window and resource context.
         const finalTotalPending = ctx.status.pendingTokens;
         try {
-          await this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending);
+          await runOMCommit(this.engine.buffering.getLockKey(threadId, resourceId), () =>
+            this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending),
+          );
           this.turn.patchRecord({ pendingMessageTokens: finalTotalPending });
         } catch {
           // Token persistence is intentionally non-fatal for streaming UX.
@@ -438,7 +453,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         const liveTurn = turn && !turn.ended ? turn : undefined;
 
         if (liveTurn) {
-          await liveTurn.end();
+          // Use the pipeline's accepted terminal list as the persistence authority,
+          // rather than relying on the list captured when the turn began.
+          await liveTurn.end(messageList);
         }
         this.turn = undefined;
         state.__omTurn = undefined;
@@ -458,6 +475,56 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
 
         return messageList;
       });
+  }
+
+  async processAPIError(args: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
+    const { error, messageList, requestContext, stepNumber, state } = args;
+
+    if (!this.engine.getObservationConfig().observeOnContextOverflow) return;
+    if (state[GATEWAY_STATE_KEY]) return;
+    // One recovery per step: if the retry overflows again, observing more won't help.
+    if (state[CONTEXT_OVERFLOW_STEP_KEY] === stepNumber) return;
+    if (!isContextOverflowError(error)) return;
+
+    const context = this.engine.getThreadContext(requestContext, messageList);
+    if (!context) return;
+    if (parseMemoryRequestContext(requestContext)?.memoryConfig?.readOnly) return;
+
+    state[CONTEXT_OVERFLOW_STEP_KEY] = stepNumber;
+    omDebug(`[OM:processAPIError] context overflow at step ${stepNumber} — observing pending messages`);
+
+    // The provider counted more tokens than OM's estimate, so pending tokens can be below the
+    // threshold. Activate buffered observations and observe what's left regardless of it; the
+    // retry's input step then drops the observed messages from the prompt.
+    const { threadId, resourceId } = context;
+    await this.engine.waitForBuffering(threadId, resourceId);
+    const messages = getObservableMessages(messageList);
+    const { activated } = await this.engine.activate({
+      threadId,
+      resourceId,
+      messages,
+      messageList,
+      writer: args.writer,
+    });
+    const { observed } = await this.engine
+      .getTokenCounter()
+      .runWithModelContext(state.__omActorModelContext as TokenCounterModelContext | undefined, () =>
+        this.engine.observe({
+          threadId,
+          resourceId,
+          messages: getObservableMessages(messageList),
+          messageList,
+          force: true,
+          agent: args.agent,
+          sendSignal: args.sendSignal,
+          sendStateSignal: args.sendStateSignal,
+          requestContext,
+          writer: args.writer,
+          observabilityContext: getOmObservabilityContext(args),
+        }),
+      );
+
+    return { retry: activated || observed };
   }
 
   // ─── Passthrough API ────────────────────────────────────────────────────

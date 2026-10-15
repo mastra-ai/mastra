@@ -11,6 +11,8 @@
     "kimi-k3",
     "kimi-k3-fast",
     "kimi-k3-flex",
+    "mimo-v2.6-pro",
+    "mimo-v2.6-pro-flex",
     "qwen-3.8-27b",
     "qwen-3.8-27b-flex",
     "qwen3.6-35b",
@@ -36,6 +38,8 @@
     "glm-5.3-flash",
     "glm-5.3-flash-flex",
     "glm-5.3-flex",
+    "mimo-v2.6-pro",
+    "mimo-v2.6-pro-flex",
     "qwen-3.8-27b",
     "qwen-3.8-27b-flex",
     "qwen3.6-35b",
@@ -63,6 +67,15 @@
     "qwen3.6-35b-flex"
   ],
   "reasoning": {
+    "mimo-v2.6-pro": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
     "glm-5.2-short-fast": [
       {
         "type": "effort",
@@ -187,6 +200,15 @@
       {
         "type": "effort",
         "values": ["none", "high", "max"]
+      }
+    ],
+    "mimo-v2.6-pro-flex": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      },
+      {
+        "type": "budget_tokens"
       }
     ],
     "glm-5.2": [

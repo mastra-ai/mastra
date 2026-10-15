@@ -108,8 +108,6 @@ export function stubWorkBoard() {
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
       HttpResponse.json({ permissions: [] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
-      HttpResponse.json({ sessions: [] }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions: [] })),
   );
 }

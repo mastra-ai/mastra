@@ -20,7 +20,6 @@
     "anthropic/claude-sonnet-4.6",
     "anthropic/claude-sonnet-5",
     "anthropic/claude-sonnet-5.5",
-    "baidu/ernie-4.5-vl-424b-a47b",
     "bytedance-seed/seed-1.6",
     "bytedance-seed/seed-1.6-flash",
     "bytedance-seed/seed-2-1-turbo",
@@ -53,6 +52,7 @@
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
+    "google/gemini-4-argon",
     "google/gemini-nano-banana-2.1",
     "google/gemma-3-12b-it",
     "google/gemma-3-27b-it",
@@ -75,6 +75,7 @@
     "meta/muse-spark-1.2-contributor",
     "meta/muse-spark-1.3",
     "meta/muse-spark-1.3-contributor",
+    "meta/muse-wonder",
     "minimax/minimax-01",
     "minimax/minimax-m3",
     "mistralai/codestral-2508",
@@ -177,12 +178,9 @@
     "prism-ml/ternary-bonsai-2-27b",
     "qwen/qwen2.5-vl-72b-instruct",
     "qwen/qwen3-vl-235b-a22b-instruct",
-    "qwen/qwen3-vl-235b-a22b-thinking",
     "qwen/qwen3-vl-30b-a3b-instruct",
     "qwen/qwen3-vl-30b-a3b-thinking",
-    "qwen/qwen3-vl-32b-instruct",
     "qwen/qwen3-vl-8b-instruct",
-    "qwen/qwen3-vl-8b-thinking",
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-27b",
     "qwen/qwen3.5-35b-a3b",
@@ -207,18 +205,21 @@
     "sakana/fugu-ultra",
     "sakana/fugu-ultra-v2",
     "sakana/sakana-namazu",
+    "scaledown/extract",
+    "scaledown/summarize",
     "stealth/claude-opus-4.6",
     "stealth/claude-opus-4.7",
     "stealth/claude-opus-4.8",
     "stealth/claude-sonnet-4.6",
     "stealth/qwen3.6-plus",
     "stepfun/step-3.7-flash",
-    "stepfun/step-3.7-flash:free",
+    "stepfun/step-5-preview",
+    "stepfun/step-5-preview-free",
     "thinkingmachines/inkling",
     "thinkingmachines/inkling-small",
     "thinkingmachines/inkling-small:free",
-    "unbiased/pareto",
     "unbiased/pareto-26.10-preview",
+    "unbiased/pareto-26.9",
     "x-ai/grok-4.20",
     "x-ai/grok-4.20-multi-agent",
     "x-ai/grok-4.3",
@@ -248,6 +249,7 @@
     "~openai/gpt-mini-latest",
     "~openai/gpt-sol-latest",
     "~openai/gpt-terra-latest",
+    "~unbiased/pareto-latest",
     "~x-ai/grok-latest",
     "~z-ai/glm-flash-latest"
   ],
@@ -272,7 +274,6 @@
     "anthropic/claude-sonnet-4.5",
     "anthropic/claude-sonnet-4.6",
     "arcee-ai/trinity-large-thinking",
-    "baidu/ernie-4.5-vl-424b-a47b",
     "bytedance-seed/seed-1.6",
     "bytedance-seed/seed-1.6-flash",
     "bytedance-seed/seed-2-1-turbo",
@@ -323,6 +324,7 @@
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
+    "google/gemini-4-argon",
     "google/gemini-nano-banana-2.1",
     "google/gemma-2-27b-it",
     "google/gemma-3-12b-it",
@@ -338,8 +340,6 @@
     "inception/mercury-2",
     "inception/mercury-2.5",
     "inclusionai/ling-3.0-flash",
-    "inclusionai/ling-3.0-flash-fin",
-    "inclusionai/ling-3.0-flash-sante:free",
     "inclusionai/ling-3.0-flash-vl",
     "inclusionai/ling-3.1-flash",
     "inference-net/schematron-v2-small",
@@ -350,6 +350,7 @@
     "kilo-auto/frontier",
     "kilo-auto/small",
     "liquid/lfm-2.5-2.6b:free",
+    "liquid/lfm-2.5-24b-a2b",
     "mancer/weaver",
     "meituan/longcat-2.0",
     "meta-llama/llama-3.1-70b-instruct",
@@ -366,6 +367,7 @@
     "meta/muse-spark-1.2-contributor",
     "meta/muse-spark-1.3",
     "meta/muse-spark-1.3-contributor",
+    "meta/muse-wonder",
     "microsoft/phi-4",
     "microsoft/wizardlm-2-8x22b",
     "minimax/minimax-01",
@@ -460,33 +462,23 @@
     "qwen/qwen-2.5-7b-instruct",
     "qwen/qwen-2.5-coder-32b-instruct",
     "qwen/qwen-plus",
-    "qwen/qwen-plus-2025-07-28",
     "qwen/qwen2.5-vl-72b-instruct",
     "qwen/qwen3-14b",
-    "qwen/qwen3-235b-a22b",
     "qwen/qwen3-235b-a22b-2507",
     "qwen/qwen3-235b-a22b-thinking-2507",
     "qwen/qwen3-30b-a3b",
     "qwen/qwen3-30b-a3b-instruct-2507",
-    "qwen/qwen3-30b-a3b-thinking-2507",
     "qwen/qwen3-32b",
-    "qwen/qwen3-8b",
     "qwen/qwen3-coder",
     "qwen/qwen3-coder-30b-a3b-instruct",
     "qwen/qwen3-coder-flash",
     "qwen/qwen3-coder-next",
-    "qwen/qwen3-coder-plus",
-    "qwen/qwen3-max",
-    "qwen/qwen3-max-thinking",
     "qwen/qwen3-next-80b-a3b-instruct",
     "qwen/qwen3-next-80b-a3b-thinking",
     "qwen/qwen3-vl-235b-a22b-instruct",
-    "qwen/qwen3-vl-235b-a22b-thinking",
     "qwen/qwen3-vl-30b-a3b-instruct",
     "qwen/qwen3-vl-30b-a3b-thinking",
-    "qwen/qwen3-vl-32b-instruct",
     "qwen/qwen3-vl-8b-instruct",
-    "qwen/qwen3-vl-8b-thinking",
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-27b",
     "qwen/qwen3.5-35b-a3b",
@@ -498,7 +490,6 @@
     "qwen/qwen3.6-27b",
     "qwen/qwen3.6-35b-a3b",
     "qwen/qwen3.6-flash",
-    "qwen/qwen3.6-max-preview",
     "qwen/qwen3.6-plus",
     "qwen/qwen3.7-flash",
     "qwen/qwen3.7-max",
@@ -523,7 +514,8 @@
     "stealth/qwen3.6-plus",
     "stepfun/step-3.5-flash",
     "stepfun/step-3.7-flash",
-    "stepfun/step-3.7-flash:free",
+    "stepfun/step-5-preview",
+    "stepfun/step-5-preview-free",
     "tencent/hunyuan-a13b-instruct",
     "tencent/hy-mt2-1.8b",
     "tencent/hy-mt2-30b-a3b",
@@ -537,8 +529,8 @@
     "thinkingmachines/inkling",
     "thinkingmachines/inkling-small",
     "thinkingmachines/inkling-small:free",
-    "unbiased/pareto",
     "unbiased/pareto-26.10-preview",
+    "unbiased/pareto-26.9",
     "undi95/remm-slerp-l2-13b",
     "upstage/solar-mini4",
     "upstage/solar-pro-3",
@@ -578,6 +570,7 @@
     "~google/gemini-flash-latest",
     "~google/gemini-pro-latest",
     "~moonshotai/kimi-latest",
+    "~unbiased/pareto-latest",
     "~x-ai/grok-latest",
     "~z-ai/glm-flash-latest",
     "~z-ai/glm-latest"
@@ -644,6 +637,7 @@
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
+    "google/gemini-4-argon",
     "google/gemini-nano-banana-2.1",
     "google/gemma-2-27b-it",
     "google/gemma-3-12b-it",
@@ -655,11 +649,12 @@
     "ibm-granite/granite-4.2-8b",
     "inception/mercury-2",
     "inception/mercury-2.5",
-    "inclusionai/ling-3.0-flash-fin",
     "inclusionai/ling-3.0-flash-vl",
+    "inclusionai/ling-3.1-flash",
     "inference-net/schematron-v2-small",
     "inference-net/schematron-v2-turbo",
     "liquid/lfm-2.5-2.6b:free",
+    "liquid/lfm-2.5-24b-a2b",
     "meta-llama/llama-3.1-70b-instruct",
     "meta-llama/llama-3.1-8b-instruct",
     "meta-llama/llama-3.2-3b-instruct",
@@ -672,6 +667,7 @@
     "meta/muse-spark-1.2-contributor",
     "meta/muse-spark-1.3",
     "meta/muse-spark-1.3-contributor",
+    "meta/muse-wonder",
     "microsoft/phi-4",
     "minimax/minimax-m2",
     "minimax/minimax-m2.5",
@@ -785,7 +781,6 @@
     "qwen/qwen-2.5-72b-instruct",
     "qwen/qwen-2.5-7b-instruct",
     "qwen/qwen-plus",
-    "qwen/qwen-plus-2025-07-28",
     "qwen/qwen2.5-vl-72b-instruct",
     "qwen/qwen3-14b",
     "qwen/qwen3-235b-a22b-2507",
@@ -795,18 +790,12 @@
     "qwen/qwen3-coder",
     "qwen/qwen3-coder-30b-a3b-instruct",
     "qwen/qwen3-coder-next",
-    "qwen/qwen3-coder-plus",
-    "qwen/qwen3-max",
-    "qwen/qwen3-max-thinking",
     "qwen/qwen3-next-80b-a3b-instruct",
     "qwen/qwen3-next-80b-a3b-thinking",
     "qwen/qwen3-vl-235b-a22b-instruct",
-    "qwen/qwen3-vl-235b-a22b-thinking",
     "qwen/qwen3-vl-30b-a3b-instruct",
     "qwen/qwen3-vl-30b-a3b-thinking",
-    "qwen/qwen3-vl-32b-instruct",
     "qwen/qwen3-vl-8b-instruct",
-    "qwen/qwen3-vl-8b-thinking",
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-27b",
     "qwen/qwen3.5-35b-a3b",
@@ -818,7 +807,6 @@
     "qwen/qwen3.6-27b",
     "qwen/qwen3.6-35b-a3b",
     "qwen/qwen3.6-flash",
-    "qwen/qwen3.6-max-preview",
     "qwen/qwen3.6-plus",
     "qwen/qwen3.7-max",
     "qwen/qwen3.7-plus",
@@ -838,6 +826,7 @@
     "sao10k/l3.1-euryale-70b",
     "sao10k/l3.3-euryale-70b",
     "stepfun/step-3.7-flash",
+    "stepfun/step-5-preview",
     "tencent/hunyuan-a13b-instruct",
     "tencent/hy-mt2-30b-a3b",
     "tencent/hy-mt2-7b",
@@ -1388,6 +1377,12 @@
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
+    "meta/muse-wonder": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "meta/muse-spark-1.1": [
       {
         "type": "effort",
@@ -1464,12 +1459,6 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "baidu/ernie-4.5-vl-424b-a47b": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
       }
     ],
     "x-ai/grok-4.20-multi-agent": [
@@ -1581,6 +1570,12 @@
       }
     ],
     "liquid/lfm-2.5-2.6b:free": [
+      {
+        "type": "effort",
+        "values": ["high"]
+      }
+    ],
+    "liquid/lfm-2.5-24b-a2b": [
       {
         "type": "effort",
         "values": ["high"]
@@ -1712,6 +1707,12 @@
         "values": ["none", "minimal", "high"]
       }
     ],
+    "google/gemini-4-argon": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "google/gemini-3.1-flash-lite": [
       {
         "type": "effort",
@@ -1772,12 +1773,6 @@
         "values": ["none", "high"]
       }
     ],
-    "inclusionai/ling-3.0-flash-sante:free": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
     "inclusionai/ling-3.0-flash": [
       {
         "type": "effort",
@@ -1791,12 +1786,6 @@
       }
     ],
     "inclusionai/ling-3.0-flash-vl": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "inclusionai/ling-3.0-flash-fin": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -1964,7 +1953,7 @@
         "values": ["high"]
       }
     ],
-    "stepfun/step-3.7-flash:free": [
+    "stepfun/step-5-preview": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -1977,6 +1966,12 @@
       }
     ],
     "stepfun/step-3.7-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "stepfun/step-5-preview-free": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -2048,12 +2043,6 @@
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "qwen/qwen3-vl-235b-a22b-thinking": [
-      {
-        "type": "effort",
-        "values": ["high"]
-      }
-    ],
     "qwen/qwen3.8-2.4t-a95b": [
       {
         "type": "effort",
@@ -2096,12 +2085,6 @@
         "values": ["high"]
       }
     ],
-    "qwen/qwen3-235b-a22b": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
     "qwen/qwen3.5-122b-a10b": [
       {
         "type": "effort",
@@ -2127,12 +2110,6 @@
       }
     ],
     "qwen/qwen3.5-flash-02-23": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "qwen/qwen3-max-thinking": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -2168,12 +2145,6 @@
         "values": ["none", "high"]
       }
     ],
-    "qwen/qwen3.6-max-preview": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
     "qwen/qwen3-30b-a3b": [
       {
         "type": "effort",
@@ -2186,22 +2157,10 @@
         "values": ["none", "high"]
       }
     ],
-    "qwen/qwen3-8b": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
     "qwen/qwen3.5-plus-02-15": [
       {
         "type": "effort",
         "values": ["none", "high"]
-      }
-    ],
-    "qwen/qwen3-30b-a3b-thinking-2507": [
-      {
-        "type": "effort",
-        "values": ["high"]
       }
     ],
     "qwen/qwen3.6-27b": [
@@ -2220,12 +2179,6 @@
       {
         "type": "effort",
         "values": ["none", "high"]
-      }
-    ],
-    "qwen/qwen3-vl-8b-thinking": [
-      {
-        "type": "effort",
-        "values": ["high"]
       }
     ],
     "qwen/qwen3.7-plus": [

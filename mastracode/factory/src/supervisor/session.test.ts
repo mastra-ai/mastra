@@ -82,7 +82,9 @@ describe('hydrateSupervisorSession', () => {
         get: () => state,
         set: vi.fn(async (updates: Record<string, unknown>) => void Object.assign(state, updates)),
       },
+      mode: { resolve: () => ({ defaultModelId: 'openai/gpt-5.5' }) },
       model: { switch: vi.fn().mockResolvedValue(undefined) },
+      subagents: { model: { set: vi.fn().mockResolvedValue(undefined) } },
       om: {
         observer: { modelId: () => undefined, switchModel: vi.fn().mockResolvedValue(undefined) },
         reflector: { modelId: () => undefined, switchModel: vi.fn().mockResolvedValue(undefined) },
@@ -92,33 +94,50 @@ describe('hydrateSupervisorSession', () => {
   }
 
   it('stamps the project and org and applies the factory default model', async () => {
-    const { projects, project } = await seedProject();
+    const { projects, modelDefaults, project } = await seedProject();
     const session = sessionDouble(supervisorResourceId(project.id));
 
-    await hydrateSupervisorSession(session as never, { projects });
+    await hydrateSupervisorSession(session as never, { projects, modelDefaults });
 
     expect(session.readState()).toMatchObject({
       factoryProjectId: project.id,
       factoryOrgId: 'org-1',
+      factoryModelScope: 'factory',
+      factoryOwnerUserId: 'user-1',
     });
     expect(session.model.switch).toHaveBeenCalledWith('anthropic/claude-sonnet-4');
   });
 
-  it('keeps the current model when the project has no default model', async () => {
-    const { projects, project } = await seedProject(null);
+  it("uses the project creator's model under user scope", async () => {
+    const { projects, modelDefaults, project } = await seedProject();
+    await projects.update({ orgId: 'org-1', id: project.id, input: { modelScope: 'user' } });
+    await modelDefaults.set({ orgId: 'org-1', userId: 'user-1', modelId: 'openai/creator-model' });
     const session = sessionDouble(supervisorResourceId(project.id));
 
-    await hydrateSupervisorSession(session as never, { projects });
+    await hydrateSupervisorSession(session as never, { projects, modelDefaults });
+
+    expect(session.readState()).toMatchObject({
+      factoryModelScope: 'user',
+      factoryOwnerUserId: 'user-1',
+    });
+    expect(session.model.switch).toHaveBeenCalledWith('openai/creator-model');
+  });
+
+  it('applies the SDK mode default when the project has no default model', async () => {
+    const { projects, modelDefaults, project } = await seedProject(null);
+    const session = sessionDouble(supervisorResourceId(project.id));
+
+    await hydrateSupervisorSession(session as never, { projects, modelDefaults });
 
     expect(session.state.set).toHaveBeenCalled();
-    expect(session.model.switch).not.toHaveBeenCalled();
+    expect(session.model.switch).toHaveBeenCalledWith('openai/gpt-5.5');
   });
 
   it('leaves sessions that are not supervisors alone', async () => {
-    const { projects } = await seedProject();
+    const { projects, modelDefaults } = await seedProject();
     const session = sessionDouble('session-1');
 
-    await hydrateSupervisorSession(session as never, { projects });
+    await hydrateSupervisorSession(session as never, { projects, modelDefaults });
 
     expect(session.state.set).not.toHaveBeenCalled();
     expect(session.model.switch).not.toHaveBeenCalled();

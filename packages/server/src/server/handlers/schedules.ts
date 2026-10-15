@@ -15,6 +15,7 @@ import {
   updateScheduleBodySchema,
 } from '../schemas/schedules';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { getPublicWorkflowById } from './utils';
 
 type RunSummary = {
   status: WorkflowRunState['status'];
@@ -138,13 +139,21 @@ export const CREATE_SCHEDULE_ROUTE = createRoute({
   tags: ['Schedules'],
   requiresAuth: true,
   handler: async ({ mastra, ...body }) => {
-    // getAgentById / getWorkflowById throw a MastraError (status 404) when the
-    // target is unknown; translate that into a clean HTTP 404 instead of
-    // letting it surface as 500.
+    // getAgentById throws a MastraError (status 404) when the target is
+    // unknown; translate that into a clean HTTP 404 instead of letting it
+    // surface as 500. Hidden internal workflows are treated as unknown.
     if ('workflowId' in body && body.workflowId) {
+      // The scheduler later resolves the stored id through core, which also
+      // sees hidden workflows. Reject ids where that lookup would pick a
+      // different workflow than the public one validated here.
+      const workflow = getPublicWorkflowById(mastra, body.workflowId);
+      let resolved: unknown;
       try {
-        mastra.getWorkflowById(body.workflowId);
+        resolved = mastra.getWorkflowById(body.workflowId);
       } catch {
+        resolved = undefined;
+      }
+      if (!workflow || resolved !== workflow) {
         throw new HTTPException(404, { message: `Workflow "${body.workflowId}" not found` });
       }
       return await mastra.schedules.create({

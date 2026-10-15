@@ -31,6 +31,8 @@ export function FailureRateCard({ onViewErrors, onTimeRangeClick }: FailureRateC
   const { stepHours } = bucketPlan(timestamp.start, timestamp.end);
   const runs = data.reduce((sum, b) => sum + b.completed + b.failed, 0);
   const failed = data.reduce((sum, b) => sum + b.failed, 0);
+  // With nothing failed, the axis would fall back to 0-4 (400%); a share tops out at 100%.
+  const yDomain: [number, number] | undefined = failed === 0 ? [0, 1] : undefined;
 
   const layout = {
     title: 'Failure rate',
@@ -60,9 +62,9 @@ export function FailureRateCard({ onViewErrors, onTimeRangeClick }: FailureRateC
           series={SERIES}
           height="fill"
           xLabels="edges"
-          showYAxis={false}
           valueFormatter={formatPercent}
           axisFormatter={axisPercent}
+          yDomain={yDomain}
           onBucketClick={onTimeRangeClick && (row => onTimeRangeClick(bucketWindow(Number(row.ts), stepHours)))}
           isLoading={isLoading}
           {...EDGE_BUCKET_AXIS}

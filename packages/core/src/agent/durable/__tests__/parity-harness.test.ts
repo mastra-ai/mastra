@@ -676,43 +676,22 @@ describe('expectEngineParity', () => {
 
     // The run produced no chunks at all, so it only clears the
     // "compared nothing on plain" guard because its error was recorded.
-    //
-    // The one difference left is the failure's class, and it is a real one, not
-    // a recording artifact: `stream()` rejects before the model is called, and
-    // plain surfaces the plain `Error` the argument validation raises while the
-    // wrapped engines surface a `TypeError` for the same input and the same
-    // message. That split is tracked as COR-1419. The declaration is narrowed to
-    // `error` alone — the assertions below still compare both classes and the
-    // message.
-    const preStreamClassReason =
-      'COR-1419: pre-stream rejection, same message, but plain reports `Error` where the wrapped engines report `TypeError`';
-    const results = await expectEngineParity({
-      ...scenario,
-      differences: {
-        durable: { reason: preStreamClassReason, ignore: ['error'] },
-        evented: { reason: preStreamClassReason, ignore: ['error'] },
-      },
-    });
+    const results = await expectEngineParity(scenario);
 
     for (const engine of ENGINES) {
       const turn = results[engine]!.turns[0]!;
       expect(turn.chunks).toEqual([]);
-      // Same message on every engine; only the class differs. Asserted here for
-      // each engine rather than for plain and durable alone, so the declaration
-      // above cannot hide an evented that drifts to another message or class.
-      expect(turn.error?.message).toBe(results.plain!.turns[0]!.error?.message);
       expect(turn.error).toStrictEqual({
-        name: engine === 'plain' ? 'Error' : 'TypeError',
+        name: 'TypeError',
         message: turn.error!.message,
       });
+      expect(turn.error?.message).toBe(results.plain!.turns[0]!.error?.message);
       // Rejected before the model was ever called on any engine.
       expect(results[engine]!.requests).toHaveLength(0);
     }
     // And the message is the settings validation's, not something else that
     // happens to match across engines.
     expect(results.plain!.turns[0]!.error?.message).toMatch(/modelSettings\.timeout/);
-
-    await expect(expectEngineParity(scenario)).rejects.toThrow(/durable differs from plain at turns\[0\]\.error\.name/);
   });
 
   const FLAT_SCHEMA = z.object({ reply: z.string(), number: z.number() });
@@ -981,6 +960,34 @@ describe('expectEngineParity', () => {
       ...overrides,
     };
   }
+
+  it('emits one tool result for an awaited background tool on every engine', async () => {
+    const difference: EngineDifference = {
+      reason:
+        'COR-1390: taskId is a per-engine stubbed UUID, and wrapped engines strip the LLM-only _background override.',
+      ignore: ['chunkPayloads', 'requests'],
+    };
+    const results = await expectEngineParity(
+      backgroundScenario({
+        model: {
+          tapes: [
+            toolCallTape('research', { topic: 'AI', _background: { disposition: 'awaited' } }),
+            textOnlyTape('Done.'),
+          ],
+        },
+        host: { backgroundTasks: { enabled: true } },
+        differences: { durable: difference, evented: difference },
+      }),
+    );
+
+    for (const engine of ENGINES) {
+      const turn = results[engine]!.turns[0]!;
+      expect(chunksOfType(turn, 'tool-result')).toBe(1);
+      expect(turn.toolResults).toEqual([
+        { toolCallId: 'parity-call-1', toolName: 'research', result: { summary: 'Research on AI' } },
+      ]);
+    }
+  });
 
   it('dispatches a deferred tool in the background when the scenario enables it, and not otherwise', async () => {
     // A deferred dispatch is only comparable with the chunk and result fields

@@ -1,5 +1,4 @@
 import type { AgentControllerSessionSettings } from '@mastra/client-js';
-import { Button } from '@mastra/playground-ui/components/Button';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -24,13 +23,11 @@ const THINKING_LEVELS: { value: ThinkingLevel; label: string }[] = [
 ];
 
 interface ThinkingLevelPickerProps {
-  value?: ThinkingLevel;
+  value: ThinkingLevel;
   ariaLabel: string;
   disabled?: boolean;
-  /** When given, an absent `value` means the row follows this level instead of setting its own. */
-  inherited?: ThinkingLevel;
   /** Returning the write lets the thumb hold the dropped stop until it lands. */
-  onChange: (value?: ThinkingLevel) => void | Promise<unknown>;
+  onChange: (value: ThinkingLevel) => void | Promise<unknown>;
 }
 
 /**
@@ -39,19 +36,17 @@ interface ThinkingLevelPickerProps {
  * release so a drag across the whole scale is one save. Colour is the cost
  * signal - muted at Off, plain through High, warning once the bill turns.
  */
-export function ThinkingLevelPicker({ value, ariaLabel, disabled, inherited, onChange }: ThinkingLevelPickerProps) {
+export function ThinkingLevelPicker({ value, ariaLabel, disabled, onChange }: ThinkingLevelPickerProps) {
   const [dragged, setDragged] = useState<number>();
   const [held, setHeld] = useState<{ stop: number }>();
   const last = THINKING_LEVELS.length - 1;
 
   const indexOf = (level: ThinkingLevel) => THINKING_LEVELS.findIndex(entry => entry.value === level);
-  const inheriting = inherited !== undefined && value === undefined;
-  const settled = indexOf(value ?? inherited ?? 'off');
+  const settled = indexOf(value);
   const pending = dragged ?? held?.stop;
   const shown = pending ?? settled;
   const label = THINKING_LEVELS[shown]?.label ?? '';
   const tone = shown >= last - 1 ? 'text-warning-foreground' : shown === 0 ? 'text-placeholder' : 'text-foreground';
-  const valueText = `${label}${inheriting && pending === undefined ? ' \u00b7 follows base' : ''}`;
   const travelled = `calc(0.5rem + (100% - 1rem) * ${shown / last})`;
 
   // Holding the drop until the write settles: clearing it first shows the old
@@ -73,19 +68,6 @@ export function ThinkingLevelPicker({ value, ariaLabel, disabled, inherited, onC
 
   return (
     <div className={cn('flex items-center gap-2', tone, disabled && 'pointer-events-none opacity-50')}>
-      <span className="flex w-32 shrink-0 justify-end">
-        {inherited !== undefined &&
-          (inheriting ? (
-            <Txt as="span" variant="meta" tone="faint">
-              Follows base
-            </Txt>
-          ) : (
-            <Button variant="ghost" size="sm" disabled={disabled} onClick={() => onChange()}>
-              Reset to base
-            </Button>
-          ))}
-      </span>
-
       <Txt as="span" variant="caption" className="w-20 shrink-0 text-right">
         {label}
       </Txt>
@@ -113,7 +95,7 @@ export function ThinkingLevelPicker({ value, ariaLabel, disabled, inherited, onC
           step={1}
           value={shown}
           aria-label={ariaLabel}
-          aria-valuetext={valueText}
+          aria-valuetext={label}
           disabled={disabled}
           className={cn(
             'relative h-7 w-full cursor-pointer appearance-none rounded-lg bg-transparent',

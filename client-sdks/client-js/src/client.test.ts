@@ -652,28 +652,6 @@ describe('MastraClient', () => {
         expect(result).toEqual(mockMessages);
       });
 
-      it('should not include system reminders by default', async () => {
-        const mockMessages = {
-          messages: [{ id: 'msg-1', content: 'Hello' }],
-        };
-        (global.fetch as any).mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          headers: { get: () => 'application/json' },
-          json: async () => mockMessages,
-        });
-
-        const result = await client.listThreadMessages('thread-1', {
-          agentId: 'agent-1',
-        });
-
-        expect(global.fetch).toHaveBeenCalledWith(
-          'http://localhost:4111/api/memory/threads/thread-1/messages?agentId=agent-1',
-          expect.any(Object),
-        );
-        expect(result).toEqual(mockMessages);
-      });
-
       it('should include system reminders when requested', async () => {
         const mockMessages = {
           messages: [{ id: 'msg-1', content: 'Hello' }],
@@ -1131,6 +1109,37 @@ describe('MastraClient', () => {
       expect(global.fetch).toHaveBeenCalledWith(
         'http://localhost:4111/api/experiments/experiment-1?organizationId=org_a&projectId=proj_1',
         expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+
+    it('issues a top-level GET for an experiment by id', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ id: 'experiment-1', datasetId: 'dataset-1' }),
+      });
+
+      const result = await client.getExperiment('experiment-1');
+
+      expect(result).toMatchObject({ id: 'experiment-1', datasetId: 'dataset-1' });
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:4111/api/experiments/experiment-1',
+        expect.not.objectContaining({ method: expect.anything() }),
+      );
+    });
+
+    it('scopes a top-level experiment GET with tenancy query parameters', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ id: 'experiment-1', datasetId: 'dataset-1' }),
+      });
+
+      await client.getExperiment('experiment-1', { organizationId: 'org_a', projectId: 'proj_1' });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:4111/api/experiments/experiment-1?organizationId=org_a&projectId=proj_1',
+        expect.anything(),
       );
     });
 

@@ -63,10 +63,18 @@ Stored HTTP definitions don't accept arbitrary headers. When the reserved `mastr
 
 MCP tools can be allowlisted at two levels:
 
-1. **Server level**: The stored server's `tools` map limits tools for every agent that uses the client.
-1. **Agent level**: The agent's MCP client reference limits the remaining tools for that agent.
+1. **Server level**: The stored server's `tools` map limits tools for every agent that uses the client. Omitting `tools` at this level exposes all of the server's tools.
+1. **Agent level**: The agent's MCP client reference limits the remaining tools for that agent. Omitting `tools` at this level selects no tools.
 
-Agent-level tool names can use namespaced or bare names. An explicit empty `tools` map selects all tools. With the current resolver, omitting `tools` from an agent-level MCP reference selects none.
+Agent-level tool names can use namespaced or bare names. To select every remaining tool at the agent level, pass an explicit empty `tools` map:
+
+```typescript
+const mcpClients = {
+  'docs-client': { tools: {} }, // all tools
+  'search-client': { tools: { docs_search: {} } }, // only docs_search
+  'billing-client': {}, // no tools
+}
+```
 
 ### Namespacing
 

@@ -4,6 +4,7 @@
     "anthropic/claude-fable-5",
     "anthropic/claude-fable-5-1",
     "anthropic/claude-haiku-4-5-20251001",
+    "anthropic/claude-haiku-5-5",
     "anthropic/claude-opus-4-1-20250805",
     "anthropic/claude-opus-4-20250514",
     "anthropic/claude-opus-4-5-20251101",
@@ -37,6 +38,7 @@
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
+    "google/gemini-4-argon",
     "google/gemini-flash-latest",
     "google/gemini-flash-lite-latest",
     "google/gemma-3-12b-it",
@@ -89,11 +91,14 @@
     "openai/o4-mini",
     "qwen/qwen3-vl-235b-a22b-instruct",
     "qwen/qwen3-vl-235b-a22b-thinking",
+    "qwen/qwen3-vl-30b-a3b-instruct",
+    "qwen/qwen3-vl-flash",
     "qwen/qwen3-vl-plus",
     "qwen/qwen3.5-9b",
     "qwen/qwen3.6-27b",
     "qwen/qwen3.7-plus",
     "qwen/qwen3.8-max",
+    "sakana/fugu-max",
     "sakana/fugu-ultra",
     "sakana/sakana-namazu",
     "xai/grok-4.20-0309-non-reasoning",
@@ -126,6 +131,7 @@
     "cohere/command-r-plus-08-2024",
     "cohere/command-r7b-12-2024",
     "deepseek/deepseek-r1",
+    "deepseek/deepseek-r1-0528",
     "deepseek/deepseek-v3",
     "deepseek/deepseek-v3.1",
     "deepseek/deepseek-v3.2",
@@ -224,10 +230,13 @@
     "qwen/qwen3-coder-next",
     "qwen/qwen3-coder-plus",
     "qwen/qwen3-max",
+    "qwen/qwen3-max-preview",
     "qwen/qwen3-next-80b-a3b-instruct",
     "qwen/qwen3-next-80b-a3b-thinking",
     "qwen/qwen3-vl-235b-a22b-instruct",
     "qwen/qwen3-vl-235b-a22b-thinking",
+    "qwen/qwen3-vl-30b-a3b-instruct",
+    "qwen/qwen3-vl-flash",
     "qwen/qwen3-vl-plus",
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-27b",
@@ -275,6 +284,7 @@
     "anthropic/claude-fable-5",
     "anthropic/claude-fable-5-1",
     "anthropic/claude-haiku-4-5-20251001",
+    "anthropic/claude-haiku-5-5",
     "anthropic/claude-opus-4-1-20250805",
     "anthropic/claude-opus-4-20250514",
     "anthropic/claude-opus-4-5-20251101",
@@ -291,6 +301,7 @@
     "cohere/command-r-08-2024",
     "cohere/command-r-plus-08-2024",
     "cohere/command-r7b-12-2024",
+    "deepseek/deepseek-r1-0528",
     "deepseek/deepseek-v3.1",
     "deepseek/deepseek-v3.2",
     "deepseek/deepseek-v4-flash",
@@ -314,6 +325,7 @@
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
+    "google/gemini-4-argon",
     "google/gemini-flash-latest",
     "google/gemini-flash-lite-latest",
     "minimax/minimax-m2",
@@ -374,9 +386,12 @@
     "qwen/qwen3-coder-flash",
     "qwen/qwen3-coder-plus",
     "qwen/qwen3-max",
+    "qwen/qwen3-max-preview",
     "qwen/qwen3-next-80b-a3b-instruct",
     "qwen/qwen3-vl-235b-a22b-instruct",
     "qwen/qwen3-vl-235b-a22b-thinking",
+    "qwen/qwen3-vl-30b-a3b-instruct",
+    "qwen/qwen3-vl-flash",
     "qwen/qwen3-vl-plus",
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-27b",
@@ -584,6 +599,11 @@
         "type": "budget_tokens",
         "min": 1024,
         "max": 63999
+      }
+    ],
+    "anthropic/claude-haiku-5-5": [
+      {
+        "type": "toggle"
       }
     ],
     "anthropic/claude-sonnet-4-6": [
@@ -796,6 +816,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "sakana/fugu-max": [
+      {
+        "type": "effort",
+        "values": ["high", "xhigh", "max"]
       }
     ],
     "sakana/fugu-ultra": [

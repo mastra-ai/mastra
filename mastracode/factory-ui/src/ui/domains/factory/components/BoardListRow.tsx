@@ -1,4 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { ActivityWick } from '@mastra/playground-ui/components/Activity';
+import type { ActivityStatus } from '@mastra/playground-ui/components/Activity';
 import { ContextMenu } from '@mastra/playground-ui/components/ContextMenu';
 import { DataList } from '@mastra/playground-ui/components/DataList';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
@@ -18,6 +20,7 @@ type BoardListRowCells = {
   icon?: ReactNode;
   key?: ReactNode;
   title?: ReactNode;
+  links?: ReactNode;
   labels?: ReactNode;
   status?: ReactNode;
   action?: ReactNode;
@@ -35,6 +38,7 @@ export function BoardListRow({
   busy = false,
   locked = false,
   highlighted = false,
+  activityStatus,
   menu,
   createdAt,
   cells,
@@ -49,6 +53,7 @@ export function BoardListRow({
   busy?: boolean;
   locked?: boolean;
   highlighted?: boolean;
+  activityStatus?: ActivityStatus;
   menu: ReactNode;
   createdAt?: string;
   cells: BoardListRowCells;
@@ -64,6 +69,12 @@ export function BoardListRow({
       <DataList.Cell className="text-foreground empty:before:content-none max-sm:col-start-2 max-sm:row-start-1">
         <span className="flex min-w-0 items-center gap-3">
           <span className="min-w-0 flex-1 truncate">{cells.title}</span>
+          <span
+            onClick={stopRowClick}
+            className="flex max-w-[min(14rem,30%)] min-w-0 shrink-0 items-center gap-2 empty:hidden max-sm:hidden [&>*]:min-w-0"
+          >
+            {cells.links}
+          </span>
           <span className="max-w-[min(18rem,45%)] min-w-0 shrink-0 empty:hidden max-sm:hidden [&>*]:max-w-full">
             {cells.labels}
           </span>
@@ -140,7 +151,10 @@ export function BoardListRow({
   const row = (
     <DataList.RowWrapper
       ref={cardRef}
+      role="article"
+      aria-label={title}
       data-testid={testId}
+      data-highlighted={highlighted || undefined}
       data-featured={expanded || undefined}
       aria-busy={busy || locked || undefined}
       tabIndex={-1}
@@ -155,6 +169,7 @@ export function BoardListRow({
         highlighted && 'before:bg-warning-subtle',
       )}
     >
+      {activityStatus && <ActivityWick status={activityStatus} />}
       {rowCells}
     </DataList.RowWrapper>
   );

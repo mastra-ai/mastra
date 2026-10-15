@@ -6,18 +6,19 @@ import { useCallback, useMemo } from 'react';
 import { ExperimentResultDetail } from '@/domains/experiments/components/experiment-result-detail';
 import { useExperimentItemPanel } from '@/domains/experiments/context/experiment-item-panel-context';
 import { useExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
-import { useExperimentTagVocabulary } from '@/domains/experiments/hooks/use-experiment-tag-vocabulary';
 
 export interface ExperimentItemPanelProps {
   withQueryTrace: boolean;
   withFeedback: boolean;
+  /** `drawer` (default) for a standalone overlay; `inline` when hosted in the route side panel. */
+  variant?: 'drawer' | 'inline';
 }
 
 /**
- * Result drawer for the `items/:itemId` child route. Always mounted by the
- * experiment page so the drawer animates in and out; `currentItemId` drives `open`.
+ * Result panel for the `items/:itemId` child route. As a drawer, keep it mounted so it
+ * animates in and out; `currentItemId` drives `open`. Inline, it renders only while an item is open.
  */
-export function ExperimentItemPanel({ withQueryTrace, withFeedback }: ExperimentItemPanelProps) {
+export function ExperimentItemPanel({ withQueryTrace, withFeedback, variant }: ExperimentItemPanelProps) {
   const {
     currentItemId: itemId,
     experimentId,
@@ -51,18 +52,6 @@ export function ExperimentItemPanel({ withQueryTrace, withFeedback }: Experiment
     },
     [datasetId, experimentId, updateExperimentResult],
   );
-  const tagVocabulary = useExperimentTagVocabulary(datasetId, results);
-
-  const updateTags = useCallback(
-    async (resultId: string, tags: string[]) => {
-      try {
-        await updateExperimentResult.mutateAsync({ datasetId, experimentId, resultId, tags });
-      } catch {
-        toast.error('Failed to update tags');
-      }
-    },
-    [datasetId, experimentId, updateExperimentResult],
-  );
   const completeResult = useCallback(
     async (resultId: string) => {
       try {
@@ -80,6 +69,7 @@ export function ExperimentItemPanel({ withQueryTrace, withFeedback }: Experiment
 
   return (
     <ExperimentResultDetail
+      variant={variant}
       result={result}
       itemId={itemId}
       fallback={
@@ -98,9 +88,6 @@ export function ExperimentItemPanel({ withQueryTrace, withFeedback }: Experiment
       onClose={close}
       onComplete={result ? () => completeResult(result.id) : undefined}
       onFlagForReview={result ? () => void flagForReview(result.id) : undefined}
-      onTagsChange={result ? tags => void updateTags(result.id, tags) : undefined}
-      tagVocabulary={tagVocabulary}
-      isUpdatingTags={updateExperimentResult.isPending}
     />
   );
 }

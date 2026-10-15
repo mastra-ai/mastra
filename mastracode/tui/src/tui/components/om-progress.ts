@@ -216,7 +216,7 @@ export function formatOMStatus(state: OMProgressState): string {
       ? chalk.hex(mastra.red)(fraction)
       : percent >= 70
         ? chalk.hex(mastra.orange)(fraction)
-        : chalk.hex('#71717a')(fraction);
+        : theme.fg('muted', fraction);
   const savings = state.buffered.observations.projectedMessageRemoval;
   const buffered = savings > 0 ? chalk.italic(theme.fg('muted', ` ↓${formatTokensThreshold(savings)}`)) : '';
   return chalk.hex(mastra.specialGray)('msg ') + value + buffered;

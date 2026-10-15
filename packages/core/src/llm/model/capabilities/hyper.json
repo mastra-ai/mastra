@@ -13,9 +13,7 @@
     "qwen3.8-max"
   ],
   "temperature": [
-    "deepseek-v4-flash",
     "deepseek-v4-flash-0731",
-    "deepseek-v4-pro",
     "deepseek-v4-pro-0813",
     "deepseek-v4.1-flash",
     "gemma-4-26b-a4b-it",
@@ -35,9 +33,7 @@
     "qwen3.8-max"
   ],
   "structuredOutput": [
-    "deepseek-v4-flash",
     "deepseek-v4-flash-0731",
-    "deepseek-v4-pro",
     "deepseek-v4-pro-0813",
     "deepseek-v4.1-flash",
     "gemma-4-26b-a4b-it",
@@ -137,12 +133,6 @@
         "values": ["high", "xhigh"]
       }
     ],
-    "deepseek-v4-pro": [
-      {
-        "type": "effort",
-        "values": ["high", "xhigh"]
-      }
-    ],
     "gpt-oss-120b": [
       {
         "type": "effort",
@@ -159,12 +149,6 @@
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "deepseek-v4-flash": [
-      {
-        "type": "effort",
-        "values": ["high", "xhigh"]
       }
     ]
   }
