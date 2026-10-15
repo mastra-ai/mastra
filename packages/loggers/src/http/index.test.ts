@@ -161,12 +161,13 @@ describe('HttpTransport', () => {
       });
 
       it('rejects a throwing toJSON immediately without retrying or fetching', async () => {
+        const serializationError = new Error('serializer exploded');
         const toJSON = vi.fn(() => {
-          throw new Error('serializer exploded');
+          throw serializationError;
         });
         transport._transform({ msg: 'bad', toJSON } as any, 'utf8', () => {});
 
-        await expect(transport._flush()).rejects.toThrow('serializer exploded');
+        await expect(transport._flush()).rejects.toBe(serializationError);
         expect(toJSON).toHaveBeenCalledTimes(1);
         expect(fetchMock).not.toHaveBeenCalled();
         expect(vi.getTimerCount()).toBe(1); // only the flush interval, no retry delay pending
