@@ -2686,13 +2686,14 @@ describe('Processor Tracing Tests', () => {
         },
       });
 
-      // Parent of the processor span each chunk was processed under
-      const spanParentByChunkType = new Map<string, string | undefined>();
+      // The processor span each chunk was processed under, in order
+      const seen: Array<{ type: string; spanId?: string; parentId?: string; open: boolean }> = [];
       class RecordingStreamProcessor implements Processor {
         readonly id = 'recording-stream';
 
         async processOutputStream({ part, tracingContext }: ProcessOutputStreamArgs): Promise<ChunkType> {
-          spanParentByChunkType.set(part.type, tracingContext?.currentSpan?.parent?.id);
+          const span = tracingContext?.currentSpan;
+          seen.push({ type: part.type, spanId: span?.id, parentId: span?.parent?.id, open: !!span && !span.endTime });
           return part;
         }
       }
@@ -2734,9 +2735,14 @@ describe('Processor Tracing Tests', () => {
       expect(streamProcessorSpans.map(span => span.parentSpanId).sort()).toEqual(
         [firstStep!.id, secondStep!.id].sort(),
       );
-      // The tool result arrives after the first step's model stream ends, and still lands in that step's span
-      expect(spanParentByChunkType.get('tool-result')).toBe(firstStep!.id);
-      expect(spanParentByChunkType.get('text-delta')).toBe(secondStep!.id);
+      // The tool result arrives after the first step's model stream ends, and still lands in that step's open span
+      const firstStepStart = seen.find(chunk => chunk.type === 'step-start')!;
+      expect(firstStepStart.parentId).toBe(firstStep!.id);
+      expect(seen.find(chunk => chunk.type === 'tool-result')).toMatchObject({
+        spanId: firstStepStart.spanId,
+        open: true,
+      });
+      expect(seen.find(chunk => chunk.type === 'text-delta')?.parentId).toBe(secondStep!.id);
 
       await testExporter.finalExpectations();
     });
@@ -2818,6 +2824,95 @@ describe('Processor Tracing Tests', () => {
         true,
       );
       expect(streamProcessorSpans.some(span => span.parentSpanId === failedStep!.id)).toBe(true);
+
+      await testExporter.finalExpectations();
+    });
+
+    it("should nest the next step's stream processor span under that step after a tool approval resume", async () => {
+      let call = 0;
+      const model = new MockLanguageModelV2({
+        doStream: async () => {
+          call++;
+          if (call === 1) {
+            return {
+              stream: convertArrayToReadableStream([
+                { type: 'response-metadata', id: '1' },
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call-1',
+                  toolName: 'refund',
+                  input: JSON.stringify({ orderId: '1' }),
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                },
+              ]),
+            };
+          }
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'response-metadata', id: '2' },
+              { type: 'text-delta', id: '1', delta: 'refunded' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              },
+            ]),
+          };
+        },
+      });
+
+      // Parent of the processor span each chunk was processed under
+      const seen: Array<{ type: string; parentId?: string }> = [];
+      class RecordingStreamProcessor implements Processor {
+        readonly id = 'recording-stream';
+
+        async processOutputStream({ part, tracingContext }: ProcessOutputStreamArgs): Promise<ChunkType> {
+          seen.push({ type: part.type, parentId: tracingContext?.currentSpan?.parent?.id });
+          return part;
+        }
+      }
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model,
+        tools: {
+          refund: createTool({
+            id: 'refund',
+            description: 'Refund an order',
+            inputSchema: z.object({ orderId: z.string() }),
+            requireApproval: true,
+            execute: async () => ({ refunded: true }),
+          }),
+        },
+        outputProcessors: [new RecordingStreamProcessor()],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      const first = await mastra.getAgent('agent').stream('Refund order 1');
+      let toolCallId: string | undefined;
+      for await (const chunk of first.fullStream) {
+        if (chunk.type === 'tool-call-approval') toolCallId = chunk.payload.toolCallId;
+      }
+      expect(toolCallId).toBeDefined();
+
+      const resumed = await mastra.getAgent('agent').approveToolCall({ runId: first.runId, toolCallId: toolCallId! });
+      for await (const _chunk of resumed.fullStream) {
+        // drain
+      }
+
+      // The resumed tool result is processed before any step starts; the next step still gets its own span
+      const stepIds = testExporter.getModelStepSpans().map(step => step.id);
+      expect(stepIds).toContain(seen.find(chunk => chunk.type === 'text-delta')?.parentId);
 
       await testExporter.finalExpectations();
     });

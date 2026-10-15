@@ -1386,9 +1386,29 @@ function createStepFromProcessor<TProcessorId extends string>(
               // Use processorState (from the shared processorStates Map) so state persists
               // across processOutputStream and processOutputResult calls
               const mutableState = processorState;
+              // Accumulates time spent inside the hook across chunks, beside the span.
+              const hookDurationKey = `${OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX}${processor.id}`;
+              const readHookDurationMs = () => (mutableState[hookDurationKey] as number | undefined) ?? 0;
               let processorSpan = mutableState[spanKey] as
                 | ReturnType<NonNullable<typeof parentSpan>['createChildSpan']>
                 | undefined;
+
+              // When a step's stream starts, a span opened outside that step (e.g. by a tool
+              // result replayed on resume, before any step started) must not carry into it.
+              if (
+                processorSpan &&
+                (part as ChunkType).type === 'step-start' &&
+                parentSpan?.type === SpanType.MODEL_STEP &&
+                processorSpan.parent?.id !== parentSpan.id
+              ) {
+                processorSpan.end({
+                  output: { totalChunks: (streamParts ?? []).length },
+                  attributes: { hookDurationMs: readHookDurationMs() },
+                });
+                delete mutableState[spanKey];
+                delete mutableState[hookDurationKey];
+                processorSpan = undefined;
+              }
 
               if (!processorSpan && parentSpan) {
                 // First chunk - create span for this processor
@@ -1414,9 +1434,6 @@ function createStepFromProcessor<TProcessorId extends string>(
 
               // Handle outputStream span lifecycle explicitly (not via executePhaseWithSpan)
               // because outputStream uses a per-processor span stored in mutableState
-              // Accumulates time spent inside the hook across chunks, beside the span.
-              const hookDurationKey = `${OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX}${processor.id}`;
-              const readHookDurationMs = () => (mutableState[hookDurationKey] as number | undefined) ?? 0;
               let result: ChunkType | null | undefined;
               try {
                 const hookStart = performance.now();
