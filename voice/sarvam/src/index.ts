@@ -103,6 +103,17 @@ export class SarvamVoice extends MastraVoice {
     this.speaker = speaker || defaultSpeaker;
   }
 
+  private async throwApiError(response: Response): Promise<never> {
+    let errorMessage: string | undefined;
+    try {
+      const body = (await response.json()) as { error?: { message?: string }; message?: string };
+      errorMessage = body?.error?.message || body?.message;
+    } catch {
+      // Non-JSON error body; fall back to the status text below.
+    }
+    throw new Error(`Sarvam AI API Error: ${errorMessage || response.statusText || `HTTP ${response.status}`}`);
+  }
+
   private async makeRequest(endpoint: string, payload: any) {
     const headers = new Headers({
       'api-subscription-key': this.apiKey!,
@@ -114,14 +125,7 @@ export class SarvamVoice extends MastraVoice {
       body: JSON.stringify(payload),
     });
     if (!response.ok) {
-      let errorMessage;
-      try {
-        const error = (await response.json()) as { message?: string };
-        errorMessage = error.message || response.statusText;
-      } catch {
-        errorMessage = response.statusText;
-      }
-      throw new Error(`Sarvam AI API Error: ${errorMessage}`);
+      await this.throwApiError(response);
     }
 
     return response;
@@ -224,6 +228,9 @@ export class SarvamVoice extends MastraVoice {
 
     try {
       const response = await fetch(`${this.baseUrl}/speech-to-text`, requestOptions);
+      if (!response.ok) {
+        await this.throwApiError(response);
+      }
       const result = (await response.json()) as any;
       return result.transcript;
     } catch (error) {
