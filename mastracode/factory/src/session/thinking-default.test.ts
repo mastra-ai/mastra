@@ -1,7 +1,6 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
-import { supervisorResourceId } from '../supervisor/session.js';
 import { resolveFactoryThinkingLevel } from './thinking-default.js';
 
 const FACTORY_ID = '11111111-1111-4111-8111-111111111111';
@@ -42,10 +41,7 @@ describe('resolveFactoryThinkingLevel', () => {
     expect(level).toBe('high');
   });
 
-  it('resolves supervisor and Factory-page requests by their resource id', async () => {
-    expect(
-      await resolveFactoryThinkingLevel(contextFor({ resourceId: supervisorResourceId(FACTORY_ID) }), deps()),
-    ).toBe('high');
+  it('resolves Factory-page requests by their resource id', async () => {
     expect(await resolveFactoryThinkingLevel(contextFor({ resourceId: FACTORY_ID }), deps())).toBe('high');
   });
 

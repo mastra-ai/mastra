@@ -5,7 +5,6 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { UUID_PATTERN } from '../routes/contracts.js';
 import { DEFAULT_FACTORY_THINKING_LEVEL } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
-import { parseSupervisorResourceId } from '../supervisor/session.js';
 import type { SourceControlSessionLookup } from './factory-session.js';
 
 const FACTORY_PROJECT_ID = new RegExp(UUID_PATTERN);
@@ -21,8 +20,6 @@ async function resolveFactoryProjectId(
 ): Promise<string | undefined> {
   const resourceId = controller.resourceId;
   if (!resourceId) return undefined;
-  const supervisorProjectId = parseSupervisorResourceId(resourceId);
-  if (supervisorProjectId) return supervisorProjectId;
   const sourceSession = await deps.sourceControl.getBySessionId(resourceId);
   if (sourceSession?.factoryProjectId) return sourceSession.factoryProjectId;
   const stateProjectId = (controller.getState?.() as { factoryProjectId?: unknown } | undefined)?.factoryProjectId;

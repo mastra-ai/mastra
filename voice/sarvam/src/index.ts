@@ -57,7 +57,8 @@ const defaultListeningModel = {
 };
 
 export class SarvamVoice extends MastraVoice {
-  private apiKey?: string;
+  private speechApiKey?: string;
+  private listeningApiKey?: string;
   private model: SarvamTTSModel = 'bulbul:v3';
   private language: SarvamTTSLanguage = 'en-IN';
   private properties: Record<string, any> = {};
@@ -86,8 +87,9 @@ export class SarvamVoice extends MastraVoice {
       speaker,
     });
 
-    this.apiKey = speechModel?.apiKey || listeningModel?.apiKey || defaultSpeechModel.apiKey;
-    if (!this.apiKey) {
+    this.speechApiKey = speechModel?.apiKey || defaultSpeechModel.apiKey;
+    this.listeningApiKey = listeningModel?.apiKey || defaultListeningModel.apiKey;
+    if (!this.speechApiKey && !this.listeningApiKey) {
       throw new Error('SARVAM_API_KEY must be set');
     }
     this.model = speechModel?.model || defaultSpeechModel.model;
@@ -116,7 +118,7 @@ export class SarvamVoice extends MastraVoice {
 
   private async makeRequest(endpoint: string, payload: any) {
     const headers = new Headers({
-      'api-subscription-key': this.apiKey!,
+      'api-subscription-key': (this.speechApiKey || this.listeningApiKey)!,
       'Content-Type': 'application/json',
     });
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
@@ -221,7 +223,7 @@ export class SarvamVoice extends MastraVoice {
     const requestOptions = {
       method: 'POST',
       headers: {
-        'api-subscription-key': this.apiKey!,
+        'api-subscription-key': (options?.apiKey || this.listeningApiKey || this.speechApiKey)!,
       },
       body: form,
     };
