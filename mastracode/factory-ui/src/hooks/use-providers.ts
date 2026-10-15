@@ -13,14 +13,6 @@ import type {
 } from '../api/types';
 
 /**
- * Providers + API-key management (mirrors the TUI `/api-keys` command).
- *
- * React Query owns the cache: the list is fetched once and deduped across
- * consumers, and the save/remove mutations invalidate the list so it refetches
- * the server's source of truth instead of optimistic local edits. Keys are
- * write-only — never read back.
- */
-/**
  * A credential change (key saved/removed, OAuth completed, signed out) alters
  * which models are runnable, so the model catalog must refetch along with the
  * provider list.

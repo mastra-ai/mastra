@@ -88,7 +88,6 @@ interface ModelCheck {
   choice: OnboardingModelChoice;
 }
 
-/** Only the active preset's choices are validated and written; inactive cached choices never influence creation. */
 export function onboardingModelPlan(setup: CompleteOnboardingSetup): {
   checks: ModelCheck[];
   factoryModelId: string;
