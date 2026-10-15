@@ -71,6 +71,9 @@ export const menuPopupClass = cn(
 export const menuLabelClass =
   'px-[calc(var(--text-label)*.9+1px)] pt-1.5 pb-1 text-meta tracking-wider text-muted-foreground uppercase';
 
+// `menuItemInsetClass` (.9em + 1.1em + .75em) for a label, measured the same way.
+export const menuLabelInsetClass = 'pl-[calc(var(--text-label)*2.75+1px)]';
+
 export const menuSeparatorClass = '-mx-1 my-1 h-px bg-border';
 
 export const menuShortcutClass = 'ml-auto text-meta tracking-wider text-muted-foreground tabular-nums';
