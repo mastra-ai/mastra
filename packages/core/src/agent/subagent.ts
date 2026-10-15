@@ -6,6 +6,7 @@ import type { RequestContext } from '../request-context';
 import type { ChunkType, FullOutput, MastraModelOutput } from '../stream';
 import type { DynamicArgument } from '../types';
 import type { MessageListInput } from './message-list';
+import type { ActionRunOutput, ActionRunResult } from '../new-message-format/output';
 import type { AgentInstructions, MastraDBMessage, MessageList } from './types';
 
 /**
@@ -82,10 +83,19 @@ export interface SubAgent<TId = string, TRequestContext extends Record<string, a
   getInstructions(opts?: { requestContext?: RequestContext }): AgentInstructions | Promise<AgentInstructions>;
 
   /** Execute a prompt and return the full result */
-  generate(messages: MessageListInput, options?: any): Promise<FullOutput | SubAgentGenerateResult>;
+  generate(messages: MessageListInput, options?: any): Promise<FullOutput | SubAgentGenerateResult | ActionRunResult>;
 
   /** Stream a prompt execution */
-  stream(messages: MessageListInput, options?: any): Promise<MastraModelOutput | SubAgentStreamResult>;
+  stream(
+    messages: MessageListInput,
+    options?: any,
+  ): Promise<MastraModelOutput | SubAgentStreamResult | ActionRunOutput>;
+
+  /** MessageList-based generate. Preferred for delegation when present (action-native `generate` is not delegatable yet). */
+  generateMessageList?(messages: MessageListInput, options?: any): Promise<FullOutput | SubAgentGenerateResult>;
+
+  /** MessageList-based stream. Preferred for delegation when present. */
+  streamMessageList?(messages: MessageListInput, options?: any): Promise<MastraModelOutput | SubAgentStreamResult>;
 
   /** Resume a previously suspended generate execution */
   resumeGenerate(resumeData: any, options?: any): Promise<FullOutput | SubAgentGenerateResult>;
@@ -133,4 +143,21 @@ export function isAgentCompatible<TId extends string>(input: unknown): input is 
     typeof candidate.resumeGenerate === 'function' &&
     typeof candidate.resumeStream === 'function'
   );
+}
+
+type DelegateGenerate = (messages: MessageListInput, options?: any) => Promise<FullOutput | SubAgentGenerateResult>;
+type DelegateStream = (messages: MessageListInput, options?: any) => Promise<MastraModelOutput | SubAgentStreamResult>;
+
+/**
+ * Delegation still runs on the MessageList contract. `Agent` exposes it as `generateMessageList`;
+ * custom subagents only implement `generate`, which returns the MessageList shape.
+ */
+export function delegateGenerate(agent: SubAgent): DelegateGenerate {
+  return agent.generateMessageList
+    ? agent.generateMessageList.bind(agent)
+    : (agent.generate.bind(agent) as DelegateGenerate);
+}
+
+export function delegateStream(agent: SubAgent): DelegateStream {
+  return agent.streamMessageList ? agent.streamMessageList.bind(agent) : (agent.stream.bind(agent) as DelegateStream);
 }

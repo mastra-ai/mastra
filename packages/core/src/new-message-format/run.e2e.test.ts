@@ -56,7 +56,10 @@ describe.skipIf(!process.env.OPENAI_API_KEY)('runAgent (live gpt-4o-mini, in-mem
     expect(types.slice(start + 1, end).every(t => t === 'text-delta')).toBe(true);
     expect(types.slice(-2)).toEqual(['turn-end', 'run-end']);
 
-    const deltas = streamed.filter(a => a.type === 'text-delta').map(a => a.delta).join('');
+    const deltas = streamed
+      .filter(a => a.type === 'text-delta')
+      .map(a => a.delta)
+      .join('');
     const text = streamed[end]!;
     expect(text).toMatchObject({ role: 'assistant', text: deltas });
 
