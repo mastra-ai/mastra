@@ -2,6 +2,6 @@
 '@mastra/factory': patch
 ---
 
-Factory now starts skill runs with a typed skill signal instead of a user message. Traces and memory show the kickoff as the skill that started the run, not as something a person typed. The signal is `{ type: 'reactive', tagName: 'skill', attributes: { name } }`, and the model still sees `<skill name="…">…</skill>`.
+Traces and memory now show the skill that started a Factory run, instead of recording the kickoff as a message a person typed. The model still receives the same skill instructions.
 
-Skills you start from the chat are unchanged and still send a user message.
+Skills you start from the chat are unchanged and still appear as your own message.
