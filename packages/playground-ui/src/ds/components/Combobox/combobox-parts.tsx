@@ -21,8 +21,12 @@ import { cn } from '@/lib/utils';
  * The field the list opens under, set by ComboboxInput or ComboboxChips. Without one (a compact
  * ComboboxTrigger with ComboboxSearch in the popup) the popup anchors to the trigger.
  */
-type FieldAnchor = { field: HTMLElement | null; setField: (field: HTMLElement | null) => void };
-const FieldAnchorContext = React.createContext<FieldAnchor | null>(null);
+type FieldAnchor = {
+  field?: HTMLElement;
+  /** A ref callback: React passes `null` when the field unmounts. */
+  setField: (field: HTMLElement | null) => void;
+};
+const FieldAnchorContext = React.createContext<FieldAnchor | undefined>(undefined);
 
 /**
  * Root. Same props as Base UI's `Combobox.Root` (`items`, `value`, `onValueChange`, `multiple`,
@@ -35,10 +39,10 @@ const FieldAnchorContext = React.createContext<FieldAnchor | null>(null);
 function ComboboxRoot<Value, Multiple extends boolean | undefined = false>(
   props: BaseCombobox.Root.Props<Value, Multiple>,
 ) {
+  // Set through a ref callback, which reports `null` on detach; read as `undefined` below.
   const [field, setField] = React.useState<HTMLElement | null>(null);
-  const anchor = React.useMemo(() => ({ field, setField }), [field]);
   return (
-    <FieldAnchorContext.Provider value={anchor}>
+    <FieldAnchorContext.Provider value={{ field: field ?? undefined, setField }}>
       <BaseCombobox.Root {...props} />
     </FieldAnchorContext.Provider>
   );
@@ -279,7 +283,7 @@ function ComboboxContent({
   container,
   ...props
 }: ComboboxContentProps) {
-  const field = React.useContext(FieldAnchorContext)?.field ?? null;
+  const field = React.useContext(FieldAnchorContext)?.field;
   const resolvedContainer = usePortalContainer(container);
   return (
     <BaseCombobox.Portal container={resolvedContainer}>
@@ -290,7 +294,7 @@ function ComboboxContent({
         alignOffset={alignOffset}
         // Base UI anchors to the input (or the trigger when the input is in the popup); chips need
         // the whole field instead.
-        anchor={anchor ?? field ?? undefined}
+        anchor={anchor ?? field}
         positionMethod={FLOATING_POSITION_METHOD}
         className={comboboxStyles.positioner}
       >
