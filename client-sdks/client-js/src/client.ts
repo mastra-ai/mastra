@@ -51,6 +51,8 @@ import type {
   TraceQueryGroupResponse,
   TraceQueryKeysetTraceResponse,
   TraceQueryResponse,
+  AggregateTracesArgs,
+  AggregateTracesResponse,
   GetTraceQueryFieldsArgs,
   GetTraceQueryFieldsResponse,
   GetTraceQueryValuesArgs,
@@ -1140,6 +1142,14 @@ export class MastraClient extends BaseResource {
   queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse>;
   queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse> {
     return this.observability.queryTraces(params);
+  }
+
+  /**
+   * Groups and measures the traces selected by a time range and optional trace-query predicate.
+   * Check `capabilities.traceAggregate` from `getObservabilityCapabilities()` first; servers without it return 404 or 501.
+   */
+  aggregateTraces(params: AggregateTracesArgs): Promise<AggregateTracesResponse> {
+    return this.observability.aggregateTraces(params);
   }
 
   /** Returns canonical and observed fields available to the advanced trace-query grammar. */
