@@ -520,6 +520,8 @@ Each agent turn calls the model once. The `chat` span is that call and is the on
 - `gen_ai.usage.output_tokens` - Number of output tokens
 - `gen_ai.request.temperature` - Sampling temperature
 - `gen_ai.response.finish_reasons` - Completion reasons
+- `gen_ai.response.time_to_first_chunk` - Seconds from the start of the model call to its first response chunk, on `chat` spans
+- `mastra.time_to_first_chunk_ms` - Milliseconds to the first response chunk, on `agent_step`, `model_generation`, and `invoke_agent` spans
 
 ### Protocol selection guide
 

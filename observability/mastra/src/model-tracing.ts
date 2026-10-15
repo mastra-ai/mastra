@@ -355,27 +355,24 @@ function extractStepInput(payload?: StepStartPayload): StepInputPreview {
 }
 
 /**
- * Chunks Mastra emits itself. Any other chunk is the provider's and counts as
- * the response's first chunk, matching OTel's `gen_ai.response.time_to_first_chunk`.
+ * Chunks that come from the model provider. The first one marks the response's
+ * first chunk, matching OTel's `gen_ai.response.time_to_first_chunk`. Everything
+ * else, such as lifecycle markers or `data-*` parts a processor writes before the
+ * model call, is Mastra's own and does not count.
  */
-const MASTRA_LIFECYCLE_CHUNK_TYPES = new Set<string>([
-  'start',
-  'step-start',
-  'step-finish',
-  'finish',
-  'error',
-  'abort',
-  'tripwire',
-  'watch',
-  'custom',
-  'step-output',
-  'tool-result',
-  'tool-error',
-  'tool-output',
-  'tool-output-denied',
-  'tool-call-approval',
-  'tool-call-suspended',
-  'tool-call-resumed',
+const MODEL_RESPONSE_CHUNK_TYPES = new Set<string>([
+  'response-metadata',
+  'raw',
+  'text-start',
+  'text-delta',
+  'reasoning-start',
+  'reasoning-delta',
+  'reasoning-file',
+  'tool-call-input-streaming-start',
+  'tool-call-delta',
+  'tool-call',
+  'source',
+  'file',
 ]);
 
 /**
@@ -1008,7 +1005,7 @@ export class ModelSpanTracker {
     return stream.pipeThrough(
       new TransformStream({
         transform: (chunk, controller) => {
-          if (!MASTRA_LIFECYCLE_CHUNK_TYPES.has(chunk.type)) {
+          if (MODEL_RESPONSE_CHUNK_TYPES.has(chunk.type)) {
             this.#captureCompletionStartTime();
           }
 

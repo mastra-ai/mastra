@@ -4,7 +4,7 @@ import type { StructuredOutputOptions } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
-import { SpanType, EntityType, getOrCreateSpan } from '@mastra/core/observability';
+import { SpanType, EntityType, getOrCreateSpan, getTimeToFirstChunkMs } from '@mastra/core/observability';
 import type { TracingContext } from '@mastra/core/observability';
 import { executeWithContext } from '@mastra/core/observability/context-storage';
 
@@ -1212,6 +1212,38 @@ describe('Tracing Integration Tests', () => {
       // neither clock leaks onto the outer run.
       expect(clockOf(runOf('reviewer-agent'))).toBeLessThan(clockOf(runOf('outer-agent'))!);
       expect(clockOf(runOf('helper-agent'))).toBeGreaterThan(clockOf(runOf('outer-agent'))!);
+    });
+
+    it('ignores data chunks a processor writes before the model responds', async () => {
+      const progressProcessor: Processor = {
+        id: 'progress',
+        async processInputStep({ messages, writer }) {
+          await writer?.custom({ type: 'data-progress', data: { status: 'thinking' } });
+          return messages;
+        },
+      };
+      const agent = new Agent({
+        id: 'progress-agent',
+        name: 'progress-agent',
+        instructions: 'x',
+        model: delayedTextModel(40, 'hello'),
+        inputProcessors: [progressProcessor],
+      });
+      const mastra = new Mastra({ ...getBaseMastraConfig(testExporter), agents: { agent } });
+
+      const result = await mastra.getAgent('agent').stream('go');
+      await result.consumeStream();
+
+      const spans = [
+        ...testExporter.getSpansByType(SpanType.AGENT_RUN),
+        ...testExporter.getSpansByType(SpanType.MODEL_GENERATION),
+        ...testExporter.getSpansByType(SpanType.MODEL_STEP),
+        ...testExporter.getSpansByType(SpanType.MODEL_INFERENCE),
+      ];
+      expect(spans).toHaveLength(4);
+      for (const span of spans) {
+        expect(getTimeToFirstChunkMs(span)).toBeGreaterThanOrEqual(35);
+      }
     });
   });
 
