@@ -4719,8 +4719,8 @@ importers:
         specifier: npm:@a2a-js/sdk@~1.0.1
         version: '@a2a-js/sdk@1.0.1(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.5)(express@5.2.1(supports-color@10.2.2))'
       '@ai-sdk/provider-utils-v6':
-        specifier: npm:@ai-sdk/provider-utils@4.0.40
-        version: '@ai-sdk/provider-utils@4.0.40(zod@4.6.7)'
+        specifier: npm:@ai-sdk/provider-utils@4.0.56
+        version: '@ai-sdk/provider-utils@4.0.56(zod@4.6.7)'
       '@ai-sdk/provider-utils-v7':
         specifier: npm:@ai-sdk/provider-utils@5.0.54
         version: '@ai-sdk/provider-utils@5.0.54(zod@4.6.7)'
@@ -11025,12 +11025,6 @@ packages:
 
   '@ai-sdk/provider-utils@3.0.40':
     resolution: {integrity: sha512-4KL/WeBxxxG+rbNG0a2TPm56o8I0X743+mvNHIr+PSoTBOD6dHzoz/Yw+Olwjg2EhcUmj/uOJWDuXPpFNVcqOw==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: 4.6.7
-
-  '@ai-sdk/provider-utils@4.0.40':
-    resolution: {integrity: sha512-OL5IrpUm9Y8Dwy+w/vvFwPotS6m52O9W0op2oXgXdCROMJIBalBI0oro6OIBYkPxvm5Xg02GSkoQN25RlR0bnw==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: 4.6.7
@@ -33995,13 +33989,6 @@ snapshots:
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.0.8
       undici: 8.11.2
-      zod: 4.6.7
-
-  '@ai-sdk/provider-utils@4.0.40(zod@4.6.7)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.14
-      '@standard-schema/spec': 1.1.0
-      eventsource-parser: 3.0.8
       zod: 4.6.7
 
   '@ai-sdk/provider-utils@4.0.56(zod@4.6.7)':
