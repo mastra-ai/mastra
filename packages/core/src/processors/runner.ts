@@ -226,6 +226,55 @@ export function findOwnModelStepSpan(span: AnySpan | undefined): AnySpan | undef
   return undefined;
 }
 
+/** Chunk types that end the model step an output stream processor span sits under. */
+const STEP_END_CHUNK_TYPES = new Set(['step-finish', 'error', 'abort']);
+
+function endStoredOutputStreamSpan(state: Record<string, unknown>, processorId: string, totalChunks: number): void {
+  const spanKey = `__outputStreamSpan_${processorId}`;
+  const hookDurationKey = `${OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX}${processorId}`;
+  (state[spanKey] as Span<SpanType.PROCESSOR_RUN> | undefined)?.end({
+    output: { totalChunks },
+    attributes: { hookDurationMs: (state[hookDurationKey] as number | undefined) ?? 0 },
+  });
+  delete state[spanKey];
+  delete state[hookDurationKey];
+}
+
+/**
+ * When a step's stream starts, ends the stored output stream processor span if
+ * it was opened outside that step (e.g. by a tool result replayed on resume,
+ * before any step started), so it does not carry into the step.
+ */
+export function endOutputStreamSpanOutsideStep(
+  state: Record<string, unknown>,
+  processorId: string,
+  part: ChunkType,
+  stepSpan: AnySpan | undefined,
+  totalChunks: number,
+): void {
+  const span = state[`__outputStreamSpan_${processorId}`] as AnySpan | undefined;
+  if (span && part.type === 'step-start' && stepSpan?.type === SpanType.MODEL_STEP && span.parent?.id !== stepSpan.id) {
+    endStoredOutputStreamSpan(state, processorId, totalChunks);
+  }
+}
+
+/**
+ * Ends the stored output stream processor span when the model step it sits
+ * under ends. The span outlives the step's model stream so the step's tool
+ * results land in it too.
+ */
+export function endOutputStreamSpanAtStepEnd(
+  state: Record<string, unknown>,
+  processorId: string,
+  part: ChunkType,
+  totalChunks: number,
+): void {
+  const span = state[`__outputStreamSpan_${processorId}`] as AnySpan | undefined;
+  if (span?.parent?.type === SpanType.MODEL_STEP && STEP_END_CHUNK_TYPES.has(part.type)) {
+    endStoredOutputStreamSpan(state, processorId, totalChunks);
+  }
+}
+
 /**
  * Union type for processor or workflow that can be used as a processor
  */

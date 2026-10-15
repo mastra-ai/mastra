@@ -38,7 +38,12 @@ import {
   ProcessorStepSchema,
   createProcessorSendSignal,
 } from '../../processors';
-import { OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX, findOwnModelStepSpan } from '../../processors/runner';
+import {
+  OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX,
+  endOutputStreamSpanAtStepEnd,
+  endOutputStreamSpanOutsideStep,
+  findOwnModelStepSpan,
+} from '../../processors/runner';
 import {
   resolveProcessorSpanAttributes,
   resolveProcessorSpanName,
@@ -1063,8 +1068,9 @@ function createStepFromProcessor<TProcessorId extends string>(
       // Find appropriate parent span:
       // - For input/outputResult: find AGENT_RUN (processor runs once at start/end)
       // - For inputStep/outputStep/toolResult: find MODEL_STEP (processor runs per LLM call / tool round-trip)
-      // - For outputStream: the MODEL_STEP whose stream is processed, else AGENT_RUN when the stream
-      //   carries no step (e.g. durable agents)
+      // - For outputStream: the MODEL_STEP whose stream is processed, else AGENT_RUN. Durable agents stay
+      //   on AGENT_RUN because their stream runs with the agent run's context; their tool-result chunks
+      //   do carry a step, but they reuse the span that is already open
       // When workflow is executed, currentSpan is WORKFLOW_STEP, so we walk up the parent chain
       // Fall back to currentSpan only when its tree can reach exporters — otherwise
       // the public processor span would export as an orphan trace root.
@@ -1386,29 +1392,16 @@ function createStepFromProcessor<TProcessorId extends string>(
               // Use processorState (from the shared processorStates Map) so state persists
               // across processOutputStream and processOutputResult calls
               const mutableState = processorState;
-              // Accumulates time spent inside the hook across chunks, beside the span.
-              const hookDurationKey = `${OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX}${processor.id}`;
-              const readHookDurationMs = () => (mutableState[hookDurationKey] as number | undefined) ?? 0;
+              endOutputStreamSpanOutsideStep(
+                mutableState,
+                processor.id,
+                part as ChunkType,
+                parentSpan,
+                (streamParts ?? []).length,
+              );
               let processorSpan = mutableState[spanKey] as
                 | ReturnType<NonNullable<typeof parentSpan>['createChildSpan']>
                 | undefined;
-
-              // When a step's stream starts, a span opened outside that step (e.g. by a tool
-              // result replayed on resume, before any step started) must not carry into it.
-              if (
-                processorSpan &&
-                (part as ChunkType).type === 'step-start' &&
-                parentSpan?.type === SpanType.MODEL_STEP &&
-                processorSpan.parent?.id !== parentSpan.id
-              ) {
-                processorSpan.end({
-                  output: { totalChunks: (streamParts ?? []).length },
-                  attributes: { hookDurationMs: readHookDurationMs() },
-                });
-                delete mutableState[spanKey];
-                delete mutableState[hookDurationKey];
-                processorSpan = undefined;
-              }
 
               if (!processorSpan && parentSpan) {
                 // First chunk - create span for this processor
@@ -1434,6 +1427,9 @@ function createStepFromProcessor<TProcessorId extends string>(
 
               // Handle outputStream span lifecycle explicitly (not via executePhaseWithSpan)
               // because outputStream uses a per-processor span stored in mutableState
+              // Accumulates time spent inside the hook across chunks, beside the span.
+              const hookDurationKey = `${OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX}${processor.id}`;
+              const readHookDurationMs = () => (mutableState[hookDurationKey] as number | undefined) ?? 0;
               let result: ChunkType | null | undefined;
               try {
                 const hookStart = performance.now();
@@ -1459,20 +1455,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                   delete mutableState[spanKey];
                   delete mutableState[hookDurationKey];
                 }
-                // A span under a step outlives that step's model stream so the step's tool
-                // results land in it too, and ends with the step.
-                const partType = (part as ChunkType).type;
-                if (
-                  processorSpan?.parent?.type === SpanType.MODEL_STEP &&
-                  (partType === 'step-finish' || partType === 'error' || partType === 'abort')
-                ) {
-                  processorSpan.end({
-                    output: { totalChunks: (streamParts ?? []).length },
-                    attributes: { hookDurationMs: readHookDurationMs() },
-                  });
-                  delete mutableState[spanKey];
-                  delete mutableState[hookDurationKey];
-                }
+                endOutputStreamSpanAtStepEnd(mutableState, processor.id, part as ChunkType, (streamParts ?? []).length);
               } catch (error) {
                 // End span with error and clean up state
                 if (error instanceof TripWire) {
