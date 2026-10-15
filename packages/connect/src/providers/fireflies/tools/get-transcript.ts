@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 4e61bff484f0 — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ 5cdd2a40042a — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -13,9 +13,15 @@ const SentenceSchema = z.object({
   speaker_name: z.string().nullish(),
   speaker_id: z.string().nullish(),
   raw_text: z.string().nullish(),
-  start_time: z.string().nullish(),
-  end_time: z.string().nullish(),
+  start_time: z.number().nullish(),
+  end_time: z.number().nullish(),
   text: z.string().nullish(),
+});
+
+const ProviderSentenceSchema = SentenceSchema.extend({
+  speaker_id: z.union([z.string(), z.number()]).nullish(),
+  start_time: z.union([z.number(), z.string()]).nullish(),
+  end_time: z.union([z.number(), z.string()]).nullish(),
 });
 
 const SummarySectionSchema = z.object({
@@ -96,7 +102,7 @@ const AnalyticsSchema = z.object({
 const TranscriptSchema = z.object({
   id: z.string().nullish(),
   title: z.string().nullish(),
-  sentences: z.array(SentenceSchema).nullish(),
+  sentences: z.array(ProviderSentenceSchema).nullish(),
   summary: ProviderSummarySchema.nullable().optional(),
   speakers: z.array(SpeakerSchema).nullish(),
   meeting_info: MeetingInfoSchema.nullable().optional(),
@@ -134,6 +140,16 @@ export const getTranscriptOutputSchema = z.object({
 
 function normalizeActionItems(actionItems: string | string[]): string {
   return Array.isArray(actionItems) ? actionItems.join('\n') : actionItems;
+}
+
+function normalizeSentence(sentence: z.infer<typeof ProviderSentenceSchema>): z.infer<typeof SentenceSchema> {
+  return {
+    ...sentence,
+    speaker_id: sentence.speaker_id != null ? String(sentence.speaker_id) : sentence.speaker_id,
+    start_time:
+      sentence.start_time != null && isFinite(Number(sentence.start_time)) ? Number(sentence.start_time) : undefined,
+    end_time: sentence.end_time != null && isFinite(Number(sentence.end_time)) ? Number(sentence.end_time) : undefined,
+  };
 }
 
 export function getTranscriptTool(proxy: PlatformProxy) {
@@ -253,7 +269,7 @@ export function getTranscriptTool(proxy: PlatformProxy) {
       return {
         id: transcript.id ?? undefined,
         title: transcript.title ?? undefined,
-        sentences: transcript.sentences ?? undefined,
+        sentences: transcript.sentences ? transcript.sentences.map(normalizeSentence) : undefined,
         summary: transcript.summary
           ? {
               ...transcript.summary,

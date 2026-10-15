@@ -196,11 +196,38 @@ export const googleDriveScenario: Scenario = {
       );
     }
 
-    // Revisions are produced automatically by Drive on edits. Probe with
-    // the first revision id ("1") which is almost always present.
+    // Revisions are produced automatically by Drive on edits. List them to
+    // obtain a real revision id, then probe get-revision with it (falling
+    // back to "1", which is almost always present).
+    let revisionId: string | undefined;
+    if (fileId && tools['google_drive_list_revisions']) {
+      try {
+        const revs = await call<{ revisions?: Array<{ id?: string }> }>('google_drive_list_revisions', { fileId });
+        revisionId = revs.revisions?.[0]?.id;
+        steps.push(makeStep('list revisions', 'google_drive_list_revisions', 'pass', revisionId));
+      } catch (error) {
+        steps.push(makeStep('list revisions', 'google_drive_list_revisions', 'fail', errorMessage(error)));
+      }
+    }
     if (fileId) {
       steps.push(
-        await probeTool(call, tools, 'get revision', 'google_drive_get_revision', { fileId, revisionId: '1' }),
+        await probeTool(call, tools, 'get revision', 'google_drive_get_revision', {
+          fileId,
+          revisionId: revisionId ?? '1',
+        }),
+      );
+    }
+
+    // Export only applies to Google Workspace files (Docs/Sheets/Slides).
+    // upload-document cannot bootstrap one — Drive media upload rejects
+    // google-apps MIME types — so probe with the plain-text file; the
+    // provider's "not exportable" rejection still proves routing.
+    if (fileId) {
+      steps.push(
+        await probeTool(call, tools, 'export file', 'google_drive_export_file', {
+          fileId,
+          mimeType: 'application/pdf',
+        }),
       );
     }
 
