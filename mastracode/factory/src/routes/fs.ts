@@ -95,7 +95,13 @@ export interface WorkspaceFilesListing {
 }
 
 export type WorkspaceChangeStatus =
-  'modified' | 'added' | 'deleted' | 'renamed' | 'copied' | 'untracked' | 'conflicted';
+  | 'modified'
+  | 'added'
+  | 'deleted'
+  | 'renamed'
+  | 'copied'
+  | 'untracked'
+  | 'conflicted';
 
 export interface WorkspaceChange {
   path: string;
