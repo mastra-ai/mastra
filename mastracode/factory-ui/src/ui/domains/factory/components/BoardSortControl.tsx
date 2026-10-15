@@ -1,8 +1,9 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { ArrowUpDown } from 'lucide-react';
 
+import { BOARD_SORTS } from '../boardOrder';
 import type { BoardSort } from '../boardOrder';
-import { DEFAULT_BOARD_SORT, isBoardSort } from '../boardSort';
+import { DEFAULT_BOARD_SORT } from '../boardSort';
 
 export const BOARD_SORT_LABELS: Record<BoardSort, string> = {
   recent: 'Recently moved',
@@ -20,31 +21,25 @@ export function BoardSortControl({
   currentUserId?: string;
   onChange: (sort: BoardSort) => void;
 }) {
+  const triggerLabel = `Sort filed cards: ${BOARD_SORT_LABELS[value]}`;
+  const options = BOARD_SORTS.filter(sort => sort !== 'recent-mine' || currentUserId).map(sort => ({
+    value: sort,
+    label: BOARD_SORT_LABELS[sort],
+  }));
+
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger
         size="icon-sm"
         variant={value === DEFAULT_BOARD_SORT ? 'default' : 'primary'}
-        aria-label={`Sort filed cards: ${BOARD_SORT_LABELS[value]}`}
-        tooltip={`Sort filed cards: ${BOARD_SORT_LABELS[value]}`}
+        aria-label={triggerLabel}
+        tooltip={triggerLabel}
       >
         <ArrowUpDown aria-hidden />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start">
         <DropdownMenu.Label>Sort filed cards</DropdownMenu.Label>
-        <DropdownMenu.RadioGroup
-          value={value}
-          onValueChange={next => {
-            if (isBoardSort(next)) onChange(next);
-          }}
-        >
-          <DropdownMenu.RadioItem value="recent">{BOARD_SORT_LABELS.recent}</DropdownMenu.RadioItem>
-          {currentUserId ? (
-            <DropdownMenu.RadioItem value="recent-mine">{BOARD_SORT_LABELS['recent-mine']}</DropdownMenu.RadioItem>
-          ) : null}
-          <DropdownMenu.RadioItem value="created-newest">{BOARD_SORT_LABELS['created-newest']}</DropdownMenu.RadioItem>
-          <DropdownMenu.RadioItem value="created-oldest">{BOARD_SORT_LABELS['created-oldest']}</DropdownMenu.RadioItem>
-        </DropdownMenu.RadioGroup>
+        <DropdownMenu.RadioOptions options={options} value={value} onValueChange={onChange} />
       </DropdownMenu.Content>
     </DropdownMenu>
   );

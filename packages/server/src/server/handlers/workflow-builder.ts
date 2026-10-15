@@ -62,7 +62,7 @@ export const STREAM_WORKFLOW_BUILDER_ROUTE = createRoute({
       if (!builder?.enabled) throw new HTTPException(404, { message: 'Workflow builder is not enabled' });
       const agent = builder.getAgent();
 
-      const { messages, memory: memoryOption, requestContext: bodyRequestContext, ...rest } = params;
+      const { messages, memory: memoryOption, requestContext: bodyRequestContext, scopes: _scopes, ...rest } = params;
       validateBody({ messages });
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);

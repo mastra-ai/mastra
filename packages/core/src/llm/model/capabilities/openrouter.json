@@ -15,7 +15,6 @@
     "anthropic/claude-opus-4.8",
     "anthropic/claude-opus-5",
     "anthropic/claude-opus-5.5",
-    "anthropic/claude-sonnet-4",
     "anthropic/claude-sonnet-4.5",
     "anthropic/claude-sonnet-4.6",
     "anthropic/claude-sonnet-5",
@@ -103,6 +102,8 @@
     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
     "nvidia/nemotron-3.5-content-safety",
     "nvidia/nemotron-3.5-content-safety:free",
+    "nvidia/nemotron-3.5-super-vl",
+    "nvidia/nemotron-3.5-super-vl:free",
     "openai/gpt-4-turbo",
     "openai/gpt-4.1",
     "openai/gpt-4.1-mini",
@@ -206,8 +207,7 @@
     "thinkingmachines/inkling-small",
     "thinkingmachines/inkling-small:free",
     "thinkingmachines/inkling:free",
-    "unbiased/pareto",
-    "unbiased/pareto-26.10-preview",
+    "unbiased/pareto-26.9",
     "x-ai/grok-4.20",
     "x-ai/grok-4.20-multi-agent",
     "x-ai/grok-4.3",
@@ -237,6 +237,7 @@
     "~openai/gpt-mini-latest",
     "~openai/gpt-sol-latest",
     "~openai/gpt-terra-latest",
+    "~unbiased/pareto-latest",
     "~x-ai/grok-latest",
     "~z-ai/glm-flash-latest"
   ],
@@ -257,10 +258,8 @@
     "anthropic/claude-opus-4.1",
     "anthropic/claude-opus-4.5",
     "anthropic/claude-opus-4.6",
-    "anthropic/claude-sonnet-4",
     "anthropic/claude-sonnet-4.5",
     "anthropic/claude-sonnet-4.6",
-    "apodex/apodex-1.1-mini:free",
     "arcee-ai/trinity-large-thinking",
     "bytedance-seed/seed-1.6",
     "bytedance-seed/seed-1.6-flash",
@@ -330,13 +329,12 @@
     "inception/mercury-2",
     "inception/mercury-2.5",
     "inclusionai/ling-3.0-flash",
-    "inclusionai/ling-3.0-flash-fin",
-    "inclusionai/ling-3.0-flash-sante",
     "inclusionai/ling-3.0-flash-vl",
     "inclusionai/ling-3.1-flash",
     "inference-net/schematron-v2-small",
     "inference-net/schematron-v2-turbo",
     "liquid/lfm-2.5-2.6b:free",
+    "liquid/lfm-2.5-24b-a2b",
     "mancer/weaver",
     "meituan/longcat-2.0",
     "meta-llama/llama-3.1-70b-instruct",
@@ -408,6 +406,8 @@
     "nvidia/nemotron-3.5-content-safety:free",
     "nvidia/nemotron-3.5-lightning",
     "nvidia/nemotron-3.5-lightning:free",
+    "nvidia/nemotron-3.5-super-vl",
+    "nvidia/nemotron-3.5-super-vl:free",
     "openai/gpt-3.5-turbo",
     "openai/gpt-3.5-turbo-0613",
     "openai/gpt-3.5-turbo-16k",
@@ -509,8 +509,7 @@
     "thinkingmachines/inkling-small",
     "thinkingmachines/inkling-small:free",
     "thinkingmachines/inkling:free",
-    "unbiased/pareto",
-    "unbiased/pareto-26.10-preview",
+    "unbiased/pareto-26.9",
     "undi95/remm-slerp-l2-13b",
     "upstage/solar-mini4",
     "upstage/solar-pro-3",
@@ -550,6 +549,7 @@
     "~google/gemini-flash-latest",
     "~google/gemini-pro-latest",
     "~moonshotai/kimi-latest",
+    "~unbiased/pareto-latest",
     "~x-ai/grok-latest",
     "~z-ai/glm-flash-latest",
     "~z-ai/glm-latest"
@@ -570,7 +570,6 @@
     "anthropic/claude-sonnet-4.6",
     "anthropic/claude-sonnet-5",
     "anthropic/claude-sonnet-5.5",
-    "apodex/apodex-1.1-mini:free",
     "bytedance-seed/seed-1.6",
     "bytedance-seed/seed-1.6-flash",
     "bytedance-seed/seed-2-1-turbo",
@@ -630,9 +629,11 @@
     "inception/mercury-2",
     "inception/mercury-2.5",
     "inclusionai/ling-3.0-flash-vl",
+    "inclusionai/ling-3.1-flash",
     "inference-net/schematron-v2-small",
     "inference-net/schematron-v2-turbo",
     "liquid/lfm-2.5-2.6b:free",
+    "liquid/lfm-2.5-24b-a2b",
     "meta-llama/llama-3.1-70b-instruct",
     "meta-llama/llama-3.1-8b-instruct",
     "meta-llama/llama-3.2-3b-instruct",
@@ -686,6 +687,8 @@
     "nvidia/nemotron-3-super-120b-a12b:free",
     "nvidia/nemotron-3-ultra-550b-a55b",
     "nvidia/nemotron-3.5-lightning",
+    "nvidia/nemotron-3.5-super-vl",
+    "nvidia/nemotron-3.5-super-vl:free",
     "openai/gpt-3.5-turbo",
     "openai/gpt-3.5-turbo-0613",
     "openai/gpt-3.5-turbo-16k",
@@ -1022,11 +1025,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-sonnet-4": [
-      {
-        "type": "toggle"
       }
     ],
     "anthropic/claude-sonnet-5": [
@@ -1749,17 +1747,7 @@
         "type": "toggle"
       }
     ],
-    "inclusionai/ling-3.0-flash-sante": [
-      {
-        "type": "toggle"
-      }
-    ],
     "inclusionai/ling-3.0-flash-vl": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "inclusionai/ling-3.0-flash-fin": [
       {
         "type": "toggle"
       }
@@ -1783,7 +1771,7 @@
         "type": "toggle"
       }
     ],
-    "apodex/apodex-1.1-mini:free": [
+    "nvidia/nemotron-3.5-super-vl:free": [
       {
         "type": "toggle"
       }
@@ -1821,6 +1809,11 @@
       },
       {
         "type": "budget_tokens"
+      }
+    ],
+    "nvidia/nemotron-3.5-super-vl": [
+      {
+        "type": "toggle"
       }
     ],
     "nvidia/nemotron-3-ultra-550b-a55b:free": [

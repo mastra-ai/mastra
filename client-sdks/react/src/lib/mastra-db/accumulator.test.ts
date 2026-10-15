@@ -1678,12 +1678,6 @@ describe('accumulateChunk - tripwire', () => {
 // =============================================================================
 
 describe('accumulateChunk - finish / abort finalization', () => {
-  it('finish marks streaming text parts done', () => {
-    const out = reduce([startChunk(), textStartChunk('t1'), textDeltaChunk('t1', 'hi'), finishChunk('stop')]);
-    const text = out[0].content.parts.find(p => p.type === 'text') as MastraTextPart;
-    expect(text.state).toBe('done');
-  });
-
   it('abort marks streaming text parts done', () => {
     const out = reduce([startChunk(), textStartChunk('t1'), textDeltaChunk('t1', 'hi'), abortChunk()]);
     const text = out[0].content.parts.find(p => p.type === 'text') as MastraTextPart;

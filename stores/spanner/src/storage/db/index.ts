@@ -411,6 +411,47 @@ export class SpannerDB extends MastraBase {
   }
 
   /**
+   * Delete up to `limit` rows keyed by `runId` whose epoch-ms `column` is
+   * older than `cutoff`. Used to prune the run fencing tables.
+   */
+  async pruneRunRows({
+    tableName,
+    column,
+    cutoff,
+    limit,
+  }: {
+    tableName: string;
+    column: string;
+    cutoff: number;
+    limit: number;
+  }): Promise<number> {
+    const table = quoteIdent(tableName, 'table name');
+    const col = quoteIdent(column, 'column name');
+    const runId = quoteIdent('runId', 'column name');
+    const [rows] = await this.database.run({
+      sql: `SELECT ${runId} FROM ${table} WHERE ${col} IS NOT NULL AND ${col} < @cutoff ORDER BY ${col} LIMIT @limit`,
+      params: { cutoff, limit },
+      types: { cutoff: 'int64', limit: 'int64' },
+      json: true,
+    });
+    const runIds = (rows as Array<{ runId: string }>).map(row => row.runId);
+    if (runIds.length === 0) return 0;
+    let deleted = 0;
+    await this.runWithAbortRetry(async () => {
+      await this.database.runTransactionAsync(async (tx: Transaction) => {
+        const [count] = await tx.runUpdate({
+          sql: `DELETE FROM ${table} WHERE ${runId} IN UNNEST(@runIds) AND ${col} < @cutoff`,
+          params: { runIds, cutoff },
+          types: { runIds: { type: 'array', child: 'string' }, cutoff: 'int64' },
+        });
+        await tx.commit();
+        deleted = count;
+      });
+    });
+    return deleted;
+  }
+
+  /**
    * Determine the primary-key column list for a table. Some core tables (like
    * `mastra_workflow_snapshot`) don't carry a single-column PK in the schema,
    * so we hardcode known composite PKs here.

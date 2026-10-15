@@ -12,6 +12,7 @@ import { SidebarNavLink } from './nav/sidebar-nav-link';
 import { SidebarNavList } from './nav/sidebar-nav-list';
 import { SidebarNavSection } from './nav/sidebar-nav-section';
 import { SidebarNavSeparator } from './nav/sidebar-nav-separator';
+import { SidebarNavShowMore } from './nav/sidebar-nav-show-more';
 import { SidebarNavStack } from './nav-stack/sidebar-nav-stack';
 import { SidebarMobileTrigger } from './root/sidebar-mobile-trigger';
 import { SidebarProvider } from './root/sidebar-provider';
@@ -34,6 +35,7 @@ export const Sidebar = Object.assign(SidebarRoot, {
   NavList: SidebarNavList,
   NavSection: SidebarNavSection,
   NavSeparator: SidebarNavSeparator,
+  NavShowMore: SidebarNavShowMore,
   NavStack: SidebarNavStack,
   Provider: SidebarProvider,
   SearchTrigger: SidebarSearchTrigger,

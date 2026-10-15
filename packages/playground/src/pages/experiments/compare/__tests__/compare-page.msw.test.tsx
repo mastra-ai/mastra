@@ -14,7 +14,9 @@ import {
   comparisonOf,
 } from './fixtures/page';
 import { storageWithoutMetrics } from '@/domains/configuration/hooks/__tests__/fixtures/observability-storage-capabilities';
+import { buildDataset } from '@/domains/datasets/components/__tests__/fixtures/datasets';
 import { buildListExperimentsResponse } from '@/domains/experiments/components/__tests__/fixtures/experiments';
+import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
 
@@ -22,6 +24,10 @@ const allExperiments = [sameDatasetA, sameDatasetB, otherDataset, ...moreSameDat
 
 beforeEach(() => {
   server.use(
+    // Named in the header.
+    http.get(`${TEST_BASE_URL}/api/datasets/:datasetId`, ({ params }) =>
+      HttpResponse.json(buildDataset({ id: String(params.datasetId), name: 'Support tickets' })),
+    ),
     // The comparison itself is covered by its own layout test; keep it inert here.
     http.post(`${TEST_BASE_URL}/api/datasets/:datasetId/compare`, () => HttpResponse.json(emptyComparison)),
     // Mirrors the server: 404 when the experiment does not belong to the dataset.
@@ -48,10 +54,10 @@ function LocationProbe() {
 
 function renderPage(query: string) {
   return renderWithProviders(
-    <>
+    <TestLinkProvider>
       <LocationProbe />
       <CompareExperimentsPage />
-    </>,
+    </TestLinkProvider>,
     { router: { initialEntries: [`/experiments/compare${query}`] } },
   );
 }
@@ -69,7 +75,39 @@ function useEchoComparison() {
   return requests;
 }
 
+const breadcrumb = () => screen.getByRole('navigation', { name: 'Breadcrumb' });
+
 describe('CompareExperimentsPage', () => {
+  describe('when the dataset loads', () => {
+    it('shows the compared dataset in the header, linking to it', async () => {
+      renderPage('?dataset=dataset-1&baseline=exp-a&contender=exp-b');
+
+      const link = await screen.findByRole('link', { name: 'Open dataset Support tickets' });
+      expect(link.getAttribute('href')).toBe('/datasets/dataset-1');
+    });
+
+    it('keeps the dataset out of the breadcrumb', async () => {
+      renderPage('?dataset=dataset-1&baseline=exp-a&contender=exp-b');
+
+      await screen.findByRole('link', { name: 'Open dataset Support tickets' });
+      expect(within(breadcrumb()).queryByText('Support tickets')).toBeNull();
+    });
+  });
+
+  describe('when the dataset cannot be loaded', () => {
+    it('names the dataset by its id in the header', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/datasets/:datasetId`, () =>
+          HttpResponse.json({ error: 'Forbidden' }, { status: 403 }),
+        ),
+      );
+      renderPage('?dataset=dataset-1&baseline=exp-a&contender=exp-b');
+
+      const link = await screen.findByRole('link', { name: 'Open dataset dataset-1' });
+      expect(link.getAttribute('href')).toBe('/datasets/dataset-1');
+    });
+  });
+
   describe('when both experiments belong to the dataset', () => {
     it('renders the comparison for two experiments of the dataset', async () => {
       renderPage('?dataset=dataset-1&baseline=exp-a&contender=exp-b');
