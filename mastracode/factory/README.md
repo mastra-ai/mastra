@@ -322,7 +322,7 @@ phases: {
 
 Installed custom boards can create linked items, start working roles, transition through bound tools, and react to completed tool results. Board and phase identifiers contain 1–128 letters, digits, underscores, or hyphens and start with a letter or digit. Identifiers are case-sensitive and cannot contain surrounding whitespace.
 
-This configuration runs a release rehearsal through `queued → preparing → shipping → shipped`. Add it to an existing Factory host with configured storage, a GitHub integration, a connected project repository, a sandbox, and organization-scoped model credentials. Enable automatic runs for the project. The repository must contain a `release:check` package script; it should validate the release without publishing it.
+This configuration runs a release rehearsal through `queued → preparing → shipping → shipped`. Add it to an existing Factory host with configured storage, a GitHub integration, a connected project repository, and organization-scoped model credentials. Factory uses a default sandbox unless you configure one: the Mastra Platform sandbox when the platform environment is set, otherwise a local sandbox under `~/.mastracode/factory/sandboxes`. Enable automatic runs for the project. The repository must contain a `release:check` package script; it should validate the release without publishing it.
 
 ```typescript
 import { MastraFactory } from '@mastra/factory';

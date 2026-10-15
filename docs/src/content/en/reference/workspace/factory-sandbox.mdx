@@ -48,16 +48,27 @@ import { LocalFactorySandbox } from '@mastra/factory'
 new PlatformFactorySandbox() // reads MASTRA_PLATFORM_ACCESS_TOKEN and MASTRA_ENVIRONMENT_ID
 new E2BFactorySandbox() // reads E2B_API_KEY
 new DockerFactorySandbox({ defaults: { baseImage: 'node:22-slim' } })
-new LocalFactorySandbox({ root: '/var/sandboxes', env: { PATH: process.env.PATH! } })
+new LocalFactorySandbox({ root: '/var/sandboxes', env: { HOME: process.env.HOME! } })
 ```
 
-`LocalFactorySandbox` runs every session on the host machine under `join(root, sessionId)`.
+`LocalFactorySandbox` runs every session on the host machine under `join(root, sessionId)`. Commands get `PATH` plus only the variables you pass in `env`, so pass what git and your toolchain need (such as `HOME`) and keep server secrets out.
 
 For an unset setting, the provider applies its own default: 2 CPUs, 1024 MB and a 5 minute idle timeout on Platform and E2B, overridable through `defaults`. On Platform, a top-level `idleTimeoutMinutes` option also applies when `defaults` doesn't set one. The schema's `default` values show the effective defaults.
 
 Platform polls a build through the builder that started it. After a host restart, an earlier build reads as `unknown`.
 
 Keep schema changes additive: add fields, and read both names for a release when you rename one. The stored document outlives the schema that wrote it, so a key the current schema no longer declares can appear in it, for example after the host switches provider. When such a key makes an update fail validation, Factory drops the undeclared keys and retries before refusing the update. Keys the update itself sets are never dropped.
+
+### Default sandbox
+
+When you omit `sandbox`, `prepare()` picks one for you:
+
+- `PlatformFactorySandbox` when `MASTRA_PLATFORM_ACCESS_TOKEN` or `MASTRA_PLATFORM_SECRET_KEY` is set and both `MASTRA_PROJECT_ID` and `MASTRA_ENVIRONMENT_ID` are set.
+- Otherwise `LocalFactorySandbox` rooted at `~/.mastracode/factory/sandboxes`. Commands get only `PATH` plus these host variables: `HOME`, `USER`, `LOGNAME`, `SHELL`, `TMPDIR`, `LANG`, `LC_ALL`, `TERM`, `TZ`, `GIT_EXEC_PATH`, `GIT_TEMPLATE_DIR`, `SSL_CERT_FILE` and `SSL_CERT_DIR`. Factory logs a warning at boot because sessions then run repository commands on the host.
+
+An explicit `sandbox` always wins over the default. Pass one for production deployments.
+
+With a Platform credential and `MASTRA_PROJECT_ID` but no `MASTRA_ENVIRONMENT_ID`, Factory still installs its Platform integrations, but sessions use the local sandbox.
 
 ### Callback form
 
