@@ -25,7 +25,9 @@ describe('FactoryModelsSettings', () => {
       </MemoryRouter>,
     );
 
-    await waitFor(() => expect(screen.queryByText('Thinking defaults')).not.toBeInTheDocument());
-    expect(screen.getByRole('combobox', { name: 'Model scope' })).toHaveTextContent('Factory model and credentials');
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Model scope' })).toHaveTextContent('Factory model and credentials'),
+    );
+    expect(screen.queryByRole('slider', { name: 'Thinking level' })).not.toBeInTheDocument();
   });
 });
