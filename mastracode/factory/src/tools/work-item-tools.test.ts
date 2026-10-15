@@ -6,6 +6,7 @@ import { feedTopic } from '../feed-events.js';
 import { fakeRouteAuth } from '../routes/test-utils.js';
 import type { FactoryTransitionService } from '../rules/transition-service.js';
 import { CommentsDomain } from '../storage/domains/comments/domain.js';
+import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { FactoryDeferredDecisionRecord } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FACTORY_TOOLS_WITHOUT_APPROVAL } from './permissions.js';
@@ -43,6 +44,27 @@ async function setup({
     pubsub,
   });
   const boards = createBoardRegistry();
+  // Two linked repositories, so a card that names neither is ambiguous. Only
+  // the reads the repository check makes are stubbed.
+  const linked = [
+    { id: 'link-1', repositoryId: 'repo-1', externalId: '2', slug: 'mastra-ai/mastra' },
+    { id: 'link-2', repositoryId: 'repo-2', externalId: '3', slug: 'mastra-ai/platform' },
+  ];
+  const sourceControl = {
+    integrationId: 'github',
+    connections: {
+      list: async () => [{ id: 'connection-1', integrationId: 'github' }],
+    },
+    projectRepositories: {
+      list: async () => linked.map(({ id, repositoryId }) => ({ id, repositoryId, inEnvironment: true })),
+    },
+    repositories: {
+      get: async ({ id }: { id: string }) => {
+        const link = linked.find(candidate => candidate.repositoryId === id);
+        return link ? { id, externalId: link.externalId, slug: link.slug } : null;
+      },
+    },
+  } as unknown as SourceControlStorageHandle;
   const transitionService = {
     transition: vi.fn<Transition>(
       transition ??
@@ -63,6 +85,7 @@ async function setup({
     transitionService,
     auditRecorder,
     feed: feed ?? commentsDomain,
+    sessions: { getSourceControlBySessionId: async () => sourceControl },
   }) as Record<string, { requireApproval?: boolean; execute: (input: unknown, context: unknown) => Promise<unknown> }>;
   const run = <T>(name: string, input: unknown) => tools[name]!.execute(input, {}) as Promise<T>;
   const fileItem = (factoryProjectId: string, title: string) =>
@@ -193,6 +216,147 @@ describe('factory_create_work_item', () => {
   });
 });
 
+describe('repositories', () => {
+  it('files the item in the repository it names, so its runs know where to work', async () => {
+    const { run, workItems } = await setup();
+
+    const created = await run<{ id: string }>('factory_create_work_item', {
+      title: 'Fix the login redirect',
+      brief: 'Users land on /404 after signing in.',
+      repository: 'mastra-ai/platform',
+    });
+
+    const item = await workItems.getForProject('org-1', 'project-1', created.id);
+    expect(item!.metadata).toMatchObject({ repository: 'mastra-ai/platform' });
+  });
+
+  it('refuses a repository the Factory does not link, before filing anything', async () => {
+    const { run, workItems } = await setup();
+
+    await expect(
+      run('factory_create_work_item', { title: 'x', brief: 'y', repository: 'someone/else' }),
+    ).rejects.toThrow(
+      'someone/else is not linked to this Factory. Linked repositories: mastra-ai/mastra, mastra-ai/platform.',
+    );
+    expect(await workItems.list({ orgId: 'org-1', factoryProjectId: 'project-1' })).toEqual([]);
+  });
+});
+
+describe('factory_update_work_item', () => {
+  it("sets a card's repository, title and parent as the caller and audits the fields", async () => {
+    const { run, workItems, fileItem, auditRecorder } = await setup();
+    const { item } = await fileItem('project-1', 'Old title');
+    const { item: parent } = await fileItem('project-1', 'Epic');
+
+    const result = await run('factory_update_work_item', {
+      workItem: item.id,
+      title: 'New title',
+      repository: 'mastra-ai/mastra',
+      parentWorkItem: parent.id,
+    });
+
+    expect(result).toMatchObject({
+      workItem: { id: item.id, title: 'New title' },
+      updated: ['title', 'repository', 'parentWorkItemId'],
+      repository: 'mastra-ai/mastra',
+      parentWorkItemId: parent.id,
+      plansPreapproved: false,
+    });
+    const stored = await workItems.getForProject('org-1', 'project-1', item.id);
+    expect(stored).toMatchObject({ title: 'New title', parentWorkItemId: parent.id, stages: item.stages });
+    expect(stored!.metadata).toMatchObject({ repository: 'mastra-ai/mastra' });
+    expect(auditRecorder.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'factory.work_item.updated',
+        actorId: 'user-1',
+        actorType: 'human',
+        targets: [{ type: 'work_item', id: item.id, name: 'New title' }],
+        metadata: { fields: ['title', 'metadata', 'parentWorkItemId'], cause: 'factory_tools' },
+      }),
+    );
+  });
+
+  it('keeps the rest of the metadata when it sets the repository', async () => {
+    const { run, workItems, fileItem } = await setup();
+    const { item } = await fileItem('project-1', 'Card');
+    await workItems.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { metadata: { note: 'keep' } } });
+
+    await run('factory_update_work_item', { workItem: item.id, repository: 'mastra-ai/platform' });
+
+    const stored = await workItems.getForProject('org-1', 'project-1', item.id);
+    expect(stored!.metadata).toMatchObject({ note: 'keep', repository: 'mastra-ai/platform' });
+  });
+
+  it('refuses a repository the Factory does not link and leaves the card alone', async () => {
+    const { run, workItems, fileItem } = await setup();
+    const { item } = await fileItem('project-1', 'Card');
+
+    await expect(run('factory_update_work_item', { workItem: item.id, repository: 'someone/else' })).rejects.toThrow(
+      'someone/else is not linked to this Factory. Linked repositories: mastra-ai/mastra, mastra-ai/platform.',
+    );
+    expect((await workItems.getForProject('org-1', 'project-1', item.id))!.metadata).toEqual({});
+  });
+
+  it("refuses to repoint a card synced from an issue, which follows the issue's repository", async () => {
+    const { run, workItems, fileItem } = await setup();
+    const { item } = await fileItem('project-1', 'Issue card');
+    await workItems.update({
+      orgId: 'org-1',
+      id: item.id,
+      userId: 'user-1',
+      patch: { metadata: { githubRepositoryId: '2', repository: 'mastra-ai/mastra' } },
+    });
+
+    await expect(
+      run('factory_update_work_item', { workItem: item.id, repository: 'mastra-ai/platform' }),
+    ).rejects.toThrow("This card runs in mastra-ai/mastra, which comes from its linked issue and can't be changed.");
+  });
+
+  it('detaches a card from its parent and pre-approves its plans', async () => {
+    const { run, workItems, fileItem } = await setup();
+    const { item: parent } = await fileItem('project-1', 'Epic');
+    const { item } = await fileItem('project-1', 'Child');
+    await workItems.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { parentWorkItemId: parent.id } });
+
+    const result = await run('factory_update_work_item', {
+      workItem: item.id,
+      parentWorkItem: null,
+      plansPreapproved: true,
+    });
+
+    expect(result).toMatchObject({ parentWorkItemId: null, plansPreapproved: true });
+  });
+
+  it('refuses a parent from another Factory and a card that would be its own ancestor', async () => {
+    const { run, workItems, fileItem } = await setup();
+    const { item: foreign } = await fileItem('project-2', 'Elsewhere');
+    const { item: parent } = await fileItem('project-1', 'Epic');
+    const { item: child } = await fileItem('project-1', 'Child');
+    await workItems.update({ orgId: 'org-1', id: child.id, userId: 'user-1', patch: { parentWorkItemId: parent.id } });
+
+    await expect(run('factory_update_work_item', { workItem: child.id, parentWorkItem: foreign.id })).rejects.toThrow(
+      'was found in this Factory',
+    );
+    await expect(run('factory_update_work_item', { workItem: parent.id, parentWorkItem: child.id })).rejects.toThrow(
+      'The parent was refused',
+    );
+  });
+
+  it('takes no stage, board or sessions, and needs at least one field', async () => {
+    const { tools, fileItem } = await setup();
+    const { item } = await fileItem('project-1', 'Card');
+    const schema = (
+      tools.factory_update_work_item as unknown as { inputSchema: { safeParse: (v: unknown) => { success: boolean } } }
+    ).inputSchema;
+
+    expect(schema.safeParse({ workItem: item.id }).success).toBe(false);
+    expect(schema.safeParse({ workItem: item.id, stage: 'done' }).success).toBe(false);
+    expect(schema.safeParse({ workItem: item.id, board: 'work' }).success).toBe(false);
+    expect(schema.safeParse({ workItem: item.id, sessions: {} }).success).toBe(false);
+    expect(schema.safeParse({ workItem: item.id, title: 'ok' }).success).toBe(true);
+  });
+});
+
 describe('approval', () => {
   it('never asks before running a work-item tool', async () => {
     const { tools } = await setup();
@@ -201,6 +365,7 @@ describe('approval', () => {
     );
     expect(flags).toEqual({
       factory_create_work_item: false,
+      factory_update_work_item: false,
       factory_transition_work_item: false,
       factory_retry_decision: false,
       factory_dismiss_decision: false,
@@ -217,6 +382,7 @@ describe('approval', () => {
         'factory_inspect_work_item',
         'factory_list_attention',
         'factory_create_work_item',
+        'factory_update_work_item',
         'factory_transition_work_item',
         'factory_retry_decision',
         'factory_dismiss_decision',
