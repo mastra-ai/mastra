@@ -504,23 +504,26 @@ describe('Subconscious observation curator', () => {
     );
   });
 
-  it('fails closed without dispatching when the host does not vouch for an organization', async () => {
-    const { context, extractor } = fixture();
+  it('skips quietly without dispatching or writing when the run has no org', async () => {
+    const { memory, context, extractor, subconscious } = fixture();
     const writer = { custom: vi.fn().mockResolvedValue(undefined) };
+    const sendStateSignal = vi.fn(async () => ({ skipped: false }));
     const sendMessage = vi.spyOn(Agent.prototype, 'sendMessage');
+    const getStore = vi.spyOn(memory, 'getKnowledgeStore');
+    const materialize = vi.spyOn(memory.getKnowledgeInstance()!, 'materializeScope');
+    const requestContext = new RequestContext();
+    requestContext.set('mastra__scopes', ['team:core']);
 
     await expect(
-      extractor.onExtracted!({ ...context, writer, requestContext: new RequestContext() }),
+      extractor.onExtracted!({ ...context, writer, sendStateSignal, requestContext } as any),
     ).resolves.toBeUndefined();
+    await subconscious.settled();
 
-    await vi.waitFor(() =>
-      expect(writer.custom).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ error: expect.stringContaining('require requestContext.organizationId') }),
-        }),
-      ),
-    );
     expect(sendMessage).not.toHaveBeenCalled();
+    expect(getStore).not.toHaveBeenCalled();
+    expect(materialize).not.toHaveBeenCalled();
+    expect(writer.custom).not.toHaveBeenCalled();
+    expect(sendStateSignal).not.toHaveBeenCalled();
   });
 
   it('reports asynchronous curator failures without rejecting the extractor hook', async () => {

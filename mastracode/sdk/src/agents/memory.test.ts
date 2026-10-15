@@ -464,12 +464,14 @@ describe('getDynamicMemory', () => {
       {
         projectPath: '/tmp/project',
         factoryProjectId: 'project-1',
+        factoryOrgId: 'org-real',
       },
       'thread',
       { vector: true },
     );
-    expect(requestContext.set).toHaveBeenCalledWith('knowledgeResourceId', 'project-1');
-    expect(requestContext.get('knowledgeResourceId')).toBe('project-1');
+    // The project travels only as a Core-marked project: scope now.
+    expect(requestContext.get('knowledgeResourceId')).toBeUndefined();
+    expect(requestContext.get('mastra__scopes')).toEqual(expect.arrayContaining(['project:project-1']));
   });
 
   it('marks injected knowledge scopes as run-derived and stays idempotent on a reused context', async () => {
@@ -493,8 +495,7 @@ describe('getDynamicMemory', () => {
     expect(first).toEqual(second);
     // Core-marked, so a downstream trust-checked reader sees them.
     expect(getRunAgentScopes(requestContext as never)).toEqual(second);
-    // The legacy override stays set for Subconscious readers that still use it.
-    expect(requestContext.get('knowledgeResourceId')).toBe('project-1');
+    expect(requestContext.get('knowledgeResourceId')).toBeUndefined();
   });
 
   it('configures factory curation scope and limits', async () => {

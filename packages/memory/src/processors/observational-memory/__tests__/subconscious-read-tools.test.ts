@@ -220,6 +220,16 @@ describe('Subconscious knowledge read tools', () => {
     ).rejects.toThrow(/organizationId/);
   });
 
+  it('returns a tool error naming the org scope when the run has no org', async () => {
+    const tools = (await createMemory()).listTools();
+    await expect(
+      tools.knowledge_search!.execute?.({ query: 'Atlas' }, {
+        agent: { threadId: 'alpha', resourceId: 'user-42' },
+        requestContext: new RequestContext(),
+      } as any),
+    ).rejects.toThrow('Knowledge needs an org:<id> agent scope');
+  });
+
   it('lets storage decide semantic hit visibility, including scope nodes visible through their own id', async () => {
     const memory = await createMemory();
     const store = (await memory.storage.getStore('knowledge'))!;

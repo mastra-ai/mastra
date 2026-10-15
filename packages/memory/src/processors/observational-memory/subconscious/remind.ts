@@ -9,6 +9,7 @@ import { resolveSubconsciousAgentModel } from './model';
 import { createReminderAgent } from './remind-agent';
 import { ensureOwnedRemindThread, getRemindThreadId, REMIND_MESSAGE_METADATA_KEY } from './remind-protocol';
 import { createReplyToMemoryQuestionTool } from './remind-questions';
+import { resolveKnowledgeOrgId } from './scope';
 import type { ResolvedSubconsciousAgent } from './types';
 
 /** Own-thread records younger than this are treated as still-in-context and excluded from reminder candidates. */
@@ -90,6 +91,8 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
         let scopeIds: KnowledgeScopeIds | undefined;
         let store: KnowledgeStorage | undefined;
         try {
+          // Org-less runs are legitimate: without an org, Knowledge has nowhere to read from, so skip quietly.
+          if (!resolveKnowledgeOrgId(context.requestContext)) return;
           scopeIds = await resolveKnowledgeScopeIds(context.memory, {
             agent: { threadId: context.threadId, resourceId: context.resourceId },
             requestContext: context.requestContext,

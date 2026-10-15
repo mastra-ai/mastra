@@ -1,5 +1,6 @@
 import type { LanguageModelV2StreamPart } from '@internal/ai-sdk-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { setRunAgentScopes } from '@mastra/core/agent';
 import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -66,7 +67,7 @@ function createHarness(options: { knowledgeResourceId?: string }) {
   const memory = new Memory({ storage, knowledge: new Knowledge({ id: 'default', storage }) });
   const requestContext = new RequestContext();
   requestContext.set('organizationId', ORG);
-  if (options.knowledgeResourceId) requestContext.set('knowledgeResourceId', options.knowledgeResourceId);
+  if (options.knowledgeResourceId) setRunAgentScopes(requestContext, [`project:${options.knowledgeResourceId}`]);
 
   const emitted = { reminder: 0, reply: 0 };
   let sourceRecordId = '';
@@ -233,7 +234,7 @@ describe('Subconscious remind thread ownership', () => {
     await runScenario(undefined);
   });
 
-  it('accepts ask_memory after a passive reminder with a knowledgeResourceId override', async () => {
+  it('accepts ask_memory after a passive reminder with a project scope', async () => {
     await runScenario(PROJECT);
   });
 });

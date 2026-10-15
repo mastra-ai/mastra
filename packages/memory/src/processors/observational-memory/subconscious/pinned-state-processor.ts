@@ -26,6 +26,7 @@ import type { KnowledgeScopeIds, KnowledgeStorage } from '@mastra/core/storage';
 
 import { resolveKnowledgeScopeIds } from './knowledge-tools';
 import { listPinnedKnowledge, PINNED_DELTA_TAG, PINNED_SNAPSHOT_TAG, SUBCONSCIOUS_PINS_STATE_ID } from './pinned';
+import { resolveKnowledgeOrgId } from './scope';
 
 export interface PinEntry {
   id: string;
@@ -141,9 +142,13 @@ export class PinnedStateProcessor implements Processor<typeof SUBCONSCIOUS_PINS_
   // visible context (visibility is subset containment), never a level-narrowed
   // write scope.
   private async resolveScope(args: ComputeStateSignalArgs): Promise<KnowledgeScopeIds | undefined> {
-    const organizationId = args.requestContext?.get?.('organizationId');
-    if (typeof organizationId !== 'string' || !organizationId.trim() || !args.resourceId || !args.threadId)
-      return undefined;
+    let organizationId: string | undefined;
+    try {
+      organizationId = resolveKnowledgeOrgId(args.requestContext);
+    } catch {
+      return undefined; // an ambiguous org shows no pins rather than the wrong org's
+    }
+    if (!organizationId || !args.resourceId || !args.threadId) return undefined;
     return resolveKnowledgeScopeIds(
       {
         getKnowledgeInstance: () => this.deps.getKnowledgeInstance(),

@@ -1,4 +1,4 @@
-import { Agent } from '@mastra/core/agent';
+import { Agent, setRunAgentScopes } from '@mastra/core/agent';
 import { Knowledge } from '@mastra/core/knowledge';
 import type { ComputeStateSignalArgs } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
@@ -34,10 +34,11 @@ const semanticInfrastructure = {
   } as unknown as MastraEmbeddingModel<string>,
 };
 
-function requestContextWith(overrides: Record<string, unknown> = {}) {
+function requestContextWith(options: { projectId?: string } = {}) {
   const requestContext = new RequestContext();
   requestContext.set('organizationId', 'acme');
-  for (const [key, value] of Object.entries(overrides)) requestContext.set(key, value);
+  // The project scope counts only when Core marked it as run-derived.
+  if (options.projectId) setRunAgentScopes(requestContext, [`project:${options.projectId}`]);
   return requestContext;
 }
 
@@ -60,10 +61,10 @@ function makeSignalArgs(
 
 afterEach(() => vi.restoreAllMocks());
 
-describe('Subconscious project scope override', () => {
+describe('Subconscious project scope via agent scopes', () => {
   it('the pinned state processor surfaces a pin written under the project scope to a different session', async () => {
     const memory = createMemory();
-    const scopeIds = await scopeIdsFor(memory, requestContextWith({ knowledgeResourceId: 'project-1' }));
+    const scopeIds = await scopeIdsFor(memory, requestContextWith({ projectId: 'project-1' }));
     const tools = createPinnedTools(memory, {
       scopeIds,
       sourceThreadId: 'thread-a',
@@ -79,7 +80,7 @@ describe('Subconscious project scope override', () => {
 
     // Session B with the override sees the pin.
     const withOverride = await processor.computeStateSignal(
-      makeSignalArgs(requestContextWith({ knowledgeResourceId: 'project-1' })),
+      makeSignalArgs(requestContextWith({ projectId: 'project-1' })),
     );
     expect(withOverride).toMatchObject({ mode: 'snapshot' });
     expect(withOverride!.contents).toContain(pinned.id);
@@ -91,7 +92,7 @@ describe('Subconscious project scope override', () => {
 
   it('a changed override on the same request context reads fresh instead of serving the memo', async () => {
     const memory = createMemory();
-    const scopeIds = await scopeIdsFor(memory, requestContextWith({ knowledgeResourceId: 'project-1' }));
+    const scopeIds = await scopeIdsFor(memory, requestContextWith({ projectId: 'project-1' }));
     const tools = createPinnedTools(memory, {
       scopeIds,
       sourceThreadId: 'thread-a',
@@ -104,14 +105,14 @@ describe('Subconscious project scope override', () => {
       getKnowledgeInstance: () => memory.getKnowledgeInstance(),
       getKnowledgeStore: () => memory.getKnowledgeStore(),
     });
-    const requestContext = requestContextWith({ knowledgeResourceId: 'project-1' });
+    const requestContext = requestContextWith({ projectId: 'project-1' });
 
     const first = await processor.computeStateSignal(makeSignalArgs(requestContext));
     expect(first).toMatchObject({ mode: 'snapshot' });
 
     // Same request context, later step, but the override moved to another project:
     // the scope key differs, so the memo must not be served.
-    requestContext.set('knowledgeResourceId', 'project-2');
+    setRunAgentScopes(requestContext, ['project:project-2']);
     const second = await processor.computeStateSignal(makeSignalArgs(requestContext, { stepNumber: 1 }));
     expect(second).toBeUndefined();
   });
@@ -120,7 +121,7 @@ describe('Subconscious project scope override', () => {
     const memory = createMemory();
     const store = (await memory.storage.getStore('knowledge'))!;
     const search = vi.spyOn(store, 'search');
-    const projectScopeIds = await scopeIdsFor(memory, requestContextWith({ knowledgeResourceId: 'project-1' }));
+    const projectScopeIds = await scopeIdsFor(memory, requestContextWith({ projectId: 'project-1' }));
     const sessionScopeIds = await scopeIdsFor(memory, requestContextWith());
     const subconscious = new Subconscious({
       observation: [{ name: 'curate', model: 'mock/model', maxSteps: 5 }],
@@ -141,7 +142,7 @@ describe('Subconscious project scope override', () => {
       current: 'Project Atlas launches soon.',
       rawObservations: 'Project Atlas launches soon.',
       memory,
-      requestContext: requestContextWith({ knowledgeResourceId: 'project-1' }),
+      requestContext: requestContextWith({ projectId: 'project-1' }),
       observationCommitted: Promise.resolve(true),
     });
     await vi.waitFor(() => expect(curatorAgent).toBeDefined());
@@ -167,7 +168,7 @@ describe('Subconscious project scope override', () => {
           }),
         },
         sendSignal: vi.fn(async () => undefined),
-        requestContext: requestContextWith({ knowledgeResourceId: 'project-1' }),
+        requestContext: requestContextWith({ projectId: 'project-1' }),
       } as any),
     ).catch(() => undefined);
     expect(search).toHaveBeenCalled();

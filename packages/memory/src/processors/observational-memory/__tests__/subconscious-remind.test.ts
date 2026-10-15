@@ -651,6 +651,30 @@ describe('Subconscious remind', () => {
     expect(await memory.getThreadById({ threadId: sidekickId })).not.toBeNull();
   });
 
+  it('skips quietly without failing, signalling or writing when the run has no org', async () => {
+    const extractor = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true });
+    const context = createContext('unused');
+    const writer = { custom: vi.fn().mockResolvedValue(undefined) };
+    const getStore = vi.spyOn(context.memory, 'getKnowledgeStore');
+    const materialize = vi.spyOn(context.memory.getKnowledgeInstance()!, 'materializeScope');
+
+    const result = await applyExtractorHooks({
+      source: 'observer',
+      extractors: [extractor],
+      rawObservations: 'The user asked about Project Atlas.',
+      ...context,
+      requestContext: new RequestContext(),
+      writer,
+    } as any);
+
+    expect(result.failures).toBeUndefined();
+    expect(context.sendSignal).not.toHaveBeenCalled();
+    expect(context.sendStateSignal).not.toHaveBeenCalled();
+    expect(writer.custom).not.toHaveBeenCalled();
+    expect(getStore).not.toHaveBeenCalled();
+    expect(materialize).not.toHaveBeenCalled();
+  });
+
   it('isolates reminder failures from the observation lifecycle', async () => {
     const extractor = new SubconsciousRemindExtractor({
       name: 'remind',

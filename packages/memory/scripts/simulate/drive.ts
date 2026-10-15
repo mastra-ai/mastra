@@ -1,3 +1,4 @@
+import { setRunAgentScopes } from '@mastra/core/agent';
 import type { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 
@@ -42,7 +43,7 @@ function requestContextWithOrg(organizationId: string, knowledgeResourceId?: str
   if (!organizationId.trim()) throw new Error('Replay requires a non-empty organizationId.');
   const requestContext = new RequestContext();
   requestContext.set('organizationId', organizationId);
-  if (knowledgeResourceId?.trim()) requestContext.set('knowledgeResourceId', knowledgeResourceId);
+  if (knowledgeResourceId?.trim()) setRunAgentScopes(requestContext, [`project:${knowledgeResourceId.trim()}`]);
   return requestContext;
 }
 
