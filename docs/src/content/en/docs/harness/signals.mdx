@@ -407,7 +407,7 @@ Saved connections remain in the sender thread until explicitly disconnected. Eve
 
 After a send attempt reaches Core routing, the routing result is authoritative. The result can be `wake`, `deliver`, `persist`, `blocked`, or `discard`, depending on the target thread and notification policy. A send that fails a direct delivery because no thread owner acknowledged it isn't lost: the signal stays pending in the target's notification inbox and the send reports `persist` instead of claiming delivery. That outcome leaves the `messageId` unused, so the sender can retry it with the same id. A send made with `expectsReply: true` returns an error there, because the reply obligation isn't established until the signal is delivered.
 
-When the delivery policy routes a signal to the notification summary instead of a direct delivery, the send also reports `persist`, but it records the `messageId`, so retrying with the same id reports a duplicate instead of routing again. This is what happens to a low-priority send, and to a high- or medium-priority send whose target thread is currently active.
+When the delivery policy routes a signal to the notification summary instead of a direct delivery, the send reports `persist` and records the `messageId`, so retrying with the same id reports a duplicate instead of routing again. This is what happens to a low-priority send, and to a high- or medium-priority send whose target thread is currently active. A send made with `expectsReply: true` returns an error there as well and leaves the `messageId` unused, so it can be retried at a priority that routes directly.
 
 ### Discover agents in other projects
 
