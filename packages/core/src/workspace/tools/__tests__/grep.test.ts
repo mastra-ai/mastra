@@ -1,9 +1,10 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { WORKSPACE_TOOLS } from '../../constants';
+import { UnsupportedGrepPatternError } from '../../errors';
 import { LocalFilesystem } from '../../filesystem';
 import { Workspace } from '../../workspace';
 import { createWorkspaceTools } from '../tools';
@@ -83,6 +84,65 @@ describe('workspace_grep', () => {
 
   afterEach(async () => {
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  describe('host-side search budget', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    async function makeTree(fileCount: number) {
+      await fs.mkdir(path.join(tempDir, 'src'), { recursive: true });
+      for (let i = 0; i < fileCount; i++) {
+        await fs.writeFile(path.join(tempDir, 'src', `f${i}.ts`), 'const foo = 1;');
+      }
+    }
+
+    it('stops the fallback walk once the budget is exhausted and reports partial results', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_GREP_HOST_BUDGET_MS', '30');
+      await makeTree(40);
+      const filesystem = new DelayedLocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({ filesystem });
+      const tools = await createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'foo' }, { workspace });
+
+      expect(result).toMatch(/host-side search stopped after 0s: scanned \d+ of 40 files found/);
+      expect(filesystem.readFileCalls.length).toBeLessThan(40);
+    });
+
+    it('stops the fallback walk when the abort signal fires', async () => {
+      await makeTree(5);
+      const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+      const tools = await createWorkspaceTools(workspace);
+      const controller = new AbortController();
+      controller.abort();
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
+        { pattern: 'foo' },
+        { workspace, abortSignal: controller.signal },
+      );
+
+      expect(result).toContain('0 matches');
+      expect(result).toContain('host-side search aborted');
+    });
+
+    it('logs the native grep failure reason before falling back', async () => {
+      await makeTree(1);
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      (filesystem as any).grep = async () => {
+        throw new UnsupportedGrepPatternError('foo', 'exit 124: command timed out');
+      };
+      const workspace = new Workspace({ filesystem });
+      const info = vi.fn();
+      workspace.__setLogger({ info, warn: vi.fn(), debug: vi.fn(), error: vi.fn(), trackException: vi.fn() } as any);
+      const tools = await createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'foo' }, { workspace });
+
+      expect(result).toContain('1 match across 1 file');
+      expect(info).toHaveBeenCalledWith(expect.stringContaining('exit 124: command timed out'));
+    });
   });
 
   it('should find basic regex matches across files', async () => {

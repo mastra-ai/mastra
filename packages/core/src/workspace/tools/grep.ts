@@ -14,6 +14,18 @@ import { startWorkspaceSpan } from './tracing';
 const GREP_FILESYSTEM_CONCURRENCY = 8;
 
 /**
+ * Wall-clock budget for the host-side directory walk used when native grep is
+ * unavailable or fails. On remote filesystems every listing and read is a round
+ * trip, so an unbounded walk of a large tree can stall an agent run for minutes.
+ */
+const DEFAULT_GREP_HOST_SEARCH_BUDGET_MS = 60_000;
+
+function getHostSearchBudgetMs(): number {
+  const fromEnv = Number.parseInt(process.env.MASTRA_WORKSPACE_GREP_HOST_BUDGET_MS ?? '', 10);
+  return fromEnv > 0 ? fromEnv : DEFAULT_GREP_HOST_SEARCH_BUDGET_MS;
+}
+
+/**
  * Options for {@link createGrepTool}.
  */
 export interface GrepToolOptions {
@@ -154,6 +166,13 @@ Usage:
         const GLOBAL_CAP = 1000;
         const normalizedContextLines = Math.max(0, Math.floor(contextLines));
 
+        // Bounds the host-side walk; stays Infinity unless that walk runs.
+        let hostSearchDeadline = Infinity;
+        const hostSearchBudgetMs = getHostSearchBudgetMs();
+        let hostSearchStoppedEarly = false;
+        let hostSearchScannedFiles = 0;
+        const hostSearchExpired = () => context?.abortSignal?.aborted === true || Date.now() > hostSearchDeadline;
+
         // Collect files to search
         let filePaths: string[] = [];
         let nativeResults: FilesystemGrepResult[] | undefined;
@@ -199,7 +218,7 @@ Usage:
                 const reason = error instanceof Error ? error.message : String(error);
                 if (error instanceof UnsupportedGrepPatternError) {
                   workspace.logger?.info(
-                    `Native grep on "${filesystem.provider}" filesystem does not support pattern "${pattern}"; falling back to host-side search`,
+                    `Native grep on "${filesystem.provider}" filesystem was not usable (${reason}); falling back to host-side search`,
                   );
                 } else {
                   workspace.logger?.warn(
@@ -215,11 +234,20 @@ Usage:
               const entriesByDirectory = new Map<string, Awaited<ReturnType<typeof filesystem.readdir>>>();
               let directoryFrontier = [searchPath];
 
+              hostSearchDeadline = Date.now() + hostSearchBudgetMs;
               const pMap = (await import('p-map')).default;
               while (directoryFrontier.length > 0) {
+                if (hostSearchExpired()) {
+                  hostSearchStoppedEarly = true;
+                  break;
+                }
                 const directoryEntries = await pMap(
                   directoryFrontier,
                   async dir => {
+                    if (hostSearchExpired()) {
+                      hostSearchStoppedEarly = true;
+                      return [];
+                    }
                     try {
                       return await filesystem.readdir(dir);
                     } catch (err) {
@@ -431,10 +459,18 @@ Usage:
           batchStart < filePaths.length && !truncated;
           batchStart += GREP_FILESYSTEM_CONCURRENCY
         ) {
+          if (hostSearchExpired()) {
+            hostSearchStoppedEarly = true;
+            break;
+          }
           const batchPaths = filePaths.slice(batchStart, batchStart + GREP_FILESYSTEM_CONCURRENCY);
           const batchContents = await pMap(
             batchPaths,
             async filePath => {
+              if (hostSearchExpired()) {
+                hostSearchStoppedEarly = true;
+                return undefined;
+              }
               try {
                 const raw = await filesystem.readFile(filePath, { encoding: 'utf-8' });
                 return typeof raw === 'string' ? raw : undefined;
@@ -451,6 +487,7 @@ Usage:
             const filePath = batchPaths[fileIndex]!;
             const content = batchContents[fileIndex];
             if (content === undefined) continue;
+            hostSearchScannedFiles++;
 
             const lines = content.split('\n');
             let fileMatchCount = 0;
@@ -489,6 +526,14 @@ Usage:
         summaryParts.push(`across ${filesWithMatches.size} file${filesWithMatches.size !== 1 ? 's' : ''}`);
         if (truncated) {
           summaryParts.push(`(truncated at ${GLOBAL_CAP})`);
+        }
+        if (hostSearchStoppedEarly) {
+          const reason = context?.abortSignal?.aborted
+            ? 'aborted'
+            : `stopped after ${Math.round(hostSearchBudgetMs / 1000)}s`;
+          summaryParts.push(
+            `(host-side search ${reason}: scanned ${hostSearchScannedFiles} of ${filePaths.length} files found; results are incomplete, narrow the path or pattern)`,
+          );
         }
         if (skippedExtensionCount > 0) {
           summaryParts.push(

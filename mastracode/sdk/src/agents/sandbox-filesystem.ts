@@ -607,9 +607,16 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     if (result.exitCode === 1) return [];
     const results = this.parseRipgrepJson(result.stdout, abs, options);
     if (result.exitCode !== 0 && results.length === 0) {
-      throw new UnsupportedGrepPatternError(options.pattern);
+      throw new UnsupportedGrepPatternError(options.pattern, SandboxFilesystem.describeGrepFailure(result));
     }
     return results;
+  }
+
+  /** Human-readable cause of a failed grep/rg exec, surfaced in the fallback log. */
+  private static describeGrepFailure(result: { exitCode: number; stderr: string }): string {
+    if (result.exitCode === 124) return 'exit 124: command timed out or the sandbox connection dropped';
+    const stderr = result.stderr.trim().slice(0, 200);
+    return stderr ? `exit ${result.exitCode}: ${stderr}` : `exit ${result.exitCode}`;
   }
 
   private parseRipgrepJson(stdout: string, abs: string, options: FilesystemGrepOptions): FilesystemGrepResult[] {
@@ -681,21 +688,21 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   private async grepWithPosixGrep(abs: string, options: FilesystemGrepOptions): Promise<FilesystemGrepResult[]> {
     if (SandboxFilesystem.ERE_UNSUPPORTED.test(options.pattern)) {
-      throw new UnsupportedGrepPatternError(options.pattern);
+      throw new UnsupportedGrepPatternError(options.pattern, 'pattern syntax differs between POSIX ERE and JS RegExp');
     }
     let jsRegex: RegExp;
     try {
       jsRegex = new RegExp(options.pattern, options.caseSensitive ? '' : 'i');
     } catch {
-      throw new UnsupportedGrepPatternError(options.pattern);
+      throw new UnsupportedGrepPatternError(options.pattern, 'not a valid JS RegExp');
     }
     // Reconstructing per-match context from `grep -C` text output is not
     // reliable (separator lines are ambiguous); let the host walk handle it.
     if (options.contextLines) {
-      throw new UnsupportedGrepPatternError(options.pattern);
+      throw new UnsupportedGrepPatternError(options.pattern, 'context lines are not supported by the grep fallback');
     }
     const args = [
-      'grep -rnIE',
+      'grep -rnIE --exclude-dir=.git',
       options.caseSensitive ? '' : '-i',
       options.maxCountPerFile !== undefined ? `-m ${Math.max(1, Math.floor(options.maxCountPerFile))}` : '',
       '--',
@@ -706,8 +713,10 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
       .join(' ');
     const result = await this.exec(args);
     if (result.exitCode === 1) return [];
-    if (result.exitCode !== 0) {
-      throw new UnsupportedGrepPatternError(options.pattern);
+    // GNU grep exits 2 when it skipped an unreadable path but still printed
+    // matches for everything else; keep those partial results.
+    if (result.exitCode !== 0 && !(result.exitCode === 2 && result.stdout)) {
+      throw new UnsupportedGrepPatternError(options.pattern, SandboxFilesystem.describeGrepFailure(result));
     }
     // grep -n has no column output; recompute with the JS regex host-side so
     // columns are UTF-16 indices, consistent with the fallback implementation.
@@ -721,7 +730,9 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
       const column = jsRegex.exec(text)?.index;
       // grep matched this line but the JS regex did not: the two dialects
       // disagree on this pattern, so the columns would be wrong. Fall back.
-      if (column === undefined) throw new UnsupportedGrepPatternError(options.pattern);
+      if (column === undefined) {
+        throw new UnsupportedGrepPatternError(options.pattern, 'grep and JS RegExp disagree on this pattern');
+      }
       let matches = byFile.get(rel);
       if (!matches) {
         matches = [];

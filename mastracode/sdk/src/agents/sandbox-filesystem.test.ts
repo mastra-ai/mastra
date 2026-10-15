@@ -521,7 +521,45 @@ describe('SandboxFilesystem.grep', () => {
         ],
       },
     ]);
-    expect(sandbox.calls.some(c => c.startsWith('grep -rnIE'))).toBe(true);
+    expect(sandbox.calls.some(c => c.startsWith('grep -rnIE --exclude-dir=.git'))).toBe(true);
+  });
+
+  it('reports a timeout (exit 124) as the failure reason instead of a bare unsupported pattern', async () => {
+    const { fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+      if (script.startsWith('command -v rg')) return { exitCode: 0, stdout: '/usr/bin/rg', stderr: '' };
+      if (script.startsWith('rg ')) return { exitCode: 124, stdout: '', stderr: '' };
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+    await expect(fs.grep({ pattern: 'foo', path: '.', caseSensitive: true, includeHidden: false })).rejects.toThrow(
+      /exit 124: command timed out/,
+    );
+  });
+
+  it('keeps partial matches when grep exits 2 after printing matches', async () => {
+    const { fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+      if (script.startsWith('command -v rg')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.startsWith('grep ')) {
+        return { exitCode: 2, stdout: `${WORKDIR}/a.ts:1:foo`, stderr: 'grep: secret: Permission denied' };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+    await expect(fs.grep({ pattern: 'foo', path: '.', caseSensitive: true, includeHidden: false })).resolves.toEqual([
+      { path: 'a.ts', matches: [{ line: 1, column: 0, text: 'foo' }] },
+    ]);
+  });
+
+  it('includes grep stderr in the error when grep exits 2 with no output', async () => {
+    const { fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+      if (script.startsWith('command -v rg')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.startsWith('grep ')) return { exitCode: 2, stdout: '', stderr: 'grep: Unmatched ( or \\(' };
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+    await expect(fs.grep({ pattern: 'foo', path: '.', caseSensitive: true, includeHidden: false })).rejects.toThrow(
+      /exit 2: grep: Unmatched/,
+    );
   });
 
   it('signals UnsupportedGrepPatternError for patterns ERE cannot express', async () => {
