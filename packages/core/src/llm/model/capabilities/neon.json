@@ -3,6 +3,7 @@
     "claude-fable-5",
     "claude-fable-5-1",
     "claude-haiku-4-5",
+    "claude-haiku-5-5",
     "claude-opus-4-1",
     "claude-opus-4-5",
     "claude-opus-4-6",
@@ -13,11 +14,15 @@
     "claude-sonnet-4-5",
     "claude-sonnet-4-6",
     "claude-sonnet-5",
+    "claude-sonnet-5-5",
+    "deepseek-v4-1-flash",
     "gemini-3-1-flash-lite",
     "gemini-3-1-pro",
     "gemini-3-5-flash",
     "gemini-3-5-flash-lite",
     "gemini-3-6-flash",
+    "gemini-3-7-flash",
+    "gemini-3-8-flash",
     "gemini-3-flash",
     "gemma-3-12b",
     "glm-5-3-flash",
@@ -35,8 +40,12 @@
     "gpt-5-6-terra",
     "gpt-5-mini",
     "gpt-5-nano",
+    "gpt-6-1-sol",
     "gpt-6-astra",
+    "gpt-6-luna",
+    "gpt-6-sol",
     "grok-4-6",
+    "grok-4-7",
     "inkling",
     "kimi-k3",
     "llama-4-maverick"
@@ -48,6 +57,7 @@
     "claude-opus-4-6",
     "claude-sonnet-4-5",
     "claude-sonnet-4-6",
+    "deepseek-v4-1-flash",
     "gemini-3-1-flash-lite",
     "gemini-3-1-pro",
     "gemini-3-5-flash",
@@ -55,6 +65,7 @@
     "gemini-3-flash",
     "gemma-3-12b",
     "glm-5-2",
+    "glm-5-3",
     "glm-5-3-flash",
     "gpt-5-1",
     "gpt-5-2",
@@ -65,6 +76,7 @@
     "gpt-oss-120b",
     "gpt-oss-20b",
     "grok-4-6",
+    "grok-4-7",
     "inkling",
     "kimi-k3",
     "llama-4-maverick",
@@ -85,14 +97,18 @@
     "claude-sonnet-4-5",
     "claude-sonnet-4-6",
     "claude-sonnet-5",
+    "deepseek-v4-1-flash",
     "gemini-3-1-flash-lite",
     "gemini-3-1-pro",
     "gemini-3-5-flash",
     "gemini-3-5-flash-lite",
     "gemini-3-6-flash",
+    "gemini-3-7-flash",
+    "gemini-3-8-flash",
     "gemini-3-flash",
     "gemma-3-12b",
     "glm-5-2",
+    "glm-5-3",
     "glm-5-3-flash",
     "gpt-5",
     "gpt-5-1",
@@ -108,10 +124,14 @@
     "gpt-5-6-terra",
     "gpt-5-mini",
     "gpt-5-nano",
+    "gpt-6-1-sol",
     "gpt-6-astra",
+    "gpt-6-luna",
+    "gpt-6-sol",
     "gpt-oss-120b",
     "gpt-oss-20b",
     "grok-4-6",
+    "grok-4-7",
     "kimi-k3",
     "llama-4-maverick",
     "meta-llama-3-1-8b-instruct",
@@ -205,6 +225,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gemini-3-7-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "gpt-5-4-nano": [
@@ -307,6 +333,12 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
+    "glm-5-3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "claude-sonnet-5": [
       {
         "type": "toggle"
@@ -314,6 +346,18 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek-v4-1-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "gemini-3-8-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "claude-opus-4-6": [
@@ -356,6 +400,22 @@
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
+    "claude-haiku-5-5": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 63999
+      }
+    ],
+    "gpt-6-luna": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
     "gpt-5-2": [
       {
         "type": "effort",
@@ -378,6 +438,18 @@
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
+    "claude-sonnet-5-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "grok-4-7": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
     "gemini-3-5-flash-lite": [
       {
         "type": "effort",
@@ -394,6 +466,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "gpt-6-1-sol": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "gpt-oss-120b": [
@@ -415,6 +493,12 @@
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "gpt-6-sol": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ]
   }

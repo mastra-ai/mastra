@@ -6,6 +6,7 @@
 packages:
   - '.'
 overrides:
+  '@modelcontextprotocol/sdk@>=1.0.0 <1.32.0': 1.32.1
   hono@<4.13.11: 4.13.11
   postcss@<8.5.23: 8.5.23
   # Vanta 2026-09-28: undici 5/6 floor (Dependabot/Aikido)

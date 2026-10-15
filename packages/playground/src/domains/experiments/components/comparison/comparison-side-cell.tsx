@@ -1,26 +1,16 @@
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { formatDuration } from '@mastra/playground-ui/utils/duration';
-import { ClockIcon, CoinsIcon, HashIcon } from 'lucide-react';
 import { getResultErrorMessage, getResultOutputText } from '../../utils/result-output';
-import { sideDurationMs } from './build-comparison-rows';
+import { sideAverageScore, sideDurationMs } from './build-comparison-rows';
 import type { ComparisonColumn } from './build-comparison-rows';
-import {
-  costDeltaFormatter,
-  formatCostValue,
-  formatDurationDelta,
-  formatScore,
-  formatTokenCount,
-  totalTokens,
-} from './comparison-metric-format';
-import { ComparisonMetricList, ScorerLabel } from './comparison-metric-list';
+import { ComparisonMetricList } from './comparison-metric-list';
 import type { ComparisonMetric } from './comparison-metric-list';
 import { ComparisonPayload } from './comparison-payload';
 import { ComparisonSection, sectionStackClass } from './comparison-section';
+import { itemMetrics } from './item-metrics';
 
 export interface ComparisonSideCellProps {
   /** One experiment's side of the row. Contenders carry their deltas against the baseline. */
@@ -37,63 +27,21 @@ function formatValue(value: unknown): string {
 }
 
 function sideMetrics(side: ComparisonColumn, showUsage: boolean): ComparisonMetric[] {
-  const costUnit = side.usage?.costUnit;
-  const cost: ComparisonMetric[] = showUsage
-    ? [
-        {
-          id: 'cost',
-          icon: <CoinsIcon />,
-          label: 'Cost',
-          value: formatCostValue(side.usage?.estimatedCost, costUnit),
-          delta: side.costDelta ?? null,
-          formatDelta: costDeltaFormatter(costUnit),
-          higherIsBetter: false,
-        },
-      ]
-    : [];
-
-  const tokens: ComparisonMetric[] = showUsage
-    ? [
-        {
-          id: 'tokens',
-          icon: <HashIcon />,
-          label: 'Tokens',
-          value: formatTokenCount(totalTokens(side.usage)),
-          delta: side.tokenDelta ?? null,
-          formatDelta: formatTokenCount,
-          higherIsBetter: false,
-        },
-      ]
-    : [];
-
-  const durationMs = sideDurationMs(side);
-  const duration: ComparisonMetric[] =
-    durationMs == null
-      ? []
-      : [
-          {
-            id: 'duration',
-            icon: <ClockIcon />,
-            label: 'Duration',
-            value: formatDuration(durationMs) ?? '-',
-            delta: side.durationDeltaMs,
-            formatDelta: formatDurationDelta,
-            higherIsBetter: false,
-          },
-        ];
-
-  return [
-    ...cost,
-    ...duration,
-    ...tokens,
-    ...side.scores.map(score => ({
-      id: `scorer:${score.scorerId}`,
-      icon: <ScorersIcon />,
-      label: <ScorerLabel scorerId={score.scorerId} />,
-      value: formatScore(score.value),
+  return itemMetrics({
+    usage: side.usage,
+    showUsage,
+    durationMs: sideDurationMs(side),
+    costDelta: side.costDelta,
+    tokenDelta: side.tokenDelta,
+    durationDeltaMs: side.durationDeltaMs,
+    averageScore: side.scores.length > 0 ? { value: sideAverageScore(side), delta: side.averageScoreDelta } : undefined,
+    scores: side.scores.map(score => ({
+      scorerId: score.scorerId,
+      value: score.value,
+      reason: score.reason,
       delta: side.deltas?.[score.scorerId] ?? null,
     })),
-  ];
+  });
 }
 
 /**
@@ -131,19 +79,19 @@ export function ComparisonSideCell({ column: data, isLoading, showUsage = false 
       )}
 
       {errorMessage ? (
-        <ComparisonSection title="Error" tone="negative" actions={<CopyButton content={errorMessage} />}>
-          <Txt tone="muted" className="rounded-lg border border-destructive-edge bg-destructive-subtle p-3 break-words">
+        <ComparisonSection title="Error" tone="negative" framed actions={<CopyButton content={errorMessage} />}>
+          <Txt tone="muted" className="p-3 break-words">
             {errorMessage}
           </Txt>
         </ComparisonSection>
       ) : (
-        <ComparisonSection title="Output" actions={<CopyButton content={outputStr} />}>
+        <ComparisonSection title="Output" framed actions={<CopyButton content={outputStr} />}>
           <ComparisonPayload value={outputText ?? data.output} />
         </ComparisonSection>
       )}
 
       {data.comment && (
-        <ComparisonSection title="Comment">
+        <ComparisonSection title="Comment" framed>
           <ComparisonPayload value={data.comment} />
         </ComparisonSection>
       )}

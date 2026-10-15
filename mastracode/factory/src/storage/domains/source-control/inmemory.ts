@@ -8,11 +8,15 @@ import type {
   LinkProjectRepositoryInput,
   ProjectRepository,
   ProjectSourceControlConnection,
+  SessionBranchKey,
+  SetProjectRepositoryBuildStatusInput,
   SourceControlInstallation,
   SourceControlRepository,
   SourceControlSession,
+  SourceControlSessionRepository,
   SourceControlStorageHandle,
   UpdateProjectRepositoryInput,
+  UpsertSessionRepositoryInput,
   UpsertSourceControlInstallationInput,
   UpsertSourceControlRepositoryInput,
 } from './base.js';
@@ -25,6 +29,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
   connectionsRows: ProjectSourceControlConnection[] = [];
   projectRepositoriesRows: ProjectRepository[] = [];
   sessionsRows: SourceControlSession[] = [];
+  sessionRepositoriesRows: SourceControlSessionRepository[] = [];
 
   constructor(integrationId = 'github') {
     this.integrationId = integrationId;
@@ -209,6 +214,9 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     },
     delete: async ({ orgId, id }: { orgId: string; id: string }): Promise<boolean> => {
       if (!(await this.connections.get({ orgId, id }))) return false;
+      for (const link of this.projectRepositoriesRows.filter(row => row.connectionId === id)) {
+        await this.projectRepositories.unlink({ orgId, id: link.id });
+      }
       this.connectionsRows.splice(0, this.connectionsRows.length, ...this.connectionsRows.filter(row => row.id !== id));
       return true;
     },
@@ -267,6 +275,16 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       }
       return targets;
     },
+    listByProject: async ({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }) => {
+      const connectionIds = new Set(
+        (await this.connections.list({ orgId, factoryProjectId }))
+          .filter(row => row.integrationId === this.integrationId)
+          .map(row => row.id),
+      );
+      return this.projectRepositoriesRows
+        .filter(row => connectionIds.has(row.connectionId))
+        .sort((a, b) => a.position - b.position || a.createdAt.getTime() - b.createdAt.getTime());
+    },
     get: async ({ orgId, id }: { orgId: string; id: string }): Promise<ProjectRepository | null> => {
       const row = this.projectRepositoriesRows.find(candidate => candidate.id === id);
       if (!row) return null;
@@ -282,6 +300,17 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         row => row.connectionId === input.connectionId && row.repositoryId === input.repositoryId,
       );
       if (existing) return existing;
+      // Mirrors base.ts: order and dedupe span every connection of the project.
+      const siblingConnectionIds = new Set(
+        this.connectionsRows.filter(row => row.factoryProjectId === connection.factoryProjectId).map(row => row.id),
+      );
+      const siblings = this.projectRepositoriesRows.filter(row => siblingConnectionIds.has(row.connectionId));
+      const position = 1 + Math.max(0, ...siblings.map(row => row.position));
+      const inEnvironment = !siblings.some(
+        row =>
+          row.inEnvironment &&
+          this.repositoriesRows.find(candidate => candidate.id === row.repositoryId)?.slug === repository.slug,
+      );
       const now = new Date();
       const created: ProjectRepository = {
         id: globalThis.crypto.randomUUID(),
@@ -293,6 +322,11 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         sandboxWorkdir: input.sandboxWorkdir,
         setupCommand: input.setupCommand ?? null,
         teardownCommand: input.teardownCommand ?? null,
+        position,
+        inEnvironment,
+        lastBuildStatus: 'unbuilt',
+        lastBuildError: null,
+        lastBuiltAt: null,
         createdAt: now,
         updatedAt: now,
       };
@@ -313,8 +347,34 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       Object.assign(row, input, { updatedAt: new Date() });
       return row;
     },
+    setBuildStatus: async ({
+      orgId,
+      id,
+      status,
+      error,
+      builtAt,
+    }: SetProjectRepositoryBuildStatusInput): Promise<ProjectRepository | null> => {
+      const row = await this.projectRepositories.get({ orgId, id });
+      if (!row) return null;
+      Object.assign(row, {
+        lastBuildStatus: status,
+        lastBuildError: error ?? null,
+        lastBuiltAt: builtAt ?? null,
+        updatedAt: new Date(),
+      });
+      return row;
+    },
     unlink: async ({ orgId, id }: { orgId: string; id: string }): Promise<boolean> => {
       if (!(await this.projectRepositories.get({ orgId, id }))) return false;
+      const sessionIds = new Set(this.sessionsRows.filter(row => row.projectRepositoryId === id).map(r => r.sessionId));
+      this.sessionRepositoriesRows = this.sessionRepositoriesRows.filter(
+        row => row.projectRepositoryId !== id && !sessionIds.has(row.sessionId),
+      );
+      this.sessionsRows.splice(
+        0,
+        this.sessionsRows.length,
+        ...this.sessionsRows.filter(row => row.projectRepositoryId !== id),
+      );
       this.projectRepositoriesRows.splice(
         0,
         this.projectRepositoriesRows.length,
@@ -333,6 +393,30 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       ),
     listByProjectRepository: async ({ projectRepositoryId }: { projectRepositoryId: string }) =>
       this.sessionsRows.filter(row => row.projectRepositoryId === projectRepositoryId),
+    listByProject: async ({
+      orgId,
+      factoryProjectId,
+      viewerUserId,
+    }: {
+      orgId: string;
+      factoryProjectId: string;
+      viewerUserId: string;
+    }) => {
+      const connectionIds = new Set(
+        this.connectionsRows.filter(row => row.factoryProjectId === factoryProjectId).map(row => row.id),
+      );
+      const linkIds = new Set(
+        this.projectRepositoriesRows.filter(row => connectionIds.has(row.connectionId)).map(row => row.id),
+      );
+      return this.sessionsRows.filter(
+        row =>
+          row.factoryProjectId === factoryProjectId &&
+          row.orgId === orgId &&
+          row.projectRepositoryId !== null &&
+          linkIds.has(row.projectRepositoryId) &&
+          (row.visibility !== 'private' || row.userId === viewerUserId),
+      );
+    },
     getBySessionId: async (sessionId: string): Promise<SourceControlSession | null> => {
       const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
       if (!row) return null;
@@ -346,28 +430,49 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         row.updatedAt = new Date();
       }
     },
-    getForBranch: async ({
-      projectRepositoryId,
-      userId,
-      branch,
-    }: {
-      projectRepositoryId: string;
-      userId: string;
-      branch: string;
-    }): Promise<SourceControlSession | null> =>
+    getForBranch: async (args: SessionBranchKey): Promise<SourceControlSession | null> =>
       this.sessionsRows.find(
-        row => row.projectRepositoryId === projectRepositoryId && row.userId === userId && row.branch === branch,
+        row =>
+          ('factoryProjectId' in args
+            ? row.factoryProjectId === args.factoryProjectId &&
+              // Mirrors base.ts: only sessions on this integration's links resolve.
+              this.projectRepositoriesRows.some(link => link.id === row.projectRepositoryId)
+            : row.projectRepositoryId === args.projectRepositoryId) &&
+          row.userId === args.userId &&
+          row.branch === args.branch,
       ) ?? null,
     create: async (input: CreateSourceControlSessionInput): Promise<SourceControlSession> => {
-      const existing = await this.sessions.getForBranch(input);
+      const link = this.projectRepositoriesRows.find(row => row.id === input.projectRepositoryId);
+      const connection = link && this.connectionsRows.find(row => row.id === link.connectionId);
+      if (!connection) throw new Error('Project repository not found for this integration.');
+      if (input.factoryProjectId !== undefined && input.factoryProjectId !== connection.factoryProjectId) {
+        throw new Error('Session factory does not match the repository link.');
+      }
+      const factoryProjectId = connection.factoryProjectId;
+      // Mirrors base.ts: reuse is keyed by the link; another link's branch is a unique violation below.
+      const existing = await this.sessions.getForBranch({
+        projectRepositoryId: input.projectRepositoryId,
+        userId: input.userId,
+        branch: input.branch,
+      });
       if (existing) return existing;
+      // Both checks stay synchronous with the push below so concurrent creates see each other, as a unique index would.
       if (this.sessionsRows.some(row => row.sessionId === input.sessionId)) {
         throw new UniqueViolationError('Source-control session ID already exists');
+      }
+      if (
+        this.sessionsRows.some(
+          row =>
+            row.factoryProjectId === factoryProjectId && row.userId === input.userId && row.branch === input.branch,
+        )
+      ) {
+        throw new UniqueViolationError('Source-control session branch already exists in this factory');
       }
       const now = new Date();
       const session: SourceControlSession = {
         id: globalThis.crypto.randomUUID(),
         ...input,
+        factoryProjectId,
         title: input.title ?? null,
         visibility: input.visibility ?? 'org',
         sandboxId: null,
@@ -408,7 +513,49 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       }
     },
     delete: async (id: string) => {
+      const row = this.sessionsRows.find(candidate => candidate.id === id);
+      if (row) {
+        this.sessionRepositoriesRows = this.sessionRepositoriesRows.filter(r => r.sessionId !== row.sessionId);
+      }
       this.sessionsRows.splice(0, this.sessionsRows.length, ...this.sessionsRows.filter(row => row.id !== id));
     },
+  };
+
+  readonly sessionRepositories = {
+    upsert: async (input: UpsertSessionRepositoryInput): Promise<SourceControlSessionRepository> => {
+      const now = new Date();
+      const existing = this.sessionRepositoriesRows.find(
+        row => row.sessionId === input.sessionId && row.projectRepositoryId === input.projectRepositoryId,
+      );
+      if (existing) {
+        if (input.branch !== undefined) {
+          existing.branch = input.branch;
+          existing.pushedAt = input.pushedAt ?? now;
+        } else if (input.pushedAt) {
+          existing.pushedAt = input.pushedAt;
+        }
+        if (input.changeRequestId !== undefined) existing.changeRequestId = input.changeRequestId;
+        if (input.changeRequestUrl !== undefined) existing.changeRequestUrl = input.changeRequestUrl;
+        existing.updatedAt = now;
+        return existing;
+      }
+      const branch = input.branch ?? input.fallbackBranch;
+      if (!branch) throw new Error('A session repository row needs a branch when it is first recorded.');
+      const created: SourceControlSessionRepository = {
+        id: globalThis.crypto.randomUUID(),
+        sessionId: input.sessionId,
+        projectRepositoryId: input.projectRepositoryId,
+        branch,
+        changeRequestId: input.changeRequestId ?? null,
+        changeRequestUrl: input.changeRequestUrl ?? null,
+        pushedAt: input.pushedAt ?? now,
+        updatedAt: now,
+        createdAt: now,
+      };
+      this.sessionRepositoriesRows.push(created);
+      return created;
+    },
+    listBySession: async ({ sessionId }: { sessionId: string }): Promise<SourceControlSessionRepository[]> =>
+      this.sessionRepositoriesRows.filter(row => row.sessionId === sessionId),
   };
 }

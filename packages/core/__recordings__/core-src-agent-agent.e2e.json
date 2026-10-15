@@ -252,7 +252,7 @@
       }
     },
     {
-      "hash": "588425415f63cfeb",
+      "hash": "104b8ae6e7d5d10b",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -279,7 +279,7 @@
             {
               "type": "function_call_output",
               "call_id": "call_J84PRB4cJ7hm0GWOP86EhJNk",
-              "output": "{\"city\":\"London\",\"weather\":\"sunny\",\"temperature_celsius\":19,\"temperature_fahrenheit\":66,\"humidity\":50,\"wind\":\"10 mph\"}"
+              "output": "{\"city\":\"London\",\"humidity\":50,\"temperature_celsius\":19,\"temperature_fahrenheit\":66,\"weather\":\"sunny\",\"wind\":\"10 mph\"}"
             }
           ],
           "text": {
@@ -3976,7 +3976,7 @@
       }
     },
     {
-      "hash": "ecc3e4c663902394",
+      "hash": "1137e990a65fe34e",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -4003,7 +4003,7 @@
             {
               "type": "function_call_output",
               "call_id": "call_p4K5jHaSDuHeYSYx6jsUH9bX",
-              "output": "{\"success\":true,\"data\":{\"arbitrary\":\"value\",\"count\":42}}"
+              "output": "{\"data\":{\"arbitrary\":\"value\",\"count\":42},\"success\":true}"
             }
           ],
           "tools": [
@@ -4295,7 +4295,7 @@
       }
     },
     {
-      "hash": "0c0cc57818fe3338",
+      "hash": "aab7fdd8f63974e3",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -4322,7 +4322,7 @@
             {
               "type": "function_call_output",
               "call_id": "call_RJTl837H9uRnadlkzKKIyb3n",
-              "output": "{\"name\":\"Dero Israel\",\"email\":\"dero@mail.com\"}"
+              "output": "{\"email\":\"dero@mail.com\",\"name\":\"Dero Israel\"}"
             }
           ],
           "tools": [
@@ -4865,7 +4865,7 @@
       }
     },
     {
-      "hash": "29cb49a2b797e199",
+      "hash": "74ab212b99457e58",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -4892,7 +4892,7 @@
             {
               "type": "function_call_output",
               "call_id": "call_sOGsS5zFcpHPYE1rxZWExs9m",
-              "output": "{\"name\":\"Joe\",\"email\":\"joe@mail.com\"}"
+              "output": "{\"email\":\"joe@mail.com\",\"name\":\"Joe\"}"
             }
           ],
           "tools": [

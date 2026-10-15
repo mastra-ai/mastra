@@ -1,5 +1,107 @@
 # @mastra/memory
 
+## 1.38.0-alpha.0
+
+### Minor Changes
+
+- Observational Memory now recovers automatically when a model provider rejects a request for exceeding its context window ([#21657](https://github.com/mastra-ai/mastra/issues/21657)). ([#25055](https://github.com/mastra-ai/mastra/pull/25055))
+
+  A provider can count more tokens than Observational Memory's own estimate (attachments, formatting, or switching to a model with a smaller window), so a request can overflow before the observation threshold is reached. Previously the agent's request just failed. Now Observational Memory observes everything still pending and retries once with the smaller context. No configuration is needed. Automatic recovery needs a `@mastra/core` version that includes `MastraMemory.getErrorProcessors()`; with an older core, the error reaches the caller as before. To turn it off:
+
+  ```typescript
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        observation: { observeOnContextOverflow: false },
+      },
+    },
+  });
+  ```
+
+  `observe()` also accepts `force: true` to observe pending messages regardless of the threshold, for that call only.
+
+### Patch Changes
+
+- Updated dependencies [[`c6230e3`](https://github.com/mastra-ai/mastra/commit/c6230e30f76b4b912bad68f426d730da1cb67d83), [`7b08a87`](https://github.com/mastra-ai/mastra/commit/7b08a876b1060cf6842c61ed8af0eaa93e1310c4), [`5d82145`](https://github.com/mastra-ai/mastra/commit/5d82145ae3cc591eb5cdafd4af5977c36fec5c01), [`4c29655`](https://github.com/mastra-ai/mastra/commit/4c296551a79bebc6a40fddcf2409824f601e6c43), [`6155190`](https://github.com/mastra-ai/mastra/commit/6155190d2436d5e93e21f6a875d8c4306c8043ff), [`eb71f8c`](https://github.com/mastra-ai/mastra/commit/eb71f8c3abbe9aa40375f898fce60f555ef9ebf3), [`35fbdce`](https://github.com/mastra-ai/mastra/commit/35fbdce6de71332246dd6d9b4a5ecba2d87fb6cc), [`cb015a1`](https://github.com/mastra-ai/mastra/commit/cb015a1be6560cbaf4deaef219cb02e63b263bc3), [`d99fa30`](https://github.com/mastra-ai/mastra/commit/d99fa305e0baa00fb2064283658c10e00b95bf10)]:
+  - @mastra/schema-compat@1.3.15-alpha.0
+  - @mastra/core@1.78.0-alpha.3
+
+## 1.37.1
+
+### Patch Changes
+
+- Fixed observational memory erasing schema-based working memory. This happened when the Observer model returned an empty working-memory object, which Gemini does with `manageWorkingMemory: true`. ([#26681](https://github.com/mastra-ai/mastra/pull/26681))
+
+  An empty working-memory result no longer replaces stored working memory. Mastra now retries the extraction when this happens. Other extracted values, such as the thread title, are kept whether the retry succeeds or fails.
+
+- Fixed "Expression produces a union type that is too complex to represent" type errors in observational memory when the model list grows. Observer, reflector and fallback model lists no longer make type checking scale with the number of model IDs. ([#26908](https://github.com/mastra-ai/mastra/pull/26908))
+
+- Observational Memory no longer blocks an agent step on the Observer as soon as unobserved messages reach `messageTokens` with async buffering enabled. Between `messageTokens` and `observation.blockAfter` (default `1.2`, so 36k tokens with the default 30k threshold), background buffering keeps running and the next ready chunk activates on a later step. A blocking synchronous observation now runs only when pending tokens still reach `blockAfter` after buffered activation, and observes only the uncovered tail. Previously, reaching the threshold without a ready chunk forced a blocking Observer call, and buffering couldn't start above the threshold, so long agent sessions blocked on observation turn after turn. ([#22078](https://github.com/mastra-ai/mastra/pull/22078))
+
+  Unobserved messages can now grow up to `blockAfter` before a step blocks. To keep the previous behavior of observing synchronously at the threshold, set `blockAfter: 1`:
+
+  ```ts
+  observationalMemory: {
+    observation: { messageTokens: 30_000, blockAfter: 1 },
+  }
+  ```
+
+  A multiplier `blockAfter` now scales a per-thread `messageTokens` override instead of the instance threshold. With `blockAfter: 1.2`, this thread blocks at 12,000 tokens:
+
+  ```ts
+  await memory.updateObservationalMemoryConfig({
+    threadId,
+    config: { observation: { messageTokens: 10_000 } },
+  });
+  ```
+
+  `getStatus()` also returns `observationBlockAfter` and `inAsyncObservationBand`.
+
+  At `blockAfter`, activation waits a bounded time for a buffered observation that is still being produced so it activates with the rest. If that takes longer, the step observes the remaining messages synchronously; a late observation whose messages are all already observed is then dropped instead of stored. Activations triggered by the idle TTL or a model change don't wait for buffered observations still in progress.
+
+  Fixed semantic recall missing a turn's new user message when background buffering picked it up on the first step.
+
+- **Fixed out-of-order observations** ([#26129](https://github.com/mastra-ai/mastra/pull/26129))
+
+  Observational memory now keeps observations in the order events happened. Before, an important user message could be listed ahead of earlier events from the same period, so an outdated state looked like the latest one. For example, a "plan not approved, wait for revision instructions" result could be recorded after the user's actual revision instructions, and the agent kept waiting for instructions it already had.
+
+- Fixed `observation.previousObserverTokens` being ignored. Setting a budget now limits Observer calls to the most recent previous observations that fit it, on every observation path, and the Observer is told when its context was truncated. `previousObserverTokens: 0` omits previous observations. The default is now `false`, which sends the full previous observations. That matches how Observer calls have behaved since the budget stopped being applied, so nothing changes unless you set a budget. Stored memory is unaffected: new observations are still appended to the full observation text. ([#26193](https://github.com/mastra-ai/mastra/pull/26193))
+
+- Fixed observational memory buffering end markers going missing from saved message history, and a rare case where an agent's final response content could be overwritten. ([#26149](https://github.com/mastra-ai/mastra/pull/26149))
+
+  When background buffering finished, its end marker was written onto the newest assistant message, usually one the agent was still streaming. The agent's next save of that message dropped the marker. If the agent's last save landed while the marker was being written, the marker write could replace the agent's newer content. The end marker now goes on the message that carries the cycle's start marker, and the message the agent is streaming is never rewritten. The start marker now goes on the newest assistant message the cycle buffers, never on the message the agent continues streaming into, so the end marker can always find it.
+
+- Observational memory now runs its buffering, activation, observation, reflection, and config-override writes for a thread (or resource) one at a time within a process, and a due reflection goes ahead of other waiting writes. Agents and `Memory` instances that share a thread in one process no longer race each other's buffering, activation, and reflection commits, and a reflection is not held back behind a run of buffered-observation writes. Observer and Reflector model calls still run concurrently. If a storage write has not returned after 60 seconds, later writes for that thread stop waiting for it and a warning is logged, so one stuck database call cannot block the thread's memory. ([#25998](https://github.com/mastra-ai/mastra/pull/25998))
+
+- Reflections now keep more of the details users ask about later. The default Reflector instructions tell it to keep every concrete fact (names, places, dates, numbers, amounts, versions, and who said what). They also tell it to keep both the old and new value, with dates, when the user changes their mind, and to keep what the user explicitly said they have never done, do not know, or refused. Reflections favor short factual lines over general summaries, and older observations are condensed in wording rather than stripped of their facts. Custom `reflection.instruction` text is still appended as before. ([#26465](https://github.com/mastra-ai/mastra/pull/26465))
+
+- Fixed live scorers missing tool calls when observational memory is enabled. Observational memory removes messages from the agent's context once it has observed them, and live scorers only saw the messages that were left. On runs that suspend and resume, scorer `output` could miss every tool call made before `suspend()`, or end up empty. Scorers now receive every response message the run produced, across all suspend/resume segments, under the original `runId`. The prompt sent to the model is unchanged. ([#26687](https://github.com/mastra-ai/mastra/pull/26687))
+
+- Fixed observational memory losing context for the agent when background buffering, observation activation, and reflection overlap, including across processes and durable agent steps. ([#25906](https://github.com/mastra-ai/mastra/pull/25906))
+
+  - Observations buffered or activated while a reflection runs are kept in the new generation instead of being dropped and re-observed later in larger batches.
+  - Activation and sync observation commit only to the current generation. Messages leave the agent's context only after their observations are saved there; otherwise the observation retries against the current generation or the messages stay in context.
+  - A reflection that was superseded by another one no longer marks itself as completed.
+  - Messages saved by another agent or process while an observation runs are no longer marked as observed, and an observation that finds nothing new no longer skips messages saved with earlier timestamps.
+  - When two agents or processes observe the same messages at once, the second no longer saves a second copy of those observations.
+  - Overlapping background buffering calls for the same thread now run one after another, so the same messages are no longer sent to the Observer and stored more than once.
+  - An observation or buffered observation that finishes after its thread's observational memory was cleared (or the thread deleted) is discarded instead of being saved into the thread's new record.
+  - Copying a thread while a reflection replaces its observational memory no longer gives the copy a record that rejects writes.
+
+- Updated dependencies [[`54e9dc3`](https://github.com/mastra-ai/mastra/commit/54e9dc3ed0615ee84a6526395a9fefe17320fe7e), [`f8c0ce2`](https://github.com/mastra-ai/mastra/commit/f8c0ce2646427327b63c05d2eb09e76a3b04133e), [`eaa9d12`](https://github.com/mastra-ai/mastra/commit/eaa9d12407f4962e94e0d5cd49a643e6e317d60a), [`5a70664`](https://github.com/mastra-ai/mastra/commit/5a7066478c1924a6e9a94e1ba3210f9b67a35535), [`59164cb`](https://github.com/mastra-ai/mastra/commit/59164cb7f8b298e28e13305b0273ed2ef7f1d9e1), [`2a1bb80`](https://github.com/mastra-ai/mastra/commit/2a1bb80305bca1859504287e1a09f43c8a014330), [`4df792b`](https://github.com/mastra-ai/mastra/commit/4df792b5b9146b5a2d6726193ee82d9db31180a4), [`0017956`](https://github.com/mastra-ai/mastra/commit/001795671cf329997bee74541f5de9056e6b1cec), [`aa00f41`](https://github.com/mastra-ai/mastra/commit/aa00f41855e8d6802546f613ffec1669e03409fc), [`36fc7ea`](https://github.com/mastra-ai/mastra/commit/36fc7eabf79ca70bd489e4022eb39a3d8382ace5), [`2ec9c07`](https://github.com/mastra-ai/mastra/commit/2ec9c07eddb142c965f1201f5c6e5dbb288405f9), [`e384817`](https://github.com/mastra-ai/mastra/commit/e3848177f2a0051ea1469a06fb6502164bfada7c), [`519e97f`](https://github.com/mastra-ai/mastra/commit/519e97f624a15362fec7b143dea4eabcff556712), [`e384817`](https://github.com/mastra-ai/mastra/commit/e3848177f2a0051ea1469a06fb6502164bfada7c), [`821b8d4`](https://github.com/mastra-ai/mastra/commit/821b8d4253dcac5d8cf886994884e4645899bedc), [`878e0e2`](https://github.com/mastra-ai/mastra/commit/878e0e2f5adf9669158c7a8a8d67cd8809633c24), [`aea91e7`](https://github.com/mastra-ai/mastra/commit/aea91e7f3a4fb066bfda96dca670d7d2a766d770), [`380e9f5`](https://github.com/mastra-ai/mastra/commit/380e9f57ea9ba7c37950b989d145b70c03a09a6c), [`4029a96`](https://github.com/mastra-ai/mastra/commit/4029a964848512399f27bca283915d49fd106717), [`8dc4d65`](https://github.com/mastra-ai/mastra/commit/8dc4d65b34aad280c4f6ab265162c4846face7e3), [`ca92c02`](https://github.com/mastra-ai/mastra/commit/ca92c02696427baad81dd7a61b049ef37c332452), [`3504acd`](https://github.com/mastra-ai/mastra/commit/3504acdb2833b71db61dc9387c0f25f3cd0a3070), [`5bb6d71`](https://github.com/mastra-ai/mastra/commit/5bb6d711680d17370eacdcdab105e5af69202c5f), [`dab6849`](https://github.com/mastra-ai/mastra/commit/dab6849945ab2a0e4c946f5b31fb6f41b2c1cd7d), [`da87b0a`](https://github.com/mastra-ai/mastra/commit/da87b0a1629d5ffc980b434f70fe60f9445ddb1c), [`182f097`](https://github.com/mastra-ai/mastra/commit/182f09745783aa83e42131307085ecf913cfbc38), [`d9da0da`](https://github.com/mastra-ai/mastra/commit/d9da0da5e5d36023469b527f7be55c017634b186), [`097f002`](https://github.com/mastra-ai/mastra/commit/097f00297b0d46aa304eba3a7203248e21d1a70a), [`958bdc9`](https://github.com/mastra-ai/mastra/commit/958bdc942aa78f00c9ec25f8adfb8e14a0dd4fd9), [`4659a11`](https://github.com/mastra-ai/mastra/commit/4659a1130842f07364d4778aa360f3cb7877679d), [`aa00f41`](https://github.com/mastra-ai/mastra/commit/aa00f41855e8d6802546f613ffec1669e03409fc), [`5227c95`](https://github.com/mastra-ai/mastra/commit/5227c95d54d0b4846220530450063f259797b587), [`226823f`](https://github.com/mastra-ai/mastra/commit/226823ffde55e2dcce01f2111a6a35be3f2c9b85), [`67a6b30`](https://github.com/mastra-ai/mastra/commit/67a6b30769f041244f75f9093a181cdf38e1f2e7), [`7236b47`](https://github.com/mastra-ai/mastra/commit/7236b472bca9bbc9dddba53f683b15c271350183)]:
+  - @mastra/core@1.77.0
+  - @mastra/schema-compat@1.3.14
+
+## 1.37.1-alpha.3
+
+### Patch Changes
+
+- Fixed "Expression produces a union type that is too complex to represent" type errors in observational memory when the model list grows. Observer, reflector and fallback model lists no longer make type checking scale with the number of model IDs. ([#26908](https://github.com/mastra-ai/mastra/pull/26908))
+
+- Updated dependencies [[`f8c0ce2`](https://github.com/mastra-ai/mastra/commit/f8c0ce2646427327b63c05d2eb09e76a3b04133e), [`4df792b`](https://github.com/mastra-ai/mastra/commit/4df792b5b9146b5a2d6726193ee82d9db31180a4), [`0017956`](https://github.com/mastra-ai/mastra/commit/001795671cf329997bee74541f5de9056e6b1cec), [`36fc7ea`](https://github.com/mastra-ai/mastra/commit/36fc7eabf79ca70bd489e4022eb39a3d8382ace5), [`2ec9c07`](https://github.com/mastra-ai/mastra/commit/2ec9c07eddb142c965f1201f5c6e5dbb288405f9), [`380e9f5`](https://github.com/mastra-ai/mastra/commit/380e9f57ea9ba7c37950b989d145b70c03a09a6c), [`4029a96`](https://github.com/mastra-ai/mastra/commit/4029a964848512399f27bca283915d49fd106717), [`ca92c02`](https://github.com/mastra-ai/mastra/commit/ca92c02696427baad81dd7a61b049ef37c332452), [`d9da0da`](https://github.com/mastra-ai/mastra/commit/d9da0da5e5d36023469b527f7be55c017634b186), [`67a6b30`](https://github.com/mastra-ai/mastra/commit/67a6b30769f041244f75f9093a181cdf38e1f2e7)]:
+  - @mastra/core@1.77.0-alpha.4
+  - @mastra/schema-compat@1.3.14-alpha.0
+
 ## 1.37.1-alpha.2
 
 ### Patch Changes

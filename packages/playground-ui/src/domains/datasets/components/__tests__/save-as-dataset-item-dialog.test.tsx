@@ -3,11 +3,14 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import type { ChangeEvent, HTMLAttributes, PropsWithChildren, ReactNode, SelectHTMLAttributes } from 'react';
+import type { ChangeEvent, PropsWithChildren, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SaveAsDatasetItemDialog } from '../save-as-dataset-item-dialog';
-import { buildListDatasetsResponse } from './fixtures/datasets';
+import { buildDatasetItem, buildListDatasetsResponse } from './fixtures/datasets';
+import { LinkComponentProvider } from '@/lib/framework';
+import { Toaster, toast } from '@/lib/toast';
+import { StubLink, stubLinkPaths } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -21,19 +24,22 @@ type CodeEditorProps = {
 // CodeEditor, Select primitives) with its own dedicated tests; stub it as a
 // thin seam so this suite can focus on the dialog's async-seeding logic. The
 // data hooks below are driven through the real @mastra/client-js + React Query
-// stack via MSW.
+// stack via MSW. Select is a native <select> so tests can pick a dataset.
 vi.mock('@/ds/components/Select', () => ({
-  Select: ({ children }: PropsWithChildren<SelectHTMLAttributes<HTMLSelectElement>>) => <div>{children}</div>,
-  SelectTrigger: ({ children }: PropsWithChildren<HTMLAttributes<HTMLButtonElement>>) => (
-    <button type="button">{children}</button>
+  Select: ({
+    children,
+    value,
+    onValueChange,
+  }: PropsWithChildren<{ value?: string; onValueChange?: (value: string) => void }>) => (
+    <select aria-label="Dataset" value={value} onChange={event => onValueChange?.(event.target.value)}>
+      <option value="" />
+      {children}
+    </select>
   ),
-  SelectValue: ({ placeholder }: { placeholder?: string }) => <span>{placeholder}</span>,
-  SelectContent: ({ children }: PropsWithChildren) => <div>{children}</div>,
-  SelectItem: ({ children }: PropsWithChildren<{ value: string }>) => <div>{children}</div>,
-}));
-
-vi.mock('@/utils/toast', () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+  SelectTrigger: () => null,
+  SelectValue: () => null,
+  SelectContent: ({ children }: PropsWithChildren) => <>{children}</>,
+  SelectItem: ({ children, value }: PropsWithChildren<{ value: string }>) => <option value={value}>{children}</option>,
 }));
 
 vi.mock('@/ds/components/SideDialog', () => ({
@@ -66,6 +72,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  toast.dismiss();
   cleanup();
 });
 
@@ -265,6 +272,71 @@ describe('SaveAsDatasetItemDialog', () => {
 
     await waitFor(() => {
       expect(getEditors()[3].value).toBe('manual mocks');
+    });
+  });
+
+  describe('when the item is saved', () => {
+    it('shows a toast with a Go to dataset action that opens the new item in its dataset', async () => {
+      server.use(
+        http.post(`${BASE_URL}/api/datasets/:datasetId/items`, ({ params }) =>
+          HttpResponse.json(buildDatasetItem({ id: 'item-42', datasetId: String(params.datasetId) })),
+        ),
+      );
+      const navigate = vi.fn<(path: string) => void>();
+
+      render(
+        wrap(
+          <LinkComponentProvider Link={StubLink} navigate={navigate} paths={stubLinkPaths}>
+            <Toaster />
+            <SaveAsDatasetItemDialog
+              initialInput={'{"question":"hi"}'}
+              initialGroundTruth=""
+              breadcrumb={<span>Trace</span>}
+              isOpen
+              onClose={vi.fn()}
+            />
+          </LinkComponentProvider>,
+        ),
+      );
+
+      await screen.findByRole('option', { name: 'Dataset 1' });
+      fireEvent.change(screen.getByRole('combobox', { name: 'Dataset' }), { target: { value: 'dataset-1' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save Item' }));
+
+      expect(await screen.findByText('Added to "Dataset 1"')).not.toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Go to dataset' }));
+
+      expect(navigate).toHaveBeenCalledWith('/datasets/dataset-1/items/item-42');
+    });
+
+    it('omits the Go to dataset action when the app has no dataset item route', async () => {
+      server.use(http.post(`${BASE_URL}/api/datasets/:datasetId/items`, () => HttpResponse.json(buildDatasetItem())));
+
+      render(
+        wrap(
+          <LinkComponentProvider
+            Link={StubLink}
+            navigate={vi.fn()}
+            paths={{ ...stubLinkPaths, datasetItemLink: () => '' }}
+          >
+            <Toaster />
+            <SaveAsDatasetItemDialog
+              initialInput={'{"question":"hi"}'}
+              initialGroundTruth=""
+              breadcrumb={<span>Trace</span>}
+              isOpen
+              onClose={vi.fn()}
+            />
+          </LinkComponentProvider>,
+        ),
+      );
+
+      await screen.findByRole('option', { name: 'Dataset 1' });
+      fireEvent.change(screen.getByRole('combobox', { name: 'Dataset' }), { target: { value: 'dataset-1' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save Item' }));
+
+      expect(await screen.findByText('Added to "Dataset 1"')).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'Go to dataset' })).toBeNull();
     });
   });
 });

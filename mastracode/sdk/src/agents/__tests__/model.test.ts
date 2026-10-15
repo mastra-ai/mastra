@@ -207,6 +207,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { fromNodeProviderChain } from '@aws-sdk/credential-providers';
 import { MastraGateway, ModelRouterLanguageModel } from '@mastra/core/llm';
+import { RequestContext } from '@mastra/core/request-context';
 import { wrapLanguageModel } from 'ai';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MODEL_TOKENS } from '../../../../../docs/src/plugins/remark-model-tokens/models.js';
@@ -267,7 +268,7 @@ describe('resolveModel', () => {
     process.env = { ...originalEnv };
   });
 
-  it('discovers custom and Copilot providers through the MastraCode gateway', async () => {
+  it('lists only custom providers under the MastraCode gateway namespace', async () => {
     mockLoadSettings.mockReturnValue({
       customProviders: [
         {
@@ -279,8 +280,6 @@ describe('resolveModel', () => {
       ],
       memoryGateway: {},
     });
-    mockGetCopilotModelCatalog.mockResolvedValueOnce([{ id: 'gpt-4.1' }] as any);
-
     const gateway = createMastraCodeGateway({
       mastraGatewayBaseUrl: 'https://gateway-api.mastra.ai',
       routeThroughMastraGateway: false,
@@ -289,20 +288,16 @@ describe('resolveModel', () => {
     expect(gateway).toBeInstanceOf(MastraCodeGateway);
     expect(gateway.id).toBe('mastracode');
 
-    await expect(gateway.fetchProviders()).resolves.toMatchObject({
-      'acme-models': {
-        name: 'Acme Models',
-        url: 'https://llm.acme.dev/v1',
-        gateway: 'mastracode',
-        models: ['reasoner-v1'],
-      },
-      'github-copilot': {
-        name: 'GitHub Copilot',
-        gateway: 'mastracode',
-        models: ['gpt-4.1'],
-      },
+    const providers = await gateway.fetchProviders();
+    // Kimi augments models.dev `kimi-code-plan-cn`, and Copilot has its own
+    // gateway, so neither surfaces as `mastracode/<provider>/<model>`.
+    expect(Object.keys(providers)).toEqual(['acme-models']);
+    expect(providers['acme-models']).toMatchObject({
+      name: 'Acme Models',
+      url: 'https://llm.acme.dev/v1',
+      gateway: 'mastracode',
+      models: ['reasoner-v1'],
     });
-    expect(mockGetCopilotModelCatalog).toHaveBeenCalled();
   });
 
   it('claims models.dev providers authenticated by the injected credential store', () => {
@@ -581,7 +576,7 @@ describe('resolveModel', () => {
       requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
 
       expect(() => resolveModel('openai/gpt-4o', { requestContext })).toThrow(
-        'No usable openai credential is configured for this signed-in Factory account.',
+        "No usable openai credential is available. This Factory uses personal credentials only, so organization credentials don't apply. Connect the provider, then try again.",
       );
       expect(() => resolveModel('openai/gpt-4o', { requestContext })).toThrow(ProviderAuthRequiredError);
       try {
@@ -589,6 +584,39 @@ describe('resolveModel', () => {
       } catch (error) {
         expect((error as Error).name).toBe('ProviderAuthRequiredError');
       }
+    });
+
+    it('names organization scope when an organization-scoped Factory has no credential', async () => {
+      setCredentialStoreProvider(
+        () => ({
+          allowEnvironmentFallback: false,
+          reload() {},
+          get: () => undefined,
+          getStoredApiKey: () => undefined,
+          getApiKey: async () => undefined,
+        }),
+        async () => ({ orgId: 'org-1', userId: 'user-1', credentialScope: 'factory' as const }),
+      );
+      // Keep the router lazy so the test owns the request-scoped resolution promise.
+      vi.mocked(ModelRouterLanguageModel).mockImplementationOnce(function (
+        this: Record<string, unknown>,
+        _config: unknown,
+        customGateways?: unknown,
+      ) {
+        this.customGateways = customGateways;
+      } as never);
+      const requestContext = new RequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+
+      const model = resolveModel('openai/gpt-4o', { requestContext }) as unknown as {
+        customGateways: Array<{ resolveLanguageModel: () => Promise<unknown> }>;
+      };
+      const resolution = model.customGateways[0]!.resolveLanguageModel();
+
+      await expect(resolution).rejects.toThrow(ProviderAuthRequiredError);
+      await expect(resolution).rejects.toThrow(
+        "No usable openai credential is available. This Factory uses organization credentials only, so personal provider sign-ins don't apply. Add an organization credential, then try again.",
+      );
     });
 
     it('passes controller headers to the OpenAI OAuth provider', () => {
@@ -641,6 +669,43 @@ describe('resolveModel', () => {
         authStorage: scopedAuthStorage(),
       });
     });
+
+    it.each([
+      { modeless: false, expected: 'high' },
+      { modeless: true, expected: 'low' },
+    ])(
+      'given a Build session without an override, when modeless is $modeless, then dynamic resolution thinks at $expected',
+      ({ modeless, expected }) => {
+        mockAuthStorageInstance.get.mockReturnValue({
+          type: 'oauth',
+          access: 'openai-oauth-access-token',
+          refresh: 'openai-oauth-refresh-token',
+          expires: Date.now() + 60_000,
+        });
+        mockLoadSettings.mockImplementation(
+          () =>
+            ({
+              customProviders: [],
+              memoryGateway: {},
+              models: { modeThinkingDefaults: { build: 'high' } },
+              preferences: { thinkingLevel: 'low' },
+            }) as any,
+        );
+        const values = new Map<string, unknown>();
+        const requestContext = {
+          get: (key: string) => values.get(key),
+          set: (key: string, value: unknown) => values.set(key, value),
+        } as any;
+        requestContext.set('controller', { session: { modelId: 'openai/gpt-5.2', modeId: 'build' }, state: {} });
+
+        getDynamicModel({ requestContext }, undefined, { modeless });
+
+        expect(openaiCodexProvider).toHaveBeenCalledWith(
+          'gpt-5.2-codex',
+          expect.objectContaining({ thinkingLevel: expected }),
+        );
+      },
+    );
   });
 
   describe('moonshotai/* models', () => {
@@ -1296,6 +1361,14 @@ describe('resolveRequestThinkingLevel', () => {
     const level = resolveRequestThinkingLevel({ state: {}, session: { modeId: 'plan' } } as any);
 
     expect(level).toBe('medium');
+  });
+
+  it('given a context without a session mode, when the settings have mode defaults, then the global default applies', () => {
+    mockLoadSettings.mockImplementation(() =>
+      settingsWithThinking({ modeThinkingDefaults: { build: 'high' }, thinkingLevel: 'low' }),
+    );
+
+    expect(resolveRequestThinkingLevel({ state: {} })).toBe('low');
   });
 
   it('treats a null session value as a cleared override', () => {

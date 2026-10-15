@@ -151,7 +151,7 @@ describe('Model provider onboarding', () => {
       expect(screen.getByText('OpenAI')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Change provider' })).toBeInTheDocument();
       expect(screen.queryByRole('searchbox', { name: 'Search model providers' })).not.toBeInTheDocument();
-      expect(screen.getByText('openai/gpt-5.6-sol')).toBeInTheDocument();
+      expect(screen.getByRole('combobox')).toHaveTextContent('GPT-5.6 Sol');
       await user.click(screen.getByRole('button', { name: 'Continue' }));
 
       await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
@@ -261,7 +261,7 @@ describe('Model provider onboarding', () => {
       await user.click(bedrock);
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(await screen.findByRole('button', { name: 'Continue' })).toBeInTheDocument();
-      expect(screen.getByText('amazon-bedrock/anthropic.claude-sonnet-4-5')).toBeInTheDocument();
+      expect(screen.getByRole('combobox')).toHaveTextContent('Claude Sonnet 4.5');
     });
   });
 

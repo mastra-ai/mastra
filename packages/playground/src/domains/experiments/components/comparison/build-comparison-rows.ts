@@ -38,6 +38,8 @@ export interface ComparisonColumn extends ComparisonSide {
   costDelta?: number;
   /** This side's input plus output tokens minus the baseline's. Undefined on the baseline or when either is unknown. */
   tokenDelta?: number;
+  /** This side's average score minus the baseline's. Undefined on the baseline or when either has no score. */
+  averageScoreDelta?: number;
 }
 
 export interface ComparisonRow {
@@ -129,10 +131,25 @@ const deltasAgainst = (baseline: ComparisonSide, side: ComparisonSide): Record<s
 };
 
 /** Run duration of one side in ms, or null when either timestamp is missing. */
-export function sideDurationMs(side: Pick<ComparisonSide, 'startedAt' | 'completedAt'>): number | null {
+export function sideDurationMs(side: {
+  startedAt?: string | Date | null;
+  completedAt?: string | Date | null;
+}): number | null {
   if (!side.startedAt || !side.completedAt) return null;
   return new Date(side.completedAt).getTime() - new Date(side.startedAt).getTime();
 }
+
+/** Mean of the scores that have a value, or null when none has. */
+export function sideAverageScore(side: { scores: Array<{ value: number | null }> }): number | null {
+  const values = side.scores.map(score => score.value).filter((value): value is number => value != null);
+  return values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+}
+
+const averageScoreDeltaAgainst = (baseline: ComparisonSide, side: ComparisonSide): number | undefined => {
+  const baselineAverage = sideAverageScore(baseline);
+  const sideAverage = sideAverageScore(side);
+  return baselineAverage != null && sideAverage != null ? sideAverage - baselineAverage : undefined;
+};
 
 const durationDeltaAgainst = (baseline: ComparisonSide, side: ComparisonSide): number | null => {
   const baselineMs = sideDurationMs(baseline);
@@ -193,6 +210,7 @@ export const buildComparisonRows = ({
         durationDeltaMs: index === 0 ? null : durationDeltaAgainst(baseline, side),
         costDelta: index === 0 ? undefined : costDeltaAgainst(baseline, side),
         tokenDelta: index === 0 ? undefined : tokenDeltaAgainst(baseline, side),
+        averageScoreDelta: index === 0 ? undefined : averageScoreDeltaAgainst(baseline, side),
       })),
     };
   });
