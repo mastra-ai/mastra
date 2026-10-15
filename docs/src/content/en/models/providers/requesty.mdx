@@ -7,7 +7,7 @@ description: "Browse Requesty model IDs, capabilities, context windows, and pric
 
 # <img src="https://models.dev/logos/requesty.svg" alt="Requesty logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Requesty
 
-Access 171 Requesty models through Mastra's model router. Authentication is handled automatically using the `REQUESTY_API_KEY` environment variable.
+Access 175 Requesty models through Mastra's model router. Authentication is handled automatically using the `REQUESTY_API_KEY` environment variable.
 
 Learn more in the [Requesty documentation](https://requesty.ai/solution/llm-routing/models).
 
@@ -752,6 +752,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65535,
     "inputCost": 0.825,
     "outputCost": 4.125
+  },
+  {
+    "model": "requesty/gemini-4-argon",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
+    "model": "requesty/gemini-4-argon@eu",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 2.2,
+    "outputCost": 11
   },
   {
     "model": "requesty/gemma-4-26b-a4b-it",
@@ -1736,6 +1760,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 20480,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "requesty/muse-spark-1.3",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 943718,
+    "inputCost": 1.25,
+    "outputCost": 4.25
+  },
+  {
+    "model": "requesty/muse-wonder-1.0",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 943718,
+    "inputCost": 4,
+    "outputCost": 20
   },
   {
     "model": "requesty/nemotron-3-nano-omni",

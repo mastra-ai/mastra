@@ -1283,7 +1283,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect(requestContext?.get('controller')).toMatchObject({
       resourceId: PROJECT_ID,
       threadId: 'thread-1',
-      session: { modeId: 'build', modelId: 'openai/gpt-5.6-sol' },
+      session: { modelId: 'openai/gpt-5.6-sol' },
     });
     expect(session.subscribe).toHaveBeenCalledTimes(2);
     expect(getAgentEndListenerCount()).toBe(0);
@@ -2037,7 +2037,6 @@ describe('FactoryDecisionDispatcher', () => {
           sessionId: binding.sessionId,
           threadId: binding.threadId,
           branch: binding.branch,
-          agentName: 'build',
         },
       ],
     });
@@ -2100,7 +2099,6 @@ describe('FactoryDecisionDispatcher', () => {
             sessionId: binding.sessionId,
             threadId: binding.threadId,
             branch: binding.branch,
-            agentName: 'build',
             ...entry,
           },
         ],
@@ -5617,7 +5615,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect(kickoffOptions?.requestContext?.get('controller')).toMatchObject({
       threadId: 'thread-1',
       resourceId: 'session-1',
-      session: { id: 'session-1', ownerId: 'user-1', modeId: 'build', modelId: 'openai/gpt-5.6-sol' },
+      session: { id: 'session-1', ownerId: 'user-1', modelId: 'openai/gpt-5.6-sol' },
     });
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
   });

@@ -111,6 +111,14 @@ Configure validation appropriate to your issuer, including audience and expiry c
 
 Protecting Mastra routes with `server.auth` and providing interoperable OAuth discovery are different tasks. Don't assume configuring one supplies the other.
 
+### Routes Mastra registers for an MCP server
+
+Alongside the MCP transport, Mastra registers REST routes used by Studio to list servers, inspect tools, execute tools, and read resources. See the [MCP routes reference](/reference/server/routes#mcp) for the full list. These paths use the default `/api` prefix.
+
+The `POST /api/mcp/:serverId/tools/:toolId/execute` route calls `executeTool()` directly, without a protocol client. With a Mastra FGA provider configured, `MCPServer.executeTool()` enforces tool execution permission using the user in `requestContext`. The REST tool list also filters tools through FGA. These permission checks don't replace route authentication.
+
+Built-in authentication for these routes depends on `server.auth`. Without it, `requiresAuth: true` doesn't enforce authentication. Custom middleware that checks only the `/mcp` or `/sse` transport paths leaves the REST routes open. If you use custom middleware instead of `server.auth`, default-deny `/api/mcp/*` and allow access only after authentication.
+
 ### Pass verified identity to tools
 
 When a Mastra server handles an MCP request, its auth bridge preserves an existing `req.auth`. Otherwise, it uses `server.mcpOptions.setRequestAuth` when configured, or builds `authInfo` from the request context. With the default bridge, the authenticated user is available in `authInfo.extra.user`.
@@ -143,9 +151,10 @@ Keep access tokens, refresh tokens, and service credentials outside model-visibl
 
 - [ ] **Validate tokens:** Configure validation for your issuer, including audience and expiry checks, and confirm an unvalidated token is rejected.
 - [ ] **Challenge missing tokens:** Confirm every protected server path returns `401` without a bearer token.
+- [ ] **Protect MCP REST routes:** If you don't use `server.auth`, confirm `/api/mcp/:serverId/tools*`, `/api/mcp/:serverId/resources*`, and `/api/mcp/v0/servers*` aren't reachable without authentication. Use your configured API prefix if it differs from `/api`.
 - [ ] **Isolate users:** Confirm one user's provider, connection, and stored credentials aren't reused for another user.
 - [ ] **Bind credentials to the issuer:** Confirm registration and tokens aren't reused when the authorization server changes.
-- [ ] **Deny unauthorized operations:** Confirm a caller without permission is denied `tools/call`, including for a tool it never listed.
+- [ ] **Deny unauthorized operations:** Confirm a caller without permission is denied both `tools/call` and `POST /api/mcp/:serverId/tools/:toolId/execute`, including for a tool it never listed.
 - [ ] **Scope records to the caller:** Confirm record lookups resolve the tenant from trusted server context rather than tool arguments.
 - [ ] **Keep tokens at their audience:** Confirm upstream calls use separate credentials and never forward the MCP token.
 - [ ] **Keep secrets out of model data:** Confirm tokens and credentials stay out of instructions, tool arguments, and tool results.

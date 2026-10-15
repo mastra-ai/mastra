@@ -14,6 +14,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { InMemoryServerCache } from '../../../cache/inmemory';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { PubSub } from '../../../events/pubsub';
@@ -367,9 +368,10 @@ describe('Resume API', () => {
       );
       const prepareSpy = vi.spyOn(durableAgent, 'prepare');
 
-      await expect(durableAgent.resume(runId, { approved: true })).rejects.toThrow(
-        'This workflow run was not suspended',
-      );
+      await expect(durableAgent.resume(runId, { approved: true })).rejects.toMatchObject({
+        id: 'AGENT_RESUME_RUN_NOT_SUSPENDED',
+        details: { status: 'success' },
+      });
       expect(prepareSpy).not.toHaveBeenCalled();
       expect(durableAgent.runRegistry.has(runId)).toBe(false);
     });
@@ -434,6 +436,42 @@ describe('Resume API', () => {
       expect(prepareSpy).not.toHaveBeenCalled();
       expect(result.runId).toBe(runId);
       result.cleanup();
+    });
+
+    it('reports a warm resume that lost the race as AGENT_RESUME_ALREADY_CLAIMED', async () => {
+      const baseAgent = new Agent({
+        id: 'lost-race-resume-agent',
+        name: 'Lost Race Resume Agent',
+        instructions: 'Test lost resume race',
+        model: createTextModel('Unused') as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const { runId } = await durableAgent.prepare('Start something');
+
+      // The run was suspended when this resume claimed it, but a concurrent resume ran it
+      // first, so the workflow rejects with WORKFLOW_RUN_NOT_SUSPENDED.
+      const workflow = durableAgent.getWorkflow();
+      const createRun = workflow.createRun.bind(workflow);
+      const resumeError = new MastraError({
+        id: 'WORKFLOW_RUN_NOT_SUSPENDED',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: 'This workflow run was not suspended',
+      });
+      vi.spyOn(workflow, 'createRun').mockImplementation(async (...args) => {
+        const run = await createRun(...args);
+        vi.spyOn(run, 'resume').mockRejectedValue(resumeError);
+        return run;
+      });
+      const onError = vi.fn();
+
+      const result = await durableAgent.resume(runId, { approved: true }, { onError });
+      const chunks: any[] = [];
+      for await (const chunk of result.fullStream) chunks.push(chunk);
+      result.cleanup();
+
+      const errorChunk = chunks.find(chunk => chunk.type === 'error');
+      expect(errorChunk?.payload?.error).toMatchObject({ id: 'AGENT_RESUME_ALREADY_CLAIMED' });
     });
 
     it('forwards approval execution options into the durable resume path', async () => {

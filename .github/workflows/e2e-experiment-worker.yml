@@ -28,7 +28,7 @@ env:
 jobs:
   publish-experiment-worker-registry:
     name: Publish experiment worker registry
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -74,7 +74,7 @@ jobs:
     name: Experiment worker PR tier
     needs: publish-experiment-worker-registry
     if: github.event_name == 'workflow_dispatch' && inputs.tier == 'pr' && (inputs.scenario == '' || inputs.scenario == null)
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -123,7 +123,7 @@ jobs:
     name: Experiment worker full tier
     needs: publish-experiment-worker-registry
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && ((inputs.tier == 'full' && (inputs.scenario == '' || inputs.scenario == null)) || (inputs.scenario != '' && inputs.scenario != 'workspace-browser' && inputs.scenario != 'remote-sandbox' && inputs.scenario != 'object-store' && inputs.scenario != 'real-model' && inputs.scenario != 'hosted-proxy')))
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -177,7 +177,7 @@ jobs:
     name: Experiment worker browser tier
     needs: publish-experiment-worker-registry
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && ((inputs.tier == 'full' && (inputs.scenario == '' || inputs.scenario == null)) || inputs.scenario == 'workspace-browser'))
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -226,7 +226,7 @@ jobs:
     name: Experiment worker gated (remote sandbox)
     needs: publish-experiment-worker-registry
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && ((inputs.tier == 'gated' && (inputs.scenario == '' || inputs.scenario == null)) || inputs.scenario == 'remote-sandbox'))
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 15
     continue-on-error: true
     environment: experiment-worker-e2e-gated
@@ -256,7 +256,7 @@ jobs:
     name: Experiment worker gated (object store)
     needs: publish-experiment-worker-registry
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && ((inputs.tier == 'gated' && (inputs.scenario == '' || inputs.scenario == null)) || inputs.scenario == 'object-store'))
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 15
     continue-on-error: true
     environment: experiment-worker-e2e-gated
@@ -287,7 +287,7 @@ jobs:
     name: Experiment worker gated (real model)
     needs: publish-experiment-worker-registry
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && ((inputs.tier == 'gated' && (inputs.scenario == '' || inputs.scenario == null)) || inputs.scenario == 'real-model'))
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 15
     continue-on-error: true
     environment: experiment-worker-e2e-gated
@@ -317,7 +317,7 @@ jobs:
     name: Experiment worker gated (hosted proxy)
     needs: publish-experiment-worker-registry
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && ((inputs.tier == 'gated' && (inputs.scenario == '' || inputs.scenario == null)) || inputs.scenario == 'hosted-proxy'))
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 15
     continue-on-error: true
     environment: experiment-worker-e2e-gated

@@ -1,7 +1,11 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { RequestContext } from '@mastra/core/request-context';
 import type { Skill } from '@mastra/core/workspace';
 import { Hono } from 'hono';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { __clearSessionSandboxesForTests, getSessionSandbox } from '../sandbox/session-sandbox.js';
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
@@ -504,8 +508,9 @@ describe('factory skills catalog route', () => {
     const response = await app.request('/web/factory/skills');
     expect(response.status).toBe(200);
     const { skills } = (await response.json()) as {
-      skills: { name: string; description: string; content: string }[];
+      skills: { name: string; description: string; content: string; error?: string }[];
     };
+    expect(skills.filter(s => s.error)).toEqual([]);
     const names = skills.map(s => s.name);
     expect(names).toContain('factory-triage');
     expect(names).toContain('factory-plan');
@@ -520,5 +525,64 @@ describe('factory skills catalog route', () => {
     const app = createCatalogApp({ user: { workosId: 'user-1', organizationId: 'org-1' } });
     const response = await app.request('/web/factory/skills');
     expect(response.status).toBe(200);
+  });
+
+  describe('with repo-local overrides', () => {
+    let projectDir: string;
+
+    beforeEach(() => {
+      projectDir = mkdtempSync(join(tmpdir(), 'factory-skills-catalog-'));
+      vi.spyOn(process, 'cwd').mockReturnValue(projectDir);
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      rmSync(projectDir, { recursive: true, force: true });
+    });
+
+    function writeLocalSkill(dir: string, content: string) {
+      mkdirSync(join(projectDir, 'factory-skills', dir), { recursive: true });
+      writeFileSync(join(projectDir, 'factory-skills', dir, 'SKILL.md'), content);
+    }
+
+    async function listSkills() {
+      const response = await createCatalogApp({ authEnabled: false }).request('/web/factory/skills');
+      expect(response.status).toBe(200);
+      const { skills } = (await response.json()) as {
+        skills: { name: string; description: string; content: string; error?: string }[];
+      };
+      return skills;
+    }
+
+    it('reports a skill whose frontmatter the runtime cannot parse', async () => {
+      writeLocalSkill(
+        'factory-triage',
+        '---\nname: factory-triage\ndescription: Use when the user says: triage this issue\n---\n\n# Local Triage\n',
+      );
+      const skills = await listSkills();
+      const triage = skills.find(s => s.name === 'factory-triage')!;
+      expect(triage.error).toMatch(/^Invalid frontmatter:/);
+      expect(triage.description).toBe('');
+      expect(triage.content).toBe('# Local Triage');
+      expect(skills.find(s => s.name === 'factory-plan')!.error).toBeUndefined();
+    });
+
+    it('reports a skill whose metadata fails runtime validation', async () => {
+      writeLocalSkill('factory-plan', '---\nname: not-factory-plan\ndescription: Plan things\n---\n\n# Local Plan\n');
+      const plan = (await listSkills()).find(s => s.name === 'factory-plan')!;
+      expect(plan.error).toMatch(/must match directory name/);
+      expect(plan.description).toBe('Plan things');
+      expect(plan.content).toBe('# Local Plan');
+    });
+
+    it('parses quoted and block-scalar descriptions the way the runtime does', async () => {
+      writeLocalSkill(
+        'factory-triage',
+        '---\nname: factory-triage\ndescription: >-\n  Use when the user says: triage this issue\n---\n\n# Local Triage\n',
+      );
+      const triage = (await listSkills()).find(s => s.name === 'factory-triage')!;
+      expect(triage.error).toBeUndefined();
+      expect(triage.description).toBe('Use when the user says: triage this issue');
+    });
   });
 });

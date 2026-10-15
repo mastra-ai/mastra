@@ -25,6 +25,8 @@ export type ComboboxOption = {
   displayLabel?: React.ReactNode;
   start?: React.ReactNode;
   end?: React.ReactNode;
+  /** Extra terms the search matches besides `label` (aliases, ids, a provider name). Never displayed. */
+  keywords?: readonly string[];
 };
 
 type ComboboxSharedProps = {
@@ -141,6 +143,13 @@ export function Combobox(props: ComboboxProps) {
   // Default to the nearest SideDialog/Drawer popup so the list stays
   // interactive inside a modal drawer; an explicit `container` still wins.
   const resolvedContainer = usePortalContainer(container);
+  const { contains } = BaseCombobox.useFilter();
+  // Match the label like Base UI's default filter, plus any keywords the option carries.
+  const filterOption = React.useCallback(
+    (option: ComboboxOption, query: string) =>
+      contains(option.label, query) || (option.keywords?.some(keyword => contains(keyword, query)) ?? false),
+    [contains],
+  );
   const menu = useFluidMenu<HTMLDivElement>();
   const iconOnly = isIconButtonSize(size);
 
@@ -268,6 +277,7 @@ export function Combobox(props: ComboboxProps) {
       multiple
       autoHighlight
       items={displayedOptions}
+      filter={filterOption}
       value={selectedOptions}
       onValueChange={items => props.onValueChange?.((items ?? []).map(item => item.value))}
       disabled={disabled}
@@ -280,6 +290,7 @@ export function Combobox(props: ComboboxProps) {
     <BaseCombobox.Root
       autoHighlight
       items={displayedOptions}
+      filter={filterOption}
       value={selectedOption}
       inputValue={inputValue}
       onInputValueChange={value => {

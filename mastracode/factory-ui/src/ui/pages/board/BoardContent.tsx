@@ -17,6 +17,7 @@ import { BoardViewControls } from '../../domains/factory/components/BoardViewCon
 import { IntakeSourceSwitch } from '../../domains/factory/components/IntakeSourceSwitch';
 import { useBoardComposer } from '../../domains/factory/hooks/useBoardComposer';
 import { useBoardDeepLink } from '../../domains/factory/hooks/useBoardDeepLink';
+import { useCollapsedStages } from '../../domains/factory/hooks/useCollapsedStages';
 import { useBoardDecisions } from '../../domains/factory/hooks/useBoardDecisions';
 import { useBoardIntake } from '../../domains/factory/hooks/useBoardIntake';
 import { useItemSessionStatuses } from '../../domains/factory/hooks/useItemSessionStatuses';
@@ -217,6 +218,14 @@ export function BoardContent({
     targetItemId,
     targetReady,
   });
+  const targetStages = stages
+    .filter(stage => workItemsByStage.get(stage.id)?.some(item => item.id === targetItemId))
+    .map(stage => stage.id);
+  const collapsedStages = useCollapsedStages(
+    targetItemId && targetStages.length > 0
+      ? { itemId: targetItemId, commentId: targetCommentId, stages: targetStages }
+      : undefined,
+  );
 
   if (items.error !== undefined) {
     return (
@@ -266,12 +275,17 @@ export function BoardContent({
       loading,
       taskCount,
       collapsed,
+      groupOpen: collapsedStages.isStageOpen(stage.id),
+      onGroupOpenChange: (open: boolean) => collapsedStages.setStageOpen(stage.id, open),
       createButton: canCreate ? (
         <BoardStageCreateButton
           stage={stage}
           expanded={composerOpen}
           triggerRef={composer.registerTrigger(stage.id)}
-          onOpen={() => composer.open(stage.id)}
+          onOpen={() => {
+            collapsedStages.setStageOpen(stage.id, true);
+            composer.open(stage.id);
+          }}
         />
       ) : undefined,
       intakeSwitch:

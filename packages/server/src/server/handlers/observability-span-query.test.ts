@@ -96,6 +96,8 @@ describe('QUERY_SPANS', () => {
           inputTruncated: false,
           outputPreview: null,
           outputTruncated: false,
+          errorPreview: 'Weather service unavailable',
+          errorTruncated: false,
           cost: { state: 'missing' },
         },
       ],
@@ -135,6 +137,20 @@ describe('QUERY_SPANS', () => {
 
     expect(observabilityStore.querySpans).toHaveBeenCalledWith(
       expect.objectContaining({ limit: 10, cursor: CURSOR_VALUES }),
+    );
+  });
+
+  it('accepts time ranges wider than 31 days', async () => {
+    const { mastra, observabilityStore } = createHarness();
+
+    await QUERY_SPANS.handler(
+      params(mastra, { timeRange: { from: '2026-01-01T00:00:00Z', to: '2026-09-01T00:00:00Z' } }),
+    );
+
+    expect(observabilityStore.querySpans).toHaveBeenCalledWith(
+      expect.objectContaining({
+        timeRange: { from: '2026-01-01T00:00:00.000Z', to: '2026-09-01T00:00:00.000Z' },
+      }),
     );
   });
 
@@ -206,10 +222,10 @@ describe('QUERY_SPANS', () => {
       issues: [{ code: 'invalid_request', path: ['orderBy', 0, 'field'] }],
     });
 
-    const tooWide = strictValidationError({
-      timeRange: { from: '2026-01-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+    const emptyRange = strictValidationError({
+      timeRange: { from: '2026-09-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
     });
-    expect(getDeclaredErrorSchema(422).parse(tooWide?.body)).toMatchObject({
+    expect(getDeclaredErrorSchema(422).parse(emptyRange?.body)).toMatchObject({
       issues: [{ code: 'invalid_request', path: ['timeRange'] }],
     });
   });

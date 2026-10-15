@@ -9,7 +9,7 @@ import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/se
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useDataset, useDatasetItems } from '@mastra/react/hooks/datasets';
-import { ArrowLeft, Copy, FlaskConical, MoreVertical, Pencil, Play, Trash2 } from 'lucide-react';
+import { ArrowLeft, Copy, FlaskConical, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router';
@@ -166,8 +166,8 @@ function DatasetPage() {
                       <TooltipTrigger asChild>
                         <span className="cursor-not-allowed">
                           <div className="pointer-events-none opacity-50" inert aria-disabled="true">
-                            <Button variant="primary" icon={<Play />}>
-                              Run Experiment
+                            <Button variant="primary" icon={<Plus />}>
+                              New experiment
                             </Button>
                           </div>
                         </span>
@@ -175,8 +175,8 @@ function DatasetPage() {
                       <TooltipContent>Add items to the dataset before running an experiment</TooltipContent>
                     </Tooltip>
                   ) : (
-                    <Button variant="primary" onClick={() => setExperimentDialogOpen(true)} icon={<Play />}>
-                      Run Experiment
+                    <Button variant="primary" onClick={() => setExperimentDialogOpen(true)} icon={<Plus />}>
+                      New experiment
                     </Button>
                   )}
                   <DropdownMenu>

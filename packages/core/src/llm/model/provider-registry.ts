@@ -475,7 +475,7 @@ const PROVIDER_ALIASES: Record<string, string> = {
 };
 
 /** Bedrock model-id region prefixes (cross-region inference profiles). */
-const BEDROCK_REGION_PREFIX = /^(global|us-gov|us|eu|apac|jp|au)\./;
+const BEDROCK_REGION_PREFIX = /^(global|us-gov|us|eu|apac|jp|au|in)\./;
 
 /** Underlying vendor segment carried by fully-qualified Bedrock model ids. */
 const BEDROCK_VENDOR_SEGMENT =
