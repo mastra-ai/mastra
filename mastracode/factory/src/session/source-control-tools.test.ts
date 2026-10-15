@@ -220,7 +220,7 @@ describe('createSourceControlTools', () => {
 
   describe('self-review gate', () => {
     const approved = 'a'.repeat(40);
-    const gated = async (approvedHead: string | null, branchHead = approved) => {
+    const gated = async (approvedHead: string | null, branchHead = approved, localBranchMissing = false) => {
       const setup = await fixture();
       const tools = await createSourceControlTools({
         requestContext: requestContext(),
@@ -232,11 +232,13 @@ describe('createSourceControlTools', () => {
         id: 'sandbox-1',
         provider: 'custom',
         workingDirectory: '/home/user',
-        executeCommand: vi.fn(async (_command: string, args: string[]) => ({
-          exitCode: 0,
-          stdout: args.includes('rev-parse') ? `${branchHead}\n` : '',
-          stderr: '',
-        })),
+        executeCommand: vi.fn(async (_command: string, args: string[]) => {
+          const remote = args.some(arg => arg.startsWith('refs/remotes/origin/'));
+          if (args.includes('rev-parse') && localBranchMissing && !remote) {
+            return { exitCode: 128, stdout: '', stderr: 'fatal: Needed a single revision' };
+          }
+          return { exitCode: 0, stdout: args.includes('rev-parse') ? `${branchHead}\n` : '', stderr: '' };
+        }),
       };
       const run = () =>
         (tools.source_control_create_change_request!.execute as any)({ title: 'Ship it' }, { workspace: { sandbox } });
@@ -257,6 +259,12 @@ describe('createSourceControlTools', () => {
 
     it('opens the change request from the approved head', async () => {
       const { setup, run } = await gated(approved);
+      await expect(run()).resolves.toMatchObject({ id: '17' });
+      expect(setup.createPullRequest).toHaveBeenCalled();
+    });
+
+    it('reads the pushed head when the checkout has no local branch ref', async () => {
+      const { setup, run } = await gated(approved, approved, true);
       await expect(run()).resolves.toMatchObject({ id: '17' });
       expect(setup.createPullRequest).toHaveBeenCalled();
     });

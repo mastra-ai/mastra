@@ -395,11 +395,30 @@ export async function createSourceControlTools({
         if (approvedHead !== undefined) {
           const sandbox = executableSandbox(execution?.workspace?.sandbox);
           const workdir = await resolveSessionWorkdir(target.session.id, sandbox, target.repository.slug);
-          const head = await sandbox.executeCommand('git', ['-C', workdir, 'rev-parse', target.session.branch]);
-          const headSha = head.exitCode === 0 ? head.stdout.trim().toLowerCase() : '';
+          let headSha = '';
+          let lastError = '';
+          for (const ref of [target.session.branch, `refs/remotes/origin/${target.session.branch}`]) {
+            const head = await sandbox.executeCommand('git', [
+              '-C',
+              workdir,
+              'rev-parse',
+              '--verify',
+              `${ref}^{commit}`,
+            ]);
+            if (head.exitCode === 0) {
+              headSha = head.stdout.trim().toLowerCase();
+              break;
+            }
+            lastError = `${head.stderr ?? ''}`.trim();
+          }
+          if (!headSha) {
+            throw new Error(
+              `Could not read the head of branch ${target.session.branch} in ${workdir}${lastError ? `: ${lastError}` : ''}. Nothing was opened.`,
+            );
+          }
           if (headSha !== approvedHead.toLowerCase()) {
             throw new Error(
-              `Self-review approved ${approvedHead}, but the branch is at ${headSha || 'an unknown commit'}. Move the work item back to Self-review to review the new commits.`,
+              `Self-review approved ${approvedHead}, but the branch is at ${headSha}. Move the work item back to Self-review to review the new commits.`,
             );
           }
         }
