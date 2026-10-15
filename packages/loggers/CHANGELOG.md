@@ -1,5 +1,16 @@
 # @mastra/loggers
 
+## 1.3.8-alpha.0
+
+### Patch Changes
+
+- Fixed `HttpTransport` retrying JSON serialization failures. Log batches are now serialized once before sending: values that cannot be serialized (circular references, BigInts, throwing `toJSON`) fail immediately instead of waiting through retry delays, and network retries resend the exact same payload. ([#27174](https://github.com/mastra-ai/mastra/pull/27174))
+
+- Fixed `FileTransport` and `UpstashTransport` log queries accepting invalid `page`/`perPage` values. `listLogs` and `listLogsByRunId` now throw a `RangeError` for negative, fractional, non-finite, or unsafe pagination values instead of silently returning misleading results or sending malformed Redis ranges. `page: 0` and `perPage: 0` still default to page 1 and 100 per page. ([#27175](https://github.com/mastra-ai/mastra/pull/27175))
+
+- Updated dependencies [[`a9b85ba`](https://github.com/mastra-ai/mastra/commit/a9b85ba48a2542c568d91f3032464057227d55dc), [`f28c44e`](https://github.com/mastra-ai/mastra/commit/f28c44ed98a87c6078a3e3e9ef2b197d97f97956)]:
+  - @mastra/core@1.78.0-alpha.9
+
 ## 1.3.7
 
 ### Patch Changes

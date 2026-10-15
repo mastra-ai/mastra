@@ -1,5 +1,47 @@
 # @mastra/playground-ui
 
+## 64.0.0-alpha.9
+
+### Minor Changes
+
+- Comboboxes in forms now search right in the field. Inside a `Field`, a `Combobox` is a text field you type into to filter, and a `multiple` one shows its picks as removable chips (× or Backspace removes one) instead of "N selected". Comboboxes outside a `Field` (toolbars, breadcrumbs, inline pickers), `ghost` and icon-size triggers keep the trigger with the search in the popup. The `Combobox` props are unchanged. ([#27112](https://github.com/mastra-ai/mastra/pull/27112))
+
+  `Combobox` is now built on new composable parts, also exported, for pickers its `options` prop can't describe: groups with labels, items with a title, description and end detail, or a custom field. They follow shadcn's Combobox structure; the root is `ComboboxRoot` because `Combobox` is the options-based component.
+
+  ```tsx
+  import {
+    ComboboxRoot,
+    ComboboxInput,
+    ComboboxContent,
+    ComboboxEmpty,
+    ComboboxList,
+    ComboboxItem,
+  } from '@mastra/playground-ui/components/Combobox';
+
+  <ComboboxRoot items={agents} value={agent} onValueChange={setAgent} autoHighlight>
+    <ComboboxInput placeholder="Pick an agent" />
+    <ComboboxContent>
+      <ComboboxEmpty>No agents found.</ComboboxEmpty>
+      <ComboboxList>
+        {item => (
+          <ComboboxItem key={item.id} value={item}>
+            {item.name}
+          </ComboboxItem>
+        )}
+      </ComboboxList>
+    </ComboboxContent>
+  </ComboboxRoot>;
+  ```
+
+  For small triggers (an icon, a ghost button), use `ComboboxTrigger` with `ComboboxSearch` at the top of `ComboboxContent` to keep the search inside the popup.
+
+### Patch Changes
+
+- Updated dependencies [[`a9b85ba`](https://github.com/mastra-ai/mastra/commit/a9b85ba48a2542c568d91f3032464057227d55dc), [`f28c44e`](https://github.com/mastra-ai/mastra/commit/f28c44ed98a87c6078a3e3e9ef2b197d97f97956), [`a9b85ba`](https://github.com/mastra-ai/mastra/commit/a9b85ba48a2542c568d91f3032464057227d55dc), [`a9b85ba`](https://github.com/mastra-ai/mastra/commit/a9b85ba48a2542c568d91f3032464057227d55dc)]:
+  - @mastra/core@1.78.0-alpha.9
+  - @mastra/client-js@1.55.0-alpha.9
+  - @mastra/react@1.11.0-alpha.9
+
 ## 64.0.0-alpha.8
 
 ### Minor Changes

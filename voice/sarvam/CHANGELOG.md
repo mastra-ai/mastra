@@ -1,5 +1,21 @@
 # @mastra/voice-sarvam
 
+## 1.1.2-alpha.1
+
+### Patch Changes
+
+- `SarvamVoice.listen()` now throws on Sarvam API errors (e.g. invalid API key, rate limits) instead of silently returning `undefined`. Error messages for both `listen()` and `speak()` now surface Sarvam's `error.message`. ([#27173](https://github.com/mastra-ai/mastra/pull/27173))
+
+  Before, a failed `listen()` call returned `undefined`. Now it throws, so handle it with `try`/`catch`:
+
+  ```ts
+  try {
+    const text = await voice.listen(audio);
+  } catch (error) {
+    // error.message: "Sarvam AI API Error: <message>"
+  }
+  ```
+
 ## 1.1.2-alpha.0
 
 ### Patch Changes
