@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { AggregateTracesArgs, AggregateTracesResponse } from '@mastra/client-js';
 import { MastraClientError } from '@mastra/client-js';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, useLocation, useSearchParams } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
@@ -40,6 +40,7 @@ const serveAggregate = (respond: (body: AggregateTracesArgs) => Response | Aggre
 };
 
 let lastError: Error | null = null;
+let lastGroups: ReturnType<typeof useTraceGroupBy> | undefined;
 const onProjectDrillDown = vi.fn<(projectId: string) => void>();
 
 /** The grouped view as a page wires it: Group by chips in a FilterBar above the grouped table. */
@@ -54,6 +55,7 @@ function Harness({ enabled = true }: { enabled?: boolean }) {
     enabled,
   });
   lastError = groups.error;
+  lastGroups = groups;
   const location = useLocation();
   const handleChange = (items: FilterBarItem[]) =>
     groups.setGrouping(splitTraceGroupingFromFilterBar(items, dimensions).grouping);
@@ -153,6 +155,53 @@ describe('Traces group by', () => {
     expect(screen.getByText('Agent / workflow')).not.toBeNull();
     expect(screen.getByText('Environment')).not.toBeNull();
     expect(screen.getByRole('combobox', { name: 'Value: Agent / workflow, Environment' })).not.toBeNull();
+  });
+
+  describe('while a regrouped request is loading', () => {
+    const byEntityAndEnvironment: AggregateTracesResponse = {
+      rows: [
+        { dimensions: { entityName: 'support-agent', environment: 'production' }, measures: { count: 7 } },
+        { dimensions: { entityName: 'support-agent', environment: 'staging' }, measures: { count: 5 } },
+      ],
+      truncated: false,
+    };
+    const pending = () => new Promise<never>(() => {});
+
+    it('drops the previous rows when a dimension is removed', async () => {
+      let hold = false;
+      server.use(
+        http.post(AGGREGATE_URL, async () => {
+          if (hold) await pending();
+          return HttpResponse.json(byEntityAndEnvironment);
+        }),
+      );
+      renderHarness('?groupBy=entityName,environment');
+      expect(await screen.findAllByRole('button', { name: /^Show traces for support-agent/ })).toHaveLength(2);
+
+      hold = true;
+      act(() => lastGroups?.setGrouping({ groupBy: ['entityName'], having: [] }));
+
+      await waitFor(() => expect(locationParams().get('groupBy')).toBe('entityName'));
+      expect(screen.queryAllByRole('button', { name: /^Show traces for support-agent/ })).toHaveLength(0);
+    });
+
+    it('keeps the previous rows when only the sort changes', async () => {
+      let hold = false;
+      server.use(
+        http.post(AGGREGATE_URL, async () => {
+          if (hold) await pending();
+          return HttpResponse.json(byEntityAndEnvironment);
+        }),
+      );
+      renderHarness('?groupBy=entityName,environment');
+      expect(await screen.findAllByRole('button', { name: /^Show traces for support-agent/ })).toHaveLength(2);
+
+      hold = true;
+      act(() => lastGroups?.setSort({ measure: 'errorRate', direction: 'desc' }));
+
+      await waitFor(() => expect(locationParams().get('groupSort')).toBe('errorRate:desc'));
+      expect(screen.getAllByRole('button', { name: /^Show traces for support-agent/ })).toHaveLength(2);
+    });
   });
 
   it('filters the groups by a measure once grouped', async () => {

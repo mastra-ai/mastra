@@ -51,7 +51,12 @@ export function useTraceGroupBy({ searchParams, setSearchParams, dimensions, que
       // Keep the previous rows while the sort or filters change, but not across dimensions: their rows
       // would show under the new dimensions' headers.
       placeholderData: previous =>
-        previous?.rows.some(row => groupBy.every(dimension => row.dimensions && dimension in row.dimensions))
+        previous?.rows.some(
+          ({ dimensions: rowDimensions }) =>
+            rowDimensions !== undefined &&
+            Object.keys(rowDimensions).length === groupBy.length &&
+            groupBy.every(dimension => dimension in rowDimensions),
+        )
           ? previous
           : undefined,
     },
