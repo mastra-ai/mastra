@@ -3144,6 +3144,47 @@ export class Agent extends BaseResource {
     return this.request<ListAgentSuspendedRunsResponse>(`/agents/${this.agentId}/suspended-runs${query}`);
   }
 
+  /**
+   * Action-native run. Yields each `MastraAction` (including transient deltas) as it streams.
+   * `route` selects stream, approve-tool-call, or decline-tool-call.
+   */
+  async *streamActions(
+    body: Record<string, any>,
+    options: {
+      route?: 'stream' | 'approve-tool-call' | 'decline-tool-call';
+      abortSignal?: AbortSignal;
+    } = {},
+  ): AsyncGenerator<Record<string, any>> {
+    const { requestContext, ...rest } = body;
+    const response: Response = await this.request(`/agents/${this.agentId}/${options.route ?? 'stream'}`, {
+      method: 'POST',
+      body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
+      stream: true,
+      signal: options.abortSignal,
+    });
+    if (!response.body) throw new Error('No response body');
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
+        const frames = buffer.split('\n\n');
+        buffer = done ? '' : (frames.pop() ?? '');
+        for (const frame of frames) {
+          const data = frame.replace(/^data: /, '').trim();
+          if (!data || data === '[DONE]') continue;
+          yield JSON.parse(data);
+        }
+        if (done) return;
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
   async approveToolCall(params: {
     runId: string;
     toolCallId: string;
