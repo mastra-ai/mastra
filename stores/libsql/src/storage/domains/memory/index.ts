@@ -938,6 +938,14 @@ export class MemoryLibSQL extends MemoryStorage {
     );
   }
 
+  override async getLatestActionId(threadId: string): Promise<string | null> {
+    const result = await this.#client.execute({
+      sql: `SELECT id FROM ${TABLE_ACTIONS} WHERE thread_id = ? ORDER BY id DESC LIMIT 1`,
+      args: [threadId],
+    });
+    return (result.rows[0]?.id as string | undefined) ?? null;
+  }
+
   override async listActions({ threadId, runId, types, after, limit }: ListActionsQuery): Promise<PersistableAction[]> {
     const where = ['thread_id = ?'];
     const args: InValue[] = [threadId];

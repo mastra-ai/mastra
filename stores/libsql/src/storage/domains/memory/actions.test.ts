@@ -188,6 +188,14 @@ describe('MemoryLibSQL actions', () => {
     expect((await store.listActions({ threadId: 't1' }))[0]!.formatVersion).toBe(2);
   });
 
+  it('returns the greatest action id of a thread, or null', async () => {
+    expect(await store.getLatestActionId('t1')).toBeNull();
+    const [a, b, c] = [text('t1', 'r1', 'a'), text('t1', 'r1', 'b'), text('t2', 'r1', 'c')];
+    await store.saveActions({ actions: [b, a, c] });
+    expect(await store.getLatestActionId('t1')).toBe(b.id);
+    expect(await store.getLatestActionId('t2')).toBe(c.id);
+  });
+
   it('indexes actions by resource', async () => {
     const indexes = await client.execute(`PRAGMA index_list(mastra_actions)`);
     const names = indexes.rows.map(row => row.name);

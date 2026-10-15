@@ -484,6 +484,11 @@ https://mastra.ai/en/docs/memory/overview`,
     throw new Error(`Actions are not supported by this memory (${this.constructor.name}).`);
   }
 
+  /** The thread's greatest action id, or null. Implemented by `@mastra/memory`. */
+  async getLatestActionId(_threadId: string): Promise<string | null> {
+    throw new Error(`Actions are not supported by this memory (${this.constructor.name}).`);
+  }
+
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
   /**

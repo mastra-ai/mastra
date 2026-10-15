@@ -1,5 +1,6 @@
 import { MessageList } from '../../../agent/message-list';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
+import { latestId } from '../../../new-message-format/storage';
 import { normalizePerPage, calculatePagination } from '../../base';
 import { matchesRunFence, resolveRunFence, RunFenceConflictError } from '../../run-fencing';
 import type { RunFence } from '../../run-fencing';
@@ -78,6 +79,10 @@ export class InMemoryMemory extends MemoryStorage {
       .filter(a => after === undefined || a.id > after)
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     return structuredClone(limit === undefined ? matching : matching.slice(0, limit));
+  }
+
+  override async getLatestActionId(threadId: string): Promise<string | null> {
+    return latestId(this.db.actions.get(threadId));
   }
 
   async dangerouslyClearAll(): Promise<void> {

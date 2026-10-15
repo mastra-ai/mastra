@@ -277,6 +277,11 @@ export abstract class MemoryStorage extends StorageDomain {
     throw new Error(`Actions are not supported by this storage adapter (${this.constructor.name}). Use libsql.`);
   }
 
+  /** The thread's greatest action id, or null when it has none. New ids are minted above it. */
+  async getLatestActionId(_threadId: string): Promise<string | null> {
+    throw new Error(`Actions are not supported by this storage adapter (${this.constructor.name}). Use libsql.`);
+  }
+
   abstract updateMessages(args: {
     messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;

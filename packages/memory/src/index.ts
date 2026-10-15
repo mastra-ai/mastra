@@ -764,6 +764,11 @@ export class Memory extends MastraMemory {
     return memoryStore.listActions(query);
   }
 
+  override async getLatestActionId(threadId: string): Promise<string | null> {
+    const memoryStore = await this.getMemoryStore();
+    return memoryStore.getLatestActionId(threadId);
+  }
+
   async listMessagesByResourceId(args: StorageListMessagesByResourceIdInput): Promise<StorageListMessagesOutput> {
     const memoryStore = await this.getMemoryStore();
     return memoryStore.listMessagesByResourceId(args);
