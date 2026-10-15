@@ -69,13 +69,15 @@ export function createFactoryMessagingTools(
     if (!messaging) throw new Error('Session messaging is not available on this server.');
     return messaging;
   };
+  // Only a user-session turn the person started is the person's act. Workers
+  // (even when someone types into one) and turns nobody signed in started
+  // (wakes, webhooks) act as the thread's agent.
+  const human = scope.kind === 'user' && scope.interactive;
   const audit = (input: { targetSessionId: string; priority: NotificationPriority; kind: string; delivery: string }) =>
     deps.auditRecorder.record({
       orgId: scope.orgId,
-      // Only a turn the person started is the person's act. Workers and turns
-      // nobody signed in started (wakes, webhooks) act as the thread's agent.
-      actorId: scope.interactive ? scope.userId : `agent:${scope.threadId}`,
-      actorType: scope.interactive ? 'human' : 'agent',
+      actorId: human ? scope.userId : `agent:${scope.threadId}`,
+      actorType: human ? 'human' : 'agent',
       action: 'factory.agent.signaled',
       factoryProjectId: scope.factoryProjectId,
       targets: [{ type: 'session', id: input.targetSessionId }],
