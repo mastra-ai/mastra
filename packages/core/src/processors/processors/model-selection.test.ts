@@ -525,7 +525,7 @@ describe('agent fallbacks', () => {
       inputProcessors: [new ModelSelectionProcessor({ classifier, select: () => selected.model })],
     });
 
-    const result = await agent.stream('Explain distributed consensus');
+    const result = await agent.streamMessageList('Explain distributed consensus');
 
     expect(await result.text).toBe('fallback');
     expect(selected.doStream).toHaveBeenCalledTimes(1);
@@ -543,7 +543,7 @@ describe('agent fallbacks', () => {
       inputProcessors: [new ModelSelectionProcessor({ classifier, select: () => selected.model })],
     });
 
-    const result = await agent.stream('Explain distributed consensus');
+    const result = await agent.streamMessageList('Explain distributed consensus');
     await result.consumeStream();
 
     expect(selected.doStream).toHaveBeenCalledTimes(1);

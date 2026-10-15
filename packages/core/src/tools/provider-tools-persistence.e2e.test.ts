@@ -80,7 +80,7 @@ describe('provider-executed tool message persistence', () => {
       const threadId = 'thread-provider-tool-deferred';
       const resourceId = 'resource-provider-tool-deferred';
 
-      const result = await agent.stream(
+      const result = await agent.streamMessageList(
         'Research the history of TypeScript. Use both web search and the lookup tool.',
         {
           memory: { thread: threadId, resource: resourceId },
@@ -195,7 +195,7 @@ describe('provider-executed tool message persistence', () => {
       const threadId = 'thread-provider-tool-single-turn';
       const resourceId = 'resource-provider-tool-single-turn';
 
-      const result = await agent.stream('What is the current population of Tokyo?', {
+      const result = await agent.streamMessageList('What is the current population of Tokyo?', {
         memory: { thread: threadId, resource: resourceId },
       });
 

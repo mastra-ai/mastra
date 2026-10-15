@@ -63,7 +63,7 @@ describe('ModelRouter - OpenAI WebSocket transport', () => {
       },
     });
 
-    const stream = await agent.stream('Hello', {
+    const stream = await agent.streamMessageList('Hello', {
       providerOptions: {
         openai: {
           transport: 'websocket',
@@ -94,7 +94,7 @@ describe('ModelRouter - OpenAI WebSocket transport', () => {
       },
     });
 
-    const stream = await agent.stream('Hello', {
+    const stream = await agent.streamMessageList('Hello', {
       providerOptions: {
         openai: {
           transport: 'websocket',
@@ -157,7 +157,7 @@ describe('ModelRouter - OpenAI WebSocket transport', () => {
       },
     });
 
-    const stream = await agent.stream('Hello');
+    const stream = await agent.streamMessageList('Hello');
 
     for await (const _chunk of stream.textStream) {
       // drain the stream

@@ -48,7 +48,7 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
         },
       });
 
-      await agent.generate('test', { maxSteps: 1 });
+      await agent.generateMessageList('test', { maxSteps: 1 });
 
       // Verify createOpenRouter was called with the headers
       expect(createOpenRouter).toHaveBeenCalledWith({
@@ -81,7 +81,7 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
         },
       });
 
-      await agent.generate('test', { maxSteps: 1 });
+      await agent.generateMessageList('test', { maxSteps: 1 });
 
       // Verify createOpenRouter was called with the headers
       expect(createOpenRouter).toHaveBeenCalledWith({
@@ -103,7 +103,7 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
         model: 'openrouter/anthropic/claude-3-5-sonnet-20241022',
       });
 
-      await agent.generate('test', { maxSteps: 1 });
+      await agent.generateMessageList('test', { maxSteps: 1 });
 
       // Verify createOpenRouter was called with only the User-Agent header
       expect(createOpenRouter).toHaveBeenCalledWith({
@@ -131,7 +131,7 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
         },
       });
 
-      await agent.generate('test', { maxSteps: 1 });
+      await agent.generateMessageList('test', { maxSteps: 1 });
 
       // Verify createOpenRouter was called with custom API key and headers
       expect(createOpenRouter).toHaveBeenCalledWith({
@@ -161,7 +161,7 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
         },
       });
 
-      await agent.generate('test', { maxSteps: 1 });
+      await agent.generateMessageList('test', { maxSteps: 1 });
 
       // Verify all headers were passed
       expect(createOpenRouter).toHaveBeenCalledWith({
@@ -191,7 +191,7 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
         }),
       });
 
-      await agent.generate('test', { maxSteps: 1 });
+      await agent.generateMessageList('test', { maxSteps: 1 });
 
       // Verify headers were passed from dynamic config
       expect(createOpenRouter).toHaveBeenCalledWith({
@@ -232,8 +232,8 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
         },
       });
 
-      await agent1.generate('test', { maxSteps: 1 });
-      await agent2.generate('test', { maxSteps: 1 });
+      await agent1.generateMessageList('test', { maxSteps: 1 });
+      await agent2.generateMessageList('test', { maxSteps: 1 });
 
       // Both should have been called with different headers
       expect(createOpenRouter).toHaveBeenCalledTimes(2);
@@ -281,8 +281,8 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
         },
       });
 
-      await agent1.generate('test', { maxSteps: 1 });
-      await agent2.generate('test', { maxSteps: 1 });
+      await agent1.generateMessageList('test', { maxSteps: 1 });
+      await agent2.generateMessageList('test', { maxSteps: 1 });
 
       // Should only be called once since headers are the same
       expect(createOpenRouter).toHaveBeenCalledTimes(1);
@@ -311,7 +311,7 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
       expect(agent).toBeDefined();
 
       // Should work with custom API key
-      await agent.generate('test', { maxSteps: 1 });
+      await agent.generateMessageList('test', { maxSteps: 1 });
 
       // Verify headers were passed even without env var
       expect(createOpenRouter).toHaveBeenCalledWith({

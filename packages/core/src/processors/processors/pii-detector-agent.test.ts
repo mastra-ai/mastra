@@ -45,7 +45,7 @@ describe('PIIDetector in Agent.generate (#25553)', () => {
     });
     vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    const result = await agent.generate(ssn);
+    const result = await agent.generateMessageList(ssn);
 
     expect(result.text).toBe('ok');
     expect(JSON.stringify(prompts)).not.toContain(ssn);

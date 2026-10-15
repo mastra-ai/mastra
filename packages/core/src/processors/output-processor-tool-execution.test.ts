@@ -95,7 +95,7 @@ describe('Output Processor Tool Result Chunks', () => {
       outputProcessors: [new ToolResultTrackingProcessor()],
     });
 
-    const stream = await agent.stream('Call the echo tool with text "hello"', {
+    const stream = await agent.streamMessageList('Call the echo tool with text "hello"', {
       maxSteps: 5,
     });
 
@@ -153,7 +153,7 @@ describe('Output Processor Tool Result Chunks', () => {
       outputProcessors: [new StepLifecycleTrackingProcessor()],
     });
 
-    const stream = await agent.stream('Say hello');
+    const stream = await agent.streamMessageList('Say hello');
 
     const streamChunkTypes: string[] = [];
     for await (const chunk of stream.fullStream) {
@@ -262,7 +262,7 @@ describe('Output Processor State Persistence Across Tool Execution', () => {
       outputProcessors: [new StateTrackingProcessor()],
     });
 
-    const stream = await agent.stream('Execute the test tool', {
+    const stream = await agent.streamMessageList('Execute the test tool', {
       maxSteps: 5,
     });
 
@@ -368,7 +368,7 @@ describe('processToolResult lifecycle hook', () => {
       outputProcessors: [new CapturingProcessor()],
     });
 
-    const stream = await agent.stream('go', { maxSteps: 5 });
+    const stream = await agent.streamMessageList('go', { maxSteps: 5 });
     for await (const _ of stream.fullStream) {
       void _;
     }
@@ -413,7 +413,7 @@ describe('processToolResult lifecycle hook', () => {
       outputProcessors: [new RedactingProcessor()],
     });
 
-    const stream = await agent.stream('go', { maxSteps: 5 });
+    const stream = await agent.streamMessageList('go', { maxSteps: 5 });
     let toolResultChunkValue: unknown;
     for await (const chunk of stream.fullStream) {
       if (chunk.type === 'tool-result') {
@@ -449,7 +449,7 @@ describe('processToolResult lifecycle hook', () => {
       outputProcessors: [new BlockingProcessor()],
     });
 
-    const stream = await agent.stream('go', { maxSteps: 5 });
+    const stream = await agent.streamMessageList('go', { maxSteps: 5 });
     let sawTripwire = false;
     for await (const chunk of stream.fullStream) {
       if (chunk.type === 'tripwire') {
@@ -512,7 +512,7 @@ describe('processToolResult lifecycle hook', () => {
         outputProcessors: [new AbortOnToolA()],
       });
       const errorSpy = vi.spyOn(console, 'error');
-      const stream = await agent.stream('go', { maxSteps: 5, ...streamOptions });
+      const stream = await agent.streamMessageList('go', { maxSteps: 5, ...streamOptions });
       const chunks: any[] = [];
       for await (const chunk of stream.fullStream) chunks.push(chunk);
       // The loop keeps running after the client stream closes; give it time to misbehave.
@@ -569,7 +569,7 @@ describe('processToolResult lifecycle hook', () => {
       outputProcessors: [new BlockingProcessor()],
     });
 
-    const stream = await agent.stream('go', { maxSteps: 5 });
+    const stream = await agent.streamMessageList('go', { maxSteps: 5 });
     for await (const _ of stream.fullStream) {
       void _;
     }
@@ -677,7 +677,7 @@ describe('processToolResult lifecycle hook', () => {
       outputProcessors: [new StatefulProcessor()],
     });
 
-    const stream = await agent.stream('go', { maxSteps: 5 });
+    const stream = await agent.streamMessageList('go', { maxSteps: 5 });
     for await (const _ of stream.fullStream) {
       void _;
     }
@@ -716,7 +716,7 @@ describe('processToolResult lifecycle hook', () => {
 
     // No assertion on processToolResult — just confirm the stream completes
     // without errors when only processOutputStream is implemented.
-    const stream = await agent.stream('go', { maxSteps: 5 });
+    const stream = await agent.streamMessageList('go', { maxSteps: 5 });
     for await (const _ of stream.fullStream) {
       void _;
     }

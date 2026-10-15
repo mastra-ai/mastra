@@ -102,7 +102,7 @@ describe('delegation memory inheritance (issue #21625)', () => {
 
     expect(sub.hasOwnMemory()).toBe(false);
 
-    await supervisor.generate('Delegate please', {
+    await supervisor.generateMessageList('Delegate please', {
       maxSteps: 3,
       memory: { thread: 'thread-1', resource: 'resource-1' },
     });
@@ -123,11 +123,11 @@ describe('delegation memory inheritance (issue #21625)', () => {
     const supervisorA = makeSupervisor(sub, memoryA, 'supervisor-a');
     const supervisorB = makeSupervisor(sub, memoryB, 'supervisor-b');
 
-    await supervisorA.generate('Delegate please', {
+    await supervisorA.generateMessageList('Delegate please', {
       maxSteps: 3,
       memory: { thread: 'thread-a', resource: 'resource-a' },
     });
-    await supervisorB.generate('Delegate please', {
+    await supervisorB.generateMessageList('Delegate please', {
       maxSteps: 3,
       memory: { thread: 'thread-b', resource: 'resource-b' },
     });
@@ -148,11 +148,11 @@ describe('delegation memory inheritance (issue #21625)', () => {
     const sub = makeSubAgent();
     const supervisor = makeSupervisor(sub, new MockMemory());
 
-    await supervisor.generate('Delegate please', {
+    await supervisor.generateMessageList('Delegate please', {
       maxSteps: 3,
       memory: { thread: 'thread-1', resource: 'resource-1' },
     });
-    await supervisor.generate('Delegate again', {
+    await supervisor.generateMessageList('Delegate again', {
       maxSteps: 3,
       memory: { thread: 'thread-1', resource: 'resource-1' },
     });
@@ -165,7 +165,7 @@ describe('delegation memory inheritance (issue #21625)', () => {
     const generateSpy = vi.spyOn(sub, 'generate');
     const supervisor = makeSupervisor(sub, new MockMemory());
 
-    await supervisor.generate('Delegate please', {
+    await supervisor.generateMessageList('Delegate please', {
       maxSteps: 3,
       memory: { thread: 'thread-1', resource: 'resource-1' },
     });
@@ -178,7 +178,7 @@ describe('delegation memory inheritance (issue #21625)', () => {
     const sub = makeSubAgent('sub-agent', ownMemory);
     const supervisor = makeSupervisor(sub, new MockMemory());
 
-    await supervisor.generate('Delegate please', {
+    await supervisor.generateMessageList('Delegate please', {
       maxSteps: 3,
       memory: { thread: 'thread-1', resource: 'resource-1' },
     });
@@ -198,7 +198,7 @@ describe('delegation memory inheritance (issue #21625)', () => {
       server: { fga: fgaProvider },
     });
 
-    await supervisor.generate('Delegate please', {
+    await supervisor.generateMessageList('Delegate please', {
       maxSteps: 3,
       memory: { thread: 'thread-1', resource: 'resource-1' },
       requestContext: createActorRequestContext(),
@@ -229,7 +229,7 @@ describe('delegation memory inheritance (issue #21625)', () => {
     const fgaProvider = createMemoryWriteDenyProvider('unmatched-agent');
     new Mastra({ agents: { supervisor, sub }, logger: false, server: { fga: fgaProvider } });
 
-    await supervisor.generate('Delegate please', {
+    await supervisor.generateMessageList('Delegate please', {
       maxSteps: 3,
       memory: { thread: 'thread-1', resource: 'resource-1' },
       requestContext: createActorRequestContext(),
@@ -265,7 +265,7 @@ describe('delegation memory inheritance (issue #21625)', () => {
     };
     new Mastra({ agents: { supervisor, sub }, logger: false, server: { fga: fgaProvider } });
 
-    await supervisor.generate('Delegate please', {
+    await supervisor.generateMessageList('Delegate please', {
       maxSteps: 3,
       memory: { thread: 'thread-1', resource: 'resource-1' },
       requestContext: createActorRequestContext(),
@@ -311,7 +311,7 @@ describe('delegation memory inheritance (issue #21625)', () => {
     });
     const supervisor = makeSupervisor(middle, new MockMemory());
 
-    await supervisor.generate('Delegate please', {
+    await supervisor.generateMessageList('Delegate please', {
       maxSteps: 3,
       memory: { thread: 'thread-1', resource: 'resource-1' },
     });
@@ -351,7 +351,7 @@ describe('delegation memory inheritance (issue #21625)', () => {
       memory: supervisorMemory,
     });
 
-    await supervisor.generate('Delegate please', {
+    await supervisor.generateMessageList('Delegate please', {
       maxSteps: 3,
       memory: { thread: 'thread-1', resource: 'resource-1' },
     });

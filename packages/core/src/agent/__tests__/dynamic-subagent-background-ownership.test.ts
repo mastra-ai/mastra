@@ -80,7 +80,7 @@ it('keeps asynchronously selected subagents on their owning instance with distin
   async function delegate(supervisor: Agent, selected: string) {
     const requestContext = new RequestContext<{ selected: string }>();
     requestContext.set('selected', selected);
-    const stream = await supervisor.stream('Delegate.', { requestContext, runId: selected, maxSteps: 1 });
+    const stream = await supervisor.streamMessageList('Delegate.', { requestContext, runId: selected, maxSteps: 1 });
     await stream.consumeStream();
   }
 

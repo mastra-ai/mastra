@@ -1107,7 +1107,7 @@ describe('Workflow (Evented Engine Specific)', () => {
       await mastra.stopWorkers();
     });
 
-    it('should handle errors from agent.stream() with full error details', async () => {
+    it('should handle errors from agent.streamMessageList() with full error details', async () => {
       // Simulate an APICallError-like error from AI SDK
       const apiError = new Error('Service Unavailable');
       (apiError as any).statusCode = 503;
@@ -1130,7 +1130,7 @@ describe('Workflow (Evented Engine Specific)', () => {
       const agentStep = createStep({
         id: 'agent-step',
         execute: async () => {
-          const result = await agent.stream('test input', {
+          const result = await agent.streamMessageList('test input', {
             maxRetries: 0,
           });
 

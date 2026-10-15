@@ -192,7 +192,7 @@ async function runStructuredOutputSchemaTest(
       );
     // Check if model is V1 or V2/V3 and use appropriate method
     const response = isSupportedLanguageModel(model)
-      ? await agent.generate(prompt, generateOptions)
+      ? await agent.generateMessageList(prompt, generateOptions)
       : await agent.generateLegacy(prompt, generateOptions);
 
     if (!response.object) {
@@ -250,7 +250,7 @@ async function runSingleToolSchemaTest(
 
     // Check if model is V1 or V2/V3 and use appropriate method
     const response = isSupportedLanguageModel(model)
-      ? await agent.generate(`Please call the tool named '${toolName}'.`, {
+      ? await agent.generateMessageList(`Please call the tool named '${toolName}'.`, {
           toolChoice: 'required',
           maxSteps: 1,
         })

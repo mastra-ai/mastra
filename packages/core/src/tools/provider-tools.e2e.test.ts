@@ -29,7 +29,7 @@ describe('provider-defined tools', () => {
     });
 
     // Test actual execution with agent
-    const result = await agent.generate(
+    const result = await agent.generateMessageList(
       'Search for information about TypeScript programming language using the search tool',
     );
 
@@ -84,7 +84,7 @@ describe('provider-defined tools', () => {
       tools: { search: tool },
     });
 
-    const result = await agent.stream(
+    const result = await agent.streamMessageList(
       'Search for information about TypeScript programming language using the search tool',
       {},
     );
@@ -127,7 +127,7 @@ describe('provider-defined tools', () => {
       tools: { search: tool },
     });
 
-    const result = await agent.generate(
+    const result = await agent.generateMessageList(
       'Search for information about TypeScript programming language using the search tool',
       {},
     );
@@ -159,7 +159,7 @@ describe('provider-defined tools', () => {
       tools: { search: tool },
     });
 
-    const result = await agent.stream(
+    const result = await agent.streamMessageList(
       'Search for information about TypeScript programming language using the search tool',
       {},
     );
@@ -201,7 +201,7 @@ describe('provider-defined tools', () => {
       tools: { search: tool },
     });
 
-    const result = await agent.generate(
+    const result = await agent.generateMessageList(
       'Search for information about TypeScript programming language using the search tool',
       {},
     );
@@ -232,7 +232,7 @@ describe('provider-defined tools', () => {
       tools: { codeExecution: tool },
     });
 
-    const result = await agent.stream('Create a short document about the benefits of using Typescript in 100 words', {
+    const result = await agent.streamMessageList('Create a short document about the benefits of using Typescript in 100 words', {
       providerOptions: {
         container: {
           skills: [
@@ -276,7 +276,7 @@ describe('provider-defined tools', () => {
       tools: { codeExecution: tool },
     });
 
-    const result = await agent.generate('Create a short document about the benefits of using Typescript in 100 words', {
+    const result = await agent.generateMessageList('Create a short document about the benefits of using Typescript in 100 words', {
       providerOptions: {
         container: {
           skills: [
@@ -318,7 +318,7 @@ describe('provider-defined tools with AI SDK v6 (@ai-sdk/openai@3)', () => {
       tools: { search: tool },
     });
 
-    const result = await agent.stream('What is the capital of France? Use the search tool to find the answer.', {});
+    const result = await agent.streamMessageList('What is the capital of France? Use the search tool to find the answer.', {});
 
     await result.consumeStream();
 
@@ -358,7 +358,7 @@ describe('provider-defined tools with AI SDK v6 (@ai-sdk/openai@3)', () => {
       tools: { search: tool },
     });
 
-    const result = await agent.generate('What is the capital of France? Use the search tool to find the answer.', {});
+    const result = await agent.generateMessageList('What is the capital of France? Use the search tool to find the answer.', {});
 
     expect(result).toBeDefined();
 
@@ -392,7 +392,7 @@ describe('provider-defined tools with AI SDK v7 (@ai-sdk/openai@4)', () => {
       tools: { search: tool },
     });
 
-    const result = await agent.stream('What is the capital of France? Use the search tool to find the answer.', {});
+    const result = await agent.streamMessageList('What is the capital of France? Use the search tool to find the answer.', {});
 
     await result.consumeStream();
 
@@ -432,7 +432,7 @@ describe('provider-defined tools with AI SDK v7 (@ai-sdk/openai@4)', () => {
       tools: { search: tool },
     });
 
-    const result = await agent.generate('What is the capital of France? Use the search tool to find the answer.', {});
+    const result = await agent.generateMessageList('What is the capital of France? Use the search tool to find the answer.', {});
 
     expect(result).toBeDefined();
 

@@ -397,7 +397,7 @@ describe('createSubagentTool tracingContext forwarding', () => {
     vi.restoreAllMocks();
   });
 
-  it('forwards tracingContext to subagent.stream() when provided', async () => {
+  it('forwards tracingContext to subagent.streamMessageList() when provided', async () => {
     mockStream.mockResolvedValue(createMockStreamResponse('done'));
 
     const tool = createSubagentTool({

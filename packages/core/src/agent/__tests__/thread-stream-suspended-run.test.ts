@@ -65,7 +65,7 @@ describe('thread stream: run waiting on approval', () => {
     const mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false, pubsub });
     const registered = mastra.getAgent('agent');
 
-    const output = await registered.stream('go', {
+    const output = await registered.streamMessageList('go', {
       memory: { thread: `suspended-run-${delayMs}`, resource: 'user' },
     });
     for await (const _chunk of output.fullStream) {

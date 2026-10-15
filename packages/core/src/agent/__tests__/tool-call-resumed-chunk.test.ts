@@ -110,7 +110,7 @@ describe('tool-call-resumed chunk (#24280)', () => {
     const mastra = new Mastra({ agents: { supervisor }, logger: false, storage: new InMemoryStore() });
     const sup = mastra.getAgent('supervisor');
 
-    const stream = await sup.stream('go', { maxSteps: 6, memory: { resource: 'r1', thread: 't1' } });
+    const stream = await sup.streamMessageList('go', { maxSteps: 6, memory: { resource: 'r1', thread: 't1' } });
     const initial = await collect(stream);
     const suspended = initial.find(c => c.type === 'tool-call-suspended');
     expect(suspended?.payload.toolCallId).toBe('sup-tc');
@@ -155,13 +155,13 @@ describe('tool-call-resumed chunk (#24280)', () => {
     const mastra = new Mastra({ agents: { supervisor }, logger: false, storage: new InMemoryStore() });
     const sup = mastra.getAgent('supervisor');
 
-    const stream = await sup.stream('go', { maxSteps: 6, memory: { resource: 'r2', thread: 't2' } });
+    const stream = await sup.streamMessageList('go', { maxSteps: 6, memory: { resource: 'r2', thread: 't2' } });
     const initial = await collect(stream);
     const approval = initial.find(c => c.type === 'tool-call-approval');
     expect(approval?.payload.toolName).toBe('doThing');
 
     const chunks = await collect(
-      await sup.approveToolCall({
+      await sup.approveToolCallMessageList({
         runId: stream.runId,
         toolCallId: approval!.payload.toolCallId,
         memory: { resource: 'r2', thread: 't2' },
@@ -251,10 +251,10 @@ describe('tool-call-resumed chunk (#24280)', () => {
     const sup = mastra.getAgent('supervisor');
     const memory = { resource: 'r-auto', thread: 't-auto' };
 
-    const first = await collect(await sup.stream('go', { maxSteps: 6, memory }));
+    const first = await collect(await sup.streamMessageList('go', { maxSteps: 6, memory }));
     expect(first.find(c => c.type === 'tool-call-suspended')?.payload.toolCallId).toBe('sup-tc');
 
-    const second = await collect(await sup.stream('blue', { maxSteps: 6, memory }));
+    const second = await collect(await sup.streamMessageList('blue', { maxSteps: 6, memory }));
     const acks = second.filter(c => c.type === 'tool-call-resumed');
     expect(
       acks.map(c => c.payload.toolCallId),

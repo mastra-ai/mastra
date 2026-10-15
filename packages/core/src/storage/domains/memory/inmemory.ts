@@ -39,6 +39,7 @@ import {
   validateStorageMetadataFilter,
 } from '../../utils';
 import type { InMemoryDB } from '../inmemory-db';
+import type { ListActionsQuery, PersistableAction } from './base';
 import { MemoryStorage } from './base';
 import {
   assertActiveObservationsApplied,
@@ -59,10 +60,31 @@ export class InMemoryMemory extends MemoryStorage {
     super();
     this.db = db;
   }
+  override async saveActions({ actions }: { actions: PersistableAction[] }): Promise<void> {
+    for (const action of actions) {
+      if (action.transient) continue;
+      const thread = this.db.actions.get(action.threadId) ?? [];
+      if (thread.some(existing => existing.id === action.id)) {
+        throw new Error(`Action ${action.id} already exists; actions are append-only`);
+      }
+      thread.push(structuredClone(action));
+      this.db.actions.set(action.threadId, thread);
+    }
+  }
+
+  override async listActions({ threadId, runId, types, after, limit }: ListActionsQuery): Promise<PersistableAction[]> {
+    const matching = (this.db.actions.get(threadId) ?? [])
+      .filter(a => (runId === undefined || a.runId === runId) && (!types || types.includes(a.type)))
+      .filter(a => after === undefined || a.id > after)
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    return structuredClone(limit === undefined ? matching : matching.slice(0, limit));
+  }
+
 
   async dangerouslyClearAll(): Promise<void> {
     this.db.threads.clear();
     this.db.messages.clear();
+    this.db.actions.clear();
     this.db.resources.clear();
     this.db.observationalMemory.clear();
     this.db.runFences.clear();

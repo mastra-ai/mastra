@@ -120,7 +120,7 @@ describe('Output Processor Data Chunks (#13341)', () => {
       outputProcessors: [new CustomChunkEmitter()],
     });
 
-    const stream = await agent.stream('Hello', {
+    const stream = await agent.streamMessageList('Hello', {
       memory: { thread: threadId, resource: resourceId },
     });
     const streamedTypes: string[] = [];
@@ -188,7 +188,7 @@ describe('Output Processor Data Chunks (#13341)', () => {
       outputProcessors: [new DerivedChunkEmitter()],
     });
 
-    const stream = await agent.stream('Call the tool', {
+    const stream = await agent.streamMessageList('Call the tool', {
       maxSteps: 5,
       memory: { thread: threadId, resource: resourceId },
     });
@@ -249,7 +249,7 @@ describe('Output Processor Data Chunks (#13341)', () => {
       outputProcessors: [new DataChunkTrackingProcessor()],
     });
 
-    const stream = await agent.stream('Call the tool with text "hello"', {
+    const stream = await agent.streamMessageList('Call the tool with text "hello"', {
       maxSteps: 5,
     });
 
@@ -300,7 +300,7 @@ describe('Output Processor Data Chunks (#13341)', () => {
       outputProcessors: [new DataChunkModifyingProcessor()],
     });
 
-    const stream = await agent.stream('Call the tool with text "hello"', {
+    const stream = await agent.streamMessageList('Call the tool with text "hello"', {
       maxSteps: 5,
     });
 
@@ -348,7 +348,7 @@ describe('Output Processor Data Chunks (#13341)', () => {
       outputProcessors: [new DataChunkBlockingProcessor()],
     });
 
-    const stream = await agent.stream('Call the tool with text "hello"', {
+    const stream = await agent.streamMessageList('Call the tool with text "hello"', {
       maxSteps: 5,
     });
 
@@ -387,7 +387,7 @@ describe('Output Processor Data Chunks (#13341)', () => {
       // No outputProcessors
     });
 
-    const stream = await agent.stream('Call the tool with text "hello"', {
+    const stream = await agent.streamMessageList('Call the tool with text "hello"', {
       maxSteps: 5,
     });
 
@@ -438,7 +438,7 @@ describe('Output Processor Data Chunks (#13341)', () => {
     });
 
     try {
-      const stream = await agent.stream('Call the tool with text "hello"', {
+      const stream = await agent.streamMessageList('Call the tool with text "hello"', {
         maxSteps: 5,
       });
 
@@ -502,7 +502,7 @@ describe('Output Processor Data Chunks (#13341)', () => {
       outputProcessors: [new MultiChunkTracker()],
     });
 
-    const stream = await agent.stream('Call the tool', { maxSteps: 5 });
+    const stream = await agent.streamMessageList('Call the tool', { maxSteps: 5 });
 
     const streamDataChunks: any[] = [];
     for await (const chunk of stream.fullStream) {
@@ -553,7 +553,7 @@ describe('Output Processor Data Chunks (#13341)', () => {
       outputProcessors: [new RegularProcessor()],
     });
 
-    const stream = await agent.stream('Call the tool with text "hello"', {
+    const stream = await agent.streamMessageList('Call the tool with text "hello"', {
       maxSteps: 5,
     });
 
@@ -622,7 +622,7 @@ describe('Output Processor Data Chunks (#13341)', () => {
       outputProcessors: [new FirstProcessor(), new SecondProcessor()],
     });
 
-    const stream = await agent.stream('Call the tool', { maxSteps: 5 });
+    const stream = await agent.streamMessageList('Call the tool', { maxSteps: 5 });
 
     const dataChunks: any[] = [];
     for await (const chunk of stream.fullStream) {
@@ -687,7 +687,7 @@ describe('Output Processor Data Chunks (#13341)', () => {
       outputProcessors: [new OptedInProcessor(), new RegularProcessor()],
     });
 
-    const stream = await agent.stream('Call the tool', { maxSteps: 5 });
+    const stream = await agent.streamMessageList('Call the tool', { maxSteps: 5 });
 
     const dataChunks: any[] = [];
     for await (const chunk of stream.fullStream) {

@@ -89,7 +89,7 @@ describe.each([false, true])('generate signal visibility (durable: %s)', durable
       const options = {
         hideSignals: typeof hideSignals === 'boolean' ? hideSignals : hideSignals ? [...hideSignals] : undefined,
       };
-      const initial = await registered.generate('hello', options);
+      const initial = await registered.generateMessageList('hello', options);
       let result = initial;
       if (resumed) {
         expect(initial.finishReason).toBe('suspended');

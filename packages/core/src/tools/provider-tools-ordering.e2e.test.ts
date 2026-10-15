@@ -50,7 +50,7 @@ describe('provider-executed tool ordering (Anthropic compatibility)', () => {
       const resourceId = 'resource-ordering-test';
 
       // ── Turn 1: trigger both tools ──
-      const turn1 = await agent.stream(
+      const turn1 = await agent.streamMessageList(
         'Find TypeScript files in src/ AND search the web for "TypeScript 5.8 release". Use both tools at the same time.',
         { memory: { thread: threadId, resource: resourceId } },
       );
@@ -61,7 +61,7 @@ describe('provider-executed tool ordering (Anthropic compatibility)', () => {
       // ── Turn 2: follow-up that loads persisted history ──
       // If the history has broken tool ordering, Anthropic will reject with 400:
       // "tool_use ids were found without tool_result blocks immediately after"
-      const turn2 = await agent.stream('Thanks! Can you summarize what you found?', {
+      const turn2 = await agent.streamMessageList('Thanks! Can you summarize what you found?', {
         memory: { thread: threadId, resource: resourceId },
       });
       await turn2.consumeStream();

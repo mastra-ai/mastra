@@ -49,7 +49,7 @@ describe('Cloudflare Workers AI URL interpolation', () => {
     delete process.env.CLOUDFLARE_API_KEY;
   });
 
-  it('passes an interpolated baseURL to the provider during agent.stream()', async () => {
+  it('passes an interpolated baseURL to the provider during agent.streamMessageList()', async () => {
     const agent = new Agent({
       id: 'cf-worker-agent',
       name: 'CF Worker Agent',
@@ -57,7 +57,7 @@ describe('Cloudflare Workers AI URL interpolation', () => {
       model: 'cloudflare-workers-ai/@cf/meta/llama-3.1-8b-instruct',
     });
 
-    const result = await agent.stream('hello');
+    const result = await agent.streamMessageList('hello');
     await result.text;
 
     expect(createOpenAICompatible).toHaveBeenCalledTimes(1);

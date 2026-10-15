@@ -202,7 +202,7 @@ describe.skipIf(process.platform === 'win32')('FileUploadProcessor through an ag
     const { agent, prompts } = createLocalHarness();
     const bytes = Buffer.from('hello from the user');
 
-    await agent.generate([userMessage(text('Read this file'), file(bytes, 'notes.txt', 'text/plain'))], {
+    await agent.generateMessageList([userMessage(text('Read this file'), file(bytes, 'notes.txt', 'text/plain'))], {
       memory: MEMORY,
     });
 
@@ -217,7 +217,7 @@ describe.skipIf(process.platform === 'win32')('FileUploadProcessor through an ag
     const { agent, prompts } = createLocalHarness();
     const bytes = Buffer.from('streamed content');
 
-    const result = await agent.stream([userMessage(text('Read this file'), file(bytes, 'notes.txt', 'text/plain'))], {
+    const result = await agent.streamMessageList([userMessage(text('Read this file'), file(bytes, 'notes.txt', 'text/plain'))], {
       memory: MEMORY,
     });
     await result.consumeStream();
@@ -232,7 +232,7 @@ describe.skipIf(process.platform === 'win32')('FileUploadProcessor through an ag
     const { agent, prompts } = createLocalHarness();
     const bytes = randomBytes(250_000);
 
-    await agent.generate([userMessage(text('Unpack'), file(bytes, 'archive.bin', 'application/octet-stream'))], {
+    await agent.generateMessageList([userMessage(text('Unpack'), file(bytes, 'archive.bin', 'application/octet-stream'))], {
       memory: MEMORY,
     });
 
@@ -245,7 +245,7 @@ describe.skipIf(process.platform === 'win32')('FileUploadProcessor through an ag
     const { agent, prompts } = createLocalHarness();
     const bytes = Buffer.from('root:x:0:0');
 
-    await agent.generate([userMessage(file(bytes, '../../etc/passwd; rm -rf ~', 'text/plain'))], { memory: MEMORY });
+    await agent.generateMessageList([userMessage(file(bytes, '../../etc/passwd; rm -rf ~', 'text/plain'))], { memory: MEMORY });
 
     const uploaded = JSON.stringify(prompts.at(-1)).match(uploadedPath(''))![0];
     expect(await readUploaded(uploaded)).toEqual(bytes);
@@ -258,7 +258,7 @@ describe.skipIf(process.platform === 'win32')('FileUploadProcessor through an ag
     const { agent, prompts } = createLocalHarness();
     const bytes = Buffer.from('found by the command tool');
 
-    await agent.generate([userMessage(file(bytes, 'notes.txt', 'text/plain'))], { memory: MEMORY });
+    await agent.generateMessageList([userMessage(file(bytes, 'notes.txt', 'text/plain'))], { memory: MEMORY });
 
     const noted = notedPathIn(prompts.at(-1))!;
     expect(path.isAbsolute(noted)).toBe(true);
@@ -271,7 +271,7 @@ describe.skipIf(process.platform === 'win32')('FileUploadProcessor through an ag
   it('keeps the uploads of a thread with a hostile id inside the uploads directory', async () => {
     const { agent } = createLocalHarness();
 
-    await agent.generate([userMessage(file(Buffer.from('contained'), 'notes.txt', 'text/plain'))], {
+    await agent.generateMessageList([userMessage(file(Buffer.from('contained'), 'notes.txt', 'text/plain'))], {
       memory: { thread: '../../outside; rm -rf ~', resource: MEMORY.resource },
     });
 
@@ -287,10 +287,10 @@ describe.skipIf(process.platform === 'win32')('FileUploadProcessor through an ag
       const execute = vi.spyOn(sandbox, 'executeCommand');
       const bytes = Buffer.from('written once');
 
-      await agent.generate([userMessage(text('First'), file(bytes, 'notes.txt', 'text/plain'))], { memory: MEMORY });
+      await agent.generateMessageList([userMessage(text('First'), file(bytes, 'notes.txt', 'text/plain'))], { memory: MEMORY });
       const firstTurn = execute.mock.calls.map(call => call[1]?.at(-1) ?? '');
       execute.mockClear();
-      await agent.generate('Second', { memory: MEMORY });
+      await agent.generateMessageList('Second', { memory: MEMORY });
       const secondTurn = execute.mock.calls.map(call => call[1]?.at(-1) ?? '');
 
       expect(writesIn(firstTurn)).toHaveLength(1);
@@ -303,9 +303,9 @@ describe.skipIf(process.platform === 'win32')('FileUploadProcessor through an ag
       const { agent, prompts } = createLocalHarness();
       const bytes = Buffer.from('deleted by the agent');
 
-      await agent.generate([userMessage(text('First'), file(bytes, 'notes.txt', 'text/plain'))], { memory: MEMORY });
+      await agent.generateMessageList([userMessage(text('First'), file(bytes, 'notes.txt', 'text/plain'))], { memory: MEMORY });
       await fs.rm(notedPathIn(prompts[0])!);
-      await agent.generate('Second', { memory: MEMORY });
+      await agent.generateMessageList('Second', { memory: MEMORY });
 
       expect(await fs.readFile(notedPathIn(prompts.at(-1))!)).toEqual(bytes);
     });
@@ -315,8 +315,8 @@ describe.skipIf(process.platform === 'win32')('FileUploadProcessor through an ag
       const first = Buffer.from('sent on the first turn');
       const second = Buffer.from('sent on the second turn');
 
-      await agent.generate([userMessage(text('One'), file(first, 'first.txt', 'text/plain'))], { memory: MEMORY });
-      await agent.generate([userMessage(text('Two'), file(second, 'second.txt', 'text/plain'))], { memory: MEMORY });
+      await agent.generateMessageList([userMessage(text('One'), file(first, 'first.txt', 'text/plain'))], { memory: MEMORY });
+      await agent.generateMessageList([userMessage(text('Two'), file(second, 'second.txt', 'text/plain'))], { memory: MEMORY });
 
       const lastPrompt = JSON.stringify(prompts.at(-1));
       expect(filePartsIn(prompts.at(-1))).toEqual([]);
@@ -371,7 +371,7 @@ describe.skipIf(process.platform === 'win32')('FileUploadProcessor through an ag
       const bytes = Buffer.from('sent while the agent was busy');
       const subscription = await agent.subscribeToThread(SIGNAL_TARGET);
 
-      const stream = await agent.stream('Hello', { memory: MEMORY });
+      const stream = await agent.streamMessageList('Hello', { memory: MEMORY });
       await waitForActiveRun(subscription);
       const result = agent.sendMessage(
         { contents: [text('And this file'), file(bytes, 'late.txt', 'text/plain')] },
@@ -399,14 +399,14 @@ describe.skipIf(process.platform === 'win32')('FileUploadProcessor through an ag
       const big = Buffer.from('far too large for the limit');
       const subscription = await agent.subscribeToThread(SIGNAL_TARGET);
 
-      const stream = await agent.stream('Hello', { memory: MEMORY });
+      const stream = await agent.streamMessageList('Hello', { memory: MEMORY });
       await waitForActiveRun(subscription);
       const result = agent.sendMessage({ contents: [file(big, 'big.txt', 'text/plain')] }, SIGNAL_TARGET);
       await expect(result.accepted).resolves.toMatchObject({ action: 'deliver' });
       release();
       const output = await stream.getFullOutput();
       subscription.unsubscribe();
-      const next = await agent.generate('Never mind', { memory: MEMORY });
+      const next = await agent.generateMessageList('Never mind', { memory: MEMORY });
 
       expect(output.tripwire?.metadata).toMatchObject({
         code: FILE_UPLOAD_ERROR_CODES.FILE_TOO_LARGE,
@@ -426,7 +426,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
     const { agent, prompts, recall } = createHarness(sandbox);
     const bytes = Buffer.from('%PDF-1.7 report');
 
-    await agent.generate([userMessage(text('Before'), file(bytes, 'report.pdf', 'application/pdf'), text('After'))], {
+    await agent.generateMessageList([userMessage(text('Before'), file(bytes, 'report.pdf', 'application/pdf'), text('After'))], {
       memory: MEMORY,
     });
 
@@ -454,7 +454,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
     const first = Buffer.from('first');
     const second = Buffer.from('second');
 
-    await agent.generate(
+    await agent.generateMessageList(
       [userMessage(text('Two files'), file(first, 'a.txt', 'text/plain'), file(second, 'b.txt', 'text/plain'))],
       { memory: MEMORY },
     );
@@ -479,7 +479,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
     const { agent, prompts } = createHarness(sandbox);
     const bytes = Buffer.from('same bytes');
 
-    await agent.generate(
+    await agent.generateMessageList(
       [userMessage(file(bytes, 'copy-1.txt', 'text/plain'), file(bytes, 'copy-2.txt', 'text/plain'))],
       { memory: MEMORY },
     );
@@ -528,7 +528,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       inputProcessors: [new FileUploadProcessor({ workspace })],
     });
 
-    await agent.generate([userMessage(text('Look it up'), file(Buffer.from('once'), 'notes.txt', 'text/plain'))], {
+    await agent.generateMessageList([userMessage(text('Look it up'), file(Buffer.from('once'), 'notes.txt', 'text/plain'))], {
       memory: MEMORY,
       maxSteps: 3,
     });
@@ -550,7 +550,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       },
     });
 
-    await agent.generate(
+    await agent.generateMessageList(
       [
         userMessage(
           file(Buffer.from('plain text stays'), 'notes.txt', 'text/plain'),
@@ -588,7 +588,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       },
     });
 
-    await agent.generate(
+    await agent.generateMessageList(
       [
         userMessage(
           file(Buffer.from('%PDF'), 'report.pdf', 'application/pdf'),
@@ -622,7 +622,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       const { sandbox, writes } = createFakeSandbox();
       const { agent, prompts } = createHarness(sandbox, { filter });
 
-      const result = await agent.generate([userMessage(file(Buffer.from('data'), 'notes.txt', 'text/plain'))], {
+      const result = await agent.generateMessageList([userMessage(file(Buffer.from('data'), 'notes.txt', 'text/plain'))], {
         memory: MEMORY,
       });
 
@@ -643,7 +643,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       const { sandbox, writes, commands } = createFakeSandbox();
       const { agent, prompts } = createHarness(sandbox, { maxFileSize: () => 4 });
 
-      const result = await agent.generate(
+      const result = await agent.generateMessageList(
         [
           userMessage(
             file(Buffer.from('ok'), 'small.txt', 'text/plain'),
@@ -671,7 +671,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       const { sandbox, writes } = createFakeSandbox();
       const { agent } = createHarness(sandbox, { maxFileSize: () => 4 });
 
-      const result = await agent.generate([userMessage(file(Buffer.from('1234'), 'edge.txt', 'text/plain'))], {
+      const result = await agent.generateMessageList([userMessage(file(Buffer.from('1234'), 'edge.txt', 'text/plain'))], {
         memory: MEMORY,
       });
 
@@ -683,7 +683,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       const { sandbox, writes } = createFakeSandbox();
       const { agent } = createHarness(sandbox, { maxFileSize: () => 4 });
 
-      const result = await agent.generate(
+      const result = await agent.generateMessageList(
         [userMessage(file('data:text/plain;base64,notbase64!!!notbase64!!!', 'notes.txt', 'text/plain'))],
         { memory: MEMORY },
       );
@@ -706,7 +706,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
         .toString('base64')
         .replace(/.{76}/g, line => `${line}\n`);
 
-      const result = await agent.generate(
+      const result = await agent.generateMessageList(
         [userMessage(file(`data:application/octet-stream;base64,${wrapped}`, 'blob.bin', 'application/octet-stream'))],
         {
           memory: MEMORY,
@@ -720,7 +720,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       const { sandbox, writes } = createFakeSandbox();
       const { agent } = createHarness(sandbox, { maxFileSize: () => 5 });
 
-      const result = await agent.generate(
+      const result = await agent.generateMessageList(
         [userMessage(file('data:text/plain,hello%20world', 'hello.txt', 'text/plain'))],
         {
           memory: MEMORY,
@@ -735,7 +735,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       const { sandbox, writes } = createFakeSandbox();
       const { agent } = createHarness(sandbox, { maxFileSize: () => 5 });
 
-      const result = await agent.generate(
+      const result = await agent.generateMessageList(
         [userMessage(file('data:text/plain,hello%20world%ZZ', 'hello.txt', 'text/plain'))],
         {
           memory: MEMORY,
@@ -757,7 +757,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       const { sandbox } = createFakeSandbox();
       const { agent } = createHarness(sandbox, { maxFileSize: () => 1 });
 
-      const result = await agent.generate(
+      const result = await agent.generateMessageList(
         [userMessage(file('data:text/plain,caf%C3%A9 😀', 'cafe.txt', 'text/plain'))],
         {
           memory: MEMORY,
@@ -772,7 +772,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       const { agent } = createHarness(sandbox);
       const tenMegabytes = 10 * 1024 * 1024;
 
-      const result = await agent.generate(
+      const result = await agent.generateMessageList(
         [userMessage(file(Buffer.alloc(tenMegabytes + 1), 'huge.bin', 'application/octet-stream'))],
         { memory: MEMORY },
       );
@@ -795,7 +795,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
         },
       });
 
-      await agent.generate([userMessage(file(Buffer.from('%PDF'), 'Report.PDF', 'application/pdf'))], {
+      await agent.generateMessageList([userMessage(file(Buffer.from('%PDF'), 'Report.PDF', 'application/pdf'))], {
         memory: MEMORY,
       });
 
@@ -820,7 +820,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       const { sandbox, writes } = createFakeSandbox();
       const { agent, prompts } = createHarness(sandbox, { maxFileSize });
 
-      const result = await agent.generate([userMessage(file(Buffer.from('data'), 'notes.txt', 'text/plain'))], {
+      const result = await agent.generateMessageList([userMessage(file(Buffer.from('data'), 'notes.txt', 'text/plain'))], {
         memory: MEMORY,
       });
 
@@ -876,7 +876,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       const { sandbox } = createFakeSandbox();
       const { agent, prompts } = createHarness(sandbox, {}, harnessOptions);
 
-      const result = await agent.generate('No file here', callOptions);
+      const result = await agent.generateMessageList('No file here', callOptions);
 
       expect(result.tripwire).toBeUndefined();
       expect(textsIn(prompts.at(-1))).toEqual(['No file here']);
@@ -885,7 +885,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
     it.each(withoutUsableSandbox())('reach the model when %s', async (_label, sandbox) => {
       const { agent, prompts } = createHarness(sandbox);
 
-      const result = await agent.generate('No file here', { memory: MEMORY });
+      const result = await agent.generateMessageList('No file here', { memory: MEMORY });
 
       expect(result.tripwire).toBeUndefined();
       expect(textsIn(prompts.at(-1))).toEqual(['No file here']);
@@ -967,7 +967,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
         const { sandbox, writes } = createFakeSandbox();
         const { agent, prompts } = createHarness(sandbox, {}, harnessOptions);
 
-        const result = await agent.generate(withFile(), callOptions);
+        const result = await agent.generateMessageList(withFile(), callOptions);
 
         expect(result.tripwire).toBeUndefined();
         expect(filePartsIn(prompts.at(-1))).toEqual([]);
@@ -979,7 +979,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
     it('abort with NO_SANDBOX when the workspace resolves no sandbox', async () => {
       const { agent, prompts } = createHarness((() => undefined) as unknown as WorkspaceSandboxResolver);
 
-      const result = await agent.generate(withFile(), { memory: MEMORY });
+      const result = await agent.generateMessageList(withFile(), { memory: MEMORY });
 
       expect(result.tripwire?.metadata).toEqual({
         processorId: 'file-upload',
@@ -993,7 +993,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
         throw new Error('sandbox pool exhausted');
       });
 
-      const result = await agent.generate(withFile(), { memory: MEMORY });
+      const result = await agent.generateMessageList(withFile(), { memory: MEMORY });
 
       expect(result.tripwire?.metadata).toEqual({
         processorId: 'file-upload',
@@ -1007,7 +1007,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       const { sandbox } = createFakeSandbox({ writeFiles: undefined, executeCommand: undefined });
       const { agent, prompts } = createHarness(sandbox);
 
-      const result = await agent.generate(withFile(), { memory: MEMORY });
+      const result = await agent.generateMessageList(withFile(), { memory: MEMORY });
 
       expect(result.tripwire?.metadata).toEqual({
         processorId: 'file-upload',
@@ -1053,7 +1053,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       const bytes = Buffer.from('inline through a data URI');
       const dataUri = `data:text/plain;base64,${bytes.toString('base64')}`;
 
-      await agent.generate([userMessage(file(dataUri, 'notes.txt', 'text/plain'))], { memory: MEMORY });
+      await agent.generateMessageList([userMessage(file(dataUri, 'notes.txt', 'text/plain'))], { memory: MEMORY });
 
       expect(writes[0]![0]!.content).toEqual(bytes);
     });
@@ -1064,7 +1064,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       const { agent } = createHarness(sandbox, askedFor(asked));
       const bytes = Buffer.from('inline bytes');
 
-      const result = await agent.generate(
+      const result = await agent.generateMessageList(
         [userMessage(file(bytes, 'inline.txt', 'text/plain'), file('file-abc123', 'report.pdf', 'application/pdf'))],
         { memory: MEMORY },
       );
@@ -1082,7 +1082,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
         supportedUrls: { 'application/pdf': [/^http:/] },
       });
 
-      const result = await agent.generate(
+      const result = await agent.generateMessageList(
         [userMessage(file(new URL(`${baseUrl}/report.pdf`), 'report.pdf', 'application/pdf'))],
         { memory: MEMORY },
       );
@@ -1098,7 +1098,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       const asked: Array<string | undefined> = [];
       const { agent, prompts } = createHarness(sandbox, askedFor(asked));
 
-      const result = await agent.generate(
+      const result = await agent.generateMessageList(
         [userMessage(file(new URL(`${baseUrl}/report.pdf`), 'report.pdf', 'application/pdf'))],
         { memory: MEMORY },
       );
@@ -1113,7 +1113,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       const { sandbox, writes } = createFakeSandbox();
       const { agent, prompts } = createHarness(sandbox);
 
-      const result = await agent.generate(
+      const result = await agent.generateMessageList(
         [userMessage(file('data:text/plain;base64,not base64 at all!', 'notes.txt', 'text/plain'))],
         { memory: MEMORY },
       );
@@ -1141,7 +1141,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       });
       const bytes = Buffer.from('%PDF');
 
-      await agent.generate([userMessage(file(bytes, undefined, 'application/pdf'))], { memory: MEMORY });
+      await agent.generateMessageList([userMessage(file(bytes, undefined, 'application/pdf'))], { memory: MEMORY });
 
       expect(writes[0]![0]!.path).toMatch(uploadedPath('\\.pdf'));
       expect(received).toContainEqual({ fileName: undefined, mimeType: 'application/pdf', extension: undefined });
@@ -1153,7 +1153,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       const { agent, prompts } = createHarness(sandbox, { filter: ({ mimeType }) => mimeType.startsWith('image/') });
       const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
-      await agent.generate(
+      await agent.generateMessageList(
         [{ role: 'user', content: [text('Describe'), { type: 'image', image: bytes, mediaType: 'image/png' }] }],
         { memory: MEMORY },
       );
@@ -1180,7 +1180,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       const { sandbox, writes } = createFakeSandbox({ executeCommand: runsIn(COMMAND_DIRECTORY, scripts) });
       const { agent, prompts } = createHarness(sandbox);
 
-      await agent.generate(notesFile(), { memory: MEMORY });
+      await agent.generateMessageList(notesFile(), { memory: MEMORY });
 
       const noted = notedPathIn(prompts.at(-1))!;
       expect(noted).toMatch(new RegExp(`^${COMMAND_DIRECTORY}/uploads/${MEMORY.thread}/${HASH}\\.txt$`));
@@ -1196,7 +1196,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       });
       const { agent, prompts } = createHarness(sandbox);
 
-      await agent.generate(notesFile(), { memory: MEMORY });
+      await agent.generateMessageList(notesFile(), { memory: MEMORY });
 
       const noted = notedPathIn(prompts.at(-1))!;
       expect(noted).toMatch(new RegExp(`^${COMMAND_DIRECTORY}/uploads/`));
@@ -1209,7 +1209,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       const { sandbox, writes } = createFakeSandbox({ executeCommand: undefined, workingDirectory: '/srv/app' });
       const { agent, prompts } = createHarness(sandbox);
 
-      await agent.generate(notesFile(), { memory: MEMORY });
+      await agent.generateMessageList(notesFile(), { memory: MEMORY });
 
       expect(writes[0]![0]!.path).toMatch(new RegExp(`^/srv/app/uploads/${MEMORY.thread}/${HASH}\\.txt$`));
       expect(notedPathIn(prompts.at(-1))).toBe(writes[0]![0]!.path);
@@ -1219,7 +1219,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       const { sandbox, writes } = createFakeSandbox({ executeCommand: undefined });
       const { agent } = createHarness(sandbox);
 
-      await agent.generate(notesFile(), { memory: MEMORY });
+      await agent.generateMessageList(notesFile(), { memory: MEMORY });
 
       expect(writes[0]![0]!.path).toMatch(new RegExp(`^uploads/${MEMORY.thread}/${HASH}\\.txt$`));
     });
@@ -1246,7 +1246,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       });
       const { agent, prompts } = createHarness(sandbox);
 
-      const result = await agent.generate(twoFiles(), { memory: MEMORY });
+      const result = await agent.generateMessageList(twoFiles(), { memory: MEMORY });
 
       expect(result.tripwire?.metadata).toEqual({
         processorId: 'file-upload',
@@ -1272,7 +1272,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       });
       const { agent } = createHarness(sandbox);
 
-      const result = await agent.generate(twoFiles(), { memory: MEMORY });
+      const result = await agent.generateMessageList(twoFiles(), { memory: MEMORY });
 
       expect(result.tripwire?.metadata).toEqual({
         processorId: 'file-upload',
@@ -1291,7 +1291,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       });
       const { agent } = createHarness(sandbox);
 
-      const result = await agent.generate(twoFiles(), { memory: MEMORY });
+      const result = await agent.generateMessageList(twoFiles(), { memory: MEMORY });
 
       expect(result.tripwire?.metadata).toMatchObject({
         code: FILE_UPLOAD_ERROR_CODES.UPLOAD_FAILED,
@@ -1313,7 +1313,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       });
       const { agent, prompts } = createHarness(sandbox);
 
-      const result = await agent.generate(twoFiles(), { memory: MEMORY });
+      const result = await agent.generateMessageList(twoFiles(), { memory: MEMORY });
 
       expect(result.tripwire?.metadata).toEqual({
         processorId: 'file-upload',
@@ -1335,7 +1335,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       });
       const { agent } = createHarness(sandbox);
 
-      const result = await agent.generate(twoFiles(), { memory: MEMORY });
+      const result = await agent.generateMessageList(twoFiles(), { memory: MEMORY });
 
       expect(result.tripwire?.metadata).toMatchObject({
         code: FILE_UPLOAD_ERROR_CODES.UPLOAD_FAILED,
@@ -1359,8 +1359,8 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       const { sandbox } = createFakeSandbox();
       const { agent, prompts } = createHarness(sandbox, { maxFileSize: () => 4 });
 
-      const rejected = await agent.generate(rejectedTurn(), { memory: MEMORY });
-      const next = await agent.generate('Never mind, just say hi', { memory: MEMORY });
+      const rejected = await agent.generateMessageList(rejectedTurn(), { memory: MEMORY });
+      const next = await agent.generateMessageList('Never mind, just say hi', { memory: MEMORY });
 
       expect(rejected.tripwire?.metadata).toMatchObject({ code: FILE_UPLOAD_ERROR_CODES.FILE_TOO_LARGE });
       expect(next.tripwire).toBeUndefined();
@@ -1433,8 +1433,8 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       });
       await seedHistory(memory, [storedFileRow('user', 10)]);
 
-      const first = await agent.generate('What was in that file?', { memory: MEMORY });
-      const second = await agent.generate('And what else?', { memory: MEMORY });
+      const first = await agent.generateMessageList('What was in that file?', { memory: MEMORY });
+      const second = await agent.generateMessageList('And what else?', { memory: MEMORY });
 
       expect(first.tripwire).toBeUndefined();
       expect(second.tripwire).toBeUndefined();
@@ -1455,7 +1455,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       });
       await seedHistory(memory, [storedFileRow('user', 10)]);
 
-      const result = await agent.generate('What was in that file?', { memory: MEMORY });
+      const result = await agent.generateMessageList('What was in that file?', { memory: MEMORY });
 
       expect(result.tripwire?.metadata).toEqual({
         processorId: 'file-upload',
@@ -1495,7 +1495,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
         const { agent, prompts, memory } = createHarness(sandbox());
         await seedHistory(memory, [storedFileRow('user', 10)]);
 
-        const result = await agent.generate('Just say hi', { memory: MEMORY });
+        const result = await agent.generateMessageList('Just say hi', { memory: MEMORY });
 
         expect(result.tripwire).toBeUndefined();
         expect(prompts).toHaveLength(1);
@@ -1513,7 +1513,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       const { agent, prompts, memory } = createHarness(sandbox);
       await seedHistory(memory, [storedFileRow('user', 10)]);
 
-      const result = await agent.generate([userMessage(file(Buffer.from('new'), 'new.txt', 'text/plain'))], {
+      const result = await agent.generateMessageList([userMessage(file(Buffer.from('new'), 'new.txt', 'text/plain'))], {
         memory: MEMORY,
       });
 
@@ -1526,7 +1526,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       const { agent, prompts, memory } = createHarness(sandbox, { maxFileSize: () => 4 });
       await seedHistory(memory, [storedFileRow('user', 10)]);
 
-      const result = await agent.generate('What was in that file?', { memory: MEMORY });
+      const result = await agent.generateMessageList('What was in that file?', { memory: MEMORY });
 
       expect(result.tripwire).toBeUndefined();
       expect(writes).toEqual([]);
@@ -1586,7 +1586,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       });
       await seedHistory(memory, [storedTextRow(20), storedFileRow('assistant', 10)]);
 
-      const result = await agent.generate('Thanks', { memory: MEMORY });
+      const result = await agent.generateMessageList('Thanks', { memory: MEMORY });
 
       expect(result.tripwire).toBeUndefined();
       expect(prompts).toHaveLength(1);
@@ -1614,7 +1614,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       const first = Buffer.from('first attachment');
       const second = Buffer.from('second attachment');
 
-      await agent.generate(
+      await agent.generateMessageList(
         [uiMessage(attachment(first, 'one.txt', 'text/plain'), attachment(second, 'two.txt', 'text/plain'))],
         { memory: MEMORY },
       );
@@ -1634,7 +1634,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       const { sandbox, writes } = createFakeSandbox();
       const { agent, prompts } = createHarness(sandbox, { filter: ({ extension }) => extension === 'csv' });
 
-      await agent.generate([uiMessage(attachment(Buffer.from('a,b'), 'data.csv', 'application/octet-stream'))], {
+      await agent.generateMessageList([uiMessage(attachment(Buffer.from('a,b'), 'data.csv', 'application/octet-stream'))], {
         memory: MEMORY,
       });
 
@@ -1646,7 +1646,7 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       const { sandbox, writes } = createFakeSandbox();
       const { agent, prompts } = createHarness(sandbox, { filter: ({ mimeType }) => mimeType === 'application/pdf' });
 
-      await agent.generate([uiMessage(attachment(Buffer.from('kept'), 'kept.txt', 'text/plain'))], {
+      await agent.generateMessageList([uiMessage(attachment(Buffer.from('kept'), 'kept.txt', 'text/plain'))], {
         memory: MEMORY,
       });
 

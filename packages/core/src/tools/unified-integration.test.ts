@@ -118,7 +118,7 @@ describe('Tool Unified Arguments - Real Integration Tests', () => {
       });
 
       // Generate with the agent (this will call the tool)
-      const result = await agent.generate('Use the test tool', { maxSteps: 1 });
+      const result = await agent.generateMessageList('Use the test tool', { maxSteps: 1 });
       console.log('finishReason:', result.finishReason);
       console.log('toolCalls:', result.toolCalls);
       console.log(
@@ -184,7 +184,7 @@ describe('Tool Unified Arguments - Real Integration Tests', () => {
         tools: { 'test-tool': tool as any },
       });
 
-      await agent.generate('Call the tool twice', { maxSteps: 1 });
+      await agent.generateMessageList('Call the tool twice', { maxSteps: 1 });
 
       // Should be called twice (once per tool call in the same step)
       expect(executeSpy).toHaveBeenCalledTimes(2);

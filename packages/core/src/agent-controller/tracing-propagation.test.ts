@@ -73,7 +73,7 @@ describe('AgentController tracing propagation', () => {
     session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
   });
 
-  it('should forward tracingContext to agent.stream() when provided', async () => {
+  it('should forward tracingContext to agent.streamMessageList() when provided', async () => {
     const mockSpan = {
       spanContext: () => ({ traceId: 'abc', spanId: 'def' }),
       createChildSpan: vi.fn(),
@@ -88,7 +88,7 @@ describe('AgentController tracing propagation', () => {
     expect((streamOptions as any).tracingContext).toBe(tracingContext);
   });
 
-  it('should forward tracingOptions to agent.stream() when provided', async () => {
+  it('should forward tracingOptions to agent.streamMessageList() when provided', async () => {
     const tracingOptions: TracingOptions = {
       traceId: 'abc123',
       parentSpanId: 'def456',

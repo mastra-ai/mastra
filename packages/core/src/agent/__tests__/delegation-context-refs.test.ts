@@ -200,7 +200,7 @@ describe('delegation result references — agent integration', () => {
     const { supervisor, supervisorPrompts } = buildAgents([
       { toolName: 'agent-explorer', input: { prompt: 'Find the bug' } },
     ]);
-    await supervisor.generate('go', { maxSteps: 3 });
+    await supervisor.generateMessageList('go', { maxSteps: 3 });
 
     const results = toolResultTexts(supervisorPrompts[1]!);
     expect(results[0]).toBe(EXPLORER_FINDING);
@@ -255,7 +255,7 @@ describe('delegation result references — agent integration', () => {
         input: { prompt: 'Fix the bug described above', contextFromRefs: ['explorer-1'] },
       },
     ]);
-    await supervisor.generate('go', { maxSteps: 4, delegation: { enableResultReferences: true } });
+    await supervisor.generateMessageList('go', { maxSteps: 4, delegation: { enableResultReferences: true } });
 
     // Parent model sees the ref trailer after the explorer text.
     const firstResult = toolResultTexts(supervisorPrompts[1]!)[0];
@@ -287,7 +287,7 @@ describe('delegation result references — agent integration', () => {
         },
       },
     ]);
-    await supervisor.generate('go', { maxSteps: 4, delegation: { enableResultReferences: true } });
+    await supervisor.generateMessageList('go', { maxSteps: 4, delegation: { enableResultReferences: true } });
     expect(userText(implementerPrompts[0]!)).toContain('as="investigation" note="the bug location"');
   });
 
@@ -295,7 +295,7 @@ describe('delegation result references — agent integration', () => {
     const { supervisor, implementerPrompts } = buildAgents([
       { toolName: 'agent-implementer', input: { prompt: 'Fix it', contextFromRefs: ['explorer-9'] } },
     ]);
-    await supervisor.generate('go', { maxSteps: 3, delegation: { enableResultReferences: true } });
+    await supervisor.generateMessageList('go', { maxSteps: 3, delegation: { enableResultReferences: true } });
     expect(userText(implementerPrompts[0]!).endsWith('Fix it')).toBe(true);
     expect(userText(implementerPrompts[0]!)).not.toContain('delegation_result_');
   });
@@ -306,7 +306,7 @@ describe('delegation result references — agent integration', () => {
       { toolName: 'agent-explorer', input: { prompt: 'Find the bug' } },
       { toolName: 'agent-implementer', input: { prompt: 'Fix it', contextFromRefs: ['explorer-1'] } },
     ]);
-    await supervisor.generate('go', {
+    await supervisor.generateMessageList('go', {
       maxSteps: 4,
       delegation: {
         enableResultReferences: true,
@@ -328,7 +328,7 @@ describe('delegation result references — agent integration', () => {
       { toolName: 'agent-explorer', input: { prompt: 'Find the bug' } },
       { toolName: 'agent-implementer', input: { prompt: 'Fix it', contextFromRefs: ['explorer-1'] } },
     ]);
-    await supervisor.generate('go', {
+    await supervisor.generateMessageList('go', {
       maxSteps: 4,
       delegation: {
         enableResultReferences: true,
@@ -346,7 +346,7 @@ describe('delegation result references — agent integration', () => {
       [{ toolName: 'agent-explorer', input: { prompt: 'Find the bug' } }],
       { explorerReply: '' },
     );
-    await supervisor.generate('go', { maxSteps: 3, delegation: { enableResultReferences: true } });
+    await supervisor.generateMessageList('go', { maxSteps: 3, delegation: { enableResultReferences: true } });
     expect(toolResultTexts(supervisorPrompts[1]!)[0]).not.toContain('[ref:');
   });
 
@@ -354,7 +354,7 @@ describe('delegation result references — agent integration', () => {
     const { supervisor, supervisorPrompts } = buildAgents([
       { toolName: 'agent-explorer', input: { prompt: 'Find the bug' } },
     ]);
-    await supervisor.generate('go', {
+    await supervisor.generateMessageList('go', {
       maxSteps: 3,
       delegation: { enableResultReferences: true, includeSubAgentToolResultsInModelContext: true },
     });
@@ -364,7 +364,7 @@ describe('delegation result references — agent integration', () => {
 
   it('keeps the flag-off schema intact after a flag-on run on the same agent', async () => {
     const { supervisor } = buildAgents([{ toolName: 'agent-explorer', input: { prompt: 'Find the bug' } }]);
-    await supervisor.generate('go', { maxSteps: 3, delegation: { enableResultReferences: true } });
+    await supervisor.generateMessageList('go', { maxSteps: 3, delegation: { enableResultReferences: true } });
     const tools = await supervisor.getToolsForExecution({});
     expect(JSON.stringify(tools['agent-explorer']!.parameters)).not.toContain('contextFromRefs');
   });

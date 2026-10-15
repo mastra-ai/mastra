@@ -106,7 +106,7 @@ describe('Processor-returned tools receive requestContext', () => {
     requestContext.set('userId', 'user-123');
     requestContext.set('apiKey', 'secret-key');
 
-    const stream = await agent.stream('Call the dynamic tool', {
+    const stream = await agent.streamMessageList('Call the dynamic tool', {
       maxSteps: 5,
       requestContext,
     });
@@ -239,7 +239,7 @@ describe('Processor-returned tools receive requestContext', () => {
       inputProcessors: [toolInjectorProcessor],
     });
 
-    const stream = await agent.stream('Call both tools', {
+    const stream = await agent.streamMessageList('Call both tools', {
       maxSteps: 5,
       requestContext,
     });
