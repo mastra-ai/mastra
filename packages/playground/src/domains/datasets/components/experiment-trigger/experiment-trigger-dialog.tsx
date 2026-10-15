@@ -1,6 +1,6 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { ComboboxParts as C } from '@mastra/playground-ui/components/Combobox';
 import {
   Dialog,
   DialogAction,
@@ -12,44 +12,41 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
-import { Field, FieldLabel, Fieldset, FieldsetLegend } from '@mastra/playground-ui/components/Field';
+import { Field, FieldDescription, FieldLabel, Fieldset, FieldsetLegend } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { DynamicForm } from '@mastra/playground-ui/lib/form/dynamic-form';
 import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { useDatasetMutations, useDataset, useDatasetItems } from '@mastra/react/hooks/datasets';
-import { useMemo, useRef } from 'react';
-import { toast } from 'sonner';
-import { DatasetCombobox } from '../dataset-combobox';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { DatasetVersions } from '../dataset-versions';
-import { ScorerSelector } from './scorer-selector';
-import { TargetSelector } from './target-selector';
-import type { TargetType } from './target-selector';
-import { useExperimentTriggerForm } from './use-experiment-trigger-form';
+import { datasetDetail, usePrefetchDataset, useExperimentTrigger } from './use-experiment-trigger';
+import type {
+  DatasetOption,
+  ExperimentTriggerInitialValues,
+  ScorerOption,
+  TargetOption,
+} from './use-experiment-trigger';
 
-export interface ExperimentTriggerDialogProps {
-  initialDatasetId?: string;
-  initialDatasetVersion?: number;
-  initialScorerIds?: string[];
-  initialTargetType?: TargetType;
-  initialTargetId?: string;
-  initialName?: string;
-  initialDescription?: string;
+export interface ExperimentTriggerDialogProps extends ExperimentTriggerInitialValues {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: (experimentId: string) => void;
 }
 
-const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
+const sameValue = <T extends { value: string }>(a: T | null, b: T | null) => a?.value === b?.value;
+
+const TARGET_GROUPS: { type: TargetOption['type']; label: string }[] = [
+  { type: 'agent', label: 'Agents' },
+  { type: 'workflow', label: 'Workflows' },
+  { type: 'scorer', label: 'Scorers' },
+];
 
 /**
- * Schema-driven request context form. Converts the dataset's plain JSON Schema
- * into a zod schema and surfaces values via onChange (no global store coupling).
+ * Schema-driven request context form. Converts the dataset's plain JSON Schema into a zod schema and
+ * surfaces values via onChange (no global store coupling).
  */
 function RequestContextForm({
   requestContextSchema,
@@ -77,327 +74,260 @@ function RequestContextForm({
 
   return (
     <Fieldset>
-      <FieldsetLegend>Request Context</FieldsetLegend>
+      <FieldsetLegend>Request context</FieldsetLegend>
       <DynamicForm schema={zodSchema} onValuesChange={onChange} className="[&_button[type=submit]]:hidden" />
     </Fieldset>
   );
 }
 
-function PipelineStep({
-  index,
-  done,
-  isLast,
-  children,
-}: {
-  index: number;
-  done: boolean;
-  isLast?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <li className="flex gap-4">
-      <div className="flex flex-col items-center">
-        <Txt
-          as="span"
-          variant="meta"
-          tone="muted"
-          aria-hidden="true"
-          className={cn(
-            'flex size-6 shrink-0 items-center justify-center rounded-full border',
-            done ? 'border-success-edge bg-success-subtle text-success-subtle-foreground' : 'border-border',
-          )}
-        >
-          {index}
-        </Txt>
-        {!isLast && <span aria-hidden="true" className="mt-2 w-px flex-1 bg-border" />}
-      </div>
-      <div className={cn('min-w-0 flex-1 space-y-3', !isLast && 'pb-4')}>{children}</div>
-    </li>
-  );
+/**
+ * New experiment: pick what to run, on which data, and how to score it. Everything else has a default
+ * and sits under Advanced, whose toggle shows in the footer while closed and stays in place as the
+ * section's header row once opened.
+ */
+export function ExperimentTriggerDialog(props: ExperimentTriggerDialogProps) {
+  // A fresh form on every open, while the closing dialog keeps its state through its exit animation.
+  const [openCount, setOpenCount] = useState(0);
+  const [wasOpen, setWasOpen] = useState(props.open);
+  if (props.open !== wasOpen) {
+    setWasOpen(props.open);
+    if (props.open) setOpenCount(count => count + 1);
+  }
+  return <NewExperimentDialog key={openCount} {...props} />;
 }
 
-export function ExperimentTriggerDialog({
-  initialDatasetId,
-  initialDatasetVersion,
-  initialScorerIds,
-  initialTargetType,
-  initialTargetId,
-  initialName,
-  initialDescription,
-  open,
-  onOpenChange,
-  onSuccess,
-}: ExperimentTriggerDialogProps) {
+function NewExperimentDialog({ open, onOpenChange, onSuccess, ...initial }: ExperimentTriggerDialogProps) {
   const contentRef = useRef<HTMLDivElement>(null);
-  const { form, changeTargetName, resetForm } = useExperimentTriggerForm({
-    name: initialName,
-    description: initialDescription,
-    datasetId: initialDatasetId,
-    version: initialDatasetVersion,
-    targetType: initialTargetType,
-    targetId: initialTargetId,
-    scorerIds: initialScorerIds,
-  });
-  const { register, setValue, watch } = form;
-  const [name, datasetId, version, targetType, targetId, selectedScorers, requestContextValues, requestContextRaw] =
-    watch([
-      'name',
-      'datasetId',
-      'version',
-      'targetType',
-      'targetId',
-      'scorerIds',
-      'requestContextValues',
-      'requestContextRaw',
-    ]);
+  const state = useExperimentTrigger({ ...initial, onOpenChange, onSuccess });
+  const prefetchDataset = usePrefetchDataset();
 
-  const { triggerExperiment } = useDatasetMutations();
-  const { data: dataset } = useDataset({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
-  const { total: itemCount } = useDatasetItems({
-    datasetId: datasetId,
-    search: undefined,
-    version,
-    queryOptions: { enabled: Boolean(datasetId) },
-  });
-  const requestContextSchema = dataset?.requestContextSchema as Record<string, unknown> | undefined;
-  const datasetDefaultScorers = dataset?.scorerIds ?? [];
-  const usesDatasetDefaults = selectedScorers === undefined && datasetDefaultScorers.length > 0;
-  const effectiveScorers = selectedScorers ?? datasetDefaultScorers;
+  // The toggle remounts when it moves between footer and body; keep keyboard focus on it.
+  useEffect(() => {
+    const active = document.activeElement;
+    if (active && active !== document.body) return;
+    contentRef.current?.querySelector<HTMLElement>('[data-slot=collapsible-trigger]')?.focus();
+  }, [state.advancedOpen]);
 
-  const hasSchema = Boolean(requestContextSchema && Object.keys(requestContextSchema).length > 0);
+  const targetGroups = TARGET_GROUPS.map(group => ({
+    value: group.label,
+    items: state.targetOptions.filter(option => option.type === group.type),
+  })).filter(group => group.items.length > 0);
+  const dataset = state.datasets.find(option => option.value === state.datasetId) ?? null;
+  const pickedScorers = state.scorerOptions.filter(option => state.scorerIds.includes(option.value));
 
-  const runName = name.trim();
-  const canRun = Boolean(datasetId && targetType && targetId && runName);
-  const isRunning = triggerExperiment.isPending;
-
-  // The name fills in with the target, so it only counts as missing once the user clears it.
-  const missing = [!datasetId && 'dataset', !targetId && 'target', targetId && !runName && 'name'].filter(Boolean);
-  const hasRequestContext = hasSchema
-    ? Object.values(requestContextValues).some(v => v !== undefined && v !== '')
-    : requestContextRaw.trim().length > 0;
-
-  const handleDatasetChange = (nextDatasetId: string) => {
-    setValue('datasetId', nextDatasetId);
-    setValue('version', undefined);
-    setValue('scorerIds', initialScorerIds);
-    setValue('requestContextValues', {});
-  };
-
-  const resolveRequestContext = (): Record<string, unknown> | undefined => {
-    if (hasSchema) {
-      const entries = Object.entries(requestContextValues).filter(([, v]) => v !== undefined && v !== '');
-      return entries.length > 0 ? Object.fromEntries(entries) : undefined;
-    }
-    if (requestContextRaw.trim()) {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(requestContextRaw);
-      } catch {
-        throw new Error('Request Context must be valid JSON');
-      }
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        throw new Error('Request Context must be a JSON object');
-      }
-      return parsed as Record<string, unknown>;
-    }
-    return undefined;
-  };
-
-  const handleRun = form.handleSubmit(async ({ description }) => {
-    if (!datasetId || !targetType || !targetId || !runName) return;
-
-    let requestContext: Record<string, unknown> | undefined;
-    try {
-      requestContext = resolveRequestContext();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Request Context must be valid JSON';
-      toast.error(message);
-      return;
-    }
-
-    try {
-      const result = await triggerExperiment.mutateAsync({
-        datasetId,
-        name: runName,
-        description: description.trim() || undefined,
-        targetType,
-        targetId,
-        scorerIds: effectiveScorers.length > 0 ? effectiveScorers : undefined,
-        version,
-        requestContext,
-      });
-
-      toast.success('Experiment triggered successfully');
-      onOpenChange(false);
-      onSuccess?.(result.experimentId);
-
-      resetForm();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to trigger experiment';
-      toast.error(message);
-    }
-  });
-
-  const handleClose = () => {
-    onOpenChange(false);
-    resetForm();
-  };
-
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && canRun && !isRunning) {
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && state.canRun) {
       event.preventDefault();
-      void handleRun();
+      void state.run();
     }
   };
+
+  const advancedToggle = <CollapsibleTrigger variant="disclosure">Advanced</CollapsibleTrigger>;
 
   return (
-    <Dialog open={open} onOpenChange={handleClose} pending={isRunning}>
-      <DialogContent ref={contentRef} size="lg" onKeyDown={handleKeyDown}>
+    <Dialog open={open} onOpenChange={onOpenChange} pending={state.isRunning}>
+      <DialogContent ref={contentRef} size="md" onKeyDown={handleKeyDown}>
         <DialogHeader>
-          <DialogTitle>Run experiment</DialogTitle>
-          <DialogDescription>
-            Pick a dataset, choose what to run it against, and optionally score the results.
-          </DialogDescription>
+          <DialogTitle>New experiment</DialogTitle>
+          <DialogDescription>Run every item in a dataset through an agent, workflow or scorer.</DialogDescription>
         </DialogHeader>
 
-        <DialogBody>
-          <div className="space-y-4">
-            <Field>
-              <FieldLabel>Name</FieldLabel>
-              <Input {...register('name')} placeholder="Enter experiment name" autoFocus disabled={isRunning} />
-            </Field>
-
-            <Field>
-              <FieldLabel>Description</FieldLabel>
-              <Textarea
-                {...register('description')}
-                placeholder="Enter experiment description (optional)"
-                disabled={isRunning}
-                rows={2}
-              />
-            </Field>
-          </div>
-
-          <ol className="list-none">
-            <PipelineStep index={1} done={Boolean(datasetId)}>
-              <div className="grid grid-cols-[1fr_140px] gap-3">
+        {/* `contents`, so the Collapsible wraps body and footer without changing the dialog's layout. */}
+        <Collapsible open={state.advancedOpen} onOpenChange={state.setAdvancedOpen} className="contents">
+          <DialogBody>
+            {/* A plain block, so the closed Advanced panel adds no gap below the fields. */}
+            <div>
+              <div className="space-y-5">
                 <Field>
-                  <FieldLabel>Dataset</FieldLabel>
-                  <DatasetCombobox value={datasetId} onValueChange={handleDatasetChange} container={contentRef} />
+                  <FieldLabel
+                    required
+                    info="What runs on each item: an agent, a workflow, or a scorer you want to test."
+                  >
+                    Target
+                  </FieldLabel>
+                  <C.Combobox
+                    items={targetGroups}
+                    value={state.target ?? null}
+                    onValueChange={(next: TargetOption | null) => state.setTargetValue(next?.value ?? '')}
+                    isItemEqualToValue={sameValue}
+                    disabled={state.targetsLoading}
+                    autoHighlight
+                  >
+                    <C.ComboboxInput placeholder="Pick an agent, workflow or scorer" />
+                    <C.ComboboxContent container={contentRef}>
+                      <C.ComboboxEmpty>Nothing to run</C.ComboboxEmpty>
+                      <C.ComboboxList>
+                        {(group: (typeof targetGroups)[number], index: number) => (
+                          <C.ComboboxGroup key={group.value} items={group.items}>
+                            {index > 0 ? <C.ComboboxSeparator /> : null}
+                            <C.ComboboxLabel>{group.value}</C.ComboboxLabel>
+                            <C.ComboboxCollection>
+                              {(item: TargetOption) => (
+                                <C.ComboboxItem key={item.value} value={item}>
+                                  {item.label}
+                                </C.ComboboxItem>
+                              )}
+                            </C.ComboboxCollection>
+                          </C.ComboboxGroup>
+                        )}
+                      </C.ComboboxList>
+                    </C.ComboboxContent>
+                  </C.Combobox>
                 </Field>
-                {datasetId && (
+
+                <Field>
+                  <FieldLabel
+                    required
+                    info="The items to run. Each item's input goes to the target. Runs on the latest version unless you pick one under Advanced."
+                  >
+                    Dataset
+                  </FieldLabel>
+                  <C.Combobox
+                    items={state.datasets}
+                    value={dataset}
+                    onValueChange={(next: DatasetOption | null) => next && state.setDataset(next.value)}
+                    onItemHighlighted={(item: DatasetOption | undefined) => prefetchDataset(item?.value)}
+                    isItemEqualToValue={sameValue}
+                    autoHighlight
+                  >
+                    <C.ComboboxInput placeholder="Select a dataset">
+                      {datasetDetail(state.itemCount, state.version)}
+                    </C.ComboboxInput>
+                    <C.ComboboxContent container={contentRef}>
+                      <C.ComboboxEmpty>No datasets found</C.ComboboxEmpty>
+                      <C.ComboboxList>
+                        {(item: DatasetOption) => (
+                          <C.ComboboxItem key={item.value} value={item}>
+                            {item.label}
+                          </C.ComboboxItem>
+                        )}
+                      </C.ComboboxList>
+                    </C.ComboboxContent>
+                  </C.Combobox>
+                </Field>
+
+                <Field>
+                  <FieldLabel info="Grade each output automatically. Outputs are saved either way, so you can always review them yourself.">
+                    Scorers
+                  </FieldLabel>
+                  <C.Combobox
+                    multiple
+                    items={state.scorerOptions}
+                    value={pickedScorers}
+                    onValueChange={(next: ScorerOption[]) => state.setScorerIds(next.map(option => option.value))}
+                    isItemEqualToValue={sameValue}
+                    autoHighlight
+                  >
+                    <C.ComboboxChips>
+                      <C.ComboboxValue>
+                        {(items: ScorerOption[]) => (
+                          <>
+                            {items.map(item => (
+                              <C.ComboboxChip key={item.value}>{item.label}</C.ComboboxChip>
+                            ))}
+                            <C.ComboboxChipsInput
+                              placeholder={items.length === 0 ? 'No scoring, read the outputs yourself' : undefined}
+                            />
+                          </>
+                        )}
+                      </C.ComboboxValue>
+                    </C.ComboboxChips>
+                    <C.ComboboxContent container={contentRef}>
+                      <C.ComboboxEmpty>No scorers registered</C.ComboboxEmpty>
+                      <C.ComboboxList>
+                        {(item: ScorerOption) => {
+                          const row = (
+                            <C.ComboboxItem key={item.value} value={item}>
+                              {item.label}
+                            </C.ComboboxItem>
+                          );
+                          if (!item.description) return row;
+                          return (
+                            <Tooltip key={item.value}>
+                              <TooltipTrigger render={row} />
+                              <TooltipContent side="right" className="max-w-64">
+                                {item.description}
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                        }}
+                      </C.ComboboxList>
+                    </C.ComboboxContent>
+                  </C.Combobox>
+                  {state.usesDefaultScorers && <FieldDescription>The dataset's default scorers.</FieldDescription>}
+                </Field>
+              </div>
+
+              {/* While open the toggle heads the section, 16px down like the footer row it came from
+                  (the body's bottom padding plus the footer's top padding), so it doesn't move. */}
+              {state.advancedOpen && <div className="mt-4">{advancedToggle}</div>}
+
+              <CollapsibleContent className="space-y-4 pt-3">
+                {state.datasetId && state.showVersion && (
                   <Field>
-                    <FieldLabel>Version</FieldLabel>
+                    <FieldLabel>Dataset version</FieldLabel>
                     <DatasetVersions
-                      datasetId={datasetId}
-                      value={version ?? null}
-                      onValueChange={nextVersion => setValue('version', nextVersion ?? undefined)}
+                      datasetId={state.datasetId}
+                      value={state.version ?? null}
+                      onValueChange={next => state.setVersion(next ?? undefined)}
                       container={contentRef}
                     />
                   </Field>
                 )}
-              </div>
-              {datasetId && itemCount !== undefined && (
-                <Txt variant="meta" tone="muted">
-                  {itemCount} {itemCount === 1 ? 'item' : 'items'}
-                </Txt>
-              )}
-            </PipelineStep>
+                <Field>
+                  <FieldLabel>Experiment name</FieldLabel>
+                  <Input
+                    value={state.name}
+                    placeholder={state.defaultName}
+                    onChange={event => state.setName(event.target.value)}
+                    disabled={state.isRunning}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>Description</FieldLabel>
+                  <Textarea
+                    value={state.description}
+                    onChange={event => state.setDescription(event.target.value)}
+                    placeholder="Optional"
+                    rows={2}
+                    disabled={state.isRunning}
+                  />
+                </Field>
+                {state.requestContextSchema ? (
+                  <RequestContextForm
+                    requestContextSchema={state.requestContextSchema}
+                    onChange={state.setRequestContextValues}
+                  />
+                ) : (
+                  <Field>
+                    <FieldLabel>Request context (JSON)</FieldLabel>
+                    <CodeEditor
+                      value={state.requestContextRaw}
+                      onChange={state.setRequestContextRaw}
+                      showCopyButton={false}
+                      aria-label="Request context JSON"
+                      className="min-h-[120px]"
+                    />
+                  </Field>
+                )}
+              </CollapsibleContent>
+            </div>
+          </DialogBody>
 
-            <PipelineStep index={2} done={Boolean(targetId)}>
-              <TargetSelector
-                targetType={targetType}
-                setTargetType={nextTargetType => setValue('targetType', nextTargetType)}
-                targetId={targetId}
-                setTargetId={nextTargetId => setValue('targetId', nextTargetId)}
-                onTargetNameChange={changeTargetName}
-                container={contentRef}
-              />
-              {targetType && !targetId && (
-                <Txt variant="meta" tone="muted">
-                  Choose {targetType === 'agent' ? 'an' : 'a'} {targetType} to run
-                </Txt>
-              )}
-            </PipelineStep>
-
-            <PipelineStep index={3} done={effectiveScorers.length > 0} isLast>
-              <ScorerSelector
-                selectedScorers={effectiveScorers}
-                setSelectedScorers={scorerIds => setValue('scorerIds', scorerIds)}
-                disabled={isRunning}
-                container={contentRef}
-                helperText={
-                  usesDatasetDefaults
-                    ? "Pre-filled from the dataset's default scorers."
-                    : 'Scores are computed after each item runs.'
-                }
-              />
-            </PipelineStep>
-          </ol>
-
-          <Collapsible>
-            <CollapsibleTrigger variant="disclosure">
-              Request Context (JSON, optional)
-              {hasRequestContext && (
-                <Badge size="xs" variant="blue">
-                  set
-                </Badge>
-              )}
-            </CollapsibleTrigger>
-            <CollapsibleContent className="pt-3">
-              {hasSchema ? (
-                <RequestContextForm
-                  requestContextSchema={requestContextSchema!}
-                  onChange={values => setValue('requestContextValues', values)}
-                />
+          <DialogFooter start={state.advancedOpen ? undefined : advancedToggle}>
+            <DialogCancel>Cancel</DialogCancel>
+            <DialogAction onConfirm={state.run} disabled={!state.canRun}>
+              {state.isRunning ? (
+                <>
+                  <Spinner className="h-4 w-4" />
+                  Starting…
+                </>
               ) : (
-                <CodeEditor
-                  value={requestContextRaw}
-                  onChange={raw => setValue('requestContextRaw', raw)}
-                  showCopyButton={false}
-                  aria-label="Request context JSON"
-                  className="min-h-[160px]"
-                />
+                'Run experiment'
               )}
-            </CollapsibleContent>
-          </Collapsible>
-        </DialogBody>
-
-        <DialogFooter>
-          <p data-testid="experiment-run-status" aria-live="polite" className="mr-auto flex items-center gap-2">
-            {missing.length === 0 ? (
-              <>
-                <Badge variant="success" indicator="dot">
-                  Ready
-                </Badge>
-                <Txt as="span" variant="meta" tone="muted">
-                  {itemCount ?? 0} items · {targetType} · {effectiveScorers.length} scorers
-                </Txt>
-              </>
-            ) : (
-              <Badge variant="neutral" indicator="dot">
-                Missing {missing.join(', ')}
-              </Badge>
-            )}
-          </p>
-          <DialogCancel>Cancel</DialogCancel>
-          <DialogAction onConfirm={handleRun} disabled={!canRun}>
-            {isRunning ? (
-              <>
-                <Spinner className="h-4 w-4" />
-                Running...
-              </>
-            ) : (
-              <>
-                Run
-                <span className="ml-1 inline-flex gap-0.5" aria-hidden="true">
-                  <Kbd size="xs">{isMac ? '⌘' : 'Ctrl'}</Kbd>
-                  <Kbd size="xs">↵</Kbd>
-                </span>
-              </>
-            )}
-          </DialogAction>
-        </DialogFooter>
+            </DialogAction>
+          </DialogFooter>
+        </Collapsible>
       </DialogContent>
     </Dialog>
   );
