@@ -98,8 +98,8 @@ export function FactoryOnboarding({ local }: { local: boolean }) {
   const meta = onboardingStepMeta(step, draft.modelScope, local);
   const companyAccess = useProviderConnection({ scope: 'org' });
   const companyLocked = companyAccountNeedsAdmin(companyAccess);
-  const setupScope = companyLocked ? 'user' : (preview.modelScope ?? draft.modelScope ?? 'factory');
-  const previewScope = step === 'model-setup' ? setupScope : (draft.modelScope ?? 'factory');
+  const setupScope = companyLocked ? 'user' : (preview.modelScope ?? draft.modelScope ?? 'hybrid');
+  const previewScope = step === 'model-setup' ? setupScope : (draft.modelScope ?? 'hybrid');
 
   return (
     <main className="onboarding-page bg-background text-foreground min-h-dvh pb-20">

@@ -102,7 +102,7 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     name: { type: 'text' },
     description: { type: 'text', nullable: true },
     default_model_id: { type: 'text', nullable: true },
-    model_scope: { type: 'text', default: 'factory' },
+    model_scope: { type: 'text', default: 'hybrid' },
     // Deprecated: no longer read or written. Kept so existing databases need no
     // migration. Old rows may still hold `true`, so never read it to bring Slack
     // work items back. Drop it in a later migration.
@@ -170,7 +170,7 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     name: row.name,
     description: row.description,
     defaultModelId: row.default_model_id,
-    modelScope: row.model_scope === 'user' || row.model_scope === 'hybrid' ? row.model_scope : 'factory',
+    modelScope: row.model_scope === 'factory' || row.model_scope === 'user' ? row.model_scope : 'hybrid',
     autoRunEnabled: row.auto_run_enabled,
     autoApprovePlans: row.auto_approve_plans ?? false,
     sandboxWorkingDirectory: row.sandbox_working_directory ?? null,
