@@ -36,6 +36,7 @@ import type { ScorerDefinitionVersion } from './scorer-definitions';
 import type { SkillVersion } from './skills';
 import type { WorkflowDefinition } from './workflow-definitions';
 import type { WorkspaceVersion } from './workspaces';
+import type { PersistableAction } from '../../new-message-format/types';
 
 /**
  * InMemoryDB is a thin database layer for in-memory storage.
@@ -47,6 +48,7 @@ import type { WorkspaceVersion } from './workspaces';
 export class InMemoryDB {
   readonly threads = new Map<string, StorageThreadType>();
   readonly messages = new Map<string, StorageMessageType>();
+  readonly actions = new Map<string, PersistableAction[]>();
   readonly resources = new Map<string, StorageResourceType>();
   readonly workflows = new Map<string, StorageWorkflowRun>();
   readonly workflowDefinitions = new Map<string, WorkflowDefinition>();
@@ -124,6 +126,7 @@ export class InMemoryDB {
   clear(): void {
     this.threads.clear();
     this.messages.clear();
+    this.actions.clear();
     this.resources.clear();
     this.workflows.clear();
     this.workflowDefinitions.clear();

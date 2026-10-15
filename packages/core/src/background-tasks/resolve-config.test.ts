@@ -7,7 +7,7 @@ import { isToolBackgroundEligible, resolveBackgroundConfig } from './resolve-con
  * The LLM per-call `_background` override is a *modifier* on tools the
  * developer has already opted in at the tool or agent layer — not a
  * standalone opt-in. A foreground-only tool must stay foreground regardless
- * of what the model emits, so `agent.generate()` keeps returning real data
+ * of what the model emits, so `agent.generateMessageList()` keeps returning real data
  * for deterministic tools (calculators, lookups, schema validators).
  */
 describe('resolveBackgroundConfig', () => {

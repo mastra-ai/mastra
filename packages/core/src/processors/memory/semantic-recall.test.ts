@@ -2631,7 +2631,7 @@ describe('SemanticRecall', () => {
     it('should inject recalled context for a user-message signal (Studio sendMessage path)', async () => {
       // This is how a playground turn reaches input processors: useChat →
       // agent.sendMessage → thread-stream-runtime wakes the idle thread with
-      // agent.stream(signal, ...) → the signal is added to the MessageList as
+      // agent.streamMessageList(signal, ...) → the signal is added to the MessageList as
       // a role: 'signal' DB row.
       const signal = createSignal({ type: 'user-message', contents: USER_TEXT });
 

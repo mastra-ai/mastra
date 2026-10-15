@@ -121,7 +121,7 @@ describe('Supervisor pattern: output processor stream visibility', () => {
       storage: new InMemoryStore(),
     });
 
-    const stream = await supervisor.stream('Please delegate', { maxSteps: 5 });
+    const stream = await supervisor.streamMessageList('Please delegate', { maxSteps: 5 });
     for await (const _chunk of stream.fullStream) {
       // drain
     }
@@ -162,7 +162,7 @@ describe('Supervisor pattern: output processor stream visibility', () => {
       storage: new InMemoryStore(),
     });
 
-    const stream = await supervisor.stream('Please delegate', { maxSteps: 5 });
+    const stream = await supervisor.streamMessageList('Please delegate', { maxSteps: 5 });
     const consumerChunks: ChunkType[] = [];
     for await (const chunk of stream.fullStream) {
       consumerChunks.push(chunk);
@@ -198,7 +198,7 @@ describe('Supervisor pattern: output processor stream visibility', () => {
       storage: new InMemoryStore(),
     });
 
-    const stream = await supervisor.stream('Please delegate', { maxSteps: 5 });
+    const stream = await supervisor.streamMessageList('Please delegate', { maxSteps: 5 });
     const consumerChunks: ChunkType[] = [];
     for await (const chunk of stream.fullStream) {
       consumerChunks.push(chunk);
@@ -241,7 +241,7 @@ describe('Supervisor pattern: output processor stream visibility', () => {
       storage: new InMemoryStore(),
     });
 
-    const stream = await supervisor.stream('Please delegate', { maxSteps: 5 });
+    const stream = await supervisor.streamMessageList('Please delegate', { maxSteps: 5 });
     const consumerChunks: ChunkType[] = [];
     for await (const chunk of stream.fullStream) {
       consumerChunks.push(chunk);
@@ -288,7 +288,7 @@ describe('Supervisor pattern: output processor stream visibility', () => {
       storage: new InMemoryStore(),
     });
 
-    const stream = await supervisor.stream('Please delegate', { maxSteps: 5 });
+    const stream = await supervisor.streamMessageList('Please delegate', { maxSteps: 5 });
     const consumerChunks: ChunkType[] = [];
     for await (const chunk of stream.fullStream) {
       consumerChunks.push(chunk);

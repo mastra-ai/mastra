@@ -127,7 +127,7 @@ describe('Background Tasks E2E', () => {
   });
 
   it('dispatches a background-eligible tool and returns a placeholder', async () => {
-    const result = await agent.stream('Please research the topic "quantum computing"');
+    const result = await agent.streamMessageList('Please research the topic "quantum computing"');
 
     const chunks: any[] = [];
     for await (const chunk of result.fullStream) {
@@ -160,7 +160,7 @@ describe('Background Tasks E2E', () => {
   }, 30_000);
 
   it('runs a foreground tool normally', async () => {
-    const result = await agent.generate('Please greet someone named Alice');
+    const result = await agent.generateMessageList('Please greet someone named Alice');
 
     // generate() returns the full result directly
     expect(result.text).toBeDefined();
@@ -173,7 +173,7 @@ describe('Background Tasks E2E', () => {
 
   it('background task completes and result can be queried', async () => {
     // Stream to dispatch the background task
-    const result = await agent.stream('Research "artificial intelligence" for me');
+    const result = await agent.streamMessageList('Research "artificial intelligence" for me');
 
     // Consume the stream
     const chunks: any[] = [];
@@ -196,7 +196,7 @@ describe('Background Tasks E2E', () => {
   }, 30_000);
 
   it('emits background-task-completed chunk on the stream after task finishes', async () => {
-    const result = await agent.stream('Research "machine learning" please');
+    const result = await agent.streamMessageList('Research "machine learning" please');
 
     // Consume the stream — background-task-completed should appear as a chunk
     // because the stream chunk emitter is auto-wired to controller.enqueue
@@ -254,7 +254,7 @@ describe('Background Tasks E2E', () => {
 
     try {
       // --- First prompt: triggers background task ---
-      const stream1 = await memoryAgent.stream('Please research "neural networks" for me', {
+      const stream1 = await memoryAgent.streamMessageList('Please research "neural networks" for me', {
         memory: { thread: threadId, resource: resourceId },
       });
 
@@ -272,7 +272,7 @@ describe('Background Tasks E2E', () => {
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       // --- Second prompt: foreground tool while bg task is still running ---
-      const stream2 = await memoryAgent.stream('Now greet someone named Bob', {
+      const stream2 = await memoryAgent.streamMessageList('Now greet someone named Bob', {
         memory: { thread: threadId, resource: resourceId },
       });
 

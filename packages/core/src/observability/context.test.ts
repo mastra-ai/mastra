@@ -216,7 +216,7 @@ describe('Tracing Context Integration', () => {
       expect(agent).not.toBe(mockAgent);
 
       // When the agent is used, it should automatically get tracing context
-      agent.generate('test input');
+      agent.generateMessageList('test input');
 
       expect(mockAgent.generate).toHaveBeenCalledWith(
         'test input',
@@ -263,7 +263,7 @@ describe('Tracing Context Integration', () => {
       const unwrappedAgent = unwrappedMastra.getAgent('test');
 
       // Wrapped agent should inject context
-      await wrappedAgent.generate('test');
+      await wrappedAgent.generateMessageList('test');
       expect(mockAgent.generate).toHaveBeenLastCalledWith(
         'test',
         expect.objectContaining(createObservabilityContext(tracingContext)),
@@ -302,7 +302,7 @@ describe('Tracing Context Integration', () => {
       const agent = wrapped.getAgent('test-agent');
 
       // Error should propagate normally through the wrapped agent
-      await expect(agent.generate('test')).rejects.toThrow('Generation failed');
+      await expect(agent.generateMessageList('test')).rejects.toThrow('Generation failed');
     });
 
     it('should handle property access errors in wrapper methods', () => {

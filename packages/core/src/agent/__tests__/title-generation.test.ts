@@ -3345,7 +3345,7 @@ describe('sub-agent title generation propagation (#18738)', () => {
       memory,
     });
 
-    const stream = await supervisor.stream('Please delegate.', {
+    const stream = await supervisor.streamMessageList('Please delegate.', {
       maxSteps: 3,
       memory: { thread: 'top-level-thread', resource: 'user-1' },
     });

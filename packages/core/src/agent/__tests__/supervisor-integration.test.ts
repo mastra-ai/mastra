@@ -1544,7 +1544,7 @@ describe('Supervisor Pattern - Working memory forwarding', () => {
       const resourceId = 'test-resource-shared-memory';
 
       // Consume the stream and check for updateWorkingMemory errors
-      const agentStream = await supervisorWithSharedMemory.stream('Research dolphins and write a summary', {
+      const agentStream = await supervisorWithSharedMemory.streamMessageList('Research dolphins and write a summary', {
         memory: { thread: threadId, resource: resourceId },
       });
 
@@ -2055,7 +2055,7 @@ describe('Supervisor Pattern - Working memory across delegations', () => {
     const resourceId = 'test-user';
 
     // First generate call: supervisor delegates to sub-agent, sub-agent saves working memory
-    await supervisor.generate('Find record X', {
+    await supervisor.generateMessageList('Find record X', {
       maxSteps: 5,
       memory: { thread: threadId, resource: resourceId },
       delegation: {
@@ -2081,7 +2081,7 @@ describe('Supervisor Pattern - Working memory across delegations', () => {
     expect(savedWorkingMemory).toContain('401881');
 
     // Second generate call: supervisor delegates to same sub-agent again
-    await supervisor.generate('Now update the entity', {
+    await supervisor.generateMessageList('Now update the entity', {
       maxSteps: 5,
       memory: { thread: threadId, resource: resourceId },
       delegation: {
@@ -4779,13 +4779,13 @@ describe('Supervisor Pattern - Sub-agent context across multiple generate calls'
     const resourceId = 'ctx-test-user';
 
     // First generate: supervisor delegates to sub-agent, sub-agent "creates" a record
-    await supervisor.generate('Create a new record named Test Record', {
+    await supervisor.generateMessageList('Create a new record named Test Record', {
       maxSteps: 5,
       memory: { thread: threadId, resource: resourceId },
     });
 
     // Second generate: supervisor delegates to same sub-agent for a follow-up action
-    await supervisor.generate('Update the record', {
+    await supervisor.generateMessageList('Update the record', {
       maxSteps: 5,
       memory: { thread: threadId, resource: resourceId },
     });
@@ -5090,7 +5090,7 @@ describe('Supervisor Pattern - Sub-agent should not receive parent tool call ref
     const resourceId = 'tool-leak-user';
 
     // First generate: supervisor delegates to sub-agent
-    await supervisor.generate('Create a record named Test Record', {
+    await supervisor.generateMessageList('Create a record named Test Record', {
       maxSteps: 5,
       memory: { thread: threadId, resource: resourceId },
     });
@@ -5099,7 +5099,7 @@ describe('Supervisor Pattern - Sub-agent should not receive parent tool call ref
     const firstCallPromptCount = subAgentReceivedPrompts.length;
 
     // Second generate: supervisor delegates to sub-agent again
-    await supervisor.generate('Create another record', {
+    await supervisor.generateMessageList('Create another record', {
       maxSteps: 5,
       memory: { thread: threadId, resource: resourceId },
     });
@@ -5263,7 +5263,7 @@ describe('Supervisor Pattern - AbortSignal forwarding', () => {
     });
 
     const controller = new AbortController();
-    const stream = await supervisor.stream('go', { abortSignal: controller.signal, maxSteps: 5 });
+    const stream = await supervisor.streamMessageList('go', { abortSignal: controller.signal, maxSteps: 5 });
     const drainPromise = (async () => {
       for await (const _chunk of stream.fullStream) {
         // drain
@@ -5313,7 +5313,7 @@ describe('Supervisor Pattern - AbortSignal forwarding', () => {
     });
 
     const controller = new AbortController();
-    await supervisor.generate('go', { abortSignal: controller.signal, maxSteps: 5 });
+    await supervisor.generateMessageList('go', { abortSignal: controller.signal, maxSteps: 5 });
 
     expect(capturedSignal).toBeDefined();
     expect(capturedSignal!.aborted).toBe(false);
@@ -5394,7 +5394,7 @@ describe('Delegation maxSteps cap', () => {
       memory: new MockMemory(),
     });
 
-    await supervisor.generate('go', { maxSteps: 5 });
+    await supervisor.generateMessageList('go', { maxSteps: 5 });
 
     expect(generateSpy).toHaveBeenCalledTimes(1);
     expect(generateSpy.mock.calls[0]?.[1]?.maxSteps).toBe(4);
@@ -5413,7 +5413,7 @@ describe('Delegation maxSteps cap', () => {
       memory: new MockMemory(),
     });
 
-    await supervisor.generate('go', { maxSteps: 5 });
+    await supervisor.generateMessageList('go', { maxSteps: 5 });
 
     expect(generateSpy).toHaveBeenCalledTimes(1);
     expect(generateSpy.mock.calls[0]?.[1]?.maxSteps).toBe(3);
@@ -5432,7 +5432,7 @@ describe('Delegation maxSteps cap', () => {
       memory: new MockMemory(),
     });
 
-    await supervisor.generate('go', { maxSteps: 5 });
+    await supervisor.generateMessageList('go', { maxSteps: 5 });
 
     expect(generateSpy).toHaveBeenCalledTimes(1);
     expect(generateSpy.mock.calls[0]?.[1]?.maxSteps).toBe(10);
@@ -5451,7 +5451,7 @@ describe('Delegation maxSteps cap', () => {
       memory: new MockMemory(),
     });
 
-    await supervisor.generate('go', {
+    await supervisor.generateMessageList('go', {
       maxSteps: 5,
       delegation: {
         onDelegationStart: () => ({ proceed: true, modifiedMaxSteps: 12 }),
@@ -5485,7 +5485,7 @@ describe('Delegation request context derivation', () => {
     parentContext.set(MASTRA_THREAD_ID_KEY, 'parent-thread');
     parentContext.set(MASTRA_RESOURCE_ID_KEY, 'parent-resource');
 
-    await supervisor.generate('go', {
+    await supervisor.generateMessageList('go', {
       maxSteps: 3,
       requestContext: parentContext,
       memory: { resource: 'parent-resource', thread: 'parent-thread' },
@@ -5546,7 +5546,7 @@ describe('Delegation request context derivation', () => {
     const parentContext = new RequestContext();
     parentContext.set('tenantId', 'acme');
 
-    await supervisor.generate('go', {
+    await supervisor.generateMessageList('go', {
       maxSteps: 5,
       requestContext: parentContext,
       delegation: {
@@ -5595,7 +5595,7 @@ describe('Delegation request context derivation', () => {
     const parentContext = new RequestContext();
     parentContext.set('tenantId', 'acme');
 
-    await supervisor.generate('go', {
+    await supervisor.generateMessageList('go', {
       maxSteps: 3,
       requestContext: parentContext,
     });

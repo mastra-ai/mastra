@@ -353,7 +353,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
       });
 
       const agent = mastra.getAgent('testAgent');
-      const result = await agent.generate('Say hello');
+      const result = await agent.generateMessageList('Say hello');
 
       expect(result).toBeDefined();
       expect(result.text).toBe('Mock response');
@@ -375,7 +375,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
       });
 
       const agent = mastra.getAgent('testAgent');
-      const stream = await agent.stream('Say hello');
+      const stream = await agent.streamMessageList('Say hello');
 
       const chunks: string[] = [];
       for await (const chunk of stream.textStream) {
@@ -413,7 +413,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
       });
 
       const agent = mastra.getAgent('weatherAgent');
-      const result = await agent.generate('What is the weather in San Francisco?');
+      const result = await agent.generateMessageList('What is the weather in San Francisco?');
 
       expect(result).toBeDefined();
       expect(result.text).toBe('The weather is 72°F and Sunny.');
@@ -443,7 +443,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
       });
 
       const agent = mastra.getAgent('testAgent');
-      await agent.generate('Hello');
+      await agent.generateMessageList('Hello');
       expect(prepareCallSpy).toHaveBeenCalledTimes(1);
     });
 
@@ -471,7 +471,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
       });
 
       const agent = mastra.getAgent('testAgent');
-      await agent.generate('What are you?');
+      await agent.generateMessageList('What are you?');
 
       // Verify the system message contains the prepareCall instructions, not the original
       const systemMessage = capturedOptions.prompt.find((msg: any) => msg.role === 'system');
@@ -505,7 +505,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
       });
 
       const agent = mastra.getAgent('testAgent');
-      await agent.generate('Hello');
+      await agent.generateMessageList('Hello');
 
       expect(prepareCallSpy).toHaveBeenCalled();
       // Verify the temperature was overridden in the model call
@@ -539,7 +539,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
       });
 
       const agent = mastra.getAgent('testAgent');
-      await agent.generate('What is the weather in NYC?');
+      await agent.generateMessageList('What is the weather in NYC?');
 
       // prepareStep is called at least once (on each step)
       expect(prepareStepSpy).toHaveBeenCalled();
@@ -575,7 +575,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
       });
 
       const agent = mastra.getAgent('testAgent');
-      await agent.generate('What is the weather in NYC?');
+      await agent.generateMessageList('What is the weather in NYC?');
 
       // First step should be 0
       expect(stepNumbers[0]).toBe(0);
@@ -613,7 +613,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
       });
 
       const agent = mastra.getAgent('testAgent');
-      const result = await agent.generate('Hello');
+      const result = await agent.generateMessageList('Hello');
 
       // With toolChoice: 'required', the first step should have a tool call
       expect(result.steps.length).toBe(2);
@@ -676,7 +676,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
       });
 
       const agent = mastra.getAgent('testAgent');
-      await agent.generate('Hello');
+      await agent.generateMessageList('Hello');
 
       // The system message should have been overridden
       expect(capturedPrompt).toBeDefined();
@@ -720,7 +720,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
       });
 
       const agent = mastra.getAgent('testAgent');
-      await agent.generate('What is the weather in NYC?');
+      await agent.generateMessageList('What is the weather in NYC?');
 
       // prepareStep should be called for each step
       expect(stepsPerCall.length).toBe(2);
@@ -817,7 +817,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
       });
 
       const agent = mastra.getAgent('testAgent');
-      await agent.generate('Hello');
+      await agent.generateMessageList('Hello');
 
       // prepareStep should receive the overridden model from prepareCall, not the original
       expect(modelIdReceivedInPrepareStep).toBe('override-model');
@@ -901,7 +901,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
       });
 
       const agent = mastra.getAgent('testAgent');
-      await agent.generate('Hello');
+      await agent.generateMessageList('Hello');
 
       // Verify prepareCall received the original instructions
       expect(instructionsSeenInPrepareCall).toBe('Original agent instructions');
@@ -987,7 +987,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
       });
 
       const agent = mastra.getAgent('testAgent');
-      await agent.generate('What is the weather?');
+      await agent.generateMessageList('What is the weather?');
 
       // Both overrides should be applied
       expect(capturedOptions).toBeDefined();
@@ -1060,7 +1060,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
       });
 
       const agent = mastra.getAgent('testAgent');
-      await agent.generate('Original user message');
+      await agent.generateMessageList('Original user message');
 
       // The final prompt should have the modified messages
       expect(capturedPrompt).toBeDefined();
@@ -1107,7 +1107,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
       });
 
       const agent = mastra.getAgent('testAgent');
-      await agent.generate('Get weather for NYC, LA, and Chicago');
+      await agent.generateMessageList('Get weather for NYC, LA, and Chicago');
 
       // stopWhen should have been called
       expect(stopWhenCalled).toBe(true);
@@ -1133,7 +1133,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
       });
 
       const agent = mastra.getAgent('testAgent');
-      await agent.generate('Say hi');
+      await agent.generateMessageList('Say hi');
 
       expect(onStepFinishSpy).toHaveBeenCalled();
     });
@@ -1156,7 +1156,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
       });
 
       const agent = mastra.getAgent('testAgent');
-      await agent.generate('Say hi');
+      await agent.generateMessageList('Say hi');
 
       expect(onFinishSpy).toHaveBeenCalled();
     });
@@ -1188,7 +1188,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
       });
 
       const agent = mastra.getAgent('testAgent');
-      await agent.generate('What is the weather in NYC?');
+      await agent.generateMessageList('What is the weather in NYC?');
 
       // With tool call mock, should have 2 step finish calls (tool call step + final response step)
       expect(stepFinishCalls.length).toBe(2);

@@ -177,7 +177,7 @@ describe('runExperiment', () => {
       expect(itemResult.completedAt).toBeInstanceOf(Date);
     });
 
-    it('passes requestContext through to agent.generate()', async () => {
+    it('passes requestContext through to agent.generateMessageList()', async () => {
       const mockAgent = createMockAgent('Response');
       const localMastra = {
         ...mastra,

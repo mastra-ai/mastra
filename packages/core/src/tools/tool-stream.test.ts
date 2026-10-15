@@ -11,7 +11,7 @@ import { createTool } from '.';
 
 describe('ToolStream', () => {
   // A workflow step that gets an agent, streams with structured output, and pipes the objectStream to the step's writer.
-  it('should allow piping agent.stream().fullStream to writer in workflow step', async () => {
+  it('should allow piping agent.streamMessageList().fullStream to writer in workflow step', async () => {
     const structuredOutputResponse = JSON.stringify({
       storyTitle: 'The Hero Journey',
       chapters: [
@@ -77,7 +77,7 @@ describe('ToolStream', () => {
 
         const chapterAgent = stepMastra.getAgent('chapterGeneratorAgent');
 
-        const response = await chapterAgent.stream(
+        const response = await chapterAgent.streamMessageList(
           `Create a ${numberOfChapters}-chapter story plan for: ${storyIdea}`,
           {
             structuredOutput: {
@@ -195,7 +195,7 @@ describe('ToolStream - writer.custom', () => {
       },
     });
 
-    const stream = await agent.stream('Call the custom-tool with message "test"');
+    const stream = await agent.streamMessageList('Call the custom-tool with message "test"');
 
     const chunks: ChunkType[] = [];
     for await (const chunk of stream.fullStream) {
@@ -322,7 +322,7 @@ describe('ToolStream - writer.custom', () => {
       },
     });
 
-    const stream = await parentAgent.stream('Use the sub-agent to analyze data');
+    const stream = await parentAgent.streamMessageList('Use the sub-agent to analyze data');
 
     const chunks: ChunkType[] = [];
     for await (const chunk of stream.fullStream) {
@@ -405,7 +405,7 @@ describe('ToolStream - writer.custom', () => {
       },
     });
 
-    const stream = await agent.stream('Call the mixed-tool with value "test"');
+    const stream = await agent.streamMessageList('Call the mixed-tool with value "test"');
 
     const chunks: ChunkType[] = [];
     for await (const chunk of stream.fullStream) {
@@ -537,7 +537,7 @@ describe('ToolStream - writer.custom', () => {
     const resourceId = 'user-test-data-chunks';
 
     // Stream with memory enabled
-    const stream = await agent.stream('Run the progress tool for test-task', {
+    const stream = await agent.streamMessageList('Run the progress tool for test-task', {
       memory: {
         thread: threadId,
         resource: resourceId,
@@ -669,7 +669,7 @@ describe('ToolStream - writer.custom', () => {
     const threadId = 'test-thread-transient';
     const resourceId = 'user-test-transient';
 
-    const stream = await agent.stream('Run the mixed tool', {
+    const stream = await agent.streamMessageList('Run the mixed tool', {
       memory: {
         thread: threadId,
         resource: resourceId,

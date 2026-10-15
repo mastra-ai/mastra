@@ -117,7 +117,7 @@ describe('Structured Output with Tool Execution', () => {
     });
 
     // Stream the response
-    const stream = await agent.stream('Calculate 5 + 3 and return structured output', {
+    const stream = await agent.streamMessageList('Calculate 5 + 3 and return structured output', {
       maxSteps: 5,
       structuredOutput: {
         schema: responseSchema,
@@ -205,7 +205,7 @@ describe('Structured Output with Tool Execution', () => {
       },
     });
 
-    const stream = await agent.stream('What is the weather in Toronto?', {
+    const stream = await agent.streamMessageList('What is the weather in Toronto?', {
       maxSteps: 10,
       structuredOutput: {
         schema: responseSchema,
@@ -237,7 +237,7 @@ describe('Structured Output with Tool Execution', () => {
       model: openai('gpt-4o-mini'),
     });
 
-    const result = await agent.generate('What is 2+2?', {
+    const result = await agent.generateMessageList('What is 2+2?', {
       structuredOutput: {
         schema: responseSchema,
         // Note: no model provided - should use response_format or JSON prompt injection
@@ -264,7 +264,7 @@ describe('Structured Output with Tool Execution', () => {
       model: openai('gpt-4o-mini'),
     });
 
-    const stream = await agent.stream('What is 2+2?', {
+    const stream = await agent.streamMessageList('What is 2+2?', {
       structuredOutput: {
         schema: responseSchema,
         model: openai('gpt-4o-mini'),

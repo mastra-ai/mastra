@@ -123,8 +123,8 @@ const turnWith = (...files: Array<ReturnType<typeof file>>) => [
 const unsentNote = (name: string) => `[Attachment unavailable: ${name}]`;
 
 const run = async (agent: Agent, mode: 'generate' | 'stream', input: Parameters<Agent['generate']>[0]) => {
-  if (mode === 'generate') return (await agent.generate(input, { memory: MEMORY })).text;
-  const output = await agent.stream(input, { memory: MEMORY });
+  if (mode === 'generate') return (await agent.generateMessageList(input, { memory: MEMORY })).text;
+  const output = await agent.streamMessageList(input, { memory: MEMORY });
   return (await output.getFullOutput()).text;
 };
 
@@ -156,7 +156,7 @@ describe('UnsupportedFileHandler, a default error processor of every agent', () 
   it('keeps the images, PDFs, and text files of the request when it replaces the rejected one', async () => {
     const { agent, prompts } = createAgent(rejectsTypes(XLSX));
 
-    await agent.generate(
+    await agent.generateMessageList(
       turnWith(
         file('PK workbook', 'leads.xlsx', XLSX),
         file('%PDF report', 'report.pdf', 'application/pdf'),
@@ -176,7 +176,7 @@ describe('UnsupportedFileHandler, a default error processor of every agent', () 
   it('replaces every other file type the model may not read too, since it only tries again once', async () => {
     const { agent, prompts } = createAgent(rejectsTypes(XLSX, 'application/zip'));
 
-    const result = await agent.generate(
+    const result = await agent.generateMessageList(
       turnWith(file('PK workbook', 'leads.xlsx', XLSX), file('PK archive', undefined, 'application/zip')),
       { memory: MEMORY },
     );
@@ -189,7 +189,7 @@ describe('UnsupportedFileHandler, a default error processor of every agent', () 
   it('keeps the rejected file in the stored message', async () => {
     const { agent, recall } = createAgent(rejectsTypes(XLSX));
 
-    await agent.generate(turnWith(file('PK workbook', 'leads.xlsx', XLSX)), { memory: MEMORY });
+    await agent.generateMessageList(turnWith(file('PK workbook', 'leads.xlsx', XLSX)), { memory: MEMORY });
 
     const stored = (await recall()).find(message => message.role === 'user');
     expect(stored?.content.parts.map(part => part.type)).toEqual(['text', 'file']);
@@ -222,8 +222,8 @@ describe('UnsupportedFileHandler, a default error processor of every agent', () 
       ],
     });
 
-    const first = await agent.generate('Hello', { memory: MEMORY });
-    const second = await agent.generate('Hello again', { memory: MEMORY });
+    const first = await agent.generateMessageList('Hello', { memory: MEMORY });
+    const second = await agent.generateMessageList('Hello again', { memory: MEMORY });
 
     expect([first.text, second.text]).toEqual(['ok', 'ok']);
     expect(prompts).toHaveLength(4);
@@ -249,7 +249,7 @@ describe('UnsupportedFileHandler, a default error processor of every agent', () 
     it('replaces a file the model may not read, and calls the model again', async () => {
       const { agent, prompts } = createAgent(rejectsOverHttp(XLSX));
 
-      const result = await agent.generate(turnWith(file('PK workbook', 'leads.xlsx', XLSX)), { memory: MEMORY });
+      const result = await agent.generateMessageList(turnWith(file('PK workbook', 'leads.xlsx', XLSX)), { memory: MEMORY });
 
       expect(result.text).toBe('ok');
       expect(prompts).toHaveLength(2);
@@ -259,8 +259,8 @@ describe('UnsupportedFileHandler, a default error processor of every agent', () 
     it('keeps the next text-only turn of the thread working', async () => {
       const { agent, prompts } = createAgent(rejectsOverHttp(XLSX));
 
-      await agent.generate(turnWith(file('PK workbook', 'leads.xlsx', XLSX)), { memory: MEMORY });
-      const next = await agent.generate('Just say hi', { memory: MEMORY });
+      await agent.generateMessageList(turnWith(file('PK workbook', 'leads.xlsx', XLSX)), { memory: MEMORY });
+      const next = await agent.generateMessageList('Just say hi', { memory: MEMORY });
 
       expect(next.text).toBe('ok');
       expect(userTexts(prompts.at(-1)!)).toContain(unsentNote('leads.xlsx'));
@@ -270,7 +270,7 @@ describe('UnsupportedFileHandler, a default error processor of every agent', () 
       const { agent, prompts } = createAgent(() => httpError());
 
       await expect(
-        agent.generate(turnWith(file('%PDF report', 'report.pdf', 'application/pdf')), { memory: MEMORY }),
+        agent.generateMessageList(turnWith(file('%PDF report', 'report.pdf', 'application/pdf')), { memory: MEMORY }),
       ).rejects.toThrow('An internal error has occurred');
       expect(prompts).toHaveLength(1);
     });
@@ -293,7 +293,7 @@ describe('UnsupportedFileHandler, a default error processor of every agent', () 
           });
         });
 
-        const result = await agent.generate(turnWith(file('PK workbook', 'leads.xlsx', XLSX)), { memory: MEMORY });
+        const result = await agent.generateMessageList(turnWith(file('PK workbook', 'leads.xlsx', XLSX)), { memory: MEMORY });
 
         expect(result.text).toBe('ok');
         expect(prompts).toHaveLength(2);
@@ -308,7 +308,7 @@ describe('UnsupportedFileHandler, a default error processor of every agent', () 
       () => new UnsupportedFunctionalityError({ functionality: 'tool choice type: required' }),
     );
 
-    await expect(agent.generate(turnWith(file('PK workbook', 'leads.xlsx', XLSX)), { memory: MEMORY })).rejects.toThrow(
+    await expect(agent.generateMessageList(turnWith(file('PK workbook', 'leads.xlsx', XLSX)), { memory: MEMORY })).rejects.toThrow(
       'tool choice type: required',
     );
     expect(prompts).toHaveLength(1);
@@ -319,7 +319,7 @@ describe('UnsupportedFileHandler, a default error processor of every agent', () 
       () => new UnsupportedFunctionalityError({ functionality: `file part media type ${XLSX}` }),
     );
 
-    await expect(agent.generate(turnWith(file('PK workbook', 'leads.xlsx', XLSX)), { memory: MEMORY })).rejects.toThrow(
+    await expect(agent.generateMessageList(turnWith(file('PK workbook', 'leads.xlsx', XLSX)), { memory: MEMORY })).rejects.toThrow(
       `file part media type ${XLSX}`,
     );
     expect(prompts).toHaveLength(2);
@@ -328,7 +328,7 @@ describe('UnsupportedFileHandler, a default error processor of every agent', () 
   it('does nothing for an agent that turns the default error processors off', async () => {
     const { agent, prompts } = createAgent(rejectsTypes(XLSX), { errorProcessorDefaults: false });
 
-    await expect(agent.generate(turnWith(file('PK workbook', 'leads.xlsx', XLSX)), { memory: MEMORY })).rejects.toThrow(
+    await expect(agent.generateMessageList(turnWith(file('PK workbook', 'leads.xlsx', XLSX)), { memory: MEMORY })).rejects.toThrow(
       `file part media type ${XLSX}`,
     );
     expect(prompts).toHaveLength(1);
@@ -350,7 +350,7 @@ describe('UnsupportedFileHandler, a default error processor of every agent', () 
       const { sandbox, writes } = createFakeSandbox();
       const { agent, prompts, recall } = createAgent(rejectsTypes(XLSX), { sandbox });
 
-      const result = await agent.generate(turnWith(file(workbook, 'leads.xlsx', XLSX)), { memory: MEMORY });
+      const result = await agent.generateMessageList(turnWith(file(workbook, 'leads.xlsx', XLSX)), { memory: MEMORY });
 
       expect(result.text).toBe('ok');
       expect(writes.flat().map(written => written.content.toString())).toEqual([workbook]);
@@ -389,7 +389,7 @@ describe('UnsupportedFileHandler, a default error processor of every agent', () 
         sandbox: (() => undefined) as unknown as WorkspaceSandboxResolver,
       });
 
-      const result = await agent.generate(turnWith(file(workbook, 'leads.xlsx', XLSX)), { memory: MEMORY });
+      const result = await agent.generateMessageList(turnWith(file(workbook, 'leads.xlsx', XLSX)), { memory: MEMORY });
 
       expect(result.text).toBe('ok');
       expect(userTexts(prompts[1]!)).toEqual(['Read these', unsentNote('leads.xlsx')]);
@@ -403,7 +403,7 @@ describe('UnsupportedFileHandler, a default error processor of every agent', () 
       });
       const { agent, prompts } = createAgent(rejectsTypes(XLSX), { sandbox });
 
-      const result = await agent.generate(turnWith(file(workbook, 'leads.xlsx', XLSX)), { memory: MEMORY });
+      const result = await agent.generateMessageList(turnWith(file(workbook, 'leads.xlsx', XLSX)), { memory: MEMORY });
 
       expect(result.text).toBe('ok');
       expect(result.tripwire).toBeUndefined();

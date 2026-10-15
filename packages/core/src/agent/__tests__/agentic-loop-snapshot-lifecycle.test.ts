@@ -211,7 +211,7 @@ describe('agentic-loop snapshot lifecycle', () => {
     });
     const workflowsStore = (await mastra.getStorage()!.getStore('workflows'))!;
 
-    const stream = await supervisor.stream('Find the user Dero Israel via billing');
+    const stream = await supervisor.streamMessageList('Find the user Dero Israel via billing');
 
     let toolCallId = '';
     for await (const chunk of stream.fullStream) {
@@ -232,7 +232,7 @@ describe('agentic-loop snapshot lifecycle', () => {
     // boundary — the in-memory loop holds the registration.
     expect(mastra.__getRunScope(stream.runId)).toBeDefined();
 
-    const resumeStream = await supervisor.approveToolCall({ runId: stream.runId, toolCallId });
+    const resumeStream = await supervisor.approveToolCallMessageList({ runId: stream.runId, toolCallId });
     for await (const _chunk of resumeStream.fullStream) {
       // consume
     }

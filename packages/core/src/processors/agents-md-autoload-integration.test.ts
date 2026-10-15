@@ -486,7 +486,7 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
       ],
     });
 
-    await agent.generate('List the core directory', { maxSteps: 2 });
+    await agent.generateMessageList('List the core directory', { maxSteps: 2 });
 
     expect(reclassified.some(message => message.content.parts.some(part => part.type === 'tool-invocation'))).toBe(
       true,

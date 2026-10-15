@@ -174,14 +174,14 @@ describe('delegated resume custom frames (#22217)', () => {
     });
     const supervisor = mastra.getAgent('supervisor');
 
-    const stream = await supervisor.stream('Process the order.', {
+    const stream = await supervisor.streamMessageList('Process the order.', {
       maxSteps: 6,
       memory: { resource: 'r1', thread: 'thread-1' },
     });
     const initialChunks = await collectChunks(stream);
     expect(initialChunks.some(c => c.type === 'tool-call-approval')).toBe(true);
 
-    const resumed = await supervisor.approveToolCall({ runId: stream.runId, toolCallId: 'sup-tc-A' });
+    const resumed = await supervisor.approveToolCallMessageList({ runId: stream.runId, toolCallId: 'sup-tc-A' });
     const resumedChunks = await collectChunks(resumed);
     expectNoErrors(resumedChunks);
     const types = resumedChunks.map(c => c.type);
@@ -195,7 +195,7 @@ describe('delegated resume custom frames (#22217)', () => {
     const mastra = new Mastra({ agents: { supervisor: sup }, logger: false, storage: new InMemoryStore() });
     const supervisor = mastra.getAgent('supervisor');
 
-    const stream = await supervisor.stream('Process the order.', {
+    const stream = await supervisor.streamMessageList('Process the order.', {
       maxSteps: 6,
       memory: { resource: 'r1', thread: 'thread-1' },
     });

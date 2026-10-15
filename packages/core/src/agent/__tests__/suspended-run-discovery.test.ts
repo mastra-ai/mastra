@@ -853,7 +853,7 @@ describe('suspended-run discovery', () => {
       });
       new Mastra({ agents: { supervisor, subAgent }, logger: false, storage: new InMemoryStore() });
 
-      const stream = await supervisor.stream('Find the user Dero Israel via billing', {
+      const stream = await supervisor.streamMessageList('Find the user Dero Israel via billing', {
         memory: { thread: 'thread-1', resource: 'resource-1' },
       });
       for await (const _chunk of stream.fullStream) {
@@ -913,7 +913,7 @@ describe('suspended-run discovery', () => {
       });
       new Mastra({ agents: { supervisor, mid, leaf }, logger: false, storage: new InMemoryStore() });
 
-      const stream = await supervisor.stream('Find the user Dero Israel', {
+      const stream = await supervisor.streamMessageList('Find the user Dero Israel', {
         memory: { thread: 'thread-1', resource: 'resource-1' },
       });
       for await (const _chunk of stream.fullStream) {

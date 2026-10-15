@@ -61,7 +61,7 @@ describe('ProviderHistoryCompat Anthropic reasoning E2E', { timeout: 60_000 }, (
     });
 
     const firstUserMessage = { role: 'user' as const, content: 'What is 19 * 23? Reply with one sentence.' };
-    const firstResult = await reasoningAgent.generate([firstUserMessage], {
+    const firstResult = await reasoningAgent.generateMessageList([firstUserMessage], {
       maxSteps: 1,
     });
     const responseMessages = firstResult.response.messages ?? [];
@@ -69,7 +69,7 @@ describe('ProviderHistoryCompat Anthropic reasoning E2E', { timeout: 60_000 }, (
     expect(assistantMessage).toBeDefined();
     expect(JSON.stringify(assistantMessage)).toContain('reasoning');
 
-    const result = await anthropicAgent.generate(
+    const result = await anthropicAgent.generateMessageList(
       [firstUserMessage, assistantMessage!, { role: 'user' as const, content: 'Reply with only: OK' }],
       {
         maxSteps: 1,
@@ -109,7 +109,7 @@ describe('ProviderHistoryCompat Anthropic reasoning E2E', { timeout: 60_000 }, (
     } as const;
 
     const firstUserMessage = { role: 'user' as const, content: 'What is 17 * 29? Reply with one sentence.' };
-    const firstResult = await anthropicAgent.generate([firstUserMessage], {
+    const firstResult = await anthropicAgent.generateMessageList([firstUserMessage], {
       maxSteps: 1,
       modelSettings: { maxOutputTokens: 1200 },
       providerOptions,
@@ -120,7 +120,7 @@ describe('ProviderHistoryCompat Anthropic reasoning E2E', { timeout: 60_000 }, (
     expect(JSON.stringify(assistantMessage)).toContain('reasoning');
     expect(JSON.stringify(assistantMessage)).toContain('anthropic');
 
-    const result = await anthropicAgent.generate(
+    const result = await anthropicAgent.generateMessageList(
       [firstUserMessage, assistantMessage!, { role: 'user' as const, content: 'Reply with only: OK' }],
       {
         maxSteps: 1,

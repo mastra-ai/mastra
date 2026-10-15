@@ -91,7 +91,7 @@ describe('ModelRouter Integration Tests', () => {
         tools: { get_weather: weatherTool },
       });
 
-      const response = await agent.generate('What is 2+2?');
+      const response = await agent.generateMessageList('What is 2+2?');
       expect(response.text).toBeDefined();
       expect(typeof response.text).toBe('string');
       expect(response.text.length).toBeGreaterThan(0);
@@ -114,7 +114,7 @@ describe('ModelRouter Integration Tests', () => {
         tools: { get_weather: weatherTool },
       });
 
-      const response = await agent.generate('What is the capital of France?');
+      const response = await agent.generateMessageList('What is the capital of France?');
       expect(response.text).toBeDefined();
       expect(typeof response.text).toBe('string');
       expect(response.text.toLowerCase()).toContain('paris');
@@ -138,7 +138,7 @@ describe('ModelRouter Integration Tests', () => {
         model: modelId,
       });
 
-      const response = await agent.generate('Say "Hello from Mastra!" and nothing else.');
+      const response = await agent.generateMessageList('Say "Hello from Mastra!" and nothing else.');
 
       expect(response).toBeDefined();
       expect(response.text).toBeDefined();
@@ -161,7 +161,7 @@ describe('ModelRouter Integration Tests', () => {
         },
       });
 
-      const response = await agent.generate('What is the weather in San Francisco?', {
+      const response = await agent.generateMessageList('What is the weather in San Francisco?', {
         toolChoice: 'required',
         maxSteps: 1,
       });
@@ -185,7 +185,7 @@ describe('ModelRouter Integration Tests', () => {
         model: modelId,
       });
 
-      const response = await agent.generate('Say hello');
+      const response = await agent.generateMessageList('Say hello');
 
       expect(response.text).toBeDefined();
       expect(typeof response.text).toBe('string');
@@ -207,7 +207,7 @@ describe('ModelRouter Integration Tests', () => {
         model: modelId,
       });
 
-      const { textStream } = await agent.stream('Count from 1 to 3');
+      const { textStream } = await agent.streamMessageList('Count from 1 to 3');
 
       const chunks: string[] = [];
       for await (const chunk of textStream) {
