@@ -45,7 +45,7 @@ export function ExperimentsToolbar({
         </ActionRow.Start>
       </ActionRow>
       <ActionRow>
-        <ActionRow.Start>
+        <ActionRow.Start className="self-end">
           <ExperimentsComparableLegend datasetId={comparableDatasetId} />
         </ActionRow.Start>
         <ActionRow.End>
