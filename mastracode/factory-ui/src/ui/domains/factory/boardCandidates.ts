@@ -21,6 +21,8 @@ export interface IntakeFeed {
   isFetchingNextPage?: boolean;
   fetchNextPage: () => unknown;
   refetch: () => unknown;
+  /** Retries only the failed provider in a combined feed. */
+  retryFailed?: () => unknown;
 }
 
 /** A live GitHub/Linear issue or PR that has not been materialized as a work item. */

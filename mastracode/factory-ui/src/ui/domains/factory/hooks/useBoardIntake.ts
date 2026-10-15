@@ -80,20 +80,24 @@ function feedWithRoutingFailure(
   };
 }
 
-/** A single feed keeps its query state; multiple feeds page and retry together. */
+/** A single feed keeps its query state; multiple feeds page independently. */
 function combineIntakeFeeds(feeds: readonly (IntakeFeed & { isPending: boolean })[]) {
   if (feeds.length === 0) return undefined;
   if (feeds.length === 1) return feeds[0];
 
   const failedFeed = feeds.find(feed => feed.error);
+  const healthyFeeds = feeds.filter(feed => !feed.error);
   return {
     error: failedFeed?.error ?? null,
     isPending: feeds.some(feed => feed.isPending),
     isFetchNextPageError: failedFeed?.isFetchNextPageError ?? false,
-    hasNextPage: feeds.some(feed => feed.hasNextPage),
-    isFetchingNextPage: feeds.some(feed => feed.isFetchingNextPage),
-    fetchNextPage: () => Promise.all(feeds.filter(feed => feed.hasNextPage).map(feed => feed.fetchNextPage())),
+    hasNextPage: healthyFeeds.some(feed => feed.hasNextPage),
+    isFetchingNextPage: healthyFeeds.some(feed => feed.isFetchingNextPage),
+    fetchNextPage: () => Promise.all(healthyFeeds.filter(feed => feed.hasNextPage).map(feed => feed.fetchNextPage())),
     refetch: () => Promise.all(feeds.map(feed => feed.refetch())),
+    retryFailed: failedFeed
+      ? () => (failedFeed.isFetchNextPageError ? failedFeed.fetchNextPage() : failedFeed.refetch())
+      : undefined,
   };
 }
 
@@ -327,7 +331,8 @@ export function useBoardIntake({
     routesPending;
   const isConfigurationPending = !review && configQuery.isPending;
   const isRoutingPending = browsesGithub && routesPending;
-  const isPending = isConfigurationPending || discoveringSources || isRoutingPending || Boolean(feed?.isPending);
+  const isPending =
+    isConfigurationPending || (!review && discoveringSources) || isRoutingPending || Boolean(feed?.isPending);
 
   return {
     active: failedSource ?? browsedSources[0],

@@ -12,6 +12,7 @@ import { builtinBoardCatalog, releaseBoard } from '../../../../../../e2e/ui/boar
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import type { LinkedRepositoryPayload } from '../../../workspaces/services/github';
+import { queryKeys } from '../../../../../api/keys';
 import type { InstalledBoardInfo } from '../../../../../api/types';
 import type { GithubIssue } from '../../services/factory';
 import type { GitLabIssue } from '../../services/gitlab';
@@ -269,6 +270,35 @@ describe('useBoardIntake GitLab routing', () => {
     await waitFor(() => expect(result.current.isPending).toBe(false));
     expect(githubIssueRequests).toBe(0);
     expect(githubLabelRouteRequests).toBe(0);
+  });
+
+  it('settles Review even when configured GitLab intake has a disabled status query', async () => {
+    stubIntake([]);
+    let gitlabStatusRequests = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+        HttpResponse.json({
+          config: {
+            github: { enabled: true, sourceIds: ['acme/app'] },
+            gitlab: { enabled: true, sourceIds: ['gitlab-project:1'] },
+            linear: { enabled: false, sourceIds: null },
+          },
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () => {
+        gitlabStatusRequests++;
+        return HttpResponse.json({ enabled: true, configured: true, reauthRequired: false });
+      }),
+      http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/prs`, () =>
+        HttpResponse.json({ pullRequests: [], nextPage: null }),
+      ),
+    );
+
+    const { result, client } = renderIntake('factory-1', reviewBoard);
+
+    await waitFor(() => expect(client.getQueryState(queryKeys.intakeConfig())?.status).toBe('success'));
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+    expect(gitlabStatusRequests).toBe(0);
   });
 
   it('uses the GitLab MR feed for a GitLab-linked Review board and never requests GitHub PRs', async () => {
