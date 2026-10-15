@@ -280,6 +280,14 @@ import type {
 } from './types';
 import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
+import { instructionsToText } from '../new-message-format/agent-options';
+import type { ActionResumeOptions, ActionRunOptions } from '../new-message-format/agent-options';
+import { createRunOutput } from '../new-message-format/output';
+import type { ActionRunOutput, ActionRunResult } from '../new-message-format/output';
+import { runAgent } from '../new-message-format/run';
+import type { ActionStore, RunAgentOptions } from '../new-message-format/run';
+import type { ActionDraft, AgentInput } from '../new-message-format/to-actions';
+import { toV7Tools } from '../new-message-format/tools';
 import type { AgentCapabilities } from './workflows/prepare-stream/schema';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
@@ -9535,7 +9543,102 @@ export class Agent<
     return this.resumeNetwork({ approved: false, ...(reason !== undefined ? { reason } : {}) }, resumeOptions);
   }
 
-  async generate<
+  /**
+   * Runs the agent on the action-native path: input in any supported message format, actions out.
+   * The stream carries persistable actions plus transient deltas; storage holds only the former.
+   */
+  async stream(input: AgentInput, options: ActionRunOptions = {}): Promise<ActionRunOutput> {
+    return this.#runActions({ ...options, input });
+  }
+
+  /** Same as `stream()`, drained to its result. */
+  async generate(input: AgentInput, options: ActionRunOptions = {}): Promise<ActionRunResult> {
+    return (await this.stream(input, options)).result;
+  }
+
+  /** Approves a pending tool call by appending the approval response and resuming the run from the log. */
+  async approveToolCall(options: ActionResumeOptions): Promise<ActionRunOutput> {
+    return this.#respondToApproval(options, true);
+  }
+
+  /** Declines a pending tool call by appending the denial and resuming the run from the log. */
+  async declineToolCall(options: ActionResumeOptions & { reason?: string }): Promise<ActionRunOutput> {
+    return this.#respondToApproval(options, false, options.reason);
+  }
+
+  async #respondToApproval(options: ActionResumeOptions, approved: boolean, reason?: string) {
+    const threadId = resolveThreadIdFromArgs({ memory: options.memory })?.id;
+    const memory = threadId ? await this.#actionStore(options.requestContext) : undefined;
+    if (!threadId || !memory) {
+      throw new Error('Resuming a tool approval requires memory with a thread.');
+    }
+    const log = await memory.listActions({ threadId, runId: options.runId });
+    const answered = new Set(log.flatMap(a => (a.type === 'tool-approval-responded' ? [a.approvalId] : [])));
+    const request = log.findLast(
+      a =>
+        a.type === 'tool-approval-requested' &&
+        !answered.has(a.approvalId) &&
+        (!options.toolCallId || a.toolCallId === options.toolCallId),
+    );
+    if (request?.type !== 'tool-approval-requested') {
+      throw new Error(`No pending tool approval found for run ${options.runId}.`);
+    }
+    return this.#runActions({
+      ...options,
+      append: [
+        {
+          type: 'tool-approval-responded',
+          approvalId: request.approvalId,
+          toolCallId: request.toolCallId,
+          toolName: request.toolName,
+          approved,
+          ...(reason !== undefined ? { reason } : {}),
+        },
+      ],
+    });
+  }
+
+  async #actionStore(requestContext?: RequestContext): Promise<ActionStore | undefined> {
+    const memory = await this.getMemory({ requestContext });
+    return memory && 'listActions' in memory && 'saveActions' in memory ? (memory as unknown as ActionStore) : undefined;
+  }
+
+  async #runActions(
+    options: ActionRunOptions & { input?: AgentInput; append?: ActionDraft[]; runId?: string },
+  ): Promise<ActionRunOutput> {
+    const requestContext = options.requestContext ?? new RequestContext();
+    const runId = options.runId ?? crypto.randomUUID();
+    const threadId = resolveThreadIdFromArgs({ memory: options.memory })?.id;
+    const memory = threadId ? await this.#actionStore(requestContext) : undefined;
+
+    const model =
+      typeof this.model === 'object' && this.model !== null && 'specificationVersion' in this.model
+        ? this.model
+        : await this.getModel({ requestContext });
+    const instructions = await this.getInstructions({ requestContext });
+    const tools = toV7Tools(await this.listTools({ requestContext }), {
+      agentId: this.id,
+      requestContext,
+      mastra: this.#mastra,
+    });
+
+    const source = runAgent({
+      model: model as RunAgentOptions['model'],
+      instructions: instructionsToText(instructions),
+      tools,
+      input: options.input,
+      append: options.append,
+      threadId: threadId ?? runId,
+      resourceId: options.memory?.resource,
+      runId,
+      memory,
+      maxTurns: options.maxSteps,
+      abortSignal: options.abortSignal,
+    });
+    return createRunOutput(runId, source);
+  }
+
+  async generateMessageList<
     OUTPUT extends StandardSchemaWithJSON<any, any>,
     T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
   >(
@@ -9544,20 +9647,20 @@ export class Agent<
       structuredOutput: PublicStructuredOutputOptions<T>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<T>>;
-  async generate<OUTPUT extends {}>(
+  async generateMessageList<OUTPUT extends {}>(
     messages: MessageListInput,
     options: AgentExecutionOptionsBase<OUTPUT> & {
       structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<OUTPUT>>;
-  async generate(
+  async generateMessageList(
     messages: MessageListInput,
     options: AgentExecutionOptionsBase<unknown> & {
       structuredOutput?: never;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<TOutput>>;
-  async generate<OUTPUT = TOutput>(messages: MessageListInput): Promise<FullOutput<OUTPUT>>;
-  async generate<OUTPUT = TOutput>(
+  async generateMessageList<OUTPUT = TOutput>(messages: MessageListInput): Promise<FullOutput<OUTPUT>>;
+  async generateMessageList<OUTPUT = TOutput>(
     messages: MessageListInput,
     options?: AgentExecutionOptionsBase<any> & {
       structuredOutput?: PublicStructuredOutputOptions<any>;
@@ -10336,7 +10439,7 @@ export class Agent<
     return agentThreadStreamRuntime.sendSignal<OUTPUT>(this.#getThreadRuntimeAgent(), signal, target, this.getPubSub());
   }
 
-  async stream<
+  async streamMessageList<
     OUTPUT extends StandardSchemaWithJSON<any, any>,
     T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
   >(
@@ -10345,20 +10448,20 @@ export class Agent<
       structuredOutput: PublicStructuredOutputOptions<T>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<T>>;
-  async stream<OUTPUT extends {}>(
+  async streamMessageList<OUTPUT extends {}>(
     messages: MessageListInput,
     streamOptions: AgentExecutionOptionsBase<OUTPUT> & {
       structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>>;
-  async stream(
+  async streamMessageList(
     messages: MessageListInput,
     streamOptions: AgentExecutionOptionsBase<unknown> & {
       structuredOutput?: never;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<TOutput>>;
-  async stream(messages: MessageListInput): Promise<MastraModelOutput<TOutput>>;
-  async stream<OUTPUT = TOutput>(
+  async streamMessageList(messages: MessageListInput): Promise<MastraModelOutput<TOutput>>;
+  async streamMessageList<OUTPUT = TOutput>(
     messages: MessageListInput,
     streamOptions?: AgentExecutionOptionsBase<any> & {
       structuredOutput?: PublicStructuredOutputOptions<any>;
@@ -11158,7 +11261,7 @@ export class Agent<
    * }
    * ```
    */
-  async approveToolCall<OUTPUT = undefined>(
+  async approveToolCallMessageList<OUTPUT = undefined>(
     options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string } & {
       model?: DynamicArgument<MastraModelConfig>;
     },
@@ -11491,7 +11594,7 @@ export class Agent<
    * tool invocation's `approval.reason` and surfaced to the model in place of the default
    * "Tool call was not approved by the user" message.
    */
-  async declineToolCall<OUTPUT = undefined>(
+  async declineToolCallMessageList<OUTPUT = undefined>(
     options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string; reason?: string } & {
       model?: DynamicArgument<MastraModelConfig>;
     },
