@@ -59,6 +59,9 @@ export const menuPopupClass = cn(
   'w-max max-w-(--available-width) min-w-[max(11rem,var(--anchor-width))]',
   'origin-[var(--transform-origin)] overflow-x-hidden overflow-y-auto',
   cn('rounded-xl p-1 text-foreground/90 outline-none', overlaySurfaceStyle),
+  // Keeps a ScrollArea's scrollbar clear of the 14px corners: at 10px in, the corner no longer
+  // cuts into the 6px-wide bar.
+  '[--scroll-area-scrollbar-inset:10px]',
   // A destructive row tints the travelling highlight instead of painting its own.
   '[&:has([data-variant=destructive][data-fluid-hover-active])_[data-slot=fluid-hover-highlight]]:bg-destructive-subtle',
   'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',
