@@ -301,7 +301,10 @@ function BarPlot({
   );
 }
 
-function topSegmentColor(row: Record<string, unknown> | undefined, series: MetricsLineChartSeries[]) {
+function topSegmentColor(
+  row: MetricsStackedBarChartProps['data'][number] | undefined,
+  series: MetricsLineChartSeries[],
+) {
   return series.findLast(s => Number(row?.[s.dataKey]) > 0)?.color ?? CHART_TICK.fill;
 }
 

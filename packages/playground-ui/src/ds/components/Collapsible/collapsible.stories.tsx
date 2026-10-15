@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ArrowUpRight } from 'lucide-react';
-import { useState } from 'react';
 import { Button } from '../Button';
 import { DisclosureChevron } from '../DisclosureChevron';
 import { Meter } from '../Meter';
