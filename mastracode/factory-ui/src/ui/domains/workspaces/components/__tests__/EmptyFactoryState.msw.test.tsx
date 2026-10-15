@@ -105,8 +105,14 @@ function registerSetup(failure?: 'connection' | 'intake' | 'model') {
     http.post(`${TEST_BASE_URL}/web/factory/projects`, async ({ request }) => {
       const body = await request.json();
       writes.push({ path: 'create', body });
-      project = { id: 'fp-1', name: 'hello' };
+      const input = z.object({ modelScope: z.enum(['factory', 'user', 'hybrid']).optional() }).parse(body);
+      project = { id: 'fp-1', name: 'hello', modelScope: input.modelScope ?? 'hybrid' };
       return HttpResponse.json({ project });
+    }),
+    http.delete(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () => {
+      writes.push({ path: 'delete', body: { id: 'fp-1' } });
+      project = undefined;
+      return new HttpResponse(null, { status: 204 });
     }),
     http.post(`${TEST_BASE_URL}/web/gitlab/projects/registration`, async ({ request }) => {
       writes.push({ path: 'registration', body: await request.json() });
@@ -194,7 +200,7 @@ describe('Draft Factory onboarding', () => {
     expect(review.getByText('team/backend')).toBeInTheDocument();
     expect(review.getByText('GitLab · develop')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Edit model' }));
-    expect(await screen.findByRole('combobox')).toHaveTextContent(model.modelId);
+    expect(await screen.findByRole('combobox')).toHaveTextContent('GPT-5.6 Sol');
     await user.click(screen.getByRole('button', { name: 'Change provider' }));
     await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
     await user.click(await screen.findByRole('button', { name: 'Continue' }));
@@ -222,7 +228,7 @@ describe('Draft Factory onboarding', () => {
     persistOnboardingDraft({ repository: otherRepo, model });
     sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model-provider');
     const view = renderOnboarding();
-    expect(await screen.findByRole('combobox')).toHaveTextContent(model.modelId);
+    expect(await screen.findByRole('combobox')).toHaveTextContent('GPT-5.6 Sol');
     view.unmount();
     sessionStorage.setItem(ONBOARDING_STEP_KEY, 'vcs');
     renderOnboarding();
@@ -262,6 +268,41 @@ describe('Draft Factory onboarding', () => {
       await user.click(await screen.findByRole('button', { name: 'Create factory' }));
       expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
       await waitFor(() => expect(writes.filter(item => item.path === 'create')).toHaveLength(1));
+    },
+  );
+
+  it.each(['user', 'hybrid'] as const)(
+    'recreates a pending Factory when a failed setup is retried in %s scope',
+    async desiredScope => {
+      const writes = registerSetup('model');
+      persistOnboardingDraft({
+        repository: repo,
+        ...(desiredScope === 'user' ? { model } : { personal: model }),
+      });
+      sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
+      const user = userEvent.setup();
+      const view = renderOnboarding();
+      await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('502');
+      expect(sessionStorage.getItem(ONBOARDING_FACTORY_KEY)).toBe('fp-1');
+      view.unmount();
+      persistOnboardingDraft({
+        repository: repo,
+        ...(desiredScope === 'user' ? { personal: model } : { model }),
+      });
+      renderOnboarding();
+      await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+      expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
+      expect(writes.filter(item => item.path === 'delete')).toEqual([{ path: 'delete', body: { id: 'fp-1' } }]);
+      expect(writes.filter(item => item.path === 'create')).toEqual([
+        { path: 'create', body: { name: 'hello', ...(desiredScope === 'hybrid' ? { modelScope: 'user' } : {}) } },
+        { path: 'create', body: { name: 'hello', ...(desiredScope === 'user' ? { modelScope: 'user' } : {}) } },
+      ]);
+      expect(
+        writes
+          .filter(item => item.path === 'model')
+          .every(item => !z.object({ modelScope: z.unknown().optional() }).parse(item.body).modelScope),
+      ).toBe(true);
     },
   );
 
@@ -467,6 +508,8 @@ describe('Personal Factory model', () => {
     expect(review.getByText('API key · Factory + your default')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Create factory' }));
     await screen.findByRole('heading', { name: 'Factory ready' });
+    // Without an organization model, Factory runs couldn't run in hybrid scope, so the Factory stays on personal credentials.
+    expect(writes.find(item => item.path === 'create')?.body).toEqual({ name: repo.name, modelScope: 'user' });
     expect(writes.find(item => item.path === 'model')?.body).toEqual({ defaultModelId: 'anthropic/claude-fable-5' });
     expect(writes.find(item => item.path === 'personal-model')?.body).toEqual({
       modelId: 'anthropic/claude-fable-5',

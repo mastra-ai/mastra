@@ -160,6 +160,10 @@
     max-width: none;
     width: 100%;
   }
+  .onboarding-form[data-step='project-management'] {
+    display: flex;
+    overflow: visible;
+  }
   .onboarding-preview {
     grid-area: visual;
     container-type: size;
@@ -179,6 +183,7 @@
       display: block;
     }
   }
+  .onboarding-intake-detail,
   .onboarding-ticket-title {
     display: none;
   }
@@ -192,8 +197,5 @@
   }
   .onboarding-diagram {
     width: min(100cqw, 125cqh, 500px);
-  }
-  .onboarding-ticket-title {
-    display: block;
   }
 }

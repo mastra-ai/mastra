@@ -312,6 +312,8 @@ export interface StepStartPayload {
   messageId?: string;
   /** Epoch milliseconds sampled immediately before the model provider call. Absent when no provider call occurred. */
   startedAt?: number;
+  modelId?: string;
+  provider?: string;
   request: {
     body?: string;
     [key: string]: unknown;

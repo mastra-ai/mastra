@@ -1,27 +1,34 @@
-import type { FactoryUserSession } from './user-sessions';
+import type { DropdownMenuRadioOption } from '@mastra/playground-ui/components/DropdownMenu';
 
-export type UserSessionFilterStatus = 'all' | 'working' | 'initializing' | 'idle';
-export type UserSessionUpdatedFilter = 'all' | '24h' | '7d' | '30d';
+import { SESSION_ACTIVITY_STATUSES, SESSION_STATUS_LABELS, sessionOwners } from './sessionRows';
+import type { SessionActivityStatus, SessionListRow } from './sessionRows';
+
+export type SessionStatusFilter = 'all' | SessionActivityStatus;
+export type SessionUpdatedFilter = 'all' | '24h' | '7d' | '30d';
 
 export const ALL_SESSION_OWNERS = 'all';
 export const MY_SESSIONS = 'mine';
 export const SESSION_OWNER_PREFIX = 'owner:';
 
-export interface UserSessionFiltersState {
-  search: string;
+export const SESSION_STATUS_OPTIONS: readonly DropdownMenuRadioOption<SessionStatusFilter>[] = [
+  { value: 'all', label: 'All statuses' },
+  ...SESSION_ACTIVITY_STATUSES.map(status => ({ value: status, label: SESSION_STATUS_LABELS[status] })),
+];
+
+export const SESSION_UPDATED_OPTIONS: readonly DropdownMenuRadioOption<SessionUpdatedFilter>[] = [
+  { value: 'all', label: 'Any time' },
+  { value: '24h', label: 'Last 24 hours' },
+  { value: '7d', label: 'Last 7 days' },
+  { value: '30d', label: 'Last 30 days' },
+];
+
+export interface SessionFiltersState {
   owner: string;
-  status: UserSessionFilterStatus;
-  updated: UserSessionUpdatedFilter;
+  status: SessionStatusFilter;
+  updated: SessionUpdatedFilter;
 }
 
-export interface UserSessionFilterCandidate {
-  session: FactoryUserSession;
-  ownerName: string;
-  status: Exclude<UserSessionFilterStatus, 'all'>;
-}
-
-export const EMPTY_USER_SESSION_FILTERS: UserSessionFiltersState = {
-  search: '',
+export const EMPTY_SESSION_FILTERS: SessionFiltersState = {
   owner: ALL_SESSION_OWNERS,
   status: 'all',
   updated: 'all',
@@ -31,63 +38,63 @@ export function sessionOwnerFilterValue(userId: string): string {
   return `${SESSION_OWNER_PREFIX}${userId}`;
 }
 
-/**
- * A known viewer starts on their own sessions, matching the work and review lists. An unknown
- * viewer has no sessions of their own, so they start on everyone's.
- */
-export function defaultUserSessionFilters(viewerUserId: string | undefined): UserSessionFiltersState {
-  return viewerUserId ? { ...EMPTY_USER_SESSION_FILTERS, owner: MY_SESSIONS } : EMPTY_USER_SESSION_FILTERS;
+export function defaultSessionFilters(viewerUserId: string | undefined): SessionFiltersState {
+  return viewerUserId ? { ...EMPTY_SESSION_FILTERS, owner: MY_SESSIONS } : EMPTY_SESSION_FILTERS;
 }
 
-/** Counts the controls moved away from `defaults`, so the resting view never reads as filtered. */
-export function activeUserSessionFilterCount(
-  filters: UserSessionFiltersState,
-  defaults: UserSessionFiltersState = EMPTY_USER_SESSION_FILTERS,
+export function activeSessionFilterCount(
+  filters: SessionFiltersState,
+  defaults: SessionFiltersState = EMPTY_SESSION_FILTERS,
 ): number {
   return (
-    Number(filters.search.trim() !== defaults.search.trim()) +
     Number(filters.owner !== defaults.owner) +
     Number(filters.status !== defaults.status) +
     Number(filters.updated !== defaults.updated)
   );
 }
 
-function matchesSearch(candidate: UserSessionFilterCandidate, search: string): boolean {
-  const normalizedSearch = search.trim().toLocaleLowerCase();
-  if (!normalizedSearch) return true;
-
-  const { session, ownerName } = candidate;
-  return [session.title, session.branch, ownerName, session.userId, session.sessionId].some(value =>
-    value?.toLocaleLowerCase().includes(normalizedSearch),
-  );
-}
-
-function matchesOwner(session: FactoryUserSession, owner: string, viewerUserId: string | undefined): boolean {
+function matchesOwner(row: SessionListRow, owner: string, viewerUserId: string | undefined): boolean {
   if (owner === ALL_SESSION_OWNERS) return true;
-  if (owner === MY_SESSIONS) return Boolean(viewerUserId) && session.userId === viewerUserId;
+  if (owner === MY_SESSIONS) return Boolean(viewerUserId) && row.session.userId === viewerUserId;
   if (!owner.startsWith(SESSION_OWNER_PREFIX)) return false;
-  return session.userId === owner.slice(SESSION_OWNER_PREFIX.length);
+  return row.session.userId === owner.slice(SESSION_OWNER_PREFIX.length);
 }
 
-function updatedCutoff(updated: UserSessionUpdatedFilter, now: number): number | undefined {
+const UPDATED_WINDOW_HOURS: Record<Exclude<SessionUpdatedFilter, 'all'>, number> = {
+  '24h': 24,
+  '7d': 24 * 7,
+  '30d': 24 * 30,
+};
+
+function updatedCutoff(updated: SessionUpdatedFilter, now: number): number | undefined {
   if (updated === 'all') return undefined;
-  const hours = updated === '24h' ? 24 : updated === '7d' ? 24 * 7 : 24 * 30;
-  return now - hours * 60 * 60 * 1_000;
+  return now - UPDATED_WINDOW_HOURS[updated] * 60 * 60 * 1_000;
 }
 
-export function filterUserSessions(
-  candidates: UserSessionFilterCandidate[],
-  filters: UserSessionFiltersState,
+export function filterSessionRows(
+  rows: readonly SessionListRow[],
+  filters: SessionFiltersState,
   viewerUserId: string | undefined,
   now = Date.now(),
-): UserSessionFilterCandidate[] {
+): SessionListRow[] {
   const cutoff = updatedCutoff(filters.updated, now);
 
-  return candidates.filter(candidate => {
-    if (!matchesSearch(candidate, filters.search)) return false;
-    if (!matchesOwner(candidate.session, filters.owner, viewerUserId)) return false;
-    if (filters.status !== 'all' && candidate.status !== filters.status) return false;
-    if (cutoff !== undefined && new Date(candidate.session.updatedAt).getTime() < cutoff) return false;
+  return rows.filter(row => {
+    if (!matchesOwner(row, filters.owner, viewerUserId)) return false;
+    if (filters.status !== 'all' && row.status !== filters.status) return false;
+    if (cutoff !== undefined && new Date(row.updatedAt).getTime() < cutoff) return false;
     return true;
   });
+}
+
+export function sessionOwnerOptions(
+  rows: readonly SessionListRow[],
+  viewerUserId: string | undefined,
+): DropdownMenuRadioOption<string>[] {
+  const viewerOption = viewerUserId ? [{ value: MY_SESSIONS, label: 'Mine' }] : [];
+  const namedOptions = sessionOwners(rows).map(({ userId, name }) => ({
+    value: sessionOwnerFilterValue(userId),
+    label: name,
+  }));
+  return [{ value: ALL_SESSION_OWNERS, label: 'All owners' }, ...viewerOption, ...namedOptions];
 }

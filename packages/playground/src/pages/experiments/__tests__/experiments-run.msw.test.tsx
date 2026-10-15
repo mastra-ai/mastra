@@ -103,7 +103,7 @@ describe('Experiments page — Run Experiment', () => {
     mockNavigate.mockClear();
     renderWithProviders(<ExperimentsPage />, { router: true });
 
-    fireEvent.click(await screen.findByRole('button', { name: /run experiment/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /new experiment/i }));
 
     const dialog = await screen.findByRole('dialog', { name: /run experiment/i });
     expect(dialog).toBeDefined();

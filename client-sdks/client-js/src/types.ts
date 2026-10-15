@@ -137,6 +137,8 @@ export type SendAgentMessageParams = GeneratedRequest<Body<'POST /agents/:agentI
 
 export type QueueAgentMessageParams = GeneratedRequest<Body<'POST /agents/:agentId/queue-message'>>;
 
+export type QueueAgentSignalParams = GeneratedRequest<Body<'POST /agents/:agentId/queue-signal'>>;
+
 export interface SubscribeAgentThreadParams {
   resourceId?: string;
   threadId: string;
@@ -337,7 +339,7 @@ export type NetworkStreamParams<OUTPUT = undefined> = {
   messages: MessageListInput;
   model?: string;
   tracingOptions?: TracingOptions;
-} & Omit<MultiPrimitiveExecutionOptions<OUTPUT>, 'model'>;
+} & Omit<MultiPrimitiveExecutionOptions<OUTPUT>, 'model' | 'scopes'>;
 
 export type GetAgentResponse = GeneratedResponse<'GET /agents/:agentId'> & {
   /** Handler-provided identifier omitted from the serialized route schema's value shape. */
@@ -420,7 +422,10 @@ export type StreamParamsBase<OUTPUT = undefined> = {
    */
   abortSignal?: AbortSignal;
 } & WithoutMethods<
-  Omit<AgentExecutionOptions<OUTPUT>, 'model' | 'requestContext' | 'clientTools' | 'options' | 'structuredOutput'>
+  Omit<
+    AgentExecutionOptions<OUTPUT>,
+    'model' | 'requestContext' | 'clientTools' | 'options' | 'structuredOutput' | 'scopes'
+  >
 >;
 export type StreamParamsBaseWithoutMessages<OUTPUT = undefined> = StreamParamsBase<OUTPUT>;
 export type StreamParams<OUTPUT = undefined> = StreamParamsBase<OUTPUT> & {

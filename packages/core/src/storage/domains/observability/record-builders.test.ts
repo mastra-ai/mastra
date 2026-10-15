@@ -35,6 +35,13 @@ describe('record-builders', () => {
     });
   });
 
+  it('preserves exporter-supplied previews for create and update records', () => {
+    const previews = { inputPreview: ' custom ', outputPreview: '', errorPreview: null };
+    const span = { id: 'span', traceId: 'trace', ...previews } as AnyExportedSpan;
+    expect(buildCreateSpanRecord(span)).toMatchObject(previews);
+    expect(buildUpdateSpanRecord(span)).toMatchObject(previews);
+  });
+
   describe('buildMetricRecord', () => {
     it('maps shared correlation fields and canonical cost fields', () => {
       const timestamp = new Date('2026-01-01T00:00:00.000Z');

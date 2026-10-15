@@ -27,6 +27,7 @@
     "qwen/qwen3.8-flash",
     "qwen/qwen3.8-max",
     "stepfun/step-3.7-flash",
+    "stepfun/step-5-preview",
     "xiaomimimo/mimo-v2.5",
     "xiaomimimo/mimo-v2.6-flash",
     "xiaomimimo/mimo-v2.6-pro",
@@ -153,6 +154,7 @@
     "qwen/qwen3.8-flash",
     "qwen/qwen3.8-max",
     "stepfun/step-3.7-flash",
+    "stepfun/step-5-preview",
     "tencent/hy3",
     "tencent/hy4-preview",
     "xiaomimimo/mimo-v2.5",
@@ -366,6 +368,12 @@
     "minimax/minimax-m3": [
       {
         "type": "toggle"
+      }
+    ],
+    "stepfun/step-5-preview": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "stepfun/step-3.7-flash": [

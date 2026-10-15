@@ -7,7 +7,7 @@ import { CustomProvidersSection } from './CustomProvidersSection';
 import { FactoryDefaultModelSection } from './FactoryDefaultModelSection';
 import { FactoryModelScopeSection } from './FactoryModelScopeSection';
 import { SettingsSubsection } from './SettingsSubsection';
-import { BaseThinkingSection, ModeThinkingDefaultsSection } from './ThinkingDefaultsSection';
+import { BaseThinkingSection } from './ThinkingDefaultsSection';
 import { ProviderAccessSection } from './ProviderAccessSection';
 import { ModelSettings } from './SettingsPanel.parts';
 
@@ -39,7 +39,7 @@ export function FactoryModelsSettings({ models, settings, onBehaviorChange }: Fa
     <SettingsSubsection
       scope="factory"
       title="Factory defaults"
-      description="Applied to Factory runs (triage, board work items) and channel sessions."
+      description="Where this Factory's sessions and work-item runs get their model and credentials."
     >
       <SettingsContainer>
         <FactoryModelScopeSection />
@@ -67,7 +67,6 @@ export function FactoryModelsSettings({ models, settings, onBehaviorChange }: Fa
       >
         <SettingsContainer>
           <BaseThinkingSection />
-          <ModeThinkingDefaultsSection />
         </SettingsContainer>
       </SettingsSubsection>
       <SettingsSubsection

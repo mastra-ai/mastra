@@ -80,8 +80,10 @@ import type {
   StepMetadata,
   CreateWorkflowParams,
   InferSchemaOutput,
+  InferWorkflowRequestContext,
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { resolveLegacyAgent, resolveRegisteredAgent } from '../entry-executors';
 import type { ClassifierStepOutput } from '../entry-executors';
 import { createStepFromClassifier } from '../step-factories';
 import type { ClassifierStepOptions } from '../step-factories';
@@ -412,7 +414,7 @@ function createStepFromParams<
   TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
   TSuspendSchema extends PublicSchema<any> ? InferPublicSchema<TSuspendSchema> : unknown,
   DefaultEngineType,
-  TRequestContextSchema extends PublicSchema<any> ? InferPublicSchema<TRequestContextSchema> : unknown
+  InferWorkflowRequestContext<TRequestContextSchema>
 > {
   // Type assertion needed because toStandardSchema returns StandardSchemaWithJSON<unknown>
   // but we need it to match the inferred generic types. The public overloads ensure
@@ -437,7 +439,7 @@ function createStepFromParams<
       TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
       TSuspendSchema extends PublicSchema<any> ? InferPublicSchema<TSuspendSchema> : unknown,
       DefaultEngineType,
-      TRequestContextSchema extends PublicSchema<any> ? InferPublicSchema<TRequestContextSchema> : unknown
+      InferWorkflowRequestContext<TRequestContextSchema>
     >['execute'],
   };
 }
@@ -575,13 +577,14 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
     }) => {
       const observabilityContext = resolveObservabilityContext(obsFields);
       const logger = mastra?.getLogger();
+      const agent = resolveRegisteredAgent(params, mastra);
       const toolData = {
         name: params.name ?? params.id,
         args: inputData,
       } as const;
 
       // Detect model version to choose streaming method
-      const isV2Model = isSupportedLanguageModel(await params.getModel({ requestContext }));
+      const isV2Model = isSupportedLanguageModel(await agent.getModel({ requestContext }));
 
       // Track structured output result
       let structuredResult: any = null;
@@ -597,75 +600,90 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
       // Get the appropriate stream based on model version
       let fullStream: AsyncIterable<unknown>;
       let textPromise: Promise<string>;
+      let cleanup: (() => void) | undefined;
 
-      if (isV2Model) {
-        // V2+ model path: use .stream() which returns MastraModelOutput
-        const modelOutput = await params.stream((inputData as { prompt: string }).prompt, {
-          ...(agentOptions ?? {}),
-          ...observabilityContext,
-          requestContext,
-          onFinish: (result: any) => {
-            handleFinish(result);
-            void safeOnFinish((agentOptions as any)?.onFinish, result, logger);
-          },
-          abortSignal,
-        });
-        fullStream = modelOutput.fullStream;
-        textPromise = modelOutput.text;
-      } else {
-        // V1 model path: use .streamLegacy() for backwards compatibility
-        let resolveText: (value: string) => void;
-        textPromise = new Promise(resolve => {
-          resolveText = resolve;
-        });
+      try {
+        if (isV2Model) {
+          const streamResult = await agent.stream((inputData as { prompt: string }).prompt, {
+            ...(agentOptions ?? {}),
+            ...observabilityContext,
+            requestContext,
+            onFinish: (result: any) => {
+              handleFinish(result);
+              void safeOnFinish((agentOptions as any)?.onFinish, result, logger);
+            },
+            abortSignal,
+          });
+          const durableStreamResult = streamResult as typeof streamResult & {
+            output?: typeof streamResult;
+            cleanup?: () => void;
+          };
+          const isDurableStreamResult =
+            typeof durableStreamResult.cleanup === 'function' &&
+            durableStreamResult.output &&
+            typeof durableStreamResult.output === 'object';
+          const modelOutput = isDurableStreamResult ? durableStreamResult.output! : streamResult;
+          cleanup = isDurableStreamResult ? durableStreamResult.cleanup : undefined;
+          fullStream = modelOutput.fullStream;
+          textPromise = modelOutput.text;
+        } else {
+          // V1 model path: use .streamLegacy() for backwards compatibility
+          let resolveText: (value: string) => void;
+          textPromise = new Promise(resolve => {
+            resolveText = resolve;
+          });
 
-        if (typeof params.streamLegacy !== 'function') {
-          throw new Error(`Agent step "${params.id}" uses a legacy v1 model but does not implement streamLegacy().`);
+          const legacyAgent = resolveLegacyAgent(agent, mastra);
+          if (typeof legacyAgent.streamLegacy !== 'function') {
+            throw new Error(`Agent step "${params.id}" uses a legacy v1 model but does not implement streamLegacy().`);
+          }
+
+          const legacyResult = await legacyAgent.streamLegacy((inputData as { prompt: string }).prompt, {
+            ...(agentOptions ?? {}),
+            ...observabilityContext,
+            requestContext,
+            onFinish: (result: any) => {
+              handleFinish(result);
+              resolveText!(result.text);
+              void safeOnFinish((agentOptions as any)?.onFinish, result, logger);
+            },
+            abortSignal,
+          });
+          fullStream = legacyResult.fullStream;
         }
 
-        const legacyResult = await params.streamLegacy((inputData as { prompt: string }).prompt, {
-          ...(agentOptions ?? {}),
-          ...observabilityContext,
-          requestContext,
-          onFinish: (result: any) => {
-            handleFinish(result);
-            resolveText!(result.text);
-            void safeOnFinish((agentOptions as any)?.onFinish, result, logger);
-          },
-          abortSignal,
+        if (abortSignal.aborted) {
+          return abort() as TStepOutput;
+        }
+
+        // Process the stream (unified for V1/V2)
+        const { tripwireChunk } = await processAgentStream({
+          fullStream,
+          isV2Model,
+          pubsub,
+          runId,
+          toolData,
+          logger,
+          writer,
+          streamFormat,
         });
-        fullStream = legacyResult.fullStream;
+
+        // Handle tripwire if detected
+        if (tripwireChunk) {
+          throw createTripWireFromChunk(tripwireChunk);
+        }
+
+        // Return structured output if available, otherwise return text
+        if (structuredResult !== null) {
+          return structuredResult as TStepOutput;
+        }
+
+        return {
+          text: await textPromise,
+        } as TStepOutput;
+      } finally {
+        cleanup?.();
       }
-
-      if (abortSignal.aborted) {
-        return abort() as TStepOutput;
-      }
-
-      // Process the stream (unified for V1/V2)
-      const { tripwireChunk } = await processAgentStream({
-        fullStream,
-        isV2Model,
-        pubsub,
-        runId,
-        toolData,
-        logger,
-        writer,
-        streamFormat,
-      });
-
-      // Handle tripwire if detected
-      if (tripwireChunk) {
-        throw createTripWireFromChunk(tripwireChunk);
-      }
-
-      // Return structured output if available, otherwise return text
-      if (structuredResult !== null) {
-        return structuredResult as TStepOutput;
-      }
-
-      return {
-        text: await textPromise,
-      } as TStepOutput;
     },
     component: 'AGENT',
   };
