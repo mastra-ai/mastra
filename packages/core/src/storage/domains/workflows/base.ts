@@ -10,6 +10,7 @@ import type {
 import { runFencingNotSupportedError } from '../../run-fencing';
 import type { UpdateWorkflowStateOptions, WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '../../types';
 import { StorageDomain } from '../base';
+import type { WorkflowRunChanges } from './journal';
 
 export abstract class WorkflowsStorage extends StorageDomain {
   constructor() {
@@ -43,6 +44,16 @@ export abstract class WorkflowsStorage extends StorageDomain {
    * rejects when the probe fails: it must never answer false and later true.
    */
   supportsRunFencing(): boolean | Promise<boolean> {
+    return false;
+  }
+
+  /**
+   * Whether this adapter stores storage v2 runs (`storageVersion: 2`): a header plus
+   * append-only entries, written by `persistWorkflowSnapshot` with `storageVersion: 2`.
+   * Reads without a `storageVersion` hint must find runs of either version.
+   * @experimental
+   */
+  supportsRunJournal(): boolean {
     return false;
   }
 
@@ -93,7 +104,7 @@ export abstract class WorkflowsStorage extends StorageDomain {
   /**
    * In-memory, LibSQL, and PostgreSQL storage return an empty object without writing when the workflow run does not
    * exist. Remaining adapters are being aligned under COR-1448; callers must not rely on this method to create the
-   * initial run snapshot.
+   * initial run snapshot. Not supported for storage v2 runs.
    */
   abstract updateWorkflowResults({
     workflowName,
@@ -117,18 +128,31 @@ export abstract class WorkflowsStorage extends StorageDomain {
     fence?: RunFence;
   }): Promise<Record<string, StepResult<any, any, any, any>>>;
 
+  /**
+   * `storageVersion` picks the store to patch. Without it, adapters that support run journals
+   * patch the run wherever it is stored.
+   */
   abstract updateWorkflowState({
     workflowName,
     runId,
     opts,
     fence,
+    storageVersion,
   }: {
     workflowName: string;
     runId: string;
     opts: UpdateWorkflowStateOptions;
     fence?: RunFence;
+    /** @experimental */
+    storageVersion?: 1 | 2;
   }): Promise<WorkflowRunState | undefined>;
 
+  /**
+   * With `storageVersion: 2`, the run is stored as a header plus entries. A call without
+   * `changes` is a checkpoint that replaces the run's entries with one per `snapshot.context`
+   * key plus the state. A call with `changes` appends only the listed step results, and the
+   * state when `changes.state` is set. Either way, the header is rewritten from `snapshot`.
+   */
   abstract persistWorkflowSnapshot(_: {
     workflowName: string;
     runId: string;
@@ -137,19 +161,40 @@ export abstract class WorkflowsStorage extends StorageDomain {
     createdAt?: Date;
     updatedAt?: Date;
     fence?: RunFence;
+    /** @experimental */
+    storageVersion?: 1 | 2;
+    /** @experimental */
+    changes?: WorkflowRunChanges;
   }): Promise<void>;
 
+  /**
+   * `storageVersion` limits the lookup to one store. Without it, adapters that support run
+   * journals look in both.
+   */
   abstract loadWorkflowSnapshot({
     workflowName,
     runId,
+    storageVersion,
   }: {
     workflowName: string;
     runId: string;
+    /** @experimental */
+    storageVersion?: 1 | 2;
   }): Promise<WorkflowRunState | null>;
 
+  /** Adapters that support run journals list runs of both versions. */
   abstract listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns>;
 
-  abstract getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
+  /**
+   * `storageVersion` limits the lookup to one store. Without it, adapters that support run
+   * journals look in both.
+   */
+  abstract getWorkflowRunById(args: {
+    runId: string;
+    workflowName?: string;
+    /** @experimental */
+    storageVersion?: 1 | 2;
+  }): Promise<WorkflowRun | null>;
 
   abstract deleteWorkflowRunById(args: { runId: string; workflowName: string; fence?: RunFence }): Promise<void>;
 }

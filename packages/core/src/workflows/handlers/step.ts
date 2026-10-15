@@ -17,8 +17,8 @@ import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
+import { buildStepResultAccessors } from '../run-journal';
 import type { Step, SuspendOptions } from '../step';
-import { getStepResult, getStepResultAsync } from '../step';
 import type {
   ExecutionContext,
   OutputWriter,
@@ -423,8 +423,7 @@ export async function executeStep(
         suspendData: suspendDataToUse,
         ...createObservabilityContext({ currentSpan: stepSpan }),
         getInitData: () => stepResults?.input as any,
-        getStepResult: getStepResult.bind(null, stepResults),
-        getStepResultAsync: getStepResultAsync.bind(null, stepResults),
+        ...buildStepResultAccessors(engine, runId, stepResults),
         suspend: async (suspendPayload?: any, suspendOptions?: SuspendOptions): Promise<void> => {
           const { suspendData, validationError: suspendValidationError } = await validateStepSuspendData({
             suspendData: suspendPayload,
@@ -619,15 +618,15 @@ export async function executeStep(
     ...execResults,
   } as StepResult<any, any, any, any>;
 
+  const stateUpdate = stepRetryResult.ok ? stepRetryResult.result.contextMutations.stateUpdate : null;
+
   return {
     result: stepResult,
     stepResults: { [step.id]: stepResult },
-    mutableContext: engine.buildMutableContext({
-      ...executionContext,
-      state: stepRetryResult.ok
-        ? (stepRetryResult.result.contextMutations.stateUpdate ?? executionContext.state)
-        : executionContext.state,
-    }),
+    mutableContext: {
+      ...engine.buildMutableContext({ ...executionContext, state: stateUpdate ?? executionContext.state }),
+      ...(stateUpdate != null ? { stateUpdated: true } : {}),
+    },
     // Serialize requestContext only for engines that restore it from
     // serialized results (Inngest memoization); the default engine keeps
     // the original reference and never reads this field, so serializing

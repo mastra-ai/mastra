@@ -242,12 +242,19 @@ export async function persistStepUpdate(
     };
 
     const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
-    await workflowsStore?.persistWorkflowSnapshot({
-      workflowName: workflowId,
-      runId,
-      resourceId,
-      snapshot: engine.options?.pruneSnapshot ? engine.options.pruneSnapshot({ snapshot, workflowStatus }) : snapshot,
-    });
+    const journal = engine.getRunJournal(runId);
+    if (journal) {
+      if (workflowsStore) {
+        await journal.write(workflowsStore, { workflowName: workflowId, runId, resourceId, snapshot });
+      }
+    } else {
+      await workflowsStore?.persistWorkflowSnapshot({
+        workflowName: workflowId,
+        runId,
+        resourceId,
+        snapshot: engine.options?.pruneSnapshot ? engine.options.pruneSnapshot({ snapshot, workflowStatus }) : snapshot,
+      });
+    }
     engine.setLastPersistedStatus(runId, workflowStatus);
   });
 }

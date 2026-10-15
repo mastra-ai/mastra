@@ -89,6 +89,7 @@ import type {
 } from './step';
 import { createMappingStep, createStepFromAgent, createStepFromClassifier, createStepFromTool } from './step-factories';
 import type { AgentStepOptions, ClassifierStepOptions } from './step-factories';
+import { collectPredicateStepRefs, resolveStepOutputs } from './step-refs';
 import type {
   DefaultEngineType,
   DynamicMapping,
@@ -192,12 +193,20 @@ function isDeclarativePredicateArg(value: unknown): value is { predicate: Predic
  * conditional/loop entries from stored predicates.
  */
 export function predicateToCondition(predicate: Predicate): (params: any) => Promise<boolean> {
+  const stepRefs = collectPredicateStepRefs(predicate);
   return async (params: any) => {
+    // Resolve every referenced step up front. Passing the sync getStepResult
+    // instead would let the predicate's fail-quiet lookup swallow its throw on
+    // runs that can't serve it, and silently take the wrong branch.
+    const stepResults =
+      typeof params?.getStepResultAsync === 'function'
+        ? Object.fromEntries(await resolveStepOutputs(stepRefs, id => params.getStepResultAsync(id)))
+        : {};
     return evaluatePredicate(predicate, {
       initData: params?.getInitData ? params.getInitData() : undefined,
       inputData: params?.inputData,
       state: params?.state,
-      getStepResult: typeof params?.getStepResult === 'function' ? (id: string) => params.getStepResult(id) : undefined,
+      stepResults,
     });
   };
 }
@@ -1918,6 +1927,7 @@ export class Workflow<
       isOwnershipLostError: options.isOwnershipLostError,
       isForeignExecution: options.isForeignExecution,
       pruneSnapshot: options.pruneSnapshot,
+      storageVersion: options.storageVersion,
       tracingPolicy: options.tracingPolicy,
       onStart: options.onStart,
       onFinish: options.onFinish,
@@ -1925,6 +1935,15 @@ export class Workflow<
       sharePubsub: options.sharePubsub,
       autoRestartActiveRuns: options.autoRestartActiveRuns,
     };
+
+    if (options.storageVersion === 2 && options.pruneSnapshot) {
+      throw new MastraError({
+        id: 'WORKFLOW_STORAGE_V2_PRUNE_SNAPSHOT',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: `Workflow "${id}" sets both storageVersion: 2 and pruneSnapshot. Storage version 2 doesn't support pruneSnapshot.`,
+      });
+    }
 
     if (!executionEngine) {
       // TODO: this should be configured using the Mastra class instance that's passed in
@@ -1963,6 +1982,15 @@ export class Workflow<
   }
 
   __registerMastra(mastra: Mastra) {
+    // Checked here rather than in the constructor: other engines set engineType after super().
+    if (this.#options.storageVersion === 2 && this.engineType !== 'default') {
+      throw new MastraError({
+        id: 'WORKFLOW_STORAGE_V2_UNSUPPORTED_ENGINE',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: `Workflow "${this.id}" sets storageVersion: 2, which the ${this.engineType} engine doesn't support yet. Use the default engine or storageVersion: 1.`,
+      });
+    }
     this.#mastra = mastra;
     this.executionEngine.__registerMastra(mastra);
   }
@@ -2909,6 +2937,18 @@ export class Workflow<
     if (!this.executionGraph.steps) {
       throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
     }
+    const storageVersion = this.#options.storageVersion ?? 1;
+    if (storageVersion === 2) {
+      const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+      if (workflowsStore && !workflowsStore.supportsRunJournal()) {
+        throw new MastraError({
+          id: 'WORKFLOW_STORAGE_V2_UNSUPPORTED_STORE',
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          category: ErrorCategory.USER,
+          text: `Workflow "${this.id}" sets storageVersion: 2, which the configured storage adapter doesn't support yet. Use storageVersion: 1.`,
+        });
+      }
+    }
     const runIdToUse =
       options?.runId ||
       this.#mastra?.generateId({
@@ -2946,6 +2986,7 @@ export class Workflow<
         validateInputs: this.#options?.validateInputs,
         workflowEngineType: this.engineType,
         pubsub: options?.pubsub,
+        storageVersion,
       });
 
     this.#runs.set(runIdToUse, run);
@@ -2974,9 +3015,32 @@ export class Workflow<
     // If a run exists in storage, update the run's status to reflect the actual state
     // This fixes the issue where createRun checks storage but doesn't use the stored data
     if (existsInStorage && existingRun.status) {
-      run.workflowRunStatus = existingRun.status as WorkflowRunStatus;
       const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-      const storedSnapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: this.id, runId: runIdToUse });
+      const storedSnapshot = await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: this.id,
+        runId: runIdToUse,
+        storageVersion: run.storageVersion,
+      });
+      if (workflowsStore && !storedSnapshot) {
+        // Continuing a run under a different version would leave two incomplete copies of it.
+        const otherVersion = run.storageVersion === 2 ? 1 : 2;
+        const otherSnapshot = await workflowsStore.loadWorkflowSnapshot({
+          workflowName: this.id,
+          runId: runIdToUse,
+          storageVersion: otherVersion,
+        });
+        if (otherSnapshot) {
+          if (this.#runs.get(runIdToUse) === run) this.#runs.delete(runIdToUse);
+          this.executionEngine.clearRunPersistenceOverride(runIdToUse);
+          throw new MastraError({
+            id: 'WORKFLOW_STORAGE_VERSION_MISMATCH',
+            domain: ErrorDomain.MASTRA_WORKFLOW,
+            category: ErrorCategory.USER,
+            text: `Run "${runIdToUse}" of workflow "${this.id}" was created with storageVersion: ${otherVersion}, but the workflow now sets storageVersion: ${run.storageVersion}. Restore storageVersion: ${otherVersion} to continue this run.`,
+          });
+        }
+      }
+      run.workflowRunStatus = existingRun.status as WorkflowRunStatus;
       run.parentWorkflow = storedSnapshot?.parentWorkflow ?? run.parentWorkflow;
     }
 
@@ -3008,6 +3072,7 @@ export class Workflow<
         snapshot: this.#options.pruneSnapshot
           ? this.#options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
           : initialSnapshot,
+        storageVersion,
       });
     }
 
@@ -3204,6 +3269,7 @@ export class Workflow<
         const nestedSnapshot = await workflowsStore?.loadWorkflowSnapshot({
           workflowName: this.id,
           runId: run.runId,
+          storageVersion: run.storageVersion,
         });
         let nestedStatus = nestedSnapshot?.status;
         // A crash between the nested run's resume claim and its resumed step starting leaves a
@@ -3220,6 +3286,7 @@ export class Workflow<
           const released = await workflowsStore!.updateWorkflowState({
             workflowName: this.id,
             runId: run.runId,
+            storageVersion: run.storageVersion,
             opts: { status: 'suspended', expectedStatus: nestedStatus },
           });
           if (released) {
@@ -3763,6 +3830,12 @@ export class Run<
   readonly workflowEngineType: WorkflowEngineType;
 
   /**
+   * How this run is stored, taken from the workflow's `storageVersion` option when the run is created.
+   * @experimental
+   */
+  readonly storageVersion: 1 | 2;
+
+  /**
    * The storage for this run
    */
   #mastra?: Mastra;
@@ -3812,6 +3885,8 @@ export class Run<
     workflowEngineType: WorkflowEngineType;
     /** Optional pubsub instance. If not provided, a new EventEmitterPubSub is created. */
     pubsub?: PubSub;
+    /** @experimental Defaults to 1. */
+    storageVersion?: 1 | 2;
   }) {
     this.workflowId = params.workflowId;
     this.runId = params.runId;
@@ -3834,6 +3909,7 @@ export class Run<
     this.requestContextSchema = params.requestContextSchema;
     this.workflowRunStatus = 'pending';
     this.workflowEngineType = params.workflowEngineType;
+    this.storageVersion = params.storageVersion ?? 1;
   }
 
   public get abortController(): AbortController {
@@ -3902,6 +3978,7 @@ export class Run<
       const snapshot = await workflowsStore?.loadWorkflowSnapshot({
         workflowName: this.workflowId,
         runId: this.runId,
+        storageVersion: this.storageVersion,
       });
       return !!snapshot && TERMINAL_WORKFLOW_RUN_STATUSES.has(snapshot.status);
     } catch {
@@ -3933,6 +4010,7 @@ export class Run<
       await workflowsStore?.updateWorkflowState({
         workflowName: this.workflowId,
         runId: this.runId,
+        storageVersion: this.storageVersion,
         opts: {
           status: 'canceled',
         },
@@ -4163,6 +4241,7 @@ export class Run<
           await workflowsStore?.persistWorkflowSnapshot({
             workflowName: this.workflowId,
             runId: this.runId,
+            storageVersion: this.storageVersion,
             resourceId: this.resourceId,
             snapshot: this.executionEngine.options.pruneSnapshot
               ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'waiting' })
@@ -4197,6 +4276,7 @@ export class Run<
       format,
       outputOptions,
       perStep,
+      storageVersion: this.storageVersion,
     });
 
     this.workflowRunStatus = result.status;
@@ -4943,6 +5023,7 @@ export class Run<
     const claimed = await workflowsStore.updateWorkflowState({
       workflowName: this.workflowId,
       runId: this.runId,
+      storageVersion: this.storageVersion,
       opts: { status: 'running', expectedStatus: 'suspended' },
     });
 
@@ -4955,6 +5036,7 @@ export class Run<
     const current = await workflowsStore.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
+      storageVersion: this.storageVersion,
     });
 
     if (!current) {
@@ -5210,6 +5292,7 @@ export class Run<
         const current = await workflowsStore?.loadWorkflowSnapshot({
           workflowName: this.workflowId,
           runId: this.runId,
+          storageVersion: this.storageVersion,
         });
 
         const claimedPaths = Object.keys(snapshot.suspendedPaths ?? {});
@@ -5238,6 +5321,7 @@ export class Run<
         await workflowsStore?.updateWorkflowState({
           workflowName: this.workflowId,
           runId: this.runId,
+          storageVersion: this.storageVersion,
           opts: { status: 'suspended', expectedStatus: 'running' },
         });
       } catch (releaseError) {
@@ -5287,6 +5371,7 @@ export class Run<
         await claimedParent.store.updateWorkflowState({
           workflowName: claimedParent.run.workflowId,
           runId: claimedParent.run.runId,
+          storageVersion: claimedParent.run.storageVersion,
           opts: { status: 'suspended', expectedStatus: 'running' },
         });
       } catch (releaseError) {
@@ -5329,6 +5414,7 @@ export class Run<
         outputOptions: params.outputOptions,
         outputWriter: params.outputWriter,
         perStep: params.perStep,
+        storageVersion: this.storageVersion,
       })
       .then(async result => {
         if (!params.isVNext && result.status !== 'suspended') {
@@ -5412,6 +5498,7 @@ export class Run<
     const snapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
+      storageVersion: this.storageVersion,
     });
 
     if (!snapshot) {
@@ -5515,6 +5602,7 @@ export class Run<
       outputWriter,
       outputOptions,
       workflowSpan,
+      storageVersion: this.storageVersion,
     });
 
     this.workflowRunStatus = result.status;
@@ -5574,6 +5662,7 @@ export class Run<
     const snapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
+      storageVersion: this.storageVersion,
     });
 
     if (!snapshot) {
@@ -5654,6 +5743,7 @@ export class Run<
       workflowSpan,
       outputOptions,
       perStep,
+      storageVersion: this.storageVersion,
     });
 
     this.workflowRunStatus = result.status;
