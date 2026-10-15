@@ -3,6 +3,7 @@ import { MastraClient } from '@mastra/client-js';
 import type { AIV5Type, MastraDBMessage, MastraToolInvocationPart } from '@mastra/core/agent/message-list';
 import { AIV5Adapter } from '@mastra/core/agent/message-list';
 import type { CoreUserMessage } from '@mastra/core/llm';
+import type { MastraAction } from '@mastra/core/new-message-format';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { TaskItem } from '@mastra/core/signals';
@@ -16,6 +17,7 @@ import {
   fromCoreUserMessagesToMastraDBMessage,
 } from '../lib/mastra-db';
 import type { MastraDBMessageMetadata } from '../lib/mastra-db';
+import { createActionChunker } from '../lib/mastra-db/actions';
 import { useMastraClient } from '../mastra-client-context';
 import {
   extractLatestTasksFromMessages,
@@ -417,8 +419,7 @@ export const useChat = ({
   }, [propsRequestContext]);
 
   type SignalContentPart =
-    | { type: 'text'; text: string }
-    | { type: 'file'; data: string; mediaType: string; filename?: string };
+    { type: 'text'; text: string } | { type: 'file'; data: string; mediaType: string; filename?: string };
   type UserMessageSignalContents = string | SignalContentPart[];
 
   const normalizeSignalFileData = (data: string | URL | ArrayBuffer | Uint8Array) => {
@@ -807,6 +808,22 @@ export const useChat = ({
     }
   };
 
+  /** Feeds an action stream through the chunk accumulator; tracks the server-assigned runId. */
+  const runActionStream = async (
+    actions: AsyncIterable<Record<string, any>>,
+    onChunk?: (chunk: ChunkType) => Promise<void>,
+  ) => {
+    const toChunks = createActionChunker();
+    for await (const action of actions as AsyncIterable<MastraAction>) {
+      if (action.runId) _currentRunId.current = action.runId;
+      // The user's message is already shown optimistically.
+      if (action.type === 'text' && action.role === 'user') continue;
+      for (const chunk of toChunks(action)) {
+        await processStreamChunk(chunk, onChunk);
+      }
+    }
+  };
+
   const stream = async ({
     coreUserMessages,
     model,
@@ -815,47 +832,9 @@ export const useChat = ({
     onChunk,
     modelSettings,
     signal,
-    tracingOptions,
-    clientTools,
-    clientToolsResolver,
-    signalId,
-    clientMessageId,
   }: StreamArgs) => {
-    const {
-      frequencyPenalty,
-      presencePenalty,
-      maxRetries,
-      maxTokens,
-      temperature,
-      topK,
-      topP,
-      instructions,
-      system,
-      providerOptions,
-      maxSteps,
-      requireToolApproval,
-    } = modelSettings || {};
-
+    const { maxSteps } = modelSettings || {};
     const resolvedRequestContext = requestContext ?? propsRequestContext;
-    const resolvedClientTools = clientTools ?? hookClientTools;
-    const signalContinuationOptions: SignalContinuationOptions = {
-      model,
-      maxSteps,
-      modelSettings: {
-        frequencyPenalty,
-        presencePenalty,
-        maxRetries,
-        maxOutputTokens: maxTokens,
-        temperature,
-        topK,
-        topP,
-      },
-      instructions,
-      system,
-      providerOptions,
-      requireToolApproval,
-      tracingOptions,
-    };
     _activeContinuation.current = {
       model,
       requestContext: resolvedRequestContext,
@@ -878,145 +857,25 @@ export const useChat = ({
 
     const agent = clientWithAbort.getAgent(agentId, undefined, { stream: streamPath });
 
-    const streamWithLegacyRoute = async () => {
-      const runId = uuid();
-      const response = await agent.stream(coreUserMessages, {
-        model,
-        runId,
-        maxSteps,
-        untilIdle: true,
-        modelSettings: {
-          frequencyPenalty,
-          presencePenalty,
-          maxRetries,
-          maxOutputTokens: maxTokens,
-          temperature,
-          topK,
-          topP,
-        },
-        instructions,
-        system,
-        requestContext: resolvedRequestContext,
-        ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
-        providerOptions,
-        requireToolApproval,
-        tracingOptions,
-        clientTools: resolvedClientTools,
-        clientToolsResolver,
-      });
-
-      _onChunk.current = onChunk;
-      _currentRunId.current = runId;
-
-      await response.processDataStream({
-        onChunk: chunk => processStreamChunk(chunk, onChunk),
-      });
-
+    _onChunk.current = onChunk;
+    try {
+      await runActionStream(
+        agent.streamActions(
+          {
+            messages: coreUserMessages,
+            maxSteps,
+            requestContext: resolvedRequestContext,
+            ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
+          },
+          { abortSignal: internalAbort.signal },
+        ),
+        onChunk,
+      );
+    } finally {
       if (_streamAbortRef.current === internalAbort) {
         _streamAbortRef.current = null;
       }
       setIsRunning(false);
-    };
-
-    if (!threadId || _threadSignalsUnsupportedRef.current || threadSignalsDisabled) {
-      await streamWithLegacyRoute();
-      return;
-    }
-
-    _onChunk.current = onChunk;
-
-    await ensureThreadSubscription({ threadId, resourceId: resourceId || agentId });
-
-    if (_threadSignalsUnsupportedRef.current) {
-      await streamWithLegacyRoute();
-      return;
-    }
-
-    const resolvedSignalId = signalId ?? uuid();
-    const messageContents = getSignalContents(coreUserMessages);
-    // RequestContext serializes to a plain record via its toJSON(), but the class has no
-    // index signature, so it isn't assignable to the generated `Record<string, unknown>` body type.
-    const requestContextRecord = resolvedRequestContext as Record<string, unknown> | undefined;
-    const streamOptions = {
-      model,
-      maxSteps,
-      modelSettings: {
-        frequencyPenalty,
-        presencePenalty,
-        maxRetries,
-        maxOutputTokens: maxTokens,
-        temperature,
-        topK,
-        topP,
-      },
-      instructions,
-      system,
-      requestContext: requestContextRecord,
-      providerOptions: providerOptions as any,
-      requireToolApproval,
-      tracingOptions,
-      clientTools: resolvedClientTools,
-      clientToolsResolver,
-    };
-
-    try {
-      const result = await agent.sendMessage({
-        message: clientMessageId
-          ? { contents: messageContents, metadata: { [CLIENT_MESSAGE_ID_KEY]: clientMessageId } }
-          : messageContents,
-        resourceId: resourceId || agentId,
-        threadId,
-        ifIdle: {
-          streamOptions: {
-            ...signalContinuationOptions,
-            requestContext: requestContextRecord,
-            clientTools: resolvedClientTools,
-            clientToolsResolver,
-          },
-        },
-      });
-      const echoedSignalId =
-        result.signal &&
-        typeof result.signal === 'object' &&
-        'id' in result.signal &&
-        typeof result.signal.id === 'string'
-          ? result.signal.id
-          : resolvedSignalId;
-      onSignalSent?.(echoedSignalId, getSignalPreview(coreUserMessages));
-      if (pendingToolApprovalIdsRef.current.size > 0) {
-        setIsRunning(false);
-      }
-    } catch (error) {
-      if (isThreadSignalUnsupportedError(error)) {
-        try {
-          await agent.sendSignal({
-            signal: {
-              id: resolvedSignalId,
-              type: 'user-message',
-              contents: messageContents,
-            },
-            resourceId: resourceId || agentId,
-            threadId,
-            ifIdle: { streamOptions },
-          });
-          onSignalSent?.(resolvedSignalId, getSignalPreview(coreUserMessages));
-          return;
-        } catch (signalError) {
-          onSignalEcho?.(resolvedSignalId);
-          if (isThreadSignalUnsupportedError(signalError)) {
-            markThreadSignalsUnsupported();
-            setMessages(prev => [...prev, fromCoreUserMessagesToMastraDBMessage(coreUserMessages)]);
-            await streamWithLegacyRoute();
-            return;
-          }
-          throw signalError;
-        }
-      }
-      throw error;
-    }
-
-    if (_streamAbortRef.current === internalAbort) {
-      _streamAbortRef.current = null;
     }
   };
 
@@ -1107,128 +966,46 @@ export const useChat = ({
     _activeContinuation.current = {};
   };
 
-  const approveToolCall = async (toolCallId: string, resumeData?: unknown) => {
+  const respondToToolCall = async (toolCallId: string, approved: boolean) => {
     const onChunk = _onChunk.current;
     const currentRunId = _currentRunId.current;
     const continuation = _activeContinuation.current;
 
-    if (!currentRunId)
-      return console.info('[approveToolCall] approveToolCall can only be called after a stream has started');
+    if (!currentRunId) return console.info('[useChat] tool approval can only be answered after a stream has started');
 
     setIsRunning(true);
-    setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'approved' } }));
+    setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: approved ? 'approved' : 'declined' } }));
+    pendingToolApprovalIdsRef.current.delete(toolCallId);
+    setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
 
     const agent = baseClient.getAgent(agentId, undefined, { stream: streamPath });
-    if (_threadSubscriptionKeyRef.current && threadId) {
-      try {
-        await agent.sendToolApproval({
-          resourceId: resourceId || agentId,
-          threadId,
-          toolCallId,
-          approved: true,
-          ...(continuation.model !== undefined ? { streamOptions: { model: continuation.model } } : {}),
-          ...(resumeData !== undefined ? { resumeData } : {}),
-          requestContext: continuation.requestContext,
-        });
-        liveRunId.current ??= currentRunId;
-        liveApprovalIds.current.add(toolCallId);
-        pendingToolApprovalIdsRef.current.delete(toolCallId);
-        setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
-        setIsRunning(false);
-      } catch (error) {
-        setToolCallApprovals(prev => {
-          const next = { ...prev };
-          delete next[toolCallId];
-          return next;
-        });
-        setIsRunning(false);
-        throw error;
-      }
-      return;
-    }
-
     try {
-      const response =
-        resumeData !== undefined
-          ? await agent.resumeStream(resumeData as Parameters<typeof agent.resumeStream>[0], {
-              runId: currentRunId,
-              toolCallId,
-              ...continuation,
-            })
-          : await agent.approveToolCall({
-              runId: currentRunId,
-              toolCallId,
-              ...continuation,
-            });
-
-      await response.processDataStream({
-        onChunk: async (chunk: ChunkType) => {
-          await processStreamChunk(chunk, onChunk);
-        },
-      });
-      setIsRunning(false);
+      await runActionStream(
+        agent.streamActions(
+          {
+            runId: currentRunId,
+            toolCallId,
+            requestContext: continuation.requestContext,
+            ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
+          },
+          { route: approved ? 'approve-tool-call' : 'decline-tool-call' },
+        ),
+        onChunk,
+      );
     } catch (error) {
       setToolCallApprovals(prev => {
         const next = { ...prev };
         delete next[toolCallId];
         return next;
       });
-      setIsRunning(false);
       throw error;
+    } finally {
+      setIsRunning(false);
     }
   };
 
-  const declineToolCall = async (toolCallId: string) => {
-    const onChunk = _onChunk.current;
-    const currentRunId = _currentRunId.current;
-    const continuation = _activeContinuation.current;
-
-    if (!currentRunId)
-      return console.info('[declineToolCall] declineToolCall can only be called after a stream has started');
-
-    setIsRunning(true);
-    setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'declined' } }));
-    const agent = baseClient.getAgent(agentId, undefined, { stream: streamPath });
-    if (_threadSubscriptionKeyRef.current && threadId) {
-      try {
-        await agent.sendToolApproval({
-          resourceId: resourceId || agentId,
-          threadId,
-          toolCallId,
-          approved: false,
-          ...(continuation.model !== undefined ? { streamOptions: { model: continuation.model } } : {}),
-          requestContext: continuation.requestContext,
-        });
-        liveRunId.current ??= currentRunId;
-        liveApprovalIds.current.add(toolCallId);
-        pendingToolApprovalIdsRef.current.delete(toolCallId);
-        setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
-        setIsRunning(false);
-      } catch (error) {
-        setToolCallApprovals(prev => {
-          const next = { ...prev };
-          delete next[toolCallId];
-          return next;
-        });
-        setIsRunning(false);
-        throw error;
-      }
-      return;
-    }
-
-    const response = await agent.declineToolCall({
-      runId: currentRunId,
-      toolCallId,
-      ...continuation,
-    });
-
-    await response.processDataStream({
-      onChunk: async (chunk: ChunkType) => {
-        await processStreamChunk(chunk, onChunk);
-      },
-    });
-    setIsRunning(false);
-  };
+  const approveToolCall = (toolCallId: string, _resumeData?: unknown) => respondToToolCall(toolCallId, true);
+  const declineToolCall = (toolCallId: string) => respondToToolCall(toolCallId, false);
 
   const approveToolCallGenerate = async (toolCallId: string) => {
     const currentRunId = _currentRunId.current;
