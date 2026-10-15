@@ -120,6 +120,33 @@ describe('DateTimeRangePicker (custom range popover)', () => {
     expect(from.getDate()).toBe(20);
   });
 
+  it('keeps the end calendar from minDate when the draft start is earlier', () => {
+    renderCustom({
+      dateFrom: new Date(2026, 8, 1),
+      dateTo: new Date(2026, 8, 20),
+      minDate: new Date(2026, 8, 15, 13, 30),
+    });
+
+    const [, endCalendar] = screen.getAllByRole('grid');
+    const [day14] = within(endCalendar).getAllByRole('gridcell', { name: '14' });
+    expect(day14.hasAttribute('disabled')).toBe(true);
+  });
+
+  it('applies a range that starts on the minDate day when minDate carries a time', () => {
+    const onDateRangeChange = vi.fn();
+    renderCustom({
+      dateFrom: new Date(2026, 8, 15),
+      dateTo: new Date(2026, 8, 20),
+      minDate: new Date(2026, 8, 15, 13, 30),
+      onDateRangeChange,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /apply/i }));
+
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(onDateRangeChange).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects a range that already starts before minDate', () => {
     const onDateRangeChange = vi.fn();
     renderCustom({
