@@ -142,6 +142,30 @@ export class MemoryThread extends BaseResource {
   }
 
   /**
+   * Lists persisted actions for the thread, ordered by id (ULID).
+   */
+  listActions(
+    params: {
+      agentId?: string;
+      runId?: string;
+      after?: string;
+      limit?: number;
+      requestContext?: RequestContext | Record<string, any>;
+    } = {},
+  ): Promise<{ actions: Array<Record<string, unknown>> }> {
+    const query = new URLSearchParams();
+    const agentId = params.agentId ?? this.agentId;
+    if (agentId) query.set('agentId', agentId);
+    if (params.runId) query.set('runId', params.runId);
+    if (params.after) query.set('after', params.after);
+    if (params.limit !== undefined) query.set('limit', String(params.limit));
+    const qs = query.toString();
+    return this.request(
+      `/memory/threads/${this.threadId}/actions${qs ? `?${qs}` : ''}${requestContextQueryString(params.requestContext, qs ? '&' : '?')}`,
+    );
+  }
+
+  /**
    * Deletes one or more messages from the thread
    * @param messageIds - Can be a single message ID (string), array of message IDs,
    *                     message object with id property, or array of message objects
