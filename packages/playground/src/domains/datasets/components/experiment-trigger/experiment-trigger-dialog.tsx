@@ -1,6 +1,21 @@
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
-import { ComboboxParts as C } from '@mastra/playground-ui/components/Combobox';
+import {
+  ComboboxChip,
+  ComboboxChips,
+  ComboboxChipsInput,
+  ComboboxCollection,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxGroup,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxLabel,
+  ComboboxList,
+  ComboboxRoot,
+  ComboboxSeparator,
+  ComboboxValue,
+} from '@mastra/playground-ui/components/Combobox';
 import {
   Dialog,
   DialogAction,
@@ -145,7 +160,7 @@ function NewExperimentDialog({ open, onOpenChange, onSuccess, ...initial }: Expe
                   >
                     Target
                   </FieldLabel>
-                  <C.Combobox
+                  <ComboboxRoot
                     items={targetGroups}
                     value={state.target ?? null}
                     onValueChange={(next: TargetOption | null) => state.setTargetValue(next?.value ?? '')}
@@ -153,26 +168,26 @@ function NewExperimentDialog({ open, onOpenChange, onSuccess, ...initial }: Expe
                     disabled={state.targetsLoading}
                     autoHighlight
                   >
-                    <C.ComboboxInput placeholder="Pick an agent, workflow or scorer" />
-                    <C.ComboboxContent container={contentRef}>
-                      <C.ComboboxEmpty>Nothing to run</C.ComboboxEmpty>
-                      <C.ComboboxList>
+                    <ComboboxInput placeholder="Pick an agent, workflow or scorer" />
+                    <ComboboxContent container={contentRef}>
+                      <ComboboxEmpty>Nothing to run</ComboboxEmpty>
+                      <ComboboxList>
                         {(group: (typeof targetGroups)[number], index: number) => (
-                          <C.ComboboxGroup key={group.value} items={group.items}>
-                            {index > 0 ? <C.ComboboxSeparator /> : null}
-                            <C.ComboboxLabel>{group.value}</C.ComboboxLabel>
-                            <C.ComboboxCollection>
+                          <ComboboxGroup key={group.value} items={group.items}>
+                            {index > 0 ? <ComboboxSeparator /> : null}
+                            <ComboboxLabel>{group.value}</ComboboxLabel>
+                            <ComboboxCollection>
                               {(item: TargetOption) => (
-                                <C.ComboboxItem key={item.value} value={item}>
+                                <ComboboxItem key={item.value} value={item}>
                                   {item.label}
-                                </C.ComboboxItem>
+                                </ComboboxItem>
                               )}
-                            </C.ComboboxCollection>
-                          </C.ComboboxGroup>
+                            </ComboboxCollection>
+                          </ComboboxGroup>
                         )}
-                      </C.ComboboxList>
-                    </C.ComboboxContent>
-                  </C.Combobox>
+                      </ComboboxList>
+                    </ComboboxContent>
+                  </ComboboxRoot>
                 </Field>
 
                 <Field>
@@ -182,7 +197,7 @@ function NewExperimentDialog({ open, onOpenChange, onSuccess, ...initial }: Expe
                   >
                     Dataset
                   </FieldLabel>
-                  <C.Combobox
+                  <ComboboxRoot
                     items={state.datasets}
                     value={dataset}
                     onValueChange={(next: DatasetOption | null) => next && state.setDataset(next.value)}
@@ -190,27 +205,27 @@ function NewExperimentDialog({ open, onOpenChange, onSuccess, ...initial }: Expe
                     isItemEqualToValue={sameValue}
                     autoHighlight
                   >
-                    <C.ComboboxInput placeholder="Select a dataset">
+                    <ComboboxInput placeholder="Select a dataset">
                       {datasetDetail(state.itemCount, state.version)}
-                    </C.ComboboxInput>
-                    <C.ComboboxContent container={contentRef}>
-                      <C.ComboboxEmpty>No datasets found</C.ComboboxEmpty>
-                      <C.ComboboxList>
+                    </ComboboxInput>
+                    <ComboboxContent container={contentRef}>
+                      <ComboboxEmpty>No datasets found</ComboboxEmpty>
+                      <ComboboxList>
                         {(item: DatasetOption) => (
-                          <C.ComboboxItem key={item.value} value={item}>
+                          <ComboboxItem key={item.value} value={item}>
                             {item.label}
-                          </C.ComboboxItem>
+                          </ComboboxItem>
                         )}
-                      </C.ComboboxList>
-                    </C.ComboboxContent>
-                  </C.Combobox>
+                      </ComboboxList>
+                    </ComboboxContent>
+                  </ComboboxRoot>
                 </Field>
 
                 <Field>
                   <FieldLabel info="Grade each output automatically. Outputs are saved either way, so you can always review them yourself.">
                     Scorers
                   </FieldLabel>
-                  <C.Combobox
+                  <ComboboxRoot
                     multiple
                     items={state.scorerOptions}
                     value={pickedScorers}
@@ -218,28 +233,28 @@ function NewExperimentDialog({ open, onOpenChange, onSuccess, ...initial }: Expe
                     isItemEqualToValue={sameValue}
                     autoHighlight
                   >
-                    <C.ComboboxChips>
-                      <C.ComboboxValue>
+                    <ComboboxChips>
+                      <ComboboxValue>
                         {(items: ScorerOption[]) => (
                           <>
                             {items.map(item => (
-                              <C.ComboboxChip key={item.value}>{item.label}</C.ComboboxChip>
+                              <ComboboxChip key={item.value}>{item.label}</ComboboxChip>
                             ))}
-                            <C.ComboboxChipsInput
+                            <ComboboxChipsInput
                               placeholder={items.length === 0 ? 'No scoring, read the outputs yourself' : undefined}
                             />
                           </>
                         )}
-                      </C.ComboboxValue>
-                    </C.ComboboxChips>
-                    <C.ComboboxContent container={contentRef}>
-                      <C.ComboboxEmpty>No scorers registered</C.ComboboxEmpty>
-                      <C.ComboboxList>
+                      </ComboboxValue>
+                    </ComboboxChips>
+                    <ComboboxContent container={contentRef}>
+                      <ComboboxEmpty>No scorers registered</ComboboxEmpty>
+                      <ComboboxList>
                         {(item: ScorerOption) => {
                           const row = (
-                            <C.ComboboxItem key={item.value} value={item}>
+                            <ComboboxItem key={item.value} value={item}>
                               {item.label}
-                            </C.ComboboxItem>
+                            </ComboboxItem>
                           );
                           if (!item.description) return row;
                           return (
@@ -251,9 +266,9 @@ function NewExperimentDialog({ open, onOpenChange, onSuccess, ...initial }: Expe
                             </Tooltip>
                           );
                         }}
-                      </C.ComboboxList>
-                    </C.ComboboxContent>
-                  </C.Combobox>
+                      </ComboboxList>
+                    </ComboboxContent>
+                  </ComboboxRoot>
                   {state.usesDefaultScorers && <FieldDescription>The dataset's default scorers.</FieldDescription>}
                 </Field>
               </div>
