@@ -94,6 +94,27 @@ describe('activity transform', () => {
     expect(output).not.toContain('createWorkflow');
   });
 
+  it('generates Standard Schema suspend-payload validation', async () => {
+    const output = await transform(`
+      import { createStep } from '@mastra/core/workflows';
+
+      export const approval = createStep({
+        id: 'approval',
+        suspendSchema: {
+          '~standard': {
+            version: 1,
+            vendor: 'test',
+            validate: value => ({ value }),
+          },
+        },
+        execute: async ({ suspend }) => suspend({ reason: 'approval' }),
+      });
+    `);
+
+    expect(output).toContain("schema['~standard'].validate(value)");
+    expect(output).toContain("'issues' in result");
+  });
+
   it('uses a local mastra binding in the injected helper', async () => {
     const output = await transform(`
       import { createStep } from '@mastra/core/workflows';

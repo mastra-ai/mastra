@@ -1,4 +1,4 @@
-import { defineSignal, defineQuery, proxyActivities, setHandler, condition, log, sleep, executeChild } from '@temporalio/workflow';
+import { defineSignal, defineQuery, proxyActivities, setHandler, condition, log, ApplicationFailure, sleep, executeChild } from '@temporalio/workflow';
 
 const resumeSignal = defineSignal('mastra.resume');
 const statusQuery = defineQuery('mastra.status');
@@ -191,7 +191,7 @@ class TemporalExecutionEngine {
               }]
             });
             if (childResult?.status === 'suspended' || childResult?.__temporalSuspension === true) {
-              throw new Error('Temporal workflows do not support suspending inside child workflows yet.');
+              throw ApplicationFailure.nonRetryable('Temporal workflows do not support suspending inside child workflows yet.');
             }
             return childResult?.result ?? childResult;
           });
@@ -309,7 +309,7 @@ class TemporalExecutionEngine {
                 initData: this.initData
               }));
               if (itemResult?.__temporalSuspension === true) {
-                throw new Error('Temporal workflows do not support suspending inside foreach steps yet.');
+                throw ApplicationFailure.nonRetryable('Temporal workflows do not support suspending inside foreach steps yet.');
               }
               results[i] = itemResult;
             }

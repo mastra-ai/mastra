@@ -4,6 +4,7 @@ const executeChild = vi.fn();
 const proxyActivities = vi.fn();
 const sleep = vi.fn(async () => {});
 const logInfo = vi.fn();
+const nonRetryable = vi.fn((message: string) => Object.assign(new Error(message), { nonRetryable: true }));
 const defineQuery = vi.fn((name: string) => name);
 const defineSignal = vi.fn((name: string) => name);
 const signalHandlers = new Map<string, (...args: unknown[]) => void>();
@@ -15,6 +16,7 @@ const condition = vi.fn(async (predicate: () => boolean) => {
 });
 
 vi.mock('@temporalio/workflow', () => ({
+  ApplicationFailure: { nonRetryable },
   condition,
   defineQuery,
   defineSignal,
@@ -46,6 +48,7 @@ describe('temporal workflow runtime helper module', () => {
     defineSignal.mockClear();
     setHandler.mockClear();
     condition.mockClear();
+    nonRetryable.mockClear();
     signalHandlers.clear();
   });
 
@@ -287,15 +290,33 @@ describe('temporal workflow runtime helper module', () => {
     await expect(run).resolves.toMatchObject({ status: 'success' });
   });
 
-  it('fails loudly when a foreach item suspends', async () => {
+  it('fails non-retryably when a foreach item suspends', async () => {
     const approveItem = vi.fn().mockResolvedValue({ __temporalSuspension: true, suspendPayload: { reason: 'item' } });
     proxyActivities.mockReturnValue({ approveItem });
 
     const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
     const workflow = createWorkflow('approval-workflow').foreach('approveItem').commit();
 
-    await expect(workflow({ inputData: [{ id: 1 }] })).rejects.toThrow(
-      'Temporal workflows do not support suspending inside foreach steps yet.',
+    await expect(workflow({ inputData: [{ id: 1 }] })).rejects.toMatchObject({
+      message: 'Temporal workflows do not support suspending inside foreach steps yet.',
+      nonRetryable: true,
+    });
+    expect(nonRetryable).toHaveBeenCalledWith('Temporal workflows do not support suspending inside foreach steps yet.');
+  });
+
+  it('fails non-retryably when a child workflow suspends', async () => {
+    proxyActivities.mockReturnValue({});
+    executeChild.mockResolvedValue({ status: 'suspended', suspended: [['approval']] });
+
+    const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
+    const workflow = createWorkflow('parent-workflow').thenWorkflow('child-workflow').commit();
+
+    await expect(workflow({ inputData: { orderId: 'order-1' } })).rejects.toMatchObject({
+      message: 'Temporal workflows do not support suspending inside child workflows yet.',
+      nonRetryable: true,
+    });
+    expect(nonRetryable).toHaveBeenCalledWith(
+      'Temporal workflows do not support suspending inside child workflows yet.',
     );
   });
 

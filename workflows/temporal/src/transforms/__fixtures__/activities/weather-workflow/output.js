@@ -1,9 +1,16 @@
 import { RequestContext } from '@mastra/core/di';
 import { z } from 'zod';
 
-function parseWithSchema(schema, value) {
+async function parseWithSchema(schema, value) {
   if (!schema) {
     return value;
+  }
+  if (typeof schema['~standard']?.validate === 'function') {
+    const result = await schema['~standard'].validate(value);
+    if ('issues' in result) {
+      throw new Error(result.issues.map(issue => issue.message).join(', '));
+    }
+    return result.value;
   }
   if (typeof schema.parseAsync === 'function') {
     return schema.parseAsync(value);

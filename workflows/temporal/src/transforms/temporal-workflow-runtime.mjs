@@ -1,4 +1,5 @@
 import {
+  ApplicationFailure,
   condition,
   defineQuery,
   defineSignal,
@@ -188,7 +189,9 @@ export class TemporalExecutionEngine {
             args: [{ inputData, ...this.executionContext }],
           });
           if (childResult?.status === 'suspended' || childResult?.__temporalSuspension === true) {
-            throw new Error('Temporal workflows do not support suspending inside child workflows yet.');
+            throw ApplicationFailure.nonRetryable(
+              'Temporal workflows do not support suspending inside child workflows yet.',
+            );
           }
           return childResult?.result ?? childResult;
         });
@@ -312,7 +315,9 @@ export class TemporalExecutionEngine {
               this.activityParams(items[i], { initData: this.initData }),
             );
             if (itemResult?.__temporalSuspension === true) {
-              throw new Error('Temporal workflows do not support suspending inside foreach steps yet.');
+              throw ApplicationFailure.nonRetryable(
+                'Temporal workflows do not support suspending inside foreach steps yet.',
+              );
             }
             results[i] = itemResult;
           }

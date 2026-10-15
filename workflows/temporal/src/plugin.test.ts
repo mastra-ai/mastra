@@ -52,6 +52,7 @@ async function writeTemporalWorkflowShim(projectRoot: string): Promise<void> {
     path.join(temporalWorkflowDir, 'index.js'),
     `
       const getMock = () => globalThis.__temporalWorkflowMock;
+      export const ApplicationFailure = { nonRetryable: (...args) => getMock().nonRetryable(...args) };
       export const condition = (...args) => getMock().condition(...args);
       export const defineQuery = (...args) => getMock().defineQuery(...args);
       export const defineSignal = (...args) => getMock().defineSignal(...args);
@@ -259,6 +260,7 @@ describe('Temporal prebuild integration', () => {
     let workflowModule: Record<string, unknown>;
     (globalThis as typeof globalThis & { __temporalWorkflowMock: unknown }).__temporalWorkflowMock = {
       condition: vi.fn(async () => true),
+      nonRetryable: vi.fn((message: string) => Object.assign(new Error(message), { nonRetryable: true })),
       defineQuery: vi.fn((name: string) => name),
       defineSignal: vi.fn((name: string) => name),
       executeChild,
