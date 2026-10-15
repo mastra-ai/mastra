@@ -1712,10 +1712,14 @@ export class SessionRunEngine {
     suspended,
     error,
     aborted,
+    resourceId,
+    threadId,
   }: {
     suspended?: boolean;
     error?: boolean;
     aborted?: boolean;
+    resourceId?: string;
+    threadId?: string;
   }): Promise<void> {
     const reason = error
       ? 'error'
@@ -1724,6 +1728,21 @@ export class SessionRunEngine {
         : aborted || this.#session.run.isAbortRequested()
           ? 'aborted'
           : 'complete';
+    // A follower Session mirrors suspensions from runs it does not own. Once
+    // such a run completes (it was resumed elsewhere), its parked calls were
+    // answered, so drop them without a cancellation event. Error and tripwire
+    // finishes retract in their chunk handlers; lease loss keeps them parked.
+    const runId = this.#session.run.getRunId();
+    if (reason === 'complete' && resourceId && threadId && runId) {
+      for (const s of this.#session.suspensions.deleteForRun({ resourceId, threadId, runId })) {
+        this.#session.displayState.deletePendingSuspension({
+          resourceId: s.resourceId,
+          threadId: s.threadId,
+          runId: s.runId,
+          toolCallId: s.toolCallId,
+        });
+      }
+    }
     await this.#session.finishAgentRun(reason);
     this.#session.run.reset();
   }
@@ -1855,6 +1874,8 @@ export class SessionRunEngine {
               suspended,
               error: isError,
               aborted,
+              resourceId: currentRun.resourceId,
+              threadId: currentRun.threadId,
             });
             currentRun = undefined;
             if (aborted) {
@@ -1886,7 +1907,11 @@ export class SessionRunEngine {
       // Graceful stream close without explicit terminal chunk.
       if (currentRun && this.#session.stream.isCurrent({ subscription })) {
         const streamResult = this.finishStreamState(currentRun);
-        await this.finishSubscribedStreamRun({ suspended: streamResult.suspended });
+        await this.finishSubscribedStreamRun({
+          suspended: streamResult.suspended,
+          resourceId: currentRun.resourceId,
+          threadId: currentRun.threadId,
+        });
         currentRun = undefined;
       }
 
