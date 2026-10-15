@@ -171,15 +171,6 @@ export function DatasetReview({
     return [...tags].sort();
   }, [dataset, items]);
 
-  const syncTagToDataset = useCallback(
-    (tag: string) => {
-      if (!dataset || !datasetId) return;
-      const currentTags = dataset.tags ?? [];
-      if (currentTags.includes(tag)) return;
-    },
-    [dataset, datasetId],
-  );
-
   const filteredItems = useMemo(() => {
     if (!activeTagFilter) return items;
     if (activeTagFilter === UNTAGGED) return items.filter(i => i.tags.length === 0);
@@ -559,19 +550,6 @@ export function DatasetReview({
         featuredItem?.experimentId
           ? paths.experimentItemLink(featuredItem.experimentId, featuredItem.itemId)
           : undefined
-      }
-      tagVocabulary={datasetTagVocabulary}
-      onTagsChange={
-        showCompleted || !featuredItem
-          ? undefined
-          : tags => {
-              setItemTags(featuredItem.id, tags);
-              for (const tag of tags) {
-                if (!datasetTagVocabulary.includes(tag)) {
-                  syncTagToDataset(tag);
-                }
-              }
-            }
       }
       onComplete={showCompleted || !featuredItem ? undefined : () => completeItem(featuredItem.id)}
       onPrevious={toPreviousItem}

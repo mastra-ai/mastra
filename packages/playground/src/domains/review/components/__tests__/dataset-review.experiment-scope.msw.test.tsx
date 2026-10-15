@@ -283,6 +283,15 @@ describe('DatasetReview with an open agent result', () => {
       const panel = await screen.findByRole('dialog', { name: 'Review item r-1' });
       expect(await within(panel).findByText('Duration')).toBeTruthy();
     });
+
+    it('does not offer to edit its tags, like on the experiment page', async () => {
+      renderOpenResult();
+
+      const panel = await screen.findByRole('dialog', { name: 'Review item r-1' });
+      await within(panel).findByText('Whisk the egg whites separately.');
+      expect(within(panel).queryByText('Tags')).toBeNull();
+      expect(within(panel).queryByRole('combobox')).toBeNull();
+    });
   });
 });
 
