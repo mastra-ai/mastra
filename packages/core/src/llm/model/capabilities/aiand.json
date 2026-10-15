@@ -1,6 +1,5 @@
 {
   "attachment": [
-    "deepseek-ai/deepseek-v4-flash",
     "deepseek-ai/deepseek-v4.1-flash",
     "google/gemma-4-31b-it",
     "moonshotai/kimi-k2.7-code",
