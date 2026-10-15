@@ -2,6 +2,7 @@ import type { GetMemoryConfigResponse } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -157,10 +158,11 @@ export function AgentMemoryConfig({ agentId }: { agentId: string }) {
           <MemoryConfigFields key={section.title} items={section.items} />
         ) : (
           <Collapsible key={section.title} defaultOpen={section.title !== 'Observational Memory'}>
-            <CollapsibleTrigger chevron="end" className="flex w-full items-center justify-between gap-2">
+            <CollapsibleTrigger className="flex w-full items-center justify-between gap-2">
               <Txt as="span" variant="body-sm">
                 {section.title}
               </Txt>
+              <DisclosureChevron direction="right" className="size-4" />
             </CollapsibleTrigger>
             <CollapsibleContent className="pt-2">
               <MemoryConfigFields items={section.items} />

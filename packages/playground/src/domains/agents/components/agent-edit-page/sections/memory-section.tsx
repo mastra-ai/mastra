@@ -278,11 +278,8 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                       />
 
                       <Collapsible open={isObserverOpen} onOpenChange={setIsObserverOpen}>
-                        <CollapsibleTrigger
-                          chevron="start"
-                          chevronSize="xs"
-                          className="flex w-full items-center gap-1 text-muted-foreground"
-                        >
+                        <CollapsibleTrigger className="flex w-full items-center gap-1">
+                          <DisclosureChevron direction="right" className="size-3 text-muted-foreground" />
                           <Txt as="span" variant="label" tone="ink" className="cursor-pointer">
                             Observer
                           </Txt>
@@ -472,11 +469,8 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                       </Collapsible>
 
                       <Collapsible open={isReflectorOpen} onOpenChange={setIsReflectorOpen}>
-                        <CollapsibleTrigger
-                          chevron="start"
-                          chevronSize="xs"
-                          className="flex w-full items-center gap-1 text-muted-foreground"
-                        >
+                        <CollapsibleTrigger className="flex w-full items-center gap-1">
+                          <DisclosureChevron direction="right" className="size-3 text-muted-foreground" />
                           <Txt as="span" variant="label" tone="ink" className="cursor-pointer">
                             Reflector
                           </Txt>

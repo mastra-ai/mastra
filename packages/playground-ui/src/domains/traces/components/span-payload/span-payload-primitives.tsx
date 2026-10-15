@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { SpanPayloadTool } from './span-payload-tool';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Txt } from '@/ds/components/Txt';
 
@@ -42,11 +43,8 @@ export function SpanPayloadCollapsible({
 }) {
   return (
     <Collapsible defaultOpen={defaultOpen}>
-      <CollapsibleTrigger
-        chevron="start"
-        chevronSize="xs"
-        className="flex items-center gap-1 text-meta text-placeholder uppercase"
-      >
+      <CollapsibleTrigger className="flex items-center gap-1 text-meta text-placeholder uppercase">
+        <DisclosureChevron direction="right" className="size-3" />
         {label}
       </CollapsibleTrigger>
       <CollapsibleContent className="pt-1.5">{children}</CollapsibleContent>
