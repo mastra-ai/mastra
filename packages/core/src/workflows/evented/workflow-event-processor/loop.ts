@@ -457,7 +457,7 @@ export async function processWorkflowForEach(
       runId,
       stepId,
       result: currentResult,
-      requestContext,
+      requestContext: withoutAuthToken(requestContext),
     });
     stepResults[stepId] = currentResult;
   }
