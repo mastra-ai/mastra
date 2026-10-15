@@ -44,6 +44,24 @@ describe('actionsToMessages', () => {
     });
     expect(parts.filter(p => p.type === 'text').map((p: any) => p.text)).toEqual(['It is 21C.']);
   });
+
+  it('does not leave a declined tool call awaiting approval on replay', () => {
+    const messages = actionsToMessages([
+      { ...base('01'), type: 'text', role: 'user', text: 'Delete a.txt' },
+      { ...base('02'), type: 'turn-start' },
+      { ...base('03'), type: 'tool-call', role: 'assistant', toolCallId: 'd1', toolName: 'deleteFile', input: {} },
+      { ...base('04'), type: 'tool-approval-requested', approvalId: 'ap1', toolCallId: 'd1', toolName: 'deleteFile' },
+      { ...base('05'), type: 'run-end', finishReason: 'tool-calls', usage: {} },
+      { ...base('06'), type: 'tool-approval-responded', approvalId: 'ap1', toolCallId: 'd1', approved: false },
+      { ...base('07'), type: 'tool-denied', toolCallId: 'd1', toolName: 'deleteFile' },
+      { ...base('08'), type: 'run-end', finishReason: 'stop', usage: {} },
+    ] as MastraAction[]);
+
+    const assistant = messages.find(m => m.role === 'assistant')!;
+    expect((assistant.content.metadata as any)?.requireApprovalMetadata ?? {}).toEqual({});
+    const tool = assistant.content.parts.find(p => p.type === 'tool-invocation') as any;
+    expect(tool.toolInvocation.state).toBe('output-denied');
+  });
 });
 
 describe('createActionChunker (live)', () => {
