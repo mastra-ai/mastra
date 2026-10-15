@@ -1,5 +1,20 @@
 # @mastra/voice-sarvam
 
+## 1.1.2-alpha.2
+
+### Patch Changes
+
+- Fixed `SarvamVoice.listen()` sending the speech model's API key. `listen()` now uses `options.apiKey`, then the listening model's key, and `speak()` uses the speech model's key, so projects with separate Sarvam keys for speech-to-text and text-to-speech bill each to the right key. ([#27206](https://github.com/mastra-ai/mastra/pull/27206))
+
+  ```ts
+  const voice = new SarvamVoice({
+    speechModel: { apiKey: 'tts-key' },
+    listeningModel: { apiKey: 'stt-key' },
+  });
+  await voice.listen(audio); // uses 'stt-key'
+  await voice.listen(audio, { apiKey: 'per-call-key' }); // uses 'per-call-key'
+  ```
+
 ## 1.1.2-alpha.1
 
 ### Patch Changes

@@ -1,5 +1,16 @@
 # @mastra/memory
 
+## 1.38.0-alpha.1
+
+### Patch Changes
+
+- Fixed token estimates for long numbers. A long number used to count as one token, so output full of numbers could grow far past memory and token limits without triggering them. Long numbers are now counted accurately, and limits trigger at the right time. ([#27208](https://github.com/mastra-ai/mastra/pull/27208))
+
+  Estimates saved on existing messages are recalculated, so existing conversations also get the corrected counts.
+
+- Updated dependencies [[`c09fb4b`](https://github.com/mastra-ai/mastra/commit/c09fb4b5758114c8c57d0af48cbe6dfdfe9dde90)]:
+  - @mastra/core@1.78.0-alpha.10
+
 ## 1.38.0-alpha.0
 
 ### Minor Changes

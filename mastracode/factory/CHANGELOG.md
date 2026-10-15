@@ -1,5 +1,15 @@
 # @mastra/factory
 
+## 0.23.0-alpha.10
+
+### Patch Changes
+
+- New Factories now default to the hybrid model scope everywhere. Onboarding preselects "Company work · personal sessions", and Factories with no saved scope, or one that isn't recognized, are treated as hybrid instead of company account. ([#27202](https://github.com/mastra-ai/mastra/pull/27202))
+
+- Updated dependencies [[`c09fb4b`](https://github.com/mastra-ai/mastra/commit/c09fb4b5758114c8c57d0af48cbe6dfdfe9dde90)]:
+  - @mastra/core@1.78.0-alpha.10
+  - @mastra/code-sdk@1.14.0-alpha.10
+
 ## 0.23.0-alpha.9
 
 ### Patch Changes

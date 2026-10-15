@@ -1,5 +1,71 @@
 # @mastra/playground-ui
 
+## 64.0.0-alpha.10
+
+### Minor Changes
+
+- Added an Output column to the Traces table, so you can see what a run returned without opening it. ([#27195](https://github.com/mastra-ai/mastra/pull/27195))
+
+  - Shows the trace's output preview, or its error in red when the trace failed.
+  - On by default, next to Input. Hide it from the Columns menu or through `columnPreferences`.
+  - Saved column choices gain Output next to Input when Input is shown.
+  - Servers that don't send previews show `-`.
+
+  ```tsx
+  import { TracesListView } from '@mastra/playground-ui/domains/traces/components/traces-list-view';
+  import { DEFAULT_TRACE_COLUMN_PREFERENCES } from '@mastra/playground-ui/domains/traces/trace-list-columns';
+
+  <TracesListView
+    {...props}
+    columnPreferences={{
+      ...DEFAULT_TRACE_COLUMN_PREFERENCES,
+      visibleColumns: DEFAULT_TRACE_COLUMN_PREFERENCES.visibleColumns.filter(column => column !== 'output'),
+    }}
+  />;
+  ```
+
+- Added `Meter`, a thin bar that shows usage against an allowance. Usage past the allowance turns red, sized to how far over it is. ([#27194](https://github.com/mastra-ai/mastra/pull/27194))
+
+  ```tsx
+  import { Meter } from '@mastra/playground-ui/components/Meter';
+
+  <Meter value={112} max={100} aria-label="vCPU" aria-valuetext="112 of 100 vCPU-hours" />;
+  ```
+
+  Pass `Meter.Source` children to show where the usage came from. Hovering or focusing the bar splits it into one color per source, with a key of each source's amount:
+
+  ```tsx
+  <Meter value={148} max={360} aria-label="Memory">
+    <Meter.Source label="research-workflows" value={112} />
+    <Meter.Source label="Sandboxes" value={36} />
+  </Meter>
+  ```
+
+  `MetricsStackedBarChart` can now print a label above a column. Set `columnLabelKey` to a row field, and rows that have it show the text above their column:
+
+  ```tsx
+  <MetricsStackedBarChart data={rows} series={series} columnLabelKey="overage" />
+  // rows: [..., { time: 'Oct 13', included: 100, over: 12, overage: '$1.20 over' }]
+  ```
+
+  An inset `Table` can now draw its header inside the inset with the rows, for a table nested in a card or an expanded row:
+
+  ```tsx
+  <Table variant="inset">
+    <Table.Header placement="inside">…</Table.Header>
+    <Table.Body>…</Table.Body>
+  </Table>
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`c09fb4b`](https://github.com/mastra-ai/mastra/commit/c09fb4b5758114c8c57d0af48cbe6dfdfe9dde90)]:
+  - @mastra/memory@1.38.0-alpha.1
+  - @mastra/core@1.78.0-alpha.10
+  - @mastra/ai-sdk@1.11.1
+  - @mastra/client-js@1.55.0-alpha.10
+  - @mastra/react@1.11.0-alpha.10
+
 ## 64.0.0-alpha.9
 
 ### Minor Changes
