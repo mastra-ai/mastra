@@ -6,6 +6,7 @@
  * - ClickHouse query settings
  */
 
+import { getTimeToFirstChunkMs } from '@mastra/core/observability';
 import type {
   LightSpanRecord,
   SpanRecord,
@@ -273,6 +274,8 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
     isEvent: span.isEvent,
     startedAt: toISOString(span.startedAt),
     endedAt: toISOString(endedAt),
+    timeToFirstChunkMs:
+      getTimeToFirstChunkMs({ startTime: span.startedAt, attributes: span.attributes ?? undefined }) ?? null,
     tags: normalizeTags(span.tags),
     metadataSearch: buildMetadataSearch(metadata),
     metadataRaw: jsonEncode(metadata),

@@ -1,3 +1,4 @@
+import { getTimeToFirstChunkMs } from '@mastra/core/observability';
 import type {
   CreateSpanArgs,
   GetSpanArgs,
@@ -60,6 +61,7 @@ const COLUMNS = [
   'spanType',
   'isEvent',
   'endedAt',
+  'timeToFirstChunkMs',
   'experimentId',
   'entityType',
   'entityId',
@@ -614,6 +616,7 @@ interface SpanEventRow {
   spanType: string | null;
   isEvent: boolean | null;
   endedAt: Date | null;
+  timeToFirstChunkMs: number | null;
   experimentId: string | null;
   entityType: string | null;
   entityId: string | null;
@@ -689,6 +692,7 @@ function toValuesTuple(row: SpanEventRow): string {
     v(row.spanType),
     v(row.isEvent),
     v(row.endedAt),
+    v(row.timeToFirstChunkMs),
     v(row.experimentId),
     v(row.entityType),
     v(row.entityId),
@@ -734,6 +738,10 @@ async function insertSpanEvents(db: DuckDBConnection, rows: SpanEventRow[]): Pro
 // Public API
 // ============================================================================
 
+function timeToFirstChunkMs(s: CreateSpanArgs['span']): number | null {
+  return getTimeToFirstChunkMs({ startTime: s.startedAt, attributes: s.attributes ?? undefined }) ?? null;
+}
+
 function createStartSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
   // An ended non-event record also gets an 'end' row carrying the full payload,
   // and reconstruction takes the latest non-null value per column, so the start
@@ -751,6 +759,7 @@ function createStartSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     isEvent: s.isEvent,
     // Event spans are point-in-time: they end at the instant they start.
     endedAt: s.isEvent ? s.startedAt : null,
+    timeToFirstChunkMs: timeToFirstChunkMs(s),
     experimentId: s.experimentId ?? null,
     entityType: s.entityType ?? null,
     entityId: s.entityId ?? null,
@@ -800,6 +809,7 @@ function createEndSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     spanType: s.spanType,
     isEvent: s.isEvent,
     endedAt: s.endedAt ?? null,
+    timeToFirstChunkMs: timeToFirstChunkMs(s),
     experimentId: s.experimentId ?? null,
     entityType: s.entityType ?? null,
     entityId: s.entityId ?? null,
