@@ -35,6 +35,9 @@ export const ComposerBox = forwardRef<HTMLDivElement, ComposerBoxProps>(
       data-slot="composer-box"
       className={cn(
         'composer-box @container relative mx-auto mt-auto w-full max-w-3xl overflow-hidden rounded-[22px] border border-border transition-colors duration-normal focus-within:border-border-strong',
+        // The suggestions list and the input scroll flush with the top corners; at 16px in, the
+        // 22px corner no longer cuts into their scrollbars.
+        '[--scroll-area-scrollbar-inset:16px]',
         className,
       )}
       {...props}
