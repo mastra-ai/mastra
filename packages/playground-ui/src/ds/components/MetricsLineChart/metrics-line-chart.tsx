@@ -4,7 +4,7 @@ import { MetricsLineChartTooltip } from './metrics-line-chart-tooltip';
 import { ChartSkeleton } from '@/ds/components/ChartSkeleton';
 import { CHART_CURSOR_PROPS, CHART_GRID_PROPS, useChartSize } from '@/ds/primitives/chart-axes';
 import type { ChartXLabels } from '@/ds/primitives/chart-axes';
-import { Y_AXIS_WIDTH, compactNumber, timeXAxis, valueYAxis } from '@/ds/primitives/chart-frame';
+import { compactNumber, timeXAxis, valueYAxis } from '@/ds/primitives/chart-frame';
 import type { ChartHeight } from '@/ds/primitives/chart-frame';
 import { CHART_MARGIN } from '@/ds/primitives/chart-layout';
 import { ChartPlot } from '@/ds/primitives/chart-plot';
@@ -118,7 +118,6 @@ function LinePlot({
 
   const format = valueFormatter ?? compactNumber.format;
   const isSparse = (key: string) => data.filter(row => typeof row[key] === 'number').length <= SPARSE_POINTS;
-  const plotWidth = size.width - (showYAxis ? Y_AXIS_WIDTH : 0);
   const activeDot = (s: MetricsLineChartSeries) => ({
     r: 3.5,
     fill: s.color,
@@ -153,7 +152,7 @@ function LinePlot({
           ))}
         </defs>
         <CartesianGrid {...CHART_GRID_PROPS} />
-        {timeXAxis({ data, xKey, timestampKey, xLabels, plotWidth })}
+        {timeXAxis({ data, xKey, timestampKey, xLabels })}
         {valueYAxis({ show: showYAxis, size, formatter: axisFormatter ?? format, domain: yDomain })}
         <Tooltip
           content={<MetricsLineChartTooltip formatValue={format} labelKey={tooltipLabelKey} />}

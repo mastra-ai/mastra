@@ -6,7 +6,7 @@ import { MetricsLineChartLegend, MetricsLineChartTooltip } from '@/ds/components
 import { CHART_GRID_PROPS, useChartSize } from '@/ds/primitives/chart-axes';
 import type { ChartXLabels } from '@/ds/primitives/chart-axes';
 import { singleBarBox, stackedSegmentBox } from '@/ds/primitives/chart-column-layout';
-import { CHART_TICK, Y_AXIS_WIDTH, compactNumber, timeXAxis, valueYAxis } from '@/ds/primitives/chart-frame';
+import { CHART_TICK, compactNumber, timeXAxis, valueYAxis } from '@/ds/primitives/chart-frame';
 import type { ChartHeight } from '@/ds/primitives/chart-frame';
 import { CHART_MARGIN } from '@/ds/primitives/chart-layout';
 import { ChartPlot } from '@/ds/primitives/chart-plot';
@@ -196,7 +196,6 @@ function BarPlot({
   }, [keyList, colorList, variant, id]);
 
   const format = valueFormatter ?? compactNumber.format;
-  const plotWidth = size.width - (showYAxis ? Y_AXIS_WIDTH : 0);
 
   return (
     <>
@@ -225,7 +224,7 @@ function BarPlot({
             ))}
           </defs>
           <CartesianGrid {...CHART_GRID_PROPS} />
-          {timeXAxis({ data, xKey, timestampKey, xLabels, plotWidth })}
+          {timeXAxis({ data, xKey, timestampKey, xLabels })}
           {valueYAxis({ show: showYAxis, size, formatter: axisFormatter ?? format, domain: yDomain })}
           {overlay &&
             valueYAxis({
