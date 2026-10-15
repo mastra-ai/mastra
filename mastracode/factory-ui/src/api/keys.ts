@@ -128,8 +128,8 @@ export const queryKeys = {
     ['factory', 'decisions', githubProjectId ?? null, statusKey] as const,
   factoryAttentionRoot: (factoryProjectId: string | undefined) =>
     ['factory', 'attention', factoryProjectId ?? null] as const,
-  factoryAttention: (factoryProjectId: string | undefined, view: string, limit: number, group = 'all') =>
-    [...queryKeys.factoryAttentionRoot(factoryProjectId), view, limit, group] as const,
+  factoryAttention: (factoryProjectId: string | undefined, view: string, limit: number) =>
+    [...queryKeys.factoryAttentionRoot(factoryProjectId), view, limit] as const,
   factorySupervisorHealth: (factoryProjectId: string | undefined) =>
     ['factory', 'supervisor', 'health', factoryProjectId ?? null] as const,
   factoryAudit: (githubProjectId: string | undefined, group: string, actorKey?: string) =>

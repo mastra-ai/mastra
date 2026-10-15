@@ -915,7 +915,7 @@ describe('KnowledgePage', () => {
 
     const { router } = renderRoute();
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/overview`));
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`));
   });
 
   it('renders graph nodes from the endpoint payload', async () => {
@@ -1147,16 +1147,14 @@ describe('KnowledgePage', () => {
     expect(screen.getByRole('navigation', { name: 'Knowledge scope' })).toHaveTextContent('Payments Service');
   });
 
-  it('shows the sidebar Knowledge entry (brain icon) under Audit log', async () => {
+  it('shows the sidebar Knowledge entry (brain icon) under Supervisor', async () => {
     stubKnowledgeRoute();
     renderRoute();
 
     const knowledgeLink = await screen.findByRole('link', { name: 'Knowledge' });
     expect(knowledgeLink).toHaveAttribute('href', `/factories/${FACTORY_ID}/knowledge`);
-    const auditLink = screen.getByRole('link', { name: 'Audit log' });
-    expect(auditLink).toHaveAttribute('href', `/factories/${FACTORY_ID}/audit`);
-    // Directly under Audit log in the sidebar nav order.
-    expect(auditLink.compareDocumentPosition(knowledgeLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const supervisorLink = screen.getByRole('link', { name: 'Supervisor' });
+    expect(supervisorLink.compareDocumentPosition(knowledgeLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('shows the empty state when no knowledge exists yet', async () => {

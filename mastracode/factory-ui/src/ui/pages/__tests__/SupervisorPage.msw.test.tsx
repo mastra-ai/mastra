@@ -107,7 +107,7 @@ describe('SupervisorPage', () => {
   });
 
   describe('when stuck decision findings are available', () => {
-    it('keeps the panel bounded and links to the complete Attention inbox', async () => {
+    it('keeps the panel bounded and links to the complete list in Activity', async () => {
       stubSupervisorRoute(
         report(
           Array.from({ length: 6 }, (_, index) => ({
@@ -130,9 +130,9 @@ describe('SupervisorPage', () => {
 
       expect(within(findings).getByText('Stuck decision 5')).toBeInTheDocument();
       expect(within(findings).queryByText('Stuck decision 6')).not.toBeInTheDocument();
-      expect(within(findings).getByRole('link', { name: 'View all in Attention' })).toHaveAttribute(
+      expect(within(findings).getByRole('link', { name: 'View all in Activity' })).toHaveAttribute(
         'href',
-        `/factories/${FACTORY_ID}/attention`,
+        `/factories/${FACTORY_ID}/activity`,
       );
     });
 

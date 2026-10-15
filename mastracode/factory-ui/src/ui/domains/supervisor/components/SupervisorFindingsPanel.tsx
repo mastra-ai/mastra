@@ -121,14 +121,14 @@ function FindingsContent({
 
       {findings.length > 0 && factoryId && (
         <Link
-          to={`/factories/${factoryId}/attention`}
+          to={`/factories/${factoryId}/activity`}
           className={cn(
             'text-muted-foreground',
             'border-border hover:text-foreground shrink-0 border-t px-4 py-3 text-center transition-colors',
           )}
         >
           <Txt as="span" variant="caption" className="block">
-            View all in Attention
+            View all in Activity
           </Txt>
         </Link>
       )}

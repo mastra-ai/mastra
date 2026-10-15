@@ -1,7 +1,9 @@
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { isAuditAction, parseAuditAction } from '@mastra/factory/storage/domains/audit/actions';
 import type { AuditAction, AuditNamespace } from '@mastra/factory/storage/domains/audit/actions';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
@@ -22,18 +24,16 @@ import {
   Zap,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { ComponentType, SVGProps } from 'react';
+import type { ComponentType, ReactNode, SVGProps } from 'react';
 import { Link } from 'react-router';
 
-import type { ActivityBlock, ActivityEntry } from '../activity';
-import { activityBlocks, clockTime, dayHeading, groupByDay } from '../activity';
-import { auditActionLabel, auditCategory } from '../auditPresentation';
-import { boardItemPath } from '../overview';
-import { PANEL, PANEL_ROW, PANEL_ROW_LINK } from './panel';
-import { DayHeading, RailRow, RAIL_LIST, RAIL_MARK_TONE } from './Timeline';
-import type { FactoryMentionMember } from '../services/members';
-import { stageTone } from '../stages';
-import { StageBadge } from './StageBadge';
+import type { ActivityEntry } from '../../activity';
+import { boardItemPath, clockTime } from '../../activity';
+import { auditActionLabel, auditCategory } from '../../auditPresentation';
+import type { FactoryMentionMember } from '../../services/members';
+import { stageTone } from '../../stages';
+import { StageBadge } from '../StageBadge';
+import { RAIL_MARK_TONE } from '../Timeline';
 
 /** Steps beyond this fold into a count, so a long chain cannot push the title out. */
 const CHAIN_SHOWN = 2;
@@ -96,10 +96,28 @@ const DEED_PHRASES: Record<AuditAction, string> = {
   'factory.intake.label_route_updated': 'changed an intake label route on',
 };
 
-/** Some events name nothing — an intake setting has no title — so the verb drops its preposition. */
-function deedPhrase(action: string, named: boolean): string {
+/** What a sentence's verb points at: one card's title, a count of cards, or nothing at all (an intake setting has no title). */
+type DeedObject = 'title' | 'group' | 'none';
+
+function subjectCount(entries: ActivityEntry[]): number {
+  return new Set(entries.map(entry => entryTarget(entry)?.id ?? entry.title)).size;
+}
+
+function deedObject(entries: ActivityEntry[]): DeedObject {
+  if (entries.every(entry => entry.title === '')) return 'none';
+  return subjectCount(entries) > 1 ? 'group' : 'title';
+}
+
+export function namesSeveralCards(entries: ActivityEntry[]): boolean {
+  return deedObject(entries) === 'group';
+}
+
+/** A comment's colon introduces its card; before a count it reads "commented on 3 cards". */
+function deedPhrase(action: string, object: DeedObject): string {
   const phrase = isAuditAction(action) ? DEED_PHRASES[action] : auditActionLabel(action).toLowerCase();
-  return named ? phrase : phrase.replace(/ (?:on|to|for|of)$/, '');
+  if (object === 'none') return phrase.replace(/ (?:on|to|for|of)$/, '');
+  if (object === 'group') return phrase.replace(/:$/, ' on');
+  return phrase;
 }
 
 function entryTone(entry: ActivityEntry): BadgeVariant {
@@ -114,7 +132,7 @@ function entryGlyph(entry: ActivityEntry): LucideIcon {
   return namespace ? DEED_GLYPHS[namespace] : SquarePen;
 }
 
-function Node({ entry }: { entry: ActivityEntry }) {
+export function Node({ entry }: { entry: ActivityEntry }) {
   const Glyph = entryGlyph(entry);
 
   return <Glyph size={14} className={RAIL_MARK_TONE[entryTone(entry)]} aria-hidden />;
@@ -161,32 +179,47 @@ function StageChain({ stages }: { stages: string[] }) {
   );
 }
 
-function entryTarget(entry: ActivityEntry): { id: string; board: string } | undefined {
+export function entryTarget(entry: ActivityEntry): { id: string; board: string } | undefined {
   return entry.kind === 'move' ? { id: entry.id, board: entry.board } : entry.item;
 }
 
-/** Only a card the board still holds opens. */
-function EntryTitle({ entry, factoryProjectId }: { entry: ActivityEntry; factoryProjectId: string | undefined }) {
+export function EntryTitle({
+  entry,
+  factoryProjectId,
+  flagged,
+  variant,
+}: {
+  entry: ActivityEntry;
+  factoryProjectId: string | undefined;
+  flagged: ReadonlySet<ActivityEntry>;
+  variant: 'column' | 'caption';
+}) {
   const target = entryTarget(entry);
-  const shape = ' min-w-0 truncate ';
-
-  if (target === undefined)
-    return (
-      <Txt as="span" variant="column" tone="ink" className={shape}>
-        {entry.title}
-      </Txt>
-    );
+  const tone = variant === 'column' ? 'ink' : 'muted';
 
   return (
-    <Link to={boardItemPath(factoryProjectId, target)} className={cn('text-foreground', `${shape} hover:underline`)}>
-      <Txt as="span" variant="column" className="block">
-        {entry.title}
-      </Txt>
-    </Link>
+    <span className="flex min-w-0 items-center gap-2">
+      {target === undefined ? (
+        <Txt as="span" variant={variant} tone={tone} className="min-w-0 truncate">
+          {entry.title}
+        </Txt>
+      ) : (
+        <Link to={boardItemPath(factoryProjectId, target)} className="min-w-0 truncate hover:underline">
+          <Txt as="span" variant={variant} tone={tone} className="truncate">
+            {entry.title}
+          </Txt>
+        </Link>
+      )}
+      {flagged.has(entry) ? (
+        <Badge variant="orange" size="xs" className="shrink-0">
+          Needs you
+        </Badge>
+      ) : null}
+    </span>
   );
 }
 
-function Time({ at, className }: { at: number; className?: string }) {
+export function Time({ at, className }: { at: number; className?: string }) {
   return (
     <Txt
       as="time"
@@ -201,129 +234,82 @@ function Time({ at, className }: { at: number; className?: string }) {
   );
 }
 
-function EntryPanel({ entries, factoryProjectId }: { entries: ActivityEntry[]; factoryProjectId: string | undefined }) {
-  return (
-    <ul className={`${PANEL} m-0 mt-2 list-none p-1`}>
-      {entries.map(entry => {
-        const target = entryTarget(entry);
-        const body = (
-          <>
-            <Txt tone="muted" as="span" variant="caption" className="min-w-0 flex-1 truncate">
-              {entry.title === '' ? <span className="text-placeholder">—</span> : entry.title}
-            </Txt>
-            <Time at={entry.at} />
-          </>
-        );
-
-        return (
-          <li key={`${entry.id}-${entry.at}`}>
-            {target === undefined ? (
-              <div className={PANEL_ROW}>{body}</div>
-            ) : (
-              <Link to={boardItemPath(factoryProjectId, target)} className={PANEL_ROW_LINK}>
-                {body}
-              </Link>
-            )}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-function Block({
-  block,
+/** Who did what to which card, on one line; detail slots in before the time, controls after it. */
+export function EntrySentence({
+  entries,
   roster,
   factoryProjectId,
-  connected,
+  flagged,
+  compact,
+  groupToggle,
+  children,
+  trailing,
 }: {
-  block: ActivityBlock;
+  entries: [ActivityEntry, ...ActivityEntry[]];
   roster: Map<string, FactoryMentionMember>;
   factoryProjectId: string | undefined;
-  connected: boolean;
+  flagged: ReadonlySet<ActivityEntry>;
+  compact: boolean;
+  groupToggle?: { expanded: boolean; onToggle: () => void };
+  children?: ReactNode;
+  trailing?: ReactNode;
 }) {
-  const first = block.entries[0]!;
+  const [first] = entries;
   const name = actorName(first.by, roster);
-  const grouped = block.entries.length > 1;
+  const object = deedObject(entries);
+  const groupNoun = entries.every(entry => entryTarget(entry) !== undefined) ? 'cards' : 'items';
 
   return (
-    <RailRow mark={<Node entry={first} />} connected={connected}>
-      <div className="flex min-h-7 min-w-0 items-center gap-x-2 pr-4">
-        <Actor by={first.by} avatarUrl={roster.get(first.by ?? '')?.avatarUrl} name={name} />
-        <Txt as="span" variant="column" tone="ink" className="shrink-0">
-          {name}
+    <div className={`flex min-w-0 items-center gap-x-2 pr-4 ${compact ? 'min-h-6' : 'min-h-7'}`}>
+      {compact ? null : <Actor by={first.by} avatarUrl={roster.get(first.by ?? '')?.avatarUrl} name={name} />}
+      <Txt as="span" variant="column" tone="ink" className="shrink-0">
+        {name}
+      </Txt>
+      <Txt as="span" variant="caption" tone="muted" className="shrink-0">
+        {first.kind === 'move' ? 'moved' : deedPhrase(first.action, object)}
+      </Txt>
+      {object === 'group' && groupToggle ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-expanded={groupToggle.expanded}
+          onClick={groupToggle.onToggle}
+          className="text-foreground -mx-1.5 h-6 shrink-0 px-1.5 tabular-nums"
+        >
+          {subjectCount(entries)} {groupNoun}
+          <DisclosureChevron direction={groupToggle.expanded ? 'down' : 'right'} />
+        </Button>
+      ) : null}
+      {object === 'group' && !groupToggle ? (
+        <Txt as="span" variant="column" tone="ink" className="shrink-0 tabular-nums">
+          {subjectCount(entries)} {groupNoun}
         </Txt>
-        <Txt as="span" variant="caption" tone="muted" className="shrink-0">
-          {first.kind === 'move' ? 'moved' : deedPhrase(first.action, first.title !== '')}
+      ) : null}
+      {object === 'none' && entries.length > 1 ? (
+        <Txt as="span" variant="caption" tone="muted" className="shrink-0 tabular-nums">
+          {entries.length} times
         </Txt>
-        {grouped && first.kind === 'move' ? (
-          <Txt as="span" variant="column" tone="ink" className="shrink-0">
-            {block.entries.length} cards
+      ) : null}
+      {object === 'title' ? (
+        <EntryTitle entry={first} factoryProjectId={factoryProjectId} flagged={flagged} variant="column" />
+      ) : null}
+      {object === 'title' && entries.length > 1 ? (
+        <Txt as="span" variant="caption" tone="muted" className="shrink-0 tabular-nums">
+          {entries.length} times
+        </Txt>
+      ) : null}
+      {first.kind === 'move' ? (
+        <>
+          <Txt as="span" variant="caption" tone="muted" className="shrink-0">
+            to
           </Txt>
-        ) : (
-          <>
-            {first.title === '' ? null : <EntryTitle entry={first} factoryProjectId={factoryProjectId} />}
-            {grouped ? (
-              <Txt as="span" variant="meta" tone="muted" className="shrink-0 tabular-nums">
-                +{block.entries.length - 1}
-              </Txt>
-            ) : null}
-          </>
-        )}
-        {first.kind === 'move' ? (
-          <>
-            <Txt as="span" variant="caption" tone="muted" className="shrink-0">
-              to
-            </Txt>
-            <StageChain stages={first.stages} />
-          </>
-        ) : null}
-        <Time at={first.at} className="ml-auto pl-2" />
-      </div>
-      {grouped ? <EntryPanel entries={block.entries} factoryProjectId={factoryProjectId} /> : null}
-    </RailRow>
-  );
-}
-
-/**
- * Board traffic as sentences on a rail, cut by day. One stream, two sources that
- * never describe the same fact: the board's stage history, and the audit trail
- * for everything a stage move is not.
- */
-export function ActivityRail({
-  entries,
-  members,
-  factoryProjectId,
-}: {
-  entries: ActivityEntry[];
-  members: FactoryMentionMember[];
-  factoryProjectId: string | undefined;
-}) {
-  const roster = new Map(members.map(member => [member.id, member]));
-  const nowMs = Date.now();
-
-  return (
-    <div className="flex flex-col gap-8">
-      {groupByDay(entries).map(day => {
-        const blocks = activityBlocks(day.items);
-
-        return (
-          <section key={day.dayMs} className="flex flex-col gap-5">
-            <DayHeading>{dayHeading(day.dayMs, nowMs)}</DayHeading>
-            <ul className={RAIL_LIST}>
-              {blocks.map((block, index) => (
-                <Block
-                  key={`${block.key}-${block.entries[0]?.at}`}
-                  block={block}
-                  roster={roster}
-                  factoryProjectId={factoryProjectId}
-                  connected={index < blocks.length - 1}
-                />
-              ))}
-            </ul>
-          </section>
-        );
-      })}
+          <StageChain stages={first.stages} />
+        </>
+      ) : null}
+      {children}
+      <Time at={first.at} className="ml-auto pl-2" />
+      {trailing}
     </div>
   );
 }

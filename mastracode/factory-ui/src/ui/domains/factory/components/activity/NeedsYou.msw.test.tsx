@@ -4,17 +4,18 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
-import { attentionKindSummaries } from '../../../../e2e/ui/attention';
-import { server } from '../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
+import { attentionKindSummaries } from '../../../../../../e2e/ui/attention';
+import { server } from '../../../../../../e2e/ui/msw-server';
+import { pickPropertyOption } from '../../../../../../e2e/ui/properties-menu';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type {
   FactoryActivityAttentionItem,
+  FactoryAttentionItem,
   FactoryAutomationFailedAttentionItem,
   FactoryAutomationProposedAttentionItem,
-  FactoryAttentionView,
   FactoryMentionAttentionItem,
-} from '../../domains/factory/services/attention';
-import { AttentionContent } from '../AttentionPage';
+} from '../../services/attention';
+import { NeedsYou } from './NeedsYou';
 
 const FACTORY_ID = 'factory-1';
 /** One poll tick (5s) plus room for the request to land. */
@@ -56,8 +57,12 @@ function proposedItem(id: string, title: string): FactoryAutomationProposedAtten
   };
 }
 
-function attentionView(value: string | null): FactoryAttentionView {
-  return value === 'unread' || value === 'archived' ? value : 'open';
+function renderNeedsYou() {
+  return renderWithProviders(
+    <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/activity`]}>
+      <NeedsYou factoryId={FACTORY_ID} />
+    </MemoryRouter>,
+  );
 }
 
 function mentionItem(commentId: string, title: string): FactoryMentionAttentionItem {
@@ -96,7 +101,7 @@ function activityItem(workItemId: string, title: string): FactoryActivityAttenti
   };
 }
 
-describe('AttentionPage', () => {
+describe('Needs you', () => {
   it('saves repository choice by work-item ID before retrying without loading the board', async () => {
     const events: string[] = [];
     const failure = {
@@ -138,36 +143,20 @@ describe('AttentionPage', () => {
       }),
     );
     const user = userEvent.setup();
-    renderWithProviders(
-      <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/attention`]}>
-        <AttentionContent factoryId={FACTORY_ID} />
-      </MemoryRouter>,
-    );
+    renderNeedsYou();
     await user.click(await screen.findByRole('button', { name: 'Choose repository for Fix the loader' }));
     const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
     await user.click(within(dialog).getByRole('button', { name: /acme\/app/ }));
     await waitFor(() => expect(events).toEqual(['patch:{"metadata":{"repository":"acme/app"}}', 'retry']));
   });
 
-  it('filters, marks read, archives, and restores attention items', async () => {
+  it('acts on a row in place, archives it, and restores it from Archived', async () => {
     let items = [item('decision-1', 'Fix the loader', false), item('decision-2', 'Repair auth', true)];
-    let markAllRequests = 0;
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, ({ request }) => {
-        const view = attentionView(new URL(request.url).searchParams.get('view'));
-        const visible = items.filter(attentionItem => {
-          if (view === 'archived') return attentionItem.archived;
-          if (view === 'unread') return !attentionItem.read && !attentionItem.archived;
-          return !attentionItem.archived;
-        });
+        const archivedView = new URL(request.url).searchParams.get('view') === 'archived';
+        const visible = items.filter(attentionItem => attentionItem.archived === archivedView);
         return HttpResponse.json({ items: visible, kinds: attentionKindSummaries(items), hasMore: false });
-      }),
-      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention/read-all`, ({ request }) => {
-        markAllRequests += 1;
-        const before = new URL(request.url).searchParams.get('before');
-        if (!before) return HttpResponse.json({ ok: true, hasMore: true, nextCursor: 'older-failures' });
-        items = items.map(attentionItem => (attentionItem.archived ? attentionItem : { ...attentionItem, read: true }));
-        return HttpResponse.json({ ok: true, hasMore: false });
       }),
       http.post(
         `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention/automation-failed/:decisionId/:occurrence/:action`,
@@ -183,11 +172,7 @@ describe('AttentionPage', () => {
       ),
     );
     const user = userEvent.setup();
-    const { client } = renderWithProviders(
-      <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/attention`]}>
-        <AttentionContent factoryId={FACTORY_ID} />
-      </MemoryRouter>,
-    );
+    const { client } = renderNeedsYou();
 
     expect(await screen.findByText('Fix the loader')).toBeVisible();
     expect(screen.getByText('Repair auth')).toBeVisible();
@@ -195,22 +180,16 @@ describe('AttentionPage', () => {
     const [goTo] = screen.getAllByRole('link', { name: /View card for/ });
     if (!goTo) throw new Error('Expected a work-item destination');
     expect(goTo).toHaveAttribute('href', `/factories/${FACTORY_ID}/work?item=item-decision-1`);
-    await user.click(screen.getByRole('button', { name: 'Mark all open as read' }));
-    await waitFor(() => expect(markAllRequests).toBe(2));
-    await waitForMutationsIdle(client);
-    await waitFor(() =>
-      expect(screen.queryByRole('button', { name: 'Mark all open as read' })).not.toBeInTheDocument(),
-    );
 
     await user.click(screen.getByRole('button', { name: 'Archive Fix the loader' }));
     await waitForMutationsIdle(client);
     await waitFor(() => expect(screen.queryByText('Fix the loader')).not.toBeInTheDocument());
 
-    await user.click(screen.getByRole('button', { name: 'Archived' }));
+    await pickPropertyOption(user, 'Needs you properties', 'Show', 'Archived');
     expect(await screen.findByText('Fix the loader')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Restore Fix the loader' }));
     await waitForMutationsIdle(client);
-    expect(await screen.findByText('No archived attention items.')).toBeVisible();
+    expect(await screen.findByText('Nothing archived.')).toBeVisible();
   });
 
   it('releases a suggested run from the inbox row', async () => {
@@ -227,15 +206,9 @@ describe('AttentionPage', () => {
       }),
     );
     const user = userEvent.setup();
-    const { client } = renderWithProviders(
-      <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/attention`]}>
-        <AttentionContent factoryId={FACTORY_ID} />
-      </MemoryRouter>,
-    );
+    const { client } = renderNeedsYou();
 
-    const queue = await screen.findByRole('region', { name: 'Waiting for approval' });
-    expect(within(queue).getByText('Fix the flaky auth test')).toBeVisible();
-    expect(within(queue).getByText('1')).toBeVisible();
+    expect(await screen.findByText('Fix the flaky auth test')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Run Fix the flaky auth test' }));
     await waitForMutationsIdle(client);
 
@@ -257,11 +230,7 @@ describe('AttentionPage', () => {
       }),
     );
     const user = userEvent.setup();
-    const { client } = renderWithProviders(
-      <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/attention`]}>
-        <AttentionContent factoryId={FACTORY_ID} />
-      </MemoryRouter>,
-    );
+    const { client } = renderNeedsYou();
 
     expect(await screen.findByText('Drop the dead flag')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Dismiss Drop the dead flag' }));
@@ -297,11 +266,7 @@ describe('AttentionPage', () => {
       ),
     );
     const user = userEvent.setup();
-    const { client } = renderWithProviders(
-      <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/attention`]}>
-        <AttentionContent factoryId={FACTORY_ID} />
-      </MemoryRouter>,
-    );
+    const { client } = renderNeedsYou();
 
     expect(await screen.findByText('mention')).toBeVisible();
     expect(screen.getByRole('link', { name: /View card for Fix login bug/ })).toHaveAttribute(
@@ -313,82 +278,52 @@ describe('AttentionPage', () => {
     await waitForMutationsIdle(client);
     expect(receiptCalls).toEqual(['mention/comment-1/0/archive']);
 
-    await user.click(screen.getByRole('button', { name: 'Load more attention items' }));
+    await user.click(screen.getByRole('button', { name: 'Load older' }));
     await waitForMutationsIdle(client);
     expect(await screen.findByText('Repair auth')).toBeVisible();
     expect(requestedCursors.filter(cursor => cursor !== null)).toEqual([KIND_CURSOR]);
   });
 
-  it('searches the server before pagination', async () => {
-    const allItems = Array.from({ length: 26 }, (_, index) =>
-      item(`decision-${index}`, index === 25 ? 'Needle on page two' : `Routine failure ${index}`, false),
-    );
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, ({ request }) => {
-        const search = new URL(request.url).searchParams.get('search')?.toLowerCase();
-        const matching = search
-          ? allItems.filter(attentionItem => attentionItem.title.toLowerCase().includes(search))
-          : allItems;
-        return HttpResponse.json({
-          items: matching.slice(0, 25),
-          kinds: attentionKindSummaries(allItems),
-          hasMore: matching.length > 25,
-          ...(matching.length > 25 ? { nextCursor: 'page-2' } : {}),
-        });
-      }),
-    );
-    const user = userEvent.setup();
-    renderWithProviders(
-      <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/attention`]}>
-        <AttentionContent factoryId={FACTORY_ID} />
-      </MemoryRouter>,
-    );
-
-    await screen.findByText('Routine failure 0');
-    expect(screen.queryByText('Needle on page two')).not.toBeInTheDocument();
-    await user.type(screen.getByRole('searchbox', { name: 'Search attention items' }), 'Needle');
-    expect(await screen.findByText('Needle on page two')).toBeVisible();
-  });
-
-  it('files activity under its own section, below what needs an answer', async () => {
-    const receiptCalls: string[] = [];
-    const items = [
+  it('leaves followed discussions to the feed, showing only what waits on a person', async () => {
+    const items: FactoryAttentionItem[] = [
       activityItem('item-4', 'Loader retry landed'),
       mentionItem('comment-1', 'Fix login bug'),
       item('decision-1', 'Fix the loader', false),
     ];
     server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, ({ request }) => {
+        const kinds = new URL(request.url).searchParams.getAll('kind');
+        const visible = items.filter(attentionItem => kinds.length === 0 || kinds.includes(attentionItem.kind));
+        return HttpResponse.json({ items: visible, kinds: attentionKindSummaries(items), hasMore: false });
+      }),
+    );
+    renderNeedsYou();
+
+    expect(await screen.findByText('Fix login bug')).toBeVisible();
+    expect(screen.getByText('Fix the loader')).toBeVisible();
+    expect(screen.queryByText('Loader retry landed')).not.toBeInTheDocument();
+  });
+
+  it('marks everything read in one go, then drops the control', async () => {
+    let items: FactoryAttentionItem[] = [item('decision-1', 'Fix the loader', false), mentionItem('c-1', 'Fix login')];
+    server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, () =>
         HttpResponse.json({ items, kinds: attentionKindSummaries(items), hasMore: false }),
       ),
-      http.post(
-        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention/:kind/:sourceId/:occurrence/:action`,
-        ({ params }) => {
-          receiptCalls.push(`${params.kind}/${params.sourceId}/${params.occurrence}/${params.action}`);
-          return HttpResponse.json({ receipt: { state: 'read' } });
-        },
-      ),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention/read-all`, () => {
+        items = items.map(attentionItem => ({ ...attentionItem, read: true }));
+        return HttpResponse.json({ ok: true, hasMore: false });
+      }),
     );
     const user = userEvent.setup();
-    const { client } = renderWithProviders(
-      <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/attention`]}>
-        <AttentionContent factoryId={FACTORY_ID} />
-      </MemoryRouter>,
-    );
+    renderNeedsYou();
 
-    const activity = await screen.findByRole('region', { name: 'Activity' });
-    expect(within(activity).getByText('comment')).toBeVisible();
-    expect(within(activity).getByText('1')).toBeVisible();
-    expect(within(activity).queryByText('Fix login bug')).not.toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'Mark all read' }));
 
-    const mention = screen.getByText('Fix login bug');
-    const activityComesLast = Boolean(activity.compareDocumentPosition(mention) & Node.DOCUMENT_POSITION_PRECEDING);
-    expect(activityComesLast).toBe(true);
-
-    await user.click(screen.getByRole('button', { name: 'Mark Loader retry landed as read' }));
-    await waitForMutationsIdle(client);
-    expect(receiptCalls).toEqual(['activity/item-4/2/read']);
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Mark all read' })).not.toBeInTheDocument());
+    expect(screen.getByText('Fix the loader')).toBeVisible();
   });
+
   it('shows a mention that lands while the page is open', async () => {
     let items: (FactoryAutomationFailedAttentionItem | FactoryMentionAttentionItem)[] = [
       item('decision-1', 'Fix the loader', false),
@@ -398,11 +333,7 @@ describe('AttentionPage', () => {
         HttpResponse.json({ items, kinds: attentionKindSummaries(items), hasMore: false }),
       ),
     );
-    renderWithProviders(
-      <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/attention`]}>
-        <AttentionContent factoryId={FACTORY_ID} />
-      </MemoryRouter>,
-    );
+    renderNeedsYou();
 
     await screen.findByText('Fix the loader');
     items = [mentionItem('comment-1', 'Fix login bug'), ...items];

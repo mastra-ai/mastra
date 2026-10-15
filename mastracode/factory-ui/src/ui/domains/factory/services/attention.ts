@@ -86,6 +86,20 @@ export function attentionAuthorName(item: FactoryAttentionItem): string | undefi
   return item.kind === 'mention' || item.kind === 'activity' ? item.authorName : undefined;
 }
 
+const ISO_INSTANT = /\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?Z\b/g;
+
+const detailDate = new Intl.DateTimeFormat(undefined, {
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+/** Supervisor evidence stamps raw ISO instants for the agent that reads it; people get their own clock. */
+export function readableAttentionDetail(detail: string): string {
+  return detail.replace(ISO_INSTANT, instant => detailDate.format(Date.parse(instant)));
+}
+
 export function attentionItemSourceId(item: FactoryAttentionItem): string {
   switch (item.kind) {
     case 'mention':
@@ -159,6 +173,18 @@ export function attentionCountsIn(
   return { open, unread };
 }
 
+/** Followed discussions stay out: they are news, not something waiting on a person. */
+const NEEDS_YOU_GROUPS = ['attention', 'queue'] satisfies FactoryAttentionGroup[];
+export const NEEDS_YOU_KINDS = NEEDS_YOU_GROUPS.flatMap(attentionKindsIn);
+
+export function needsYouCounts(kinds: FactoryAttentionKindSummaries): { open: number; unread: number } {
+  const counts = NEEDS_YOU_GROUPS.map(group => attentionCountsIn(kinds, group));
+  return {
+    open: counts.reduce((sum, count) => sum + count.open, 0),
+    unread: counts.reduce((sum, count) => sum + count.unread, 0),
+  };
+}
+
 export function latestUnreadOrNewestIn(
   kinds: FactoryAttentionKindSummaries,
   group: FactoryAttentionGroup,
@@ -192,10 +218,9 @@ export function fetchFactoryAttention(
   factoryProjectId: string,
   options: {
     view: FactoryAttentionView;
-    kinds?: FactoryAttentionKind[];
+    kinds?: readonly FactoryAttentionKind[];
     before?: string;
     limit?: number;
-    search?: string;
     signal?: AbortSignal;
   },
 ): Promise<FactoryAttentionResponse> {
@@ -203,7 +228,6 @@ export function fetchFactoryAttention(
   for (const kind of options.kinds ?? []) query.append('kind', kind);
   if (options.before) query.set('before', options.before);
   if (options.limit) query.set('limit', String(options.limit));
-  if (options.search) query.set('search', options.search);
   return requestJson<FactoryAttentionResponse>(
     `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/attention?${query}`,
     { signal: options.signal },
