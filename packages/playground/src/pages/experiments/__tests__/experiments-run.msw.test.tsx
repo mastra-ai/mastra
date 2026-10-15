@@ -73,7 +73,7 @@ describe('Experiments page — New experiment', () => {
     mockNavigate.mockClear();
     renderWithProviders(<ExperimentsPage />, { router: true });
 
-    fireEvent.click(await screen.findByRole('button', { name: /run experiment|new experiment/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /new experiment/i }));
     const dialog = within(await screen.findByRole('dialog', { name: /new experiment/i }));
 
     // The dataset starts on the newest one; pick the target and name the run under Advanced.

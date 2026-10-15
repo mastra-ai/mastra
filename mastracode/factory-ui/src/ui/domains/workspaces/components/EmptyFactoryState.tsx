@@ -131,7 +131,7 @@ export function EmptyFactoryState() {
               </Txt>
             )}
 
-            <div key={step} className="onboarding-form onboarding-reveal mt-6 w-full lg:mt-8">
+            <div key={step} data-step={step} className="onboarding-form onboarding-reveal mt-6 w-full lg:mt-8">
               {step === 'initial' && <InitialFactoryStep onContinue={() => goTo('vcs')} />}
               {step === 'vcs' && (
                 <VcsFactoryStep

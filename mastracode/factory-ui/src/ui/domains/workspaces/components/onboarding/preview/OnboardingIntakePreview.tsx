@@ -46,22 +46,28 @@ export function OnboardingIntakePreview({ source }: { source: WorkSource }) {
         </div>
       </SketchLabel>
       <SketchLabel x={282} y={24} width={90}>
-        <div className="text-right">
+        <div className="onboarding-intake-detail text-right">
           <Txt variant="meta" tone="muted">
             {status[source] ? 'Connected' : 'Example'}
           </Txt>
         </div>
       </SketchLabel>
       <SketchLabel x={38} y={58} width={128}>
-        <Txt variant="meta" tone="muted">
+        <Txt variant="meta" tone="muted" className="onboarding-intake-detail">
           {id} · {kind}
         </Txt>
-        <Txt variant="caption" tone="muted" className="mt-2">
+        <Txt variant="meta" tone="muted" className="min-[900px]:hidden">
+          {kind}
+        </Txt>
+        <Txt variant="caption" tone="muted" className="onboarding-intake-detail mt-2">
           {example}
         </Txt>
+        <svg aria-hidden="true" viewBox="0 0 128 12" className="onboarding-sketch mt-1 h-2 w-full min-[900px]:hidden">
+          <path d="M0 2H112M0 10H80" />
+        </svg>
       </SketchLabel>
       <SketchLabel x={115} y={133} width={98}>
-        <Txt variant="meta" tone="muted">
+        <Txt variant="meta" tone="muted" className="onboarding-intake-detail">
           Bring into your board
         </Txt>
       </SketchLabel>
@@ -96,9 +102,16 @@ export function OnboardingIntakePreview({ source }: { source: WorkSource }) {
         <div key={index} className="onboarding-ticket absolute min-w-0" data-ticket={index + 1}>
           <div className="flex items-center gap-1.5">
             <Icon className="text-muted-foreground size-3 shrink-0" />
-            <Txt variant="meta" tone="muted">
+            <Txt variant="meta" tone="muted" className="onboarding-intake-detail">
               {card.id}
             </Txt>
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 56 12"
+              className="onboarding-sketch h-3 min-w-0 flex-1 min-[900px]:hidden"
+            >
+              <path d="M0 2H48M0 10H32" />
+            </svg>
           </div>
           <Txt variant="caption" tone="muted" className="onboarding-ticket-title mt-1.5">
             {card.title}
@@ -106,8 +119,11 @@ export function OnboardingIntakePreview({ source }: { source: WorkSource }) {
         </div>
       ))}
       <SketchLabel x={28} y={302} width={344}>
-        <Txt variant="meta" tone="muted">
+        <Txt variant="meta" tone="muted" className="onboarding-intake-detail">
           Choose what to bring in after setup.
+        </Txt>
+        <Txt variant="meta" tone="muted" className="min-[900px]:hidden">
+          Example workflow
         </Txt>
       </SketchLabel>
     </section>

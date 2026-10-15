@@ -213,6 +213,7 @@ import {
 } from './scopes';
 import type { AgentScopesSnapshot, ResolvedAgentScopes } from './scopes';
 import type { CreatedAgentSignal } from './signals';
+import { signalSpanAttributes } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import type { SubAgent, SubAgentToolCall, SubAgentToolResult } from './subagent';
 import { agentThreadStreamRuntime } from './thread-stream-runtime';
@@ -253,6 +254,8 @@ import type {
   PublicStructuredOutputOptions,
   QueueAgentMessageOptions,
   QueueAgentMessageResult,
+  QueueAgentSignalOptions,
+  QueueAgentSignalResult,
   SendAgentMessageOptions,
   SendAgentMessageResult,
   SendAgentNotificationSignalOptions,
@@ -8609,6 +8612,7 @@ export class Agent<
         : undefined;
 
     const spanInput = isResume ? buildResumeSpanInput(resumeContext.resumeData, suspendedToolInfo) : options.messages;
+    const startingSignal = isResume ? undefined : signalSpanAttributes(options.messages);
 
     const agentSpan = getOrCreateSpan({
       type: SpanType.AGENT_RUN,
@@ -8620,6 +8624,7 @@ export class Agent<
       attributes: {
         conversationId: threadFromArgs?.id,
         instructions: this.#convertInstructionsToString(instructions),
+        ...(startingSignal ? { signal: startingSignal } : {}),
         // @deprecated — use entityVersionId (top-level span context field) instead.
         // Kept for backward compatibility during migration.
         ...(this.toRawConfig()?.resolvedVersionId
@@ -9771,6 +9776,22 @@ export class Agent<
     return agentThreadStreamRuntime.queueMessage<OUTPUT>(
       this.#getThreadRuntimeAgent(),
       message,
+      target,
+      this.getPubSub(),
+    );
+  }
+
+  /**
+   * Queues a typed signal to start a new run after the active thread run completes, or wakes
+   * the thread immediately when it is idle. Shares the queue used by `queueMessage()`.
+   */
+  queueSignal<OUTPUT = TOutput>(
+    signal: AgentSignal,
+    target: QueueAgentSignalOptions<OUTPUT>,
+  ): QueueAgentSignalResult<OUTPUT> {
+    return agentThreadStreamRuntime.queueSignal<OUTPUT>(
+      this.#getThreadRuntimeAgent(),
+      signal,
       target,
       this.getPubSub(),
     );
