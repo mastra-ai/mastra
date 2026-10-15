@@ -15,6 +15,8 @@ vi.mock('@internal/voice', () => ({
   },
 }));
 
+// Default keys are read from the environment at import time; keep them out so key fallbacks are deterministic.
+delete process.env.SARVAM_API_KEY;
 const { SarvamVoice } = await import('./index');
 
 async function sentForm(voice: InstanceType<typeof SarvamVoice>, options?: Record<string, any>) {
@@ -115,5 +117,52 @@ describe('SarvamVoice API errors', () => {
     stubResponse(JSON.stringify({ message: 'Legacy failure' }), { status: 400 });
     const voice = new SarvamVoice({ speechModel: { name: 'bulbul:v2', apiKey: 'k' } } as any);
     await expect(voice.speak('hi')).rejects.toThrow('Sarvam AI API Error: Legacy failure');
+  });
+});
+
+describe('SarvamVoice API keys', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  async function listenKey(voice: InstanceType<typeof SarvamVoice>, options?: Record<string, any>) {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ transcript: 'ok' }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await voice.listen(Readable.from([Buffer.from('RIFF')]), options);
+    const init = fetchMock.mock.calls[0]![1] as RequestInit;
+    return (init.headers as Record<string, string>)['api-subscription-key'];
+  }
+
+  it('sends the listening model API key, not the speech model one', async () => {
+    const voice = new SarvamVoice({ speechModel: { apiKey: 'tts-key' }, listeningModel: { apiKey: 'stt-key' } });
+    expect(await listenKey(voice)).toBe('stt-key');
+  });
+
+  it('sends the apiKey passed to listen()', async () => {
+    const voice = new SarvamVoice({ speechModel: { apiKey: 'tts-key' }, listeningModel: { apiKey: 'stt-key' } });
+    expect(await listenKey(voice, { apiKey: 'per-call-key' })).toBe('per-call-key');
+  });
+
+  it('falls back to the speech model API key when no listening key is set', async () => {
+    const voice = new SarvamVoice({ speechModel: { apiKey: 'tts-key' } });
+    expect(await listenKey(voice)).toBe('tts-key');
+  });
+
+  it('speak() sends the speech model API key', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ audios: ['UklGRg=='] }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const voice = new SarvamVoice({ speechModel: { apiKey: 'tts-key' }, listeningModel: { apiKey: 'stt-key' } });
+    await voice.speak('hi');
+    const headers = (fetchMock.mock.calls[0]![1] as RequestInit).headers as Headers;
+    expect(headers.get('api-subscription-key')).toBe('tts-key');
+  });
+
+  it('speak() falls back to the listening model API key', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ audios: ['UklGRg=='] }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const voice = new SarvamVoice({ listeningModel: { apiKey: 'stt-key' } });
+    await voice.speak('hi');
+    const headers = (fetchMock.mock.calls[0]![1] as RequestInit).headers as Headers;
+    expect(headers.get('api-subscription-key')).toBe('stt-key');
   });
 });
