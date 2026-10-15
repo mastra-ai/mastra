@@ -168,6 +168,12 @@ export function WorkspaceAddSkillDialog({
     return false;
   }, [selectedSkill, installedSkillIds, installedSkillNames]);
 
+  const installedSkillPath = selectedSkill ? installedSkillPaths?.[selectedSkill.name] : undefined;
+  const installedMountPath =
+    isSelectedSkillInstalled && installedSkillPath && writableMounts && writableMounts.length > 1
+      ? writableMounts.find(m => installedSkillPath.startsWith(m.path + '/') || installedSkillPath === m.path)?.path
+      : undefined;
+
   const handleInstall = useCallback(() => {
     if (!selectedSkill || !parsedSource) return;
 
@@ -393,20 +399,15 @@ export function WorkspaceAddSkillDialog({
         </DialogBody>
 
         {selectedSkill && (
-          <DialogFooter>
-            {isSelectedSkillInstalled &&
-              writableMounts &&
-              writableMounts.length > 1 &&
-              (() => {
-                const skillPath = installedSkillPaths?.[selectedSkill.name];
-                if (!skillPath) return null;
-                const mount = writableMounts.find(m => skillPath.startsWith(m.path + '/') || skillPath === m.path);
-                return mount ? (
-                  <Txt as="span" variant="caption" tone="muted" className="mr-auto">
-                    Installed at {mount.path}
-                  </Txt>
-                ) : null;
-              })()}
+          <DialogFooter
+            start={
+              installedMountPath ? (
+                <Txt as="span" variant="caption" tone="muted">
+                  Installed at {installedMountPath}
+                </Txt>
+              ) : null
+            }
+          >
             <DialogCancel>Cancel</DialogCancel>
             <DialogAction
               onConfirm={handleInstall}

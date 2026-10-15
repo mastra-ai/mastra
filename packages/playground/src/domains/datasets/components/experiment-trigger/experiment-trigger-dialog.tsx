@@ -365,23 +365,26 @@ export function ExperimentTriggerDialog({
           </Collapsible>
         </DialogBody>
 
-        <DialogFooter>
-          <p data-testid="experiment-run-status" aria-live="polite" className="mr-auto flex items-center gap-2">
-            {missing.length === 0 ? (
-              <>
-                <Badge variant="success" indicator="dot">
-                  Ready
+        <DialogFooter
+          start={
+            <p data-testid="experiment-run-status" aria-live="polite" className="flex items-center gap-2">
+              {missing.length === 0 ? (
+                <>
+                  <Badge variant="success" indicator="dot">
+                    Ready
+                  </Badge>
+                  <Txt as="span" variant="meta" tone="muted">
+                    {itemCount ?? 0} items · {targetType} · {effectiveScorers.length} scorers
+                  </Txt>
+                </>
+              ) : (
+                <Badge variant="neutral" indicator="dot">
+                  Missing {missing.join(', ')}
                 </Badge>
-                <Txt as="span" variant="meta" tone="muted">
-                  {itemCount ?? 0} items · {targetType} · {effectiveScorers.length} scorers
-                </Txt>
-              </>
-            ) : (
-              <Badge variant="neutral" indicator="dot">
-                Missing {missing.join(', ')}
-              </Badge>
-            )}
-          </p>
+              )}
+            </p>
+          }
+        >
           <DialogCancel>Cancel</DialogCancel>
           <DialogAction onConfirm={handleRun} disabled={!canRun}>
             {isRunning ? (

@@ -195,12 +195,42 @@ export const FooterWithStatus: Story = {
           <DialogDescription>Add items from a JSON file or paste them directly.</DialogDescription>
         </DialogHeader>
         <DialogBody>{paragraphs(3)}</DialogBody>
-        <DialogFooter>
-          <p className="mr-auto text-caption text-muted-foreground" aria-live="polite">
-            12 items ready to import
-          </p>
+        <DialogFooter
+          start={
+            <p className="text-caption text-muted-foreground" aria-live="polite">
+              12 items ready to import
+            </p>
+          }
+        >
           <DialogCancel>Cancel</DialogCancel>
           <DialogAction onConfirm={() => {}}>Import</DialogAction>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  ),
+};
+
+export const FooterWithSecondaryAction: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          '`start` puts status text or a secondary control on the left while the actions stay on the right. On narrow screens the actions wrap below it.',
+      },
+    },
+  },
+  render: () => (
+    <Dialog>
+      <DialogTrigger render={<Button>Run experiment</Button>} />
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Run experiment</DialogTitle>
+          <DialogDescription>Run every dataset item through the agent and score the results.</DialogDescription>
+        </DialogHeader>
+        <DialogBody>{paragraphs(1)}</DialogBody>
+        <DialogFooter start={<Button variant="ghost">Advanced options</Button>}>
+          <DialogCancel>Cancel</DialogCancel>
+          <DialogAction onConfirm={() => {}}>Run</DialogAction>
         </DialogFooter>
       </DialogContent>
     </Dialog>

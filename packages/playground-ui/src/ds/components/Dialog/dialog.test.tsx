@@ -46,6 +46,25 @@ describe('Dialog', () => {
     expect(screen.getByText('Body content')).toBeDefined();
   });
 
+  it('renders footer start content before the actions, and no start wrapper without it', () => {
+    const { rerender } = render(
+      <DialogFooter start={<span>3 items ready</span>}>
+        <Button>Import</Button>
+      </DialogFooter>,
+    );
+
+    const start = document.querySelector('[data-slot="dialog-footer-start"]');
+    expect(start?.textContent).toBe('3 items ready');
+    expect(start?.nextElementSibling?.textContent).toBe('Import');
+
+    rerender(
+      <DialogFooter>
+        <Button>Import</Button>
+      </DialogFooter>,
+    );
+    expect(document.querySelector('[data-slot="dialog-footer-start"]')).toBeNull();
+  });
+
   it('renders the overlay by default and allows it to be disabled', () => {
     const { rerender } = render(
       <Dialog defaultOpen>

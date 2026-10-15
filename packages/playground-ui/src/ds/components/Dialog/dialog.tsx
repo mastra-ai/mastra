@@ -185,13 +185,25 @@ function DialogHeader({ className, ...props }: React.ComponentProps<'div'>) {
   );
 }
 
-function DialogFooter({ className, ...props }: React.ComponentProps<'div'>) {
+export type DialogFooterProps = React.ComponentProps<'div'> & {
+  /** Status text or secondary controls on the left (e.g. an "Advanced" toggle); the actions stay on the right. */
+  start?: React.ReactNode;
+};
+
+function DialogFooter({ className, start, children, ...props }: DialogFooterProps) {
   return (
     <div
       data-slot="dialog-footer"
       className={cn('flex shrink-0 flex-wrap items-center justify-end gap-2 px-5 py-2', className)}
       {...props}
-    />
+    >
+      {start ? (
+        <div data-slot="dialog-footer-start" className="mr-auto flex min-w-0 items-center gap-2">
+          {start}
+        </div>
+      ) : null}
+      {children}
+    </div>
   );
 }
 

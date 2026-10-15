@@ -152,8 +152,7 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
           </div>
         </DialogBody>
 
-        <DialogFooter>
-          <JSONImportStatus validation={validation} />
+        <DialogFooter start={<JSONImportStatus validation={validation} />}>
           <DialogCancel>Cancel</DialogCancel>
           <DialogAction onConfirm={handleImport} disabled={validation.status !== 'ready'}>
             {isImporting && <Spinner />}
@@ -222,7 +221,7 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
   }
 
   return (
-    <div role="status" className="mr-auto flex min-w-0 items-center gap-2">
+    <div role="status" className="flex min-w-0 items-center gap-2">
       <span className={dotClassName} />
       <Txt tone="muted" as="span" variant="caption" className="truncate">
         {message}

@@ -168,24 +168,22 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete, scopeNotice 
             Open authorization page
           </Button>
         </DialogBody>
-        <DialogFooter>
-          {flowError ? (
-            <Txt
-              as="p"
-              variant="caption"
-              className="text-destructive-foreground mr-auto min-w-0 break-words"
-              role="alert"
-            >
-              {flowError}
-            </Txt>
-          ) : (
-            <div className="text-muted-foreground mr-auto flex items-center gap-2" role="status">
-              <Loader2 size={14} className="motion-safe:animate-spin motion-reduce:animate-none" />
-              <Txt as="span" variant="caption">
-                Waiting for authorization…
+        <DialogFooter
+          start={
+            flowError ? (
+              <Txt as="p" variant="caption" className="text-destructive-foreground min-w-0 break-words" role="alert">
+                {flowError}
               </Txt>
-            </div>
-          )}
+            ) : (
+              <div className="text-muted-foreground flex items-center gap-2" role="status">
+                <Loader2 size={14} className="motion-safe:animate-spin motion-reduce:animate-none" />
+                <Txt as="span" variant="caption">
+                  Waiting for authorization…
+                </Txt>
+              </div>
+            )
+          }
+        >
           <DialogCancel disabled={pollMutation.isPending}>Cancel</DialogCancel>
         </DialogFooter>
       </DialogContent>
