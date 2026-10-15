@@ -139,6 +139,7 @@ import { resolveAgentSkills, mergeWorkspaceSkills } from '../skills/agent-skills
 import type { AgentSkillsInput, AgentSkillsResolver, SkillInput } from '../skills/types';
 
 import { getSnapshotMemoryInfo, InMemoryStore } from '../storage';
+import type { MemoryStorage } from '../storage';
 import type { GoalObjectiveRecord } from '../storage/domains/thread-state/base';
 import { matchesRunFence } from '../storage/run-fencing';
 import type { RunFence } from '../storage/run-fencing';
@@ -1994,8 +1995,7 @@ export class Agent<
    * ```
    */
   public listAgents({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | Record<string, SubAgent<string, TRequestContext>>
-    | Promise<Record<string, SubAgent<string, TRequestContext>>> {
+    Record<string, SubAgent<string, TRequestContext>> | Promise<Record<string, SubAgent<string, TRequestContext>>> {
     const agentsToUse = this.#agents
       ? typeof this.#agents === 'function'
         ? this.#agents({ requestContext: requestContext as RequestContext<TRequestContext> })
@@ -2743,8 +2743,7 @@ export class Agent<
    */
   #inheritedMemory(requestContext?: RequestContext): DynamicArgument<MastraMemory, TRequestContext> | undefined {
     const inherited = requestContext?.getRaw(MASTRA_INHERITED_MEMORY_KEY) as
-      | { agentId: string; memory: DynamicArgument<MastraMemory, any> }
-      | undefined;
+      { agentId: string; memory: DynamicArgument<MastraMemory, any> } | undefined;
     return inherited?.agentId === this.id
       ? (inherited.memory as DynamicArgument<MastraMemory, TRequestContext>)
       : undefined;
@@ -3172,8 +3171,7 @@ export class Agent<
    * ```
    */
   public getInstructions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | AgentInstructions
-    | Promise<AgentInstructions> {
+    AgentInstructions | Promise<AgentInstructions> {
     if (typeof this.#instructions === 'function') {
       const result = this.#instructions({
         requestContext: requestContext as RequestContext<TRequestContext>,
@@ -3310,9 +3308,7 @@ export class Agent<
    * ```
    */
   public getMetadata({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | Record<string, unknown>
-    | undefined
-    | Promise<Record<string, unknown> | undefined> {
+    Record<string, unknown> | undefined | Promise<Record<string, unknown> | undefined> {
     if (this.#metadata === undefined) {
       return undefined;
     }
@@ -3457,8 +3453,7 @@ export class Agent<
    * ```
    */
   public getDefaultOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | AgentExecutionOptions<TOutput>
-    | Promise<AgentExecutionOptions<TOutput>> {
+    AgentExecutionOptions<TOutput> | Promise<AgentExecutionOptions<TOutput>> {
     if (typeof this.#defaultOptions !== 'function') {
       return this.#defaultOptions;
     }
@@ -3501,8 +3496,7 @@ export class Agent<
    * ```
    */
   public getDefaultNetworkOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | NetworkOptions
-    | Promise<NetworkOptions> {
+    NetworkOptions | Promise<NetworkOptions> {
     if (typeof this.#defaultNetworkOptions !== 'function') {
       return this.#defaultNetworkOptions;
     }
@@ -8795,8 +8789,7 @@ export class Agent<
       : undefined;
     const persistedTracingContext = isResume
       ? (resumeContext?.snapshot?.tracingContext as
-          | { traceId?: string; spanId?: string; parentSpanId?: string }
-          | undefined)
+          { traceId?: string; spanId?: string; parentSpanId?: string } | undefined)
       : undefined;
 
     // Only fall back to persisted traceId/parentSpanId when the caller didn't provide
@@ -9569,12 +9562,12 @@ export class Agent<
   }
 
   async #respondToApproval(options: ActionResumeOptions, approved: boolean, reason?: string) {
-    const threadId = resolveThreadIdFromArgs({ memory: options.memory })?.id;
-    const memory = threadId ? await this.#actionStore(options.requestContext) : undefined;
-    if (!threadId || !memory) {
-      throw new Error('Resuming a tool approval requires memory with a thread.');
+    const threadId = resolveThreadIdFromArgs({ memory: options.memory })?.id ?? options.runId;
+    const store = await this.#actionStore(options.requestContext);
+    if (!store) {
+      throw new Error('Resuming a tool approval requires storage on the agent or its Mastra instance.');
     }
-    const log = (await memory.listActions({ threadId, runId: options.runId })).filter(isReadableAction);
+    const log = (await store.listActions({ threadId, runId: options.runId })).filter(isReadableAction);
     const answered = new Set(log.flatMap(a => (a.type === 'tool-approval-responded' ? [a.approvalId] : [])));
     const request = log.findLast(
       a =>
@@ -9600,9 +9593,15 @@ export class Agent<
     });
   }
 
-  async #actionStore(requestContext?: RequestContext): Promise<ActionStore | undefined> {
+  /**
+   * Where the action log is written: the memory domain of the agent's Memory storage, else of the Mastra
+   * storage. Writes go to storage, not through Memory, so a run without Memory, or with read-only memory,
+   * still records. Memory is only the read side (recall, processors).
+   */
+  async #actionStore(requestContext?: RequestContext): Promise<MemoryStorage | undefined> {
     const memory = await this.getMemory({ requestContext });
-    return memory && 'listActions' in memory && 'saveActions' in memory ? (memory as unknown as ActionStore) : undefined;
+    const storage = (memory?.hasOwnStorage ? memory.storage : undefined) ?? this.#mastra?.getStorage();
+    return storage?.getStore('memory');
   }
 
   async #runActions(
@@ -9610,13 +9609,18 @@ export class Agent<
   ): Promise<ActionRunOutput> {
     const requestContext = options.requestContext ?? new RequestContext();
     const runId = options.runId ?? crypto.randomUUID();
-    const threadId = resolveThreadIdFromArgs({ memory: options.memory })?.id;
-    const memory = threadId ? await this.#actionStore(requestContext) : undefined;
+    // With no thread, the run is its own thread.
+    const threadId = resolveThreadIdFromArgs({ memory: options.memory })?.id ?? runId;
+    const store = await this.#actionStore(requestContext);
     const resourceId = options.memory?.resource;
-    const memoryInstance = memory ? await this.getMemory({ requestContext }) : undefined;
-    if (threadId && memoryInstance && resourceId && !(await memoryInstance.getThreadById({ threadId }))) {
-      await memoryInstance.createThread({ threadId, resourceId });
+    // The thread row is what the list-actions route and thread listings find; create it with the first write.
+    if (store && !(await store.getThreadById({ threadId }))) {
+      const now = new Date();
+      await store.saveThread({
+        thread: { id: threadId, resourceId: resourceId ?? threadId, createdAt: now, updatedAt: now },
+      });
     }
+    const memoryInstance = store ? await this.getMemory({ requestContext }) : undefined;
     // `lastMessages` counts runs on this path: each run is one user exchange with its tool calls.
     const lastMessages = memoryInstance?.getMergedThreadConfig().lastMessages;
     const recall =
@@ -9641,10 +9645,11 @@ export class Agent<
       tools,
       input: options.input,
       append: options.append,
-      threadId: threadId ?? runId,
+      threadId,
       resourceId,
       runId,
-      memory,
+      agentId: this.id,
+      memory: store,
       recall,
       maxTurns: options.maxSteps,
       abortSignal: options.abortSignal,
@@ -9828,8 +9833,7 @@ export class Agent<
     resourceId: string;
     threadId: string;
     streamOptions?:
-      | AgentExecutionOptions<OUTPUT>
-      | (() => AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>>);
+      AgentExecutionOptions<OUTPUT> | (() => AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>>);
     peer?: false | AgentClaimThreadPeerOptions;
     /**
      * Called when another process asks to claim this thread. Return `true` to

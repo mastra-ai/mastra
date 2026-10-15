@@ -3,8 +3,8 @@ import { stepCountIs, streamText } from '@internal/ai-v7';
 import { streamActions } from './from-ai-sdk';
 import { createActionIdGenerator } from './storage';
 import type { ListActionsQuery } from './storage';
+import { trimResentInput } from './input-filter';
 import type { ActionDraft, AgentInput } from './to-actions';
-import { toActions } from './to-actions';
 import { toModelMessages } from './to-model-messages';
 import type { ActionBase, MastraAction, PersistableAction } from './types';
 import { isPersistable } from './types';
@@ -25,6 +25,8 @@ export type RunAgentOptions = {
   threadId: string;
   resourceId?: string;
   runId?: string;
+  /** Recorded on the run's `run-start`. */
+  agentId?: string;
   memory?: ActionStore;
   /** Prior actions to recall from the thread; defaults to all of them. */
   recall?: (history: PersistableAction[]) => PersistableAction[];
@@ -43,7 +45,9 @@ export function lastRuns(count: number): (history: PersistableAction[]) => Persi
 
 /**
  * One agent run over actions: input → actions, thread recall → prompt, model stream → actions.
- * Every action is yielded; persistable ones are saved at each `turn-end` and when the run finishes.
+ * Every action is yielded. `run-start` and the accepted input are saved before the model is called, so a
+ * crash mid-run can't lose them; the rest is saved at each `turn-end` and when the run finishes.
+ * Input the log already holds (a client resending the conversation) is dropped first.
  */
 export async function* runAgent(options: RunAgentOptions): AsyncGenerator<MastraAction> {
   const { model, threadId, resourceId, memory } = options;
@@ -54,7 +58,7 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
   const history = memory ? await memory.listActions({ threadId }) : [];
   const recalled = options.recall ? options.recall(history) : history;
 
-  const { system, actions: drafts } = toActions(options.input ?? []);
+  const { system, actions: drafts } = trimResentInput(options.input ?? [], history);
   const stamp = (): ActionBase => ({
     id: generateId(),
     threadId,
@@ -62,9 +66,24 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
     runId,
     ...(resourceId !== undefined ? { resourceId } : {}),
   });
+  // A resumed run (an approval answer) continues under its runId and already has a run-start.
+  const runStart: PersistableAction[] = history.some(a => a.runId === runId)
+    ? []
+    : [
+        {
+          ...stamp(),
+          type: 'run-start',
+          agentId: options.agentId ?? 'unknown',
+          modelId,
+          settings: {
+            ...(options.maxTurns !== undefined ? { maxSteps: options.maxTurns } : {}),
+            ...(options.tools ? { toolNames: Object.keys(options.tools) } : {}),
+          },
+        },
+      ];
   const input = [...drafts, ...(options.append ?? [])].map(draft => ({ ...stamp(), ...draft }) as PersistableAction);
 
-  let pending: PersistableAction[] = [...input];
+  let pending: PersistableAction[] = [...runStart, ...input];
   const flush = async () => {
     if (!memory || pending.length === 0) return;
     const batch = pending;
@@ -73,7 +92,8 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
   };
 
   try {
-    for (const action of input) yield action;
+    await flush();
+    for (const action of [...runStart, ...input]) yield action;
 
     // A run with several approval requests resumes only once every one of them has an answer.
     const runLog = [...history.filter(a => a.runId === runId), ...input];

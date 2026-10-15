@@ -15,6 +15,7 @@ import {
   SAVE_MESSAGES_ROUTE,
   CREATE_THREAD_ROUTE,
   LIST_MESSAGES_ROUTE,
+  LIST_ACTIONS_ROUTE,
   DELETE_MESSAGES_ROUTE,
   DELETE_THREAD_ROUTE,
   UPDATE_THREAD_ROUTE,
@@ -3092,6 +3093,28 @@ describe('Memory Handlers', () => {
         expect(messageIds).toContain('msg-from-agent-1');
         expect(messageIds).toContain('msg-from-agent-2');
       });
+    });
+  });
+
+  describe('LIST_ACTIONS_ROUTE', () => {
+    it('lists an action-only thread from Mastra storage when no agent has Memory', async () => {
+      const storage = new InMemoryStore();
+      const mastra = new Mastra({ logger: false, storage });
+      const store = (await storage.getStore('memory'))!;
+      const now = new Date();
+      await store.saveThread({ thread: { id: 'th1', resourceId: 'u1', createdAt: now, updatedAt: now } });
+      await store.saveActions({
+        actions: [
+          { id: '01J00000000000000000000001', threadId: 'th1', createdAt: now, type: 'text', role: 'user', text: 'hi' },
+        ],
+      });
+
+      const result = await LIST_ACTIONS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        threadId: 'th1',
+        resourceId: 'u1',
+      } as never);
+      expect(result).toMatchObject({ actions: [{ type: 'text', text: 'hi', formatVersion: 1 }] });
     });
   });
 });

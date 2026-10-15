@@ -1103,16 +1103,18 @@ export const LIST_ACTIONS_ROUTE = createRoute({
       if (!effectiveThreadId) {
         throw new HTTPException(400, { message: 'No threadId found' });
       }
+      // Actions are written to storage whether or not the agent has Memory, so read them from there too.
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext, allowMissingAgent: true });
-      if (!memory) {
-        throw new HTTPException(400, { message: 'Memory is not initialized' });
+      const store = memory ?? (await mastra.getStorage()?.getStore('memory'));
+      if (!store) {
+        throw new HTTPException(400, { message: 'Storage is not initialized' });
       }
-      const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+      const thread = await store.getThreadById({ threadId: effectiveThreadId });
       if (!thread) {
         throw new HTTPException(404, { message: 'Thread not found' });
       }
       await enforceThreadAccess({ mastra, requestContext, threadId: effectiveThreadId, thread, effectiveResourceId });
-      const actions = await memory.listActions({ threadId: effectiveThreadId, runId, after, limit });
+      const actions = await store.listActions({ threadId: effectiveThreadId, runId, after, limit });
       return { actions: actions as unknown as Record<string, unknown>[] };
     } catch (error) {
       return handleError(error, 'Error listing actions');
