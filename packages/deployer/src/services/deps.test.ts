@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MastraError } from '@mastra/core/error';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { copyPnpmWorkspaceSettings, DepsService, getPnpmIgnoredBuildPackages } from './deps';
+import { copyPnpmWorkspaceSettings, DepsService, getPnpmIgnoredBuildPackages, withPlaceholderVersions } from './deps';
 
 const { runChildProcess } = vi.hoisted(() => ({
   runChildProcess: vi.fn(),
@@ -542,94 +542,104 @@ describe('Deps.pack', () => {
     );
   });
 
-  it('packs a versionless workspace package under the given version and restores its manifest', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'mastra-deps-pack-'));
-    tempDirs.push(root);
-    await writeFile(join(root, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n", 'utf-8');
-    const manifestPath = join(root, 'package.json');
-    const original = '{\n    "name": "@inner/versionless",\n    "private": true\n}';
-    await writeFile(manifestPath, original, 'utf-8');
+  it('uses pm pack --destination for bun', async () => {
+    expect(await packWith('bun.lock', '{}')).toBe(`bun pm pack --destination ${destination}`);
+  });
+});
 
-    let manifestDuringPack: Record<string, unknown> | undefined;
-    runChildProcess.mockImplementation(async () => {
-      manifestDuringPack = JSON.parse(await readFile(manifestPath, 'utf-8'));
-      return { success: true, stdout: '', stderr: '' };
-    });
+describe('withPlaceholderVersions', () => {
+  const tempDirs: string[] = [];
 
-    await new DepsService(root).pack({ dir: root, destination, sanitizedName: 'inner-versionless', version: '0.0.0' });
-
-    expect(manifestDuringPack).toEqual({ name: '@inner/versionless', private: true, version: '0.0.0' });
-    expect(await readFile(manifestPath, 'utf-8')).toBe(original);
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })));
   });
 
-  it('restores a versionless manifest when packing fails', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'mastra-deps-pack-'));
-    tempDirs.push(root);
-    await writeFile(join(root, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n", 'utf-8');
-    const manifestPath = join(root, 'package.json');
+  async function makePackage(manifest: string) {
+    const dir = await mkdtemp(join(tmpdir(), 'mastra-placeholder-'));
+    tempDirs.push(dir);
+    await writeFile(join(dir, 'package.json'), manifest, 'utf-8');
+    return dir;
+  }
+
+  const readManifest = async (dir: string) => JSON.parse(await readFile(join(dir, 'package.json'), 'utf-8'));
+
+  it('versions every versionless package for the whole operation and restores them afterwards', async () => {
+    const leafOriginal = '{\n    "name": "@inner/versionless",\n    "private": true\n}';
+    const dependentOriginal = '{"name":"@inner/dependent","dependencies":{"@inner/versionless":"workspace:*"}}';
+    const leaf = await makePackage(leafOriginal);
+    const dependent = await makePackage(dependentOriginal);
+
+    // While the dependent packs, pnpm/bun read the dependency's manifest to rewrite `workspace:*`.
+    const seen = await withPlaceholderVersions([leaf, dependent], async () => [
+      (await readManifest(leaf)).version,
+      (await readManifest(dependent)).version,
+    ]);
+
+    expect(seen).toEqual(['0.0.0', '0.0.0']);
+    expect(await readFile(join(leaf, 'package.json'), 'utf-8')).toBe(leafOriginal);
+    expect(await readFile(join(dependent, 'package.json'), 'utf-8')).toBe(dependentOriginal);
+  });
+
+  it('restores manifests when the operation fails', async () => {
     const original = '{"name":"@inner/versionless"}';
-    await writeFile(manifestPath, original, 'utf-8');
-    runChildProcess.mockRejectedValue(new Error('pack failed'));
+    const dir = await makePackage(original);
 
     await expect(
-      new DepsService(root).pack({ dir: root, destination, sanitizedName: 'inner-versionless', version: '0.0.0' }),
+      withPlaceholderVersions([dir], async () => {
+        throw new Error('pack failed');
+      }),
     ).rejects.toThrow('pack failed');
-    expect(await readFile(manifestPath, 'utf-8')).toBe(original);
+    expect(await readFile(join(dir, 'package.json'), 'utf-8')).toBe(original);
   });
 
-  it('serializes concurrent packs of the same versionless package', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'mastra-deps-pack-'));
-    tempDirs.push(root);
-    await writeFile(join(root, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n", 'utf-8');
-    const manifestPath = join(root, 'package.json');
+  it('restores manifests and re-raises the signal on SIGINT', async () => {
     const original = '{"name":"@inner/versionless"}';
-    await writeFile(manifestPath, original, 'utf-8');
+    const dir = await makePackage(original);
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
+    const listenersBefore = process.listeners('SIGINT');
 
-    const versionsDuringPack: unknown[] = [];
-    runChildProcess.mockImplementation(async () => {
-      versionsDuringPack.push(JSON.parse(await readFile(manifestPath, 'utf-8')).version);
-      await new Promise(resolve => setTimeout(resolve, 10));
-      return { success: true, stdout: '', stderr: '' };
+    await withPlaceholderVersions([dir], async () => {
+      const handler = process.listeners('SIGINT').find(listener => !listenersBefore.includes(listener))!;
+      handler('SIGINT');
+      expect(fs.readFileSync(join(dir, 'package.json'), 'utf-8')).toBe(original);
     });
 
-    const service = new DepsService(root);
-    const args = { dir: root, destination, sanitizedName: 'inner-versionless', version: '0.0.0' };
-    await Promise.all([service.pack(args), service.pack(args)]);
+    expect(kill).toHaveBeenCalledWith(process.pid, 'SIGINT');
+    expect(process.listeners('SIGINT')).toEqual(listenersBefore);
+    expect(await readFile(join(dir, 'package.json'), 'utf-8')).toBe(original);
+  });
 
-    expect(versionsDuringPack).toEqual(['0.0.0', '0.0.0']);
-    expect(await readFile(manifestPath, 'utf-8')).toBe(original);
+  it('removes its signal handlers after a normal run', async () => {
+    const dir = await makePackage('{"name":"@inner/versionless"}');
+    const sigint = process.listenerCount('SIGINT');
+    const sigterm = process.listenerCount('SIGTERM');
+
+    await withPlaceholderVersions([dir], async () => {});
+
+    expect(process.listenerCount('SIGINT')).toBe(sigint);
+    expect(process.listenerCount('SIGTERM')).toBe(sigterm);
   });
 
   it('names the manifest path when package.json is malformed', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'mastra-deps-pack-'));
-    tempDirs.push(root);
-    await writeFile(join(root, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n", 'utf-8');
-    const manifestPath = join(root, 'package.json');
-    await writeFile(manifestPath, '{ not json', 'utf-8');
+    const dir = await makePackage('{ not json');
+    const operation = vi.fn();
 
-    await expect(
-      new DepsService(root).pack({ dir: root, destination, sanitizedName: 'pkg', version: '0.0.0' }),
-    ).rejects.toThrow(`Failed to parse ${manifestPath}`);
-    expect(runChildProcess).not.toHaveBeenCalled();
+    await expect(withPlaceholderVersions([dir], operation)).rejects.toThrow(
+      `Failed to parse ${join(dir, 'package.json')}`,
+    );
+    expect(operation).not.toHaveBeenCalled();
   });
 
-  it('does not rewrite a manifest that already has a version', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'mastra-deps-pack-'));
-    tempDirs.push(root);
-    await writeFile(join(root, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n", 'utf-8');
-    const manifestPath = join(root, 'package.json');
+  it('does not touch a manifest that already has a version', async () => {
     const original = '{"name":"pkg","version":"1.2.3"}';
-    await writeFile(manifestPath, original, 'utf-8');
-    const writeSpy = vi.spyOn(fs.promises, 'writeFile');
+    const dir = await makePackage(original);
+    const renameSpy = vi.spyOn(fs.promises, 'rename');
 
-    await new DepsService(root).pack({ dir: root, destination, sanitizedName: 'pkg', version: '1.2.3' });
+    const versionDuringOperation = await withPlaceholderVersions([dir], async () => (await readManifest(dir)).version);
 
-    expect(writeSpy).not.toHaveBeenCalledWith(manifestPath, expect.anything());
-    writeSpy.mockRestore();
-    expect(await readFile(manifestPath, 'utf-8')).toBe(original);
-  });
-
-  it('uses pm pack --destination for bun', async () => {
-    expect(await packWith('bun.lock', '{}')).toBe(`bun pm pack --destination ${destination}`);
+    expect(versionDuringOperation).toBe('1.2.3');
+    expect(renameSpy).not.toHaveBeenCalled();
+    expect(await readFile(join(dir, 'package.json'), 'utf-8')).toBe(original);
   });
 });

@@ -594,15 +594,17 @@ export const environmentRoute = registerApiRoute('/environment', {
 
       try {
         // Keep the lockfile probe external so optimization cannot remove it from the output manifest.
-        // The versionless route makes the build pack a workspace package without a version (#27033).
+        // The versionless route makes the build pack workspace packages without a version (#27033),
+        // including one that depends on another versionless package via `workspace:*`.
         await writeFile(
           join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'api', 'route', 'versionless.ts'),
           `import { registerApiRoute } from '@mastra/core/server';
 import { versionlessValue } from '@inner/versionless';
+import { versionlessDependentValue } from '@inner/versionless-dependent';
 
 export const versionlessRoute = registerApiRoute('/versionless', {
   method: 'GET',
-  handler: async c => c.json({ value: versionlessValue }),
+  handler: async c => c.json({ value: versionlessValue, dependent: versionlessDependentValue }),
 });
 `,
         );
@@ -865,7 +867,10 @@ export const mastra = new Mastra({
     it('should bundle a workspace package that has no version (#27033)', async () => {
       const res = await fetch(`http://localhost:${port}/versionless`);
       expect(res.status).toBe(200);
-      await expect(res.json()).resolves.toEqual({ value: 'versionless-workspace-package' });
+      await expect(res.json()).resolves.toEqual({
+        value: 'versionless-workspace-package',
+        dependent: 'versionless-workspace-package-dependent',
+      });
     });
   });
 

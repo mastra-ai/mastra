@@ -15,20 +15,83 @@ type PackageManager = 'npm' | 'yarn' | 'pnpm' | 'bun';
 /** Version used to pack private workspace packages whose package.json has no `version`. */
 export const WORKSPACE_PLACEHOLDER_VERSION = '0.0.0';
 
-// Serializes the temporary manifest rewrite so concurrent packs of the same
-// package never read or restore each other's injected version.
-const manifestLocks = new Map<string, Promise<unknown>>();
+// Write via temp file + rename so an interrupted write never leaves a truncated manifest.
+async function writeManifestAtomically(manifestPath: string, contents: string) {
+  const tmpPath = `${manifestPath}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    await fsPromises.writeFile(tmpPath, contents);
+    await fsPromises.rename(tmpPath, manifestPath);
+  } catch (error) {
+    await fsPromises.rm(tmpPath, { force: true });
+    throw error;
+  }
+}
 
-function withManifestLock<T>(manifestPath: string, operation: () => Promise<T>): Promise<T> {
-  const key = path.resolve(manifestPath);
-  const previous = manifestLocks.get(key) ?? Promise.resolve();
-  const current = previous.catch(() => {}).then(operation);
-  const tail = current.catch(() => {});
-  manifestLocks.set(key, tail);
-  void tail.then(() => {
-    if (manifestLocks.get(key) === tail) manifestLocks.delete(key);
-  });
-  return current;
+/**
+ * Package managers refuse to pack a manifest without a version, and pnpm/bun also
+ * resolve `workspace:` ranges from the dependency's manifest. So every versionless
+ * package in `dirs` gets the placeholder version for the whole of `operation`, and
+ * the original manifests are restored afterwards — also on SIGINT/SIGTERM.
+ */
+export async function withPlaceholderVersions<T>(dirs: string[], operation: () => Promise<T>): Promise<T> {
+  const originals = new Map<string, string>();
+  for (const dir of new Set(dirs.map(dir => path.resolve(dir)))) {
+    const manifestPath = path.join(dir, 'package.json');
+    const original = await fsPromises.readFile(manifestPath, 'utf-8').catch(() => undefined);
+    if (original === undefined) continue;
+    let manifest: PackageJson;
+    try {
+      manifest = JSON.parse(original) as PackageJson;
+    } catch (error) {
+      throw new Error(`Failed to parse ${manifestPath}: ${(error as Error).message}`, { cause: error });
+    }
+    if (!manifest.version) {
+      originals.set(manifestPath, original);
+    }
+  }
+  if (originals.size === 0) {
+    return operation();
+  }
+
+  const injected = new Set<string>();
+  const restoreSync = () => {
+    for (const manifestPath of injected) {
+      fs.writeFileSync(manifestPath, originals.get(manifestPath)!);
+    }
+    injected.clear();
+  };
+  const onSignal = (signal: NodeJS.Signals) => {
+    restoreSync();
+    removeSignalHandlers();
+    process.kill(process.pid, signal);
+  };
+  const removeSignalHandlers = () => {
+    process.off('SIGINT', onSignal);
+    process.off('SIGTERM', onSignal);
+  };
+  process.once('SIGINT', onSignal);
+  process.once('SIGTERM', onSignal);
+
+  try {
+    for (const [manifestPath, original] of originals) {
+      const manifest = JSON.parse(original) as PackageJson;
+      await writeManifestAtomically(
+        manifestPath,
+        JSON.stringify({ ...manifest, version: WORKSPACE_PLACEHOLDER_VERSION }, null, 2) + '\n',
+      );
+      injected.add(manifestPath);
+    }
+    return await operation();
+  } finally {
+    try {
+      for (const manifestPath of [...injected]) {
+        await writeManifestAtomically(manifestPath, originals.get(manifestPath)!);
+        injected.delete(manifestPath);
+      }
+    } finally {
+      removeSignalHandlers();
+    }
+  }
 }
 
 interface LockFileInfo {
@@ -336,51 +399,12 @@ export class Deps extends MastraBase {
       destinationFlag = `--destination ${destination}`;
     }
 
-    const runPack = () =>
-      cpLogger({
-        cmd: `${this.packageManager} ${packCmd} ${destinationFlag}`,
-        args: [],
-        env: {
-          PATH: process.env.PATH!,
-        },
-      });
-
-    // Package managers refuse to pack a manifest without a version, so give
-    // versionless private workspace packages one for the duration of the pack.
-    const manifestPath = path.join(dir, 'package.json');
-    return withManifestLock(manifestPath, async () => {
-      const originalManifest = await fsPromises.readFile(manifestPath, 'utf-8').catch(() => undefined);
-      if (originalManifest === undefined) {
-        return runPack();
-      }
-      let manifest: PackageJson;
-      try {
-        manifest = JSON.parse(originalManifest) as PackageJson;
-      } catch (error) {
-        throw new Error(`Failed to parse ${manifestPath}: ${(error as Error).message}`, { cause: error });
-      }
-      if (manifest.version) {
-        return runPack();
-      }
-
-      // Write via temp file + rename so an interrupted write never leaves a truncated manifest.
-      const writeManifestAtomically = async (contents: string) => {
-        const tmpPath = `${manifestPath}.${process.pid}.${Date.now()}.tmp`;
-        try {
-          await fsPromises.writeFile(tmpPath, contents);
-          await fsPromises.rename(tmpPath, manifestPath);
-        } catch (error) {
-          await fsPromises.rm(tmpPath, { force: true });
-          throw error;
-        }
-      };
-
-      await writeManifestAtomically(JSON.stringify({ ...manifest, version }, null, 2) + '\n');
-      try {
-        return await runPack();
-      } finally {
-        await writeManifestAtomically(originalManifest);
-      }
+    return cpLogger({
+      cmd: `${this.packageManager} ${packCmd} ${destinationFlag}`,
+      args: [],
+      env: {
+        PATH: process.env.PATH!,
+      },
     });
   }
 
