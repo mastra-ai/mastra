@@ -3961,6 +3961,18 @@ export class Agent<
    * Returns the model list to mutate. Function-valued models are resolved; arrays are returned as-is.
    * @internal
    */
+  #modelListMutation: Promise<unknown> = Promise.resolve();
+
+  /**
+   * Runs model list mutations one at a time so concurrent edits build on each other.
+   * @internal
+   */
+  #serializeModelListMutation(fn: () => Promise<boolean>): Promise<boolean> {
+    const run = this.#modelListMutation.then(fn, fn);
+    this.#modelListMutation = run.catch(() => {});
+    return run;
+  }
+
   async #resolveMutableModelList(requestContext: RequestContext): Promise<ModelFallbacks | null> {
     if (typeof this.model === 'function') {
       const resolved = await this.resolveModelSelection(this.model, requestContext);
@@ -3974,7 +3986,11 @@ export class Agent<
    * Reorders the model list. If `model` is a function returning a list, it is resolved and
    * replaced by the reordered list. Returns whether the reorder was applied.
    */
-  async reorderModels(modelIds: string[], requestContext: RequestContext = new RequestContext()): Promise<boolean> {
+  reorderModels(modelIds: string[], requestContext: RequestContext = new RequestContext()): Promise<boolean> {
+    return this.#serializeModelListMutation(() => this.#reorderModels(modelIds, requestContext));
+  }
+
+  async #reorderModels(modelIds: string[], requestContext: RequestContext): Promise<boolean> {
     const modelArray = await this.#resolveMutableModelList(requestContext);
     if (!modelArray) {
       this.logger.warn('Model is not an array', { agent: this.name });
@@ -3995,7 +4011,19 @@ export class Agent<
    * Updates one entry in the model list. If `model` is a function returning a list, it is resolved
    * and replaced by the updated list. Returns whether the update was applied.
    */
-  async updateModelInModelList(
+  updateModelInModelList(
+    update: {
+      id: string;
+      model?: DynamicArgument<MastraModelConfig>;
+      enabled?: boolean;
+      maxRetries?: number;
+    },
+    requestContext: RequestContext = new RequestContext(),
+  ): Promise<boolean> {
+    return this.#serializeModelListMutation(() => this.#updateModelInModelList(update, requestContext));
+  }
+
+  async #updateModelInModelList(
     {
       id,
       model,
@@ -4007,7 +4035,7 @@ export class Agent<
       enabled?: boolean;
       maxRetries?: number;
     },
-    requestContext: RequestContext = new RequestContext(),
+    requestContext: RequestContext,
   ): Promise<boolean> {
     const modelArray = await this.#resolveMutableModelList(requestContext);
     if (!modelArray) {

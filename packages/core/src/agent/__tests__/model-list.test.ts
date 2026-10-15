@@ -195,6 +195,26 @@ function modelListTests(version: 'v1' | 'v2') {
         expect(ids[1]).toBe('model-0');
       });
 
+      it('should keep both concurrent edits on a function-valued model list', async () => {
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: 'test agent instructions',
+          model: async () => [{ model: openai('gpt-4o') }, { model: openai('gpt-4o-mini') }],
+        });
+
+        const ids = (await agent.getModelList())!.map(m => m.id);
+        const results = await Promise.all([
+          agent.reorderModels([...ids].reverse()),
+          agent.updateModelInModelList({ id: ids[0]!, enabled: false }),
+        ]);
+        expect(results).toEqual([true, true]);
+
+        const list = (await agent.getModelList())!;
+        expect(list.map(m => m.id)).toEqual([...ids].reverse());
+        expect(list.find(m => m.id === ids[0])?.enabled).toBe(false);
+      });
+
       it('should reorder and update function-valued model lists', async () => {
         const agent = new Agent({
           id: 'test-agent',
