@@ -3664,8 +3664,9 @@ export class Agent<
       return models;
     }
 
-    return models.map(m =>
-      Agent.toFallbackEntry(m, this.maxRetries ?? 0, this.#maxRetriesConfigured),
+    // Index-derived ids keep entries stable across repeated resolution of dynamic model functions.
+    return models.map((m, index) =>
+      Agent.toFallbackEntry(m, this.maxRetries ?? 0, this.#maxRetriesConfigured, `model-${index}`),
     ) as ModelFallbacks;
   }
 
@@ -3678,9 +3679,10 @@ export class Agent<
     mdl: ModelWithRetries,
     defaultMaxRetries: number,
     defaultMaxRetriesConfigured: boolean,
+    fallbackId?: string,
   ): ModelFallbacks[number] {
     return {
-      id: mdl.id ?? globalThis.crypto.randomUUID(),
+      id: mdl.id ?? fallbackId ?? globalThis.crypto.randomUUID(),
       model: mdl.model as DynamicArgument<MastraModelConfig>,
       maxRetries: mdl.maxRetries ?? defaultMaxRetries,
       maxRetriesConfigured: mdl.maxRetries !== undefined || defaultMaxRetriesConfigured,
@@ -3947,48 +3949,68 @@ export class Agent<
     };
   }
 
-  reorderModels(modelIds: string[]) {
-    if (!Array.isArray(this.model)) {
+  /**
+   * Returns the model list to mutate. Function-valued models are resolved; arrays are returned as-is.
+   * @internal
+   */
+  async #resolveMutableModelList(requestContext: RequestContext): Promise<ModelFallbacks | null> {
+    if (typeof this.model === 'function') {
+      const resolved = await this.resolveModelSelection(this.model, requestContext);
+      return Array.isArray(resolved) ? (resolved as ModelFallbacks) : null;
+    }
+    // At runtime, arrays are always normalized to ModelFallbacks (with required id) in the constructor.
+    return Array.isArray(this.model) ? (this.model as ModelFallbacks) : null;
+  }
+
+  /**
+   * Reorders the model list. If `model` is a function returning a list, it is resolved and
+   * replaced by the reordered list. Returns whether the reorder was applied.
+   */
+  async reorderModels(modelIds: string[], requestContext: RequestContext = new RequestContext()): Promise<boolean> {
+    const modelArray = await this.#resolveMutableModelList(requestContext);
+    if (!modelArray) {
       this.logger.warn('Model is not an array', { agent: this.name });
-      return;
+      return false;
     }
 
-    // TypeScript sees this.model as ModelWithRetries[] | ModelFallbacks after Array.isArray check.
-    // At runtime, arrays are always normalized to ModelFallbacks (with required id) in the constructor.
-    // The cast tells TypeScript to trust this runtime invariant.
-    this.model = (this.model as ModelFallbacks).sort((a, b) => {
+    this.model = [...modelArray].sort((a, b) => {
       const aIndex = modelIds.indexOf(a.id);
       const bIndex = modelIds.indexOf(b.id);
       const aPos = aIndex === -1 ? Infinity : aIndex;
       const bPos = bIndex === -1 ? Infinity : bIndex;
       return aPos - bPos;
     });
+    return true;
   }
 
-  updateModelInModelList({
-    id,
-    model,
-    enabled,
-    maxRetries,
-  }: {
-    id: string;
-    model?: DynamicArgument<MastraModelConfig>;
-    enabled?: boolean;
-    maxRetries?: number;
-  }) {
-    if (!Array.isArray(this.model)) {
+  /**
+   * Updates one entry in the model list. If `model` is a function returning a list, it is resolved
+   * and replaced by the updated list. Returns whether the update was applied.
+   */
+  async updateModelInModelList(
+    {
+      id,
+      model,
+      enabled,
+      maxRetries,
+    }: {
+      id: string;
+      model?: DynamicArgument<MastraModelConfig>;
+      enabled?: boolean;
+      maxRetries?: number;
+    },
+    requestContext: RequestContext = new RequestContext(),
+  ): Promise<boolean> {
+    const modelArray = await this.#resolveMutableModelList(requestContext);
+    if (!modelArray) {
       this.logger.warn('Model is not an array', { agent: this.name });
-      return;
+      return false;
     }
 
-    // TypeScript sees this.model as ModelWithRetries[] | ModelFallbacks after Array.isArray check.
-    // At runtime, arrays are always normalized to ModelFallbacks (with required id) in the constructor.
-    // The cast tells TypeScript to trust this runtime invariant.
-    const modelArray = this.model as ModelFallbacks;
     const modelToUpdate = modelArray.find(m => m.id === id);
     if (!modelToUpdate) {
       this.logger.warn('Model not found', { agent: this.name, modelId: id });
-      return;
+      return false;
     }
 
     this.model = modelArray.map(mdl => {
@@ -4003,6 +4025,7 @@ export class Agent<
       }
       return mdl;
     });
+    return true;
   }
 
   #primitives?: MastraPrimitives;

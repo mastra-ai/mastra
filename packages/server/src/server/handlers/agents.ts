@@ -3606,7 +3606,10 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
       }
 
-      agent.reorderModels(reorderedModelIds);
+      const applied = await agent.reorderModels(reorderedModelIds);
+      if (!applied) {
+        throw new HTTPException(400, { message: 'Agent model list could not be reordered' });
+      }
 
       return { message: 'Model list reordered' };
     } catch (error) {
@@ -3650,7 +3653,10 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
         ...(enabled !== undefined ? { enabled } : {}),
       };
 
-      agent.updateModelInModelList(updated);
+      const applied = await agent.updateModelInModelList(updated);
+      if (!applied) {
+        throw new HTTPException(404, { message: `Model config with id ${modelConfigId} not found` });
+      }
 
       return { message: 'Model updated in model list' };
     } catch (error) {

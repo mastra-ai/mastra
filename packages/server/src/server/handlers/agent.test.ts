@@ -986,6 +986,52 @@ describe('Agent Handlers', () => {
     });
   });
 
+  describe('function-valued model lists', () => {
+    const makeFnModelMastra = () =>
+      makeMastraMock({
+        agents: {
+          'fn-model-agent': makeMockAgent({
+            name: 'fn-model-agent',
+            model: () => [{ model: openaiV5('gpt-4o-mini') }, { model: openaiV5('gpt-4o') }],
+          }),
+        },
+      });
+
+    it('should reorder and update a function-valued model list', async () => {
+      const mastra = makeFnModelMastra();
+      const agent = mastra.getAgentById('fn-model-agent');
+      const ids = (await agent.getModelList())!.map(m => m.id);
+
+      await REORDER_AGENT_MODEL_LIST_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'fn-model-agent',
+        reorderedModelIds: [...ids].reverse(),
+      });
+      await UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'fn-model-agent',
+        modelConfigId: ids[0]!,
+        enabled: false,
+      });
+
+      const list = await agent.getModelList();
+      expect(list?.map(m => m.model.modelId)).toEqual(['gpt-4o', 'gpt-4o-mini']);
+      expect(list?.[1].enabled).toBe(false);
+    });
+
+    it('should return 404 for an unknown model config id', async () => {
+      const mastra = makeFnModelMastra();
+      await expect(
+        UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          agentId: 'fn-model-agent',
+          modelConfigId: 'missing',
+          enabled: false,
+        }),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+  });
+
   describe('enhanceInstructionsHandler', () => {
     it('should enhance instructions and return structured output', async () => {
       // Set OPENAI_API_KEY so isProviderConnected returns true

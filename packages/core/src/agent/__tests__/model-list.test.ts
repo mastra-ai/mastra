@@ -68,7 +68,7 @@ function modelListTests(version: 'v1' | 'v2') {
         const modelIds = modelList?.map(m => m.id) || [];
         const reversedModelIds = [...modelIds].reverse();
 
-        agent.reorderModels(reversedModelIds);
+        await agent.reorderModels(reversedModelIds);
 
         const reorderedModelList = await agent.getModelList();
 
@@ -111,7 +111,7 @@ function modelListTests(version: 'v1' | 'v2') {
 
         // Reorder with only 2 of 3 models — gpt-4.1 first, then gpt-4o
         // gpt-4o-mini is NOT in the list and should stay at the end
-        agent.reorderModels([modelList[2]!.id, modelList[0]!.id]);
+        await agent.reorderModels([modelList[2]!.id, modelList[0]!.id]);
 
         const reorderedModelList = await agent.getModelList();
         if (!reorderedModelList) {
@@ -151,7 +151,7 @@ function modelListTests(version: 'v1' | 'v2') {
         }
         const model1Id = modelList[1]?.id || '';
 
-        agent.updateModelInModelList({
+        await agent.updateModelInModelList({
           id: model1Id,
           model: openai('gpt-4'),
           maxRetries: 5,
@@ -167,6 +167,51 @@ function modelListTests(version: 'v1' | 'v2') {
         expect(updatedModelList[1]?.maxRetries).toBe(5);
         const updatedModel2 = updatedModelList[2]?.model as LanguageModelV2;
         expect(updatedModel2.modelId).toBe('gpt-4.1');
+      });
+
+      it('should keep stable ids for function-valued model lists', async () => {
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: 'test agent instructions',
+          model: () => [{ model: openai('gpt-4o') }, { model: openai('gpt-4o-mini') }],
+        });
+
+        const first = await agent.getModelList();
+        const second = await agent.getModelList();
+        expect(first?.map(m => m.id)).toEqual(second?.map(m => m.id));
+      });
+
+      it('should reorder and update function-valued model lists', async () => {
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: 'test agent instructions',
+          model: () => [{ model: openai('gpt-4o') }, { model: openai('gpt-4o-mini') }],
+        });
+
+        const modelList = await agent.getModelList();
+        const ids = modelList!.map(m => m.id);
+
+        expect(await agent.reorderModels([...ids].reverse())).toBe(true);
+        const reordered = await agent.getModelList();
+        expect(reordered!.map(m => m.id)).toEqual([...ids].reverse());
+        expect((reordered![0]!.model as LanguageModelV2).modelId).toBe('gpt-4o-mini');
+
+        expect(await agent.updateModelInModelList({ id: ids[0]!, enabled: false })).toBe(true);
+        const updated = await agent.getModelList();
+        expect(updated!.find(m => m.id === ids[0])?.enabled).toBe(false);
+      });
+
+      it('should not apply mutations for unknown ids or single-model agents', async () => {
+        const modelFn = () => [{ model: openai('gpt-4o') }];
+        const agent = new Agent({ id: 'a', name: 'A', instructions: 'x', model: modelFn });
+        expect(await agent.updateModelInModelList({ id: 'missing', enabled: false })).toBe(false);
+        expect(agent.__getOverridableFields().model).toBe(modelFn);
+
+        const single = new Agent({ id: 'b', name: 'B', instructions: 'x', model: openai('gpt-4o') });
+        expect(await single.reorderModels(['x'])).toBe(false);
+        expect(await single.updateModelInModelList({ id: 'x', enabled: false })).toBe(false);
       });
 
       it('should use model list', async () => {
