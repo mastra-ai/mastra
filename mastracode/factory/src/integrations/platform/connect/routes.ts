@@ -118,7 +118,6 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
   return [
     registerApiRoute('/web/integrations/platform/:provider/connections', {
       method: 'GET',
-      requiresAuth: false,
       handler: async rawContext => {
         const c = loose(rawContext);
         const provider = providerFromParam(c);
@@ -138,7 +137,6 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
     }),
     registerApiRoute('/web/integrations/platform/:provider/connect-session', {
       method: 'POST',
-      requiresAuth: false,
       handler: async rawContext => {
         const c = loose(rawContext);
         const provider = providerFromParam(c);
@@ -160,7 +158,6 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
     }),
     registerApiRoute('/web/integrations/platform/:provider/connections/:connectionId/reconnect-session', {
       method: 'POST',
-      requiresAuth: false,
       handler: async rawContext => {
         const c = loose(rawContext);
         const provider = providerFromParam(c);

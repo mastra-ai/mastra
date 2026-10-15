@@ -32,7 +32,6 @@ export function buildSupervisorRoutes(dependencies: SupervisorRouteDependencies)
     // "ensure" only has to hand back the address once ownership is verified.
     registerApiRoute(FACTORY_ROUTE_CONTRACTS.supervisorSession.path, {
       method: FACTORY_ROUTE_CONTRACTS.supervisorSession.method,
-      requiresAuth: false,
       handler: async context => {
         const resolved = await dependencies.resolveProject(context);
         if ('response' in resolved) return resolved.response;
@@ -45,7 +44,6 @@ export function buildSupervisorRoutes(dependencies: SupervisorRouteDependencies)
     }),
     registerApiRoute(FACTORY_ROUTE_CONTRACTS.supervisorHealth.path, {
       method: FACTORY_ROUTE_CONTRACTS.supervisorHealth.method,
-      requiresAuth: false,
       handler: async context => {
         const resolved = await dependencies.resolveProject(context);
         if ('response' in resolved) return resolved.response;
