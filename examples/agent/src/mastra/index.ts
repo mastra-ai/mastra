@@ -38,6 +38,8 @@ import {
   computerUseAgent,
 } from './agents/index';
 import { MCPClient } from '@mastra/mcp';
+import { docsAgent } from './agents/docs-agent';
+import { toneScorer, answerSimilarityScorer } from './scorers/docs-scorers';
 import { myMcpServer, myMcpServerTwo, mcpAppsServer } from './mcp/server';
 
 // Non-Mastra MCP server — uses @modelcontextprotocol/sdk directly via stdio.
@@ -140,6 +142,7 @@ const storage = new MastraCompositeStore({
 
 export const mastra = new Mastra({
   agents: {
+    docsAgent,
     gatewayAgent,
     askUserAgent,
     approvalDemoAgent,
@@ -189,6 +192,8 @@ export const mastra = new Mastra({
     'format-standup-digest-with-escalation': formatDigestWithEscalationTool,
   },
   scorers: {
+    toneScorer,
+    answerSimilarityScorer,
     alwaysPassScorer,
     alternatingScorer,
   },
