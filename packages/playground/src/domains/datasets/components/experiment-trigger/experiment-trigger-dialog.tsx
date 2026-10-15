@@ -143,7 +143,7 @@ function NewExperimentDialog({ open, onOpenChange, onSuccess, ...initial }: Expe
 
   // `mr-auto` pushes the footer's actions to the right while the toggle sits there; in the body it does nothing.
   const advancedToggle = (
-    <CollapsibleTrigger variant="disclosure" className="mr-auto">
+    <CollapsibleTrigger variant="form" className="mr-auto">
       Advanced
     </CollapsibleTrigger>
   );

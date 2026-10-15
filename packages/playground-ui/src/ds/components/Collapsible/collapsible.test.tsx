@@ -49,16 +49,16 @@ describe('Collapsible', () => {
     expect(screen.getByText('Panel content')).toBeDefined();
   });
 
-  it('renders the disclosure variant as a chevron followed by the label, turning while open', () => {
+  it('renders the form variant as a chevron followed by the label, turning while open', () => {
     render(
       <Collapsible>
-        <CollapsibleTrigger variant="disclosure">Advanced</CollapsibleTrigger>
+        <CollapsibleTrigger variant="form">Advanced</CollapsibleTrigger>
         <CollapsibleContent>Panel content</CollapsibleContent>
       </Collapsible>,
     );
 
     const trigger = screen.getByRole('button', { name: 'Advanced' });
-    expect(trigger.dataset.variant).toBe('disclosure');
+    expect(trigger.dataset.variant).toBe('form');
     expect(trigger.firstElementChild?.getAttribute('data-slot')).toBe('disclosure-chevron');
     expect(trigger.firstElementChild?.classList.contains('in-aria-expanded:rotate-90')).toBe(true);
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
@@ -72,12 +72,26 @@ describe('Collapsible', () => {
     render(
       <Collapsible>
         <CollapsibleTrigger>Plain</CollapsibleTrigger>
-        <CollapsibleTrigger variant="disclosure" asChild>
+        <CollapsibleTrigger variant="form" asChild>
           <button type="button">Custom</button>
         </CollapsibleTrigger>
       </Collapsible>,
     );
 
     expect(document.querySelector('[data-slot="disclosure-chevron"]')).toBeNull();
+  });
+
+  it('sizes DisclosureChevron children at zero specificity so a size class on the chevron still wins', () => {
+    render(
+      <Collapsible>
+        <CollapsibleTrigger>Toggle</CollapsibleTrigger>
+      </Collapsible>,
+    );
+
+    expect(
+      screen
+        .getByRole('button', { name: 'Toggle' })
+        .classList.contains('[:where(&_[data-slot=disclosure-chevron])]:size-icon-md'),
+    ).toBe(true);
   });
 });
