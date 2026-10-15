@@ -58,7 +58,7 @@ interface FollowedRow {
   label: string;
   title: string;
   stage: string;
-  worker: { role: string; sessionId: string } | null;
+  worker: { role: string; sessionId: string; state: FactorySessionRunState } | null;
   lastReport: LastReport | null;
 }
 
@@ -240,14 +240,24 @@ export class FactorySessionsStateProcessor implements Processor<'factory-session
         record =>
           record.attributes?.['work-item'] === label || (record.kind === 'stage' && record.sourceId === item.id),
       );
+      const running = active ? await this.#deps.isRunning(active.sessionId) : false;
+      const lastFromWorker = active
+        ? newest(records, record => record.attributes?.['from-session'] === active.sessionId)
+        : undefined;
       following.push({
         workItemId: item.id,
         label,
         title: item.title,
         stage,
-        worker: active ? { role: active.role, sessionId: active.sessionId } : null,
+        worker: active
+          ? {
+              role: active.role,
+              sessionId: active.sessionId,
+              state: running ? 'running' : lastFromWorker?.kind === 'blocked' ? 'parked' : 'idle',
+            }
+          : null,
         lastReport: report(last),
-        active: Boolean(active) && !terminal,
+        active: running && !terminal,
       });
     }
 
@@ -283,7 +293,9 @@ export class FactorySessionsStateProcessor implements Processor<'factory-session
     if (state.following.length > 0) {
       lines.push('Work items you follow:');
       for (const row of state.following) {
-        const worker = row.worker ? `; ${escapeText(row.worker.role)} session ${row.worker.sessionId}` : '';
+        const worker = row.worker
+          ? `; ${escapeText(row.worker.role)} session ${row.worker.sessionId} ${row.worker.state}`
+          : '';
         lines.push(
           `- ${escapeText(row.label)} "${escapeText(row.title)}": ${escapeText(row.stage)}${worker}${lastReport(row.lastReport)}`,
         );

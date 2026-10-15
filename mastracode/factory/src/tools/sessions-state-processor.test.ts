@@ -179,7 +179,23 @@ describe('FactorySessionsStateProcessor', () => {
     });
     expect(signal!.cacheKey).toMatch(/^sessions:/);
     expect(signal!.contents).toContain('- "Profile the build" (session side-1): running');
-    expect(signal!.contents).toMatch(/- #7 "Item 7": execute; work session worker-7; last report progress at \d{4}-/);
+    expect(signal!.contents).toMatch(
+      /- #7 "Item 7": execute; work session worker-7 idle; last report progress at \d{4}-/,
+    );
+  });
+
+  it("shows whether a followed item's session is running, idle or waiting", async () => {
+    const env = await setup();
+    const item = await env.fileItem(7);
+    await env.follow(item.id);
+    await env.bind(item.id, 'worker-7');
+
+    env.running.add('worker-7');
+    expect((await env.step())!.contents).toContain('work session worker-7 running');
+    env.running.delete('worker-7');
+    expect((await env.step())!.contents).toContain('work session worker-7 idle');
+    await env.reportFrom('worker-7', 'blocked', { 'work-item': '#7' });
+    expect((await env.step())!.contents).toContain('work session worker-7 parked; last report blocked');
   });
 
   it('shows parked for a side session whose last report was blocked', async () => {
