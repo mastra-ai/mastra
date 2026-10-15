@@ -16,14 +16,17 @@ type PackageManager = 'npm' | 'yarn' | 'pnpm' | 'bun';
 export const WORKSPACE_PLACEHOLDER_VERSION = '0.0.0';
 
 // Write via temp file + rename so an interrupted write never leaves a truncated manifest.
-async function writeManifestAtomically(manifestPath: string, contents: string) {
+async function writeManifestAtomically(manifestPath: string, contents: string, inFlight?: Set<string>) {
   const tmpPath = `${manifestPath}.${process.pid}.${Date.now()}.tmp`;
+  inFlight?.add(tmpPath);
   try {
     await fsPromises.writeFile(tmpPath, contents);
     await fsPromises.rename(tmpPath, manifestPath);
   } catch (error) {
     await fsPromises.rm(tmpPath, { force: true });
     throw error;
+  } finally {
+    inFlight?.delete(tmpPath);
   }
 }
 
@@ -54,7 +57,14 @@ export async function withPlaceholderVersions<T>(dirs: string[], operation: () =
   }
 
   const injected = new Set<string>();
+  const inFlightTmpPaths = new Set<string>();
   const restoreSync = () => {
+    // Removing in-flight temp files keeps them out of later tarballs and makes any
+    // pending rename fail instead of overwriting the restored manifest.
+    for (const tmpPath of inFlightTmpPaths) {
+      fs.rmSync(tmpPath, { force: true });
+    }
+    inFlightTmpPaths.clear();
     for (const manifestPath of injected) {
       fs.writeFileSync(manifestPath, originals.get(manifestPath)!);
     }
@@ -75,17 +85,19 @@ export async function withPlaceholderVersions<T>(dirs: string[], operation: () =
   try {
     for (const [manifestPath, original] of originals) {
       const manifest = JSON.parse(original) as PackageJson;
+      // Track before writing so a signal mid-write still restores this manifest.
+      injected.add(manifestPath);
       await writeManifestAtomically(
         manifestPath,
         JSON.stringify({ ...manifest, version: WORKSPACE_PLACEHOLDER_VERSION }, null, 2) + '\n',
+        inFlightTmpPaths,
       );
-      injected.add(manifestPath);
     }
     return await operation();
   } finally {
     try {
       for (const manifestPath of [...injected]) {
-        await writeManifestAtomically(manifestPath, originals.get(manifestPath)!);
+        await writeManifestAtomically(manifestPath, originals.get(manifestPath)!, inFlightTmpPaths);
         injected.delete(manifestPath);
       }
     } finally {

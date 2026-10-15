@@ -610,6 +610,27 @@ describe('withPlaceholderVersions', () => {
     expect(await readFile(join(dir, 'package.json'), 'utf-8')).toBe(original);
   });
 
+  it('restores the manifest and removes the temp file on a signal mid-write', async () => {
+    const original = '{"name":"@inner/versionless"}';
+    const dir = await makePackage(original);
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
+    const listenersBefore = process.listeners('SIGINT');
+    const realRename = fs.promises.rename;
+    const rename = vi.spyOn(fs.promises, 'rename').mockImplementationOnce(async (from, to) => {
+      // Temp file is written, rename has not happened yet.
+      const handler = process.listeners('SIGINT').find(listener => !listenersBefore.includes(listener))!;
+      handler('SIGINT');
+      return realRename(from, to);
+    });
+
+    await expect(withPlaceholderVersions([dir], async () => {})).rejects.toThrow(/ENOENT/);
+
+    expect(kill).toHaveBeenCalledWith(process.pid, 'SIGINT');
+    expect(await readFile(join(dir, 'package.json'), 'utf-8')).toBe(original);
+    expect(fs.readdirSync(dir)).toEqual(['package.json']);
+    rename.mockRestore();
+  });
+
   it('removes its signal handlers after a normal run', async () => {
     const dir = await makePackage('{"name":"@inner/versionless"}');
     const sigint = process.listenerCount('SIGINT');
