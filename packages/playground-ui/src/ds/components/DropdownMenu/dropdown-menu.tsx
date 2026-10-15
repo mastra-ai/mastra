@@ -200,7 +200,7 @@ const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContent
             className={cn(
               menuPopupClass,
               menuScrollPopupClass,
-              size === 'sm' && 'rounded-md [--scroll-area-scrollbar-inset:6px]',
+              size === 'sm' && 'rounded-md scrollbar-inset-md',
               className,
             )}
             {...props}

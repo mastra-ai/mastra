@@ -86,10 +86,9 @@ const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
             ref={ref}
             data-slot="popover-content"
             className={cn(
-              'z-50 w-72 origin-[var(--transform-origin)] rounded-xl text-foreground focus-visible:outline-hidden',
+              // `scrollbar-inset-xl`: a flush (`p-0`) popover's ScrollArea reaches the corners.
+              'z-50 w-72 origin-[var(--transform-origin)] rounded-xl text-foreground scrollbar-inset-xl focus-visible:outline-hidden',
               overlaySurfaceStyle,
-              // A flush (`p-0`) popover's ScrollArea reaches the 14px corners; same inset as a menu popup.
-              '[--scroll-area-scrollbar-inset:10px]',
               'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',
               'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
               classNameString && /\bp[trblxy]?-\S+/.test(classNameString) ? false : `px-3 py-3.5`,

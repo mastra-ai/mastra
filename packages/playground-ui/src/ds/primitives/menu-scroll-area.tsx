@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 
 // For a popup that scrolls its items through `MenuScrollArea`: the popup only clips, and its
 // padding moves inside the scrolled content, so the scrollbar runs along the popup's edge with
-// its ends pulled clear of the corners (`--scroll-area-scrollbar-inset` from `menuPopupClass`).
+// its ends pulled clear of the corners (`scrollbar-inset-xl` in `menuPopupClass`).
 export const menuScrollPopupClass = 'flex flex-col overflow-hidden p-0';
 
 type MenuScrollAreaProps = {

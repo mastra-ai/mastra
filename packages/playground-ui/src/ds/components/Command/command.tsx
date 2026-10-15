@@ -244,13 +244,9 @@ const CommandList = React.forwardRef<React.ElementRef<typeof CommandPrimitive.Li
 
     if (!scrollArea) return list;
 
-    // The list fills Command's `rounded-xl` box, so its scrollbar ends sit in the 14px corners:
-    // pull them in like a menu popup does.
+    // The list fills Command's `rounded-xl` box, so its scrollbar takes that radius's inset.
     return (
-      <ScrollArea
-        className={cn('min-h-0 [--scroll-area-scrollbar-inset:10px]', scrollAreaClassName)}
-        mask={scrollAreaMask}
-      >
+      <ScrollArea className={cn('min-h-0 scrollbar-inset-xl', scrollAreaClassName)} mask={scrollAreaMask}>
         <ScrollAreaViewport className={scrollAreaViewportClassName}>{list}</ScrollAreaViewport>
       </ScrollArea>
     );
