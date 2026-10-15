@@ -386,6 +386,7 @@ export const googleDriveScenario: Scenario = {
         await call('google_drive_delete_file', { fileId: copiedId });
         steps.push(makeStep('delete copy', 'google_drive_delete_file', 'pass'));
       } catch (error) {
+        log.error(`Failed to delete smoke copy ${copiedId} — clean up manually.`, errorMessage(error));
         steps.push(makeStep('delete copy', 'google_drive_delete_file', 'fail', errorMessage(error)));
       }
     }
