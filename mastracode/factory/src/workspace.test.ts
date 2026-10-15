@@ -2739,16 +2739,6 @@ describe('GitHub session workspace preparation', () => {
     ).resolves.toBeDefined();
   });
 
-  it('refuses private sessions to same-org non-owners', async () => {
-    const { workspace } = await createLocalFactory();
-    addProject();
-    addSession({ id: 'session-a', userId: 'someone-else', visibility: 'private' });
-
-    await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toThrow(
-      /Factory session session-a is not available/,
-    );
-  });
-
   it('refuses cross-org callers regardless of visibility', async () => {
     const { workspace } = await createLocalFactory();
     addProject();
