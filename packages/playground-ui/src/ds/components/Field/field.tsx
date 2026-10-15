@@ -107,6 +107,7 @@ function FieldLabelInfo({
   labelId?: string;
 }) {
   const aboutId = React.useId();
+  const infoId = React.useId();
   const labelText = plainText(label);
   // A label with elements in it has no plain text to build a name from, so the name is read from
   // the rendered label instead, as "About <label>".
@@ -123,6 +124,8 @@ function FieldLabelInfo({
           <button
             type="button"
             {...name}
+            // The tooltip only mounts while open, so screen readers get the info from this copy.
+            aria-describedby={infoId}
             // A step quieter than the placeholder grey at rest, so it reads as a hint, not a control.
             className={cn(
               'flex cursor-help items-center rounded-full text-placeholder/80 hover:text-muted-foreground focus-visible:text-muted-foreground',
@@ -139,6 +142,9 @@ function FieldLabelInfo({
       <TooltipContent side="top" className="max-w-64">
         {children}
       </TooltipContent>
+      <span id={infoId} hidden>
+        {children}
+      </span>
       {name['aria-labelledby'] ? (
         <span id={aboutId} hidden>
           About
