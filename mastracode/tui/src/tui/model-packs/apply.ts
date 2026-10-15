@@ -11,7 +11,7 @@ import type { AgentControllerThinkingLevel } from '@mastra/core/agent-controller
 import type { TUIState } from '../state.js';
 
 interface ModelPackContext {
-  state: Pick<TUIState, 'controller' | 'session'>;
+  state: Pick<TUIState, 'controller' | 'session' | 'local'>;
 }
 
 interface PackSelection {
@@ -176,7 +176,7 @@ export async function applyPackToSession(
       });
       if (!application.isCurrent()) return cancelled();
       for (const [agentType, modelId] of Object.entries(selection.subagentModels)) {
-        await ctx.state.session.subagents.model.set({ modelId, agentType });
+        await ctx.state.local?.session.subagents.model.set({ modelId, agentType });
         if (!application.isCurrent()) return cancelled();
       }
       await ctx.state.session.state.set({
@@ -211,6 +211,8 @@ export async function applyCurrentThreadPack(
   ctx: ModelPackContext,
   options: { modeId?: string; packId?: string | null; applyModeDefault?: boolean } = {},
 ): Promise<{ applied: boolean }> {
+  // Factory sessions use the Factory's configured model; local packs reference local provider auth.
+  if (!ctx.state.local) return { applied: true };
   const settings = loadSettings();
   const modeId = options.modeId ?? ctx.state.session.mode.get();
   const resolution =
@@ -255,6 +257,7 @@ export async function switchModeWithPack(ctx: ModelPackContext, modeId: string):
 }
 
 export async function reconcilePackAfterModeChange(ctx: ModelPackContext, modeId: string): Promise<void> {
+  if (!ctx.state.local) return;
   const settings = loadSettings();
   const resolution = await resolveActivePackId(ctx, settings);
   if (!resolution?.packId || ctx.state.session.mode.get() !== modeId) return;

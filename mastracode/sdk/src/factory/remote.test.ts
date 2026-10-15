@@ -1,0 +1,131 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import { RemoteController } from './remote-controller.js';
+import { RemoteSession } from './remote-session.js';
+
+const address = { url: 'https://factory.test', session: { token: 't', orgId: 'o' } };
+
+function fakeRemote() {
+  let onEvent: (event: any) => void = () => {};
+  const remote = {
+    create: vi.fn(async () => {}),
+    state: vi.fn(async () => ({
+      threadId: 'thread-1',
+      modeId: 'build',
+      modelId: 'anthropic/claude-opus-4-5',
+      running: false,
+    })),
+    subscribe: vi.fn(async (options: { onEvent: (event: any) => void }) => {
+      onEvent = options.onEvent;
+      return { unsubscribe: vi.fn() };
+    }),
+    sendMessage: vi.fn(async () => {}),
+    followUp: vi.fn(async () => {}),
+    switchModel: vi.fn(async () => {}),
+    setState: vi.fn(async () => {}),
+  };
+  return { remote, emit: (event: any) => onEvent(event) };
+}
+
+async function connected() {
+  const { remote, emit } = fakeRemote();
+  const session = new RemoteSession(address, 'res-1', remote as any);
+  await session.connect();
+  return { session, remote, emit };
+}
+
+describe('RemoteSession', () => {
+  it('hydrates from the Factory snapshot', async () => {
+    const { session } = await connected();
+    expect(session.thread.getId()).toBe('thread-1');
+    expect(session.mode.get()).toBe('build');
+    expect(session.model.get()).toBe('anthropic/claude-opus-4-5');
+    expect(session.identity.getResourceId()).toBe('res-1');
+  });
+
+  it('mirrors stream events and forwards them to listeners', async () => {
+    const { session, emit } = await connected();
+    const listener = vi.fn();
+    session.subscribe(listener);
+
+    emit({ type: 'model_changed', modelId: 'openai/gpt-5' });
+    emit({ type: 'thread_changed', threadId: 'thread-2' });
+    emit({ type: 'state_changed', state: { yolo: true }, changedKeys: ['yolo'] });
+
+    expect(session.model.get()).toBe('openai/gpt-5');
+    expect(session.thread.getId()).toBe('thread-2');
+    expect(session.state.get()).toMatchObject({ yolo: true });
+    expect(listener).toHaveBeenCalledTimes(3);
+  });
+
+  it('rehydrates wire display state objects into Maps', async () => {
+    const { session, emit } = await connected();
+    emit({
+      type: 'display_state_changed',
+      displayState: {
+        activeTools: { call1: { name: 'view' } },
+        toolInputBuffers: {},
+        pendingSuspensions: {},
+        pendingApprovals: {},
+        activeSubagents: {},
+        modifiedFiles: { 'a.ts': { operations: [] } },
+        tasks: [],
+      },
+    });
+    const display = session.displayState.get();
+    expect(display.activeTools).toBeInstanceOf(Map);
+    expect(display.activeTools.get('call1')).toEqual({ name: 'view' });
+    expect(display.modifiedFiles.has('a.ts')).toBe(true);
+  });
+
+  it('sends signals as messages when idle and follow-ups while running', async () => {
+    const { session, remote, emit } = await connected();
+    await session.sendSignal({ type: 'user', content: 'hi' } as any).persisted;
+    expect(remote.sendMessage).toHaveBeenCalledWith('hi');
+
+    emit({ type: 'agent_start' });
+    await session.sendSignal({ type: 'user', content: 'more' } as any).persisted;
+    expect(remote.followUp).toHaveBeenCalledWith('more');
+  });
+
+  it('forwards model switches with positional args', async () => {
+    const { session, remote } = await connected();
+    await session.model.switch('openai/gpt-5', { thinkingLevel: 'high' });
+    expect(remote.switchModel).toHaveBeenCalledWith('openai/gpt-5', { thinkingLevel: 'high' });
+  });
+});
+
+describe('RemoteController', () => {
+  function controller(models: unknown[] = []) {
+    const remote = {
+      listModes: vi.fn(async () => [{ id: 'build', name: 'Build' }]),
+      listModels: vi.fn(async () => models),
+    };
+    return { controller: new RemoteController(address, remote as any), remote };
+  }
+
+  it('lists Factory modes after connect', async () => {
+    const { controller: c } = controller();
+    await c.connect();
+    expect(c.listModes()).toEqual([{ id: 'build', name: 'Build' }]);
+  });
+
+  it('caches models until invalidated', async () => {
+    const { controller: c, remote } = controller([{ id: 'a/b' }]);
+    await c.listAvailableModels();
+    await c.listAvailableModels();
+    expect(remote.listModels).toHaveBeenCalledTimes(1);
+    c.invalidateAvailableModelsCache();
+    await c.listAvailableModels();
+    expect(remote.listModels).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports Factory auth status for the current model', async () => {
+    const { controller: c } = controller([{ id: 'anthropic/x', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' }]);
+    expect(await c.getCurrentModelAuthStatus({ model: { get: () => 'anthropic/x' } })).toEqual({
+      hasAuth: false,
+      apiKeyEnvVar: 'ANTHROPIC_API_KEY',
+    });
+    expect(await c.getCurrentModelAuthStatus({ model: { get: () => 'unknown/y' } })).toEqual({ hasAuth: true });
+  });
+});

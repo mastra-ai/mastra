@@ -382,6 +382,45 @@ export interface GlobalSettings {
   mcp: McpDiscoverySettings;
   // Cloud observability configuration (per-resource project IDs; tokens stored in auth.json)
   observability: ObservabilitySettings;
+  // Remote Factory connection selected via /factory (null = run locally)
+  factory: FactoryConnectionSettings | null;
+}
+
+export interface FactoryConnectionSettings {
+  url: string;
+  orgId: string;
+  projectId: string;
+  projectName: string;
+  environmentId: string;
+  environmentName: string;
+  factoryProjectId: string;
+  factoryProjectName: string;
+  projectRepositoryId: string;
+  repositorySlug: string;
+  /** Factory user session ID; addresses the remote agent-controller session as its resourceId. */
+  sessionId: string;
+  branch: string;
+}
+
+function parseFactoryConnectionSettings(raw: unknown): FactoryConnectionSettings | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const obj = raw as Record<string, unknown>;
+  const keys = [
+    'url',
+    'orgId',
+    'projectId',
+    'projectName',
+    'environmentId',
+    'environmentName',
+    'factoryProjectId',
+    'factoryProjectName',
+    'projectRepositoryId',
+    'repositorySlug',
+    'sessionId',
+    'branch',
+  ] as const;
+  if (!keys.every(key => typeof obj[key] === 'string' && obj[key])) return null;
+  return Object.fromEntries(keys.map(key => [key, obj[key]])) as unknown as FactoryConnectionSettings;
 }
 
 export interface McpDiscoverySettings {
@@ -507,6 +546,7 @@ const DEFAULTS: GlobalSettings = {
   },
   mcp: { claudeCodeGlobal: false, codexGlobal: false },
   observability: { resources: {}, localTracing: false },
+  factory: null,
 };
 
 export const WEB_SEARCH_PROVIDER_VALUES: WebSearchProviderSetting[] = ['auto', 'tavily', 'parallel'];
@@ -1059,6 +1099,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         signals: parseSignalSettings(raw.signals),
         mcp: parseMcpDiscoverySettings(raw.mcp),
         observability: parseObservabilitySettings(raw.observability),
+        factory: parseFactoryConnectionSettings(raw.factory),
       };
       applyQuietModePreferenceRollout(settings, raw.onboarding);
     } catch {
@@ -1200,6 +1241,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       signals: parseSignalSettings(raw.signals),
       mcp: parseMcpDiscoverySettings(raw.mcp),
       observability: parseObservabilitySettings(raw.observability),
+      factory: parseFactoryConnectionSettings(raw.factory),
     };
 
     // Migrate legacy omModelId → omModelOverride

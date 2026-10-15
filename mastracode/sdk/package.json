@@ -64,6 +64,7 @@
     "@ast-grep/napi": "^0.42.0",
     "@aws-sdk/credential-providers": "^3.1095.0",
     "@mastra/agent-browser": "workspace:*",
+    "@mastra/client-js": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/duckdb": "workspace:*",
     "@mastra/fastembed": "workspace:*",
