@@ -51,6 +51,7 @@ export function BoardViewControls({
     participants,
     availableLabels,
     connectedSources,
+    selectedSources: view.filters.sources,
     linearProjects,
     currentUserId,
     teammateSelected: view.filters.participantIds.size > 0,

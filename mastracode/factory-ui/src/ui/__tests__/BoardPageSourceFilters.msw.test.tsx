@@ -134,9 +134,25 @@ describe('Board source and Linear project filters', () => {
     await user.click(screen.getByRole('combobox', { name: 'Add filter' }));
     await user.type(screen.getByRole('combobox', { name: 'Add filter' }), 'Intake source');
     await user.click(await screen.findByRole('option', { name: 'Intake source' }));
-    const options = screen.getAllByRole('option').map(option => option.textContent);
-    expect(options).toEqual(expect.arrayContaining(['GitHub', 'Linear', 'Manual']));
-    expect(options).not.toEqual(expect.arrayContaining(['GitLab', 'Jira', 'incident.io', 'Slack']));
+    expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['GitHub', 'Linear', 'Manual']);
+  });
+
+  it('keeps a saved filter on a disconnected source labelled and selectable', async () => {
+    stubSources();
+    const view = renderBoard('?source=gitlab');
+    await waitForMutationsIdle(view.client);
+    fireEvent.click(screen.getByRole('button', { name: 'Filter cards' }));
+    expect(await screen.findByText('GitLab')).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('combobox', { name: 'Add filter' }));
+    await user.type(screen.getByRole('combobox', { name: 'Add filter' }), 'Intake source');
+    await user.click(await screen.findByRole('option', { name: 'Intake source' }));
+    expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual([
+      'GitHub',
+      'GitLab',
+      'Linear',
+      'Manual',
+    ]);
   });
 
   it('offers only Manual when configured providers are disconnected', async () => {

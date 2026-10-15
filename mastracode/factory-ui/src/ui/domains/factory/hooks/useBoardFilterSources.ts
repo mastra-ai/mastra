@@ -1,4 +1,3 @@
-import { useChannelAccountsQuery } from '../../../../hooks/useChannelAccounts';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useIncidentioStatusQuery } from '../../../../hooks/useIncidentioData';
@@ -11,7 +10,6 @@ export function useBoardFilterSources() {
   const linearStatus = useLinearStatusQuery();
   const jiraStatus = useJiraStatusQuery();
   const incidentioStatus = useIncidentioStatusQuery();
-  const channelAccounts = useChannelAccountsQuery();
   const linearProjects = useLinearProjectsQuery(Boolean(linearStatus.data?.connected));
 
   const connectedSources = new Set([
@@ -20,7 +18,6 @@ export function useBoardFilterSources() {
     ...(linearStatus.data?.enabled && linearStatus.data.connected ? ['linear'] : []),
     ...(jiraStatus.data?.enabled && jiraStatus.data.configured ? ['jira'] : []),
     ...(incidentioStatus.data?.enabled && incidentioStatus.data.configured ? ['incidentio'] : []),
-    ...(channelAccounts.data?.accounts.some(account => account.platform === 'slack') ? ['slack'] : []),
   ]);
 
   return { connectedSources, linearProjects: linearProjects.data };

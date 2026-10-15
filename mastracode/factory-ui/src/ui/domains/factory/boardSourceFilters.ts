@@ -8,7 +8,6 @@ export const BOARD_SOURCE_OPTIONS = [
   { value: 'linear', label: 'Linear' },
   { value: 'jira', label: 'Jira' },
   { value: 'incidentio', label: 'incident.io' },
-  { value: 'slack', label: 'Slack' },
   { value: 'manual', label: 'Manual' },
 ];
 

@@ -25,6 +25,7 @@ interface BoardFilterFieldsOptions {
   currentUserId?: string;
   teammateSelected: boolean;
   connectedSources?: ReadonlySet<string>;
+  selectedSources?: ReadonlySet<string>;
   linearProjects?: readonly LinearProject[];
 }
 
@@ -35,6 +36,7 @@ export function boardFilterFields({
   currentUserId,
   teammateSelected,
   connectedSources,
+  selectedSources,
   linearProjects = [],
 }: BoardFilterFieldsOptions): FilterBarField[] {
   return [
@@ -44,8 +46,10 @@ export function boardFilterFields({
       icon: Inbox,
       operators: ['in'],
       strict: true,
+      // Keep already-selected sources so saved views still label and edit them after a provider disconnects.
       suggestions: BOARD_SOURCE_OPTIONS.filter(
-        option => option.value === 'manual' || connectedSources?.has(option.value),
+        option =>
+          option.value === 'manual' || connectedSources?.has(option.value) || selectedSources?.has(option.value),
       ),
     },
     {
