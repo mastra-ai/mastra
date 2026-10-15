@@ -47,6 +47,7 @@ import {
 } from './auth.js';
 import { createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
+import { boardForWorkItem } from './boards/semantics.js';
 import { EnvironmentBuildRunner } from './environment/build-runner.js';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from './environment/build-workflow.js';
 import { touchFeed } from './feed-events.js';
@@ -1218,6 +1219,41 @@ export class MastraFactory {
                         const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
                         return project?.reviewTestChecksEnabled ?? true;
                       },
+                      ...(workItemsStorage
+                        ? {
+                            selfReviewApprovedHead: async () => {
+                              const resolution = await resolveFactorySessionAddress({
+                                requestContext,
+                                storage: workItemsStorage,
+                              });
+                              if (!resolution) return undefined;
+                              const binding =
+                                resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
+                              if (!binding) return undefined;
+                              const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
+                              if (!item || boardForWorkItem(item) !== 'work') return undefined;
+                              if (typeof item.metadata?.openPullRequestNumber === 'number') return undefined;
+                              const sha = item.metadata?.selfReviewedHeadSha;
+                              return item.metadata?.selfReviewVerdict === 'approve' && typeof sha === 'string'
+                                ? sha
+                                : null;
+                            },
+                            boundChangeRequestId: async () => {
+                              const resolution = await resolveFactorySessionAddress({
+                                requestContext,
+                                storage: workItemsStorage,
+                              });
+                              if (!resolution) return undefined;
+                              const binding =
+                                resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
+                              if (binding?.role !== 'review') return undefined;
+                              const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
+                              const source = item?.externalSource;
+                              if (!source || !/pull-request|merge-request/.test(source.type)) return undefined;
+                              return /(\d+)$/.exec(source.externalId)?.[1];
+                            },
+                          }
+                        : {}),
                     }),
                   );
                 }

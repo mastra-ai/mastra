@@ -218,6 +218,50 @@ describe('createSourceControlTools', () => {
     );
   });
 
+  describe('self-review gate', () => {
+    const approved = 'a'.repeat(40);
+    const gated = async (approvedHead: string | null, branchHead = approved) => {
+      const setup = await fixture();
+      const tools = await createSourceControlTools({
+        requestContext: requestContext(),
+        providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
+        audit: setup.audit,
+        selfReviewApprovedHead: async () => approvedHead,
+      });
+      const sandbox = {
+        id: 'sandbox-1',
+        provider: 'custom',
+        workingDirectory: '/home/user',
+        executeCommand: vi.fn(async (_command: string, args: string[]) => ({
+          exitCode: 0,
+          stdout: args.includes('rev-parse') ? `${branchHead}\n` : '',
+          stderr: '',
+        })),
+      };
+      const run = () =>
+        (tools.source_control_create_change_request!.execute as any)({ title: 'Ship it' }, { workspace: { sandbox } });
+      return { setup, run };
+    };
+
+    it('refuses to open a change request before self-review approves', async () => {
+      const { setup, run } = await gated(null);
+      await expect(run()).rejects.toThrow('Self-review has not approved');
+      expect(setup.createPullRequest).not.toHaveBeenCalled();
+    });
+
+    it('refuses when the branch moved past the approved head', async () => {
+      const { setup, run } = await gated(approved, 'b'.repeat(40));
+      await expect(run()).rejects.toThrow('back to Self-review');
+      expect(setup.createPullRequest).not.toHaveBeenCalled();
+    });
+
+    it('opens the change request from the approved head', async () => {
+      const { setup, run } = await gated(approved);
+      await expect(run()).resolves.toMatchObject({ id: '17' });
+      expect(setup.createPullRequest).toHaveBeenCalled();
+    });
+  });
+
   it('creates brokered diff discussions and replies without accepting repository credentials', async () => {
     const setup = await fixture();
     const tools = await createSourceControlTools({
@@ -872,6 +916,7 @@ describe('createSourceControlTools', () => {
         publishCommitCheck?: unknown;
         pullRequest?: unknown;
         testChecksEnabled?: (input: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
+        boundChangeRequestId?: () => Promise<string | undefined>;
       } = {},
     ) {
       const setup = await fixture();
@@ -894,6 +939,7 @@ describe('createSourceControlTools', () => {
         providers: [{ id: 'gitlab', storage: setup.storage, versionControl }],
         audit: setup.audit,
         ...(overrides.testChecksEnabled ? { testChecksEnabled: overrides.testChecksEnabled } : {}),
+        ...(overrides.boundChangeRequestId ? { boundChangeRequestId: overrides.boundChangeRequestId } : {}),
       });
       const tool = tools.source_control_publish_test_check!;
       return {
@@ -917,6 +963,17 @@ describe('createSourceControlTools', () => {
       await expect(run()).rejects.toThrow(/turned off for this Factory project/);
       expect(testChecksEnabled).toHaveBeenCalledWith({ orgId: expect.any(String), factoryProjectId: 'project-1' });
       expect(publishCommitCheck).not.toHaveBeenCalled();
+    });
+
+    it('refuses to publish on a change request other than the one the session reviews', async () => {
+      const { run, publishCommitCheck } = await publish({}, { boundChangeRequestId: async () => '18' });
+      await expect(run()).rejects.toThrow(/reviews change request 18, not 17/);
+      expect(publishCommitCheck).not.toHaveBeenCalled();
+    });
+
+    it('publishes on the change request the session reviews', async () => {
+      const { run } = await publish({}, { boundChangeRequestId: async () => '17' });
+      await expect(run()).resolves.toMatchObject({ id: '9' });
     });
 
     it('publishes when the project keeps test checks on', async () => {

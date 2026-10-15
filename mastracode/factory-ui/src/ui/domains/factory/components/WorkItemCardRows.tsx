@@ -48,7 +48,12 @@ export function WorkItemCardRows({
 }) {
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const external = knownExternalAuthor(item);
-  const verdict = columnStage === 'review' ? reviewVerdict(item.metadata) : undefined;
+  const verdict =
+    columnStage === 'review'
+      ? (reviewVerdict(item.metadata) ?? selfReviewVerdict(item.metadata))
+      : columnStage === 'execute'
+        ? selfReviewVerdict(item.metadata)
+        : undefined;
 
   return (
     <>
@@ -143,4 +148,18 @@ export function reviewVerdict(
   const outdated = reviewed !== undefined && head !== undefined && reviewed.toLowerCase() !== head.toLowerCase();
   const label = `${verdict === 'approve' ? 'Approved' : 'Changes requested'}${outdated ? ' (outdated)' : ''}`;
   return { approved: verdict === 'approve' && !outdated, outdated, label };
+}
+
+/**
+ * The last self-review verdict on a Work card, with the round count, shown while the
+ * branch moves between Building and Review before any change request exists.
+ */
+export function selfReviewVerdict(
+  metadata: Record<string, unknown>,
+): { approved: boolean; outdated: boolean; label: string } | undefined {
+  const verdict = metadata.selfReviewVerdict;
+  if (verdict !== 'approve' && verdict !== 'request changes') return undefined;
+  const rounds = typeof metadata.selfReviewRounds === 'number' ? metadata.selfReviewRounds : 0;
+  const label = `Self-review: ${verdict === 'approve' ? 'approved' : 'changes requested'}${rounds > 0 ? ` (round ${rounds})` : ''}`;
+  return { approved: verdict === 'approve', outdated: false, label };
 }

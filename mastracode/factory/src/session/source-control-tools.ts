@@ -240,12 +240,22 @@ export async function createSourceControlTools({
   providers,
   audit,
   testChecksEnabled,
+  selfReviewApprovedHead,
+  boundChangeRequestId,
 }: {
   requestContext: RequestContext;
   providers: readonly SourceControlToolProvider[];
   audit: AuditAgentEmitter;
   /** Per-project opt-out for `source_control_publish_test_check`. Publishing is allowed when omitted. */
   testChecksEnabled?: (input: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
+  /**
+   * Self-review gate for opening a change request. `undefined` means the session
+   * is not gated (no Work item, or its change request predates Self-review);
+   * `null` means Self-review has not approved; a SHA is the approved head.
+   */
+  selfReviewApprovedHead?: () => Promise<string | null | undefined>;
+  /** The change request a Review-bound session reviews; test checks may only target it. */
+  boundChangeRequestId?: () => Promise<string | undefined>;
 }): Promise<IntegrationTools> {
   if (!requestContext || typeof (requestContext as { get?: unknown }).get !== 'function') return {};
   const controller = requestContext.get('controller') as
@@ -374,8 +384,25 @@ export async function createSourceControlTools({
         body: z.string().optional(),
         draft: z.boolean().optional(),
       }),
-      execute: async input => {
+      execute: async (input, execution) => {
         const target = await targetFor(input);
+        const approvedHead = target.ownRepository ? await selfReviewApprovedHead?.() : undefined;
+        if (approvedHead === null) {
+          throw new Error(
+            'Self-review has not approved this branch. Move the work item to Self-review; the change request opens after it approves.',
+          );
+        }
+        if (approvedHead !== undefined) {
+          const sandbox = executableSandbox(execution?.workspace?.sandbox);
+          const workdir = await resolveSessionWorkdir(target.session.id, sandbox, target.repository.slug);
+          const head = await sandbox.executeCommand('git', ['-C', workdir, 'rev-parse', target.session.branch]);
+          const headSha = head.exitCode === 0 ? head.stdout.trim().toLowerCase() : '';
+          if (headSha !== approvedHead.toLowerCase()) {
+            throw new Error(
+              `Self-review approved ${approvedHead}, but the branch is at ${headSha || 'an unknown commit'}. Move the work item back to Self-review to review the new commits.`,
+            );
+          }
+        }
         const baseBranch = target.ownRepository
           ? target.session.baseBranch
           : (target.projectRepository.branch ?? target.repository.defaultBranch);
@@ -703,6 +730,12 @@ export async function createSourceControlTools({
         const publishCommitCheck = target.provider.versionControl.publishCommitCheck;
         if (!publishCommitCheck) {
           throw new Error(`${target.provider.id} does not support publishing commit checks; nothing was published.`);
+        }
+        const bound = await boundChangeRequestId?.();
+        if (bound !== undefined && bound !== changeRequestId(input.changeRequestId)) {
+          throw new Error(
+            `This session reviews change request ${bound}, not ${input.changeRequestId}; nothing was published.`,
+          );
         }
         const ref = await reference(target);
         const pullRequest = await target.provider.versionControl.getPullRequest({

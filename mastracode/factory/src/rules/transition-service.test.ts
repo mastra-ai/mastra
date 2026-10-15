@@ -1446,7 +1446,7 @@ describe('FactoryTransitionService', () => {
 
     expect(result).toMatchObject({
       status: 'accepted',
-      decisions: [{ type: 'sendMessage', role: 'work', prepareBinding: true }],
+      decisions: [{ type: 'invokeSkill', role: 'review', skillName: 'factory-self-review' }],
     });
   });
 
@@ -2003,7 +2003,7 @@ describe('phase semantics', () => {
     ['triage', 'triage'],
     ['planning', 'plan'],
     ['execute', 'work'],
-    ['review', 'work'],
+    ['review', 'review'],
   ] as const)('seats a human kickoff into Work %s with the %s role', async (stage, role) => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['intake'] });

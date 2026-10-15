@@ -102,6 +102,7 @@ export const FACTORY_SKILL_NAMES = new Set([
   'factory-plan',
   'factory-rereview',
   'factory-review',
+  'factory-self-review',
   'factory-triage',
 ]);
 
@@ -111,6 +112,7 @@ export const REVIEW_ONLY_FACTORY_SKILLS = new Set([
   'factory-gitlab-review',
   'factory-rereview',
   'factory-review',
+  'factory-self-review',
 ]);
 
 /**
