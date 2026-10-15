@@ -97,8 +97,24 @@ function plainText(node: React.ReactNode) {
 }
 
 /** The info icon after a label. Outside the `<label>`, so hovering or clicking it never focuses the field. */
-function FieldLabelInfo({ children, label }: { children: React.ReactNode; label: React.ReactNode }) {
+function FieldLabelInfo({
+  children,
+  label,
+  labelId,
+}: {
+  children: React.ReactNode;
+  label: React.ReactNode;
+  labelId?: string;
+}) {
+  const aboutId = React.useId();
   const labelText = plainText(label);
+  // A label with elements in it has no plain text to build a name from, so the name is read from
+  // the rendered label instead, as "About <label>".
+  const name = labelText
+    ? { 'aria-label': `About ${labelText}` }
+    : labelId
+      ? { 'aria-labelledby': `${aboutId} ${labelId}` }
+      : { 'aria-label': 'About this field' };
 
   return (
     <Tooltip>
@@ -106,7 +122,7 @@ function FieldLabelInfo({ children, label }: { children: React.ReactNode; label:
         render={
           <button
             type="button"
-            aria-label={labelText ? `About ${labelText}` : 'About this field'}
+            {...name}
             // A step quieter than the placeholder grey at rest, so it reads as a hint, not a control.
             className={cn(
               'flex cursor-help items-center rounded-full text-placeholder/80 hover:text-muted-foreground focus-visible:text-muted-foreground',
@@ -123,6 +139,11 @@ function FieldLabelInfo({ children, label }: { children: React.ReactNode; label:
       <TooltipContent side="top" className="max-w-64">
         {children}
       </TooltipContent>
+      {name['aria-labelledby'] ? (
+        <span id={aboutId} hidden>
+          About
+        </span>
+      ) : null}
     </Tooltip>
   );
 }
@@ -169,7 +190,9 @@ function FieldLabel({
   return (
     <span data-slot="field-label-row" className="flex w-fit items-center gap-1">
       {label}
-      <FieldLabelInfo label={children}>{info}</FieldLabelInfo>
+      <FieldLabelInfo label={children} labelId={field?.labelId}>
+        {info}
+      </FieldLabelInfo>
     </span>
   );
 }
