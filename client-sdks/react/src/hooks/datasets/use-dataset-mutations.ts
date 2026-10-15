@@ -13,6 +13,7 @@ import type {
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
 import type { MastraMutationOptions } from '../shared/query-options';
+import { datasetQueryOptions } from './use-datasets';
 
 type DatasetItemMutationVariables = {
   datasetId: string;
@@ -67,7 +68,7 @@ export const useDatasetMutations = ({ queryOptions }: { queryOptions?: DatasetMu
     mutationFn: (params: UpdateDatasetParams) => client.updateDataset(params),
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['datasets'] });
-      void queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
+      void queryClient.invalidateQueries({ queryKey: datasetQueryOptions(client, variables.datasetId).queryKey });
     },
     ...queryOptions?.updateDataset,
   });
@@ -84,7 +85,7 @@ export const useDatasetMutations = ({ queryOptions }: { queryOptions?: DatasetMu
     mutationFn: (params: AddDatasetItemParams) => client.addDatasetItem(params),
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
-      void queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
+      void queryClient.invalidateQueries({ queryKey: datasetQueryOptions(client, variables.datasetId).queryKey });
       void queryClient.invalidateQueries({ queryKey: ['dataset-versions', variables.datasetId] });
     },
     ...queryOptions?.addItem,
@@ -107,7 +108,7 @@ export const useDatasetMutations = ({ queryOptions }: { queryOptions?: DatasetMu
     mutationFn: ({ datasetId, itemId }: DatasetItemMutationVariables) => client.deleteDatasetItem(datasetId, itemId),
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
-      void queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
+      void queryClient.invalidateQueries({ queryKey: datasetQueryOptions(client, variables.datasetId).queryKey });
       void queryClient.invalidateQueries({ queryKey: ['dataset-versions', variables.datasetId] });
     },
     ...queryOptions?.deleteItem,
@@ -136,7 +137,7 @@ export const useDatasetMutations = ({ queryOptions }: { queryOptions?: DatasetMu
     mutationFn: (params: BatchInsertDatasetItemsParams) => client.batchInsertDatasetItems(params),
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
-      void queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
+      void queryClient.invalidateQueries({ queryKey: datasetQueryOptions(client, variables.datasetId).queryKey });
       void queryClient.invalidateQueries({ queryKey: ['dataset-versions', variables.datasetId] });
     },
     ...queryOptions?.batchInsertItems,
@@ -147,7 +148,7 @@ export const useDatasetMutations = ({ queryOptions }: { queryOptions?: DatasetMu
     mutationFn: (params: BatchDeleteDatasetItemsParams) => client.batchDeleteDatasetItems(params),
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
-      void queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
+      void queryClient.invalidateQueries({ queryKey: datasetQueryOptions(client, variables.datasetId).queryKey });
       void queryClient.invalidateQueries({ queryKey: ['dataset-versions', variables.datasetId] });
     },
     ...queryOptions?.batchDeleteItems,
@@ -160,7 +161,7 @@ export const useDatasetMutations = ({ queryOptions }: { queryOptions?: DatasetMu
     },
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
-      void queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
+      void queryClient.invalidateQueries({ queryKey: datasetQueryOptions(client, variables.datasetId).queryKey });
       void queryClient.invalidateQueries({ queryKey: ['dataset-versions', variables.datasetId] });
     },
     ...queryOptions?.deleteItems,
