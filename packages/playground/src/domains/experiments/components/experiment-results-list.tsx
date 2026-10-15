@@ -141,7 +141,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
   }
 
   return (
-    <DataList columns={gridColumns} className="min-w-0" scrollRef={containerRef} fit="container">
+    <DataList columns={gridColumns} className="min-w-0" scrollRef={containerRef}>
       <DataList.Top hasLeadingCell={hasSelection}>
         {hasSelection &&
           (onToggleSelectAll ? (

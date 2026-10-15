@@ -38,7 +38,7 @@ import { BulkTagPicker } from '@/domains/shared/components/bulk-tag-picker';
 
 const REVIEW_LIST_COLUMNS = [
   { name: 'itemId', label: 'Item ID', size: 'auto' },
-  { name: 'input', label: 'Input', size: 'minmax(0,1fr)' },
+  { name: 'input', label: 'Input', size: '20rem' },
   { name: 'tags', label: 'Tags', size: 'auto' },
   { name: 'scores', label: 'Scores', size: '6rem' },
 ];
