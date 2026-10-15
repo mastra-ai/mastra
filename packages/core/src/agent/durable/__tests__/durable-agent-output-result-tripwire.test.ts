@@ -73,4 +73,46 @@ describe('DurableAgent processOutputResult abort', () => {
     expect(messages.filter(m => m.role === 'assistant')).toHaveLength(0);
     cleanup();
   });
+
+  it('exposes tripwire and finishReason on the stream result (#27170)', async () => {
+    const agent = new Agent({
+      id: 'gate-agent',
+      name: 'Gate Agent',
+      instructions: 'test',
+      model: createModel() as LanguageModelV2,
+      outputProcessors: [gate],
+    });
+    const durableAgent = createDurableAgent({ agent, pubsub });
+    new Mastra({ agents: { 'gate-agent': durableAgent as any }, logger: false, storage: new InMemoryStore(), pubsub });
+
+    const result = await durableAgent.stream('hi');
+    for await (const _ of result.fullStream) {
+      // drain
+    }
+    expect(result.tripwire).toMatchObject({ reason: 'rejected by gate', processorId: 'gate' });
+    expect(await result.finishReason).toBe('other');
+    result.cleanup();
+  });
+});
+
+describe('Agent processOutputResult abort stream (#27170)', () => {
+  it('ends fullStream with a tripwire chunk and no finish chunk', async () => {
+    const agent = new Agent({
+      id: 'plain-gate-agent',
+      name: 'Plain Gate Agent',
+      instructions: 'test',
+      model: createModel() as LanguageModelV2,
+      outputProcessors: [gate],
+    });
+
+    const result = await agent.stream('hi');
+    const chunks: any[] = [];
+    for await (const chunk of result.fullStream) chunks.push(chunk);
+
+    expect(chunks.some(c => c.type === 'finish')).toBe(false);
+    expect(chunks.at(-1)?.type).toBe('tripwire');
+    expect(chunks.at(-1)?.payload).toMatchObject({ reason: 'rejected by gate', processorId: 'gate' });
+    expect(result.tripwire).toMatchObject({ reason: 'rejected by gate', processorId: 'gate' });
+    expect(await result.finishReason).toBe('other');
+  });
 });

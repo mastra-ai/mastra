@@ -1654,6 +1654,28 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               }
 
               self.#closeTransportIfNeeded();
+
+              // A processOutputResult tripwire rejects the turn: end the stream with a
+              // `tripwire` chunk instead of the `finish` chunk, as other tripwires do (#26142).
+              if (outputResultTripwire) {
+                if (self.#status !== 'failed' && self.#status !== 'canceled') {
+                  self.#status = 'tripwire';
+                }
+                const tripwireChunk = {
+                  type: 'tripwire',
+                  runId: chunk.runId,
+                  from: chunk.from,
+                  payload: {
+                    reason: outputResultTripwire.reason,
+                    retry: outputResultTripwire.retry,
+                    metadata: outputResultTripwire.metadata,
+                    processorId: outputResultTripwire.processorId,
+                  },
+                } as ChunkType<OUTPUT>;
+                self.#emitChunk(tripwireChunk);
+                controller.enqueue(tripwireChunk);
+                return;
+              }
               break;
 
             case 'goal':

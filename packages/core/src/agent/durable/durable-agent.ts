@@ -404,6 +404,10 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
   output: MastraModelOutput<OUTPUT>;
   /** The full stream - delegates to output.fullStream for server compatibility */
   readonly fullStream: ReadableStream<any>;
+  /** Tripwire data when a processor rejected the run - delegates to output.tripwire */
+  readonly tripwire: MastraModelOutput<OUTPUT>['tripwire'];
+  /** The run finish reason - delegates to output.finishReason */
+  readonly finishReason: MastraModelOutput<OUTPUT>['finishReason'];
   /** The unique run ID for this execution */
   runId: string;
   /** Thread ID if using memory */
@@ -2988,6 +2992,12 @@ export class DurableAgent<
       get fullStream() {
         return output.fullStream as ReadableStream<any>;
       },
+      get tripwire() {
+        return output.tripwire;
+      },
+      get finishReason() {
+        return output.finishReason;
+      },
       runId,
       threadId,
       resourceId,
@@ -3663,6 +3673,12 @@ export class DurableAgent<
       get fullStream() {
         return output.fullStream as ReadableStream<any>;
       },
+      get tripwire() {
+        return output.tripwire;
+      },
+      get finishReason() {
+        return output.finishReason;
+      },
       runId,
       threadId: memoryInfo?.threadId,
       resourceId: memoryInfo?.resourceId,
@@ -4056,6 +4072,12 @@ export class DurableAgent<
       output,
       get fullStream() {
         return output.fullStream as ReadableStream<any>;
+      },
+      get tripwire() {
+        return output.tripwire;
+      },
+      get finishReason() {
+        return output.finishReason;
       },
       runId,
       threadId,
@@ -5026,6 +5048,12 @@ export class DurableAgent<
       output,
       get fullStream() {
         return output.fullStream as ReadableStream<any>;
+      },
+      get tripwire() {
+        return output.tripwire;
+      },
+      get finishReason() {
+        return output.finishReason;
       },
       runId,
       threadId: memoryInfo?.threadId,
