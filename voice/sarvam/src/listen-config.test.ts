@@ -15,6 +15,8 @@ vi.mock('@internal/voice', () => ({
   },
 }));
 
+// Default keys are read from the environment at import time; keep them out so key fallbacks are deterministic.
+delete process.env.SARVAM_API_KEY;
 const { SarvamVoice } = await import('./index');
 
 async function sentForm(voice: InstanceType<typeof SarvamVoice>, options?: Record<string, any>) {
@@ -153,5 +155,14 @@ describe('SarvamVoice API keys', () => {
     await voice.speak('hi');
     const headers = (fetchMock.mock.calls[0]![1] as RequestInit).headers as Headers;
     expect(headers.get('api-subscription-key')).toBe('tts-key');
+  });
+
+  it('speak() falls back to the listening model API key', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ audios: ['UklGRg=='] }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const voice = new SarvamVoice({ listeningModel: { apiKey: 'stt-key' } });
+    await voice.speak('hi');
+    const headers = (fetchMock.mock.calls[0]![1] as RequestInit).headers as Headers;
+    expect(headers.get('api-subscription-key')).toBe('stt-key');
   });
 });
