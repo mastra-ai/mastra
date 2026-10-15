@@ -7,6 +7,7 @@ import type { FilterBarExpression, FilterBarItem } from '@mastra/playground-ui/c
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import {
   useFeedbackAvailable,
+  useTraceAggregateAvailable,
   useTraceQueryAvailable,
   useTraceQueryDiscoveryAvailable,
   useTraceQueryRootDurationAvailable,
@@ -25,10 +26,13 @@ import {
   TraceTimeRangeChip,
 } from '@mastra/playground-ui/domains/traces/components/trace-time-range-chip';
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
+import { TracesGroupByMenu } from '@mastra/playground-ui/domains/traces/components/traces-group-by-menu';
+import { TracesGroupedView } from '@mastra/playground-ui/domains/traces/components/traces-grouped-view';
 import { TracesListView } from '@mastra/playground-ui/domains/traces/components/traces-list-view';
 import { TracesPageSkeleton } from '@mastra/playground-ui/domains/traces/components/traces-page-skeleton';
 import { useTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/hooks/use-trace-column-preferences';
 import { useTraceFilterPersistence } from '@mastra/playground-ui/domains/traces/hooks/use-trace-filter-persistence';
+import { useTraceGroupBy } from '@mastra/playground-ui/domains/traces/hooks/use-trace-group-by';
 import { useTraceListNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-list-navigation';
 import { useTraceUrlState } from '@mastra/playground-ui/domains/traces/hooks/use-trace-url-state';
 import { useTracesListSource } from '@mastra/playground-ui/domains/traces/hooks/use-traces-list-source';
@@ -42,6 +46,7 @@ import {
   traceFiltersToFilterBarExpression,
   traceTokensToFilterBarItems,
 } from '@mastra/playground-ui/domains/traces/trace-filters';
+import { getOfferedTraceGroupByDimensions } from '@mastra/playground-ui/domains/traces/trace-group-by';
 import { hasTraceUsageColumn, isTraceUsageColumn } from '@mastra/playground-ui/domains/traces/trace-list-columns';
 import {
   buildTraceQueryRequest,
@@ -225,6 +230,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const {
     fields: metadataFields,
     canonicalFields: canonicalTraceFields,
+    aggregate: aggregateDiscovery,
     isLoading: isDiscoveryLoading,
   } = useTraceMetadataFilterFields({
     timeRange: discoveryTimeRange,
@@ -313,6 +319,32 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     [filterBarItems, filterBarValue, handleFilterBarChange],
   );
 
+  const buildListQuery = (now: Date) =>
+    buildTraceQueryRequest({
+      rootEntityType: url.selectedEntityOption?.entityType,
+      status: url.selectedStatus,
+      dateFrom: url.selectedDateFrom,
+      dateTo: url.selectedDateTo,
+      tokens: url.filterTokens,
+      groups: url.filterGroups,
+      excludedFieldIds: withRootDuration ? undefined : ROOT_DURATION_FIELD_IDS,
+      now,
+    });
+
+  // Grouping counts the same selection as the list. The scoped tabs (one agent or workflow) don't offer it.
+  const withGroupBy = useTraceAggregateAvailable().enabled && !isScoped;
+  const groupByDimensions = useMemo(
+    () => getOfferedTraceGroupByDimensions({ discovery: aggregateDiscovery }),
+    [aggregateDiscovery],
+  );
+  const groups = useTraceGroupBy({
+    searchParams,
+    setSearchParams: setPersistedSearchParams,
+    dimensions: groupByDimensions,
+    query: buildListQuery,
+    enabled: withGroupBy,
+  });
+
   const {
     rows: traces,
     isLoading: isTracesLoading,
@@ -324,20 +356,10 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     setAutoRefetch: setAutoRefetchTraces,
   } = useTracesListSource({
     rolling: !url.selectedDateTo,
-    query: now =>
-      buildTraceQueryRequest({
-        rootEntityType: url.selectedEntityOption?.entityType,
-        status: url.selectedStatus,
-        dateFrom: url.selectedDateFrom,
-        dateTo: url.selectedDateTo,
-        tokens: url.filterTokens,
-        groups: url.filterGroups,
-        excludedFieldIds: withRootDuration ? undefined : ROOT_DURATION_FIELD_IDS,
-        now,
-      }),
+    query: buildListQuery,
     orderBy: [{ field: 'startedAt', direction: sortDirection }],
     withQueryTrace,
-    enabled: !traceQuery.isLoading,
+    enabled: !traceQuery.isLoading && !groups.groupBy,
     legacyFilters: buildTraceListFilters({
       rootEntityType: url.selectedEntityOption?.entityType,
       status: url.selectedStatus,
@@ -436,22 +458,33 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         </FilterBar>
       </ActionRow.Start>
       <ActionRow.End>
-        <TraceColumnsMenu
-          preferences={traceColumns.preferences}
-          availableMetadataKeys={availableMetadataKeys}
-          usageDisabledReason={usageDisabledReason}
-          withQueryTrace={withQueryTrace}
-          onToggleColumn={traceColumns.toggleColumn}
-          onAddCustomColumn={traceColumns.addCustomColumn}
-          onRemoveCustomColumn={traceColumns.removeCustomColumn}
-          onAddMetadataColumn={traceColumns.addMetadataColumn}
-          onRemoveMetadataColumn={traceColumns.removeMetadataColumn}
-          onReset={traceColumns.resetColumns}
-        />
-        <Field orientation="horizontal" disabled={isTracesLoading}>
-          <Checkbox checked={autoRefetchTraces} onCheckedChange={checked => setAutoRefetchTraces(checked === true)} />
-          <FieldLabel>Auto refresh</FieldLabel>
-        </Field>
+        {withGroupBy && (
+          <TracesGroupByMenu value={groups.groupBy} dimensions={groupByDimensions} onChange={groups.setGroupBy} />
+        )}
+        {/* The grouped view has fixed columns and doesn't poll. */}
+        {!groups.groupBy && (
+          <>
+            <TraceColumnsMenu
+              preferences={traceColumns.preferences}
+              availableMetadataKeys={availableMetadataKeys}
+              usageDisabledReason={usageDisabledReason}
+              withQueryTrace={withQueryTrace}
+              onToggleColumn={traceColumns.toggleColumn}
+              onAddCustomColumn={traceColumns.addCustomColumn}
+              onRemoveCustomColumn={traceColumns.removeCustomColumn}
+              onAddMetadataColumn={traceColumns.addMetadataColumn}
+              onRemoveMetadataColumn={traceColumns.removeMetadataColumn}
+              onReset={traceColumns.resetColumns}
+            />
+            <Field orientation="horizontal" disabled={isTracesLoading}>
+              <Checkbox
+                checked={autoRefetchTraces}
+                onCheckedChange={checked => setAutoRefetchTraces(checked === true)}
+              />
+              <FieldLabel>Auto refresh</FieldLabel>
+            </Field>
+          </>
+        )}
       </ActionRow.End>
     </ActionRow>
   );
@@ -466,6 +499,32 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         <div>
           <TracesPageSkeleton columnPreferences={displayedColumnPreferences} />
         </div>
+      </PageLayout>
+    );
+  }
+
+  if (groups.groupBy) {
+    return (
+      <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
+        <h1 className="sr-only">Traces</h1>
+        {groups.error ? (
+          <div className="flex h-full items-center justify-center">
+            <TracesErrorContent error={groups.error} resource="traces" errorTitle="Failed to group traces" />
+          </div>
+        ) : (
+          <TracesGroupedView
+            dimension={groups.groupBy}
+            rows={groups.rows}
+            truncated={groups.truncated}
+            isLoading={groups.isLoading}
+            filtersApplied={filtersApplied}
+            sort={groups.sort}
+            onSortChange={groups.setSort}
+            onDrillDown={drillDown => {
+              if (drillDown.kind === 'filter') groups.applyFilterDrillDown(drillDown);
+            }}
+          />
+        )}
       </PageLayout>
     );
   }

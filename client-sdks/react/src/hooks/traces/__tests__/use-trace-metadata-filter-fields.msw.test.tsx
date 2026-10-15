@@ -9,7 +9,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { MastraReactProvider } from '../../../mastra-react-provider';
 import { server } from '../../../test/msw-server';
 import { useTraceMetadataFilterFields } from '../use-trace-metadata-filter-fields';
-import { traceQueryFieldsFixture, traceQueryValuesFixture } from './fixtures/trace-query-discovery';
+import {
+  traceQueryFieldsFixture,
+  traceQueryFieldsWithAggregateFixture,
+  traceQueryValuesFixture,
+} from './fixtures/trace-query-discovery';
 
 const BASE_URL = 'http://localhost:4111';
 const FIELDS_URL = `${BASE_URL}/api/observability/traces/query/fields`;
@@ -138,6 +142,30 @@ describe('useTraceMetadataFilterFields', () => {
       );
 
       expect(result.current.canonicalFields).toEqual([]);
+    });
+  });
+
+  describe('when the server reports what it can group by', () => {
+    it('returns the aggregate dimensions alongside the filter fields', async () => {
+      server.use(http.post(FIELDS_URL, () => HttpResponse.json(traceQueryFieldsWithAggregateFixture)));
+
+      const { result } = renderHook(() => useTraceMetadataFilterFields({ timeRange }), {
+        wrapper: makeWrapper(newQueryClient()),
+      });
+
+      await waitFor(() => expect(result.current.aggregate).toBeDefined());
+      expect(result.current.aggregate?.dimensions.map(dimension => dimension.path)).toEqual(['entityName', 'status']);
+    });
+
+    it('leaves aggregate undefined for servers without aggregation', async () => {
+      server.use(http.post(FIELDS_URL, () => HttpResponse.json(traceQueryFieldsFixture)));
+
+      const { result } = renderHook(() => useTraceMetadataFilterFields({ timeRange }), {
+        wrapper: makeWrapper(newQueryClient()),
+      });
+
+      await waitFor(() => expect(result.current.fields).toHaveLength(2));
+      expect(result.current.aggregate).toBeUndefined();
     });
   });
 

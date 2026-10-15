@@ -110,5 +110,8 @@ export const useTraceMetadataFilterFields = ({
     [observedFields, client, timeRange],
   );
 
-  return { fields, canonicalFields, isLoading: query.isLoading, error: query.error };
+  // Present only when the server supports aggregation and reports what it can group by.
+  const aggregate = query.data?.aggregate;
+
+  return { fields, canonicalFields, aggregate, isLoading: query.isLoading, error: query.error };
 };

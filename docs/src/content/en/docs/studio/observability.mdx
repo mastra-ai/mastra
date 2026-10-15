@@ -1,9 +1,9 @@
 ---
-title: "Observability | Studio"
-description: "Monitor Mastra agents, workflows, tools, and model calls in Studio with metrics dashboards, hierarchical traces, and searchable correlated logs."
+title: 'Observability | Studio'
+description: 'Monitor Mastra agents, workflows, tools, and model calls in Studio with metrics dashboards, hierarchical traces, and searchable correlated logs.'
 packages:
-  - "@mastra/core"
-  - "@mastra/observability"
+  - '@mastra/core'
+  - '@mastra/observability'
 ---
 
 # Studio observability
@@ -91,6 +91,8 @@ When you run an agent or workflow, the Observability tab displays traces that hi
 Above the trace list, open **Columns** to show or hide input, entity, duration, input token, output token, estimated cost, and custom metadata columns. To display custom metadata, add the top-level key used in `tracingOptions.metadata`. Studio saves the selection in browser storage for the current Mastra server and API prefix.
 
 Token and estimated cost columns require an observability store that supports metrics. These columns stay hidden in the **Branches** view because several branch rows can belong to the same trace.
+
+Open **Group by** to summarize the filtered traces by agent or workflow, status, environment, or entity type. Each row shows the trace count, error rate, p50 and p95 duration, input and output tokens, and cost for one group, and you can sort by any of these columns. Select a row to filter the trace list to that group. Studio shows the 50 largest groups and says when more exist. **Group by** appears only when your observability store supports [trace aggregation](/reference/client-js/observability#aggregate-traces).
 
 Tracing filters out low-level framework details so your traces stay focused and readable. Visit [Traces usage](/docs/observability/tracing/overview) for more details.
 

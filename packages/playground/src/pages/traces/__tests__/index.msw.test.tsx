@@ -1,4 +1,4 @@
-import type { GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
+import type { AggregateTracesArgs, GetObservabilityCapabilitiesResponse, QueryTracesInput } from '@mastra/client-js';
 import { EntityType } from '@mastra/core/observability';
 import { serializeTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/trace-list-columns';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -7,7 +7,11 @@ import { useLocation } from 'react-router';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import TracesPage from '..';
 import {
+  aggregateByEntityName,
   emptyTraceQueryFields,
+  groupedTraceQueryPage,
+  traceAggregateCapabilities,
+  traceQueryFieldsWithAggregate,
   legacyTraceCapabilities,
   noFeedbackCapabilities,
   noRootDurationCapabilities,
@@ -1768,6 +1772,117 @@ describe('Traces page tags filter', () => {
       focusFilterInput();
       await screen.findByRole('option', { name: 'Trace ID' });
       expect(screen.queryByRole('option', { name: 'Tags' })).toBeNull();
+    });
+  });
+});
+
+describe('Traces page group by', () => {
+  const onListRequest = vi.fn<(body: QueryTracesInput) => void>();
+  const onAggregateRequest = vi.fn<(body: AggregateTracesArgs) => void>();
+
+  const setGroupByHandlers = (capabilities: GetObservabilityCapabilitiesResponse) => {
+    setTracePageHandlers(capabilities);
+    onListRequest.mockClear();
+    onAggregateRequest.mockClear();
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, () =>
+        HttpResponse.json(traceQueryFieldsWithAggregate),
+      ),
+      http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+        onListRequest((await request.json()) as QueryTracesInput);
+        return HttpResponse.json(groupedTraceQueryPage);
+      }),
+      http.post(`${TEST_BASE_URL}/api/observability/traces/aggregate`, async ({ request }) => {
+        onAggregateRequest((await request.json()) as AggregateTracesArgs);
+        return HttpResponse.json(aggregateByEntityName(groupedTraceQueryPage));
+      }),
+    );
+  };
+
+  describe('when the server cannot group traces', () => {
+    it('offers no Group by control and ignores a groupBy link', async () => {
+      setGroupByHandlers(traceQueryCapabilities);
+
+      const { queryClient } = renderPage('/traces?groupBy=entityName');
+
+      await waitFor(() => expect(onListRequest).toHaveBeenCalled());
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(screen.queryByRole('button', { name: /Group by/ })).toBeNull();
+      expect(onAggregateRequest).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the server can group traces', () => {
+    it('offers only the dimensions the server reports', async () => {
+      setGroupByHandlers(traceAggregateCapabilities);
+      renderPage('/traces');
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Group by: None' }));
+
+      expect(await screen.findByRole('menuitemradio', { name: 'Agent / workflow' })).not.toBeNull();
+      expect(screen.getByRole('menuitemradio', { name: 'Status' })).not.toBeNull();
+      expect(screen.queryByRole('menuitemradio', { name: 'Environment' })).toBeNull();
+      expect(screen.queryByRole('menuitemradio', { name: 'Project' })).toBeNull();
+    });
+
+    it('groups the same selection as the list, and the group counts add up to the list', async () => {
+      setGroupByHandlers(traceAggregateCapabilities);
+      renderPage('/traces?datePreset=last-24h&filterEnvironment=production');
+
+      await waitFor(() => expect(onListRequest).toHaveBeenCalled());
+      const listBody = onListRequest.mock.lastCall![0];
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Group by: None' }));
+      fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Agent / workflow' }));
+
+      const support = await screen.findByRole('button', { name: 'Show traces for support-agent' });
+      const billing = screen.getByRole('button', { name: 'Show traces for billing-agent' });
+      const aggregateBody = onAggregateRequest.mock.lastCall![0];
+      expect(aggregateBody.where).toEqual(listBody.where);
+      // Same window start; each view stamps its own `now` as the end.
+      expect(aggregateBody.timeRange.from).toBe(listBody.timeRange!.from);
+      expect(aggregateBody.groupBy).toEqual(['entityName']);
+
+      const counts = [support, billing].map(row => Number(within(row).getAllByText(/^\d+$/)[0]!.textContent));
+      expect(counts.reduce((sum, count) => sum + count, 0)).toBe(groupedTraceQueryPage.traces.length);
+      expect(screen.queryByRole('button', { name: 'Columns' })).toBeNull();
+    });
+
+    it('drills down into a group and lists its traces', async () => {
+      setGroupByHandlers(traceAggregateCapabilities);
+      renderPage('/traces?groupBy=entityName');
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Show traces for support-agent' }));
+
+      await waitFor(() => {
+        const params = new URLSearchParams(screen.getByTestId('location').textContent ?? '');
+        expect(params.has('groupBy')).toBe(false);
+        expect(params.get('filterEntityName')).toBe('support-agent');
+      });
+      await waitFor(() =>
+        expect(onListRequest).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            where: {
+              op: 'and',
+              args: [{ op: 'eq', left: { path: 'entityName' }, right: { literal: 'support-agent' } }],
+            },
+          }),
+        ),
+      );
+      expect(await screen.findByRole('button', { name: 'Group by: None' })).not.toBeNull();
+    });
+
+    it('shows the error when the server rejects the grouped request', async () => {
+      setGroupByHandlers(traceAggregateCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/aggregate`, () =>
+          HttpResponse.json({ error: 'Query is too expensive' }, { status: 422 }),
+        ),
+      );
+      renderPage('/traces?groupBy=entityName');
+
+      expect(await screen.findByText('Failed to group traces')).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Group by: Agent / workflow' })).not.toBeNull();
     });
   });
 });
