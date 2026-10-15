@@ -685,8 +685,7 @@ describe('Account presets', () => {
     sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
     const user = userEvent.setup();
     renderOnboarding();
-    await user.click(await screen.findByRole('button', { name: 'Create factory' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('required models');
+    expect(await screen.findByRole('button', { name: 'Create factory' })).toBeDisabled();
     expect(writes).toEqual([]);
     await user.click(screen.getByRole('button', { name: 'Edit personal model' }));
     expect(screen.queryByRole('button', { name: 'Review setup' })).not.toBeInTheDocument();

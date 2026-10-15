@@ -2,4 +2,10 @@
 '@mastra/factory': patch
 ---
 
-Add explicit company, personal, and hybrid account presets to Factory onboarding. Only request the connections each setup needs and validate models against the selected account scope before creating a Factory.
+Added `scope=org` to `GET /web/config/models`. It lists only the models your organization credentials can run, next to the existing `scope=user` for personal credentials.
+
+```text
+GET /web/config/models?scope=org
+```
+
+An unsupported `scope` value now returns `400` with `invalid_model_scope`. Before, it was ignored and the unfiltered list came back.

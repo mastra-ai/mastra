@@ -5,7 +5,12 @@ import { Building2, GitBranch, Sparkles, UserRound } from 'lucide-react';
 import { CONNECTION_METHOD_LABEL } from '../../hooks/useProviderConnection';
 import { SETUP_LABELS } from '../../services/onboardingSteps';
 import { isGitLabRepository } from '../../services/github';
-import type { OnboardingDraft, OnboardingModelScope, OnboardingStep } from '../../services/onboardingFlow';
+import {
+  completeOnboardingSchema,
+  type OnboardingDraft,
+  type OnboardingModelScope,
+  type OnboardingStep,
+} from '../../services/onboardingFlow';
 
 import { OnboardingReviewRow } from './OnboardingReviewRow';
 import { OnboardingWorkReviewRow } from './OnboardingWorkReviewRow';
@@ -35,6 +40,7 @@ export function OnboardingReviewStep({
   const personal = draft.personal;
   const personalMethod = personal && CONNECTION_METHOD_LABEL[personal.method];
   const shared = draft.modelScope !== 'user';
+  const readyToCreate = completeOnboardingSchema.safeParse(draft).success;
   return (
     <section aria-label="Review factory setup" className="flex flex-col gap-5">
       <div className="flex flex-col gap-3 sm:gap-4">
@@ -99,7 +105,7 @@ export function OnboardingReviewStep({
         </Txt>
       )}
       <div>
-        <Button variant="primary" size="lg" disabled={pending || !repo} onClick={onConfirm}>
+        <Button variant="primary" size="lg" disabled={pending || !readyToCreate} onClick={onConfirm}>
           {pending && <Spinner size="sm" aria-label="Creating factory" />}
           {pending ? 'Creating your factory…' : 'Create factory'}
         </Button>
