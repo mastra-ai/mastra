@@ -18,7 +18,12 @@ import type { AnthropicPromptCacheScope } from '../providers/anthropic-prompt-ca
 import { normalizeLegacyModelId } from '../providers/model-ids.js';
 import { isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
-import { hasCredentialTenantResolver, prepareCredentialTenant, resolveCredentialStore } from './credential-resolver.js';
+import {
+  hasCredentialTenantResolver,
+  prepareCredentialTenant,
+  resolveCredentialScope,
+  resolveCredentialStore,
+} from './credential-resolver.js';
 import { resolveCustomProviders } from './custom-provider-source.js';
 import {
   MASTRA_GATEWAY_PREFIX,
@@ -286,8 +291,12 @@ function resolveModelForRequest(modelId: string, options?: Parameters<typeof res
   });
 
   if (!auth && credentialStore?.allowEnvironmentFallback === false) {
+    // Scopes are exclusive, so name the one in effect: otherwise a user with a
+    // personal sign-in can't tell why an organization-scoped Factory fails.
     throw new ProviderAuthRequiredError(
-      `No usable ${providerId} credential is configured for this signed-in Factory account. Connect the provider or add an organization credential, then try again.`,
+      resolveCredentialScope(options?.requestContext) === 'factory'
+        ? `No usable ${providerId} credential is available. This Factory uses organization credentials only, so personal provider sign-ins don't apply. Add an organization credential, then try again.`
+        : `No usable ${providerId} credential is available. This Factory uses personal credentials only, so organization credentials don't apply. Connect the provider, then try again.`,
     );
   }
 

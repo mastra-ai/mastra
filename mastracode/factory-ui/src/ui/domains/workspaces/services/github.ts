@@ -229,16 +229,21 @@ export async function listGithubRepos(
 /** The GitHub source-control integration id registered on the server. */
 const GITHUB_INTEGRATION_ID = 'github';
 
+/**
+ * Where a Factory's sessions and runs get their model and credentials: `factory` uses the organization's for both,
+ * `user` the session owner's for both, and `hybrid` the owner's for interactive sessions and the organization's for
+ * work-item runs.
+ */
+export type FactoryModelScope = 'factory' | 'user' | 'hybrid';
+
 /** A Factory project row from `/web/factory/projects`. */
 export interface FactoryProjectPayload {
   id: string;
   name: string;
   /** Org-wide default model for factory runs; null when unset. */
   defaultModelId?: string | null;
-  /** Whether sessions use the Factory's model and credentials or the current user's. */
-  modelScope?: 'factory' | 'user';
-  /** Whether new Slack sessions create Work-board items for this Factory. */
-  slackWorkItemsEnabled?: boolean;
+  /** Where sessions and runs get their model and credentials. */
+  modelScope?: FactoryModelScope;
   /** Whether Factory rules may start agent runs without someone asking for them. */
   autoRunEnabled?: boolean;
   /** Whether the Factory answers a run's plan itself instead of waiting for a person. */
@@ -337,12 +342,17 @@ export async function createFactoryProject(
   baseUrl: string,
   name: string,
   description?: string,
+  modelScope?: FactoryModelScope,
 ): Promise<FactoryProjectPayload> {
   const res = await fetch(`${baseUrl}/web/factory/projects`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(description ? { name, description } : { name }),
+    body: JSON.stringify({
+      name,
+      ...(description ? { description } : {}),
+      ...(modelScope ? { modelScope } : {}),
+    }),
   });
   const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to create Factory');
   return project;
@@ -392,11 +402,11 @@ export async function renameFactoryProject(
   return project;
 }
 
-/** Set whether sessions use the Factory's or current user's model and credentials. */
+/** Set where the Factory's sessions and runs get their model and credentials. */
 export async function updateFactoryModelScope(
   baseUrl: string,
   factoryProjectId: string,
-  modelScope: 'factory' | 'user',
+  modelScope: FactoryModelScope,
 ): Promise<FactoryProjectPayload> {
   const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
     method: 'PATCH',
@@ -449,25 +459,6 @@ export async function updateFactoryAutomation(
     body: JSON.stringify(patch),
   });
   const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to update automation');
-  return project;
-}
-
-/** Enable or disable Work-board item creation for new Slack sessions. */
-export async function updateFactorySlackWorkItems(
-  baseUrl: string,
-  factoryProjectId: string,
-  slackWorkItemsEnabled: boolean,
-): Promise<FactoryProjectPayload> {
-  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
-    method: 'PATCH',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ slackWorkItemsEnabled }),
-  });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
-    res,
-    'Failed to update Slack work-item setting',
-  );
   return project;
 }
 

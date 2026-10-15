@@ -2,7 +2,8 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
-import type { FactoryModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import { effectiveModelScope } from '../storage/domains/projects/base.js';
+import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import {
   SourceControlConnectionNotFoundError,
   type SourceControlSession,
@@ -22,12 +23,14 @@ export async function resolveFactorySessionModel(args: {
   factoryProjectId: string | undefined;
   orgId: string;
   ownerUserId: string;
-}): Promise<{ modelScope: FactoryModelScope; modelId?: string }> {
+  /** A work-item run or an interactive session; a hybrid Factory resolves a different scope for each. */
+  context: 'run' | 'session';
+}): Promise<{ modelScope: EffectiveModelScope; modelId?: string }> {
   if (!args.projects || !args.factoryProjectId) throw new Error('Factory model policy is unavailable.');
 
   const project = await args.projects.getById({ id: args.factoryProjectId });
   if (!project || project.orgId !== args.orgId) throw new Error('Factory model policy is unavailable.');
-  if (project.modelScope !== 'user') {
+  if (effectiveModelScope(project.modelScope, args.context) === 'factory') {
     return { modelScope: 'factory', ...(project.defaultModelId ? { modelId: project.defaultModelId } : {}) };
   }
 
@@ -290,7 +293,7 @@ export async function ensureFactorySourceSession(
 
 export interface HydrateFactorySessionArgs {
   orgId: string;
-  modelScope: FactoryModelScope;
+  modelScope: EffectiveModelScope;
   ownerUserId: string;
   /** The model selected by the Factory scope. Without it the SDK mode default is applied. */
   defaultModelId?: string;
