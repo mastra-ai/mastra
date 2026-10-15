@@ -1870,6 +1870,26 @@ describe('session start (onSessionStart)', () => {
     }
   });
 
+  it('pins subagents to the running model when the selected model is rejected', async () => {
+    providerDefault.mockResolvedValueOnce('anthropic/claude-fable-5');
+    const deps = makeStartDeps({ defaultModelId: null });
+    const session = makeSession({ currentModel: 'openai/gpt-5.5' });
+    session.model.switch.mockRejectedValueOnce(new Error('unknown model'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+    } finally {
+      warn.mockRestore();
+    }
+
+    for (const agentType of ['explore', 'plan', 'execute']) {
+      await expect(session.thread.getSetting({ key: `slackSubagentModelId_${agentType}` })).resolves.toBe(
+        'openai/gpt-5.5',
+      );
+    }
+  });
+
   it('records nothing when the session has no model to record', async () => {
     const deps = makeStartDeps({ defaultModelId: null });
     const session = makeSession({ currentModel: '' });

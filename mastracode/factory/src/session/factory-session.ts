@@ -338,9 +338,11 @@ export async function hydrateFactorySession(
   }
   if (!selectedModelId) return undefined;
 
+  let switched = true;
   try {
     await session.model.switch(selectedModelId);
   } catch (error) {
+    switched = false;
     console.warn('[Factory Start] Failed to apply scoped default model', {
       modelId: selectedModelId,
       error: error instanceof Error ? error.message : String(error),
@@ -360,5 +362,6 @@ export async function hydrateFactorySession(
       });
     }
   }
-  return selectedModelId;
+  // Callers pin this id to the thread, so only report a model the session actually runs on.
+  return switched ? selectedModelId : undefined;
 }

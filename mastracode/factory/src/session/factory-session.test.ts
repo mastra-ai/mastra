@@ -431,7 +431,7 @@ describe('hydrateFactorySession', () => {
     }
   });
 
-  it('keeps going when the default model is unknown', async () => {
+  it('keeps going but reports no selected model when the default model is unknown', async () => {
     const { session, double } = createSessionDouble();
     double.model.switch.mockRejectedValueOnce(new Error('unknown model'));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -443,7 +443,7 @@ describe('hydrateFactorySession', () => {
         ownerUserId: 'user-1',
         defaultModelId: 'openai/retired',
       }),
-    ).resolves.toBe('openai/retired');
+    ).resolves.toBeUndefined();
 
     expect(warn).toHaveBeenCalledWith('[Factory Start] Failed to apply scoped default model', {
       modelId: 'openai/retired',
