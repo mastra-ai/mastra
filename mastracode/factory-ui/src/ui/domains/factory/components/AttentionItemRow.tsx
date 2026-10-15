@@ -42,7 +42,7 @@ const SWAP_SLOT =
   'relative grid shrink-0 items-center justify-items-end [grid-template-areas:"slot"] *:[grid-area:slot] pointer-coarse:flex pointer-coarse:w-full pointer-coarse:justify-between';
 
 const HIDDEN_ON_REVEAL =
-  'transition-opacity duration-150 pointer-fine:group-hover:opacity-0 pointer-fine:group-focus-within:opacity-0';
+  'pointer-events-none transition-opacity duration-150 pointer-fine:group-hover:opacity-0 pointer-fine:group-focus-within:opacity-0';
 
 const SHOWN_ON_REVEAL =
   'flex items-center gap-0.5 transition-opacity duration-150 pointer-fine:pointer-events-none pointer-fine:opacity-0 pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:pointer-events-auto pointer-fine:group-focus-within:opacity-100';
