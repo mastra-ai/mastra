@@ -2,7 +2,7 @@ import { setRunAgentScopes } from '@mastra/core/agent';
 import { MASTRA_SCOPES_KEY, RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it } from 'vitest';
 
-import { resolveKnowledgeOrgId, resolveKnowledgeResourceId } from '../subconscious/scope';
+import { resolveKnowledgeOrgId, resolveKnowledgeRung } from '../subconscious/scope';
 
 function ctx(entries: Record<string, unknown>, markedScopes?: string[]): RequestContext {
   const requestContext = new RequestContext();
@@ -36,12 +36,14 @@ describe('Subconscious knowledge identity from agent scopes', () => {
     expect(() => resolveKnowledgeOrgId(ctx({ [MASTRA_SCOPES_KEY]: ['org:acme:evil'] }))).toThrow(':');
   });
 
-  it('anchors the resource rung on a Core-marked project: scope', () => {
-    expect(resolveKnowledgeResourceId(ctx({}, ['org:acme', 'project:p1']), 'user-1')).toBe('p1');
+  it('gives a Core-marked project: scope its own project:<id> rung', () => {
+    expect(resolveKnowledgeRung(ctx({}, ['org:acme', 'project:p1']), 'user-1')?.address).toBe('project:p1');
   });
 
   it('ignores a project: scope Core did not mark, and the removed knowledgeResourceId override', () => {
-    expect(resolveKnowledgeResourceId(ctx({ [MASTRA_SCOPES_KEY]: ['project:forged'] }), 'user-1')).toBe('user-1');
-    expect(resolveKnowledgeResourceId(ctx({ knowledgeResourceId: 'override' }), 'user-1')).toBe('user-1');
+    expect(resolveKnowledgeRung(ctx({ [MASTRA_SCOPES_KEY]: ['project:forged'] }), 'user-1')?.address).toBe(
+      'resource:user-1',
+    );
+    expect(resolveKnowledgeRung(ctx({ knowledgeResourceId: 'override' }), 'user-1')?.address).toBe('resource:user-1');
   });
 });

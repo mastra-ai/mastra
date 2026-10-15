@@ -99,8 +99,8 @@ async function createHarness(state: Partial<MastraCodeState> = {}) {
         { address: localOrgAddress, name: 'Local org' },
         { address: 'org:owner-1', name: 'Foreign owner' },
         { address: 'org:org-42', name: 'Factory org' },
-        { address: 'resource:proj-7', name: 'Factory project', parentAddresses: ['org:org-42'] },
-        { address: 'resource:proj-7:thread:thread-1', name: 'Factory thread', parentAddresses: ['resource:proj-7'] },
+        { address: 'project:proj-7', name: 'Factory project', parentAddresses: ['org:org-42'] },
+        { address: 'project:proj-7:thread:thread-1', name: 'Factory thread', parentAddresses: ['project:proj-7'] },
         { address: 'resource:project-1', name: 'Project 1', parentAddresses: [localOrgAddress] },
         { address: 'resource:other-project', name: 'Other project', parentAddresses: [localOrgAddress] },
         { address: 'resource:project-1:thread:thread-1', name: 'Thread 1', parentAddresses: ['resource:project-1'] },
@@ -117,8 +117,8 @@ async function createHarness(state: Partial<MastraCodeState> = {}) {
     foreignResource: [reconciled.scopes['resource:other-project']!],
     foreignOrg: [reconciled.scopes['org:owner-1']!],
     factoryOrg: [reconciled.scopes['org:org-42']!],
-    factoryResource: [reconciled.scopes['resource:proj-7']!],
-    factoryThread: [reconciled.scopes['resource:proj-7:thread:thread-1']!],
+    factoryResource: [reconciled.scopes['project:proj-7']!],
+    factoryThread: [reconciled.scopes['project:proj-7:thread:thread-1']!],
   };
   const session = createSessionHarness(state);
   const inspector = await createKnowledgeInspector({ storage, knowledge: runtime, session: session.session });

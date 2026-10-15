@@ -131,6 +131,19 @@ describe('Knowledge structure reconciliation', () => {
         { address: 'org:a', contextualScopeAddress: 'org:a' },
       ),
     ).toThrow('Knowledge child scope template cannot create identity scope thread:a');
+    // Factory project scopes are host-vouched identity too: an importer/template must not mint them.
+    expect(() =>
+      materializeKnowledgeScopePlan(
+        { 'org:$orgId': { children: [{ address: 'project:$orgId', name: 'Project' }] } },
+        { address: 'org:a', contextualScopeAddress: 'org:a' },
+      ),
+    ).toThrow('Knowledge child scope template cannot create identity scope project:a');
+    expect(() =>
+      materializeKnowledgeScopePlan(
+        { 'org:$orgId': { children: [{ address: 'project:$orgId:thread:t', name: 'Session' }] } },
+        { address: 'org:a', contextualScopeAddress: 'org:a' },
+      ),
+    ).toThrow('Knowledge child scope template cannot create identity scope project:a:thread:t');
     expect(() =>
       materializeKnowledgeScopePlan(
         {

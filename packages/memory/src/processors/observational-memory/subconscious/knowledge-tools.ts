@@ -11,7 +11,7 @@ import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 
-import { MISSING_ORG_MESSAGE, resolveKnowledgeOrgId, resolveKnowledgeResourceId } from './scope';
+import { MISSING_ORG_MESSAGE, resolveKnowledgeOrgId, resolveKnowledgeRung } from './scope';
 import type { KnowledgeSemanticIndexCoordinator, KnowledgeSemanticSearchResult } from './semantic-index';
 
 const DEFAULT_LIMIT = 10;
@@ -54,18 +54,18 @@ export async function resolveKnowledgeScopeIds(
   context: KnowledgeToolContext | undefined,
 ): Promise<KnowledgeScopeIds> {
   const organizationId = resolveKnowledgeOrgId(context?.requestContext);
-  const resourceId = resolveKnowledgeResourceId(context?.requestContext, context?.agent?.resourceId);
+  const rung = resolveKnowledgeRung(context?.requestContext, context?.agent?.resourceId);
   const threadId = context?.agent?.threadId;
   if (typeof organizationId !== 'string' || !organizationId.trim()) {
     throw new Error(MISSING_ORG_MESSAGE);
   }
-  if (!resourceId) throw new Error('Knowledge tools require an active resourceId.');
+  if (!rung) throw new Error('Knowledge tools require an active resourceId.');
   if (!threadId) throw new Error('Knowledge tools require an active threadId.');
   const knowledge = memory.getKnowledgeInstance?.();
 
   const orgAddress = `org:${organizationId}`;
-  const resourceAddress = `resource:${resourceId}`;
-  const threadAddress = `resource:${resourceId}:thread:${threadId}`;
+  const resourceAddress = rung.address;
+  const threadAddress = `${rung.address}:thread:${threadId}`;
   if (knowledge) {
     const org = await knowledge.materializeScope({
       address: orgAddress,
@@ -76,13 +76,13 @@ export async function resolveKnowledgeScopeIds(
       address: resourceAddress,
       parentAddresses: [orgAddress],
       contextualScopeAddress: orgAddress,
-      parameters: { orgId: organizationId, resourceId },
+      parameters: { orgId: organizationId, ...rung.parameters },
     });
     const thread = await knowledge.materializeScope({
       address: threadAddress,
       parentAddresses: [resourceAddress],
       contextualScopeAddress: resourceAddress,
-      parameters: { orgId: organizationId, resourceId, threadId },
+      parameters: { orgId: organizationId, ...rung.parameters, threadId },
     });
     return [org.scopes[orgAddress]!, resource.scopes[resourceAddress]!, thread.scopes[threadAddress]!];
   }
@@ -101,13 +101,13 @@ export async function resolveKnowledgeScopeIds(
     address: resourceAddress,
     parentAddresses: [orgAddress],
     contextualScopeAddress: orgAddress,
-    parameters: { orgId: organizationId, resourceId },
+    parameters: { orgId: organizationId, ...rung.parameters },
   });
   const thread = await materialize({
     address: threadAddress,
     parentAddresses: [resourceAddress],
     contextualScopeAddress: resourceAddress,
-    parameters: { orgId: organizationId, resourceId, threadId },
+    parameters: { orgId: organizationId, ...rung.parameters, threadId },
   });
   return [org.scopes[orgAddress]!, resource.scopes[resourceAddress]!, thread.scopes[threadAddress]!];
 }

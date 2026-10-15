@@ -41,19 +41,22 @@ export function resolveKnowledgeOrgId(requestContext: ContextReader): string | u
 }
 
 /**
- * Resolves the resource rung of a Subconscious Knowledge scope. A `project:` agent
- * scope anchors it so a host (for example, the Factory) can share one graph across
- * runs of the same project, leaving thread identity untouched. Only scopes Core marked
- * as run-derived count: any in-process caller can write the raw key, and this scope
- * moves Knowledge across identities. Cores without `getRunAgentScopes` cannot vouch,
- * so the project scope is ignored there (fail closed).
+ * Resolves the middle rung of a Subconscious Knowledge scope. A `project:` agent scope
+ * gives the rung its own `project:<id>` address so a host (for example, the Factory)
+ * can share one graph across a project's sessions without colliding with a user
+ * resource that happens to share the id. Only scopes Core marked as run-derived count:
+ * any in-process caller can write the raw key, and this scope moves Knowledge across
+ * identities. Cores without `getRunAgentScopes` cannot vouch, so the project scope is
+ * ignored there (fail closed) and the rung falls back to `resource:<fallback>`.
  */
-export function resolveKnowledgeResourceId(
+export function resolveKnowledgeRung(
   requestContext: ContextReader,
-  fallback: string | undefined,
-): string | undefined {
+  fallbackResourceId: string | undefined,
+): { address: string; parameters: Record<string, string> } | undefined {
   const getRunAgentScopes = (coreAgent as { getRunAgentScopes?: (rc: unknown) => string[] | undefined })
     .getRunAgentScopes;
   const [projectId] = scopeValues(getRunAgentScopes?.(requestContext), 'project');
-  return projectId ?? fallback;
+  if (projectId) return { address: `project:${projectId}`, parameters: { projectId } };
+  if (!fallbackResourceId) return undefined;
+  return { address: `resource:${fallbackResourceId}`, parameters: { resourceId: fallbackResourceId } };
 }

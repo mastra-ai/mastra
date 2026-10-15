@@ -184,8 +184,10 @@ export class KnowledgeInspectorError extends Error {
 interface Binding {
   /** Org rung shared with the subconscious writers (see knowledge-scope.ts). */
   organizationId: string;
-  /** Resource rung of the knowledge scope: the Factory project id, else the session resource. */
+  /** Middle rung of the knowledge scope: the Factory project id, else the session resource. */
   resourceId: string;
+  /** That rung's scope address: `project:<id>` for a Factory project, else `resource:<id>` (matches Memory). */
+  rungAddress: string;
   threadId?: string;
   fingerprint: string;
   identityKey: string;
@@ -295,10 +297,9 @@ function importRunSummary(run: KnowledgeImportRun): KnowledgeInspectorImportRun 
   };
 }
 
-function bindingBelongsToSession(binding: string, resourceId: string, threadId?: string): boolean {
+function bindingBelongsToSession(binding: string, rungAddress: string, threadId?: string): boolean {
   const scope = importerBinding(binding).scope;
-  const resource = `resource:${resourceId}`;
-  return scope === resource || (threadId !== undefined && scope === `${resource}:thread:${threadId}`);
+  return scope === rungAddress || (threadId !== undefined && scope === `${rungAddress}:thread:${threadId}`);
 }
 
 function truncateUtf8(value: string, maxBytes: number): { value: string; truncated: boolean } {
@@ -553,7 +554,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
       ].filter(candidate =>
         bindingBelongsToSession(
           JSON.stringify([candidate.source, candidate.scope]),
-          binding.resourceId,
+          binding.rungAddress,
           binding.threadId,
         ),
       );
@@ -576,7 +577,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     limit?: number;
   }): Promise<{ runs: KnowledgeInspectorImportRun[]; nextCursor?: string }> {
     const binding = await this.#binding();
-    if (!bindingBelongsToSession(input.binding, binding.resourceId, binding.threadId)) {
+    if (!bindingBelongsToSession(input.binding, binding.rungAddress, binding.threadId)) {
       throw new KnowledgeInspectorError('not-visible', 'Knowledge importer binding is not visible.');
     }
     const page = await this.#runtime.listImportRuns({
@@ -601,7 +602,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     if (
       !run ||
       run.importerId !== input.importerId ||
-      !bindingBelongsToSession(run.binding, binding.resourceId, binding.threadId)
+      !bindingBelongsToSession(run.binding, binding.rungAddress, binding.threadId)
     ) {
       throw new KnowledgeInspectorError('not-visible', 'Knowledge import run is not visible.');
     }
@@ -669,17 +670,18 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     const organizationId = identity.organizationId;
     const projectScope = identity.scopes.find(scope => scope.startsWith('project:'));
     const resourceId = projectScope ? projectScope.slice('project:'.length) : sessionResourceId;
+    const rungAddress = projectScope ?? `resource:${sessionResourceId}`;
     const activeThreadId = this.#session.thread.getId() ?? undefined;
     const thread = activeThreadId ? await this.#session.thread.getById({ threadId: activeThreadId }) : null;
     const threadId = thread?.resourceId === sessionResourceId ? thread.id : undefined;
-    const fingerprint = `${organizationId}\0${resourceId}\0${threadId ?? ''}`;
+    const fingerprint = `${organizationId}\0${rungAddress}\0${threadId ?? ''}`;
     if (this.#fingerprint !== fingerprint) {
       this.#fingerprint = fingerprint;
       this.#identityKey = opaqueToken();
       this.#handles.clear();
       this.#cursors.clear();
     }
-    return { organizationId, resourceId, threadId, fingerprint, identityKey: this.#identityKey };
+    return { organizationId, resourceId, rungAddress, threadId, fingerprint, identityKey: this.#identityKey };
   }
 
   async #scope(binding: Binding, level: KnowledgeInspectorScopeLevel): Promise<KnowledgeScopeIds> {
@@ -692,12 +694,14 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     const scopeIds = [org.scopes[orgAddress]!];
     if (level === 'org') return scopeIds;
 
-    const resourceAddress = `resource:${binding.resourceId}`;
+    const resourceAddress = binding.rungAddress;
     const resource = await this.#runtime.materializeScope({
       address: resourceAddress,
       contextualScopeAddress: resourceAddress,
       parentAddresses: [orgAddress],
-      parameters: { resourceId: binding.resourceId },
+      parameters: resourceAddress.startsWith('project:')
+        ? { projectId: binding.resourceId }
+        : { resourceId: binding.resourceId },
     });
     scopeIds.push(resource.scopes[resourceAddress]!);
     if (level === 'resource') return scopeIds;
