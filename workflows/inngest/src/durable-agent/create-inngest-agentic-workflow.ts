@@ -4,6 +4,7 @@ import {
   createDurableLLMExecutionStep,
   createDurableLLMMappingStep,
   createDurableToolCallStep,
+  DURABLE_STOP_WHEN_ERROR_ID,
   DurableAgentDefaults,
   DurableStepIds,
   emitChunkEvent,
@@ -28,6 +29,7 @@ import type {
   DurableToolCallInput,
 } from '@mastra/core/agent/durable';
 import { MessageList } from '@mastra/core/agent/message-list';
+import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
 import { SpanType, InternalSpans } from '@mastra/core/observability';
 import type { AIModelGenerationSpan, ExportedSpan } from '@mastra/core/observability';
@@ -387,23 +389,33 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         // The lookup happens inside a memoized step so Inngest replays reuse the
         // recorded decision (even on a worker without the registry entry) instead
         // of re-invoking (possibly stateful) user predicates.
-        let stopped: boolean;
-        try {
-          stopped = await step.run(`stop-when-${state.runId}-${state.iterationCount}`, async () => {
-            const stopWhen = getRunRegistryEntry(state.runId, mastra)?.stopWhen;
-            if (!stopWhen || state.accumulatedSteps.length === 0) {
-              return false;
-            }
-            const steps = state.accumulatedSteps as any;
-            const conditions = await Promise.all(
-              (Array.isArray(stopWhen) ? stopWhen : [stopWhen]).map(condition => condition({ steps })),
-            );
-            return conditions.some(Boolean);
-          });
-        } catch (error) {
-          await emitStepFinish(shouldContinue);
-          throw error;
-        }
+        const stopped = await step.run(`stop-when-${state.runId}-${state.iterationCount}`, async () => {
+          const stopWhen = getRunRegistryEntry(state.runId, mastra)?.stopWhen;
+          if (!stopWhen || state.accumulatedSteps.length === 0) {
+            return false;
+          }
+          const steps = state.accumulatedSteps as any;
+          const conditions = await Promise.all(
+            (Array.isArray(stopWhen) ? stopWhen : [stopWhen]).map(async condition => {
+              try {
+                return await condition({ steps });
+              } catch (error) {
+                const originalError = getErrorFromUnknown(error);
+                throw new MastraError(
+                  {
+                    id: DURABLE_STOP_WHEN_ERROR_ID,
+                    domain: ErrorDomain.AGENT,
+                    category: ErrorCategory.USER,
+                    text: originalError.message,
+                    details: { name: originalError.name, message: originalError.message },
+                  },
+                  originalError,
+                );
+              }
+            }),
+          );
+          return conditions.some(Boolean);
+        });
 
         await emitStepFinish(!stopped);
         return !stopped;

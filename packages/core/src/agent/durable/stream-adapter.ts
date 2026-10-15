@@ -438,9 +438,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       runDead = true;
     }
     // No probe (bare timeout) or provably dead ⇒ terminate with an error chunk,
-    // mirroring the ERROR-event path (enqueue error chunk + safeClose, NOT
-    // controller.error which MastraModelOutput swallows). Fire onError with
-    // `runDead` — observe() schedules registry + pubsub-topic cleanup only when
+    // mirroring the ordinary ERROR-event path (enqueue error chunk + safeClose).
+    // Fire onError with `runDead` — observe() schedules registry + pubsub-topic cleanup only when
     // isAlive confirmed the run is dead; a bare timeout just means this observer
     // stopped hearing from the run — then unsubscribe in finally.
     const error = new Error(`Durable agent stream idle for ${idleTimeoutMs}ms with no live producer`);
