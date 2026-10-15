@@ -10,14 +10,13 @@ import { cn } from '@/lib/utils';
 type InfoTooltipProps = {
   /** The explanation shown in the tooltip, and read to screen readers as the icon's description. */
   children: React.ReactNode;
-  /** What the icon is about, e.g. "About Display name". Give this or `aria-labelledby`. */
-  'aria-label'?: string;
-  'aria-labelledby'?: string;
   side?: TooltipContentProps['side'];
   align?: TooltipContentProps['align'];
   /** Layout of the tooltip body, such as a wider `max-w-*` or `space-y-*` for rich content. */
   contentClassName?: string;
-};
+} &
+  /** What the icon is about, e.g. "Version information": an icon-only button needs a name. */
+  ({ 'aria-label': string; 'aria-labelledby'?: never } | { 'aria-label'?: never; 'aria-labelledby': string });
 
 /** A muted info icon that explains the thing next to it in a tooltip, on hover or keyboard focus. */
 function InfoTooltip({ children, side = 'top', align, contentClassName, ...name }: InfoTooltipProps) {
