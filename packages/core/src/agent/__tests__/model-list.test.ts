@@ -203,6 +203,8 @@ function modelListTests(version: 'v1' | 'v2') {
         expect(agent.reorderModels(['b', 'a'])).toBe(true);
         expect(agent.updateModelInModelList({ id: 'a', enabled: false })).toBe(true);
         expect(agent.updateModelInModelList({ id: 'missing', enabled: false })).toBe(false);
+        expect(agent.reorderModels(['missing'])).toBe(false);
+        expect(agent.reorderModels([])).toBe(false);
 
         const single = new Agent({ id: 'one', name: 'One', instructions: 'x', model: openai('gpt-4o') });
         expect(single.reorderModels(['x'])).toBe(false);

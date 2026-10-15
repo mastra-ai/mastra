@@ -3957,6 +3957,11 @@ export class Agent<
       return false;
     }
 
+    if (!(this.model as ModelFallbacks).some(m => modelIds.includes(m.id))) {
+      this.logger.warn('No matching model ids to reorder', { agent: this.name });
+      return false;
+    }
+
     // TypeScript sees this.model as ModelWithRetries[] | ModelFallbacks after Array.isArray check.
     // At runtime, arrays are always normalized to ModelFallbacks (with required id) in the constructor.
     // The cast tells TypeScript to trust this runtime invariant.

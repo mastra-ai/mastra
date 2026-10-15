@@ -3613,7 +3613,7 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
       }
 
       const applied = agent.reorderModels(reorderedModelIds);
-      if (!applied) {
+      if (applied === false) {
         throw new HTTPException(400, { message: 'Agent model list could not be reordered' });
       }
 
@@ -3666,7 +3666,7 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
       };
 
       const applied = agent.updateModelInModelList(updated);
-      if (!applied) {
+      if (applied === false) {
         throw new HTTPException(404, { message: `Model config with id ${modelConfigId} not found` });
       }
 
