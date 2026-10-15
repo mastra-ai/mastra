@@ -39,7 +39,7 @@ export function WorkflowRunData({ input, result }: { input: unknown; result: Wor
       <CollapsibleTrigger className="flex min-h-11 w-full items-center gap-2 px-5 py-3 text-caption text-muted-foreground">
         <Database aria-hidden className="size-3.5 text-muted-foreground" />
         <span>Run data</span>
-        <DisclosureChevron direction="right" className="ml-auto size-4 text-muted-foreground" />
+        <DisclosureChevron direction="right" className="ml-auto text-muted-foreground" />
       </CollapsibleTrigger>
       <CollapsibleContent>
         <Tabs defaultTab={tab} value={tab} onValueChange={setSelectedTab} className="min-w-0 px-5 pb-4">

@@ -173,7 +173,7 @@ export function SchemaConfigSection({
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger variant="disclosure">Schema Configuration (Optional)</CollapsibleTrigger>
+      <CollapsibleTrigger variant="form">Schema Configuration (Optional)</CollapsibleTrigger>
 
       <CollapsibleContent className="space-y-4 pt-4">
         <Notice variant="info" title="JSON Schema Format">

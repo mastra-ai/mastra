@@ -106,7 +106,7 @@ function WorkflowInformationTopSection({
       >
         <div className="flex shrink-0 items-center gap-1 pr-2">
           <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2 px-4 py-3 text-column text-muted-foreground">
-            <DisclosureChevron direction="right" className="size-4 text-muted-foreground" />
+            <DisclosureChevron direction="right" className="text-muted-foreground" />
             <span>Workflow run</span>
             {!isOpen && result?.status && <WorkflowRunStatusBadge status={result.status} />}
           </CollapsibleTrigger>
