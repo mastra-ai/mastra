@@ -108,14 +108,14 @@ describe('DatasetPage', () => {
       expect(screen.getAllByRole('combobox', { name: 'Switch dataset version' })).toHaveLength(1);
     });
 
-    it('orders "Experiments" before "New experiment"', async () => {
+    it('orders "New experiment" before "Experiments"', async () => {
       mockDataset(dataset, items);
       renderPage();
 
       const runButton = await screen.findByRole('button', { name: /new experiment/i });
       const link = within(getPageHeader()).getByRole('link', { name: 'Experiments' });
 
-      expect(link.compareDocumentPosition(runButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(runButton.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
     it('does not show when the dataset was created in the page header', async () => {

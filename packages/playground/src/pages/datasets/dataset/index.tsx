@@ -131,6 +131,11 @@ function DatasetPage() {
 
   const headerActions = (
     <>
+      {hasItems && (
+        <Button variant="ghost" size="sm" onClick={() => setExperimentDialogOpen(true)} icon={<Plus />}>
+          New experiment
+        </Button>
+      )}
       {showDataActions && (
         <Button
           variant="ghost"
@@ -139,11 +144,6 @@ function DatasetPage() {
           icon={<ExperimentsIcon />}
         >
           Experiments
-        </Button>
-      )}
-      {hasItems && (
-        <Button variant="ghost" size="sm" onClick={() => setExperimentDialogOpen(true)} icon={<Plus />}>
-          New experiment
         </Button>
       )}
       <DropdownMenu>
