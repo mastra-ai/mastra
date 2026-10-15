@@ -60,7 +60,13 @@ Calling `tools()` per request is cheap: identical options share one internal sta
 
 If both a global and a user connection exist for one provider, the agent sees both through the usual [multi-connection handling](/docs/mastra-platform/connect/tools#choose-between-connections).
 
-Every platform call made under a resource ID asserts it, and the platform rejects mismatches, so one user's connection can never serve another user's request.
+## How user isolation is enforced
+
+Scoping by an identifier is only as strong as the binding between the signed-in user and that identifier. In systems where application code passes a user ID as an ordinary parameter, isolation depends on every call site labeling every request correctly. Mastra removes that burden: the resource ID is never a value a request gets to choose, and the binding is verified again on every call.
+
+- The server derives the resource ID. `mapUserToResourceId` runs after authentication and writes the result to a reserved request-context key that clients can't set. No route or tool accepts a resource ID from request input.
+- The platform verifies it at execution time. Every call made under a resource ID carries an assertion, and the platform compares it to the connection's stored resource ID before serving tool calls, credentials, or proxy traffic. A mismatch is rejected as if the connection didn't exist, so one user's connection can never serve another user's request.
+- Ownership is checked before OAuth begins. Creating a connection returns a launch URL that re-verifies the caller owns the pending session before redirecting into the provider's flow. See [the authorization link never leaves the server](#the-authorization-link-never-leaves-the-server).
 
 ## Let users connect their accounts
 
