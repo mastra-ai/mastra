@@ -657,7 +657,8 @@ A person's own Factory session (a user session) gets tools to find, file and man
 | `factory_list_work_items`       | Optional `query` (title text or `#number`), `stage`, `board`, `role`, `active`, `requestedBy: 'me'`, `subscribed`, `limit` (default 25, max 50) |
 | `factory_inspect_work_item`     | `workItem` (id or `#number`)                                                                                                                    |
 | `factory_list_attention`        | Optional `limit` (max 50)                                                                                                                       |
-| `factory_create_work_item`      | `title`, `brief`                                                                                                                                |
+| `factory_create_work_item`      | `title`, `brief`, optional `repository` (`owner/name`, one this Factory links)                                                                  |
+| `factory_update_work_item`      | `workItem` plus any of `title`, `repository`, `parentWorkItem` (or `null` to detach), `plansPreapproved: true`                                  |
 | `factory_subscribe_work_item`   | `workItem`                                                                                                                                      |
 | `factory_unsubscribe_work_item` | `workItem`                                                                                                                                      |
 | `factory_transition_work_item`  | `workItem`, `stage`                                                                                                                             |
@@ -667,7 +668,7 @@ A person's own Factory session (a user session) gets tools to find, file and man
 
 Read tools are available on every turn. The other tools only appear on turns a signed-in person started, so text arriving from a notification, webhook or channel can't drive them. None of them asks for approval: they are allowed on the session when it's created, unless the person has set their own policy for the tool or for the `mcp` category.
 
-`factory_create_work_item` files the card as the caller in its board's first phase, exactly like **New card**, posts the brief as its first comment, and subscribes the session. Subscriptions are stored per work item and session in the `factory_work_item_subscriptions` collection and are removed with the item, so any number of sessions can follow one item.
+`factory_create_work_item` files the card as the caller in its board's first phase, exactly like **New card**, posts the brief as its first comment, and subscribes the session. Name the `repository` when the Factory links more than one: a run can't start on a card that doesn't say which. `factory_update_work_item` sets it afterwards, like choosing a repository on the card, and also edits the title, the parent item and plan pre-approval. Both refuse a repository the Factory doesn't link, and a card synced from an issue keeps the issue's repository. Stages, the board and role sessions aren't fields it edits; stages move with `factory_transition_work_item`. Subscriptions are stored per work item and session in the `factory_work_item_subscriptions` collection and are removed with the item, so any number of sessions can follow one item.
 
 The tools take their scope as an argument rather than reading the request, so the same tool set can later be mounted elsewhere, such as an MCP server.
 

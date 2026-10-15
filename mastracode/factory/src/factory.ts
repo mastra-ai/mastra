@@ -1277,6 +1277,7 @@ export class MastraFactory {
                             boards: this.#boards,
                             transitionService,
                             auditRecorder: auditDomain,
+                            sessions: sourceControlSessions,
                           },
                         }),
                       );
