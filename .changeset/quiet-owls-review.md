@@ -7,4 +7,4 @@ Work items now get an independent self-review before their pull or merge request
 
 Factory enforces this on the server: a Work-bound session cannot open a change request until self-review has approved the exact branch head being proposed. After three request-changes rounds, the card parks in Intake for a person to decide; agents cannot move it until someone does. Cards that already have an open PR keep their current flow.
 
-Projects can turn self-review off with the "Self-review before pull requests" switch in Automation settings. It is on by default. When it is off, the builder opens the PR directly from Building, as before.
+Self-review is off by default. Turn it on per project with the "Self-review before pull requests" switch in Automation settings. While it is off, the builder opens the PR directly from Building, as before.

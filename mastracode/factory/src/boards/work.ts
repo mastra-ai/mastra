@@ -170,7 +170,7 @@ function returnedFromSelfReview(context: FactoryStageRuleContext): boolean {
 function buildWorkItem(context: FactoryStageRuleContext) {
   const reference = JSON.stringify(sourceRef(context.item));
   const handOff =
-    context.selfReviewEnabled === false
+    context.selfReviewEnabled !== true
       ? `Open a ${changeRequestNoun(context.item)} when the work is ready for review.`
       : HAND_OFF_TO_SELF_REVIEW;
   const fromSelfReview = returnedFromSelfReview(context);
@@ -203,7 +203,7 @@ function selfReviewWorkItem(context: FactoryStageRuleContext) {
   // A card whose change request is already open is past self-review; the Review
   // board's reviewer covers it on the change request itself.
   if (typeof context.item.metadata?.openPullRequestNumber === 'number') return;
-  if (context.selfReviewEnabled === false) return;
+  if (context.selfReviewEnabled !== true) return;
   return {
     type: 'invokeSkill',
     idempotencyKey: `${context.ingress.id}:factory-self-review`,

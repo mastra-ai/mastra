@@ -62,9 +62,9 @@ export interface FactoryProject {
   buildOnPushEnabled: boolean;
   /** Minutes after a push-triggered attempt during which further pushes do not build. */
   buildPushDebounceMinutes: number;
-  /** Whether Review agents publish their test results as a commit check. Defaults to on. */
+  /** Whether Review agents publish their test results as a commit check. Defaults to off. */
   reviewTestChecksEnabled: boolean;
-  /** Whether Work items get an independent self-review before the change request opens. Defaults to on. */
+  /** Whether Work items get an independent self-review before the change request opens. Defaults to off. */
   selfReviewEnabled: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -130,8 +130,8 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     build_start_claim_expires_at: { type: 'timestamp', nullable: true },
     build_on_push_enabled: { type: 'boolean', default: false },
     build_push_debounce_minutes: { type: 'integer', default: DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES },
-    review_test_checks_enabled: { type: 'boolean', default: true },
-    self_review_enabled: { type: 'boolean', default: true },
+    review_test_checks_enabled: { type: 'boolean', default: false },
+    self_review_enabled: { type: 'boolean', default: false },
     /** Set once the source-control domain has backfilled repository positions and environment membership. */
     environment_backfilled_at: { type: 'timestamp', nullable: true },
     created_at: { type: 'timestamp' },
@@ -196,8 +196,8 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     buildStartUncertain: row.build_start_uncertain ?? false,
     buildOnPushEnabled: row.build_on_push_enabled ?? false,
     buildPushDebounceMinutes: row.build_push_debounce_minutes ?? DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES,
-    reviewTestChecksEnabled: row.review_test_checks_enabled ?? true,
-    selfReviewEnabled: row.self_review_enabled ?? true,
+    reviewTestChecksEnabled: row.review_test_checks_enabled ?? false,
+    selfReviewEnabled: row.self_review_enabled ?? false,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

@@ -1440,6 +1440,7 @@ describe('FactoryTransitionService', () => {
     const service = new FactoryTransitionService({
       configVersion: 'rules-v1',
       storage,
+      selfReviewEnabled: async () => true,
     });
 
     const result = await service.transition({ ...request(item, { stage: 'review' }), cause: 'board_drag' });

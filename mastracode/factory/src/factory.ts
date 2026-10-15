@@ -829,7 +829,7 @@ export class MastraFactory {
           selfReviewEnabled: async ({ orgId, factoryProjectId }) => {
             await factoryProjectsStorage.ensureReady();
             const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
-            return project?.selfReviewEnabled ?? true;
+            return project?.selfReviewEnabled ?? false;
           },
           ...(onTerminalStage ? { onTerminalStage } : {}),
           ...(githubIntegration
@@ -1222,7 +1222,7 @@ export class MastraFactory {
                       testChecksEnabled: async ({ orgId, factoryProjectId }) => {
                         await factoryProjectsStorage.ensureReady();
                         const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
-                        return project?.reviewTestChecksEnabled ?? true;
+                        return project?.reviewTestChecksEnabled ?? false;
                       },
                       ...(workItemsStorage
                         ? {
@@ -1245,7 +1245,7 @@ export class MastraFactory {
                                   orgId: binding.orgId,
                                   id: binding.factoryProjectId,
                                 });
-                                if (project?.selfReviewEnabled === false) return undefined;
+                                if (!project?.selfReviewEnabled) return undefined;
                               }
                               const sha = item.metadata?.selfReviewedHeadSha;
                               return item.metadata?.selfReviewVerdict === 'approve' && typeof sha === 'string'

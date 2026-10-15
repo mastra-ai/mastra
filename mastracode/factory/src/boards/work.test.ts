@@ -28,6 +28,7 @@ function executeContext(source: FactoryRuleItemContext['source']): FactoryStageR
     stage: 'execute',
     fromStage: 'triage',
     toStage: 'execute',
+    selfReviewEnabled: true,
   };
 }
 
@@ -42,8 +43,8 @@ describe('work board build prompt', () => {
     expect(decision.prompt).not.toContain('pull request');
   });
 
-  it('asks the builder to open the change request itself when the project turned self-review off', async () => {
-    const off = { ...executeContext('gitlab-issue'), selfReviewEnabled: false };
+  it('asks the builder to open the change request itself when self-review is off, which is the default', async () => {
+    const { selfReviewEnabled: _on, ...off } = executeContext('gitlab-issue');
     const build = await workBoard.rules.execute?.gitlabIssue?.onEnter?.(off);
     if (!build || build.type !== 'invokeSkill') throw new Error('Expected build invocation.');
     expect(build.prompt).toContain('Open a merge request when the work is ready for review.');

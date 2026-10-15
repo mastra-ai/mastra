@@ -489,7 +489,7 @@ export class FactoryTransitionService {
           const selfReviewEnabled =
             request.board === 'work' && this.#selfReviewEnabled
               ? await this.#selfReviewEnabled({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })
-              : true;
+              : false;
           const decisions: FactoryCommitDecision[] = [];
           for (const rule of resolveFactoryStageRules(this.#boards, {
             board: request.board,

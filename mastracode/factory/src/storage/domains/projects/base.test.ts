@@ -125,7 +125,7 @@ describe('FactoryProjectsStorage', () => {
   it('keeps review test checks on by default and lets a project turn them off', async () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'P' } });
-    expect(project.reviewTestChecksEnabled).toBe(true);
+    expect(project.reviewTestChecksEnabled).toBe(false);
     const updated = await seed.projects.update({
       orgId: 'org-1',
       id: project.id,
