@@ -48,6 +48,17 @@ describe('Txt', () => {
     });
   });
 
+  describe('when text has a destructive tone', () => {
+    it('uses the destructive foreground color', () => {
+      render(
+        <Txt as="p" variant="caption" tone="destructive">
+          Could not save
+        </Txt>,
+      );
+      expect(screen.getByText('Could not save').className).toContain('text-destructive-foreground');
+    });
+  });
+
   describe('when text receives a ref', () => {
     it('attaches the ref to the native text element', () => {
       const textRef = createRef<HTMLElement>();

@@ -24,6 +24,7 @@ const tones = {
   ink: 'text-foreground',
   muted: 'text-muted-foreground',
   faint: 'text-placeholder',
+  destructive: 'text-destructive-foreground',
 };
 
 const fonts = {

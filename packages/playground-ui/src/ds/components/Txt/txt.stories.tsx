@@ -22,7 +22,7 @@ const meta: Meta<typeof Txt> = {
     },
     tone: {
       control: { type: 'select' },
-      options: [undefined, 'ink', 'muted', 'faint'],
+      options: [undefined, 'ink', 'muted', 'faint', 'destructive'],
     },
     font: {
       control: { type: 'inline-radio' },
@@ -88,6 +88,9 @@ export const Tones: Story = {
       </Txt>
       <Txt variant="body-sm" tone="faint">
         Faint — placeholders and absent values
+      </Txt>
+      <Txt variant="body-sm" tone="destructive">
+        Destructive — inline error text, such as a failed save
       </Txt>
     </div>
   ),
