@@ -1992,6 +1992,43 @@ describe('Agent Routes Authorization', () => {
       expect(execution).not.toHaveBeenCalled();
     });
 
+    function withMapper(fga = false) {
+      vi.spyOn(mastra, 'getServer').mockReturnValue({
+        auth: { mapUserToResourceId: (user: { id: string }) => user.id },
+        ...(fga ? { fga: {} } : {}),
+      } as any);
+    }
+
+    it.each(resumeRoutes)('$name denies a mapped caller a durable run with no owner', async ({ route, method }) => {
+      withMapper();
+      await persistSuspendedDurableRun({ resourceId: '' });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+      await expect(callResume(route, { resourceId: 'user-a' })).rejects.toMatchObject({ status: 403 });
+      expect(execution).not.toHaveBeenCalled();
+    });
+
+    it.each(resumeRoutes)(
+      '$name denies an unscoped caller without FGA when a mapper is configured',
+      async ({ route, method }) => {
+        withMapper();
+        await persistSuspendedDurableRun({ resourceId: 'user-b' });
+        const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+        await expect(callResume(route, {})).rejects.toMatchObject({ status: 403 });
+        expect(execution).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(resumeRoutes)('$name lets an unscoped caller resume when FGA is configured', async ({ route, method }) => {
+      withMapper(true);
+      await persistSuspendedDurableRun({ resourceId: 'user-b' });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+      await callResume(route, {});
+      expect(execution).toHaveBeenCalled();
+    });
+
     it.each(resumeRoutes)('$name rejects a missing durable run', async ({ route, method }) => {
       const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
 
@@ -2210,6 +2247,48 @@ describe('Agent Routes Authorization', () => {
       );
 
       delete (mockAgent as any).recover;
+    });
+
+    it.each([
+      ['a mapped caller recovering a run with no owner', { resourceId: 'user-a' }, undefined, false],
+      ['an unscoped caller without FGA', {}, 'user-b', false],
+    ])('denies %s when a mapper is configured', async (_name, ctx, owner, _fga) => {
+      vi.spyOn(mastra, 'getServer').mockReturnValue({
+        auth: { mapUserToResourceId: (user: { id: string }) => user.id },
+      } as any);
+      const recoverMock = vi.fn().mockResolvedValue({ fullStream: new ReadableStream() });
+      (mockDurableAgent as any).recover = recoverMock;
+      await persistDurableAgenticLoopRun({ runId: 'recover-mapped', resourceId: owner });
+
+      await expect(
+        RECOVER_ROUTE.handler({
+          mastra,
+          agentId: 'test-durable-agent',
+          requestContext: createContextWithReservedKeys(ctx),
+          abortSignal: new AbortController().signal,
+          runId: 'recover-mapped',
+        } as any),
+      ).rejects.toMatchObject({ status: 403 });
+      expect(recoverMock).not.toHaveBeenCalled();
+    });
+
+    it('lets an unscoped caller recover when FGA is configured with a mapper', async () => {
+      vi.spyOn(mastra, 'getServer').mockReturnValue({
+        auth: { mapUserToResourceId: (user: { id: string }) => user.id },
+        fga: {},
+      } as any);
+      const recoverMock = vi.fn().mockResolvedValue({ fullStream: new ReadableStream() });
+      (mockDurableAgent as any).recover = recoverMock;
+      await persistDurableAgenticLoopRun({ runId: 'recover-fga', resourceId: 'user-b' });
+
+      await RECOVER_ROUTE.handler({
+        mastra,
+        agentId: 'test-durable-agent',
+        requestContext: createContextWithReservedKeys({}),
+        abortSignal: new AbortController().signal,
+        runId: 'recover-fga',
+      } as any);
+      expect(recoverMock).toHaveBeenCalled();
     });
 
     it('should call agent.recover(runId, { abortSignal }) and return fullStream', async () => {
