@@ -12,7 +12,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
-import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Field, FieldLabel, Fieldset, FieldsetLegend } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
@@ -337,8 +336,7 @@ export function ExperimentTriggerDialog({
           </ol>
 
           <Collapsible>
-            <CollapsibleTrigger className="flex items-center gap-2 text-caption">
-              <DisclosureChevron direction="right" className="size-4" />
+            <CollapsibleTrigger variant="form">
               Request Context (JSON, optional)
               {hasRequestContext && (
                 <Badge size="xs" variant="blue">

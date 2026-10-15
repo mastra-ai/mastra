@@ -13,6 +13,7 @@
     "deepseek-v4-flash-0731",
     "gemma-4-26b-a4b-it",
     "glm-5.2",
+    "glm-5.3",
     "gpt-oss-120b",
     "llama-3.3-70b-instruct",
     "mistral-medium-3.5-128b",
@@ -28,6 +29,7 @@
     "deepseek-v4-flash-0731",
     "gemma-4-26b-a4b-it",
     "glm-5.2",
+    "glm-5.3",
     "mistral-medium-3.5-128b",
     "qwen3.5-397b-a17b",
     "qwen3.6-35b-a3b",
@@ -80,6 +82,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

@@ -219,6 +219,34 @@ export class D1DB extends MastraBase {
     }
   }
 
+  /**
+   * Delete up to `limit` rows keyed by `runId` whose epoch-ms `column` is older
+   * than `cutoff`. Used to prune the run fencing tables.
+   */
+  async pruneRunRows({
+    tableName,
+    column,
+    cutoff,
+    limit,
+  }: {
+    tableName: TABLE_NAMES;
+    column: string;
+    cutoff: number;
+    limit: number;
+  }): Promise<number> {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(column)) {
+      throw new Error(`Invalid retention identifier: ${tableName}.${column}`);
+    }
+    const table = this.getTableName(tableName);
+    const rows = (await this.executeQuery({
+      sql: `DELETE FROM ${table} WHERE runId IN (
+        SELECT runId FROM ${table} WHERE ${column} < ? ORDER BY ${column} LIMIT ?
+      ) RETURNING runId`,
+      params: [cutoff, limit],
+    })) as Record<string, unknown>[] | null;
+    return Array.isArray(rows) ? rows.length : 0;
+  }
+
   async executeQuery(options: SqlQueryOptions): Promise<Record<string, any>[] | Record<string, any> | null> {
     if (this.binding) {
       return this.executeWorkersBindingQuery(options);
