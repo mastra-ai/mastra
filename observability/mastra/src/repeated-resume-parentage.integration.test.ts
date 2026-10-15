@@ -1,6 +1,6 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
-import { createDurableAgent } from '@mastra/core/agent/durable';
+import { createDurableAgent, DurableAgent } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
 import { SpanType } from '@mastra/core/observability';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -165,3 +165,119 @@ it('normal and durable resumes are siblings under the initial agent after two su
     expected,
   );
 }, 30_000);
+
+it.each(['normal', 'durable'] as const)(
+  '%s keeps nested agent resumes under their own initial invocation',
+  async engine => {
+    const exporter = new TestExporter();
+    let innerExecutions = 0;
+    let outerExecutions = 0;
+    let innerFinishReason: string | undefined;
+    const innerRunId = `nested-inner-${engine}`;
+    const outerRunId = `nested-outer-${engine}`;
+    const innerAgent = new Agent({
+      id: 'inner',
+      name: 'Inner agent',
+      instructions: 'Request two approvals, then answer.',
+      model: twoApprovalsModel(),
+      tools: {
+        confirm: createTool({
+          id: 'confirm',
+          description: 'Request approval',
+          inputSchema: z.object({}),
+          requireApproval: true,
+          execute: async () => ({ approval: ++innerExecutions }),
+        }),
+      },
+    });
+    const inner = engine === 'durable' ? createDurableAgent({ agent: innerAgent }) : innerAgent;
+    const outerAgent = new Agent({
+      id: 'outer',
+      name: 'Outer agent',
+      instructions: 'Request two approvals, then answer.',
+      model: twoApprovalsModel(),
+      tools: {
+        confirm: createTool({
+          id: 'confirm',
+          description: 'Start a nested agent on the first approval',
+          inputSchema: z.object({}),
+          requireApproval: true,
+          execute: async (_input, context) => {
+            if (++outerExecutions === 1) {
+              const result = await inner.generate('Start nested work.', {
+                runId: innerRunId,
+                tracingContext: context?.tracingContext,
+                maxSteps: 10,
+              });
+              innerFinishReason = result.finishReason;
+            }
+            return { approval: outerExecutions };
+          },
+        }),
+      },
+    });
+    const outer = engine === 'durable' ? createDurableAgent({ agent: outerAgent }) : outerAgent;
+    const host = new Mastra({
+      agents: { outer, inner },
+      storage: new InMemoryStore(),
+      logger: false,
+      observability: new Observability({
+        configs: { test: { serviceName: 'nested-resume', exporters: [exporter] } },
+      }),
+    });
+    const resume = (agent: typeof inner | typeof outer, runId: string, toolCallId: string) => {
+      if (agent instanceof DurableAgent) {
+        return agent.resumeGenerate(runId, { approved: true }, { toolCallId, maxSteps: 10 });
+      }
+      return agent.resumeGenerate({ approved: true }, { runId, toolCallId, maxSteps: 10 });
+    };
+    try {
+      expect((await outer.generate('Start.', { runId: outerRunId, maxSteps: 10 })).finishReason).toBe('suspended');
+      expect((await resume(outer, outerRunId, 'call-1')).finishReason).toBe('suspended');
+      expect(innerFinishReason).toBe('suspended');
+      expect(innerExecutions).toBe(0);
+
+      expect((await resume(inner, innerRunId, 'call-1')).finishReason).toBe('suspended');
+      const innerResult = await resume(inner, innerRunId, 'call-2');
+      expect(innerResult.finishReason).toBe('stop');
+      expect(innerResult.text).toBe('Both approvals received.');
+      expect(innerExecutions).toBe(2);
+
+      const outerResult = await resume(outer, outerRunId, 'call-2');
+      expect(outerResult.finishReason).toBe('stop');
+      expect(outerResult.text).toBe('Both approvals received.');
+      expect(outerExecutions).toBe(2);
+
+      await expect.poll(() => exporter.getSpansByType(SpanType.AGENT_RUN).length).toBe(6);
+      const runs = exporter.getSpansByType(SpanType.AGENT_RUN);
+      const outerRuns = runs.filter(span => span.entityId === 'outer');
+      const innerRuns = runs.filter(span => span.entityId === 'inner');
+      expect(outerRuns).toHaveLength(3);
+      expect(innerRuns).toHaveLength(3);
+      expect(new Set(runs.map(span => span.traceId)).size).toBe(1);
+      expect(runs.filter(span => !span.parentSpanId)).toEqual([outerRuns[0]]);
+      for (const family of [outerRuns, innerRuns]) {
+        for (const resumed of family.slice(1)) {
+          expect(resumed.parentSpanId).toBe(family[0]!.id);
+          expect(resumed.metadata?.resumedFromSpanId).toBe(family[0]!.id);
+        }
+      }
+      // The inner initial invocation belongs to the outer tool, not the trace root.
+      const allSpans = new Map(exporter.getAllSpans().map(span => [span.id, span]));
+      let parent = allSpans.get(innerRuns[0]!.parentSpanId!);
+      expect(parent?.type).toBe(SpanType.TOOL_CALL);
+      const visited = new Set<string>();
+      while (parent && parent.type !== SpanType.AGENT_RUN) {
+        expect(visited.has(parent.id)).toBe(false);
+        visited.add(parent.id);
+        parent = parent.parentSpanId ? allSpans.get(parent.parentSpanId) : undefined;
+      }
+      // Durable tools can retain a span from before approval/resume. Either
+      // invocation is valid here; the important boundary is outer versus inner.
+      expect(outerRuns.map(span => span.id)).toContain(parent?.id);
+    } finally {
+      await host.shutdown();
+    }
+  },
+  30_000,
+);
