@@ -402,8 +402,10 @@ function ComboboxChips({ className, children, ...props }: BaseCombobox.Chips.Pro
 
   React.useLayoutEffect(() => {
     if (!field) return;
-    // One row is the control height; anything taller means the chips wrapped.
-    const observer = new ResizeObserver(() => setMultiline(field.offsetHeight > 31));
+    // One row is the control height (the field's `min-height`); anything taller means the chips wrapped.
+    // The 1px slack absorbs subpixel rounding.
+    const rowHeight = parseFloat(getComputedStyle(field).minHeight) || 0;
+    const observer = new ResizeObserver(() => setMultiline(field.offsetHeight > rowHeight + 1));
     observer.observe(field);
     return () => observer.disconnect();
   }, [field]);
