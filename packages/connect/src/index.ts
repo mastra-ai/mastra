@@ -21,3 +21,35 @@ export type { MastraConnectErrorCode } from './errors.js';
 export type { ConnectClientOptions, ConnectionCredential, ProjectConnection } from './client.js';
 export { PROVIDERS, CHANNELS } from './registry.js';
 export type { ProviderRegistration } from './registry.js';
+export { importers } from './importers.js';
+export type { ImportersOptions, ImportersIntegrationOptions, ImportersResolver } from './importers.js';
+export { IMPORTERS, findImporterRegistration } from './importer-registry.js';
+export type {
+  ImporterAccess,
+  ImporterProviderContext,
+  ImporterProviderRegistration,
+  ImporterProxyRequest,
+  ImporterProxyResponse,
+  ImporterScopesContext,
+  ImporterScopesResolver,
+} from './importer-registry.js';
+export {
+  DEFAULT_MAX_PAGES_PER_RUN,
+  DEFAULT_MAX_RECORDS_PER_RUN,
+  MAX_RECORD_TEXT,
+  boundText,
+  clearHighWater,
+  clearResumeCursor,
+  contentRecordId,
+  linksMetadata,
+  neutralizeWikilinks,
+  nodeSelfMetadata,
+  readHighWater,
+  readResumeCursor,
+  readWatermark,
+  walkPages,
+  writeHighWater,
+  writeResumeCursor,
+  writeWatermark,
+} from './importer-runtime.js';
+export type { RecordLink } from './importer-runtime.js';
