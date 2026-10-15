@@ -74,4 +74,6 @@ export type {
 export type { SubAgent, SubAgentGenerateResult, SubAgentStreamResult } from './subagent';
 export { isAgentCompatible } from './subagent';
 
+export { getRunAgentScopes, setRunAgentScopes } from './scopes';
+
 export type { MastraLanguageModel, MastraLegacyLanguageModel } from '../llm/model/shared.types';

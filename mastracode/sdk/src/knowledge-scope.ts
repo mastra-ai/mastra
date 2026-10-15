@@ -16,6 +16,11 @@ export type KnowledgeScopeIdentity =
       organizationId: string;
       /** Set when the resource rung is anchored on something other than the session resource. */
       knowledgeResourceId?: string;
+      /**
+       * Agent scopes expressing this identity: always `org:<organizationId>`, plus
+       * `project:<projectId>` when the resource rung is anchored on a shared Factory project.
+       */
+      scopes: string[];
     }
   | { resolved: false; knowledgeResourceId?: string; reason?: string };
 
@@ -46,10 +51,11 @@ export function resolveKnowledgeScopeIdentity(state: MastraCodeState | undefined
       resolved: true,
       organizationId,
       knowledgeResourceId: isFactory ? factoryProjectId : undefined,
+      scopes: [`org:${organizationId}`, ...(isFactory ? [`project:${factoryProjectId}`] : [])],
     };
   }
   if (factoryOwned) {
     return { resolved: false, knowledgeResourceId: isFactory ? factoryProjectId : undefined };
   }
-  return { resolved: true, organizationId: LOCAL_KNOWLEDGE_ORG_ID };
+  return { resolved: true, organizationId: LOCAL_KNOWLEDGE_ORG_ID, scopes: [`org:${LOCAL_KNOWLEDGE_ORG_ID}`] };
 }

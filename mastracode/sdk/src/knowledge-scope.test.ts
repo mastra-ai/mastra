@@ -4,7 +4,11 @@ import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeScopeIdentity } from './knowled
 
 describe('resolveKnowledgeScopeIdentity', () => {
   it('defaults TUI/studio sessions to the fixed local org regardless of project or machine', () => {
-    const expected = { resolved: true, organizationId: LOCAL_KNOWLEDGE_ORG_ID };
+    const expected = {
+      resolved: true,
+      organizationId: LOCAL_KNOWLEDGE_ORG_ID,
+      scopes: [`org:${LOCAL_KNOWLEDGE_ORG_ID}`],
+    };
     expect(LOCAL_KNOWLEDGE_ORG_ID).toBe('local');
     expect(resolveKnowledgeScopeIdentity(undefined)).toEqual(expected);
     expect(resolveKnowledgeScopeIdentity({ projectPath: '/tmp/p' } as never)).toEqual(expected);
@@ -16,6 +20,7 @@ describe('resolveKnowledgeScopeIdentity', () => {
       resolved: true,
       organizationId: 'org-1',
       knowledgeResourceId: 'proj-1',
+      scopes: ['org:org-1', 'project:proj-1'],
     });
   });
 
@@ -24,6 +29,7 @@ describe('resolveKnowledgeScopeIdentity', () => {
       resolved: true,
       organizationId: 'org-1',
       knowledgeResourceId: undefined,
+      scopes: ['org:org-1'],
     });
   });
 
@@ -32,6 +38,7 @@ describe('resolveKnowledgeScopeIdentity', () => {
       resolved: true,
       organizationId: 'org-1',
       knowledgeResourceId: undefined,
+      scopes: ['org:org-1'],
     });
   });
 

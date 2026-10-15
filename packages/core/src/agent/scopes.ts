@@ -61,6 +61,16 @@ export function setRunAgentScopes(requestContext: RequestContext<any>, scopes: r
 }
 
 /**
+ * Returns `mastra__scopes` only when Core wrote it for the current run (see `setRunAgentScopes`).
+ * Any in-process caller can set the raw key, so readers that let scopes move data across
+ * identities must read through this instead of the raw request-context entry.
+ */
+export function getRunAgentScopes(requestContext: { get(key: string): unknown } | undefined): string[] | undefined {
+  const scopes = requestContext?.get(MASTRA_SCOPES_KEY);
+  return Array.isArray(scopes) && runScopeValues.has(scopes) ? [...scopes] : undefined;
+}
+
+/**
  * Re-marks `mastra__scopes` on a context Core rebuilt from its own persisted run state (durable
  * snapshots, durable step input). The mark does not survive JSON, and these scopes already passed
  * resolution when the run started.

@@ -667,7 +667,8 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
       throw new KnowledgeInspectorError('unavailable', 'Knowledge inspection requires an active project.');
     }
     const organizationId = identity.organizationId;
-    const resourceId = identity.knowledgeResourceId ?? sessionResourceId;
+    const projectScope = identity.scopes.find(scope => scope.startsWith('project:'));
+    const resourceId = projectScope ? projectScope.slice('project:'.length) : sessionResourceId;
     const activeThreadId = this.#session.thread.getId() ?? undefined;
     const thread = activeThreadId ? await this.#session.thread.getById({ threadId: activeThreadId }) : null;
     const threadId = thread?.resourceId === sessionResourceId ? thread.id : undefined;
