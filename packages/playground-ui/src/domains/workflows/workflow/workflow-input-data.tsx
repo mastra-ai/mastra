@@ -11,7 +11,6 @@ import { WorkflowInputTypeToggle } from './workflow-input-type-toggle';
 import type { WorkflowInputType } from './workflow-input-type-toggle';
 import { Button } from '@/ds/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
-import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { DynamicForm } from '@/lib/form';
@@ -217,8 +216,10 @@ export const WorkflowInputData = ({
 
   return (
     <Collapsible defaultOpen>
-      <CollapsibleTrigger className="flex w-full items-center gap-2 pb-3 text-left">
-        <DisclosureChevron direction="right" className="size-4 text-muted-foreground" />
+      <CollapsibleTrigger
+        chevron="start"
+        className="flex w-full items-center gap-2 pb-3 text-left text-muted-foreground"
+      >
         {headingSlot ?? defaultHeading}
       </CollapsibleTrigger>
 
