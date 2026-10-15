@@ -78,6 +78,11 @@ export interface ChannelSessionResolveContext {
  * `thread.resourceId` — a session can only bind threads it owns. Hosts that
  * want a different session identity choose it on both ends, by pairing this
  * with the channels `resolveResourceId` option.
+ *
+ * Create the session with `threadId: thread.id` so it binds the mapped thread
+ * directly. Without it, a session scoped by tags or `projectPath` auto-selects
+ * or creates a different thread and is only switched onto the mapped one
+ * afterwards, leaving an extra empty thread behind.
  */
 export type ChannelSessionResolve = (ctx: ChannelSessionResolveContext) => Session<any> | Promise<Session<any>>;
 
