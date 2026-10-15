@@ -9,7 +9,6 @@
 import type { Processor, ProcessInputStepArgs } from '@mastra/core/processors';
 
 const PLAN_REJECTED_PREFIX = 'Plan was not approved';
-const PLAN_REVISION_REQUESTED_PREFIX = 'Plan was not approved. The user wants revisions.';
 
 type ToolInvocation = {
   state?: string;
@@ -25,24 +24,31 @@ type ToolResultPart = {
 
 function resultText(result: unknown): string {
   if (typeof result === 'string') return result;
-  if (result && typeof result === 'object') {
-    const content = (result as { content?: unknown }).content;
-    if (typeof content === 'string') return content;
+  if (result && typeof result === 'object' && 'content' in result && typeof result.content === 'string') {
+    return result.content;
   }
   return '';
 }
 
-function stopsForUserFeedback(text: string): boolean {
-  return text.startsWith(PLAN_REJECTED_PREFIX) && !text.startsWith(PLAN_REVISION_REQUESTED_PREFIX);
+function waitsForUserFeedback(result: unknown): boolean {
+  if (result && typeof result === 'object' && 'submittedPlan' in result) {
+    const { submittedPlan } = result;
+    if (submittedPlan && typeof submittedPlan === 'object') {
+      const rejected = 'action' in submittedPlan && submittedPlan.action === 'rejected';
+      const carriesFeedback = 'feedback' in submittedPlan && Boolean(submittedPlan.feedback);
+      return rejected && !carriesFeedback;
+    }
+  }
+  return resultText(result).startsWith(PLAN_REJECTED_PREFIX);
 }
 
 function isPlanRejection(inv: ToolInvocation | undefined): boolean {
   if (!inv || inv.state !== 'result' || inv.toolName !== 'submit_plan') return false;
-  return stopsForUserFeedback(resultText(inv.result));
+  return waitsForUserFeedback(inv.result);
 }
 
 function isPlanRejectionResultPart(part: ToolResultPart): boolean {
-  return part.type === 'tool_result' && part.name === 'submit_plan' && stopsForUserFeedback(resultText(part.result));
+  return part.type === 'tool_result' && part.name === 'submit_plan' && waitsForUserFeedback(part.result);
 }
 
 export class PlanRejectionAbortProcessor implements Processor<'plan-rejection-abort'> {
