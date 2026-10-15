@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 5cdd2a40042a — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ bea793df8163 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -142,13 +142,21 @@ function normalizeActionItems(actionItems: string | string[]): string {
   return Array.isArray(actionItems) ? actionItems.join('\n') : actionItems;
 }
 
+function toFiniteNumber(value: string | number | null | undefined): number | undefined {
+  if (value == null) return undefined;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  const trimmed = value.trim();
+  if (trimmed === '') return undefined;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 function normalizeSentence(sentence: z.infer<typeof ProviderSentenceSchema>): z.infer<typeof SentenceSchema> {
   return {
     ...sentence,
     speaker_id: sentence.speaker_id != null ? String(sentence.speaker_id) : sentence.speaker_id,
-    start_time:
-      sentence.start_time != null && isFinite(Number(sentence.start_time)) ? Number(sentence.start_time) : undefined,
-    end_time: sentence.end_time != null && isFinite(Number(sentence.end_time)) ? Number(sentence.end_time) : undefined,
+    start_time: toFiniteNumber(sentence.start_time),
+    end_time: toFiniteNumber(sentence.end_time),
   };
 }
 

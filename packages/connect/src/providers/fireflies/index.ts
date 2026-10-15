@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 5cdd2a40042a — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ bea793df8163 — do not edit by hand.
 import type { ProviderRegistration } from '../../registry.js';
 import { createFirefliesTools } from './tools.js';
 

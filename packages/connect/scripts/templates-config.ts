@@ -66,7 +66,7 @@ const PIN_708: TemplatePin = {
  */
 const PIN_724: TemplatePin = {
   repo: 'NangoHQ/integration-templates',
-  sha: '5cdd2a40042ab0a4c6411d52ed722834c4a93be7',
+  sha: 'bea793df8163c4cf153d541b48cf5e7123c24fb1',
 };
 
 /**

@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 5cdd2a40042a — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ bea793df8163 — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
 import { applyToolFilter } from '../../toolset.js';
