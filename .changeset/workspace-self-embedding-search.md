@@ -12,4 +12,4 @@ const workspace = new Workspace({
 })
 ```
 
-Without a `searchIndexName`, these workspaces default to the `<id>_search_selfembed` index so server-embedded documents never share an index with client-supplied vectors. Providing an `embedder` still takes precedence.
+Without a `searchIndexName`, these workspaces default to the `<id>_search_selfembed` index. Server-embedded documents and client-supplied vectors then use different default indexes. A shared custom `searchIndexName` overrides this. Providing an `embedder` still takes precedence.
