@@ -79,9 +79,11 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const createDraftSessionMutation = useCreateUserSessionFromDraft();
   const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
   const draftConfigNotReady = onUserDraft && (modelLoading || modelError !== undefined);
-  const attachDisabled = blocked || chatPreparing || planFeedback.pending;
+  // Images added while the draft's session is being created would miss the handoff and vanish on navigation.
+  const creatingSession = createDraftSessionMutation.isPending;
+  const attachDisabled = blocked || chatPreparing || planFeedback.pending || creatingSession;
   const { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange } = useComposerImages({
-    disabled: chatPreparing || planFeedback.pending,
+    disabled: chatPreparing || planFeedback.pending || creatingSession,
   });
   const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;
   const sendDisabled = composerDisabled || draftConfigNotReady || chatPreparing || planFeedback.loading;

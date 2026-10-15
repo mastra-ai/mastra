@@ -149,6 +149,42 @@ describe('Starting a user session with images attached', () => {
       await waitForMutationsIdle(client);
     });
 
+    it('locks attachments while the session is being created so late images are not lost', async () => {
+      const preparation = stubPreparingSession({ createdSessionTitle: 'slow create' });
+      let finishCreate = () => {};
+      const createFinished = new Promise<void>(resolve => {
+        finishCreate = resolve;
+      });
+      server.use(
+        http.post(`${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`, async () => {
+          await createFinished;
+          return HttpResponse.json({ session: createdDraftSession('slow create') });
+        }),
+      );
+      const user = userEvent.setup();
+      const { client, container } = renderDraft();
+      const message = await draftReadyForImages();
+      await dropScreenshot(container);
+
+      await user.type(message, 'slow create');
+      await user.keyboard('{Enter}');
+
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Attach image' })).toBeDisabled());
+      const form = container.querySelector('form');
+      assert(form);
+      fireEvent.drop(form, { dataTransfer: { files: [new File(['late'], 'late.png', { type: 'image/png' })] } });
+      fireEvent.paste(message, { clipboardData: { files: [new File(['late'], 'late.png', { type: 'image/png' })] } });
+      await user.upload(screen.getByLabelText('Attach images'), new File(['late'], 'late.png', { type: 'image/png' }));
+      expect(screen.queryByRole('button', { name: 'Remove late.png' })).not.toBeInTheDocument();
+
+      finishCreate();
+
+      await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent(THREAD_URL));
+      await waitFor(() => expect(preparation.postedFiles).toEqual([SENT_SHOT]));
+      preparation.finishWorkspace();
+      await waitForMutationsIdle(client);
+    });
+
     it('applies the draft-selected model before sending the prompt and its images', async () => {
       const preparation = stubPreparingSession({ createdSessionTitle: 'use my model' });
       acceptSessionCreate('use my model');
