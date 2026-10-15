@@ -1,6 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { IncidentioApiClient } from './api.js';
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
@@ -50,6 +54,7 @@ describe('IncidentioApiClient additional API surfaces', () => {
   });
 
   it('sends x-mastra-project-id only when configured for the Platform proxy', async () => {
+    vi.stubEnv('MASTRA_PROJECT_ID', '');
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => json({ incidents: [], pagination_meta: {} }));
     const proxied = new IncidentioApiClient({
       baseUrl: 'https://integrations.example.com/v2/connections/a1b_incidentio/proxy',
@@ -62,9 +67,34 @@ describe('IncidentioApiClient additional API surfaces', () => {
 
     expect(fetchImpl.mock.calls[0]?.[1]?.headers).toMatchObject({ 'x-mastra-project-id': 'proj_123' });
 
+    const unconfigured = new IncidentioApiClient({
+      baseUrl: 'https://api.incident.test',
+      accessToken: 'incident-key',
+      fetchImpl,
+    });
+
+    await unconfigured.listIncidents();
+
+    expect(fetchImpl.mock.calls[1]?.[1]?.headers).not.toHaveProperty('x-mastra-project-id');
+  });
+
+  it('falls back to MASTRA_PROJECT_ID unless the direct mode opts out with projectId: null', async () => {
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => json({ incidents: [], pagination_meta: {} }));
+    const proxied = new IncidentioApiClient({
+      baseUrl: 'https://integrations.example.com/v2/connections/a1b_incidentio/proxy',
+      accessToken: 'platform-token',
+      fetchImpl,
+    });
+
+    await proxied.listIncidents();
+
+    expect(fetchImpl.mock.calls[0]?.[1]?.headers).toMatchObject({ 'x-mastra-project-id': 'proj_env' });
+
     const direct = new IncidentioApiClient({
       baseUrl: 'https://api.incident.test',
       accessToken: 'incident-key',
+      projectId: null,
       fetchImpl,
     });
 

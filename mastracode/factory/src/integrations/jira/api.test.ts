@@ -25,6 +25,7 @@ function requestOf(fetchMock: ReturnType<typeof vi.fn>, call = 0): { url: string
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe('JiraApiClient construction', () => {
@@ -99,6 +100,7 @@ describe('JiraApiClient requests', () => {
   });
 
   it('uses Bearer auth when pointed at a Platform connection proxy', async () => {
+    vi.stubEnv('MASTRA_PROJECT_ID', '');
     const fetchMock = stubFetch(jsonResponse({ baseUrl: 'https://acme.atlassian.net' }));
     const proxy = new JiraApiClient({
       baseUrl: 'https://integrations.example.com/v2/connections/a1b_jira/proxy/',
@@ -126,7 +128,21 @@ describe('JiraApiClient requests', () => {
     expect(requestOf(fetchMock).init.headers).toMatchObject({ 'x-mastra-project-id': 'proj_123' });
   });
 
+  it('falls back to MASTRA_PROJECT_ID for attribution in Platform proxy mode', async () => {
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+    const fetchMock = stubFetch(jsonResponse({ baseUrl: 'https://acme.atlassian.net' }));
+    const proxy = new JiraApiClient({
+      baseUrl: 'https://integrations.example.com/v2/connections/a1b_jira/proxy/',
+      accessToken: 'platform-token',
+    });
+
+    await proxy.getServerInfo();
+
+    expect(requestOf(fetchMock).init.headers).toMatchObject({ 'x-mastra-project-id': 'proj_env' });
+  });
+
   it('never sends x-mastra-project-id to Atlassian in direct Basic auth mode', async () => {
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
     const fetchMock = stubFetch(jsonResponse({ values: [], startAt: 0, isLast: true }));
 
     await client().listProjects();

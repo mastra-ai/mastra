@@ -339,11 +339,12 @@ export interface IncidentioApiClientConfig {
   /**
    * Mastra project id sent as `x-mastra-project-id` when the base URL is a
    * Mastra Platform connection proxy, so the platform can attribute proxied
-   * incident.io activity to the project. The platform strips the header
-   * before forwarding the request upstream. Leave unset for direct
-   * api.incident.io access.
+   * incident.io activity to the project. When omitted, falls back to the
+   * `MASTRA_PROJECT_ID` environment variable; the platform strips the header
+   * before forwarding the request upstream. Pass `null` for direct
+   * api.incident.io access so the header never reaches incident.io.
    */
-  projectId?: string;
+  projectId?: string | null;
   fetchImpl?: typeof fetch;
 }
 
@@ -366,7 +367,8 @@ export class IncidentioApiClient {
     }
     this.#baseUrl = baseUrl.replace(/\/+$/, '');
     this.#accessToken = accessToken;
-    this.#projectId = config.projectId?.trim() || null;
+    this.#projectId =
+      config.projectId === null ? null : (config.projectId ?? process.env.MASTRA_PROJECT_ID)?.trim() || null;
     this.#fetch = config.fetchImpl ?? globalThis.fetch;
   }
 

@@ -63,8 +63,9 @@ export type JiraApiClientConfig = JiraApiClientBaseConfig &
         accessToken: string;
         /**
          * Mastra project id sent as `x-mastra-project-id` so the platform can
-         * attribute proxied Jira activity to the project. The platform strips
-         * the header before forwarding the request to Atlassian.
+         * attribute proxied Jira activity to the project. Falls back to the
+         * `MASTRA_PROJECT_ID` environment variable. The platform strips the
+         * header before forwarding the request to Atlassian.
          */
         projectId?: string;
         email?: never;
@@ -193,7 +194,7 @@ export class JiraApiClient {
         throw new Error('JiraApiClient is missing required config: accessToken.');
       }
       this.#authHeader = `Bearer ${config.accessToken}`;
-      this.#projectId = config.projectId?.trim() || null;
+      this.#projectId = (config.projectId ?? process.env.MASTRA_PROJECT_ID)?.trim() || null;
     } else {
       const missing = (['email', 'apiToken'] as const).filter(key => !config[key]);
       if (missing.length > 0) {
