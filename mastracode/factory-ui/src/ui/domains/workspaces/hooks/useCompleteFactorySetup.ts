@@ -1,6 +1,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { useApiConfig } from '../../../../api/config';
+import type { ProvidersResponse } from '../../../../api/types';
+import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import { isProviderConnected } from './useProviderConnection';
 import { queryKeys } from '../../../../api/keys';
 import { availableModelsQueryOptions } from '../../../../hooks/useAvailableModels';
 import { useLinkRepositoryMutation } from '../../../../hooks/useFactories';
@@ -15,6 +18,8 @@ import {
 } from '../services/github';
 import {
   clearOnboardingFlow,
+  completeOnboardingSchema,
+  onboardingModelChoices,
   persistOnboardingFactory,
   persistOnboardingLinkedRepositories,
   readOnboardingFactory,
@@ -32,30 +37,47 @@ async function findPendingFactory(baseUrl: string, pendingId: string) {
 }
 
 export function useCompleteFactorySetup() {
-  const { baseUrl } = useApiConfig();
+  const { baseUrl, client } = useApiConfig();
+  const auth = useFactoryAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const link = useLinkRepositoryMutation();
   const setPersonalDefault = useSetDefaultModel();
   return useMutation({
     mutationFn: async (draft: OnboardingDraft) => {
-      const repo = draft.repository;
-      if (!repo) throw new Error('Choose a repository before creating your factory.');
-      const factoryModel = draft.model?.modelId ?? draft.personal?.modelId;
-      if (!factoryModel) throw new Error('Choose a model before creating your factory.');
-      const personalModel = draft.personal?.modelId;
-      const availableModels = await queryClient.fetchQuery({ ...availableModelsQueryOptions(baseUrl), staleTime: 0 });
-      const unavailableModel = [factoryModel, personalModel].find(
-        modelId => modelId && !availableModels.some(available => available.id === modelId),
-      );
-      if (unavailableModel) throw new Error(`${unavailableModel} is no longer available. Choose another model.`);
+      const parsed = completeOnboardingSchema.safeParse(draft);
+      if (!parsed.success) throw new Error('Choose your setup and its required models before creating your factory.');
+      const setup = parsed.data;
+      const repo = setup.repository;
+      const modelScope = setup.modelScope;
+      const factoryModel = setup.modelScope === 'user' ? setup.personal.modelId : setup.model.modelId;
+      const personalModel = setup.modelScope === 'factory' ? undefined : setup.personal.modelId;
+      const choices = onboardingModelChoices(setup);
+      const [providers, catalogs] = await Promise.all([
+        client.get<ProvidersResponse>('/web/config/providers'),
+        Promise.all(
+          choices.map(({ scope }) =>
+            queryClient.fetchQuery({
+              ...availableModelsQueryOptions(baseUrl, { scope }),
+              staleTime: 0,
+            }),
+          ),
+        ),
+      ]);
+      for (const [index, { scope, choice }] of choices.entries()) {
+        const account = scope === 'org' ? 'the company account' : 'your account';
+        if (!catalogs[index].some(model => model.id === choice.modelId && model.provider === choice.providerId)) {
+          throw new Error(`${choice.modelId} is no longer available for ${account}. Choose another model.`);
+        }
+        const provider = providers.providers.find(item => item.provider === choice.providerId);
+        if (!provider || !isProviderConnected(provider, auth.data?.authEnabled ? scope : undefined, choice.method)) {
+          throw new Error(`The connection for ${account} has changed. Review your provider connection.`);
+        }
+      }
 
       const pendingId = readOnboardingFactory();
       let existing = pendingId ? await findPendingFactory(baseUrl, pendingId) : undefined;
-      // Without an organization model, Factory runs would have nothing to run on in the default hybrid scope, so a
-      // personal-only setup keeps both sessions and runs on the creator's own credentials.
-      const modelScope = draft.model?.modelId ? undefined : 'user';
-      if (existing && existing.modelScope !== (modelScope ?? 'hybrid')) {
+      if (existing && existing.modelScope !== modelScope) {
         // Recreate the unfinished project rather than bypassing the admin gate on scope changes.
         await deleteFactoryProject(baseUrl, existing.id);
         existing = undefined;

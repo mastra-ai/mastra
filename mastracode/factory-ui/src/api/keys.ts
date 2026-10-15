@@ -17,7 +17,7 @@ export const INITIAL_THREAD_MESSAGE_LIMIT = 100;
 
 export interface AvailableModelsFilter {
   factoryProjectId?: string;
-  scope?: 'user';
+  scope?: 'org' | 'user';
   resourceId?: string;
   threadId?: string;
 }

@@ -1,4 +1,4 @@
-/** App-owned vector artwork. All scenes share six surfaces so their geometry can morph. */
+/** App-owned vector artwork. All scenes share eight surfaces so their geometry can morph. */
 export type Point = readonly [number, number];
 type WorldPoint = readonly [number, number, number];
 export type DrawingScene = 'factory' | 'codebase' | 'intake' | 'accounts';
@@ -255,14 +255,20 @@ export function drawingPose(scene: DrawingScene, mode: AccountsMode): DrawingPos
       x: 0,
       y: 0,
       foundation: 0,
-      surfaces: [...roofs, conveyorTicket(0, smooth(0.18)), conveyorTicket(1, smooth(0.53)), folded],
+      surfaces: [...roofs, conveyorTicket(0, smooth(0.18)), conveyorTicket(1, smooth(0.53)), folded, folded, folded],
     };
   if (scene === 'codebase')
     return {
       ...base,
       building: 1,
       links: [codeLink, hiddenLink, hiddenLink],
-      surfaces: [...roofs.map(shape => transformed(shape, miniScale, miniX, miniY)), repository, ...brackets],
+      surfaces: [
+        ...roofs.map(shape => transformed(shape, miniScale, miniX, miniY)),
+        repository,
+        ...brackets,
+        folded,
+        folded,
+      ],
     };
   if (scene === 'intake')
     return {
@@ -277,26 +283,38 @@ export function drawingPose(scene: DrawingScene, mode: AccountsMode): DrawingPos
         hiddenLink,
         hiddenLink,
       ],
-      surfaces: [panel(28, 48, 148, 64), panel(28, 186, 104, 48), panel(148, 186, 104, 48), folded, folded, folded],
+      surfaces: [
+        panel(28, 48, 148, 64),
+        panel(28, 186, 104, 48),
+        panel(148, 186, 104, 48),
+        folded,
+        folded,
+        folded,
+        folded,
+        folded,
+      ],
     };
   const links = [80, 200, 320].map((x, index): Point[] => {
-    const origin = mode === 'individual' || (mode === 'hybrid' && index === 2) ? x : 200;
+    const origin = mode === 'shared' ? 200 : x;
     return [
       [origin, 90],
       [origin, 126],
       [x, 126],
-      [x, 156],
+      [x, index === 0 ? 185 : 156],
     ];
   });
   return {
     ...base,
     links,
+    building: 1,
+    x: 80 - 209 * miniScale,
+    y: 222 - 213 * miniScale,
     surfaces: [
-      panel(28, 156, 104, 94, true),
-      panel(148, 156, 104, 94, true),
-      panel(268, 156, 104, 94, true),
-      panel(148, 48, 104, 42),
-      mode === 'individual' ? panel(28, 48, 104, 42) : folded,
+      ...roofs.map(shape => transformed(shape, miniScale, 80 - 209 * miniScale, 222 - 213 * miniScale)),
+      panel(148, 156, 104, 94),
+      panel(268, 156, 104, 94),
+      panel(mode === 'shared' ? 148 : 28, 48, 104, 42),
+      mode === 'shared' ? folded : panel(148, 48, 104, 42),
       mode === 'shared' ? folded : panel(268, 48, 104, 42),
     ],
   };

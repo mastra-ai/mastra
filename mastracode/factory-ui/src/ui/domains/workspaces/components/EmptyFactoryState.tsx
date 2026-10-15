@@ -1,5 +1,8 @@
 import { OnboardingProgress } from './onboarding/OnboardingProgress';
-import { onboardingStepMeta } from '../services/onboardingSteps';
+import { OnboardingSetupStep } from './onboarding/OnboardingSetupStep';
+import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { onboardingSteps, onboardingStepMeta } from '../services/onboardingSteps';
 import { useState } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
@@ -8,7 +11,6 @@ import { connectLinear } from '../../factory/services/linear';
 import type { SourceControlRepository } from '../services/github';
 import { connectGithub, manageGithubConnection } from '../services/github';
 import {
-  ONBOARDING_STEPS,
   persistOnboardingDraft,
   persistOnboardingReviewReturn,
   readOnboardingDraft,
@@ -49,12 +51,35 @@ function shownModel(previewedModel?: string, previewedProvider?: string, savedMo
 }
 
 export function EmptyFactoryState() {
+  const auth = useFactoryAuth();
+  if (auth.isPending) return <SkeletonRows label="Loading Factory setup" rows={3} />;
+  if (auth.isError)
+    return (
+      <div className="p-6">
+        <Txt role="alert">Unable to load your account.</Txt>
+        <Button onClick={() => void auth.refetch()}>Retry</Button>
+      </div>
+    );
+  return <FactoryOnboarding local={!auth.data.authEnabled} />;
+}
+
+function FactoryOnboarding({ local }: { local: boolean }) {
   const { baseUrl } = useApiConfig();
   const complete = useCompleteFactorySetup();
-  const [draft, setDraft] = useState<OnboardingDraft>(readOnboardingDraft);
+  const [draft, setDraft] = useState<OnboardingDraft>(() => {
+    const saved = readOnboardingDraft();
+    return local ? { ...saved, modelScope: 'factory' } : saved;
+  });
   const [step, setStep] = useState<Step>(() => {
     const saved = readOnboardingStep();
-    return saved !== 'initial' && !draft.repository ? 'vcs' : saved;
+    if (saved !== 'initial' && !draft.repository) return 'vcs';
+    if (['model-provider', 'personal-provider', 'review', 'model-setup'].includes(saved)) {
+      if (!local && !draft.modelScope) return 'model-setup';
+      if (local && (saved === 'model-setup' || saved === 'personal-provider')) return 'model-provider';
+      if (saved === 'model-provider' && draft.modelScope === 'user') return 'personal-provider';
+      if (saved === 'personal-provider' && draft.modelScope === 'factory') return 'model-provider';
+    }
+    return saved;
   });
   const [returnToReview, setReviewReturn] = useState(readOnboardingReviewReturn);
   const setReturnToReview = (value: boolean) => {
@@ -80,13 +105,13 @@ export function EmptyFactoryState() {
     goTo(returnToReview ? 'review' : next);
     setReturnToReview(false);
   };
-  const stepIndex = ONBOARDING_STEPS.indexOf(step);
-  const previousStep = stepIndex > 0 ? ONBOARDING_STEPS[stepIndex - 1] : undefined;
+  const steps = onboardingSteps(draft.modelScope, local);
+  const stepIndex = steps.indexOf(step);
+  const previousStep = stepIndex > 0 ? steps[stepIndex - 1] : undefined;
   const repository = preview.repository ?? draft.repository;
   const model = shownModel(preview.model, preview.providerId, draft.model?.modelId);
   const personalModel = shownModel(preview.personalModel, preview.personalProviderId, draft.personal?.modelId);
-  const personalIsFactoryModel = !draft.model;
-  const meta = onboardingStepMeta(step, personalIsFactoryModel);
+  const meta = onboardingStepMeta(step, draft.modelScope, local);
 
   return (
     <main className="onboarding-page bg-background text-foreground min-h-dvh pb-20">
@@ -160,7 +185,19 @@ export function EmptyFactoryState() {
                     persistOnboardingStep('project-management');
                     connectLinear(baseUrl);
                   }}
-                  onContinue={() => advance('model-provider')}
+                  onContinue={() => advance(local ? 'model-provider' : 'model-setup')}
+                />
+              )}
+              {step === 'model-setup' && (
+                <OnboardingSetupStep
+                  scope={draft.modelScope ?? 'factory'}
+                  onChange={modelScope => updateDraft({ ...draft, modelScope })}
+                  onContinue={() => {
+                    const modelScope = draft.modelScope ?? 'factory';
+                    updateDraft({ ...draft, modelScope });
+                    setReturnToReview(false);
+                    goTo(modelScope === 'user' ? 'personal-provider' : 'model-provider');
+                  }}
                 />
               )}
               {step === 'model-provider' && (
@@ -169,20 +206,20 @@ export function EmptyFactoryState() {
                   onPreviewModel={previewed => previewWith({ model: previewed })}
                   onPreviewProvider={(providerId, method) => previewWith({ providerId, method, model: undefined })}
                   onComplete={model => {
-                    updateDraft({ ...draft, model });
+                    updateDraft({ ...draft, model, modelScope: model ? draft.modelScope : 'user' });
                     if (!model) {
                       setReturnToReview(false);
                       goTo('personal-provider');
                       return;
                     }
-                    advance('personal-provider');
+                    advance(draft.modelScope === 'hybrid' ? 'personal-provider' : 'review');
                   }}
                 />
               )}
               {step === 'personal-provider' && (
                 <PersonalProviderFactoryStep
                   initialChoice={draft.personal}
-                  requireModel={personalIsFactoryModel}
+                  requireModel
                   onPreviewModel={previewed => previewWith({ personalModel: previewed })}
                   onContinue={personal => {
                     updateDraft({ ...draft, personal });
@@ -196,6 +233,7 @@ export function EmptyFactoryState() {
               {step === 'review' && (
                 <OnboardingReviewStep
                   draft={draft}
+                  local={local}
                   pending={complete.isPending}
                   error={complete.error?.message}
                   onConfirm={() => {
@@ -213,6 +251,8 @@ export function EmptyFactoryState() {
 
         <OnboardingPreview
           step={step}
+          modelScope={draft.modelScope ?? 'factory'}
+          local={local}
           repository={repository}
           source={previewSource}
           model={model}
@@ -223,7 +263,7 @@ export function EmptyFactoryState() {
           personalModel={personalModel}
         />
       </div>
-      <OnboardingProgress step={step} editingReview={returnToReview} />
+      <OnboardingProgress step={step} editingReview={returnToReview} local={local} />
     </main>
   );
 }

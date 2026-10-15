@@ -24,12 +24,11 @@ export interface AvailableModelsTarget extends AvailableModelsFilter {
 }
 
 async function fetchSettingsModels(baseUrl: string, target?: AvailableModelsTarget) {
-  const query =
-    target?.scope === 'user'
-      ? '?scope=user'
-      : target?.factoryProjectId
-        ? `?factoryId=${encodeURIComponent(target.factoryProjectId)}`
-        : '';
+  const query = target?.scope
+    ? `?scope=${target.scope}`
+    : target?.factoryProjectId
+      ? `?factoryId=${encodeURIComponent(target.factoryProjectId)}`
+      : '';
   const res = await fetch(`${baseUrl}/web/config/models${query}`, {
     credentials: 'include',
     headers: { Accept: 'application/json' },

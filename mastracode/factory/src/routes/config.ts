@@ -1007,9 +1007,11 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 }
                 sessionPolicy = { modelScope, defaultModelId };
               }
-            } else if (allTenantCredentials && c.req.query('scope') === 'user') {
-              // Settings still list the caller's own models; live threads resolve their owner above.
-              tenantCredentials = allTenantCredentials.filter(record => record.scope === 'user');
+            } else if (c.req.query('scope') !== undefined) {
+              // Explicit settings scopes never override a live thread's owner and policy above.
+              const scope = z.enum(['org', 'user']).safeParse(c.req.query('scope'));
+              if (!scope.success) return c.json({ error: 'invalid_model_scope' }, 400);
+              tenantCredentials = allTenantCredentials?.filter(record => record.scope === scope.data);
             } else if (allTenantCredentials && factoryProjectId && tenant) {
               if (!options.factoryProjects) return c.json({ error: 'factory_unavailable' }, 503);
               await options.factoryProjects.ensureReady();

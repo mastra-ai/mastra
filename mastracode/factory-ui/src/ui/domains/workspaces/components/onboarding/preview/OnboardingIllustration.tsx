@@ -60,7 +60,7 @@ export function OnboardingIllustration({ scene, mode }: { scene: DrawingScene; m
       {[0, 1, 2].map(index => (
         <path key={index} data-link className="onboarding-sketch-link" />
       ))}
-      {[3, 4, 5].map(index => (
+      {[3, 4, 5, 6, 7].map(index => (
         <g key={index} data-surface={index}>
           <path data-face className="onboarding-sketch-surface" />
           <path data-marks className="onboarding-sketch-detail" />

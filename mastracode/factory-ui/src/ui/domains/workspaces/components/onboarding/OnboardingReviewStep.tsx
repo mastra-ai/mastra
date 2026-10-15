@@ -1,13 +1,13 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { GitBranch, ListTodo, Sparkles, UserRound } from 'lucide-react';
+import { Building2, GitBranch, ListTodo, Sparkles, UserRound } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { CONNECTION_METHOD_LABEL } from '../../hooks/useProviderConnection';
 import { useWorkSourceConnections, WORK_SOURCE_NAME, WORK_SOURCES } from '../../hooks/useWorkSourceConnections';
-import { providerDisplayName } from '../../../settings/components/provider-display-name';
+import { SETUP_LABELS } from '../../services/onboardingSteps';
 import { isGitLabRepository } from '../../services/github';
-import type { OnboardingConnectionChoice, OnboardingDraft, OnboardingStep } from '../../services/onboardingFlow';
+import type { OnboardingDraft, OnboardingStep } from '../../services/onboardingFlow';
 
 function OnboardingReviewRow({
   icon,
@@ -61,19 +61,16 @@ function OnboardingWorkReviewRow({ disabled, onEdit }: { disabled: boolean; onEd
   );
 }
 
-function personalAccessValue(personal?: OnboardingConnectionChoice) {
-  if (!personal) return 'No personal connection selected';
-  return personal.modelId ?? providerDisplayName(personal.providerId);
-}
-
 export function OnboardingReviewStep({
   draft,
+  local = false,
   onEdit,
   onConfirm,
   pending,
   error,
 }: {
   draft: OnboardingDraft;
+  local?: boolean;
   onEdit: (step: OnboardingStep) => void;
   onConfirm: () => void;
   pending: boolean;
@@ -82,7 +79,7 @@ export function OnboardingReviewStep({
   const repo = draft.repository;
   const personal = draft.personal;
   const personalMethod = personal && CONNECTION_METHOD_LABEL[personal.method];
-  const personalScope = personal?.modelId ? 'your default' : 'only you';
+  const shared = draft.modelScope !== 'user';
   return (
     <section aria-label="Review factory setup" className="flex flex-col gap-5">
       <div className="flex flex-col gap-3 sm:gap-4">
@@ -95,12 +92,28 @@ export function OnboardingReviewStep({
           onEdit={() => onEdit('vcs')}
         />
         <OnboardingWorkReviewRow disabled={pending} onEdit={() => onEdit('project-management')} />
-        {draft.model ? (
+        {!local && (
+          <OnboardingReviewRow
+            icon={<Building2 />}
+            label="Setup"
+            value={draft.modelScope ? SETUP_LABELS[draft.modelScope] : 'Choose a setup'}
+            detail="Applies to this Factory"
+            disabled={pending}
+            onEdit={() => onEdit('model-setup')}
+          />
+        )}
+        {shared ? (
           <OnboardingReviewRow
             icon={<Sparkles />}
             label="Model"
-            value={draft.model.modelId}
-            detail="Factory default · organization account"
+            value={draft.model?.modelId ?? 'Choose a model'}
+            detail={
+              local
+                ? 'Factory default · local connection'
+                : draft.modelScope === 'hybrid'
+                  ? 'Company account · Factory work'
+                  : 'Company account · Factory work and sessions'
+            }
             disabled={pending}
             onEdit={() => onEdit('model-provider')}
           />
@@ -109,22 +122,28 @@ export function OnboardingReviewStep({
             icon={<Sparkles />}
             label="Model"
             value={personal?.modelId ?? 'Choose a model'}
-            detail={personal && `${personalMethod} · Factory + your default`}
+            detail={personal && `${personalMethod} · your default for work and sessions`}
             disabled={pending}
             onEdit={() => onEdit('personal-provider')}
           />
         )}
-        {draft.model && (
+        {draft.modelScope === 'hybrid' && (
           <OnboardingReviewRow
             icon={<UserRound />}
-            label="Access"
-            value={personalAccessValue(personal)}
-            detail={personal ? `${personalMethod} · ${personalScope}` : undefined}
+            label="Personal model"
+            value={personal?.modelId ?? 'Choose your session model'}
+            detail={personal ? `${personalMethod} · your default for sessions` : undefined}
             disabled={pending}
             onEdit={() => onEdit('personal-provider')}
           />
         )}
       </div>
+      {draft.modelScope !== 'factory' && (
+        <Txt variant="meta" tone="muted">
+          Your personal default is used wherever your account powers a session or Factory work. Teammates keep their own
+          defaults.
+        </Txt>
+      )}
       {error && (
         <Txt variant="caption" role="alert">
           {error}
