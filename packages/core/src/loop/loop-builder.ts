@@ -1,7 +1,7 @@
 import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
 import { normalizeToolOutput } from '../agent/message-list/utils/unwrap-legacy-tool-output';
 import type { MastraDBMessage } from '../memory';
-import { InternalSpans } from '../observability';
+import { InternalSpans, resolveExportedSpanId, SpanType } from '../observability';
 import { safeEnqueue } from '../stream/base';
 import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
@@ -686,6 +686,21 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
    * predicate).
    */
   build(): LoopWorkflow {
+    const currentSpan = this.params.tracingContext?.currentSpan;
+    const agentSpan =
+      currentSpan?.type === SpanType.AGENT_RUN ? currentSpan : currentSpan?.findParent(SpanType.AGENT_RUN);
+    const previousContext = this.params.resumeContext?.snapshot?.tracingContext;
+    // Keep all resumed invocations under the initial agent, not the generation
+    // that happened to be active when the internal workflow suspended. Only
+    // reuse the saved parent when this invocation actually resumed beneath it;
+    // an explicit caller tracing context can start a different lineage.
+    const initialAgentSpanId =
+      agentSpan &&
+      previousContext?.spanId &&
+      agentSpan.traceId === previousContext.traceId &&
+      agentSpan.getParentSpanId() === previousContext.spanId
+        ? previousContext.spanId
+        : resolveExportedSpanId(agentSpan);
     return this.workflowFactory()({
       id: AGENTIC_LOOP_WORKFLOW_ID,
       inputSchema: llmIterationOutputSchema,
@@ -714,7 +729,17 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         // Agent-loop snapshots are pure resume artifacts — strip everything a
         // resume never reads (stale suspend payloads, duplicated message
         // arrays, AI SDK step history) before persisting.
-        pruneSnapshot: pruneAgentLoopSnapshot,
+        pruneSnapshot: params => {
+          const snapshot = pruneAgentLoopSnapshot(params);
+          if (params.workflowStatus === 'suspended' && agentSpan) {
+            snapshot.tracingContext = {
+              traceId: agentSpan.traceId,
+              spanId: initialAgentSpanId,
+              parentSpanId: agentSpan.getParentSpanId(),
+            };
+          }
+          return snapshot;
+        },
         validateInputs: false,
       },
     })
