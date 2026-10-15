@@ -14,6 +14,7 @@ const primeTenant = vi.fn(async (_tenant: unknown) => undefined);
 vi.mock('../../routes/tenant-credentials.js', () => ({
   primeTenantCredentialsForRequestContext: (context: RequestContext) => prime(context),
   primeTenantCredentialsForTenant: (tenant: unknown) => primeTenant(tenant),
+  resolveTenantProviderDefaultModel: async () => undefined,
 }));
 
 import {
