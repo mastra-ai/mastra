@@ -1,3 +1,4 @@
+import * as coreKnowledge from '@mastra/core/knowledge';
 import { materializeKnowledgeScopePlan, type Knowledge } from '@mastra/core/knowledge';
 import type {
   KnowledgeNode,
@@ -42,6 +43,17 @@ export type KnowledgeToolContext = {
   requestContext?: { get(key: string): unknown };
 };
 
+/**
+ * Older Cores clone materializeScope's input, so a live request context (which can hold functions)
+ * is only passed to a Core that advertises the vouch capability.
+ */
+export function knowledgeRunContext(
+  requestContext: KnowledgeToolContext['requestContext'],
+  knowledgeModule: Record<string, unknown> = coreKnowledge,
+): { requestContext?: KnowledgeToolContext['requestContext'] } {
+  return knowledgeModule.KNOWLEDGE_VOUCH_RUN_SCOPES === true ? { requestContext } : {};
+}
+
 export async function getKnowledgeStore(memory: KnowledgeStoreMemory): Promise<KnowledgeStorage> {
   if (memory.getKnowledgeStore) return memory.getKnowledgeStore();
   const store = await memory.storage?.getStore('knowledge');
@@ -52,6 +64,7 @@ export async function getKnowledgeStore(memory: KnowledgeStoreMemory): Promise<K
 export async function resolveKnowledgeScopeIds(
   memory: KnowledgeStoreMemory,
   context: KnowledgeToolContext | undefined,
+  knowledgeModule: Record<string, unknown> = coreKnowledge,
 ): Promise<KnowledgeScopeIds> {
   const organizationId = resolveKnowledgeOrgId(context?.requestContext);
   const rung = resolveKnowledgeRung(context?.requestContext, context?.agent?.resourceId);
@@ -62,6 +75,7 @@ export async function resolveKnowledgeScopeIds(
   if (!rung) throw new Error('Knowledge tools require an active resourceId.');
   if (!threadId) throw new Error('Knowledge tools require an active threadId.');
   const knowledge = memory.getKnowledgeInstance?.();
+  const runContext = knowledgeRunContext(context?.requestContext, knowledgeModule);
 
   const orgAddress = `org:${organizationId}`;
   const resourceAddress = rung.address;
@@ -71,18 +85,21 @@ export async function resolveKnowledgeScopeIds(
       address: orgAddress,
       contextualScopeAddress: orgAddress,
       parameters: { orgId: organizationId },
+      ...runContext,
     });
     const resource = await knowledge.materializeScope({
       address: resourceAddress,
       parentAddresses: [orgAddress],
       contextualScopeAddress: orgAddress,
       parameters: { orgId: organizationId, ...rung.parameters },
+      ...runContext,
     });
     const thread = await knowledge.materializeScope({
       address: threadAddress,
       parentAddresses: [resourceAddress],
       contextualScopeAddress: resourceAddress,
       parameters: { orgId: organizationId, ...rung.parameters, threadId },
+      ...runContext,
     });
     return [org.scopes[orgAddress]!, resource.scopes[resourceAddress]!, thread.scopes[threadAddress]!];
   }

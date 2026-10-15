@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
+import { setRunAgentScopes } from '../../agent/scopes';
 import { ConsoleLogger } from '../../logger';
 import { Mastra } from '../../mastra';
+import { MASTRA_SCOPES_KEY, RequestContext } from '../../request-context';
 import { InMemoryStore, KnowledgeInvisibleRecordError, MastraCompositeStore } from '../../storage';
 import { Knowledge } from '../index';
 
@@ -88,6 +90,87 @@ describe('Knowledge', () => {
     expect(first).toMatchObject({ changed: true, accessEpoch: 1 });
     expect(second).toMatchObject({ changed: false, accessEpoch: 1, scopes: first.scopes });
     expect(lazy).toMatchObject({ changed: true, accessEpoch: 2 });
+  });
+
+  it('fills missing scope parameters through the configured vouch hook', async () => {
+    const scopes = { 'agent:$agentId:public': { access: [{ principal: 'team:$orgId', role: 'readonly' as const }] } };
+    const input = { address: 'agent:weather:public', contextualScopeAddress: 'resource:weather' };
+    const seen: Array<{ address: string; parameter: string }> = [];
+    const vouched = new Knowledge({
+      storage: new InMemoryStore({ id: 'vouched' }),
+      structure: { scopes: [{ address: 'team:acme', name: 'Acme team' }] },
+      scopes,
+      vouch: async request => {
+        seen.push(request);
+        await Promise.resolve();
+        return request.parameter === 'orgId' ? 'acme' : undefined;
+      },
+    });
+    const unvouched = new Knowledge({ storage: new InMemoryStore({ id: 'unvouched' }), scopes });
+
+    await expect(unvouched.materializeScope(input)).rejects.toThrow(
+      'Missing host-vouched Knowledge scope parameter: orgId',
+    );
+    await vouched.reconcile();
+    await expect(vouched.materializeScope(input)).resolves.toMatchObject({ changed: true });
+    expect(seen).toEqual([{ address: 'agent:weather:public', parameter: 'orgId' }]);
+  });
+
+  describe('vouch hook run scopes', () => {
+    const scopes = { 'agent:$agentId:public': { access: [{ principal: 'team:$orgId', role: 'readonly' as const }] } };
+    const input = { address: 'agent:weather:public', contextualScopeAddress: 'resource:weather' };
+    function vouchingKnowledge(id: string) {
+      const seen: Array<readonly string[] | undefined> = [];
+      const knowledge = new Knowledge({
+        storage: new InMemoryStore({ id }),
+        structure: { scopes: [{ address: 'team:acme', name: 'Acme team' }] },
+        scopes,
+        vouch: async ({ parameter, scopes: runScopes }) => {
+          seen.push(runScopes);
+          const org = runScopes?.find(scope => scope.startsWith('org:'))?.slice(4);
+          return parameter === 'orgId' ? org : undefined;
+        },
+      });
+      return { knowledge, seen };
+    }
+
+    it('passes the Core-marked run scopes to the hook', async () => {
+      const { knowledge, seen } = vouchingKnowledge('marked');
+      await knowledge.reconcile();
+      const requestContext = new RequestContext();
+      setRunAgentScopes(requestContext, ['org:acme', 'project:p1']);
+
+      await expect(knowledge.materializeScope({ ...input, requestContext })).resolves.toMatchObject({ changed: true });
+      expect(seen).toEqual([['org:acme', 'project:p1']]);
+    });
+
+    it('reports a real planning error instead of a missing parameter', async () => {
+      const knowledge = new Knowledge({
+        storage: new InMemoryStore({ id: 'planning-error' }),
+        scopes: {
+          'agent:$agentId:public': {
+            access: [{ principal: 'team:$orgId', role: 'readonly' }],
+            children: [{ address: 'thread:$orgId', name: 'Session' }],
+          },
+        },
+        vouch: async () => 'acme',
+      });
+
+      await expect(knowledge.materializeScope(input)).rejects.toThrow(
+        'Knowledge child scope template cannot create identity scope thread:acme',
+      );
+    });
+
+    it('never passes unmarked scopes to the hook', async () => {
+      const { knowledge, seen } = vouchingKnowledge('unmarked');
+      await knowledge.reconcile();
+      const requestContext = new RequestContext([[MASTRA_SCOPES_KEY, ['org:acme']]]);
+
+      await expect(knowledge.materializeScope({ ...input, requestContext })).rejects.toThrow(
+        'Missing host-vouched Knowledge scope parameter: orgId',
+      );
+      expect(seen).toEqual([undefined]);
+    });
   });
 
   it('adds parent edges declared after first boot to existing static scopes', async () => {

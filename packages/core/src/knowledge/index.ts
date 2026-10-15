@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { getRunAgentScopes } from '../agent/scopes';
 import { MastraBase } from '../base';
 import type { Mastra } from '../mastra';
 import type { MastraCompositeStore } from '../storage';
@@ -47,6 +48,8 @@ function configuredScopeDescription(scope: KnowledgeStructurePlan['scopes'][numb
   return typeof description === 'string' ? description.trim() || undefined : undefined;
 }
 
+const NEEDS_VOUCH = Symbol('knowledge.needsVouch');
+
 export class Knowledge extends MastraBase {
   readonly id: string;
   readonly hasOwnStorage: boolean;
@@ -58,6 +61,7 @@ export class Knowledge extends MastraBase {
   #storagePromise?: Promise<KnowledgeStorage>;
   #structure?: KnowledgeStructurePlan;
   #scopeTypes?: KnowledgeScopeTypesConfig;
+  #vouch?: KnowledgeConfig['vouch'];
   #importers = new KnowledgeImporterRegistry();
   #importerRunner = new KnowledgeImporterRunner(this, () => this.logger);
   #reconcilePromise?: Promise<KnowledgeStructureReconcileResult>;
@@ -72,6 +76,7 @@ export class Knowledge extends MastraBase {
     this.description = config.description;
     this.#structure = config.structure ? validateKnowledgeStructurePlan(structuredClone(config.structure)) : undefined;
     this.#scopeTypes = validateKnowledgeScopeTypes(structuredClone(config.scopes));
+    this.#vouch = config.vouch;
     for (const importer of config.importers ?? []) {
       this.registerImporter(importer);
     }
@@ -267,9 +272,43 @@ export class Knowledge extends MastraBase {
     return this.#reconcilePromise;
   }
 
+  /**
+   * The planner is synchronous, so an async vouch hook is resolved on demand: plan, and when the
+   * planner asks for a parameter not yet resolved, stop, await the hook, and plan again. Any other
+   * planning error propagates unchanged; a declined parameter fails closed with the planner's own
+   * missing-parameter error.
+   */
+  async #planScope(
+    input: MaterializeKnowledgeScopeInput,
+    runScopes: readonly string[] | undefined,
+  ): Promise<KnowledgeStructurePlan> {
+    const hook = this.#vouch;
+    if (!hook) return materializeKnowledgeScopePlan(this.#scopeTypes, input);
+    const resolved = new Map<string, string | undefined>();
+    for (;;) {
+      let pending: string | undefined;
+      try {
+        return materializeKnowledgeScopePlan(this.#scopeTypes, {
+          ...input,
+          vouch: ({ parameter }) => {
+            if (resolved.has(parameter)) return resolved.get(parameter);
+            pending = parameter;
+            throw NEEDS_VOUCH;
+          },
+        });
+      } catch (error) {
+        if (error !== NEEDS_VOUCH || pending === undefined) throw error;
+        resolved.set(pending, await hook({ address: input.address, parameter: pending, scopes: runScopes }));
+      }
+    }
+  }
+
   async materializeScope(input: MaterializeKnowledgeScopeInput): Promise<KnowledgeStructureReconcileResult> {
-    const snapshot = structuredClone(input);
-    const plan = materializeKnowledgeScopePlan(this.#scopeTypes, snapshot);
+    // The vouch hook is host configuration, never per-call input. The request context is read only
+    // for the run's Core-marked scopes and never enters the plan.
+    const { vouch: _ignored, requestContext, ...rest } = input;
+    const snapshot = structuredClone(rest);
+    const plan = await this.#planScope(snapshot, getRunAgentScopes(requestContext));
     const existing = this.#materializePromises.get(snapshot.address);
     if (existing) {
       if (JSON.stringify(existing.plan) !== JSON.stringify(plan)) {
@@ -538,6 +577,12 @@ export class Knowledge extends MastraBase {
 export * from '../storage/domains/knowledge';
 export * from './imports';
 export { materializeKnowledgeScopePlan } from './reconcile';
+/**
+ * Runtime capability marker: `Knowledge.materializeScope` accepts a run `requestContext` and reads
+ * only its Core-marked scopes for the vouch hook (it is never cloned). Packages with an older Core
+ * peer floor check for this before passing a live request context.
+ */
+export const KNOWLEDGE_VOUCH_RUN_SCOPES = true;
 export type { KnowledgeConfig } from './config';
 export type {
   KnowledgeScopeAccessConfig,
