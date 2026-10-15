@@ -7,7 +7,7 @@ import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
 import { createEventedWorkflow, createWorkflow } from '../workflows/create';
 import type { Step } from '../workflows/step';
-import type { OutputWriter } from '../workflows/types';
+import type { OutputWriter, WorkflowStateTracingContext } from '../workflows/types';
 import type { Workflow } from '../workflows/workflow';
 import { createStep } from '../workflows/workflow';
 import type { LoopRuntime, MainLoopIterationState } from './loop-runtime';
@@ -687,24 +687,34 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
    */
   build(): LoopWorkflow {
     const currentSpan = this.params.tracingContext?.currentSpan;
-    const agentSpan =
-      currentSpan?.type === SpanType.AGENT_RUN ? currentSpan : currentSpan?.findParent(SpanType.AGENT_RUN);
-    const previousContext = this.params.resumeContext?.snapshot?.tracingContext;
+    let agentSpan = currentSpan;
+    if (currentSpan?.type !== SpanType.AGENT_RUN) {
+      agentSpan = currentSpan?.findParent(SpanType.AGENT_RUN);
+    }
+
     // Keep all resumed invocations under the initial agent, not the generation
     // that happened to be active when the internal workflow suspended. Only
     // reuse the saved parent when this invocation actually resumed beneath it;
     // an explicit caller tracing context can start a different lineage.
-    const resumeTracingContext = agentSpan
-      ? previousContext?.spanId &&
+    let resumeTracingContext: WorkflowStateTracingContext | undefined;
+    if (agentSpan) {
+      const previousContext = this.params.resumeContext?.snapshot?.tracingContext;
+      const continuesSavedLineage =
+        previousContext?.spanId &&
         agentSpan.traceId === previousContext.traceId &&
-        agentSpan.getParentSpanId() === previousContext.spanId
-        ? { ...previousContext }
-        : {
-            traceId: agentSpan.traceId,
-            spanId: resolveExportedSpanId(agentSpan),
-            parentSpanId: agentSpan.getParentSpanId(),
-          }
-      : undefined;
+        agentSpan.getParentSpanId() === previousContext.spanId;
+
+      if (continuesSavedLineage) {
+        resumeTracingContext = { ...previousContext };
+      } else {
+        resumeTracingContext = {
+          traceId: agentSpan.traceId,
+          spanId: resolveExportedSpanId(agentSpan),
+          parentSpanId: agentSpan.getParentSpanId(),
+        };
+      }
+    }
+
     return this.workflowFactory()({
       id: AGENTIC_LOOP_WORKFLOW_ID,
       inputSchema: llmIterationOutputSchema,
