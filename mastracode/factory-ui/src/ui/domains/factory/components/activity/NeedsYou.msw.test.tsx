@@ -284,7 +284,7 @@ describe('Needs you', () => {
     expect(requestedCursors.filter(cursor => cursor !== null)).toEqual([KIND_CURSOR]);
   });
 
-  it('leaves followed discussions to the feed, showing only what waits on a person', async () => {
+  it('lists followed discussions too, under what waits on a person even when newer', async () => {
     const items: FactoryAttentionItem[] = [
       activityItem('item-4', 'Loader retry landed'),
       mentionItem('comment-1', 'Fix login bug'),
@@ -299,9 +299,35 @@ describe('Needs you', () => {
     );
     renderNeedsYou();
 
-    expect(await screen.findByText('Fix login bug')).toBeVisible();
-    expect(screen.getByText('Fix the loader')).toBeVisible();
-    expect(screen.queryByText('Loader retry landed')).not.toBeInTheDocument();
+    expect(await screen.findByText('Loader retry landed')).toBeVisible();
+    expect(screen.getAllByRole('link').map(link => link.getAttribute('aria-label'))).toEqual([
+      'View card for Fix login bug',
+      'View card for Fix the loader',
+      'View card for Loader retry landed',
+    ]);
+  });
+
+  it('offers older items when a page comes back empty but the scan has more', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, ({ request }) => {
+        const older = [item('decision-3', 'Old failure', false)];
+        return new URL(request.url).searchParams.get('before') === 'scan-200'
+          ? HttpResponse.json({ items: older, kinds: attentionKindSummaries(older), hasMore: false })
+          : HttpResponse.json({
+              items: [],
+              kinds: attentionKindSummaries(older),
+              hasMore: true,
+              nextCursor: 'scan-200',
+            });
+      }),
+    );
+    const user = userEvent.setup();
+    renderNeedsYou();
+
+    await user.click(await screen.findByRole('button', { name: 'Load older' }));
+
+    expect(await screen.findByText('Old failure')).toBeVisible();
+    expect(screen.queryByText('Nothing needs you right now.')).not.toBeInTheDocument();
   });
 
   it('marks everything read in one go, then drops the control', async () => {

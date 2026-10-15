@@ -18,7 +18,7 @@ import {
   TriangleAlert,
   X,
 } from 'lucide-react';
-import { createElement, type ReactElement, type ReactNode } from 'react';
+import { createElement, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
@@ -28,47 +28,24 @@ import type { FactoryAttentionItem } from '../services/attention';
 import { RAIL_ROW_BODY } from './Timeline';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-/** What landed: the glyph the rail hangs the row off, and the word the row's badge wears. */
 const KIND = {
-  mention: { glyph: MessageSquare, label: 'mention', tone: 'text-badge-green-indicator', badge: 'green' },
-  activity: { glyph: MessagesSquare, label: 'comment', tone: 'text-muted-foreground', badge: 'neutral' },
-  'automation-failed': {
-    glyph: TriangleAlert,
-    label: 'failed',
-    tone: 'text-destructive-foreground',
-    badge: 'destructive',
-  },
-  'automation-proposed': {
-    glyph: Sparkles,
-    label: 'suggested',
-    tone: 'text-warning-foreground',
-    badge: 'orange',
-  },
-  'supervisor-finding': { glyph: Brain, label: 'finding', tone: 'text-badge-green-indicator', badge: 'blue' },
-  'agent-waiting': {
-    glyph: Hourglass,
-    label: 'waiting',
-    tone: 'text-warning-foreground',
-    badge: 'orange',
-  },
-} satisfies Record<
-  FactoryAttentionItem['kind'],
-  { glyph: typeof MessageSquare; label: string; tone: string; badge: BadgeVariant }
->;
+  mention: { glyph: MessageSquare, label: 'mention', badge: 'green' },
+  activity: { glyph: MessagesSquare, label: 'comment', badge: 'neutral' },
+  'automation-failed': { glyph: TriangleAlert, label: 'failed', badge: 'destructive' },
+  'automation-proposed': { glyph: Sparkles, label: 'suggested', badge: 'orange' },
+  'supervisor-finding': { glyph: Brain, label: 'finding', badge: 'blue' },
+  'agent-waiting': { glyph: Hourglass, label: 'waiting', badge: 'orange' },
+} satisfies Record<FactoryAttentionItem['kind'], { glyph: typeof MessageSquare; label: string; badge: BadgeVariant }>;
 
-/** Meta and actions stack in one grid cell sized to the wider of the two, so a hover swaps them without reflow or overlap. */
+/** Meta and actions stack in one grid cell, so a hover swaps them without reflow; touch has no hover, so they share a line under the title. */
 const SWAP_SLOT =
-  'relative grid shrink-0 items-center justify-items-end [grid-template-areas:"slot"] *:[grid-area:slot]';
+  'relative grid shrink-0 items-center justify-items-end [grid-template-areas:"slot"] *:[grid-area:slot] pointer-coarse:flex pointer-coarse:w-full pointer-coarse:justify-between';
 
 const HIDDEN_ON_REVEAL =
-  'transition-opacity duration-150 pointer-coarse:opacity-0 pointer-fine:group-hover:opacity-0 pointer-fine:group-focus-within:opacity-0';
+  'transition-opacity duration-150 pointer-fine:group-hover:opacity-0 pointer-fine:group-focus-within:opacity-0';
 
 const SHOWN_ON_REVEAL =
   'flex items-center gap-0.5 transition-opacity duration-150 pointer-fine:pointer-events-none pointer-fine:opacity-0 pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:pointer-events-auto pointer-fine:group-focus-within:opacity-100';
-
-export function KindIcon({ kind }: { kind: FactoryAttentionItem['kind'] }): ReactElement {
-  return createElement(KIND[kind].glyph, { size: 14, className: cn('shrink-0', KIND[kind].tone), 'aria-hidden': true });
-}
 
 function destinationLabel(item: FactoryAttentionItem): string {
   if (item.target.kind === 'thread') return 'Open thread';
@@ -110,7 +87,6 @@ export function AttentionItemRow({
   retrying,
   settling,
   updatingReceipt,
-  onOpen,
   onRetry,
   onChooseRepository,
   onApprove,
@@ -124,7 +100,6 @@ export function AttentionItemRow({
   retrying: boolean;
   settling: boolean;
   updatingReceipt: boolean;
-  onOpen?: () => void;
   onRetry?: () => void;
   onChooseRepository?: () => void;
   onApprove?: () => void;
@@ -137,10 +112,14 @@ export function AttentionItemRow({
   const author = attentionAuthorName(item);
 
   return (
-    <div className={cn('group relative flex items-center gap-3 py-2', RAIL_ROW_BODY)}>
+    <div
+      className={cn(
+        'group relative flex items-center gap-3 py-2 pointer-coarse:flex-wrap pointer-coarse:gap-y-1',
+        RAIL_ROW_BODY,
+      )}
+    >
       <Link
         to={factoryAttentionTargetPath(factoryId, item.target)}
-        onClick={onOpen}
         aria-label={`${destinationLabel(item)} for ${item.title}`}
         className={`absolute inset-0 rounded-lg ${focusRingInset}`}
       />
@@ -178,10 +157,7 @@ export function AttentionItemRow({
             size="icon-sm"
             tooltip="Ask supervisor"
             aria-label={`Ask supervisor about ${item.title}`}
-            onClick={() => {
-              onOpen?.();
-              void navigate(supervisorAskPath(factoryId, attentionPrompt(item)));
-            }}
+            onClick={() => void navigate(supervisorAskPath(factoryId, attentionPrompt(item)))}
           >
             <Brain aria-hidden />
           </Button>

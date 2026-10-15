@@ -91,8 +91,7 @@ function SummaryRow({
 function EventRow({ entry, context }: { entry: ActivityEntry; context: RailContext }) {
   const [open, setOpen] = useState(false);
   const detail = entry.kind === 'deed' ? entry.detail : '';
-  const metadata = entry.kind === 'deed' ? entry.metadata : {};
-  const hasMetadata = Object.keys(metadata).length > 0;
+  const hasMetadata = Object.keys(entry.metadata).length > 0;
 
   return (
     <RailRow mark={<Node entry={entry} />} connected={false}>
@@ -124,7 +123,7 @@ function EventRow({ entry, context }: { entry: ActivityEntry; context: RailConte
       </EntrySentence>
       {open ? (
         <Code
-          code={JSON.stringify(metadata, null, 2)}
+          code={JSON.stringify(entry.metadata, null, 2)}
           lang="json"
           className="text-meta font-body text-muted-foreground m-0 mt-1 mb-2 px-2 py-1 break-all whitespace-pre-wrap"
         />

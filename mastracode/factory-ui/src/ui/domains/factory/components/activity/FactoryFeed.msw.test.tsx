@@ -8,7 +8,7 @@ import { attentionKindSummaries } from '../../../../../../e2e/ui/attention';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { closePropertiesMenus, openPropertiesMenu, pickPropertyOption } from '../../../../../../e2e/ui/properties-menu';
 import { renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
-import type { FactoryAutomationFailedAttentionItem } from '../../services/attention';
+import type { FactoryActivityAttentionItem, FactoryAutomationFailedAttentionItem } from '../../services/attention';
 import type { WorkItemStageEntry } from '../../services/workItems';
 import { ActivityTimeline } from './ActivityTimeline';
 
@@ -53,7 +53,7 @@ function stubAudit(events: unknown[], actors: Record<string, unknown> = {}) {
   server.use(http.get('*/web/factory/projects/:id/audit', () => HttpResponse.json({ events, actors })));
 }
 
-function stubOpenAttention(items: FactoryAutomationFailedAttentionItem[]) {
+function stubOpenAttention(items: Array<FactoryAutomationFailedAttentionItem | FactoryActivityAttentionItem>) {
   server.use(
     http.get('*/web/factory/projects/:id/attention', () =>
       HttpResponse.json({ items, kinds: attentionKindSummaries(items), hasMore: false }),
@@ -148,6 +148,88 @@ describe('Factory feed', () => {
     const [latest, earlier] = screen.getAllByRole('link', { name: 'Fix the flaky auth test' });
     expect(latest?.parentElement).toHaveTextContent('Needs you');
     expect(earlier?.parentElement).not.toHaveTextContent('Needs you');
+  });
+
+  it('leaves a card whose discussion merely moved on unflagged', async () => {
+    const discussed = card('Fix the flaky auth test', [{ stage: 'review', enteredAt: hoursAgo(2), by: 'user:u1' }]);
+    stubBoard([discussed]);
+    stubOpenAttention([
+      {
+        key: `factory:${FACTORY_ID}:attention:activity:${discussed.id}:1`,
+        kind: 'activity',
+        commentId: 'comment-1',
+        authorId: 'u2',
+        occurrence: 1,
+        workItemId: discussed.id,
+        title: 'Fix the flaky auth test',
+        detail: 'Pushed a fix.',
+        occurredAt: hoursAgo(1),
+        read: false,
+        archived: false,
+        target: { kind: 'work-item', workItemId: discussed.id, board: 'work' },
+      },
+    ]);
+    const { client } = renderActivity();
+
+    expect(await screen.findByRole('link', { name: 'Fix the flaky auth test' })).toBeInTheDocument();
+    await waitForMutationsIdle(client);
+    expect(screen.queryByText('Needs you')).not.toBeInTheDocument();
+  });
+
+  it('holds older board moves back until the audit trail has been read down to them', async () => {
+    stubBoard([card('Old card', [{ stage: 'done', enteredAt: hoursAgo(5), by: 'agent:builder' }])]);
+    const event = (id: string, action: string, occurredAt: string) => ({
+      id,
+      actorId: 'u1',
+      actorType: 'human',
+      action,
+      targets: [],
+      metadata: { branch: `branch-${id}` },
+      occurredAt,
+    });
+    server.use(
+      http.get('*/web/factory/projects/:id/audit', ({ request }) =>
+        new URL(request.url).searchParams.get('before') === 'page-2'
+          ? HttpResponse.json({ events: [event('older', 'factory.agent.push', hoursAgo(3))], actors: {} })
+          : HttpResponse.json({
+              events: [event('newer', 'factory.agent.push', hoursAgo(1))],
+              actors: {},
+              nextCursor: 'page-2',
+            }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderActivity();
+
+    expect(await screen.findByText('branch-newer')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Old card' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Load more activity' }));
+
+    const oldMove = await screen.findByRole('link', { name: 'Old card' });
+    const olderPush = screen.getByText('branch-older');
+    expect(olderPush.compareDocumentPosition(oldMove) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('names an audit actor by the id its events carry', async () => {
+    stubBoard([]);
+    stubAudit(
+      [
+        {
+          id: 'event-1',
+          actorId: 'workos:user-7',
+          actorType: 'human',
+          action: 'factory.agent.push',
+          targets: [],
+          metadata: { branch: 'fix/thing' },
+          occurredAt: hoursAgo(1),
+        },
+      ],
+      { 'workos:user-7': { id: 'user-7', name: 'Ada Lovelace' } },
+    );
+    renderActivity();
+
+    expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument();
   });
 
   it('lists each audit event on its own line once every event is shown', async () => {

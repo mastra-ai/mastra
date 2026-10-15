@@ -7,8 +7,8 @@ import { Archive } from 'lucide-react';
 import { useState } from 'react';
 
 import { useFactoryAttentionHistory, useMarkAllFactoryAttentionRead } from '../../../../../hooks/useFactoryAttention';
-import { NEEDS_YOU_KINDS, needsYouCounts } from '../../services/attention';
-import type { FactoryAttentionView } from '../../services/attention';
+import { ATTENTION_KINDS, attentionCounts, NEEDS_YOU_KINDS } from '../../services/attention';
+import type { FactoryAttentionItem, FactoryAttentionView } from '../../services/attention';
 import { PropertiesMenu } from '../../../../ui/PropertiesMenu';
 import { AttentionItemRow } from '../AttentionItemRow';
 import { PANEL } from '../panel';
@@ -27,9 +27,9 @@ const VIEW_OPTIONS = [
 
 export function NeedsYou({ factoryId }: { factoryId: string }) {
   const [view, setView] = useState<NeedsYouView>('open');
-  const attention = useFactoryAttentionHistory(factoryId, view, NEEDS_YOU_KINDS);
-  const kinds = attention.data?.pages[0]?.kinds;
-  const counts = kinds ? needsYouCounts(kinds) : { open: 0, unread: 0 };
+  const attention = useFactoryAttentionHistory(factoryId, view, ATTENTION_KINDS);
+  const summaries = attention.data?.pages[0]?.kinds;
+  const counts = summaries ? attentionCounts(summaries, ATTENTION_KINDS) : { open: 0, unread: 0 };
   const markAllRead = useMarkAllFactoryAttentionRead(factoryId);
   const archived = view === 'archived';
 
@@ -84,7 +84,7 @@ export function NeedsYou({ factoryId }: { factoryId: string }) {
 
 function NeedsYouRows({ factoryId, view }: { factoryId: string; view: NeedsYouView }) {
   const [expanded, setExpanded] = useState(false);
-  const attention = useFactoryAttentionHistory(factoryId, view, NEEDS_YOU_KINDS);
+  const attention = useFactoryAttentionHistory(factoryId, view, ATTENTION_KINDS);
   const actions = useAttentionItemActions(factoryId);
 
   if (attention.isPending) {
@@ -102,8 +102,8 @@ function NeedsYouRows({ factoryId, view }: { factoryId: string; view: NeedsYouVi
     );
   }
 
-  const items = attention.data.pages.flatMap(page => page.items);
-  if (items.length === 0) {
+  const items = actionsFirst(attention.data.pages.flatMap(page => page.items));
+  if (items.length === 0 && !attention.hasNextPage) {
     return (
       <Txt as="p" variant="caption" tone="muted" className="m-0">
         {view === 'archived' ? 'Nothing archived.' : 'Nothing needs you right now.'}
@@ -153,4 +153,11 @@ function NeedsYouRows({ factoryId, view }: { factoryId: string; view: NeedsYouVi
       ) : null}
     </>
   );
+}
+
+/** Followed discussions sit under what waits on a person, so news never folds a failure out of sight. */
+function actionsFirst(items: FactoryAttentionItem[]): FactoryAttentionItem[] {
+  const waiting = items.filter(item => NEEDS_YOU_KINDS.includes(item.kind));
+  const followed = items.filter(item => !NEEDS_YOU_KINDS.includes(item.kind));
+  return [...waiting, ...followed];
 }

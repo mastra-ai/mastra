@@ -38,7 +38,13 @@ export function ActivityPage() {
               aria-label="Activity view"
               size="sm"
               value={view}
-              onValueChange={next => setSearchParams(next === 'factory' ? {} : { view: next })}
+              onValueChange={next =>
+                setSearchParams(current => {
+                  if (next === 'factory') current.delete('view');
+                  else current.set('view', next);
+                  return current;
+                })
+              }
             >
               {ACTIVITY_VIEWS.map(option => (
                 <SegmentedControlItem key={option.value} value={option.value}>

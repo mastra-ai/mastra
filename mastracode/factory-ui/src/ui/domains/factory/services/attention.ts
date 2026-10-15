@@ -97,7 +97,10 @@ const detailDate = new Intl.DateTimeFormat(undefined, {
 
 /** Supervisor evidence stamps raw ISO instants for the agent that reads it; people get their own clock. */
 export function readableAttentionDetail(detail: string): string {
-  return detail.replace(ISO_INSTANT, instant => detailDate.format(Date.parse(instant)));
+  return detail.replace(ISO_INSTANT, instant => {
+    const at = Date.parse(instant);
+    return Number.isNaN(at) ? instant : detailDate.format(at);
+  });
 }
 
 export function attentionItemSourceId(item: FactoryAttentionItem): string {
@@ -129,15 +132,12 @@ const ATTENTION_GROUP_OF_KIND: Record<FactoryAttentionKind, FactoryAttentionGrou
   'automation-proposed': 'queue',
   activity: 'activity',
 };
-const ATTENTION_KINDS = Object.keys(ATTENTION_GROUP_OF_KIND) as FactoryAttentionKind[];
+export const ATTENTION_KINDS = Object.keys(ATTENTION_GROUP_OF_KIND) as FactoryAttentionKind[];
 
-export function attentionGroupOf(kind: FactoryAttentionKind): FactoryAttentionGroup {
-  return ATTENTION_GROUP_OF_KIND[kind];
-}
+export const INTERRUPTING_KINDS = ATTENTION_KINDS.filter(kind => ATTENTION_GROUP_OF_KIND[kind] === 'attention');
 
-export function attentionKindsIn(group: FactoryAttentionGroup): FactoryAttentionKind[] {
-  return ATTENTION_KINDS.filter(kind => ATTENTION_GROUP_OF_KIND[kind] === group);
-}
+/** Followed discussions are news, not something waiting on a person. */
+export const NEEDS_YOU_KINDS = ATTENTION_KINDS.filter(kind => ATTENTION_GROUP_OF_KIND[kind] !== 'activity');
 
 export interface FactoryAttentionLatest {
   key: string;
@@ -160,36 +160,24 @@ export interface FactoryAttentionResponse {
   nextCursor?: string;
 }
 
-export function attentionCountsIn(
-  kinds: FactoryAttentionKindSummaries,
-  group: FactoryAttentionGroup,
+export function attentionCounts(
+  summaries: FactoryAttentionKindSummaries,
+  kinds: readonly FactoryAttentionKind[],
 ): { open: number; unread: number } {
   let open = 0;
   let unread = 0;
-  for (const kind of attentionKindsIn(group)) {
-    open += kinds[kind].open;
-    unread += kinds[kind].unread;
+  for (const kind of kinds) {
+    open += summaries[kind].open;
+    unread += summaries[kind].unread;
   }
   return { open, unread };
 }
 
-/** Followed discussions stay out: they are news, not something waiting on a person. */
-const NEEDS_YOU_GROUPS = ['attention', 'queue'] satisfies FactoryAttentionGroup[];
-export const NEEDS_YOU_KINDS = NEEDS_YOU_GROUPS.flatMap(attentionKindsIn);
-
-export function needsYouCounts(kinds: FactoryAttentionKindSummaries): { open: number; unread: number } {
-  const counts = NEEDS_YOU_GROUPS.map(group => attentionCountsIn(kinds, group));
-  return {
-    open: counts.reduce((sum, count) => sum + count.open, 0),
-    unread: counts.reduce((sum, count) => sum + count.unread, 0),
-  };
-}
-
 export function latestUnreadOrNewestIn(
-  kinds: FactoryAttentionKindSummaries,
-  group: FactoryAttentionGroup,
+  summaries: FactoryAttentionKindSummaries,
+  kinds: readonly FactoryAttentionKind[],
 ): FactoryAttentionLatest | null {
-  const latests = attentionKindsIn(group).flatMap(kind => kinds[kind].latest ?? []);
+  const latests = kinds.flatMap(kind => summaries[kind].latest ?? []);
   const unread = latests.filter(latest => latest.unread);
   return newestOf(unread.length > 0 ? unread : latests);
 }

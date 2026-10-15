@@ -146,10 +146,14 @@ describe('Activity page, ungrouped', () => {
     expect(screen.getAllByRole('link', { name: 'Fix reconnect' })).toHaveLength(2);
     expect(screen.queryByText(/decisionId/)).not.toBeInTheDocument();
 
-    const details = screen.getByRole('button', { name: 'Details' });
-    expect(details).toHaveAttribute('aria-expanded', 'false');
-    await user.click(details);
-    expect(details).toHaveAttribute('aria-expanded', 'true');
+    const [moveDetails, runDetails] = screen.getAllByRole('button', { name: 'Details' });
+    if (!moveDetails || !runDetails) throw new Error('Expected a Details toggle on both events');
+    await user.click(moveDetails);
+    expect(await screen.findByText(/"from"/)).toBeInTheDocument();
+
+    expect(runDetails).toHaveAttribute('aria-expanded', 'false');
+    await user.click(runDetails);
+    expect(runDetails).toHaveAttribute('aria-expanded', 'true');
     expect(await screen.findByText(/"decisionId"/)).toBeInTheDocument();
     expect(screen.queryByText(/__actorProfile/)).not.toBeInTheDocument();
   });
@@ -185,5 +189,34 @@ describe('Activity page, ungrouped', () => {
     await openPropertySubmenu(user, 'Timeline properties', 'Filter');
     expect(screen.getByRole('menuitemcheckbox', { name: 'All events' })).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByRole('menuitemcheckbox', { name: 'Runs' })).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('keeps every event listed across a trip to Codebase and back, without reading the trail again', async () => {
+    let auditRequests = 0;
+    const started = event('event-started', { action: 'factory.run.started' });
+    server.use(
+      ...baseHandlers(),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/audit`, () => {
+        auditRequests += 1;
+        return HttpResponse.json({ events: [started], actors });
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderAudit();
+    expect(await screen.findByText('started a run on')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('radio', { name: 'Codebase' }));
+    expect(await screen.findByRole('heading', { name: 'No repository linked yet' })).toBeInTheDocument();
+    await user.click(screen.getByRole('radio', { name: 'Factory' }));
+
+    expect(await screen.findByText('started a run on')).toBeInTheDocument();
+    await openPropertySubmenu(user, 'Timeline properties', 'Group');
+    expect(screen.getByRole('menuitemradio', { name: 'None' })).toHaveAttribute('aria-checked', 'true');
+    await user.click(screen.getByRole('menuitemradio', { name: 'Similar' }));
+    await closePropertiesMenus(user);
+
+    expect(await screen.findByText('started a run on')).toBeInTheDocument();
+    expect(auditRequests).toBe(1);
   });
 });

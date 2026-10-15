@@ -15,4 +15,10 @@ describe('readableAttentionDetail', () => {
   it('leaves bare dates and other numbers alone', () => {
     expect(readableAttentionDetail('Release 2026-10-12 shipped 3 fixes')).toBe('Release 2026-10-12 shipped 3 fixes');
   });
+
+  it('leaves an instant that is not a real date as written instead of failing the render', () => {
+    expect(readableAttentionDetail('Mentioned at 2026-13-12T07:28:26.926Z')).toBe(
+      'Mentioned at 2026-13-12T07:28:26.926Z',
+    );
+  });
 });

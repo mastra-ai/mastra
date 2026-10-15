@@ -92,6 +92,7 @@ export interface ActivityMove {
   at: number;
   by: string | undefined;
   stages: string[];
+  metadata: Record<string, unknown>;
 }
 
 /** Everything else the Factory recorded: a run started, a commit, a comment. */
@@ -155,6 +156,7 @@ function auditMove(event: AuditEvent, at: number, cards: Map<string, ActivityCar
     at,
     by: event.actorId,
     stages: [stage],
+    metadata: auditVisibleMetadata(event),
   };
 }
 
@@ -207,6 +209,7 @@ export function collapseRuns(moves: MovedItem[]): ActivityMove[] {
         at: move.at,
         by: move.by,
         stages: [move.stage],
+        metadata: {},
       });
   }
 

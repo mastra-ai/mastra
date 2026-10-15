@@ -7,7 +7,7 @@ import { NavLink, useLocation, useParams } from 'react-router';
 import { useFactoryAttentionSummary } from '../../../../hooks/useFactoryAttention';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useOverlays } from '../../../lib/overlays';
-import { attentionCountsIn, latestUnreadOrNewestIn, needsYouCounts } from '../services/attention';
+import { attentionCounts, INTERRUPTING_KINDS, latestUnreadOrNewestIn, NEEDS_YOU_KINDS } from '../services/attention';
 import type { FactoryAttentionKindSummaries } from '../services/attention';
 import { playAttentionSoundOnce } from '../services/attentionSound';
 
@@ -26,10 +26,10 @@ function useAttentionChime(factoryId: string | undefined, kinds: FactoryAttentio
   useEffect(() => {
     if (!kinds) return;
     const scope = `${soundScope}:${factoryId ?? 'none'}`;
-    const latest = latestUnreadOrNewestIn(kinds, 'attention');
+    const latest = latestUnreadOrNewestIn(kinds, INTERRUPTING_KINDS);
     const key = latest?.key ?? null;
     const occurredAt = latest ? Date.parse(latest.at) : 0;
-    const unread = attentionCountsIn(kinds, 'attention').unread;
+    const unread = attentionCounts(kinds, INTERRUPTING_KINDS).unread;
     const previous = baseline.current;
     baseline.current = { scope, key, occurredAt, unread };
     if (!previous || previous.scope !== scope || !latest?.unread) return;
@@ -44,8 +44,8 @@ export function SidebarActivityLink() {
   const overlays = useOverlays();
   const { pathname } = useLocation();
   const kinds = useFactoryAttentionSummary(factoryId).data;
-  const unread = kinds ? attentionCountsIn(kinds, 'attention').unread : 0;
-  const open = kinds ? needsYouCounts(kinds).open : 0;
+  const unread = kinds ? attentionCounts(kinds, INTERRUPTING_KINDS).unread : 0;
+  const open = kinds ? attentionCounts(kinds, NEEDS_YOU_KINDS).open : 0;
   useAttentionChime(factoryId, kinds);
 
   if (!factoryId) return null;
