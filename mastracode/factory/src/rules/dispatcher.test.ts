@@ -1272,9 +1272,10 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.sendSignal).toHaveBeenCalledWith(
       {
         id: expect.any(String),
-        type: 'user',
-        tagName: 'user',
-        contents: expect.stringMatching(/<skill name="understand-issue">[\s\S]*ARGUMENTS: Issue 42[\s\S]*<\/skill>/),
+        type: 'reactive',
+        tagName: 'skill',
+        attributes: { name: 'understand-issue' },
+        contents: expect.stringMatching(/^Follow the skill\.[\s\S]*ARGUMENTS: Issue 42$/),
       },
       { requestContext: expect.anything(), requireDelivery: true },
     );
@@ -1331,8 +1332,10 @@ describe('FactoryDecisionDispatcher', () => {
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
-    const contents = session.sendSignal.mock.calls[0]?.[0]?.contents as string;
-    expect(contents).toContain('<skill name="understand-issue">');
+    const signal = session.sendSignal.mock.calls[0]?.[0];
+    expect(signal).toMatchObject({ type: 'reactive', tagName: 'skill', attributes: { name: 'understand-issue' } });
+    const contents = signal?.contents as string;
+    expect(contents).not.toContain('<skill');
     expect(contents).toContain('Resume the active understand-issue session');
     expect(contents).toContain('ARGUMENTS: Issue 42');
     // The whole fix: the full skill body ('Follow the skill.') is not re-pasted.
@@ -1763,8 +1766,9 @@ describe('FactoryDecisionDispatcher', () => {
 
     expect(session.sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({
+        tagName: 'skill',
         contents: expect.stringMatching(
-          /<\/skill>\n\n<work-item-feed>\n[\s\S]*\[Bob · [\s\S]*ship it behind the flag[\s\S]*<\/work-item-feed>$/,
+          /^Follow the skill\.[\s\S]*\n\n<work-item-feed>\n[\s\S]*\[Bob · [\s\S]*ship it behind the flag[\s\S]*<\/work-item-feed>$/,
         ),
       }),
       expect.anything(),
@@ -4638,7 +4642,7 @@ describe('FactoryDecisionDispatcher', () => {
       expect.objectContaining({ item: expect.objectContaining({ id: item.id }), role: 'triage' }),
     );
     expect(session.sendSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ contents: expect.stringContaining('<skill name="understand-issue">') }),
+      expect.objectContaining({ tagName: 'skill', attributes: { name: 'understand-issue' } }),
       { requestContext: expect.anything(), requireDelivery: true },
     );
   });
@@ -4711,7 +4715,7 @@ describe('FactoryDecisionDispatcher', () => {
     );
     expect(session.thread.switch).toHaveBeenCalledWith({ threadId: 'thread-2' });
     expect(session.sendSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ contents: expect.stringContaining('<skill name="understand-issue">') }),
+      expect.objectContaining({ tagName: 'skill', attributes: { name: 'understand-issue' } }),
       { requestContext: expect.anything(), requireDelivery: true },
     );
   });
