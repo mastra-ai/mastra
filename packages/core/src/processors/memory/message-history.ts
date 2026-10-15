@@ -6,6 +6,7 @@ import { loadMessageHistory, parseMemoryRequestContext } from '../../memory';
 import { getMemoryTokenBoundary, isAfterMemoryTokenBoundary } from '../../memory/message-history-config';
 import { SpanType } from '../../observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '../../observability';
+import { MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY } from '../../request-context';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 
@@ -107,6 +108,33 @@ export class MessageHistory implements Processor {
     return observabilityContext?.tracingContext?.currentSpan;
   }
 
+  private async loadContinuationToolCallMessages(
+    requestContext: RequestContext | undefined,
+    threadId: string,
+    resourceId: string | undefined,
+    loaded: MastraDBMessage[],
+  ): Promise<MastraDBMessage[]> {
+    const ids = requestContext?.get(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY);
+    if (!Array.isArray(ids) || ids.length === 0) return [];
+
+    const missing = new Set<string>(ids.filter((id): id is string => typeof id === 'string'));
+    for (const msg of loaded) {
+      for (const id of toolCallIdsOf(msg)) missing.delete(id);
+    }
+    if (missing.size === 0) return [];
+
+    const loadedIds = new Set(loaded.map(msg => msg.id));
+    const { messages } = await this.storage.listMessages({
+      threadId,
+      resourceId,
+      perPage: false,
+      includeTotal: false,
+    });
+    return messages.filter(
+      msg => msg.role !== 'system' && !loadedIds.has(msg.id) && toolCallIdsOf(msg).some(id => missing.has(id)),
+    );
+  }
+
   async processInput(
     args: {
       messages: MastraDBMessage[];
@@ -173,6 +201,20 @@ export class MessageHistory implements Processor {
       const filteredMessages = messages.filter((msg: MastraDBMessage) => {
         return msg.role !== 'system' && (!boundary || isAfterMemoryTokenBoundary(msg, boundary));
       });
+
+      // A background task's result is written into its original tool-call message, which keeps
+      // its dispatch-time createdAt. The continuation turn that reports the result must still see
+      // it, so load those messages even when they fall outside the history window.
+      const pinnedMessages = await this.loadContinuationToolCallMessages(
+        requestContext,
+        threadId,
+        resourceId,
+        filteredMessages,
+      );
+      if (pinnedMessages.length) {
+        filteredMessages.push(...pinnedMessages);
+        filteredMessages.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      }
 
       // 3. Add stored history in chronological order. MessageList layers any matching
       // input copy onto the stored message so memory remains the authoritative base.
@@ -294,4 +336,13 @@ export class MessageHistory implements Processor {
     await this.storage.saveMessages({ messages: filtered });
     noteThreadMessagesSaved({ threadId, resourceId, savedAt });
   }
+}
+
+function toolCallIdsOf(msg: MastraDBMessage): string[] {
+  const parts = msg.content?.parts ?? [];
+  const ids: string[] = [];
+  for (const part of parts) {
+    if (part.type === 'tool-invocation') ids.push(part.toolInvocation.toolCallId);
+  }
+  return ids;
 }

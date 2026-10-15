@@ -13,7 +13,13 @@
 import { resolveAgentScopes } from '../../agent/scopes';
 import type { BackgroundTaskManager } from '../../background-tasks/manager';
 import type { MastraMemory } from '../../memory/memory';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_SCOPES_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
+import {
+  MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY,
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_SCOPES_KEY,
+  MASTRA_THREAD_ID_KEY,
+  RequestContext,
+} from '../../request-context';
 import { deepMerge } from '../../utils';
 
 // ---------------------------------------------------------------------------
@@ -194,8 +200,17 @@ export function buildContinuationOpts(
   batch: Array<Record<string, unknown>>,
 ): Record<string, any> {
   const directive = buildContinuationDirective(batch);
+  const toolCallIds = batch
+    .map(chunk => (chunk as { payload?: { toolCallId?: unknown } }).payload?.toolCallId)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0);
+  // Copy so the IDs stay scoped to this continuation instead of leaking into the caller's context.
+  const requestContext = new RequestContext(
+    (baseContinuationOpts.requestContext as RequestContext | undefined)?.entries() ?? [],
+  );
+  requestContext.set(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY, toolCallIds);
   return {
     ...baseContinuationOpts,
+    requestContext,
     context: [...(callerContext ?? []), { role: 'system' as const, content: directive }],
   };
 }
