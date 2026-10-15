@@ -110,6 +110,28 @@ describe('JiraApiClient requests', () => {
     const { url, init } = requestOf(fetchMock);
     expect(url).toBe('https://integrations.example.com/v2/connections/a1b_jira/proxy/rest/api/3/serverInfo');
     expect(init.headers).toMatchObject({ authorization: 'Bearer platform-token' });
+    expect(init.headers).not.toHaveProperty('x-mastra-project-id');
+  });
+
+  it('sends x-mastra-project-id for project attribution in Platform proxy mode', async () => {
+    const fetchMock = stubFetch(jsonResponse({ baseUrl: 'https://acme.atlassian.net' }));
+    const proxy = new JiraApiClient({
+      baseUrl: 'https://integrations.example.com/v2/connections/a1b_jira/proxy/',
+      accessToken: 'platform-token',
+      projectId: 'proj_123',
+    });
+
+    await proxy.getServerInfo();
+
+    expect(requestOf(fetchMock).init.headers).toMatchObject({ 'x-mastra-project-id': 'proj_123' });
+  });
+
+  it('never sends x-mastra-project-id to Atlassian in direct Basic auth mode', async () => {
+    const fetchMock = stubFetch(jsonResponse({ values: [], startAt: 0, isLast: true }));
+
+    await client().listProjects();
+
+    expect(requestOf(fetchMock).init.headers).not.toHaveProperty('x-mastra-project-id');
   });
 
   it('searches issues via POST /search/jql with explicit fields and threads the cursor', async () => {

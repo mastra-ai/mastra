@@ -49,6 +49,30 @@ describe('IncidentioApiClient additional API surfaces', () => {
     );
   });
 
+  it('sends x-mastra-project-id only when configured for the Platform proxy', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => json({ incidents: [], pagination_meta: {} }));
+    const proxied = new IncidentioApiClient({
+      baseUrl: 'https://integrations.example.com/v2/connections/a1b_incidentio/proxy',
+      accessToken: 'platform-token',
+      projectId: 'proj_123',
+      fetchImpl,
+    });
+
+    await proxied.listIncidents();
+
+    expect(fetchImpl.mock.calls[0]?.[1]?.headers).toMatchObject({ 'x-mastra-project-id': 'proj_123' });
+
+    const direct = new IncidentioApiClient({
+      baseUrl: 'https://api.incident.test',
+      accessToken: 'incident-key',
+      fetchImpl,
+    });
+
+    await direct.listIncidents();
+
+    expect(fetchImpl.mock.calls[1]?.[1]?.headers).not.toHaveProperty('x-mastra-project-id');
+  });
+
   it('lists incident updates with an optional incident filter', async () => {
     const update = { id: 'update-1', message: 'Mitigation deployed' };
     const fetchImpl = vi
