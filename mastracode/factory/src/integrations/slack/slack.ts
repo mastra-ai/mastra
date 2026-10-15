@@ -672,7 +672,9 @@ async function prepareExistingSessionOwnerContext(
   }
   if (sourceControls.length === 0 || internalThread.resourceId.startsWith('channel:')) return 'ready';
   if (!options.expectedOrgId) {
-    throw new Error(`Could not authorize the owner of Slack Factory session ${internalThread.resourceId}.`);
+    throw new Error(
+      `Could not authorize the owner of Slack Factory session ${internalThread.resourceId}: the sender's account link has no organization.`,
+    );
   }
 
   const preparation = await prepareSessionRunContext(
@@ -682,8 +684,12 @@ async function prepareExistingSessionOwnerContext(
     { expectedOrgId: options.expectedOrgId },
   );
   if (preparation === 'organization-mismatch') return preparation;
-  if (preparation === 'unavailable') {
-    throw new Error(`Could not authorize the owner of Slack Factory session ${internalThread.resourceId}.`);
+  if (preparation !== 'prepared') {
+    const reason =
+      preparation === 'session-not-found'
+        ? 'no source-control session row exists for it, or its project repository row is missing'
+        : 'its source-control session row has no organization';
+    throw new Error(`Could not authorize the owner of Slack Factory session ${internalThread.resourceId}: ${reason}.`);
   }
   return 'ready';
 }

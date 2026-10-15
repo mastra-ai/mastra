@@ -442,6 +442,43 @@ describe('handler dispatch gating', () => {
     expect(prime).not.toHaveBeenCalled();
   });
 
+  it.each([
+    {
+      name: 'no source-control session row resolves',
+      session: null,
+      reason: 'no source-control session row exists for it, or its project repository row is missing',
+    },
+    {
+      name: 'the source-control session row has no organization',
+      session: { orgId: ' ', userId: 'owner-1' },
+      reason: 'its source-control session row has no organization',
+    },
+  ])('logs why the existing Factory session owner could not be authorized when $name', async ({ session, reason }) => {
+    const thread = makeSubscribedThread();
+    const accountLinks = fullStore({ orgId: 'org-1', userId: 'responder-1', defaultFactoryProjectId: 'fp-1' });
+    const projects = makeProjects([{ id: 'fp-1' }]);
+    const sourceControl = { sessions: { getBySessionId: vi.fn().mockResolvedValue(session) } } as any;
+    const output = vi.fn();
+    const mastra = {
+      getLogger: () => ({ error: output }),
+      getStorage: () => ({
+        getStore: vi.fn().mockResolvedValue({
+          listThreads: vi.fn().mockResolvedValue({ threads: [{ id: 'thread-1', resourceId: 'session-1' }] }),
+        }),
+      }),
+    };
+    const defaultHandler = vi.fn();
+    const handlers = createHandlers({ accountLinks, projects, sourceControl });
+
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(mastra));
+
+    expect(output).toHaveBeenCalledExactlyOnceWith(
+      expect.stringContaining(`Could not authorize the owner of Slack Factory session session-1: ${reason}.`),
+    );
+    expect(defaultHandler).not.toHaveBeenCalled();
+    expect(prime).not.toHaveBeenCalled();
+  });
+
   it('rejects a subscribed Factory follow-up when its internal thread cannot be resolved', async () => {
     const thread = makeSubscribedThread();
     const accountLinks = fullStore({ orgId: 'org-1', userId: 'responder-1', defaultFactoryProjectId: 'fp-1' });
