@@ -83,7 +83,7 @@ import type {
   InferWorkflowRequestContext,
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
-import { resolveRegisteredAgent, warnLegacyDurableFallback } from '../entry-executors';
+import { resolveLegacyAgent, resolveRegisteredAgent } from '../entry-executors';
 import type { ClassifierStepOutput } from '../entry-executors';
 import { createStepFromClassifier } from '../step-factories';
 import type { ClassifierStepOptions } from '../step-factories';
@@ -633,12 +633,12 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
             resolveText = resolve;
           });
 
-          if (typeof agent.streamLegacy !== 'function') {
+          const legacyAgent = resolveLegacyAgent(agent, mastra);
+          if (typeof legacyAgent.streamLegacy !== 'function') {
             throw new Error(`Agent step "${params.id}" uses a legacy v1 model but does not implement streamLegacy().`);
           }
 
-          warnLegacyDurableFallback(agent, mastra);
-          const legacyResult = await agent.streamLegacy((inputData as { prompt: string }).prompt, {
+          const legacyResult = await legacyAgent.streamLegacy((inputData as { prompt: string }).prompt, {
             ...(agentOptions ?? {}),
             ...observabilityContext,
             requestContext,

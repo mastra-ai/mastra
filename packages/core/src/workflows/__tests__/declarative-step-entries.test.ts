@@ -6,6 +6,7 @@
  * materializes them into runnable steps, the shared helpers, and end-to-end
  * runtime behavior across both execution engines.
  */
+import { MockLanguageModelV1, simulateReadableStream } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
@@ -386,6 +387,46 @@ describe.each(ENGINES)('declarative step runtime ($name engine)', ({ evented }) 
     expect(wrapperStream).not.toHaveBeenCalled();
     if (result.status === 'success') {
       expect(result.result).toEqual({ text: 'plain response' });
+    }
+  });
+
+  it('createStep() keeps the supplied agent config for a durable: true agent on a legacy v1 model', async () => {
+    const processInput = vi.fn(({ messages }: any) => messages);
+    const agent = new Agent({
+      id: 'v1-durable-agent',
+      name: 'v1-durable-agent',
+      instructions: 'test',
+      durable: true,
+      inputProcessors: [{ id: 'spy-input', processInput }],
+      model: new MockLanguageModelV1({
+        doStream: async () => ({
+          stream: simulateReadableStream({
+            initialDelayInMs: 0,
+            chunkDelayInMs: 0,
+            chunks: [
+              { type: 'text-delta', textDelta: 'legacy response' },
+              { type: 'finish', finishReason: 'stop', usage: { promptTokens: 1, completionTokens: 1 } },
+            ],
+          }),
+          rawCall: { rawPrompt: [], rawSettings: {} },
+        }),
+      }),
+    });
+    const wf = createWorkflow({
+      id: 'v1-durable-agent-wf',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.any(),
+    })
+      .then(createStep(agent))
+      .commit();
+    bind(wf, { agents: { agent } });
+
+    const run = await wf.createRun();
+    const result = await run.start({ inputData: { prompt: 'say hi' } });
+    expect(result.status).toBe('success');
+    expect(processInput).toHaveBeenCalled();
+    if (result.status === 'success') {
+      expect(result.result).toEqual({ text: 'legacy response' });
     }
   });
 
