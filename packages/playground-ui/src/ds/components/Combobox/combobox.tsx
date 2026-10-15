@@ -39,14 +39,14 @@ export type ComboboxOption = {
 type ComboboxSharedProps = {
   options: ComboboxOption[];
   placeholder?: React.ReactNode;
-  /** The search row's placeholder for compact triggers. A field searches in itself and shows `placeholder`. */
+  /** The search row's placeholder for compact triggers. A field (inside a `Field`) searches in itself and shows `placeholder`. */
   searchPlaceholder?: string;
   emptyText?: string;
   className?: string;
   disabled?: boolean;
   /**
-   * `default` is a form field you type in to search. `ghost` (and the legacy `outline`/`link`) is a compact
-   * trigger with the search inside the popup, for toolbars, breadcrumbs and inline pickers.
+   * `default` inside a `Field` is a form field you type in to search. `ghost` (and the legacy `outline`/`link`),
+   * or any variant outside a `Field`, is a compact trigger with the search inside the popup.
    */
   variant?: ComboboxVariant;
   /** Icon sizes (`icon-*`) render a chevron-only trigger with the search in the popup; pass `aria-label` to name it. */
@@ -109,9 +109,9 @@ function ComboboxOptionText({ option }: { option: ComboboxOption }) {
 /**
  * A searchable select driven by `options`, built on the Combobox parts.
  *
- * A single-select `default` field searches right in the field, like a text input. Multiple selection,
- * `ghost` and icon-size triggers, and custom (non-text) placeholders keep a compact trigger with the
- * search inside the popup. For anything these props don't cover (chips, groups, rich items), compose
+ * Inside a `Field`, a single-select `default` combobox searches right in the field, like a text input.
+ * Everywhere else (outside a `Field`, multiple selection, `ghost` and icon-size triggers, custom
+ * non-text placeholders) it keeps a compact trigger with the search inside the popup. For anything these props don't cover (chips, groups, rich items), compose
  * the parts directly (`ComboboxRoot`, `ComboboxInput`, ...).
  */
 export function Combobox(props: ComboboxProps) {
@@ -147,8 +147,10 @@ export function Combobox(props: ComboboxProps) {
     [ariaDescribedBy, error ? fieldErrorId(errorName) : undefined].filter(Boolean).join(' ') || undefined;
   const iconOnly = isIconButtonSize(size);
   const textSize = isIconButtonSize(size) ? undefined : size;
-  // Search in the field for a single-select text field; everything else keeps the popup search.
+  // A form field (inside a `Field`) searches in itself. Outside one, a Combobox is usually a toolbar or
+  // inline picker that callers lay out as a button, so it keeps the trigger with the search in the popup.
   const inField =
+    field !== null &&
     !multiple &&
     variant === 'default' &&
     !isIconButtonSize(size) &&

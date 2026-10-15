@@ -7,7 +7,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Field, FieldError, FieldLabel } from '../Field';
 import { Form } from '../Form';
-import { Combobox } from './combobox';
+import { Combobox as BareCombobox } from './combobox';
+import type { ComboboxProps } from './combobox';
+
+/** Most tests use the Combobox the way forms do: inside a `Field`, where a single select searches in the field. */
+function Combobox(props: ComboboxProps) {
+  return (
+    <Field>
+      <FieldLabel>Provider</FieldLabel>
+      <BareCombobox {...props} />
+    </Field>
+  );
+}
 
 afterEach(() => {
   cleanup();
@@ -343,7 +354,7 @@ describe('Combobox', () => {
     render(
       <Field invalid>
         <FieldLabel>Provider</FieldLabel>
-        <Combobox options={options} />
+        <BareCombobox options={options} />
         <FieldError>Required</FieldError>
       </Field>,
     );
@@ -359,7 +370,7 @@ describe('Combobox', () => {
     render(
       <Field>
         <FieldLabel>Provider</FieldLabel>
-        <Combobox options={options} />
+        <BareCombobox options={options} />
       </Field>,
     );
 
@@ -479,7 +490,7 @@ describe('Combobox', () => {
     render(
       <Field invalid>
         <FieldLabel>Providers</FieldLabel>
-        <Combobox multiple options={options} value={[]} />
+        <BareCombobox multiple options={options} value={[]} />
         <FieldError>Required</FieldError>
       </Field>,
     );
@@ -507,6 +518,30 @@ describe('Combobox', () => {
       fireEvent.pointerDown(anthropic, { pointerType: 'mouse' });
       fireEvent.click(anthropic, { detail: 1 });
     }).not.toThrow();
+  });
+});
+
+describe('Combobox outside a Field', () => {
+  it('keeps a compact trigger with the search in the popup', async () => {
+    const onValueChange = vi.fn();
+    render(
+      <BareCombobox
+        options={options}
+        onValueChange={onValueChange}
+        aria-label="Provider"
+        searchPlaceholder="Search providers"
+      />,
+    );
+
+    const trigger = screen.getByRole('combobox', { name: 'Provider' });
+    expect(trigger.tagName).toBe('BUTTON');
+
+    fireEvent.click(trigger);
+    const search = await screen.findByPlaceholderText('Search providers');
+    fireEvent.input(search, { target: { value: 'goo' }, inputType: 'insertText' });
+    fireEvent.click(await screen.findByRole('option', { name: 'Google' }));
+
+    expect(onValueChange).toHaveBeenCalledWith('google');
   });
 });
 

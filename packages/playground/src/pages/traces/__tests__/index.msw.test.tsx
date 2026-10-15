@@ -506,8 +506,7 @@ describe('Traces side panel header actions', () => {
         expect(queryClient.isFetching()).toBe(0);
       });
       fireEvent.click(await screen.findByRole('button', { name: 'Score trace' }));
-      // A field opens on mousedown (a real press), which fireEvent.click doesn't send.
-      fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Select scorer' }));
+      fireEvent.click(await screen.findByRole('combobox', { name: 'Select scorer' }));
       fireEvent.click(await screen.findByRole('option', { name: 'Quality scorer' }));
       fireEvent.click(screen.getByRole('button', { name: 'Start Scoring' }));
       await waitFor(() =>
