@@ -154,7 +154,7 @@ export class MessageHistory implements Processor {
 
   /**
    * Keep pinned messages inside the token budget: drop the oldest unpinned history first,
-   * and skip pinning entirely when the pinned messages alone exceed the budget.
+   * and skip any pinned message that cannot fit on its own.
    */
   private async fitPinnedMessages(
     history: MastraDBMessage[],
@@ -162,9 +162,16 @@ export class MessageHistory implements Processor {
   ): Promise<{ history: MastraDBMessage[]; pinned: MastraDBMessage[] }> {
     if (!this.tokenLimit || !this.tokenCounter || !pinned.length) return { history, pinned };
     const maxTokens = this.tokenLimit.maxTokens - this.tokenLimit.atMaxRemoveTokens;
+    // Keep each pinned result that fits on its own, then give the rest of the budget to history.
+    const fittedPinned: MastraDBMessage[] = [];
     let pinnedTokens = 0;
-    for (const msg of pinned) pinnedTokens += await this.tokenCounter.countMessage(msg);
-    if (pinnedTokens > maxTokens) return { history, pinned: [] };
+    for (const msg of pinned) {
+      const tokens = await this.tokenCounter.countMessage(msg);
+      if (pinnedTokens + tokens > maxTokens) continue;
+      pinnedTokens += tokens;
+      fittedPinned.push(msg);
+    }
+    if (!fittedPinned.length) return { history, pinned: [] };
     // history is newest-first; keep the newest messages that still fit next to the pinned ones.
     const kept: MastraDBMessage[] = [];
     let total = pinnedTokens;
@@ -174,7 +181,7 @@ export class MessageHistory implements Processor {
       total += tokens;
       kept.push(msg);
     }
-    return { history: kept, pinned };
+    return { history: kept, pinned: fittedPinned };
   }
 
   async processInput(
