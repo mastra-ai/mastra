@@ -253,6 +253,17 @@ describe('Combobox', () => {
     });
   });
 
+  it('finds an option by the plain-text displayLabel the field shows', async () => {
+    render(<Combobox options={[{ label: 'Auto', value: 'auto', displayLabel: 'Auto · GPT-5 Mini' }, ...options]} />);
+
+    const { user } = await openField();
+    await user.keyboard('mini');
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['Auto']);
+    });
+  });
+
   it('selects a custom value when custom values are allowed', async () => {
     const onValueChange = vi.fn();
     renderCombobox({ onValueChange, allowCustomValue: true });
