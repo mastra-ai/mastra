@@ -713,7 +713,7 @@ When a followed work item changes stage, subscribers whose session is running ge
 A user session sees what it is waiting on without calling a tool. Once it has started a side session or follows a work item, each step carries a `<factory-sessions>` state signal listing:
 
 - side sessions it started: title, session id, whether it is running, parked or idle, and the last report with its time;
-- work items it follows: number, title, stage, the session working on it, and the last report with its time.
+- work items it follows: number, title, stage, the session working on it and whether that session is `running`, `idle` or `parked`, and the last report with its time. Following doesn't end when an item finishes; a session can unsubscribe when it's done with an item.
 
 Running entries come first, and the list shows at most 20 rows with a "+N more" line. Side sessions idle for more than 24 hours, and items in a finished stage for more than 24 hours, drop out. Sessions the caller only messaged never appear. When the last entry goes, the signal sends "No sub-sessions or followed work items." once and then stays silent. The signal is only resent when its content changes.
 
