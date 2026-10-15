@@ -4886,9 +4886,9 @@ export class DurableAgent<
     let workflowInput: DurableAgenticWorkflowInput | undefined;
     let loopSnapshot: WorkflowRunState | undefined;
     let workflowInputSnapshot: WorkflowRunState | undefined;
-    const workflowsStore = !localEntry ? await this.#mastra?.getStorage()?.getStore('workflows') : undefined;
+    const workflowsStore = !observedEntry ? await this.#mastra?.getStorage()?.getStore('workflows') : undefined;
 
-    if (!structuredOutput || !localEntry) {
+    if (!structuredOutput || !observedEntry) {
       const snapshotStore = workflowsStore ?? (await this.#mastra?.getStorage()?.getStore('workflows'));
 
       for (const workflowName of [DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION]) {
@@ -4909,7 +4909,7 @@ export class DurableAgent<
       }
     }
 
-    if (!localEntry && workflowInput && workflowInput.agentId !== this.id) {
+    if (!observedEntry && workflowInput && workflowInput.agentId !== this.id) {
       throw new MastraError({
         id: 'DURABLE_AGENT_OBSERVE_AGENT_MISMATCH',
         domain: ErrorDomain.AGENT,
@@ -4934,7 +4934,7 @@ export class DurableAgent<
       }
     }
 
-    if (!localEntry && workflowInput) {
+    if (!observedEntry && workflowInput) {
       requestContext = workflowInput.requestContextEntries
         ? new RequestContext(
             Object.entries(workflowInput.requestContextEntries) as Iterable<readonly [string, unknown]>,
