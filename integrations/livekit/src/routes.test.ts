@@ -6,6 +6,7 @@ import {
   Room,
   RoomEgress,
   RoomServiceClient,
+  TokenVerifier,
 } from 'livekit-server-sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LiveKitSessionMetadataSchema, parseSessionMetadata } from './metadata';
@@ -110,6 +111,13 @@ describe('liveKitConnectionRoute recording', () => {
     expect(claims.roomConfig).toBeUndefined();
     expect(JSON.stringify(claims)).not.toContain('storage-secret');
     expect(JSON.stringify(details)).not.toContain('storage-secret');
+    // The current server SDK requires exp when verifying tokens. Validate the route's
+    // real signed token as a consumer would, rather than only decoding its payload.
+    const verified = await new TokenVerifier(credentials.apiKey, credentials.apiSecret).verify(
+      details.participantToken!,
+    );
+    expect(verified.sub).toBe('user-9');
+    expect(verified.exp).toBeGreaterThan(Math.floor(Date.now() / 1000));
   });
 
   it('resolves recording per request with the body, context, and final room name', async () => {

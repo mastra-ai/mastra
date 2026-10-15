@@ -261,7 +261,7 @@ export class MastraLLM extends llm.LLM {
     });
   }
 
-  /** No-op in v1: nothing in the LiveKit session/worker ever calls `prewarm()` automatically. */
+  /** LiveKit calls this at activity startup. Mastra owns provider connections, so no local prewarm is needed. */
   override prewarm(): void {}
 }
 

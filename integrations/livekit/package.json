@@ -81,8 +81,8 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "@livekit/protocol": "^1.46.6",
-    "livekit-server-sdk": "^2.15.4"
+    "@livekit/protocol": "^1.52.1",
+    "livekit-server-sdk": "^2.19.1"
   },
   "peerDependencies": {
     "@livekit/agents": "^1.7.1",
@@ -107,21 +107,22 @@
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@livekit/agents": "^1.7.1",
-    "@livekit/agents-plugin-livekit": "^1.7.1",
-    "@livekit/agents-plugin-silero": "^1.7.1",
+    "@livekit/agents": "^1.9.3",
+    "@livekit/agents-plugin-livekit": "^1.9.3",
+    "@livekit/agents-plugin-silero": "^1.9.3",
     "@mastra/client-js": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/hono": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/pg": "workspace:*",
-    "@types/node": "22.20.1",
-    "eslint": "^10.7.0",
-    "hono": "^4.13.7",
-    "tsdown": "0.22.9",
+    "@types/node": "26.6.5",
+    "eslint": "^10.12.0",
+    "hono": "^4.13.13",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
-    "vitest": "catalog:",
-    "zod": "catalog:"
+    "vite": "^8.3.4",
+    "vitest": "5.0.5",
+    "zod": "^4.6.7"
   }
 }

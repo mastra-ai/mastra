@@ -19,6 +19,82 @@ intake + service-area check, general callback).
       Compare committed LiveKit conversation items with saved Memory messages and measure
       next-turn latency with transcript persistence enabled.
 
+## Stable dependency audit (2026-10-15)
+
+The shared-session and transcript work is recovered on `codex/livekit-stable-dependencies`.
+The dependency refresh does not select a 1.0 release or change the public integration API.
+Only the LiveKit package's importer and new dependency graph change in the shared lockfile.
+
+| Dependency | Previous installed version | Updated stable version |
+| --- | --- | --- |
+| Agents, LiveKit plugin, Silero plugin | 1.7.1 | 1.9.3 |
+| RTC peer selected by LiveKit | 0.13.34 | 1.1.0 |
+| Server SDK | 2.16.0 | 2.19.1 |
+| Direct protocol dependency | 1.49.0 | 1.52.1 |
+| Zod used for development | 4.6.5 | 4.6.7 |
+| Vitest | 4.1.11 | 5.0.5 |
+| tsdown | 0.22.9 | 0.23.1 |
+| ESLint | 10.7.0 | 10.12.0 |
+| Hono used for integration tests | 4.13.7 | 4.13.13 |
+| Node type definitions | 22.19.15 (workspace override) | 26.6.5 (LiveKit-only override) |
+
+Vite 8.3.4 is now an explicit development dependency because Vitest 5 makes it a peer.
+TypeScript was already at the latest stable 7.0.2. Mastra workspace dependencies stay linked;
+this task does not upgrade or edit core, server, memory, or storage packages.
+
+### Compatibility and migration impact
+
+- **RTC peer range changes upstream.** Agents/Silero 1.9.3 require RTC `^1.1.0`.
+  Update applications that explicitly pin RTC 0.13.x, keeping Agents and plugins on the same
+  exact release. RTC's 1.0 release marks it stable; 1.1 adds the RPC interceptor required by Agents.
+  The integration's existing `^1.7.1` peer range remains supported with the matching older RTC.
+- **Token verification requires expiration.** Server SDK 2.19.1 rejects tokens without `exp`.
+  The connection route already uses LiveKit's expiring `AccessToken`; a regression assertion
+  verifies its signed token with the real `TokenVerifier`.
+- **LiveKit telemetry changes.** Several trace durations switch from milliseconds to seconds,
+  and configured OpenTelemetry exporters can receive conversation content. The canonical LiveKit
+  guide lists the native controls and migration details. Mastra's `*Ms` metric fields keep their units.
+- **Transport and transcript behavior.** Dead native session transports reject sends immediately.
+  Legacy transcription packets are suppressed for stream-capable clients; committed conversation
+  events and `lk.transcription` text streams remain available. No replacement transport or
+  transcription logic was introduced.
+- **Development runtime.** tsdown 0.23 requires Node `^22.18.0 || ^24.11.0 || >=26.0.0`;
+  Vitest 5 also excludes Node 25. Validation uses Node 24.18.0. Published runtime support remains
+  Node >=22.13.0. Vitest 5 clears mock call history by default; the existing tests pass with that behavior.
+- **Upstream pins remain authoritative.** RTC still pins FFI bindings 0.12.73; the turn detector
+  still pins Transformers 4.2.0 and ONNX Runtime 1.24.3. Their newer standalone releases are not
+  overrides: native ABI/model compatibility belongs to LiveKit. Server SDK pins protocol 1.51.0
+  alongside the integration's 1.52.1. Other major lines, including OpenAI 6, Pino 8/9, and protobuf 1,
+  remain within upstream requirements. The workspace's existing jose 6.2.12 security override
+  is unchanged; the published Server SDK itself still declares jose 5.
+
+### Validation
+
+- [x] Latest stable SDK suite: 337 passed; PostgreSQL test skipped pending its release check.
+- [x] Zod 3 compatibility suite: 337 passed; PostgreSQL test skipped.
+- [x] Previous LiveKit 1.7.1 peer suite: 337 passed; PostgreSQL test skipped.
+- [x] ESM, CommonJS, and declarations built; all four entry points imported in both module formats.
+- [x] Package lint and source TypeScript check passed.
+- [x] Packed consumer with published stable core 1.77.0, client-js 1.54.0, Memory 1.37.1,
+  and LibSQL 1.26.1: all ESM/CommonJS exports loaded, and a native text session persisted its
+  greeting, caller input, and reply through Memory. This does not replace the live audio check.
+- [x] Canonical guide formatting, Remark, and Vale passed; frozen install passed.
+
+The isolated stable consumer reports the existing client-js dependency on older AI SDK utilities
+whose peer range declares Zod 3. The Zod 4 consumer check and both integration Zod suites pass;
+no override or client-js package change was added for that upstream peer warning.
+
+An additional check that includes every test file in TypeScript reports 14 existing fixture
+diagnostics. The same diagnostics reproduce on the recovered commit with the old dependencies;
+the package's configured source/declaration checks exclude tests. This is separate from the
+passing runtime test suites and is not a regression from this dependency refresh.
+
+Sources: [Agents changelog](https://github.com/livekit/agents-js/blob/main/agents/CHANGELOG.md),
+[RTC changelog](https://github.com/livekit/node-sdks/blob/main/packages/livekit-rtc/CHANGELOG.md),
+[Server SDK changelog](https://github.com/livekit/node-sdks/blob/main/packages/livekit-server-sdk/CHANGELOG.md),
+[Vitest migration](https://vitest.dev/guide/migration/),
+[tsdown 0.23](https://github.com/rolldown/tsdown/releases/tag/v0.23.0).
+
 ---
 
 ## Decision log

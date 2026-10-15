@@ -862,23 +862,25 @@ Before upgrading an application that registers `liveKitRecordingRoute()`, add an
 
 ### Install compatible packages
 
-Use the same exact release for Agents and its plugins. The tested baseline is:
+Use the same exact release for Agents and its plugins. The current tested stable versions are:
 
 | Package | Version |
 | - | - |
-| `@livekit/agents` | `1.7.1` |
-| `@livekit/agents-plugin-livekit` | `1.7.1` |
-| `@livekit/agents-plugin-silero` | `1.7.1` |
-| `@livekit/rtc-node` | `0.13.34` |
-| `livekit-server-sdk` | `2.16.0` |
+| `@livekit/agents` | `1.9.3` |
+| `@livekit/agents-plugin-livekit` | `1.9.3` |
+| `@livekit/agents-plugin-silero` | `1.9.3` |
+| `@livekit/rtc-node` | `1.1.0` |
+| `livekit-server-sdk` | `2.19.1` |
 
 For a local prerelease archive, install it with the matching LiveKit packages:
 
 ```bash npm2yarn
-npm install ./mastra-livekit-0.5.0-next.0.tgz @livekit/agents@1.7.1 @livekit/agents-plugin-livekit@1.7.1 @livekit/agents-plugin-silero@1.7.1 @livekit/rtc-node@0.13.34 livekit-server-sdk@2.16.0
+npm install ./mastra-livekit-0.5.0-next.0.tgz @livekit/agents@1.9.3 @livekit/agents-plugin-livekit@1.9.3 @livekit/agents-plugin-silero@1.9.3 @livekit/rtc-node@1.1.0 livekit-server-sdk@2.19.1
 ```
 
-Replace the archive path with the supplied prerelease. Install any other `@livekit/agents-plugin-*` packages at the matching release. Agents 1.7.1 and Silero 1.7.1 require RTC `^0.13.34`; RTC 1.x doesn't satisfy that requirement. Don't override peer dependency errors to install it.
+Replace the archive path with the supplied prerelease. Install any other `@livekit/agents-plugin-*` packages at the matching release. Agents 1.9.3 and Silero 1.9.3 require RTC `^1.1.0`. Update an application's explicit RTC dependency along with Agents and its plugins.
+
+The integration still accepts Agents and plugins from 1.7.1 within 1.x. If you retain 1.7.1, keep RTC `^0.13.34` with it. Don't mix these version sets or override peer dependency errors.
 
 Keep Node.js 22.13 or newer. Both `@mastra/livekit` and Agents require Zod `^3.25.76 || ^4.1.8`. Upgrade older Zod versions before installing 0.5.0. Verify the installed dependency tree and initialize the worker's models:
 
@@ -888,6 +890,17 @@ npx tsx src/mastra/voice-worker.ts download-files
 ```
 
 Use a single installed copy of Agents for both the integration and a custom `voice.AgentSession`. Multiple copies can fail LiveKit's runtime class checks.
+
+### Account for upstream behavior changes
+
+When upgrading from Agents 1.7.1 to 1.9.3, review these [LiveKit changes](https://github.com/livekit/agents-js/blob/main/agents/CHANGELOG.md):
+
+- Several LiveKit trace duration attributes, including `lk.eou.endpointing_delay` and `lk.transcription_delay`, now use seconds. Update dashboards that interpret those attributes as milliseconds. Mastra's `onTurnMetrics` fields ending in `Ms` still use milliseconds.
+- LiveKit's session transports throw when a send fails because the transport is closed or the room is disconnected. Applications using those transports directly should handle the rejected send.
+- LiveKit exports conversation content to configured OpenTelemetry exporters. Use its `allowPii: false` tracer-provider option or `LIVEKIT_TELEMETRY_ALLOW_PII=0` for an ambient provider to omit that content from third-party exporters. `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=false` disables content capture for all destinations.
+- When all eligible clients support transcription streams, LiveKit stops sending duplicate legacy transcription packets. The `lk.transcription` stream and committed conversation events used by Mastra's transcript persistence remain available.
+
+The [Server SDK 2.19.1 token verifier](https://github.com/livekit/node-sdks/blob/main/packages/livekit-server-sdk/CHANGELOG.md) requires an `exp` claim. Tokens issued by `liveKitConnectionRoute()` already include it. If an application creates tokens separately, use LiveKit's `AccessToken` API with an expiration.
 
 ### Check VAD and turn detection
 
