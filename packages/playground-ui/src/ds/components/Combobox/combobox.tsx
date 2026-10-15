@@ -182,10 +182,13 @@ export function Combobox(props: ComboboxProps) {
     if (isMultipleCombobox(props)) props.onValueChange?.([]);
   };
   const { contains } = BaseCombobox.useFilter();
-  // Match the label like Base UI's default filter, plus any keywords the option carries.
+  // Match the label like Base UI's default filter, the text a field shows for it (a plain-text
+  // `displayLabel`), and any keywords the option carries.
   const filterOption = React.useCallback(
     (option: ComboboxOption, query: string) =>
-      contains(option.label, query) || (option.keywords?.some(keyword => contains(keyword, query)) ?? false),
+      contains(option.label, query) ||
+      contains(optionText(option), query) ||
+      (option.keywords?.some(keyword => contains(keyword, query)) ?? false),
     [contains],
   );
 
