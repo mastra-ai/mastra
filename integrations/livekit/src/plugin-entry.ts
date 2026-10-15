@@ -2,6 +2,14 @@
 // it's for customers who own their own `voice.AgentSession` and want a Mastra agent in the `llm`
 // slot. Plugin users don't inherit the worker wrapper's surface or its optional peers.
 export { MastraLLM } from './llm-plugin';
+export { createLiveKitTranscriptPersistence } from './transcript';
+export type {
+  LiveKitTranscriptPersistence,
+  CreateLiveKitTranscriptPersistenceOptions,
+  TranscriptPersistenceOptions,
+  TranscriptPersistenceStatus,
+  TranscriptPersistenceError,
+} from './transcript';
 export type { MastraLLMOptions } from './llm-plugin';
 export { createRemoteAgentReplyGenerator } from './remote';
 export type { RemoteMastraAgentOptions, RemoteAgentReplyGeneratorOptions } from './remote';

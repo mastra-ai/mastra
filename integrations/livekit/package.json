@@ -104,6 +104,7 @@
     }
   },
   "devDependencies": {
+    "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@livekit/agents": "^1.9.4",
@@ -111,7 +112,12 @@
     "@livekit/agents-plugin-silero": "^1.9.4",
     "@mastra/client-js": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@mastra/hono": "workspace:*",
+    "@mastra/libsql": "workspace:*",
+    "@mastra/memory": "workspace:*",
+    "@mastra/pg": "workspace:*",
     "@types/node": "22.19.15",
+    "hono": "^4.13.7",
     "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
