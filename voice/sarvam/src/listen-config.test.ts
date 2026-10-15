@@ -72,3 +72,48 @@ describe('SarvamVoice.listen', () => {
     expect(form.has('mode')).toBe(false);
   });
 });
+
+describe('SarvamVoice API errors', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const audio = () => Readable.from([Buffer.from('RIFF')]);
+  const stubResponse = (body: string, init: ResponseInit) =>
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(body, init)),
+    );
+
+  it('listen() rejects with Sarvam error.message on 403', async () => {
+    stubResponse(JSON.stringify({ error: { message: 'Invalid API key', code: 'invalid_api_key_error' } }), {
+      status: 403,
+    });
+    const voice = new SarvamVoice({ listeningModel: { name: 'saarika:v2.5', apiKey: 'k' } } as any);
+    await expect(voice.listen(audio())).rejects.toThrow('Sarvam AI API Error: Invalid API key');
+  });
+
+  it('listen() rejects with status text on non-JSON error body', async () => {
+    stubResponse('oops', { status: 500, statusText: 'Internal Server Error' });
+    const voice = new SarvamVoice({ listeningModel: { name: 'saarika:v2.5', apiKey: 'k' } } as any);
+    await expect(voice.listen(audio())).rejects.toThrow('Sarvam AI API Error: Internal Server Error');
+  });
+
+  it('listen() still returns the transcript on success', async () => {
+    stubResponse(JSON.stringify({ transcript: 'hello' }), { status: 200 });
+    const voice = new SarvamVoice({ listeningModel: { name: 'saarika:v2.5', apiKey: 'k' } } as any);
+    await expect(voice.listen(audio())).resolves.toBe('hello');
+  });
+
+  it('speak() rejects with Sarvam error.message on 403', async () => {
+    stubResponse(JSON.stringify({ error: { message: 'Invalid API key' } }), { status: 403 });
+    const voice = new SarvamVoice({ speechModel: { name: 'bulbul:v2', apiKey: 'k' } } as any);
+    await expect(voice.speak('hi')).rejects.toThrow('Sarvam AI API Error: Invalid API key');
+  });
+
+  it('speak() falls back to top-level message', async () => {
+    stubResponse(JSON.stringify({ message: 'Legacy failure' }), { status: 400 });
+    const voice = new SarvamVoice({ speechModel: { name: 'bulbul:v2', apiKey: 'k' } } as any);
+    await expect(voice.speak('hi')).rejects.toThrow('Sarvam AI API Error: Legacy failure');
+  });
+});
