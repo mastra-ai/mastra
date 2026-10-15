@@ -89,7 +89,7 @@ function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo })
               </Txt>
             )}
           </div>
-          <DisclosureChevron direction="right" className="text-muted-foreground" />
+          <DisclosureChevron direction="right" className="text-muted-foreground size-4" />
         </CollapsibleTrigger>
         <CollapsibleContent>
           <SkillContent content={skill.content} />

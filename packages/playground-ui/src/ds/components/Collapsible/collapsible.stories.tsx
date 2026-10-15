@@ -1,10 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { Badge } from '../Badge';
 import { Button } from '../Button';
 import { DisclosureChevron } from '../DisclosureChevron';
-import { Field, FieldLabel } from '../Field';
-import { Input } from '../Input';
 import { ScrollArea } from '../ScrollArea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './collapsible';
 
@@ -25,7 +22,7 @@ export const Default: Story = {
       <CollapsibleTrigger asChild>
         <Button className="w-full justify-between">
           Click to expand
-          <DisclosureChevron />
+          <DisclosureChevron className="size-4" />
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-2 rounded-md border border-border bg-background p-4">
@@ -41,7 +38,7 @@ export const DefaultOpen: Story = {
       <CollapsibleTrigger asChild>
         <Button className="w-full justify-between">
           Section Title
-          <DisclosureChevron />
+          <DisclosureChevron className="size-4" />
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-2 rounded-md border border-border bg-background p-4">
@@ -51,67 +48,6 @@ export const DefaultOpen: Story = {
   ),
 };
 
-type FormToggleProps = { defaultOpen?: boolean; badge?: boolean; triggerClassName?: string };
-
-function FormToggle({ defaultOpen = false, badge = false, triggerClassName }: FormToggleProps) {
-  return (
-    <div className="flex w-100 flex-col gap-4">
-      <Field>
-        <FieldLabel>Experiment name</FieldLabel>
-        <Input placeholder="Nightly regression" />
-      </Field>
-      <Collapsible defaultOpen={defaultOpen} className="flex flex-col gap-4">
-        <CollapsibleTrigger variant="form" className={triggerClassName}>
-          Advanced
-          {badge && (
-            <Badge size="xs" variant="blue">
-              set
-            </Badge>
-          )}
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <Field>
-            <FieldLabel>Max concurrency</FieldLabel>
-            <Input defaultValue="5" />
-          </Field>
-        </CollapsibleContent>
-      </Collapsible>
-    </div>
-  );
-}
-
-export const Form: Story = {
-  parameters: {
-    docs: {
-      description: {
-        story:
-          '`variant="form"` is the toggle for an optional section inside a form or dialog body (Advanced, Request Context): a chevron that turns while open, then muted label text, flush with the fields around it. Headers, rows and cards use the default variant and lay themselves out.',
-      },
-    },
-  },
-  render: () => <FormToggle />,
-};
-
-export const FormOpen: Story = {
-  render: () => <FormToggle defaultOpen />,
-};
-
-export const FormWithBadge: Story = {
-  render: () => <FormToggle badge />,
-};
-
-export const FormFocusVisible: Story = {
-  parameters: {
-    docs: {
-      description: {
-        story:
-          'The keyboard focus ring, drawn here statically. It sits outside the flush box so it never touches the glyphs.',
-      },
-    },
-  },
-  render: () => <FormToggle triggerClassName="outline-1 outline-offset-2 outline-border-focus outline-solid" />,
-};
-
 export const SettingsSection: Story = {
   render: () => (
     <div className="w-100 space-y-2">
@@ -119,7 +55,7 @@ export const SettingsSection: Story = {
         <CollapsibleTrigger asChild>
           <button className="flex w-full items-center justify-between py-2 text-subheading text-foreground hover:text-white">
             Advanced Settings
-            <DisclosureChevron />
+            <DisclosureChevron className="size-4" />
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent className="space-y-3 pt-2">
@@ -148,7 +84,7 @@ export const MultipleCollapsibles: Story = {
         <CollapsibleTrigger asChild>
           <Button variant="ghost" className="w-full justify-between">
             Section 1
-            <DisclosureChevron />
+            <DisclosureChevron className="size-4" />
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent className="p-2">
@@ -159,7 +95,7 @@ export const MultipleCollapsibles: Story = {
         <CollapsibleTrigger asChild>
           <Button variant="ghost" className="w-full justify-between">
             Section 2
-            <DisclosureChevron />
+            <DisclosureChevron className="size-4" />
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent className="p-2">
@@ -170,7 +106,7 @@ export const MultipleCollapsibles: Story = {
         <CollapsibleTrigger asChild>
           <Button variant="ghost" className="w-full justify-between">
             Section 3
-            <DisclosureChevron />
+            <DisclosureChevron className="size-4" />
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent className="p-2">
@@ -189,7 +125,7 @@ export const FillsConstrainedPanel: Story = {
     >
       <CollapsibleTrigger className="flex w-full shrink-0 items-center justify-between px-4 py-2 text-subheading text-foreground">
         Recent runs
-        <DisclosureChevron />
+        <DisclosureChevron className="size-4" />
       </CollapsibleTrigger>
       <CollapsibleContent fill className="flex min-h-0 flex-col">
         <ScrollArea className="min-h-0 flex-1 border-t border-border">

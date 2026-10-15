@@ -162,7 +162,7 @@ export function AgentMemoryConfig({ agentId }: { agentId: string }) {
               <Txt as="span" variant="body-sm">
                 {section.title}
               </Txt>
-              <DisclosureChevron direction="right" />
+              <DisclosureChevron direction="right" className="size-4" />
             </CollapsibleTrigger>
             <CollapsibleContent className="pt-2">
               <MemoryConfigFields items={section.items} />
