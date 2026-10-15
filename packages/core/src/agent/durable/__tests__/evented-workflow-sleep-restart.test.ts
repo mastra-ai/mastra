@@ -11,8 +11,8 @@
  *
  * The sleep duration is only checked on the non-mechanism cells: restart and
  * redelivery can re-enter the sleep, so those cells assert the result and exact
- * execution log instead. COR-1307 owns the fresh-id completed-transition
- * replay observed by the harness's `wf-evented-redeliver` condition.
+ * execution log instead, with stale-detecting known differences for
+ * COR-1307/COR-1394's completed-transition replay.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -20,6 +20,11 @@ import { z } from 'zod';
 import { Mastra } from '../../../mastra';
 import { MockStore } from '../../../storage/mock';
 import { createEventedWorkflow, createStep } from '../../../workflows';
+import {
+  REDELIVERY_MODES,
+  expectRedeliveryParity,
+  redeliverAndDrain,
+} from '../../../workflows/evented/test-utils/redelivery-contract';
 import { RedeliveryDriver } from '../../../workflows/evented/test-utils/redelivery-driver';
 import { DEFAULT_TIMEOUT_MS, createGate, createRestartScenario, findRow, loadGraph } from './restart-harness';
 import type { Checkpoint, Gate } from './restart-harness';
@@ -206,7 +211,7 @@ describe('T58 wf-sleep: the sleep holds without a restart', () => {
 
 describe('T58 wf-evented-redeliver', () => {
   for (const variant of ['sleep', 'sleep-until'] as const) {
-    it(`${variant}: pins the harness fresh-id replay of a completed transition`, async () => {
+    it.each(REDELIVERY_MODES)(`${variant} / %s: executes each completed transition once`, async mode => {
       const driver = new RedeliveryDriver();
       const executed: string[] = [];
       const step = (id: string) =>
@@ -245,22 +250,24 @@ describe('T58 wf-evented-redeliver', () => {
         const match = { spec: `${workflowId}@0`, runId } as const;
         const original = driver.stepRuns(match).at(-1)!;
         expect(original.data).toMatchObject({ workflowId, runId, executionPath: [0] });
-        const deliveriesBefore = driver.deliveryCount(match);
-        const { event, handled } = await driver.redeliver(match, { viaPublish: true });
-
-        expect(event.id).not.toBe(original.id);
-        expect(event.deliveryAttempt).toBe(1);
+        const { event } = await redeliverAndDrain(driver, match, mode);
         expect(event.data).toEqual(original.data);
         expect(event.data).toMatchObject({ workflowId, runId, executionPath: [0] });
-        expect(handled).toHaveLength(1);
-        expect(handled[0]!.result.ok).toBe(true);
-        expect(driver.deliveryCount(match)).toBe(deliveriesBefore + 1);
-        // COR-1307: the harness publishes a fresh id, so the completed transition
-        // runs again and drives the sleep chain a second time.
-        await vi.waitFor(() => expect(executed).toEqual(['before', 'after', 'before', 'after']));
+        expectRedeliveryParity(
+          { executed },
+          { executed: ['before', 'after'] },
+          mode === 'same-id'
+            ? undefined
+            : {
+                reason:
+                  'COR-1307 / COR-1394: a completed transition drives the sleep chain again on fresh-ID or expired replay.',
+                expect: correct => ({ ...correct, executed: [...correct.executed, ...correct.executed] }),
+              },
+        );
       } finally {
         await mastra.stopWorkers();
         driver.dispose();
+        vi.useRealTimers();
       }
     });
   }

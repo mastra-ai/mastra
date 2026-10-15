@@ -1,8 +1,8 @@
 /**
  * Port of durability harness case T57 (wf-parallel-suspend).
  *
- * This file intentionally includes the default-engine parity leg. COR-1307
- * owns the fresh-id completed-transition replay pinned by the redelivery cell.
+ * Includes the default-engine parity leg and completed-transition redelivery
+ * contracts, with stale-detecting known differences for COR-1307/COR-1394.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -11,6 +11,7 @@ import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
 import { createEventedWorkflow, createWorkflow } from '../create';
 import { createStep } from '../workflow';
+import { REDELIVERY_MODES, expectRedeliveryParity, redeliverAndDrain } from './test-utils/redelivery-contract';
 import { RedeliveryDriver } from './test-utils/redelivery-driver';
 
 const Input = z.object({ seed: z.number() });
@@ -65,7 +66,7 @@ async function runCell(engine: Engine) {
 describe('T57 wf-parallel-suspend', () => {
   it.each(['default', 'evented'] as const)('%s: resumes both parallel branches', runCell);
 
-  it('wf-evented-redeliver: pins the harness fresh-id replay', async () => {
+  it.each(REDELIVERY_MODES)('wf-evented-redeliver / %s: executes each completed branch once', async mode => {
     const driver = new RedeliveryDriver();
     const executed: string[] = [];
     const workflow = build('evented', executed);
@@ -96,19 +97,23 @@ describe('T57 wf-parallel-suspend', () => {
       const path = rightRun?.data?.executionPath as number[] | undefined;
       expect(path).toEqual([0, 1]);
       const match = { spec: `${workflow.id}@${path!.join(',')}`, runId } as const;
-      const before = driver.deliveryCount(match);
-      const outcome = await driver.redeliver(match, { viaPublish: true });
-      expect(outcome.event.id).not.toBe(rightRun!.id);
-      expect(outcome.event.deliveryAttempt).toBe(1);
+      const outcome = await redeliverAndDrain(driver, match, mode);
       expect(outcome.event.data).toEqual(rightRun!.data);
       expect(outcome.event.data).toMatchObject({ workflowId: workflow.id, runId, executionPath: path });
-      expect(outcome.handled).toHaveLength(1);
-      expect(outcome.handled[0]!.result.ok).toBe(true);
-      expect(driver.deliveryCount(match)).toBe(before + 1);
-      await vi.waitFor(() => expect(executed.sort()).toEqual(['left', 'right', 'right']));
+      expectRedeliveryParity(
+        { executed: executed.sort() },
+        { executed: ['left', 'right'] },
+        mode === 'same-id'
+          ? undefined
+          : {
+              reason: 'COR-1307 / COR-1394: a completed parallel branch executes again on fresh-ID or expired replay.',
+              expect: correct => ({ ...correct, executed: [...correct.executed, 'right'] }),
+            },
+      );
     } finally {
       await mastra.stopWorkers();
       driver.dispose();
+      vi.useRealTimers();
     }
   });
 });

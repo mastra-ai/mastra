@@ -5,6 +5,11 @@ import { z } from 'zod/v4';
 import { Mastra } from '../../../mastra';
 import { MockStore } from '../../../storage/mock';
 import { createTool } from '../../../tools';
+import {
+  expectRedeliveryParity,
+  REDELIVERY_MODES,
+  redeliverAndDrain,
+} from '../../../workflows/evented/test-utils/redelivery-contract';
 import { RedeliveryDriver } from '../../../workflows/evented/test-utils/redelivery-driver';
 import { Agent } from '../../agent';
 import { createEventedAgent } from '../create-evented-agent';
@@ -16,9 +21,9 @@ const rows = [
 ] as const;
 
 describe('T4 background-tools redelivery', () => {
-  it.each(rows)(
-    '$disposition: wf-evented-redeliver pins the completed tool-step replay',
-    async ({ disposition, args }) => {
+  it.each(rows.flatMap(row => REDELIVERY_MODES.map(mode => ({ ...row, mode }))))(
+    '$disposition / $mode replay preserves one completed tool execution',
+    async ({ disposition, args, mode }) => {
       let modelCalls = 0;
       const emittedArgs: unknown[] = [];
       const chunkTypes: string[] = [];
@@ -122,21 +127,30 @@ describe('T4 background-tools redelivery', () => {
             },
           },
         });
-        const deliveriesBefore = driver.deliveryCount(match);
-        const { event, handled } = await driver.redeliver(match, { viaPublish: true });
-        expect(event.id).not.toBe(original.id);
-        expect(event.deliveryAttempt).toBe(1);
-        expect(handled).toHaveLength(1);
-        expect(handled[0]?.result.ok).toBe(true);
-        expect(driver.deliveryCount(match)).toBe(deliveriesBefore + 1);
-
-        // COR-1307: foreground/deferred fresh-id replay dispatches the completed tool again;
-        // awaited currently preserves its single execution while still consuming the duplicate.
-        const expectedExecutions = disposition === 'awaited' ? 1 : 2;
-        await vi.waitFor(() => expect(received).toHaveLength(expectedExecutions));
-        expect(received).toEqual(Array.from({ length: expectedExecutions }, () => ({ topic: 'delivery' })));
-        expect(chunkTypes.filter(type => type === 'background-task-started')).toHaveLength(1);
-        expect(modelCalls).toBe(2);
+        await redeliverAndDrain(driver, match, mode);
+        expectRedeliveryParity(
+          {
+            received,
+            emittedArgs,
+            backgroundTaskNotifications: chunkTypes.filter(type => type === 'background-task-started').length,
+            modelCalls,
+          },
+          {
+            received: [{ topic: 'delivery' }],
+            emittedArgs: [args, undefined],
+            backgroundTaskNotifications: 1,
+            modelCalls: 2,
+          },
+          mode === 'same-id' || disposition === 'awaited'
+            ? undefined
+            : {
+                reason:
+                  mode === 'expired'
+                    ? 'COR-1307 / COR-1394: an expired completed foreground/deferred step dispatches the tool again.'
+                    : 'COR-1307: a fresh-ID replay dispatches the completed foreground/deferred tool again.',
+                expect: correct => ({ ...correct, received: [...correct.received, ...correct.received] }),
+              },
+        );
       } finally {
         cleanup?.();
         await mastra.stopWorkers();
@@ -144,6 +158,7 @@ describe('T4 background-tools redelivery', () => {
         const bgStore = await storage.getStore('backgroundTasks');
         await bgStore?.dangerouslyClearAll();
         driver.dispose();
+        vi.useRealTimers();
       }
     },
     30_000,

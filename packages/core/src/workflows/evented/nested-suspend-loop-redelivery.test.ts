@@ -1,8 +1,8 @@
 /**
  * Port of durability harness case T56 (wf-nested-suspend-loop).
  *
- * This file intentionally includes the default-engine parity leg. COR-1307
- * owns the fresh-id completed-transition replay pinned by the redelivery cell.
+ * Includes the default-engine parity leg and completed-transition redelivery
+ * contracts, with stale-detecting known differences for COR-1307/COR-1394.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -11,6 +11,7 @@ import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
 import { createEventedWorkflow, createWorkflow } from '../create';
 import { createStep } from '../workflow';
+import { REDELIVERY_MODES, expectRedeliveryParity, redeliverAndDrain } from './test-utils/redelivery-contract';
 import { RedeliveryDriver } from './test-utils/redelivery-driver';
 
 const Value = z.object({ value: z.number() });
@@ -74,7 +75,7 @@ async function runCell(engine: Engine) {
 describe('T56 wf-nested-suspend-loop', () => {
   it.each(['default', 'evented'] as const)('%s: resumes every nested loop suspension', runCell);
 
-  it('wf-evented-redeliver: pins the harness fresh-id replay', async () => {
+  it.each(REDELIVERY_MODES)('wf-evented-redeliver / %s: executes each completed transition once', async mode => {
     const driver = new RedeliveryDriver();
     const executed: number[] = [];
     const { nested, parent } = build('evented', executed);
@@ -103,18 +104,23 @@ describe('T56 wf-nested-suspend-loop', () => {
       const match = { spec: `${parent.id}@0`, runId } as const;
       const original = driver.stepRuns(match).at(-1)!;
       expect(original.data).toMatchObject({ workflowId: parent.id, runId, executionPath: [0] });
-      const before = driver.deliveryCount(match);
-      const outcome = await driver.redeliver(match, { viaPublish: true });
-      expect(outcome.event.id).not.toBe(original.id);
-      expect(outcome.event.deliveryAttempt).toBe(1);
+      const outcome = await redeliverAndDrain(driver, match, mode);
       expect(outcome.event.data).toEqual(original.data);
-      expect(outcome.handled).toHaveLength(1);
-      expect(outcome.handled[0]!.result.ok).toBe(true);
-      expect(driver.deliveryCount(match)).toBe(before + 1);
-      await vi.waitFor(() => expect(executed).toEqual([0, 1, 1]));
+      expectRedeliveryParity(
+        { executed },
+        { executed: [0, 1] },
+        mode === 'same-id'
+          ? undefined
+          : {
+              reason:
+                'COR-1307 / COR-1394: a completed nested transition executes again on fresh-ID or expired replay.',
+              expect: correct => ({ ...correct, executed: [...correct.executed, 1] }),
+            },
+      );
     } finally {
       await mastra.stopWorkers();
       driver.dispose();
+      vi.useRealTimers();
     }
   });
 });
