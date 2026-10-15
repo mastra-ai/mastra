@@ -3,6 +3,6 @@
 '@mastra/core': patch
 ---
 
-Fixed token estimates for long numbers. Long digit runs (IDs, timestamps, numeric data) were counted as a single token, so Observational Memory and `TokenLimiterProcessor` underestimated number-heavy tool output and could miss their thresholds. Digit runs are now counted in chunks, closer to real tokenizers.
+Fixed token estimates for long numbers. A long number used to count as one token, so output full of numbers could grow far past memory and token limits without triggering them. Long numbers are now counted accurately, and limits trigger at the right time.
 
-Token estimates saved on messages before this upgrade are recalculated, so existing threads also get the corrected counts.
+Estimates saved on existing messages are recalculated, so existing conversations also get the corrected counts.
