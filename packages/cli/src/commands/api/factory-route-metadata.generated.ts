@@ -210,22 +210,6 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "GET /web/factory/projects/:id/supervisor/health": {
-    "contractKey": "supervisorHealth",
-    "method": "GET",
-    "path": "/web/factory/projects/:id/supervisor/health",
-    "description": "Run the deterministic Factory supervisor health check",
-    "pathParams": [
-      "id"
-    ],
-    "queryParams": [],
-    "bodyParams": [],
-    "hasQuery": false,
-    "hasBody": false,
-    "responseShape": {
-      "kind": "single"
-    }
-  },
   "GET /web/factory/projects/:id/work-items": {
     "contractKey": "workItemList",
     "method": "GET",
@@ -508,22 +492,6 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "record"
     }
   },
-  "POST /web/factory/projects/:id/supervisor/session": {
-    "contractKey": "supervisorSession",
-    "method": "POST",
-    "path": "/web/factory/projects/:id/supervisor/session",
-    "description": "Get the deterministic Factory supervisor session address",
-    "pathParams": [
-      "id"
-    ],
-    "queryParams": [],
-    "bodyParams": [],
-    "hasQuery": false,
-    "hasBody": false,
-    "responseShape": {
-      "kind": "single"
-    }
-  },
   "POST /web/factory/projects/:id/work-items": {
     "contractKey": "workItemCreate",
     "method": "POST",
@@ -733,7 +701,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "automation-proposed",
               "mention",
               "activity",
-              "supervisor-finding",
               "agent-waiting"
             ]
           }
@@ -772,7 +739,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "automation-proposed",
               "mention",
               "activity",
-              "supervisor-finding",
               "agent-waiting"
             ]
           },
@@ -823,7 +789,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "automation-proposed",
             "mention",
             "activity",
-            "supervisor-finding",
             "agent-waiting"
           ]
         },
@@ -1487,56 +1452,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       },
       "required": [
         "metrics"
-      ]
-    }
-  },
-  "GET /web/factory/projects/:id/supervisor/health": {
-    "path": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
-        }
-      },
-      "required": [
-        "id"
-      ]
-    },
-    "response": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "type": "object",
-      "properties": {
-        "checkedAt": {
-          "type": "string"
-        },
-        "findings": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "propertyNames": {
-              "type": "string"
-            },
-            "additionalProperties": {}
-          }
-        },
-        "counts": {
-          "type": "object",
-          "propertyNames": {
-            "type": "string"
-          },
-          "additionalProperties": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 9007199254740991
-          }
-        }
-      },
-      "required": [
-        "checkedAt",
-        "findings",
-        "counts"
       ]
     }
   },
@@ -2426,7 +2341,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "automation-proposed",
             "mention",
             "activity",
-            "supervisor-finding",
             "agent-waiting"
           ]
         },
@@ -2494,7 +2408,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "automation-proposed",
             "mention",
             "activity",
-            "supervisor-finding",
             "agent-waiting"
           ]
         },
@@ -2562,7 +2475,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "automation-proposed",
             "mention",
             "activity",
-            "supervisor-finding",
             "agent-waiting"
           ]
         },
@@ -3000,42 +2912,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "additionalProperties": {}
     }
   },
-  "POST /web/factory/projects/:id/supervisor/session": {
-    "path": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
-        }
-      },
-      "required": [
-        "id"
-      ]
-    },
-    "response": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "type": "object",
-      "properties": {
-        "sessionId": {
-          "type": "string"
-        },
-        "threadId": {
-          "type": "string"
-        },
-        "factoryProjectId": {
-          "type": "string",
-          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
-        }
-      },
-      "required": [
-        "sessionId",
-        "threadId",
-        "factoryProjectId"
-      ]
-    }
-  },
   "POST /web/factory/projects/:id/work-items": {
     "path": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -3358,7 +3234,6 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "projectEnvironmentBuildGet": "GET /web/factory/projects/:id/environment/builds/:buildId",
   "healthThresholdsGet": "GET /web/factory/projects/:id/health/thresholds",
   "metricsGet": "GET /web/factory/projects/:id/metrics",
-  "supervisorHealth": "GET /web/factory/projects/:id/supervisor/health",
   "workItemList": "GET /web/factory/projects/:id/work-items",
   "projectUpdate": "PATCH /web/factory/projects/:id",
   "projectEnvironmentUpdate": "PATCH /web/factory/projects/:id/environment",
@@ -3374,7 +3249,6 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "decisionRetry": "POST /web/factory/projects/:id/decisions/:decisionId/retry",
   "projectEnvironmentBuild": "POST /web/factory/projects/:id/environment/build",
   "workItemStart": "POST /web/factory/projects/:id/runs/start",
-  "supervisorSession": "POST /web/factory/projects/:id/supervisor/session",
   "workItemCreate": "POST /web/factory/projects/:id/work-items",
   "workItemAutomationRun": "POST /web/factory/projects/:id/work-items/:workItemId/automation-runs",
   "workItemTransition": "POST /web/factory/projects/:id/work-items/:workItemId/transition"
