@@ -61,22 +61,22 @@ function setupHandlers({
     http.get(`${BASE_URL}/api/agents`, () => HttpResponse.json(targetAgents)),
     http.get(`${BASE_URL}/api/workflows`, () => HttpResponse.json({})),
     http.get(`${BASE_URL}/api/scores/scorers`, () => HttpResponse.json(scorers)),
-    http.post(`${BASE_URL}/api/datasets/:datasetId/experiments`, async ({ params, request }) => {
-      triggerCalls.push({
-        datasetId: String(params.datasetId),
-        body: (await request.json()) as Record<string, unknown>,
-      });
-      return HttpResponse.json({
-        experimentId: 'exp-1',
-        status: 'pending',
-        totalItems: 0,
-        succeededCount: 0,
-        failedCount: 0,
-        startedAt: new Date().toISOString(),
-        completedAt: null,
-        results: [],
-      });
-    }),
+    http.post<{ datasetId: string }, Record<string, unknown>>(
+      `${BASE_URL}/api/datasets/:datasetId/experiments`,
+      async ({ params, request }) => {
+        triggerCalls.push({ datasetId: params.datasetId, body: await request.json() });
+        return HttpResponse.json({
+          experimentId: 'exp-1',
+          status: 'pending',
+          totalItems: 0,
+          succeededCount: 0,
+          failedCount: 0,
+          startedAt: new Date().toISOString(),
+          completedAt: null,
+          results: [],
+        });
+      },
+    ),
   );
 
   return { triggerCalls };
@@ -87,15 +87,23 @@ function renderDialog(props: Partial<ExperimentTriggerDialogProps> = {}) {
   const onOpenChange = vi.fn();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
-  render(
+  const dialog = (open: boolean) => (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
-        <ExperimentTriggerDialog open onOpenChange={onOpenChange} onSuccess={onSuccess} {...props} />
+        <ExperimentTriggerDialog open={open} onOpenChange={onOpenChange} onSuccess={onSuccess} {...props} />
       </QueryClientProvider>
-    </MastraReactProvider>,
+    </MastraReactProvider>
   );
+  const { rerender } = render(dialog(true));
 
-  return { onSuccess, onOpenChange };
+  /** Closes the dialog like its caller would, waits for it to leave, and opens it again. */
+  async function reopen() {
+    rerender(dialog(false));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    rerender(dialog(true));
+  }
+
+  return { onSuccess, onOpenChange, reopen };
 }
 
 const targetField = () => screen.getByRole<HTMLInputElement>('combobox', { name: /^Target/ });
@@ -243,6 +251,37 @@ describe('ExperimentTriggerDialog', () => {
       expect(screen.queryByText('Dataset version')).toBeNull();
       await choose(datasetField(), 'Dataset 2');
       expect(await screen.findByText('Dataset version')).toBeDefined();
+    });
+
+    it('keeps focus on the toggle as it moves between the footer and the section', async () => {
+      setupHandlers();
+      renderDialog();
+      await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
+
+      await openAdvanced();
+      expect(document.activeElement).toBe(advancedToggle());
+
+      fireEvent.click(advancedToggle());
+      await waitFor(() => expect(advancedToggle().closest('[data-slot=dialog-footer]')).not.toBeNull());
+      expect(document.activeElement).toBe(advancedToggle());
+    });
+  });
+
+  describe('when reopened', () => {
+    it('starts from a fresh form', async () => {
+      setupHandlers();
+      const { reopen } = renderDialog();
+      await pickAgentOne();
+      await openAdvanced();
+      fireEvent.change(nameInput(), { target: { value: 'Prompt v2' } });
+
+      await reopen();
+
+      await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
+      expect(targetField().value).toBe('');
+      expect(screen.queryByLabelText('Experiment name')).toBeNull();
+      await openAdvanced();
+      expect(nameInput().value).toBe('');
     });
   });
 
