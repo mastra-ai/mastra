@@ -1,6 +1,5 @@
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
-import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { cleanup, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -87,12 +86,12 @@ describe('ExperimentResultsSection', () => {
     });
   });
 
-  describe('when a result has a start time', () => {
-    it('shows when it was created like the other lists, without seconds', () => {
-      renderSection([agentTracedResult]);
-      expect(screen.getByTestId('result-created-res-agent-traced').textContent).toBe(
-        formatDate(agentTracedResult.startedAt, 'date-time'),
-      );
+  describe('when a result has a start time and tags', () => {
+    it('shows neither a Created nor a Tags column', () => {
+      renderSection([{ ...agentTracedResult, tags: ['alpha'] }]);
+      expect(screen.queryByText('Created')).toBeNull();
+      expect(screen.queryByText('Tags')).toBeNull();
+      expect(screen.queryByText('alpha')).toBeNull();
     });
   });
 

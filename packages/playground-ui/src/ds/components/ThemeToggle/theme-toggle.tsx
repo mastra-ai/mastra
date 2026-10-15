@@ -12,7 +12,7 @@ export interface ThemeToggleOption {
   icon: React.ReactNode;
 }
 
-const DEFAULT_OPTIONS: ReadonlyArray<ThemeToggleOption> = [
+export const THEME_OPTIONS: ReadonlyArray<ThemeToggleOption> = [
   { value: 'system', label: 'System', icon: <Monitor /> },
   { value: 'light', label: 'Light', icon: <Sun /> },
   { value: 'dark', label: 'Dark', icon: <Moon /> },
@@ -48,7 +48,7 @@ function pickSelectedTheme(options: ReadonlyArray<ThemeToggleOption>, current: T
 export const ThemeToggle = ({
   value,
   onChange,
-  options = DEFAULT_OPTIONS,
+  options = THEME_OPTIONS,
   size = 'md',
   'aria-label': ariaLabel = 'Theme',
   ...groupProps

@@ -10,6 +10,9 @@ import {
   createStorageErrorId,
   isRunFenceConflictError,
   resolveRunFence,
+  executeRetentionPrune,
+  resolveRetentionTargets,
+  retentionCutoffMs,
 } from '@mastra/core/storage';
 import type {
   ClaimRunOwnershipInput,
@@ -24,6 +27,10 @@ import type {
   WorkflowRuns,
   CreateIndexOptions,
   TABLE_NAMES,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { withRetry } from '../../../shared/retry';
@@ -81,6 +88,15 @@ export class WorkflowsDSQL extends WorkflowsStorage {
 
   /** Tables managed by this domain */
   static readonly MANAGED_TABLES = [TABLE_WORKFLOW_SNAPSHOT] as const;
+
+  /**
+   * Tables `prune()` can clean up. Run ownership rows anchor on `updatedAt` (epoch ms), which every
+   * claim, renewal and release refreshes, so a live execution's row is never
+   * older than its renew interval.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    runOwnership: { table: TABLE_WORKFLOW_RUN_OWNERS, column: 'updatedAt', indexed: false, anchorType: 'epoch-ms' },
+  };
 
   constructor(config: DsqlDomainConfig) {
     super();
@@ -146,6 +162,22 @@ export class WorkflowsDSQL extends WorkflowsStorage {
         this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
       }
     }
+  }
+
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveRetentionTargets({
+      policies,
+      descriptor: WorkflowsDSQL.retentionTables,
+      order: ['runOwnership'],
+    });
+    return executeRetentionPrune({
+      domain: 'workflows',
+      targets,
+      options,
+      cutoffFor: (target, now) => retentionCutoffMs(target.policy, now),
+      deleteBatch: (target, cutoff, limit) =>
+        this.#db.pruneBatch({ tableName: target.table as TABLE_NAMES, column: target.column, cutoff, limit }),
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {

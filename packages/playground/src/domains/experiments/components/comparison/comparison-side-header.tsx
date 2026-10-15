@@ -180,6 +180,19 @@ export function ComparisonSideHeader({
           },
         ]
       : []),
+    // Every column lists the same scorers, so hiding it when there are none keeps the columns aligned.
+    ...(metrics && summary && summary.length > 0
+      ? [
+          {
+            id: 'avg-score',
+            icon: <GaugeIcon />,
+            label: 'Avg score',
+            value: formatScore(metrics.averageScore),
+            delta: trend(metrics.averageScore, baselineMetrics?.averageScore),
+            emphasis: true,
+          },
+        ]
+      : []),
     ...(usage
       ? [
           {
@@ -204,18 +217,6 @@ export function ComparisonSideHeader({
             delta: trend(metrics.errorCount, baselineMetrics?.errorCount),
             formatDelta: String,
             higherIsBetter: false,
-          },
-        ]
-      : []),
-    // Every column lists the same scorers, so hiding it when there are none keeps the columns aligned.
-    ...(metrics && summary && summary.length > 0
-      ? [
-          {
-            id: 'avg-score',
-            icon: <GaugeIcon />,
-            label: 'Avg score',
-            value: formatScore(metrics.averageScore),
-            delta: trend(metrics.averageScore, baselineMetrics?.averageScore),
           },
         ]
       : []),
