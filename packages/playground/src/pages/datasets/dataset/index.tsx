@@ -20,16 +20,10 @@ import {
   AddItemDialog,
   DeleteDatasetDialog,
 } from '@/domains/datasets';
-import { DatasetItemDrawer } from '@/domains/datasets/components/items/dataset-item-drawer';
+import { DatasetItemSidePanel } from '@/domains/datasets/components/items/dataset-item-side-panel';
 import { DatasetItemPanelProvider } from '@/domains/datasets/context/dataset-item-panel-context';
 import { useDatasetItemsUrlState } from '@/domains/datasets/hooks/use-dataset-items-url-state';
-import {
-  datasetCrumb,
-  datasetVersionCrumb,
-  navCrumb,
-  truncateItemIdCrumb,
-  type CrumbDef,
-} from '@/domains/navigation/crumbs';
+import { datasetCrumb, datasetVersionCrumb, navCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
 
 function DatasetPageShell({ crumbs, children }: { crumbs: CrumbDef[]; children?: ReactNode }) {
   return (
@@ -42,24 +36,14 @@ function DatasetPageShell({ crumbs, children }: { crumbs: CrumbDef[]; children?:
 }
 
 function DatasetPage() {
-  const { datasetId, itemId } = useParams()! as { datasetId: string; itemId?: string };
+  const { datasetId } = useParams()! as { datasetId: string };
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { activeVersion } = useDatasetItemsUrlState(searchParams, setSearchParams);
-  const datasetPath = `/datasets/${encodeURIComponent(datasetId)}`;
   // The dataset crumb never links: its whole hit area is the dataset switcher.
   const shellCrumbs: CrumbDef[] = [navCrumb('/datasets'), datasetCrumb];
-  // Links on the version crumb only render on the nested items/:itemId route.
-  const crumbs: CrumbDef[] = [
-    ...shellCrumbs,
-    { ...datasetVersionCrumb, to: activeVersion == null ? datasetPath : `${datasetPath}?version=${activeVersion}` },
-    ...(itemId
-      ? [
-          { id: 'dataset-items', label: 'Items' },
-          { id: 'dataset-item', label: truncateItemIdCrumb(itemId) },
-        ]
-      : []),
-  ];
+  // The selected item shows in the side panel, so it gets no crumb of its own.
+  const crumbs: CrumbDef[] = [...shellCrumbs, datasetVersionCrumb];
 
   // Dialog states
   const [experimentDialogOpen, setExperimentDialogOpen] = useState(false);
@@ -197,8 +181,8 @@ function DatasetPage() {
           </div>
         </PageLayout>
 
-        {/* Item detail drawer; the `items/:itemId` child route only carries the breadcrumb. */}
-        <DatasetItemDrawer />
+        {/* Selected item of the `items/:itemId` child route, in the route side panel. */}
+        <DatasetItemSidePanel />
       </div>
 
       <ExperimentTriggerDialog

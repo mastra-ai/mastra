@@ -43,43 +43,71 @@ export interface DatasetItemPanelProps {
   datasetId: string;
   /** Keep the panel mounted and pass `undefined` to close it, so the drawer animates out. */
   item?: DatasetItem;
-  /** Item the panel is opened for while `item` is not available yet; keeps the drawer open showing `fallback`. */
+  /** Item the panel is opened for while `item` is not available yet; keeps the panel open showing `fallback`. */
   itemId?: string;
   /** Rendered instead of the item body while `itemId` is set but `item` is missing (loading / not found). */
   fallback?: ReactNode;
   items: DatasetItem[];
   onItemChange: (itemId: string) => void;
   onClose: () => void;
+  /**
+   * `drawer` (default) portals the panel over the app. `inline` renders it in the document flow
+   * (e.g. inside the route side panel) and renders nothing while there is no `item`/`itemId`.
+   */
+  variant?: 'drawer' | 'inline';
 }
 
 /**
- * Drawer showing full details of a single dataset item.
+ * Full details of a single dataset item, as a drawer or an inline card.
  * Includes navigation to next/previous items and sections for Input, Ground Truth, and Metadata.
  */
-export function DatasetItemPanel({ item, itemId, fallback, onClose, ...bodyProps }: DatasetItemPanelProps) {
+export function DatasetItemPanel({
+  item,
+  itemId,
+  fallback,
+  onClose,
+  variant = 'drawer',
+  ...bodyProps
+}: DatasetItemPanelProps) {
   const id = item?.id ?? itemId;
+  const title = `Dataset item ${id ?? ''}`;
+  const content = item ? (
+    // Keyed so form state never leaks between items while the panel stays mounted.
+    <DatasetItemPanelBody key={item.id} item={item} onClose={onClose} {...bodyProps} />
+  ) : itemId ? (
+    <>
+      <DataPanel.Header>
+        <DataPanel.Heading>
+          Item
+          <DataPanel.CopyId id={itemId} />
+        </DataPanel.Heading>
+        <DataPanel.HeaderActions>
+          <DataPanel.CloseButton icon="x" onClick={onClose} tooltip="Close detail panel" />
+        </DataPanel.HeaderActions>
+      </DataPanel.Header>
+      {fallback}
+    </>
+  ) : null;
+
+  if (variant === 'inline') {
+    if (!content) return null;
+    return (
+      <DataPanel variant="inline" title={title}>
+        {content}
+      </DataPanel>
+    );
+  }
+
   return (
-    <DataPanel open={!!id} onClose={onClose} title={`Dataset item ${id ?? ''}`}>
-      {item ? (
-        // Keyed so form state never leaks between items while the drawer stays mounted.
-        <DatasetItemPanelBody key={item.id} item={item} onClose={onClose} {...bodyProps} />
-      ) : itemId ? (
-        <>
-          <DataPanel.Header>
-            <DataPanel.CloseButton onClick={onClose} tooltip="Close detail panel" />
-            <DataPanel.Heading>
-              Item
-              <DataPanel.CopyId id={itemId} />
-            </DataPanel.Heading>
-          </DataPanel.Header>
-          {fallback}
-        </>
-      ) : null}
+    <DataPanel open={!!id} onClose={onClose} title={title}>
+      {content}
     </DataPanel>
   );
 }
 
-type DatasetItemPanelBodyProps = Omit<DatasetItemPanelProps, 'item' | 'itemId' | 'fallback'> & { item: DatasetItem };
+type DatasetItemPanelBodyProps = Omit<DatasetItemPanelProps, 'item' | 'itemId' | 'fallback' | 'variant'> & {
+  item: DatasetItem;
+};
 
 function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }: DatasetItemPanelBodyProps) {
   const { Link } = useLinkComponent();
@@ -279,7 +307,6 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
   return (
     <>
       <DataPanel.Header>
-        <DataPanel.CloseButton onClick={onClose} tooltip="Close detail panel" />
         <DataPanel.Heading>
           Item
           <DataPanel.CopyId id={item.id} />
@@ -325,6 +352,7 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
             previousLabel="Go to previous item"
             nextLabel="Go to next item"
           />
+          <DataPanel.CloseButton icon="x" onClick={onClose} tooltip="Close detail panel" />
         </DataPanel.HeaderActions>
       </DataPanel.Header>
 
