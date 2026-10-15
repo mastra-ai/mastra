@@ -2,6 +2,9 @@ import { Combobox as BaseCombobox } from '@base-ui/react/combobox';
 import { X } from 'lucide-react';
 import * as React from 'react';
 import {
+  ComboboxChip,
+  ComboboxChips,
+  ComboboxChipsInput,
   ComboboxContent,
   ComboboxEmpty,
   ComboboxInput,
@@ -109,10 +112,10 @@ function ComboboxOptionText({ option }: { option: ComboboxOption }) {
 /**
  * A searchable select driven by `options`, built on the Combobox parts.
  *
- * Inside a `Field`, a single-select `default` combobox searches right in the field, like a text input.
- * Everywhere else (outside a `Field`, multiple selection, `ghost` and icon-size triggers, custom
- * non-text placeholders) it keeps a compact trigger with the search inside the popup. For anything these props don't cover (chips, groups, rich items), compose
- * the parts directly (`ComboboxRoot`, `ComboboxInput`, ...).
+ * Inside a `Field`, a `default` combobox searches right in the field: a text field for a single value,
+ * removable chips for `multiple`. Everywhere else (outside a `Field`, `ghost` and icon-size triggers,
+ * custom non-text placeholders) it keeps a compact trigger with the search inside the popup. For anything
+ * these props don't cover (groups, rich items), compose the parts directly (`ComboboxRoot`, ...).
  */
 export function Combobox(props: ComboboxProps) {
   const {
@@ -147,13 +150,15 @@ export function Combobox(props: ComboboxProps) {
     [ariaDescribedBy, error ? fieldErrorId(errorName) : undefined].filter(Boolean).join(' ') || undefined;
   const iconOnly = isIconButtonSize(size);
   const textSize = isIconButtonSize(size) ? undefined : size;
-  // A form field (inside a `Field`) searches in itself. Outside one, a Combobox is usually a toolbar or
-  // inline picker that callers lay out as a button, so it keeps the trigger with the search in the popup.
+  // A form field (inside a `Field`) searches in itself: a text field for one value, chips for several.
+  // Outside one, a Combobox is usually a toolbar or inline picker that callers lay out as a button, so it
+  // keeps the trigger with the search in the popup.
   const inField =
     field !== null &&
-    !multiple &&
     variant === 'default' &&
     !isIconButtonSize(size) &&
+    // The chips field is tuned to the medium control height.
+    (!multiple || size === 'md') &&
     !iconOnlyValue &&
     showChevron &&
     (placeholder === undefined || typeof placeholder === 'string');
@@ -192,34 +197,51 @@ export function Combobox(props: ComboboxProps) {
     'aria-describedby': describedBy,
   };
 
-  const control = inField ? (
-    <ComboboxInput
-      {...controlProps}
-      size={textSize}
-      placeholder={placeholder as string | undefined}
-      start={selectedOption?.start}
-      className={className}
-    />
-  ) : (
-    <ComboboxTrigger
-      {...controlProps}
-      variant={variant}
-      size={size}
-      showChevron={showChevron}
-      icon={iconOnly ? undefined : selectedOption?.start}
-      className={cn(iconOnlyValue && 'w-auto px-2.5', className)}
-    >
-      {multiple ? (
-        iconOnly ? (
-          triggerText
+  const control =
+    inField && multiple ? (
+      <ComboboxChips className={className}>
+        <ComboboxValue>
+          {(items: ComboboxOption[]) => (
+            <>
+              {items.map(item => (
+                <ComboboxChip key={item.value}>{item.label}</ComboboxChip>
+              ))}
+              <ComboboxChipsInput
+                {...controlProps}
+                placeholder={items.length === 0 ? (placeholder as string | undefined) : undefined}
+              />
+            </>
+          )}
+        </ComboboxValue>
+      </ComboboxChips>
+    ) : inField ? (
+      <ComboboxInput
+        {...controlProps}
+        size={textSize}
+        placeholder={placeholder as string | undefined}
+        start={selectedOption?.start}
+        className={className}
+      />
+    ) : (
+      <ComboboxTrigger
+        {...controlProps}
+        variant={variant}
+        size={size}
+        showChevron={showChevron}
+        icon={iconOnly ? undefined : selectedOption?.start}
+        className={cn(iconOnlyValue && 'w-auto px-2.5', className)}
+      >
+        {multiple ? (
+          iconOnly ? (
+            triggerText
+          ) : (
+            <span className={cn(selectedOptions.length === 0 && comboboxStyles.placeholder)}>{triggerText}</span>
+          )
         ) : (
-          <span className={cn(selectedOptions.length === 0 && comboboxStyles.placeholder)}>{triggerText}</span>
-        )
-      ) : (
-        (selectedOption?.displayLabel ?? <ComboboxValue placeholder={placeholder} />)
-      )}
-    </ComboboxTrigger>
-  );
+          (selectedOption?.displayLabel ?? <ComboboxValue placeholder={placeholder} />)
+        )}
+      </ComboboxTrigger>
+    );
 
   const content = (
     <ComboboxContent align={align} container={container}>

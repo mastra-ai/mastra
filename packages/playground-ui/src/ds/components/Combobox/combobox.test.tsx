@@ -105,10 +105,40 @@ describe('Combobox', () => {
       />,
     );
 
+    // In a Field, the picks are chips and the field is the search.
+    expect(screen.getByRole('button', { name: 'Remove OpenAI' })).toBeTruthy();
+
+    const { user } = await openField();
+    await user.click(screen.getByRole('option', { name: 'Anthropic' }));
+
+    await waitFor(() => {
+      expect(onValueChange).toHaveBeenCalledWith(['openai', 'anthropic']);
+    });
+  });
+
+  it('removes a chip with its × and with Backspace', async () => {
+    function Controlled() {
+      const [value, setValue] = useState<string[]>(['openai', 'google']);
+      return <Combobox multiple options={options} value={value} onValueChange={setValue} />;
+    }
+    render(<Controlled />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: 'Remove OpenAI' }));
+    expect(screen.queryByRole('button', { name: 'Remove OpenAI' })).toBeNull();
+
+    await user.click(screen.getByRole('combobox'));
+    await user.keyboard('{Backspace}');
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Remove Google' })).toBeNull());
+  });
+
+  it('keeps "N selected" on a compact multi-select trigger outside a Field', async () => {
+    const onValueChange = vi.fn();
+    render(<BareCombobox multiple options={options} value={['openai']} onValueChange={onValueChange} />);
+
     expect(screen.getByRole('combobox').textContent).toContain('1 selected');
 
     fireEvent.click(screen.getByRole('combobox'));
-
     const anthropic = await screen.findByRole('option', { name: 'Anthropic' });
     fireEvent.pointerDown(anthropic, { pointerType: 'mouse' });
     fireEvent.click(anthropic, { detail: 1 });
@@ -130,8 +160,8 @@ describe('Combobox', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('combobox'));
-    fireEvent.click(await screen.findByRole('button', { name: 'Clear' }));
+    const { user } = await openField();
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
 
     expect(onValueChange).toHaveBeenCalledWith([]);
   });
@@ -158,8 +188,8 @@ describe('Combobox', () => {
     }
 
     render(<FormCombobox />);
-    fireEvent.click(screen.getByRole('combobox'));
-    fireEvent.click(await screen.findByRole('button', { name: 'Clear' }));
+    const { user } = await openField();
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
 
     expect(onValueChange).toHaveBeenCalledWith([]);
     expect(onSubmit).not.toHaveBeenCalled();
@@ -419,7 +449,7 @@ describe('Combobox', () => {
     cleanup();
     render(<Combobox multiple options={options} value={[]} />);
 
-    expect(screen.getByRole('combobox').textContent).toContain('Select options...');
+    expect(screen.getByRole('combobox').getAttribute('placeholder')).toBe('Select options...');
   });
 
   it('offers its own words for searching and for a search that finds nothing', async () => {
@@ -464,12 +494,14 @@ describe('Combobox', () => {
   });
 
   it('keeps up with a selection that changes from outside', () => {
+    const chips = () =>
+      screen.queryAllByRole('button', { name: /^Remove / }).map(chip => chip.getAttribute('aria-label'));
     const { rerender } = render(<Combobox multiple options={options} value={['openai']} />);
-    expect(screen.getByRole('combobox').textContent).toContain('1 selected');
+    expect(chips()).toEqual(['Remove OpenAI']);
 
     rerender(<Combobox multiple options={options} value={['openai', 'google']} />);
 
-    expect(screen.getByRole('combobox').textContent).toContain('2 selected');
+    expect(chips()).toEqual(['Remove OpenAI', 'Remove Google']);
   });
 
   it('describes an option that carries a description', async () => {
@@ -511,13 +543,9 @@ describe('Combobox', () => {
   it('picks a value with nobody listening', async () => {
     render(<Combobox multiple options={options} value={[]} />);
 
-    fireEvent.click(screen.getByRole('combobox'));
-    const anthropic = await screen.findByRole('option', { name: 'Anthropic' });
+    const { user } = await openField();
 
-    expect(() => {
-      fireEvent.pointerDown(anthropic, { pointerType: 'mouse' });
-      fireEvent.click(anthropic, { detail: 1 });
-    }).not.toThrow();
+    await expect(user.click(screen.getByRole('option', { name: 'Anthropic' }))).resolves.not.toThrow();
   });
 });
 
