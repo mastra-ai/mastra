@@ -62,6 +62,28 @@ function headerTexts(container: HTMLElement): (string | null)[] {
 }
 
 describe('TracesListView columns', () => {
+  it('renders supplied previews and accepts rows without previews', () => {
+    const { container } = render(
+      <TracesListView
+        traces={[
+          makeTrace({
+            traceId: 'stored',
+            inputPreview: 'Supplied input',
+            outputPreview: 'Stored answer',
+            errorPreview: 'Tool failed',
+          }),
+          makeTrace({ traceId: 'legacy' }),
+        ]}
+        columnPreferences={{ visibleColumns: ['input', 'output', 'error'], customColumns: [], metadataKeys: [] }}
+        onTraceClick={vi.fn()}
+      />,
+    );
+    expect(headerTexts(container)).toEqual(['Start', 'Primitive name', 'Input', 'Output', 'Error', 'Status']);
+    expect(screen.getByText('Supplied input')).toBeTruthy();
+    expect(screen.getByText('Tool failed')).toBeTruthy();
+    expect(screen.getByText('Stored answer')).toBeTruthy();
+    expect(screen.getByText('run legacy')).toBeTruthy();
+  });
   describe('when no column preferences are provided', () => {
     it('renders the default headers in order with the matching grid', () => {
       const { container } = render(<TracesListView traces={[]} onTraceClick={vi.fn()} />);
@@ -303,15 +325,15 @@ describe('TracesListView — rows', () => {
     expect(screen.queryByText(/local input/)).toBeNull();
   });
 
-  it('derives a preview itself when the row carries none', () => {
+  it.each([undefined, null])('does not format raw input when the supplied preview is %s', inputPreview => {
     render(
       <TracesListView
-        traces={[makeTrace({ traceId: 'trace-1', input: { prompt: 'what is the weather' } })]}
+        traces={[makeTrace({ traceId: 'trace-1', inputPreview, input: { prompt: 'what is the weather' } })]}
         onTraceClick={vi.fn()}
       />,
     );
 
-    expect(screen.getByText(/what is the weather/)).toBeTruthy();
+    expect(screen.queryByText(/what is the weather/)).toBeNull();
   });
 
   it('explains the level icon only where rows mix traces and subtraces', () => {

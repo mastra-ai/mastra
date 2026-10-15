@@ -4,6 +4,7 @@ import {
   TRACE_OPTIONAL_COLUMNS,
   TRACE_USAGE_COLUMNS,
   buildTraceListColumns,
+  buildTraceListColumnKeys,
   formatTraceMetadataValue,
   hasTraceColumn,
   hasTraceUsageColumn,
@@ -13,6 +14,13 @@ import {
 } from './trace-list-columns';
 
 describe('trace list columns', () => {
+  it.each(['output', 'error'] as const)('persists an opt-in %s column and gives it a stable ordering key', column => {
+    const preferences = { visibleColumns: [column], customColumns: [], metadataKeys: [] };
+    expect(parseTraceColumnPreferences(serializeTraceColumnPreferences(preferences))).toEqual(preferences);
+    expect(buildTraceListColumnKeys(preferences)).toEqual(['startTime', 'name', column, 'status']);
+    expect(buildTraceListColumns(preferences)).toBe('11rem 14rem minmax(8rem,1fr) 6rem');
+    expect(DEFAULT_TRACE_COLUMN_PREFERENCES.visibleColumns).not.toContain(column);
+  });
   describe('when saved preferences are missing or invalid', () => {
     it('uses the default columns', () => {
       expect(parseTraceColumnPreferences(undefined)).toEqual(DEFAULT_TRACE_COLUMN_PREFERENCES);
@@ -94,6 +102,8 @@ describe('trace list columns', () => {
       expect(TRACE_OPTIONAL_COLUMNS).toEqual([
         'type',
         'input',
+        'output',
+        'error',
         'duration',
         'endTime',
         'environment',

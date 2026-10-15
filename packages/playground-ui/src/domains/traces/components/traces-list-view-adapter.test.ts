@@ -3,6 +3,19 @@ import { firstTraceQueryPage } from '../hooks/__tests__/fixtures/trace-query';
 import { toTracesListViewTraces } from './traces-list-view-adapter';
 
 describe('toTracesListViewTraces', () => {
+  it('preserves all supplied previews', () => {
+    const trace = firstTraceQueryPage.traces[0];
+    if (!trace) throw new Error('Expected a trace fixture');
+    expect(
+      toTracesListViewTraces([
+        { ...trace, inputPreview: 'Question', outputPreview: 'Stored answer', errorPreview: 'Tool failed' },
+      ])[0],
+    ).toMatchObject({
+      inputPreview: 'Question',
+      outputPreview: 'Stored answer',
+      errorPreview: 'Tool failed',
+    });
+  });
   it('maps root identity and preserves list display fields', () => {
     const trace = firstTraceQueryPage.traces[0];
     if (!trace) throw new Error('Expected a trace fixture');
