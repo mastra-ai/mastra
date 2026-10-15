@@ -33,21 +33,36 @@ type AnyMessage = { role: string; content?: unknown; parts?: unknown[]; toolInvo
 type AnyPart = { type: string; [key: string]: unknown };
 
 export function toActions(input: AgentInput): ToActionsResult {
-  const result: ToActionsResult = { system: [], actions: [] };
-  const messages = typeof input === 'string' ? [input] : Array.isArray(input) ? input : [input];
-  for (const message of messages) {
+  const { system, messages } = toActionsByMessage(input);
+  return { system, actions: messages.flatMap(m => m.actions) };
+}
+
+export type InputMessageActions = {
+  /** `user` for strings and signals. */
+  role: 'user' | 'assistant' | 'tool' | 'system';
+  actions: ActionDraft[];
+};
+
+/** `toActions`, keeping which input message each action came from. */
+export function toActionsByMessage(input: AgentInput): { system: string[]; messages: InputMessageActions[] } {
+  const system: string[] = [];
+  const messages: InputMessageActions[] = [];
+  const list = typeof input === 'string' ? [input] : Array.isArray(input) ? input : [input];
+  for (const message of list) {
     if (typeof message === 'string') {
-      result.actions.push({ type: 'text', role: 'user', text: message });
+      messages.push({ role: 'user', actions: [{ type: 'text', role: 'user', text: message }] });
       continue;
     }
     if ('__isCreatedSignal' in message) {
-      result.actions.push(signalToAction(message));
+      messages.push({ role: 'user', actions: [signalToAction(message)] });
       continue;
     }
+    const result: ToActionsResult = { system, actions: [] };
     convertMessage(message, result);
+    messages.push({ role: message.role as InputMessageActions['role'], actions: result.actions });
   }
-  linkApprovals(result.actions);
-  return result;
+  linkApprovals(messages.flatMap(m => m.actions));
+  return { system, messages };
 }
 
 function signalToAction(signal: CreatedAgentSignal): ActionDraft {

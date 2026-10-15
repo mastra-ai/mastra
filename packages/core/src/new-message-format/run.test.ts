@@ -17,10 +17,10 @@ describe('runAgent', () => {
       const streamed: MastraAction[] = [];
       for await (const action of runAgent({ model, input: 'Hello', threadId: 't1', memory })) streamed.push(action);
 
-      expect(streamed.map(a => a.type)).toEqual(['text', 'error', 'run-end']);
+      expect(streamed.map(a => a.type)).toEqual(['run-start', 'text', 'error', 'run-end']);
       expect(streamed.at(-1)).toMatchObject({ type: 'run-end', finishReason: 'error' });
       const stored = await memory.listActions({ threadId: 't1' });
-      expect(stored.map(a => a.type)).toEqual(['text', 'error', 'run-end']);
+      expect(stored.map(a => a.type)).toEqual(['run-start', 'text', 'error', 'run-end']);
     });
   });
 });

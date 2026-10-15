@@ -1,4 +1,5 @@
 import { createClient } from '@libsql/client';
+import { runAgent } from '@mastra/core/new-message-format';
 import type { PersistableAction } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -225,5 +226,52 @@ describe('MemoryLibSQL actions', () => {
     const fresh = text('t1', 'r1', 'new row');
     await upgraded.saveActions({ actions: [fresh] });
     expect(await upgraded.listActions({ threadId: 't1' })).toHaveLength(2);
+  });
+
+  it('stores a retried question once after its model call failed', async () => {
+    // LibSQL rebuilds rows in its own key order, so the resend match must not depend on key order.
+    await store.saveActions({
+      actions: [
+        { ...text('t1', 'r0', 'hello'), metadata: undefined },
+        { ...text('t1', 'r0', 'Hi!'), role: 'assistant', metadata: undefined } as PersistableAction,
+      ],
+    });
+    const failing = {
+      specificationVersion: 'v4',
+      provider: 'test',
+      modelId: 'failing',
+      supportedUrls: {},
+      doGenerate: async () => {
+        throw new Error('provider down');
+      },
+      doStream: async () => {
+        throw new Error('provider down');
+      },
+    } as never;
+    const ui = (id: string, role: 'user' | 'assistant', value: string) => ({
+      id,
+      role,
+      parts: [{ type: 'text', text: value }],
+    });
+    const resent = [ui('m1', 'user', 'hello'), ui('m2', 'assistant', 'Hi!'), ui('m3', 'user', 'what now?')];
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await (async () => {
+        for await (const _ of runAgent({
+          model: failing,
+          threadId: 't1',
+          resourceId: 'user-1',
+          memory: store,
+          input: resent,
+        }))
+          void _;
+      })().catch(() => {});
+    }
+
+    const log = await store.listActions({ threadId: 't1' });
+    expect(log.flatMap(a => (a.type === 'text' ? [`${a.role}:${a.text}`] : []))).toEqual([
+      'user:hello',
+      'assistant:Hi!',
+      'user:what now?',
+    ]);
   });
 });
