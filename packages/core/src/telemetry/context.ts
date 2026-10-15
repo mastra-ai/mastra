@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { z } from 'zod/v4';
-import { hashTelemetryValue } from './posthog';
+import { hashTelemetryValue, isTelemetryEnabled } from './posthog';
 
 export interface ServerTelemetryContext {
   projectId: string;
@@ -33,12 +33,16 @@ function normalizeGitRemote(remote: string): string | undefined {
 
 /**
  * Returns the project's Git `origin` normalized to lowercase `host/path`, so SSH, HTTPS,
- * credentials, and ports all map to one repository identity. Resolves to `undefined` when
- * Git, the origin, or a remote repository identity isn't available. Never rejects.
+ * credentials, and ports all map to one repository identity. Resolves to `undefined` without
+ * running Git when telemetry is disabled, and when Git, the origin, or a remote repository
+ * identity isn't available. Never rejects.
  */
 export async function getGitRepositoryIdentity(
   cwd: string = process.env.MASTRA_PROJECT_ROOT || process.cwd(),
 ): Promise<string | undefined> {
+  if (!isTelemetryEnabled()) {
+    return undefined;
+  }
   try {
     const remote = await new Promise<string>((resolve, reject) => {
       execFile(

@@ -20,6 +20,7 @@ function mockRemote(remote: string) {
 describe('getServerTelemetryContext', () => {
   beforeEach(() => {
     vi.stubEnv('MASTRA_PROJECT_ID', undefined);
+    vi.stubEnv('MASTRA_TELEMETRY_DISABLED', undefined);
     execFile.mockReset();
     execFile.mockImplementation((_file, _args, _options, callback) => callback(new Error('git unavailable'), '', ''));
     resetProjectId2CacheForTests();
@@ -198,6 +199,18 @@ describe('getServerTelemetryContext', () => {
 describe('getGitRepositoryIdentity', () => {
   beforeEach(() => {
     execFile.mockReset();
+    vi.stubEnv('MASTRA_TELEMETRY_DISABLED', undefined);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('does not run Git when telemetry is disabled', async () => {
+    vi.stubEnv('MASTRA_TELEMETRY_DISABLED', '1');
+    mockRemote('git@github.com:org/repo.git');
+    await expect(getGitRepositoryIdentity('/tmp/build-root')).resolves.toBeUndefined();
+    expect(execFile).not.toHaveBeenCalled();
   });
 
   it('returns the normalized origin of the given directory, uncached', async () => {
