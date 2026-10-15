@@ -21,7 +21,7 @@ type CollapsibleTriggerProps = Omit<CollapsiblePrimitive.Trigger.Props, 'classNa
 // Control height, so the row lines up with buttons beside it (e.g. in a dialog footer). Open, it
 // takes the full width and draws the divider hairline after its content.
 const disclosureTriggerClass = cn(
-  // gap spaces the text from a trailing badge; the chevron's -mr-1 leaves ~7px from its ink to the text.
+  // gap spaces the text from a trailing badge; the chevron's -mr-0.5 leaves ~9px from its ink to the text.
   'inline-flex h-control-md w-fit cursor-pointer items-center gap-1.5 text-label text-muted-foreground',
   // Flush with the content around it, so the focus ring sits outside the box instead of over the glyphs.
   'rounded-sm focus-visible:outline-offset-2',
@@ -57,7 +57,7 @@ const CollapsibleTrigger = React.forwardRef<HTMLButtonElement, CollapsibleTrigge
         {disclosure ? (
           <DisclosureChevron
             direction="right"
-            className="-mr-1 -ml-[4.3px] size-icon-md in-aria-expanded:translate-x-[2px]"
+            className="-mr-0.5 -ml-[4.3px] size-icon-md in-aria-expanded:translate-x-[2px]"
           />
         ) : null}
         {asChild ? undefined : children}
