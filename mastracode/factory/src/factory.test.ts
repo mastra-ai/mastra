@@ -29,7 +29,7 @@ import type * as transitionServiceModule from './rules/transition-service.js';
 import { DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
 import { createFactorySecretEncryption } from './secret-encryption.js';
 import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.js';
-import { PLAN_COMMAND_INSTRUCTIONS } from './session/plan-command-instructions.js';
+import { PLAN_REVIEW_INSTRUCTIONS } from './session/plan-review-instructions.js';
 import type { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SourceControlStorage } from './storage/domains/source-control/base.js';
@@ -855,7 +855,7 @@ describe('MastraFactory.prepare', () => {
     ).rejects.toThrow('security state could not be restored before prompt creation');
   });
 
-  it('teaches /plan to unbound user sessions, not to channel runs or runs whose binding cannot be looked up', async () => {
+  it('offers plan review to unbound user sessions, not to channel runs or runs whose binding cannot be looked up', async () => {
     const config = await prepareFactory({ storage: fakeStorage() });
     (config.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
     const context = new RequestContext();
@@ -872,7 +872,7 @@ describe('MastraFactory.prepare', () => {
     });
     const hostInstructions = config.hostInstructions as (input: { requestContext: RequestContext }) => Promise<unknown>;
 
-    await expect(hostInstructions({ requestContext: context })).resolves.toBe(PLAN_COMMAND_INSTRUCTIONS);
+    await expect(hostInstructions({ requestContext: context })).resolves.toBe(PLAN_REVIEW_INSTRUCTIONS);
 
     context.set('channel', { platform: 'slack' });
     await expect(hostInstructions({ requestContext: context })).resolves.toBeUndefined();

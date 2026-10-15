@@ -26,7 +26,7 @@ import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useUpdateAgentControllerSettingsMutation } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { settingsSectionPath } from '../../settings/settingsSections';
 import type { SlashCommand, SlashCommandOption } from '../services/commands';
-import { findCommand, isSentToAgent, parseSlashCommand } from '../services/commands';
+import { findCommand, parseSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { GLOBAL_THINKING_SOURCE_LABEL, THINKING_LEVEL_LABELS } from '../services/thinkingLevels';
 import { useChatModels } from './useChatModels';
@@ -38,14 +38,6 @@ import { useChatTranscript } from './useChatTranscript';
 
 const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
 
-const PLAN_COMMAND: SlashCommand = {
-  name: 'plan',
-  args: '[task]',
-  description: 'Plan first, build once you approve',
-  requiresSession: false,
-  sentToAgent: true,
-};
-
 function describeGlobalDefault(level: string): string {
   return `${level} (${GLOBAL_THINKING_SOURCE_LABEL})`;
 }
@@ -55,7 +47,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const factoryQuery = useFactoryQuery(factoryId);
   const navigate = useNavigate();
   const location = useLocation();
-  const { resourceId, sessionEnabled, projectPath, baseUrl, kind } = useChatSessionContext();
+  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { transcript, busy, localUser, pushNotice } = useChatTranscript();
   const { usage, omPhase } = useChatRuntime();
   const { activeModelId, setModel } = useChatModels();
@@ -121,7 +113,6 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
         if (rawArguments) await setModel(rawArguments);
       },
     },
-    ...(kind === 'user' ? [PLAN_COMMAND] : []),
     {
       name: 'goal',
       args: '<objective>',
@@ -327,7 +318,6 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
       pushNotice(`Unknown command: /${parsed.name ?? ''}`, 'error');
       return true;
     }
-    if (isSentToAgent(command)) return false;
     await command.execute(parsed.rawArguments, text);
     return true;
   };

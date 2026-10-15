@@ -8,7 +8,7 @@ import type { FactorySessionSourceLookup } from '../rules/binding-context.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { SUPERVISOR_INSTRUCTIONS } from '../supervisor/instructions.js';
 import { parseSupervisorResourceId } from '../supervisor/session.js';
-import { PLAN_COMMAND_INSTRUCTIONS } from './plan-command-instructions.js';
+import { PLAN_REVIEW_INSTRUCTIONS } from './plan-review-instructions.js';
 
 type SessionController = AgentControllerRequestContext<MastraCodeState>;
 
@@ -24,8 +24,8 @@ export function createFactoryHostInstructions(deps: FactoryHostInstructionsDeps)
     if (parseSupervisorResourceId(controller?.resourceId)) return SUPERVISOR_INSTRUCTIONS;
     if (!controller?.threadId || !controller.resourceId) return undefined;
     const binding = await restoreTrustStateBeforePrompt(controller, requestContext, deps);
-    const planCommandAvailable = binding === 'unbound' && !requestContext.get('channel');
-    return planCommandAvailable ? PLAN_COMMAND_INSTRUCTIONS : undefined;
+    const planReviewAvailable = binding === 'unbound' && !requestContext.get('channel');
+    return planReviewAvailable ? PLAN_REVIEW_INSTRUCTIONS : undefined;
   };
 }
 

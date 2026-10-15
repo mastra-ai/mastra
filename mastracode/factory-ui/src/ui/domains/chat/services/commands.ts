@@ -7,19 +7,9 @@ export interface SlashCommandDescriptor extends Pick<ComposerCommand, 'name' | '
   requiresSession: boolean;
 }
 
-interface ExecutedSlashCommand extends SlashCommandDescriptor {
+export interface SlashCommand extends SlashCommandDescriptor {
   options?: ComposerCommand['options'];
   execute: (rawArguments: string, originalText: string) => Promise<void>;
-}
-
-interface AgentSlashCommand extends SlashCommandDescriptor {
-  sentToAgent: true;
-}
-
-export type SlashCommand = ExecutedSlashCommand | AgentSlashCommand;
-
-export function isSentToAgent(command: SlashCommand): command is AgentSlashCommand {
-  return 'sentToAgent' in command;
 }
 
 export interface ParsedSlashCommand {
