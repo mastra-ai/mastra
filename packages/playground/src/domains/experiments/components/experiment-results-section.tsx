@@ -12,12 +12,6 @@ import { getOptionalResultColumns } from '../utils/result-output';
 import { ExperimentResultsList } from './experiment-results-list';
 import type { ExperimentResultsSortKey } from './experiment-results-list';
 
-// An active run with no results yet would otherwise read the same as a finished empty run.
-const emptyMessageByStatus: Record<string, string> = {
-  pending: 'Run queued — waiting to start…',
-  running: 'Run in progress — results appear as items complete',
-};
-
 export type ExperimentResultsSectionProps = {
   experimentId: string;
   experimentStatus?: ExperimentStatus;
@@ -144,7 +138,6 @@ export function ExperimentResultsSection({
         setEndOfListElement={setEndOfListElement}
         isFetchingNextPage={isFetchingNextPage}
         hasNextPage={hasNextPage}
-        emptyMessage={emptyMessageByStatus[experimentStatus ?? ''] ?? 'No results yet'}
         selectedIds={selectedIds}
         onToggleSelect={onToggleSelect}
         onToggleSelectAll={onToggleSelectAll}

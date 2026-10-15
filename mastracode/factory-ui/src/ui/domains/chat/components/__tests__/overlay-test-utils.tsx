@@ -26,7 +26,7 @@ if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoVi
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 
-const OVERLAY_FACTORY_ID = 'p-overlay';
+export const OVERLAY_FACTORY_ID = 'p-overlay';
 const OVERLAY_PROJECT_REPOSITORY_ID = 'repo-overlay';
 const OVERLAY_SESSION_ID = 'session-overlay';
 

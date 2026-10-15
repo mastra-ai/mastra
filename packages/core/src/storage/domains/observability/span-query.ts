@@ -19,7 +19,12 @@ import {
   traceQueryTimeRangeSchema,
 } from './trace-query';
 import type { TraceQueryIssue, TraceQueryPlanOptions, TrustedTraceQueryScalarPredicate } from './trace-query';
+import { isPreviewTruncated } from './tracing';
 
+/**
+ * @deprecated Span query previews use the shared preview format (`buildPreview`), at most
+ * `PREVIEW_MAX_LENGTH` characters plus `…`.
+ */
 export const SPAN_QUERY_MAX_PREVIEW_CHARACTERS = 256;
 export const SPAN_QUERY_MAX_LIMIT = 1000;
 export const SPAN_QUERY_MAX_CURSOR_BYTES = 8192;
@@ -28,8 +33,8 @@ const identifier = z.string().min(1).max(512);
 
 const timeRangeSchema = traceQueryTimeRangeSchema.superRefine((range, context) => {
   const duration = Date.parse(range.to) - Date.parse(range.from);
-  if (duration <= 0 || duration > 31 * 24 * 60 * 60 * 1000) {
-    context.addIssue({ code: 'custom', message: 'The time range must be positive and at most 31 days' });
+  if (duration <= 0) {
+    context.addIssue({ code: 'custom', message: 'The time range must be positive' });
   }
 });
 
@@ -79,10 +84,8 @@ export const spanQueryCostSchema = z.discriminatedUnion('state', [
   z.object({ state: z.literal('unavailable') }).strict(),
 ]);
 
-const previewSchema = z
-  .string()
-  .refine(value => [...value].length <= SPAN_QUERY_MAX_PREVIEW_CHARACTERS, 'Preview exceeds its character limit')
-  .nullable();
+// Supplied previews are not length-limited; only automatic generation is bounded.
+const previewSchema = z.string().nullable();
 
 export const spanQueryRowSchema = spanQueryIdentitySchema
   .extend({
@@ -102,6 +105,8 @@ export const spanQueryRowSchema = spanQueryIdentitySchema
     inputTruncated: z.boolean(),
     outputPreview: previewSchema,
     outputTruncated: z.boolean(),
+    errorPreview: previewSchema,
+    errorTruncated: z.boolean(),
     cost: spanQueryCostSchema,
   })
   .superRefine((row, context) => {
@@ -115,7 +120,7 @@ export const spanQueryRowSchema = spanQueryIdentitySchema
         message: 'Duration must match the completed span timestamps',
       });
     }
-    for (const field of ['input', 'output'] as const) {
+    for (const field of ['input', 'output', 'error'] as const) {
       if (row[`${field}Preview`] === null && row[`${field}Truncated`]) {
         context.addIssue({
           code: 'custom',
@@ -252,19 +257,13 @@ export function encodeSpanQueryCursor(plan: TrustedSpanQueryPlan, values: z.infe
   return result;
 }
 
-/** Raw-text fallback for already-selected payloads, not an unbounded JSON parser/serializer. */
-export function createSpanQueryPreview(value: string | null): { value: string | null; truncated: boolean } {
-  if (value === null) return { value: null, truncated: false };
-  let characters = 0;
-  let preview = '';
-  for (const character of value) {
-    characters += 1;
-    if (characters > SPAN_QUERY_MAX_PREVIEW_CHARACTERS) {
-      return { value: preview, truncated: true };
-    }
-    preview += character;
-  }
-  return { value: preview, truncated: false };
+/**
+ * Span query preview from a stored preview (see `buildPreview`): `''` (nothing to preview) and
+ * `null` become `null`, and `truncated` says whether the preview was cut.
+ */
+export function createSpanQueryPreview(preview: string | null): { value: string | null; truncated: boolean } {
+  if (!preview) return { value: null, truncated: false };
+  return { value: preview, truncated: isPreviewTruncated(preview) };
 }
 
 /** @internal Identity shared by page hydration and metric attribution. */
@@ -324,13 +323,17 @@ export function resolveSpanQueryCost(metrics: SpanQueryCostMetric[]): SpanQueryR
 /** @internal Selected page metadata; adapters normalize dates to ISO strings. */
 export type SpanQuerySelectedRow = Omit<
   SpanQueryRow,
-  'inputPreview' | 'inputTruncated' | 'outputPreview' | 'outputTruncated' | 'cost'
+  'inputPreview' | 'inputTruncated' | 'outputPreview' | 'outputTruncated' | 'errorPreview' | 'errorTruncated' | 'cost'
 >;
 
-/** @internal Payloads are already bounded to 257 code points by the database. */
+/**
+ * @internal Previews built by `buildPreview`: the stored preview columns, or for rows written
+ * before a store kept them, a preview built from the payload column.
+ */
 export interface SpanQueryPayload extends SpanQueryIdentity {
   inputPreview: string | null;
   outputPreview: string | null;
+  errorPreview: string | null;
 }
 
 /** @internal Hydration never changes the selected page's order or cursor boundary. */
@@ -356,12 +359,15 @@ export function buildSpanQueryResponse(
       const payload = byIdentity.get(key);
       const input = createSpanQueryPreview(payload?.inputPreview ?? null);
       const output = createSpanQueryPreview(payload?.outputPreview ?? null);
+      const error = createSpanQueryPreview(payload?.errorPreview ?? null);
       return {
         ...row,
         inputPreview: input.value,
         inputTruncated: input.truncated,
         outputPreview: output.value,
         outputTruncated: output.truncated,
+        errorPreview: error.value,
+        errorTruncated: error.truncated,
         cost: resolveSpanQueryCost(costs.get(key) ?? []),
       };
     }),

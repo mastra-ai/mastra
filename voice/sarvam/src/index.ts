@@ -61,6 +61,7 @@ export class SarvamVoice extends MastraVoice {
   private model: SarvamTTSModel = 'bulbul:v3';
   private language: SarvamTTSLanguage = 'en-IN';
   private properties: Record<string, any> = {};
+  private listenDefaults: Pick<SarvamListenOptions, 'languageCode' | 'mode'> = {};
   speaker: SarvamVoiceId = 'shubh';
   private baseUrl = 'https://api.sarvam.ai';
 
@@ -92,6 +93,10 @@ export class SarvamVoice extends MastraVoice {
     this.model = speechModel?.model || defaultSpeechModel.model;
     this.language = speechModel?.language || defaultSpeechModel.language;
     this.properties = speechModel?.properties || {};
+    this.listenDefaults = {
+      languageCode: listeningModel?.languageCode,
+      mode: listeningModel?.mode,
+    };
     // bulbul:v2 and bulbul:v3 have non-overlapping speaker catalogs, so the
     // default speaker depends on the selected TTS model.
     const defaultSpeaker: SarvamVoiceId = this.model === 'bulbul:v2' ? 'anushka' : 'shubh';
@@ -197,11 +202,17 @@ export class SarvamVoice extends MastraVoice {
     const blob = new Blob([audioBuffer], { type: mimeType });
 
     form.append('file', blob);
-    form.append('model', options?.model || 'saarika:v2.5');
-    form.append('language_code', options?.languageCode || 'unknown');
+    // Per-call options win over the listeningModel given to the constructor.
+    form.append('model', options?.model || this.listeningModel?.name || defaultListeningModel.model);
+    form.append(
+      'language_code',
+      options?.languageCode || this.listenDefaults.languageCode || defaultListeningModel.language_code,
+    );
     // `mode` is only meaningful for saaras:v3 — Sarvam ignores it for saarika models.
-    if (options?.mode) {
-      form.append('mode', options.mode);
+    // The constructor's mode belongs to the constructor's model, so a per-call model drops it.
+    const mode = options?.mode || (options?.model ? undefined : this.listenDefaults.mode);
+    if (mode) {
+      form.append('mode', mode);
     }
     const requestOptions = {
       method: 'POST',

@@ -471,6 +471,27 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
                 delete prop.type;
                 prop.anyOf = [propSchema, { type: 'null' }];
               }
+            } else if (prop.type === undefined && Array.isArray(prop.anyOf)) {
+              // A typeless union (e.g. JSON Schema `anyOf: [string, number]`) still needs a null
+              // alternative, or making it required turns an optional field into a mandatory one.
+              const hasNull = prop.anyOf.some(branch => typeof branch !== 'boolean' && branch.type === 'null');
+              if (!hasNull) {
+                const constrained = genericConstraintKeywords.some(keyword => keyword in prop);
+                if (constrained) {
+                  // Sibling constraints like `enum`/`const` would still reject null, so move them into the non-null branch.
+                  const branch = { anyOf: prop.anyOf } as JSONSchema7;
+                  for (const keyword of genericConstraintKeywords) {
+                    if (keyword in prop) {
+                      // @ts-expect-error - keyword is a valid property for JSON Schema
+                      branch[keyword] = prop[keyword];
+                      delete prop[keyword];
+                    }
+                  }
+                  prop.anyOf = [branch, { type: 'null' }];
+                } else {
+                  prop.anyOf = [...prop.anyOf, { type: 'null' }];
+                }
+              }
             }
           }
         }

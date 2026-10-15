@@ -1,5 +1,67 @@
 # @mastra/factory
 
+## 0.23.0-alpha.3
+
+### Minor Changes
+
+- You can now remove agent controller built-in tools such as `submit_plan` without reaching into the controller's private config. Set `disableBuiltinTools` on `createMastraCode()` / `prepareAgentControllerMount()`, or on `MastraFactory` to apply it to every Factory session. When `submit_plan` is unavailable, plan mode tells the model to write the plan file instead of calling it. ([#26967](https://github.com/mastra-ai/mastra/pull/26967))
+
+  ```ts
+  new MastraFactory({ storage, disableBuiltinTools: ['submit_plan'] });
+  ```
+
+- Added a hybrid model scope: sessions run on the owner's credentials and default model, work items run on the Factory's. New Factories start in hybrid; existing Factories keep their scope. Because new Factories now bill members' interactive sessions to their own provider accounts, admins who want everything on organization credentials should switch the Factory to the factory scope. ([#27095](https://github.com/mastra-ai/mastra/pull/27095))
+
+  Previously, setting `modelScope` to `factory` on `PATCH /web/factory/projects/:id` put both sessions and work items on organization credentials:
+
+  ```json
+  { "modelScope": "factory" }
+  ```
+
+  Admins can now split sessions and work items by setting it to `hybrid`:
+
+  ```json
+  { "modelScope": "hybrid" }
+  ```
+
+- Slack threads no longer create Work board cards. A Slack DM or @-mention still starts its session and posts the "New session started" card, whatever the factory's old setting was. ([#27063](https://github.com/mastra-ai/mastra/pull/27063))
+
+  The `slackWorkItemsEnabled` project setting is removed from the project update API.
+
+  Before:
+
+  ```http
+  PATCH /web/factory/projects/:id
+  { "slackWorkItemsEnabled": true }
+  ```
+
+  After: sent alone, the field is rejected as an empty update (400, "At least one project field is required"). Sent with other fields, it is ignored:
+
+  ```http
+  PATCH /web/factory/projects/:id
+  { "name": "Platform" }
+  ```
+
+  Slack-thread cards that already exist keep receiving `aside` comments and keep posting feed comments back to Slack.
+
+### Patch Changes
+
+- Added `scope=user` to `GET /web/config/models` to list models supported by the caller's personal credentials. Organization-only models are excluded from this personal catalog. ([#27080](https://github.com/mastra-ai/mastra/pull/27080))
+
+- Fixed new Factory sessions starting on the built-in mode model instead of your default model. When a session opened before its chat thread was attached, your default went to a thread the chat never used, so the first message could run on a model you have no credentials for and fail with a provider authentication error. ([#27080](https://github.com/mastra-ai/mastra/pull/27080))
+
+- Fixed model pickers offering models that an organization-scoped Factory cannot run. `GET /web/config/models` accepts an optional `factoryId` and then lists only models served by that Factory's model scope (organization credentials for organization scope, personal credentials for personal scope). Personal model settings now note when the current Factory uses organization credentials only. ([#27077](https://github.com/mastra-ai/mastra/pull/27077))
+
+  ```text
+  GET /web/config/models?factoryId=<factory-id>
+  ```
+
+- Fixed sandbox settings becoming impossible to save when a previously stored value is no longer allowed (for example, a memory size above the new 8 GB limit). The outdated value is dropped and the provider default applies instead. ([#27098](https://github.com/mastra-ai/mastra/pull/27098))
+
+- Updated dependencies [[`386fe60`](https://github.com/mastra-ai/mastra/commit/386fe608e8ec763277b13138b6c3b37641bc6c50), [`7b08a87`](https://github.com/mastra-ai/mastra/commit/7b08a876b1060cf6842c61ed8af0eaa93e1310c4), [`5d82145`](https://github.com/mastra-ai/mastra/commit/5d82145ae3cc591eb5cdafd4af5977c36fec5c01), [`4c29655`](https://github.com/mastra-ai/mastra/commit/4c296551a79bebc6a40fddcf2409824f601e6c43), [`6155190`](https://github.com/mastra-ai/mastra/commit/6155190d2436d5e93e21f6a875d8c4306c8043ff), [`eb71f8c`](https://github.com/mastra-ai/mastra/commit/eb71f8c3abbe9aa40375f898fce60f555ef9ebf3), [`35fbdce`](https://github.com/mastra-ai/mastra/commit/35fbdce6de71332246dd6d9b4a5ecba2d87fb6cc), [`cb015a1`](https://github.com/mastra-ai/mastra/commit/cb015a1be6560cbaf4deaef219cb02e63b263bc3), [`d99fa30`](https://github.com/mastra-ai/mastra/commit/d99fa305e0baa00fb2064283658c10e00b95bf10), [`23b493b`](https://github.com/mastra-ai/mastra/commit/23b493bb4b6e8c5e7c2b7f2fa4c531571d81e988)]:
+  - @mastra/code-sdk@1.14.0-alpha.3
+  - @mastra/core@1.78.0-alpha.3
+
 ## 0.23.0-alpha.2
 
 ### Minor Changes
