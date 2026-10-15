@@ -1,17 +1,18 @@
 import type { LanguageModel, ToolSet } from '@internal/ai-v7';
 import { stepCountIs, streamText } from '@internal/ai-v7';
 import { streamActions } from './from-ai-sdk';
+import { createActionIdGenerator } from './storage';
 import type { ListActionsQuery } from './storage';
 import type { ActionDraft, AgentInput } from './to-actions';
 import { toActions } from './to-actions';
 import { toModelMessages } from './to-model-messages';
 import type { ActionBase, MastraAction, PersistableAction } from './types';
 import { isPersistable } from './types';
-import { createUlid } from './ulid';
 
 export type ActionStore = {
   saveActions(args: { actions: PersistableAction[] }): Promise<void>;
   listActions(query: ListActionsQuery): Promise<PersistableAction[]>;
+  getLatestActionId(threadId: string): Promise<string | null>;
 };
 
 export type RunAgentOptions = {
@@ -47,7 +48,7 @@ export function lastRuns(count: number): (history: PersistableAction[]) => Persi
 export async function* runAgent(options: RunAgentOptions): AsyncGenerator<MastraAction> {
   const { model, threadId, resourceId, memory } = options;
   const runId = options.runId ?? crypto.randomUUID();
-  const generateId = options.generateId ?? createUlid();
+  const generateId = options.generateId ?? (await createActionIdGenerator(memory, threadId));
   const modelId = typeof model === 'object' && 'modelId' in model ? model.modelId : 'unknown';
 
   const history = memory ? await memory.listActions({ threadId }) : [];
