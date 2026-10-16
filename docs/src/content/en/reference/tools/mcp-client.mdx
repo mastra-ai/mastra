@@ -1143,6 +1143,14 @@ If the subscription ends, for example because the server terminates it, each sub
     description: 'Priority of event notifications.',
   },
   {
+    name: 'coalesce',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      "Sets `coalesceKey: 'mcp-events:<key>'` on event notifications (the prefix is the provider `id`). Pending notifications from one subscription then merge, so a burst that arrives before the agent reads its inbox keeps only the latest occurrence. When off, every occurrence is its own notification.",
+  },
+  {
     name: 'tools',
     type: 'boolean | { servers: string[] }',
     isOptional: true,
