@@ -20,8 +20,14 @@ import { matchesExpectedWorkflowStatus } from '../../types';
 import { createEmptyWorkflowSnapshot, mergeWorkflowStepResult } from '../../workflow-snapshot';
 import type { InMemoryDB } from '../inmemory-db';
 import { WorkflowsStorage } from './base';
-import { materializeWorkflowRun } from './journal';
-import type { WorkflowRunChanges, WorkflowRunEntry } from './journal';
+import { materializeWorkflowRun, summarizeStepResult } from './journal';
+import type {
+  StoredWorkflowRun,
+  StoredWorkflowRunHeader,
+  WorkflowRunChanges,
+  WorkflowRunEntry,
+  WorkflowRunHeader,
+} from './journal';
 import { getSnapshotMemoryInfo } from './snapshot-memory-info';
 
 /**
@@ -422,6 +428,165 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     });
 
     return snapshot;
+  }
+
+  async loadWorkflowRunHeader({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<StoredWorkflowRunHeader | null> {
+    const record = this.db.workflowRunHeaders.get(this.getWorkflowKey(workflowName, runId));
+    return record ? { header: cloneRunData(record.header), lastSeq: record.lastSeq } : null;
+  }
+
+  async loadWorkflowRun({
+    workflowName,
+    runId,
+    successfulSteps,
+  }: {
+    workflowName: string;
+    runId: string;
+    successfulSteps: 'full' | 'summary';
+  }): Promise<StoredWorkflowRun | null> {
+    const key = this.getWorkflowKey(workflowName, runId);
+    const record = this.db.workflowRunHeaders.get(key);
+    if (!record) return null;
+
+    // Map keeps each step at its first write while later entries replace the value.
+    const latest = new Map<string, any>();
+    let state: Record<string, any> = {};
+    for (const entry of this.db.workflowRunEntries.get(key) ?? []) {
+      if (entry.kind === 'step') latest.set(entry.stepId, entry.result);
+      else state = entry.state;
+    }
+
+    const steps: StoredWorkflowRun['steps'] = {};
+    const summarizedStepIds: string[] = [];
+    for (const [stepId, result] of latest) {
+      // `input` is the run's input, not a step result.
+      if (successfulSteps === 'summary' && stepId !== 'input' && result?.status === 'success') {
+        // Clone only the summary, never the data the summary leaves out.
+        steps[stepId] = cloneRunData(summarizeStepResult(result));
+        summarizedStepIds.push(stepId);
+      } else {
+        steps[stepId] = cloneRunData(result);
+      }
+    }
+    return {
+      header: cloneRunData(record.header),
+      lastSeq: record.lastSeq,
+      state: cloneRunData(state),
+      steps,
+      summarizedStepIds,
+    };
+  }
+
+  async loadWorkflowRunSteps({
+    workflowName,
+    runId,
+    stepIds,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepIds: string[];
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    const wanted = new Set(stepIds);
+    const steps: Record<string, StepResult<any, any, any, any>> = {};
+    for (const entry of this.db.workflowRunEntries.get(this.getWorkflowKey(workflowName, runId)) ?? []) {
+      if (entry.kind === 'step' && wanted.has(entry.stepId)) {
+        steps[entry.stepId] = entry.result as StepResult<any, any, any, any>;
+      }
+    }
+    return cloneRunData(steps);
+  }
+
+  async updateWorkflowRunHeader({
+    workflowName,
+    runId,
+    opts,
+    fence,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: UpdateWorkflowStateOptions;
+    fence?: RunFence;
+  }): Promise<StoredWorkflowRunHeader | undefined> {
+    this.assertFence(fence, runId, 'updateWorkflowRunHeader');
+    const record = this.db.workflowRunHeaders.get(this.getWorkflowKey(workflowName, runId));
+    if (!record) return;
+    const { expectedStatus, ...patch } = opts;
+    if (!matchesExpectedWorkflowStatus(record.header.status, expectedStatus)) return;
+    record.header = { ...record.header, ...cloneRunData(patch) };
+    return { header: cloneRunData(record.header), lastSeq: record.lastSeq };
+  }
+
+  async writeWorkflowRunCheckpoint(args: {
+    workflowName: string;
+    runId: string;
+    resourceId?: string;
+    header: WorkflowRunHeader;
+    steps: Record<string, StepResult<any, any, any, any>>;
+    state: Record<string, any>;
+    fence?: RunFence;
+  }): Promise<void> {
+    this.assertFence(args.fence, args.runId, 'writeWorkflowRunCheckpoint');
+    this.writeRunEntries({ ...args, append: false });
+  }
+
+  async appendWorkflowRunEntries(args: {
+    workflowName: string;
+    runId: string;
+    resourceId?: string;
+    header: WorkflowRunHeader;
+    steps: Record<string, StepResult<any, any, any, any>>;
+    state?: Record<string, any>;
+    fence?: RunFence;
+  }): Promise<void> {
+    this.assertFence(args.fence, args.runId, 'appendWorkflowRunEntries');
+    this.writeRunEntries({ ...args, append: true });
+  }
+
+  /** Writes the header and one entry per step, then the state. A checkpoint first drops the old entries. */
+  private writeRunEntries({
+    workflowName,
+    runId,
+    resourceId,
+    header,
+    steps,
+    state,
+    append,
+  }: {
+    workflowName: string;
+    runId: string;
+    resourceId?: string;
+    header: WorkflowRunHeader;
+    steps: Record<string, StepResult<any, any, any, any>>;
+    state?: Record<string, any>;
+    append: boolean;
+  }): void {
+    const key = this.getWorkflowKey(workflowName, runId);
+    const existing = this.db.workflowRunHeaders.get(key);
+    const now = new Date();
+    let seq = existing?.lastSeq ?? 0;
+    const entries: WorkflowRunEntry[] = append ? (this.db.workflowRunEntries.get(key) ?? []) : [];
+    for (const [stepId, result] of Object.entries(steps)) {
+      entries.push({ seq: ++seq, kind: 'step', stepId, result: cloneRunData(result) });
+    }
+    if (state !== undefined) {
+      entries.push({ seq: ++seq, kind: 'state', state: cloneRunData(state) });
+    }
+    this.db.workflowRunHeaders.set(key, {
+      workflow_name: workflowName,
+      run_id: runId,
+      resourceId: resourceId ?? existing?.resourceId,
+      header: cloneRunData(header),
+      lastSeq: seq,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    });
+    this.db.workflowRunEntries.set(key, entries);
   }
 
   async persistWorkflowSnapshot({
