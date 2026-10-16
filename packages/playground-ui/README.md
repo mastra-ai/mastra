@@ -21,6 +21,14 @@ export function SaveButton() {
 }
 ```
 
+With a Tailwind build of your own, compile one sheet instead of `style.css`: import the components' stylesheet uncompiled, and `sources.css` so Tailwind emits the classes the compiled components use.
+
+```css
+@import 'tailwindcss';
+@import '@mastra/playground-ui/components.css';
+@import '@mastra/playground-ui/sources.css';
+```
+
 ### Tool approvals
 
 `ToolApproval` renders a standalone approval request in the shared activity layout: the tool name
@@ -227,7 +235,7 @@ Text fields, textareas, input groups, and the default Select, Combobox, and Date
 
 A field in an error state sets `--field-rim` and `--field-rim-focus` to `--destructive-indicator`, so the red outline shows on every surface and stays red while focused.
 
-If your app generates additional semantic utilities, import `@mastra/playground-ui/theme.css` into its Tailwind stylesheet so Tailwind can read the `@theme inline` mappings.
+If your app keeps `style.css` and generates additional semantic utilities, import `@mastra/playground-ui/theme.css` into its Tailwind stylesheet so Tailwind can read the `@theme inline` mappings. `components.css` already includes it.
 
 ### Brand colors
 

@@ -641,4 +641,37 @@ describe('theme.css export', () => {
     expect(scannedPatterns).toContain(resolve(pkgRoot, 'dist/**/*.js'));
     expect(pkg.files).toContain('dist');
   });
+
+  // One file feeds both the library build (`src/index.css`) and an app compiling its own
+  // sheet, so a rule can only land in both. It must not scan `dist` itself: the library
+  // build would then watch its own output. The plugin and the animation sheet resolve
+  // from this package's dependencies, which is what an app's Tailwind sees in node_modules.
+  it('ships the components entry raw, shared with the library build, with every file it imports', async () => {
+    expect(pkg.exports['./components.css']).toBe('./components.css');
+    expect(pkg.files).toContain('components.css');
+    expect(productionCss.trim().split('\n')).toEqual(["@import 'tailwindcss';", "@import '../components.css';"]);
+
+    const componentsEntry = readFileSync(resolve(pkgRoot, 'components.css'), 'utf8');
+    const imports = [...componentsEntry.matchAll(/@import\s+'\.\/([^']+)';/g)].map(([, path = '']) => path);
+
+    expect(imports).toContain('theme.css');
+    expect(imports).not.toContain('sources.css');
+    for (const path of imports) {
+      expect(existsSync(resolve(pkgRoot, path))).toBe(true);
+      expect(pkg.files.some((entry: string) => path.startsWith(`${entry}/`) || path === entry)).toBe(true);
+    }
+    for (const dependency of ['@tailwindcss/typography', 'tw-animate-css']) {
+      expect(pkg.dependencies[dependency]).toBeDefined();
+    }
+
+    const compiler = await compileStylesheet("@import 'tailwindcss'; @import './components.css';", pkgRoot);
+    const output = compiler.build(['shadow-raised', 'state-layer', 'prose', 'animate-in', 'bg-field', 'dark:bg-card']);
+
+    expect(compiler.sources).toEqual([]);
+    for (const utility of ['shadow-raised', 'state-layer', 'prose', 'animate-in', 'bg-field']) {
+      expect(output).toContain(`.${utility} {`);
+    }
+    expect(output).toContain('.dark\\:bg-card:is(.dark *)');
+    expect(output).toContain('.cm-editor {');
+  });
 });
