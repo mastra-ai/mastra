@@ -578,11 +578,11 @@ describe('theme.css export', () => {
   it('resolves chromatic roles to opaque ramp values in both themes', () => {
     const { darkVariables, lightVariables } = getThemeVariables(themeCss);
     const roles =
-      /^(?:destructive|warning|success|info)-(?:subtle|edge|indicator|subtle-foreground)$|^product-|^chart-(?:blue|blue-deep|amber|green|purple|orange|pink|red|sequential-[1-5])$|^span-(?!type-)/;
+      /^(?:destructive|warning|success|info)-(?:subtle|edge|indicator|subtle-foreground)$|^product-|^chart-(?:blue|blue-deep|amber|green|purple|orange|pink|red|sequential-[1-5])$|^span-(?!type-)|^syntax-(?:string|keyword|literal|name|link)$/;
 
     for (const variables of [darkVariables, lightVariables]) {
       const tokens = [...variables.keys()].filter(name => roles.test(name));
-      expect(tokens.length).toBe(58);
+      expect(tokens.length).toBe(63);
       for (const token of tokens) {
         const value = resolveToken(token, variables);
         expect(value).toMatch(/^oklch\(/);
@@ -591,6 +591,7 @@ describe('theme.css export', () => {
     }
     expect(resolveToken('success-subtle', darkVariables)).not.toBe(resolveToken('success-subtle', lightVariables));
     expect(resolveToken('chart-blue', darkVariables)).not.toBe(resolveToken('chart-blue', lightVariables));
+    expect(resolveToken('syntax-string', darkVariables)).not.toBe(resolveToken('syntax-string', lightVariables));
   });
 
   it('keeps the brand green indicator readable as text on light surfaces', () => {
@@ -665,13 +666,13 @@ describe('theme.css export', () => {
     }
 
     const compiler = await compileStylesheet("@import 'tailwindcss'; @import './components.css';", pkgRoot);
-    const output = compiler.build(['shadow-raised', 'state-layer', 'prose', 'animate-in', 'bg-field', 'dark:bg-card']);
+    const output = compiler.build(['shadow-raised', 'state-layer', 'prose', 'animate-in', 'bg-field', 'dark:invert']);
 
     expect(compiler.sources).toEqual([]);
     for (const utility of ['shadow-raised', 'state-layer', 'prose', 'animate-in', 'bg-field']) {
       expect(output).toContain(`.${utility} {`);
     }
-    expect(output).toContain('.dark\\:bg-card:is(.dark *)');
-    expect(output).toContain('.cm-editor {');
+    expect(output).toContain('.dark\\:invert:is(.dark *)');
+    expect(output).toContain('--syntax-string: var(--green-300)');
   });
 });

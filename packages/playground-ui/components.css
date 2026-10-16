@@ -5,7 +5,6 @@
 @import 'tw-animate-css';
 
 @import './theme.css';
-@import './src/ds/components/CodeEditor/syntax-colors.css';
 
 @plugin '@tailwindcss/typography';
 

@@ -14,4 +14,4 @@ The entry carries the tokens from `theme.css`, the `dark` variant, the typograph
 
 `@tailwindcss/typography` and `tw-animate-css` are now dependencies instead of devDependencies, so the entry resolves them from the installed package. The `time-input` utility loads `/icons/clock.svg` from the app's root; an app that uses it ships that asset.
 
-`style.css` is unchanged for apps without a Tailwind build.
+`style.css` changes in one place: CodeMirror's five `--syntax-*` roles now live in `theme/code.css` on `:root` instead of under `.cm-editor`. Apps without a Tailwind build keep loading it as before.

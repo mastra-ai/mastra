@@ -11,7 +11,6 @@
     "theme.css",
     "components.css",
     "sources.css",
-    "src/ds/components/CodeEditor/syntax-colors.css",
     "theme"
   ],
   "exports": {
