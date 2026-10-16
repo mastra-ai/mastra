@@ -695,7 +695,6 @@ describe('AgentController signal messages', () => {
     const second = await controller.createSession({
       id: 'collaborator',
       ownerId: 'second-owner',
-      scope: 'collaborator',
     });
     expect(second).not.toBe(first);
     const threadId = first.thread.getId()!;

@@ -56,7 +56,7 @@ import { createSessionThreadAdvertisement } from './agent-connections/session-ad
 import { AgentConnectionsSignalProvider } from './agent-connections/signal-provider.js';
 import type { AgentConnectionsSignalProviderOptions } from './agent-connections/signal-provider.js';
 import { createBackgroundCompletionEvents } from './agents/background-completion-events.js';
-import { createBackgroundCompletionCallbacks } from './agents/background-completion.js';
+import { createBackgroundCompletionCallbacks, findSessionForThread } from './agents/background-completion.js';
 import { hasCredentialStoreProvider, withCredentialTenantPreparation } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory, hasSubconsciousTools } from './agents/memory.js';
@@ -935,13 +935,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // thread has no model to run with ("No model selected"). New wake paths must
   // build their options here so `prepareWakeRequestContext` runs for them.
   const getWakeStreamOptions = async ({ resourceId, threadId }: { resourceId: string; threadId: string }) => {
-    // Run the woken notification as the session that owns the target
-    // resource so it uses that session's model/mode/state/workspace. Never
-    // borrow another session: every Mastra Code process shares one database,
-    // so the target thread may belong to another project, and running it with
-    // this session's workspace would act on the wrong project.
-    const session = await controller.getSessionByResource(resourceId);
-    // No session here owns the resource. Return undefined so the dispatcher
+    // Run the woken notification as the session that owns the target thread
+    // so it uses that session's model/mode/state/workspace. Never borrow
+    // another session: every Mastra Code process shares one database, so the
+    // target thread may belong to another project, and running it with this
+    // session's workspace would act on the wrong project.
+    const session = await findSessionForThread(controller, { resourceId, threadId });
+    // No session here owns the thread. Return undefined so the dispatcher
     // sends a bare wake instead of throwing mid-delivery.
     if (!session) return undefined;
     // A long-running system must be able to drive work unattended, so migrate
@@ -1010,6 +1010,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       isThreadActive: () => session.thread.getId() === threadId,
       threadId,
       resourceId,
+      sessionId: session.identity.getId(),
       session: {
         id: session.identity.getId(),
         ownerId: session.identity.getOwnerId(),

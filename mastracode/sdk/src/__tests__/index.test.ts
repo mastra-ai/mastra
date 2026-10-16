@@ -109,7 +109,7 @@ const controllerSetStateMock = vi.fn();
 const controllerSetThreadSettingMock = vi.fn();
 const controllerSetThreadSettingOnMock = vi.fn();
 const controllerEmitMock = vi.fn();
-const controllerGetSessionByResourceMock = vi.fn();
+const controllerGetSessionMock = vi.fn();
 let createdSessionMock: any;
 const createMcpManagerMock = vi.fn();
 const hookManagerConstructorMock = vi.fn();
@@ -258,8 +258,8 @@ vi.mock('@mastra/core/agent-controller', async importOriginal => ({
       };
       return createdSessionMock;
     }
-    async getSessionByResource(resourceId: string) {
-      return controllerGetSessionByResourceMock(resourceId);
+    async getSession(sessionId: string) {
+      return controllerGetSessionMock(sessionId);
     }
     getState() {
       return controllerStateMock;
@@ -535,8 +535,8 @@ describe('createMastraCode', () => {
     controllerSetThreadSettingOnMock.mockReset();
     controllerSetThreadSettingOnMock.mockResolvedValue(undefined);
     controllerEmitMock.mockReset();
-    controllerGetSessionByResourceMock.mockReset();
-    controllerGetSessionByResourceMock.mockImplementation(async () => createdSessionMock);
+    controllerGetSessionMock.mockReset();
+    controllerGetSessionMock.mockImplementation(async () => createdSessionMock);
     createdSessionMock = undefined;
     createMcpManagerMock.mockReset();
     hookManagerConstructorMock.mockReset();
@@ -2205,7 +2205,7 @@ describe('createMastraCode', () => {
     const prepareWakeRequestContext = vi.fn();
     const { createMastraCode } = await import('../index.js');
     await createMastraCode({ prepareWakeRequestContext });
-    controllerGetSessionByResourceMock.mockResolvedValue(undefined);
+    controllerGetSessionMock.mockResolvedValue(undefined);
     const decide = agentConstructorMock.mock.calls
       .map(call => call[0] as Record<string, any>)
       .find(config => config.notifications)?.notifications?.deliveryPolicy?.decide;
@@ -2222,12 +2222,12 @@ describe('createMastraCode', () => {
   async function decideDelivery(options: Record<string, unknown>, { ownedHere }: { ownedHere: boolean }) {
     const { createMastraCode } = await import('../index.js');
     const mastraCode = await createMastraCode(options);
-    if (!ownedHere) controllerGetSessionByResourceMock.mockResolvedValue(undefined);
+    if (!ownedHere) controllerGetSessionMock.mockResolvedValue(undefined);
     const decide = agentConstructorMock.mock.calls
       .map(call => call[0] as Record<string, any>)
       .find(config => config.notifications)?.notifications?.deliveryPolicy?.decide;
     const decision = await decide({
-      record: { priority: 'high', source: 'sentinel', resourceId: 'some-resource', threadId: 'some-thread' },
+      record: { priority: 'high', source: 'sentinel', resourceId: 'project-resource', threadId: 'some-thread' },
       threadState: 'idle',
       now: new Date('2026-10-01T00:00:00.000Z'),
     });

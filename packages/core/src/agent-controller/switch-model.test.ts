@@ -122,7 +122,7 @@ describe('session.model.switch', () => {
       const { controller, session } = await createSession(trackModelUse, storage);
       const thread = await session.thread.create();
       await session.model.switch('openai/gpt-4o', { thinkingLevel: initialLevel });
-      const writer = await controller.createSession({ id: 'writer-session', ownerId: 'test-owner', scope: 'writer' });
+      const writer = await controller.createSession({ id: 'writer-session', ownerId: 'test-owner' });
       await writer.thread.switch({ threadId: thread.id });
       await writer.model.switch(modelId, { thinkingLevel: 'high' });
       trackModelUse.mockClear();
@@ -157,7 +157,7 @@ describe('session.model.switch', () => {
     const { controller, session } = await createSession();
     const thread = await session.thread.create();
     await session.model.switch('openai/gpt-5.5', { thinkingLevel: 'high' });
-    const writer = await controller.createSession({ id: 'writer-session', ownerId: 'test-owner', scope: 'writer' });
+    const writer = await controller.createSession({ id: 'writer-session', ownerId: 'test-owner' });
     await writer.thread.switch({ threadId: thread.id });
     await writer.state.set({ thinkingLevel: undefined });
     const listener = vi.fn();
@@ -183,7 +183,7 @@ describe('session.model.switch', () => {
     const thread = await session.thread.create();
     await session.model.switch('openai/gpt-4o', { thinkingLevel: 'high' });
     const { controller } = await createSession(undefined, storage);
-    const writer = await controller.createSession({ id: 'writer-session', ownerId: 'test-owner', scope: 'writer' });
+    const writer = await controller.createSession({ id: 'writer-session', ownerId: 'test-owner' });
     await writer.thread.switch({ threadId: thread.id });
     await writer.model.switch('openai/gpt-5.5');
     await writer.state.set({ thinkingLevel: undefined });
@@ -209,7 +209,7 @@ describe('session.model.switch', () => {
     const { controller, session } = await createSession();
     const thread = await session.thread.create();
     await session.model.switch('openai/gpt-4o', { thinkingLevel: 'low' });
-    const writer = await controller.createSession({ id: 'writer-session', ownerId: 'test-owner', scope: 'writer' });
+    const writer = await controller.createSession({ id: 'writer-session', ownerId: 'test-owner' });
     await writer.thread.switch({ threadId: thread.id });
     await writer.model.switch('openai/gpt-5.5');
     await writer.thread.setSetting({ key: 'thinkingLevel', value: 'invalid' });
@@ -243,7 +243,7 @@ describe('session.model.switch', () => {
     const thread = await session.thread.create();
     await session.model.switch('openai/gpt-4o', { thinkingLevel: 'low' });
     const { controller } = await createSession(undefined, storage);
-    const writer = await controller.createSession({ id: 'writer-session', ownerId: 'test-owner', scope: 'writer' });
+    const writer = await controller.createSession({ id: 'writer-session', ownerId: 'test-owner' });
     await writer.thread.switch({ threadId: thread.id });
     await writer.model.switch('openai/gpt-5.5', { thinkingLevel: 'high' });
     const listener = vi.fn();

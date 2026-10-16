@@ -26,7 +26,7 @@ describe('agent-controller routes', () => {
     const route = AGENT_CONTROLLER_ROUTES.find(
       r =>
         r.method === 'POST' &&
-        r.path === '/agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/owner',
+        r.path === '/agent-controller/:controllerId/sessions/:sessionId/threads/:threadId/owner',
     );
     expect(route?.requiresPermission).toBe('agent-controller:execute');
   });
