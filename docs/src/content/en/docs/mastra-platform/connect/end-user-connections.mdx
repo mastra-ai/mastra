@@ -86,14 +86,20 @@ export const mastra = new Mastra({
     },
     apiRoutes: [
       ...userConnectRoutes({
-        // Optional: restrict which providers end users can connect.
-        // Omit to expose the full platform catalog.
+        // Optional: override the project's provider policy in code.
+        // Omit to use the provider list configured in Mastra Platform.
         providers: ['linear', 'slack'],
       }),
     ],
   },
 })
 ```
+
+### Control which providers users can connect
+
+In the project's **Settings** page, use **End-user connections** to allow the full catalog, select specific providers, or disable new end-user connections. Omit `providers` from `userConnectRoutes()` to use this project setting. Pass `providers` when the application must enforce its own fixed allowlist.
+
+The code-level value takes priority over the project setting. The same precedence applies to the built-in `request_connection` tool. See the [provider policy reference](/reference/connect/provider-configuration) for the configuration states, resolution order, and cache behavior.
 
 The routes do no authentication of their own. Your server's auth pipeline authenticates each request, and the routes are gated on the resource ID it derives, so a request without one gets a 401. All platform calls happen server-side with your platform token. The browser never sees it.
 
@@ -115,7 +121,7 @@ The provider's authorization link is a bearer capability: anyone who opens it ca
 
 Resource-scoped tool resolutions include a built-in `request_connection` tool. When a task needs a provider the user hasn't connected (or the user asks to connect one), the agent calls it and gets back a structured list of connectable providers with their current connection state. Chat UIs that understand the payload (Studio does) render it as a connect card: the user clicks Connect, authorizes in a popup through the mounted routes, and the agent can retry the task against fresh tools.
 
-The connectable set follows your `tools()` configuration: the `providers` allowlist when you set one, otherwise the full platform catalog. The tool never creates sessions or handles authorization links. It only reports what can be connected. It's also never added to global-only resolutions, since there is no user to scope a new connection to. To turn it off, pass `connectPrompt: false` to [`tools()`](/reference/connect/tools).
+The connectable set follows the effective provider policy: the `providers` allowlist passed to `tools()` when present, otherwise the project's end-user provider list from Mastra Platform. An unconfigured project list inherits the full platform catalog. The tool never creates sessions or handles authorization links. It only reports what can be connected. It's also never added to global-only resolutions, since there is no user to scope a new connection to. To turn it off, pass `connectPrompt: false` to [`tools()`](/reference/connect/tools).
 
 ## Inspect connections in Studio
 

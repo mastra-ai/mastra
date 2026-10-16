@@ -19,7 +19,7 @@ export const mastra = new Mastra({
       authenticateToken: async token => verifyToken(token),
       mapUserToResourceId: user => user.id,
     },
-    apiRoutes: [...userConnectRoutes({ providers: ['linear', 'slack'] })],
+    apiRoutes: [...userConnectRoutes({})],
   },
 })
 ```
@@ -36,7 +36,7 @@ The routes do no authentication of their own: the server's auth pipeline authent
     name: 'providers',
     type: 'string[]',
     description:
-      'Allowlist of provider IDs exposed to end users; providers outside this set return 404 on every route. Omit to expose the full platform catalog. An explicit empty array is rejected.',
+      'Code-level allowlist of provider IDs exposed to end users. This value takes priority over the project provider list configured in Mastra Platform. Omit it to use the project setting: null or no setting inherits the full platform catalog, while an empty project list disables end-user connections. An explicit empty array in code is rejected.',
     isOptional: true,
   },
   {
@@ -75,15 +75,19 @@ The routes do no authentication of their own: the server's auth pipeline authent
 ]}
 />
 
+## Provider policy
+
+When `providers` is omitted, the routes use the project's end-user provider list from Mastra Platform. A code-level allowlist takes priority. See the [provider policy reference](/reference/connect/provider-configuration) for the configuration states, resolution order, and cache behavior.
+
 ## Routes
 
 All routes are gated on the caller's resource ID and respond with `Cache-Control: no-store`. Paths below use the default `/connect` base path.
 
 | Route | Description |
 | - | - |
-| `GET /connect/providers` | The connectable providers (the platform catalog, filtered to the allowlist when one is configured): `{ providers: [{ id, displayName, logoUrl, authType, authFields }] }`. |
-| `GET /connect/connections` | Global connections plus the caller's own, filtered to the allowlist when one is configured: `{ connections: [{ id, integrationId, status, accountLabel, scope }] }` where `scope` is `'global'` or `'user'`. |
-| `POST /connect/:provider/sessions` | Creates a connect session owned by the caller: `{ connectionId, integrationId, launchUrl, sessionToken, expiresAt }`. `launchUrl` is a server-relative path to the launch route; the provider's authorization URL is never returned to the browser. Providers outside the allowlist (or unknown to the catalog when no allowlist is configured) return 404. |
+| `GET /connect/providers` | The connectable providers from the platform catalog, filtered by the effective provider policy: `{ providers: [{ id, displayName, logoUrl, authType, authFields }] }`. |
+| `GET /connect/connections` | Global connections plus the caller's own, filtered by the effective provider policy: `{ connections: [{ id, integrationId, status, accountLabel, scope }] }` where `scope` is `'global'` or `'user'`. |
+| `POST /connect/:provider/sessions` | Creates a connect session owned by the caller: `{ connectionId, integrationId, launchUrl, sessionToken, expiresAt }`. `launchUrl` is a server-relative path to the launch route; the provider's authorization URL is never returned to the browser. Providers outside the effective policy (or unknown to the catalog when the full catalog is inherited) return 404. |
 | `GET /connect/connections/:id/status` | Poll target for a visible (global or own) connection: `{ id, status, scope }`. An invisible connection returns the same 404 as an unknown ID. |
 | `DELETE /connect/connections/:id` | Disconnects the caller's own connection (204). Global connections return 403. |
 | `GET /connect/connections/:id/launch` | Launch gate for a pending session. Verifies the caller owns the session, then responds with a 302 redirect to the provider's authorization flow. A session owned by another user, an expired session, or an unknown ID all return the same 404, so a leaked launch URL can't bind someone else's account. |
@@ -98,7 +102,7 @@ Errors are JSON: `{ error: { code, message } }`. Platform failure details never 
 | 401 | `unauthorized` | No resolvable resource ID for the request |
 | 400 | `invalid_return_to` | `returnTo` isn't a relative path or an allowlisted origin |
 | 403 | `forbidden` | Deleting a global connection |
-| 404 | `provider_not_found`, `connection_not_found` | Provider outside the allowlist (or unknown without one), or an invisible connection |
+| 404 | `provider_not_found`, `connection_not_found` | Provider outside the effective policy (or unknown when the full catalog is inherited), or an invisible connection |
 | 500 | `misconfigured` | Missing platform token or other configuration problem |
 | 502 | `platform_error` | The platform request failed |
 
