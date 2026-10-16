@@ -77,6 +77,22 @@ describe('MCPEventsSignalProvider', () => {
     expect(sent().map(call => call.target.threadId)).toEqual(['thread-1', 'thread-2']);
   });
 
+  it('keeps every occurrence of a burst as its own notification', async () => {
+    const { provider, subscriptions, sent, storage } = setup();
+    await provider.subscribeThread(thread1, pushA);
+    subscriptions[0]!.push({ n: 1 }, { eventId: 'evt-1' });
+    subscriptions[0]!.push({ n: 2 }, { eventId: 'evt-2' });
+    await vi.waitFor(() => expect(sent()).toHaveLength(2));
+    expect(sent().every(call => call.notification.coalesceKey === undefined)).toBe(true);
+
+    const notifications = await storage.getStore('notifications');
+    const records = await notifications!.listNotifications({ threadId: 'thread-1' });
+    expect(records.map(record => record.payload).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))).toMatchObject([
+      { occurrence: { eventId: 'evt-1', data: { n: 1 } } },
+      { occurrence: { eventId: 'evt-2', data: { n: 2 } } },
+    ]);
+  });
+
   it('wraps event data as untrusted so it cannot escape the data block', async () => {
     const { provider, subscriptions, sent } = setup();
     await provider.subscribeThread(thread1, pushA);
