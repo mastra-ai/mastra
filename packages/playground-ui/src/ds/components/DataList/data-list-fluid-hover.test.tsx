@@ -79,32 +79,25 @@ describe('DataList fluid hover', () => {
     expect(activeRows().map(r => r.textContent)).toEqual(['b']);
   });
 
-  it('rounds the highlight only at the ends of the hovered row section', async () => {
+  it("gives the highlight the hovered row's own corners", async () => {
     await setup(
       <>
-        <DataList.RowButton>a</DataList.RowButton>
-        <DataList.RowButton>b</DataList.RowButton>
-        <DataList.Subheader>group</DataList.Subheader>
-        <DataList.RowButton>c</DataList.RowButton>
+        <DataList.RowButton style={{ borderRadius: '8px 8px 0px 0px' }}>a</DataList.RowButton>
+        <DataList.RowButton style={{ borderRadius: '0px' }}>b</DataList.RowButton>
       </>,
     );
-    const ends = () => [grid().hasAttribute('data-active-row-first'), grid().hasAttribute('data-active-row-last')];
+    const highlightRadius = () =>
+      grid()
+        .querySelector<HTMLElement>('[data-slot=fluid-hover-highlight]')
+        ?.style.getPropertyValue('--fluid-hover-item-radius');
 
     hoverAt(5);
     await flushFrames();
-    expect(ends()).toEqual([true, false]);
+    expect(highlightRadius()).toBe('8px 8px 0px 0px');
 
     hoverAt(ROW_HEIGHT + 5);
     await flushFrames();
-    expect(ends()).toEqual([false, true]);
-
-    hoverAt(ROW_HEIGHT * 3 + 5);
-    await flushFrames();
-    expect(ends()).toEqual([true, true]);
-
-    fireEvent.mouseLeave(grid());
-    await flushFrames();
-    expect(ends()).toEqual([false, false]);
+    expect(highlightRadius()).toBe('0px');
   });
 
   it('lights the RowWrapper, never the nested RowButton', async () => {
