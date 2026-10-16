@@ -12,8 +12,11 @@ import { AddedToken, Tokenizer } from '@anush008/tokenizers';
 import fs from 'node:fs';
 import type { PathLike } from 'node:fs';
 import path from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import type { ReadableStream } from 'node:stream/web';
 import * as ort from 'onnxruntime-node';
-import { downloadFileToCacheDir } from '@huggingface/hub';
+import { downloadFile } from '@huggingface/hub';
 
 export enum ExecutionProvider {
   CPU = 'cpu',
@@ -273,19 +276,18 @@ export class FlagEmbedding extends Embedding {
 
     const { repo, files } = HF_MODEL_SOURCES[model];
     const tmpDir = fs.mkdtempSync(`${modelDir}.tmp-`);
-    // Keep the Hugging Face hub cache inside the configured cacheDir (not ~/.cache) and
-    // move blobs out of it so each model file is stored only once.
-    const hubCacheDir = path.join(tmpDir, '.hf-hub');
-
     try {
       if (showDownloadProgress) {
         console.error(`Downloading ${model} from Hugging Face (${repo})...`);
       }
       for (const file of [...COMMON_MODEL_FILES, ...files]) {
-        const downloaded = await downloadFileToCacheDir({ repo, path: file, cacheDir: hubCacheDir });
-        fs.renameSync(fs.realpathSync(downloaded), path.join(tmpDir, file));
+        const downloaded = await downloadFile({ repo, path: file });
+        if (!downloaded) throw new Error(`Model file not found in ${repo}: ${file}`);
+        await pipeline(
+          Readable.fromWeb(downloaded.stream() as ReadableStream),
+          fs.createWriteStream(path.join(tmpDir, file)),
+        );
       }
-      fs.rmSync(hubCacheDir, { recursive: true, force: true });
       try {
         fs.renameSync(tmpDir, modelDir);
       } catch (error) {
@@ -476,14 +478,13 @@ export class SparseTextEmbedding extends SparseEmbedding {
         fs.mkdirSync(outputDir, { recursive: true, mode: 0o755 });
       }
 
-      const downloaded = await downloadFileToCacheDir({
+      const downloaded = await downloadFile({
         repo: model,
         path: fileName,
       });
 
-      if (downloaded && typeof downloaded === 'string') {
-        fs.copyFileSync(downloaded, outputPath);
-      }
+      if (!downloaded) throw new Error(`Model file not found in ${model}: ${fileName}`);
+      await pipeline(Readable.fromWeb(downloaded.stream() as ReadableStream), fs.createWriteStream(outputPath));
     }
 
     return modelDir;
