@@ -4,7 +4,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { CONNECTION_METHOD_LABEL, useProviderConnection } from '../hooks/useProviderConnection';
 import type { PreviewProvider } from '../hooks/useProviderConnection';
-import { providerDisplayName } from '../../settings/components/provider-display-name';
+import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { FactoryDefaultModelForm } from './FactoryDefaultModelForm';
 import { ModelProviderPicker } from './ModelProviderPicker';
 import { OnboardingConnectionRow } from './onboarding/OnboardingConnectionRow';

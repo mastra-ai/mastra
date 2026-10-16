@@ -47,8 +47,6 @@ import {
 } from './provider-credentials.js';
 import { Route } from './route.js';
 import type { RouteAuth, RouteDependencies } from './route.js';
-import { ownerCredentialsByModelProvider } from './session-owner.js';
-import type { SessionOwner } from './session-owner.js';
 
 /** Widen a route-local Hono context to the plain `Context` the auth helpers take. */
 function loose(c: unknown): Context {
@@ -964,7 +962,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             const tenant = auth.tenant(c);
             let tenantCredentials = allTenantCredentials;
             let sessionPolicy: { modelScope: 'factory' | 'user'; defaultModelId: string | null } | undefined;
-            let threadOwnerKnown = false;
             const resourceId = c.req.query('resourceId');
             const threadId = c.req.query('threadId');
             if (resourceId !== undefined || threadId !== undefined) {
@@ -1009,8 +1006,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                     (await options.modelDefaults.get({ orgId, userId: policy.tenant.userId }))?.modelId ?? null;
                 }
                 sessionPolicy = { modelScope, defaultModelId };
-                // Without a Factory project the policy fell back to the caller, who may not own the thread.
-                threadOwnerKnown = Boolean(policy.factoryProjectId);
               }
             } else if (allTenantCredentials && c.req.query('scope') === 'user') {
               // Settings still list the caller's own models; live threads resolve their owner above.
@@ -1069,18 +1064,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 // Fail soft: the catalog still serves the built-in models.
               }
             }
-            const owner: SessionOwner | undefined =
-              threadOwnerKnown && tenantCredentials
-                ? {
-                    credentials: ownerCredentialsByModelProvider(
-                      models.map(model => model.provider),
-                      tenantCredentials,
-                    ),
-                  }
-                : undefined;
             return c.json({
               ...sessionPolicy,
-              ...(owner ? { owner } : {}),
               models: catalog.sort((a, b) =>
                 a.provider === b.provider ? a.id.localeCompare(b.id) : a.provider.localeCompare(b.provider),
               ),

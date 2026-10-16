@@ -16,8 +16,8 @@ import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
 
 import { channelOrigin, messageAuthor } from '../services/message-author';
-import { replyOwnerLabel } from '../services/reply-owner';
-import type { ReplyOwner } from '../services/reply-owner';
+import { replyCredentialLabel } from '../services/reply-credential';
+import type { ThreadOwner } from '../services/reply-credential';
 import type { MessageEntry, SuspensionPrompt } from '../services/transcript';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
 import {
@@ -76,7 +76,7 @@ export function MessageBubble({
   isSubmitting: boolean;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
   viewerId?: string;
-  owner?: ReplyOwner;
+  owner?: ThreadOwner;
 }) {
   const written = renderableParts(entry);
   const parts = useRevealedParts(written, Boolean(entry.streaming));
@@ -94,10 +94,9 @@ export function MessageBubble({
   const steeringStatus = steeringLabel(entry);
   const steeringPending = entry.deliveryStatus === 'pending';
   const steeringFailed = entry.deliveryStatus === 'failed';
-  const { modelId, provider } = entry.message.content.metadata ?? {};
-  const replyModelId = meta && typeof modelId === 'string' ? modelId : undefined;
-  const ownerLabel =
-    replyModelId && owner && typeof provider === 'string' ? replyOwnerLabel(owner, provider, viewerId) : undefined;
+  const metadata = entry.message.content.metadata;
+  const replyModelId = meta && typeof metadata?.modelId === 'string' ? metadata.modelId : undefined;
+  const credentialLabel = replyModelId && metadata ? replyCredentialLabel(metadata, owner, viewerId) : undefined;
   const messageActions = meta ? (
     <MessageActions>
       <MessageCopyButton text={meta} />
@@ -144,7 +143,7 @@ export function MessageBubble({
                     render={
                       <MessageMetadata tabIndex={0}>
                         {formatModelName(replyModelId)}
-                        {ownerLabel && ` · ${ownerLabel}`}
+                        {credentialLabel && ` · ${credentialLabel}`}
                       </MessageMetadata>
                     }
                   />

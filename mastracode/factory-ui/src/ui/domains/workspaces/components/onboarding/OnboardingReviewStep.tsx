@@ -5,7 +5,7 @@ import { GitBranch, ListTodo, Sparkles, UserRound } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { CONNECTION_METHOD_LABEL } from '../../hooks/useProviderConnection';
 import { useWorkSourceConnections, WORK_SOURCE_NAME, WORK_SOURCES } from '../../hooks/useWorkSourceConnections';
-import { providerDisplayName } from '../../../settings/components/provider-display-name';
+import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { isGitLabRepository } from '../../services/github';
 import type { OnboardingConnectionChoice, OnboardingDraft, OnboardingStep } from '../../services/onboardingFlow';
 

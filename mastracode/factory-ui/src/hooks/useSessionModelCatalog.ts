@@ -1,4 +1,3 @@
-import type { SessionOwner } from '@mastra/factory/routes/session-owner';
 import { queryOptions, skipToken, useQuery } from '@tanstack/react-query';
 
 import type { ApiClient } from '../api/client';
@@ -16,7 +15,6 @@ export interface SessionModelCatalog {
   models: AvailableModelOption[];
   modelScope?: 'factory' | 'user';
   defaultModelId?: string | null;
-  owner?: SessionOwner;
 }
 
 export function fetchSessionModelCatalog(client: ApiClient, target: SessionModelCatalogTarget) {

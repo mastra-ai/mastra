@@ -2,7 +2,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Building2, MessageSquare, Sparkles, UserRound } from 'lucide-react';
 import { useProvidersQuery } from '../../../../../../hooks/use-providers';
 import { useFactoryAuth } from '../../../../../../hooks/useFactoryAuth';
-import { providerDisplayName } from '../../../../settings/components/provider-display-name';
+import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import {
   CONNECTION_METHOD_LABEL,
   isProviderConnected,

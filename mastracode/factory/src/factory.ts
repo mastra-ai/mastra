@@ -106,6 +106,7 @@ import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
 import { LiveSessions } from './session/live-sessions.js';
 import { hydrateSessionMemorySettings, layerPersonalMemorySettings } from './session/memory-settings-hydration.js';
+import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
 import { createSourceControlTools } from './session/source-control-tools.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
@@ -1186,6 +1187,7 @@ export class MastraFactory {
           }
           return [environmentProcessor];
         },
+        outputProcessors: [new FactoryReplyCredentialProcessor()],
         ...(vector ? { vector } : {}),
         ...(toolIntegrations.length > 0 ||
         sourceControlToolProviders.length > 0 ||

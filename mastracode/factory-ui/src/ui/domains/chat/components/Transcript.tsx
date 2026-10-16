@@ -8,11 +8,9 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
 import { memo, useCallback, useMemo, useState } from 'react';
 
-import { useChatModelScope } from '../context/useChatModelScope';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
-import { replyOwner } from '../services/reply-owner';
-import type { ReplyOwner } from '../services/reply-owner';
+import type { ThreadOwner } from '../services/reply-credential';
 import {
   useApproveAgentControllerToolMutation,
   useRespondAgentControllerSuspensionMutation,
@@ -30,10 +28,8 @@ import { isTimeGap } from './TranscriptSignals';
 import type { MessageEntry, NoticeEntry, SuspensionPrompt, TimelineEntry } from '../services/transcript';
 
 export function Transcript({ tail }: { tail?: ReactNode }) {
-  const { resourceId, sessionEnabled, projectPath, baseUrl, owner: sessionOwner } = useChatSessionContext();
+  const { resourceId, sessionEnabled, projectPath, baseUrl, owner } = useChatSessionContext();
   const { transcript, resolvePrompt, busy, viewerId } = useChatTranscript();
-  const catalog = useChatModelScope().sessionModelsQuery.data;
-  const owner = useMemo(() => replyOwner(catalog, sessionOwner), [catalog, sessionOwner]);
   const { entries } = transcript;
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -98,7 +94,8 @@ export function TranscriptEntries({
   running?: boolean;
   /** The signed-in user; anyone else's message gets their avatar beside it. */
   viewerId?: string;
-  owner?: ReplyOwner;
+  /** Whose personal credentials the thread runs on; names their replies for other viewers. */
+  owner?: ThreadOwner;
   /** Rendered inside the live turn (the activity line), so the reserved room stays under it. */
   tail?: ReactNode;
 }) {
@@ -214,7 +211,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
   redundantSuspension: boolean;
   isSubmitting: boolean;
   viewerId?: string;
-  owner?: ReplyOwner;
+  owner?: ThreadOwner;
   onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {

@@ -2,16 +2,13 @@
 '@mastra/factory': patch
 ---
 
-Added `owner` to the session model catalog (`GET /web/config/models?resourceId=…&threadId=…`). It lists, per model provider, the credential type answering the thread: an API key, or the subscription it bills. Whose credential it is follows `modelScope`: the organization's, or the session owner's, whom `GET /web/user-sessions/:sessionId` already names.
+Factory now records which credential answered each assistant reply in the message's `content.metadata`: `credentialLabel` names the subscription or API key, and `credentialOwnerId` is the user whose personal credential it was. A reply answered by the organization's credential has no `credentialOwnerId`.
 
 ```json
 {
-  "modelScope": "user",
-  "owner": {
-    "credentials": {
-      "anthropic": { "type": "oauth", "subscription": "Claude Pro/Max" },
-      "openai": { "type": "api_key" }
-    }
-  }
+  "modelId": "claude-opus-4-6",
+  "provider": "anthropic.messages",
+  "credentialLabel": "Claude Pro/Max",
+  "credentialOwnerId": "user_123"
 }
 ```

@@ -8,7 +8,7 @@ import {
   useStartProviderOAuth,
 } from '../../../../hooks/use-providers';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import { providerDisplayName } from '../../settings/components/provider-display-name';
+import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { credentialAt } from '../../settings/components/provider-credential';
 
 export type ProviderCredentialScope = 'org' | 'user';

@@ -47,16 +47,15 @@ async function setup(modelScope: 'hybrid' | 'user' | 'factory' = 'hybrid', visib
     baseBranch: 'main',
     visibility,
   });
-  await seed.credentials.setCredential({ orgId: 'org-1', userId: 'owner' }, 'anthropic', {
-    type: 'oauth',
-    refresh: 'owner-secret',
-    access: 'owner-secret',
-    expires: Date.now() + 60_000,
-  });
-  await seed.credentials.setCredential({ orgId: 'org-1', userId: 'viewer' }, 'openai-codex', {
-    type: 'api_key',
-    key: 'viewer-secret',
-  });
+  for (const [userId, provider] of [
+    ['owner', 'anthropic'],
+    ['viewer', 'openai-codex'],
+  ] as const) {
+    await seed.credentials.setCredential({ orgId: 'org-1', userId }, provider, {
+      type: 'api_key',
+      key: `${userId}-secret`,
+    });
+  }
   await seed.credentials.setCredential({ orgId: 'org-1' }, 'deepseek', { type: 'api_key', key: 'org-secret' });
   await seed.modelDefaults.set({ orgId: 'org-1', userId: 'owner', modelId: 'anthropic/claude-opus-4-6' });
   await seed.modelDefaults.set({ orgId: 'org-1', userId: 'viewer', modelId: 'openai/gpt-5.5' });
@@ -130,7 +129,6 @@ describe('session-owner model catalog', () => {
       expect(body.modelScope).toBe('user');
       expect(body.defaultModelId).toBe('anthropic/claude-opus-4-6');
       expect(body.models.map((m: { id: string }) => m.id)).toEqual(['anthropic/claude-opus-4-6']);
-      expect(body.owner).toEqual({ credentials: { anthropic: { type: 'oauth', subscription: 'Claude Pro/Max' } } });
       expect(JSON.stringify(body)).not.toContain('secret');
     },
   );
@@ -157,7 +155,6 @@ describe('session-owner model catalog', () => {
       const body = await response.json();
       expect(body.modelScope).toBe('factory');
       expect(body.defaultModelId).toBe('deepseek/deepseek-flash');
-      expect(body.owner).toEqual({ credentials: { deepseek: { type: 'api_key' } } });
       expect(body.models.map((m: { id: string }) => m.id)).toEqual(['deepseek/deepseek-flash']);
     },
   );
