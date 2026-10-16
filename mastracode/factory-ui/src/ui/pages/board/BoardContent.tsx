@@ -288,7 +288,6 @@ export function BoardContent({
             showEmptyStateActions && (
               <BoardEmptyStateActions
                 factoryId={factoryProjectId}
-                kind={kind}
                 connectSource={canConnectSource}
                 onCreate={canCreate ? () => composer.open(stage.id) : undefined}
                 onClearFilters={filtersExcludeAll ? view.clearFilters : undefined}

@@ -18,20 +18,17 @@ function boardColumnEmptyCopy(
   isInitialPhase: boolean,
 ): BoardColumnEmptyCopy {
   if (isInitialPhase) {
-    if (!hasIntakeSource) {
-      return {
-        title: 'No intake sources',
-        description:
-          kind === 'review'
-            ? 'Connect a repository to see its change requests here.'
-            : 'Create a card or connect an issue source in Work Intake settings.',
-      };
-    }
     if (kind === 'review')
       return {
         title: 'No change requests waiting',
         description: 'Open change requests from connected repositories appear here.',
       };
+    if (!hasIntakeSource) {
+      return {
+        title: 'No intake sources',
+        description: 'Create a card or connect an issue source in Work Intake settings.',
+      };
+    }
     return {
       title: 'Intake is clear',
       description: 'New issues from your connected sources appear here.',
