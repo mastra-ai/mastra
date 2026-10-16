@@ -1009,7 +1009,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                     (await options.modelDefaults.get({ orgId, userId: policy.tenant.userId }))?.modelId ?? null;
                 }
                 sessionPolicy = { modelScope, defaultModelId };
-                // Without a Factory project the policy fell back to the caller, who may not be the one paying.
+                // Without a Factory project the policy fell back to the caller, who may not own the thread.
                 threadOwnerKnown = Boolean(policy.factoryProjectId);
               }
             } else if (allTenantCredentials && c.req.query('scope') === 'user') {

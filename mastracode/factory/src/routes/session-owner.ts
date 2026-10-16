@@ -3,7 +3,7 @@ import { getAuthProviderId, WEB_OAUTH_PROVIDERS } from './provider-credentials.j
 
 export type OwnerCredential = { type: 'api_key' } | { type: 'oauth'; subscription: string };
 
-/** Whose credential answers a thread per provider: the owner's own, or the organization's when the factory pays. */
+/** Whose credential answers a thread per provider: the owner's own, or the organization's when the organization owns the credentials. */
 export interface SessionOwner {
   /** Keyed by catalog provider (`anthropic`), not the AI SDK's `anthropic.messages` a reply carries. */
   credentials: Record<string, OwnerCredential>;
