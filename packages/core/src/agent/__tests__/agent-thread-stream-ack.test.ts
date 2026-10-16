@@ -107,6 +107,85 @@ const key = [resourceId, threadId].join(AGENT_THREAD_KEY_SEPARATOR);
 const topic = `agent.thread-stream.${encodeURIComponent(key)}`;
 
 describe('thread stream subscriber acknowledgements', () => {
+  it('notifies only the owner after deduplicated admission while acknowledging observer copies', async () => {
+    const owner = new AgentThreadStreamRuntime();
+    const observer = new AgentThreadStreamRuntime();
+    const pubsub = new AckTrackingPubSub();
+    const runId = 'notification-owner-run';
+    await owner.waitForCrossAgentThreadRun(
+      agent,
+      { runId, memory: { thread: threadId, resource: resourceId } },
+      pubsub,
+    );
+    const observation = await observer.subscribeToThread(agent, { resourceId, threadId }, pubsub);
+    let notifications = 0;
+    const admitted: string[][] = [];
+    let observerNotifications = 0;
+    const unsubscribe = owner.subscribePendingSignals(
+      runId,
+      () => {
+        notifications++;
+        admitted.push(
+          [...owner.drainPendingSignals(runId, pubsub), ...owner.drainPendingSignals(runId, pubsub, 'pre-run')].map(
+            signal => signal.id,
+          ),
+        );
+      },
+      pubsub,
+    );
+    const unobserve = observer.subscribePendingSignals(
+      runId,
+      () => {
+        observerNotifications++;
+      },
+      pubsub,
+    );
+    const publishSignal = (id: string, preRun = false, targetedRun = runId) =>
+      pubsub.publish(topic, {
+        type: 'agent.thread-stream',
+        runId: targetedRun,
+        data: {
+          type: 'signal-enqueued',
+          runId: targetedRun,
+          sourceId: 'remote-sender',
+          preRun,
+          signal: { id, type: 'user-message', contents: 'synthetic input', createdAt: new Date() },
+        },
+      });
+    try {
+      await publishSignal('accepted');
+      expect(notifications).toBe(1);
+      expect(admitted).toEqual([['accepted']]);
+      await publishSignal('accepted'); // Redelivery after draining is still deduplicated.
+      await publishSignal('wrong-owner', false, 'foreign-run');
+      expect(notifications).toBe(1);
+      await publishSignal('pre-run', true);
+      expect(notifications).toBe(2);
+      expect(admitted).toEqual([['accepted'], ['pre-run']]);
+      await pubsub.publish(topic, {
+        type: 'agent.thread-stream',
+        runId,
+        data: { type: 'signals-cancelled', signalIds: ['cancelled'] },
+      });
+      await publishSignal('cancelled');
+      expect(notifications).toBe(2);
+      expect(owner.drainPendingSignals(runId, pubsub)).toEqual([]);
+      expect(observerNotifications).toBe(0);
+      expect(pubsub.pending.size).toBe(0);
+      expect(pubsub.nacked).toEqual([]);
+      expect(pubsub.acked).toHaveLength(18); // Owner control, observer control and observer fan-out.
+      unsubscribe();
+      await publishSignal('unsubscribed');
+      expect(notifications).toBe(2);
+      expect(owner.drainPendingSignals(runId, pubsub).map(signal => signal.id)).toEqual(['unsubscribed']);
+    } finally {
+      unsubscribe();
+      unobserve();
+      owner.releaseThreadRunReservation(runId, pubsub);
+      observation.unsubscribe();
+    }
+  });
+
   it('acks every delivered event, including ones it filters out', async () => {
     const runtime = new AgentThreadStreamRuntime();
     const pubsub = new AckTrackingPubSub();

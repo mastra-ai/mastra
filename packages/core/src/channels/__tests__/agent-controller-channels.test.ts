@@ -5,6 +5,9 @@ import z from 'zod';
 import { Agent } from '../../agent';
 import { AgentController } from '../../agent-controller/agent-controller';
 import { createMockWorkspace } from '../../agent-controller/test-utils';
+import type { AgentControllerEvent } from '../../agent-controller/types';
+import { FGADeniedError } from '../../auth/ee/fga-check';
+import type { IFGAProvider } from '../../auth/ee/interfaces/fga';
 import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
@@ -131,7 +134,11 @@ async function createSetup({
   resolveSession,
   onStaleToolApproval,
   instructions,
+  storage = new InMemoryStore(),
+  platform = 'discord',
 }: {
+  storage?: InMemoryStore;
+  platform?: string;
   responseText?: string;
   instructions?: () => Promise<string>;
   model?: MockLanguageModelV2;
@@ -144,7 +151,7 @@ async function createSetup({
   resolveSession?: (ctx: any) => any;
   onStaleToolApproval?: (ctx: any) => void | Promise<void>;
 } = {}) {
-  const adapter = createMockAdapter('discord');
+  const adapter = createMockAdapter(platform);
   const agent = new Agent({
     id: 'mode-agent',
     name: 'mode-agent',
@@ -156,12 +163,12 @@ async function createSetup({
   const controller = new AgentController({
     workspace: createMockWorkspace(),
     id: 'ctrl-1',
-    storage: new InMemoryStore(),
+    storage,
     resourceId: 'ctrl-resource',
     modes: [{ id: 'build', agent, defaultModelId: 'anthropic/claude-opus-4-7' }],
     defaultModeId: 'build',
     channels: {
-      adapters: { discord: toolDisplay ? { adapter, toolDisplay } : adapter },
+      adapters: { [platform]: toolDisplay ? { adapter, toolDisplay } : adapter },
       ...(onSessionStart ? { onSessionStart } : {}),
       ...(resolveSession ? { resolveSession } : {}),
       ...(onStaleToolApproval ? { onStaleToolApproval } : {}),
@@ -424,6 +431,49 @@ describe('AgentControllerChannels', () => {
    * possible.
    */
   describe('session resolver', () => {
+    it('requires execute permission before invoking a custom resolver', async () => {
+      const resolveSession = vi.fn();
+      const { adapter, controller, mastra, channels } = await createSetup({ resolveSession });
+      const provider: IFGAProvider = {
+        check: vi.fn().mockResolvedValue(false),
+        require: vi
+          .fn()
+          .mockRejectedValue(
+            new FGADeniedError(
+              { id: 'user-1' },
+              { type: 'agent-controller', id: 'ctrl-1' },
+              'agent-controller:execute',
+            ),
+          ),
+        filterAccessible: vi.fn(),
+      };
+      controller.__registerMastra({ getServer: () => ({ fga: provider }) } as any);
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1', organizationMembershipId: 'om-1' });
+      requestContext.set('actor', { type: 'user', id: 'user-1', organizationId: 'org-1' });
+      const chatThread = createChatThread(adapter, 'chan-1:t-fga-denied');
+
+      await expect(
+        (channels as any).processChatMessage(chatThread, createMessage('m-1', 'hello'), mastra, requestContext),
+      ).rejects.toBeInstanceOf(FGADeniedError);
+
+      expect(resolveSession).not.toHaveBeenCalled();
+      expect(await controller.getSessionByResource('channel:chan-1:t-fga-denied')).toBeUndefined();
+      expect(provider.require).toHaveBeenCalledTimes(1);
+      const [user, authorization] = vi.mocked(provider.require).mock.calls[0]!;
+      expect(user).toEqual({ id: 'user-1', organizationMembershipId: 'om-1' });
+      expect(authorization).toMatchObject({
+        resource: { type: 'agent-controller', id: 'ctrl-1' },
+        permission: 'agent-controller:execute',
+        context: { resourceId: 'channel:chan-1:t-fga-denied' },
+      });
+      expect((authorization.context as any).requestContext.get('actor')).toEqual({
+        type: 'user',
+        id: 'user-1',
+        organizationId: 'org-1',
+      });
+    });
+
     it('creates the session in place of the default, with the inbound requestContext', async () => {
       const calls: Array<{ resourceId: string; tenant: unknown }> = [];
       const { adapter, controller, mastra, channels } = await createSetup({
@@ -1107,6 +1157,61 @@ describe('AgentControllerChannels thread history', () => {
       },
     } as any;
   }
+
+  it('names a new Slack session from its earlier thread context and emits the title for the sidebar', async () => {
+    const prompts: string[] = [];
+    const titleModel = new MockLanguageModelV2({
+      doGenerate: async options => {
+        prompts.push(JSON.stringify(options.prompt));
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          content: [{ type: 'text', text: 'Fix checkout timeouts' }],
+        };
+      },
+    });
+    const storage = new InMemoryStore();
+    const agentMemory = new MockMemory({ storage, options: { generateTitle: { model: titleModel } } });
+    const events: AgentControllerEvent[] = [];
+    const { adapter, controller, mastra, channels } = await createSetup({
+      storage,
+      agentMemory,
+      platform: 'slack',
+      onSessionStart: ({ session }) => {
+        session.subscribe((event: AgentControllerEvent) => events.push(event));
+      },
+    });
+    const chatThread = createMentionThread(adapter, 'C123:456', [
+      { ...historyMessage(0), text: 'Checkout is timing out after the payments deployment' },
+    ]);
+    await channels['processChatMessage'](
+      chatThread,
+      createMessage('m-trigger', '@TestBot please investigate'),
+      mastra,
+      new RequestContext(),
+    );
+    const session = await controller.getSessionByResource('channel:C123:456');
+    const threadId = session!.thread.getId()!;
+    await vi.waitFor(async () =>
+      expect((await agentMemory.getThreadById({ threadId }))?.title).toBe('Fix checkout timeouts'),
+    );
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain('Checkout is timing out after the payments deployment');
+    expect(prompts[0]).toContain('please investigate');
+    expect(events).toContainEqual({ type: 'thread_title_updated', threadId, title: 'Fix checkout timeouts' });
+
+    await waitFor(() => !session!.run.isRunning(), { what: 'first turn to finish' });
+    await channels['processChatMessage'](
+      chatThread,
+      createMessage('m-followup', 'Any updates?'),
+      mastra,
+      new RequestContext(),
+    );
+    await waitFor(() => !session!.run.isRunning(), { what: 'follow-up to finish' });
+    expect(prompts).toHaveLength(1);
+  });
 
   it('writes history rows to the session thread before dispatching the trigger', async () => {
     const agentMemory = new MockMemory();

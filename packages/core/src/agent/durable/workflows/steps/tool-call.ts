@@ -1,7 +1,9 @@
 import { z } from 'zod';
+import { MastraFGAPermissions } from '../../../../auth/ee';
 import { executeAdoptedBackgroundOperation } from '../../../../background-tasks/adoption';
 import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
 import type { PubSub } from '../../../../events/pubsub';
+import { STEP_MODEL_MESSAGES_KEY } from '../../../../loop/run-scope-keys';
 import { approvalResumeSchema } from '../../../../loop/shared/approval-schema';
 import { normalizeModelOutput } from '../../../../loop/shared/normalize-model-output';
 import { readToolResultFromMessageList } from '../../../../loop/shared/read-tool-result';
@@ -12,6 +14,7 @@ import { processAndEmitChunk } from '../../../../loop/shared/steps/process-chunk
 import { resolveFrameworkSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import type { ResolvedSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import { applyToolPayloadTransformToChunk } from '../../../../loop/shared/tool-payload-transform';
+import { runBeforeApprovalHook } from '../../../../loop/workflows/agentic-execution/tool-approval-verdict';
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
@@ -34,6 +37,7 @@ import { getToolTitle } from '../../../../tools/tool-title';
 import { resolveToolOutputValidationSchema, validateToolOutput } from '../../../../tools/validation';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { SuspendOptions } from '../../../../workflows/step';
+import { defineLazyWriter } from '../../../../workflows/utils';
 import { createStep } from '../../../../workflows/workflow';
 import { stopGoalActivity } from '../../../goal';
 import type { MessageList } from '../../../message-list';
@@ -41,11 +45,14 @@ import type { SaveQueueManager } from '../../../save-queue';
 import { resolveDeclineReason } from '../../../tool-approval';
 import { TripWire } from '../../../trip-wire';
 import { DurableStepIds } from '../../constants';
-import { globalRunRegistry, markRunActive } from '../../run-registry';
+import { assertExecutionNotSuperseded, assertExecutionOwned, isExecutionFenceError } from '../../execution-fence';
+import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
+import { getRunRegistryEntry, globalRunRegistry, markRunActive } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type {
   DurableToolCallInput,
   DurableToolCallOutput,
+  DurableLLMStepOutput,
   SerializableDurableOptions,
   AgentSuspendedEventData,
   RunRegistryEntry,
@@ -56,7 +63,9 @@ import {
   restoreRequestContext,
   toolRequiresApproval,
 } from '../../utils/resolve-runtime';
+import { createRunMessageList } from '../../utils/run-message-list';
 import { serializeError } from '../../utils/serialize-state';
+import { readMessageListState } from '../shared/message-list-state';
 
 /**
  * Input schema for the durable tool call step.
@@ -77,6 +86,8 @@ const durableToolCallInputSchema = z.object({
   hasSuspendSchema: z.boolean().optional(),
   // Exported MODEL_STEP span so the TOOL_CALL nests under the LLM call
   stepSpanData: z.any().optional(),
+  // First-chunk clock of the step that produced this call, for ending spans on suspend
+  completionStartTime: z.coerce.date().optional(),
 });
 
 /**
@@ -161,6 +172,7 @@ async function flushMessagesBeforeSuspension({
   memoryConfig,
   threadExists,
   onThreadCreated,
+  beforePersist,
 }: {
   saveQueueManager?: SaveQueueManager;
   messageList?: MessageList;
@@ -170,6 +182,7 @@ async function flushMessagesBeforeSuspension({
   memoryConfig?: MemoryConfig;
   threadExists?: boolean;
   onThreadCreated?: () => void;
+  beforePersist?: () => Promise<void>;
 }) {
   if (!saveQueueManager || !messageList || !threadId || memoryConfig?.readOnly) {
     return;
@@ -190,9 +203,11 @@ async function flushMessagesBeforeSuspension({
     }
 
     // Flush all pending messages immediately
-    await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
-  } catch {
-    // Log but don't throw — suspension should proceed even if flush fails
+    await saveQueueManager.flushMessages(messageList, threadId, memoryConfig, { beforePersist });
+  } catch (error) {
+    // A superseded execution must not suspend the run it no longer owns.
+    if (isExecutionFenceError(error)) throw error;
+    // Otherwise don't throw — suspension should proceed even if flush fails
   }
 }
 
@@ -329,6 +344,7 @@ export function createDurableToolCallStep() {
         requestContext,
         actor,
         getInitData,
+        getStepResult,
       } = params;
 
       // Access pubsub via symbol
@@ -384,6 +400,7 @@ export function createDurableToolCallStep() {
         requestContextEntries?: Record<string, unknown>;
         agentSpanData?: unknown;
         modelSpanData?: unknown;
+        completionStartTime?: Date | string;
       }>();
 
       const { runId, options: agentOptions, state } = initData;
@@ -404,17 +421,24 @@ export function createDurableToolCallStep() {
           };
           // After a prior resume, end the resume spans (registry override) — they are the
           // active root for this segment. Otherwise end the threaded originals.
-          const reg = globalRunRegistry.get(runId);
+          const reg = getRunRegistryEntry(runId, mastra as Mastra | undefined);
           const agentSpanData = reg?.resumeAgentSpanData ?? initData.agentSpanData;
           const modelSpanData = reg?.resumeModelSpanData ?? initData.modelSpanData;
+          // Rebuilt spans come from the run-start snapshot, so end them with the clock
+          // their segment captured: the loop state's (or this step's, on the first
+          // iteration) for the originals, the registry's for a resumed segment.
+          const clock = reg?.resumeModelSpanData
+            ? reg.resumeCompletionStartTime
+            : (initData.completionStartTime ?? typedInput.completionStartTime);
+          const attributes = clock ? { completionStartTime: new Date(clock) } : undefined;
           if (typedInput.stepSpanData) {
             obs.rebuildSpan(typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)?.end({ output });
           }
           if (modelSpanData) {
-            obs.rebuildSpan(modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>)?.end({ output });
+            obs.rebuildSpan(modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>)?.end({ output, attributes });
           }
           if (agentSpanData) {
-            obs.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>)?.end({ output });
+            obs.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>)?.end({ output, attributes });
           }
         } catch (error) {
           // Span bookkeeping must never break suspension.
@@ -444,7 +468,14 @@ export function createDurableToolCallStep() {
       // provider tool advertises the snake-case name), then by id, then fall
       // back to the Mastra-wide tool registry (exact name, provider-tool
       // name, then by id). Mirrors the non-durable tool-call step.
-      const registryEntry = globalRunRegistry.get(runId);
+      let registryEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
+      const registryModel = registryEntry?.model as { __metadataOnly?: boolean } | undefined;
+      const hasAuthoritativeToolSnapshot =
+        !!registryEntry &&
+        registryEntry.isPlaceholder !== true &&
+        !!registryModel &&
+        registryModel.__metadataOnly !== true &&
+        (registryEntry.baseTools !== undefined || registryEntry.tools !== undefined);
       const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext });
 
       // Tracing context for per-chunk PROCESSOR_RUN spans: the run's AGENT_RUN span (live
@@ -505,7 +536,9 @@ export function createDurableToolCallStep() {
       // threadId regardless. Without this guard every tool call on a memoryless durable run would
       // pay for a full rebuild to obtain something that can neither exist nor be used.
       const needsSaveQueueForFlush = !registryEntry?.saveQueueManager && !!state?.threadId;
-      if ((!tool || needsSaveQueueForFlush) && mastra) {
+      // A persistence-only rebuild restores tools and the save queue, but not processors.
+      const needsProcessorPipeline = !registryEntry?.outputProcessors || !registryEntry.processorStates;
+      if (((!tool && !hasAuthoritativeToolSnapshot) || needsSaveQueueForFlush || needsProcessorPipeline) && mastra) {
         const rebuilt = await rebuildRunToolsFromMastra({
           mastra: mastra as Mastra,
           runId,
@@ -514,9 +547,11 @@ export function createDurableToolCallStep() {
           options: agentOptions,
           requestContextEntries: initData.requestContextEntries,
           requestContext,
+          rehydrateProcessors: true,
           logger,
         });
         if (rebuilt) {
+          registryEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
           rebuiltTools = rebuilt.tools;
           rebuiltWorkspace = rebuilt.workspace;
           rebuiltMemory = rebuilt.memory;
@@ -524,13 +559,15 @@ export function createDurableToolCallStep() {
           rebuiltRequestContext = rebuilt.requestContext;
           // Keep an already-resolved tool: we may have rebuilt purely to obtain the
           // SaveQueueManager, and the registry's instance is the live per-request closure.
-          if (!tool) {
+          // A hydrated registry's per-step snapshot is authoritative, so a tool omitted
+          // from it must not be restored from the agent's full toolset.
+          if (!tool && !hasAuthoritativeToolSnapshot) {
             tool = rebuiltTools[toolName] as typeof tool;
           }
-          if (!tool) {
+          if (!tool && !hasAuthoritativeToolSnapshot) {
             tool = findProviderToolByName(rebuiltTools as any, toolName) as typeof tool;
           }
-          if (!tool) {
+          if (!tool && !hasAuthoritativeToolSnapshot) {
             tool = Object.values(rebuiltTools).find(
               (t: any) => t && typeof t === 'object' && 'id' in t && t.id === toolName,
             ) as typeof tool;
@@ -538,14 +575,16 @@ export function createDurableToolCallStep() {
         }
       }
 
-      // Mastra-wide lookup runs only after the owning agent's tools (registry or
-      // rebuild) miss: tool ids are not unique across agents, so a global lookup
-      // first could execute another agent's same-id tool on a cold worker.
-      if (!tool) {
+      // Mastra-wide lookup runs only after a cold worker's rebuilt agent tools
+      // miss: tool ids are not unique across agents, so a global lookup first
+      // could execute another agent's same-id tool. A hydrated registry's
+      // per-step snapshot is authoritative and must not fall back to this full
+      // catalog when prepareStep or an input processor omitted a tool.
+      if (!tool && !hasAuthoritativeToolSnapshot) {
         tool = resolveTool(toolName, mastra as Mastra);
       }
 
-      if (!tool && mastra) {
+      if (!tool && !hasAuthoritativeToolSnapshot && mastra) {
         mastraTools = (mastra as Mastra).listTools?.() as Record<string, any> | undefined;
         if (mastraTools) {
           tool = findProviderToolByName(mastraTools as any, toolName) as typeof tool;
@@ -575,7 +614,11 @@ export function createDurableToolCallStep() {
       const isHiddenByActiveTools = effectiveActiveTools !== undefined && !effectiveActiveTools.includes(activeToolKey);
 
       if (!tool || isHiddenByActiveTools) {
-        const availableToolNames = effectiveActiveTools ?? Object.keys(rebuiltTools ?? registryEntry?.tools ?? {});
+        const availableToolNames =
+          effectiveActiveTools ??
+          Object.keys(
+            hasAuthoritativeToolSnapshot ? (registryEntry?.tools ?? {}) : (rebuiltTools ?? registryEntry?.tools ?? {}),
+          );
         const availableToolsStr =
           availableToolNames.length > 0 ? ` Available tools: ${availableToolNames.join(', ')}` : '';
         const error = {
@@ -602,23 +645,96 @@ export function createDurableToolCallStep() {
       const saveQueueManager = registryEntry?.saveQueueManager ?? rebuiltSaveQueueManager;
       const memory = registryEntry?.memory ?? rebuiltMemory;
       const workspace = registryEntry?.workspace ?? rebuiltWorkspace;
+      const toolPayloadTransform =
+        getRunRegistryEntry(runId, mastra as Mastra | undefined)?.toolPayloadTransform ??
+        Object.values(mastra?.listAgents?.() ?? {})
+          .find(agent => agent.id === initData.agentId)
+          ?.getToolPayloadTransform?.() ??
+        mastra?.getToolPayloadTransform?.();
       let threadExists = state?.threadExists ?? false;
 
-      // Reconstruct MessageList from workflow state if available
-      // Note: In foreach mode, the message list from the registry may be available
-      // but for durability, we access what's available through the registry
-      let messageList: MessageList | undefined;
-      // For local execution, the globalRunRegistry might have an ExtendedRunRegistry entry
-      // that stores the messageList. We cast and check safely.
-      const extendedEntry = globalRunRegistry.get(runId) as any;
-      if (extendedEntry?.messageList) {
-        messageList = extendedEntry.messageList;
+      const toolsForTransform = getRunRegistryEntry(runId, mastra as Mastra | undefined)?.tools ?? rebuiltTools;
+      const messageList: MessageList | undefined = getRunRegistryEntry(
+        runId,
+        mastra as Mastra | undefined,
+      )?.messageList;
+      // Hold suspension chunks/events until the engine has saved the suspended
+      // snapshot, when the running engine supports that (#26435).
+      const publishAfterPersist = async (publish: () => Promise<void>) => {
+        const pending = getRunRegistryEntry(runId, mastra as Mastra | undefined)?.pendingSuspensionEvents;
+        if (pending) pending.push(publish);
+        else await publish();
+      };
+      let resumeMessageList = messageList;
+      // A durable engine can replay the completed LLM step on a cold resume,
+      // so its runtime rehydration never runs before this suspended tool step.
+      // The suspension metadata was flushed to memory before suspending.
+      if (!resumeMessageList && workflowResumeData !== undefined && memory && state?.threadId) {
+        const { messages } = await memory.recall({
+          threadId: state.threadId,
+          resourceId: state.resourceId,
+          perPage: false,
+        });
+        if (messages.length) {
+          resumeMessageList = createRunMessageList({
+            mastra,
+            threadId: state.threadId,
+            resourceId: state.resourceId,
+          }).add(messages, 'memory');
+        }
+      }
+      // Replayed step transcripts supply context only, not messages to persist.
+      let contextMessageList = messageList;
+      if (!contextMessageList) {
+        const llmOutput = getStepResult?.<DurableLLMStepOutput>(DurableStepIds.LLM_EXECUTION);
+        const messageListState = await readMessageListState(params, llmOutput ?? {});
+        if (messageListState) {
+          contextMessageList = createRunMessageList({
+            mastra,
+            threadId: state?.threadId,
+            resourceId: state?.resourceId,
+          }).deserialize(messageListState);
+        }
       }
 
-      const doFlush = async () => {
+      // Every flush from this step re-checks run ownership inside the save
+      // queue, so a superseded execution cannot write memory (#23734).
+      const assertOwned = () =>
+        assertExecutionOwned({ runId, agentId: initData.agentId, requestContext, mastra: mastra as Mastra });
+      // Background-task hooks can fire after the execution settled and
+      // released its claim; their writes only stop once another execution
+      // claimed the run.
+      const assertNotSuperseded = () =>
+        assertExecutionNotSuperseded({ runId, agentId: initData.agentId, requestContext, mastra: mastra as Mastra });
+
+      const doFlush = async (messagesToFlush = messageList) => {
+        if (
+          saveQueueManager &&
+          messagesToFlush &&
+          memory &&
+          state?.threadId &&
+          state.resourceId &&
+          !state.memoryConfig?.readOnly
+        ) {
+          const authorizationRequestContext =
+            registryEntry?.requestContext ?? restoreRequestContext(initData.requestContextEntries, requestContext);
+          const authorizeMemory = (permission: Parameters<typeof authorizeDurableMemory>[1]['permission']) =>
+            authorizeDurableMemory(getDurableMemoryAuthorizationChecks(registryEntry), {
+              mastra: mastra as Mastra | undefined,
+              user: authorizationRequestContext.get('user'),
+              threadId: state.threadId!,
+              resourceId: state.resourceId!,
+              agentId: initData.agentId,
+              requestContext: authorizationRequestContext,
+              permission,
+              actor: agentOptions.actor,
+            });
+          await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE);
+          if (!threadExists) await authorizeMemory(MastraFGAPermissions.MEMORY_READ);
+        }
         await flushMessagesBeforeSuspension({
           saveQueueManager,
-          messageList,
+          messageList: messagesToFlush,
           memory,
           threadId: state?.threadId,
           resourceId: state?.resourceId,
@@ -627,6 +743,7 @@ export function createDurableToolCallStep() {
           onThreadCreated: () => {
             threadExists = true;
           },
+          beforePersist: assertOwned,
         });
       };
 
@@ -737,7 +854,7 @@ export function createDurableToolCallStep() {
         target: { toolCallId?: string; toolName: string; runId?: string },
         type: 'suspension' | 'approval',
       ) => {
-        if (!messageList) return;
+        if (!resumeMessageList) return;
 
         const metadataKey = type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
         const expectedPartType = type === 'suspension' ? 'data-tool-call-suspended' : 'data-tool-call-approval';
@@ -751,7 +868,7 @@ export function createDurableToolCallStep() {
 
         const changedMessages = [];
         let matchedEntry: Record<string, any> | undefined;
-        for (const message of messageList.get.all.db()) {
+        for (const message of resumeMessageList.get.all.db()) {
           if (message.role !== 'assistant') continue;
 
           let messageChanged = false;
@@ -783,8 +900,8 @@ export function createDurableToolCallStep() {
         }
 
         if (changedMessages.length > 0) {
-          messageList.add(changedMessages, 'response');
-          await doFlush();
+          resumeMessageList.add(changedMessages, 'response');
+          await doFlush(resumeMessageList);
         }
         // Live counterpart of the persisted `resumed: true` marker (mirrors the base tool-call step).
         if (matchedEntry && pubsub) {
@@ -805,8 +922,8 @@ export function createDurableToolCallStep() {
               metadata: undefined as Record<string, any> | undefined,
             },
             {
-              policy: registryEntry?.toolPayloadTransform,
-              tools: registryEntry?.tools,
+              policy: toolPayloadTransform,
+              tools: toolsForTransform,
               logger: logger as any,
             },
           );
@@ -831,7 +948,59 @@ export function createDurableToolCallStep() {
         suspendData != null &&
         typeof suspendData === 'object' &&
         (suspendData as { type?: unknown }).type === 'approval';
-      const approvalGated = suspendedForApproval || (requiresApproval && suspendData === undefined);
+      const isFreshCall = suspendData === undefined;
+      const approvalGated = suspendedForApproval || (requiresApproval && isFreshCall);
+
+      if (approvalGated && !approvalDecision && isFreshCall) {
+        const rejection = await runBeforeApprovalHook({
+          tool,
+          input: args,
+          context: { toolCallId, toolName, requestContext: approvalRequestContext, workspace, actor },
+          logger: logger as any,
+        });
+        if (rejection) {
+          const result = rejection.output;
+          if (pubsub) {
+            try {
+              const resultChunk = await applyToolPayloadTransformToChunk(
+                {
+                  type: 'tool-result' as const,
+                  runId,
+                  from: ChunkFrom.AGENT,
+                  payload: { toolCallId, toolName, args, result, providerExecuted },
+                },
+                {
+                  policy: toolPayloadTransform,
+                  toolTransform: (tool as { transform?: any })?.transform,
+                  tools: toolsForTransform,
+                  logger: logger as any,
+                },
+              );
+              await processChunkThroughOutputProcessors(
+                resultChunk,
+                registryEntry,
+                pubsub,
+                runId,
+                initData.agentId,
+                logger,
+                messageList,
+                processorObservabilityContext,
+                collectProcessorDataPart,
+              );
+            } catch (emitError) {
+              if (emitError instanceof DurableOutputProcessorError) {
+                throw emitError;
+              }
+              logger?.warn?.(`[DurableAgent] Failed to emit tool-result chunk for ${toolName}: ${emitError}`);
+            }
+          }
+          return {
+            ...typedInput,
+            result,
+            ...(processorDataParts.length ? { processorDataParts } : {}),
+          };
+        }
+      }
 
       if (approvalGated && !approvalDecision) {
         // Persist active goal time before exposing the approval wait.
@@ -849,23 +1018,25 @@ export function createDurableToolCallStep() {
               payload: { toolCallId, toolName, args, resumeSchema: approvalResumeSchema, updatedAt: Date.now() },
             },
             {
-              policy: registryEntry?.toolPayloadTransform,
-              tools: registryEntry?.tools,
+              policy: toolPayloadTransform,
+              tools: toolsForTransform,
               logger: logger as any,
             },
           );
-          await emitChunkEvent(pubsub, runId, approvalChunk);
+          await publishAfterPersist(() => emitChunkEvent(pubsub, runId, approvalChunk));
         }
 
         // Emit suspended event for the stream adapter
         if (pubsub) {
-          await emitSuspendedEvent(pubsub, runId, {
-            toolCallId,
-            toolName,
-            args,
-            type: 'approval',
-            resumeSchema: approvalResumeSchema,
-          });
+          await publishAfterPersist(() =>
+            emitSuspendedEvent(pubsub, runId, {
+              toolCallId,
+              toolName,
+              args,
+              type: 'approval',
+              resumeSchema: approvalResumeSchema,
+            }),
+          );
         }
 
         // Add approval metadata to message before persisting
@@ -919,8 +1090,8 @@ export function createDurableToolCallStep() {
                   payload: { toolCallId, toolName, args, approval },
                 },
                 {
-                  policy: registryEntry?.toolPayloadTransform,
-                  tools: registryEntry?.tools,
+                  policy: toolPayloadTransform,
+                  tools: toolsForTransform,
                   logger: logger as any,
                 },
               );
@@ -1087,9 +1258,20 @@ export function createDurableToolCallStep() {
           }
         : undefined;
 
-      const toolOptions = {
+      let delegationMessages = registryEntry?.runScope?.get(STEP_MODEL_MESSAGES_KEY);
+      if (isAgentTool && !delegationMessages && contextMessageList) {
+        // Cold workers must exclude synthetic context by ID before model conversion drops IDs.
+        const delegationList = createRunMessageList({ mastra });
+        delegationList.add(
+          contextMessageList.get.all.db().filter(message => message.id !== 'om-continuation'),
+          'input',
+        );
+        delegationMessages = delegationList.get.all.aiV5.prompt();
+      }
+
+      const toolOptionsWithoutWriter = {
         toolCallId,
-        messages: [],
+        messages: isAgentTool ? (delegationMessages ?? []) : (contextMessageList?.get.input.aiV5.model() ?? []),
         getMessages: messageList ? () => messageList.get.all.db() : undefined,
         workspace,
         requestContext,
@@ -1113,12 +1295,6 @@ export function createDurableToolCallStep() {
           : {}),
         ...(toolAbortSignal ? { abortSignal: toolAbortSignal } : {}),
         outputWriter,
-        // Raw `Tool` instances resolved from the Mastra registry (the cross-process
-        // fallback path) are not wrapped by CoreToolBuilder, so they only get a
-        // `writer` if we construct it here — mirrors the non-durable tool-call-step.
-        // Registry tools go through CoreToolBuilder, which builds its own ToolStream.
-        writer: new ToolStream({ prefix: 'tool', callId: toolCallId, name: toolName, runId }, outputWriter),
-
         // In-execution suspend callback — allows tools to suspend mid-execution
         suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions) => {
           wasSuspended = true;
@@ -1160,22 +1336,24 @@ export function createDurableToolCallStep() {
                   },
                 },
                 {
-                  policy: registryEntry?.toolPayloadTransform,
-                  tools: registryEntry?.tools,
+                  policy: toolPayloadTransform,
+                  tools: toolsForTransform,
                   logger: logger as any,
                 },
               );
-              await emitChunkEvent(pubsub, runId, approvalChunk);
+              await publishAfterPersist(() => emitChunkEvent(pubsub, runId, approvalChunk));
             }
 
             if (pubsub) {
-              await emitSuspendedEvent(pubsub, runId, {
-                toolCallId,
-                toolName: approvalToolName,
-                args: approvalArgs,
-                type: 'approval',
-                resumeSchema: approvalResumeSchema,
-              });
+              await publishAfterPersist(() =>
+                emitSuspendedEvent(pubsub, runId, {
+                  toolCallId,
+                  toolName: approvalToolName,
+                  args: approvalArgs,
+                  type: 'approval',
+                  resumeSchema: approvalResumeSchema,
+                }),
+              );
             }
 
             // Add approval metadata to message before persisting
@@ -1227,14 +1405,13 @@ export function createDurableToolCallStep() {
                   },
                 },
                 {
-                  policy: registryEntry?.toolPayloadTransform,
-                  tools: registryEntry?.tools,
+                  policy: toolPayloadTransform,
+                  tools: toolsForTransform,
                   logger: logger as any,
                 },
               );
-              await emitChunkEvent(pubsub, runId, suspensionChunk);
-
-              await emitSuspendedEvent(pubsub, runId, suspendedEventData);
+              await publishAfterPersist(() => emitChunkEvent(pubsub, runId, suspensionChunk));
+              await publishAfterPersist(() => emitSuspendedEvent(pubsub, runId, suspendedEventData));
             }
 
             // Add suspension metadata to message before persisting
@@ -1267,6 +1444,15 @@ export function createDurableToolCallStep() {
           }
         },
       };
+      // Raw `Tool` instances resolved from the Mastra registry (the cross-process
+      // fallback path) are not wrapped by CoreToolBuilder, so they only get a
+      // `writer` from here — mirrors the non-durable tool-call-step. Registry tools
+      // go through CoreToolBuilder, which builds its own ToolStream, so this one is
+      // created only if the tool actually reads it.
+      const toolOptions = defineLazyWriter(
+        toolOptionsWithoutWriter,
+        () => new ToolStream({ prefix: 'tool', callId: toolCallId, name: toolName, runId }, outputWriter),
+      );
 
       // Live-attempt barrier only. Durable recovery must use persisted task and
       // transcript state because this Promise does not survive workflow replay.
@@ -1437,7 +1623,7 @@ export function createDurableToolCallStep() {
               // Resolve the mapping tool at completion time: the registry entry
               // may have been rebuilt (or expired) if the task finished after a
               // process restart.
-              const liveEntry = globalRunRegistry.get(runId);
+              const liveEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
               const mappingTool = liveEntry?.tools?.[toolName] ?? tool;
               await applyBackgroundToolResult({
                 params,
@@ -1447,13 +1633,9 @@ export function createDurableToolCallStep() {
                 messageList,
                 approvalGrant: approvalGrant as Record<string, unknown> | undefined,
                 baseProviderMetadata: typedInput.providerMetadata as any,
-                // Transcript payload transforms (L22 parity port). The policy and
-                // tool-level transform are resolved at completion time from the
-                // live registry — NOT captured at dispatch — because the entry may
-                // be rebuilt after a process restart. The run-level policy carries
-                // a closure and cannot be rehydrated across restarts (only
-                // tool-level transforms survive via registry re-resolution) — a
-                // limitation shared with the sync tool-call path.
+                // Resolve the tool-level transform from the live registry at
+                // completion, since the entry may have been rebuilt after dispatch.
+                // Use the same resolved run/agent/Mastra policy as the other chunks.
                 transformForTranscript: async result => {
                   const failed = params.status === 'failed';
                   const transformCarrier = await applyToolPayloadTransformToChunk(
@@ -1468,9 +1650,9 @@ export function createDurableToolCallStep() {
                       metadata: {} as Record<string, any>,
                     },
                     {
-                      policy: liveEntry?.toolPayloadTransform,
+                      policy: toolPayloadTransform,
                       toolTransform: (mappingTool as { transform?: any })?.transform,
-                      tools: liveEntry?.tools,
+                      tools: toolsForTransform,
                       logger: logger as any,
                       transformInput: {
                         providerMetadata: typedInput.providerMetadata as Record<string, unknown> | undefined,
@@ -1507,7 +1689,9 @@ export function createDurableToolCallStep() {
                 logger: logger as any,
                 flush: async () => {
                   if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
-                    await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
+                    await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig, {
+                      beforePersist: assertNotSuperseded,
+                    });
                   }
                 },
               });
@@ -1536,8 +1720,21 @@ export function createDurableToolCallStep() {
             // is persisted. Unlike the regular agent which has a single long-lived
             // messageList, the durable agent's workflow state is serialized before
             // this async callback fires, so we must flush directly.
+            // A superseded execution skips the write. The hook runs outside this
+            // step (the background-task manager calls it), so the error is not
+            // rethrown: that would fail the task instead of stopping the step.
             if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
-              await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
+              try {
+                await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig, {
+                  beforePersist: assertNotSuperseded,
+                });
+              } catch (error) {
+                if (!isExecutionFenceError(error)) throw error;
+                logger?.debug?.('[DurableAgent] Skipped background-task metadata flush: execution superseded', {
+                  runId,
+                  toolCallId: params.toolCallId,
+                });
+              }
             }
           },
 
@@ -1652,7 +1849,7 @@ export function createDurableToolCallStep() {
         // the raw pre-serialization result for the same reason.
         let providerMetadata = typedInput.providerMetadata;
         let modelOutputComputed: boolean | undefined;
-        const mappingTool = globalRunRegistry.get(runId)?.tools?.[toolName] ?? tool;
+        const mappingTool = getRunRegistryEntry(runId, mastra as Mastra | undefined)?.tools?.[toolName] ?? tool;
         const toModelOutput = mappingTool.toModelOutput;
         if (toModelOutput) {
           modelOutputComputed = true;
@@ -1693,9 +1890,9 @@ export function createDurableToolCallStep() {
         // stream. Processors mutate via messageList.updateToolInvocation, but
         // llm-mapping re-derives the transcript from the llm-execution snapshot
         // plus the serialized step outputs, so the processed value must travel
-        // through the returned `result` field. Requires the live in-process
-        // registry (processor states are unserializable) — a cross-process
-        // resume skips, same as the chunk pipeline below.
+        // through the returned `result` field. Requires a live messageList,
+        // so a cross-process resume skips this hook; the chunk pipeline below
+        // still runs with the rebuilt output processors.
         if (!wasSuspended && registryEntry?.outputProcessors?.length && registryEntry.processorStates && messageList) {
           const resultProcessorRunner = new ProcessorRunner({
             inputProcessors: [],
@@ -1805,9 +2002,9 @@ export function createDurableToolCallStep() {
                 payload: { toolCallId, toolName, args, result, providerExecuted },
               },
               {
-                policy: registryEntry?.toolPayloadTransform,
+                policy: toolPayloadTransform,
                 toolTransform: (tool as { transform?: any })?.transform,
-                tools: registryEntry?.tools,
+                tools: toolsForTransform,
                 logger: logger as any,
               },
             );
@@ -1875,9 +2072,9 @@ export function createDurableToolCallStep() {
                 payload: { toolCallId, toolName, args, error: toolError },
               },
               {
-                policy: registryEntry?.toolPayloadTransform,
+                policy: toolPayloadTransform,
                 toolTransform: (tool as { transform?: any })?.transform,
-                tools: registryEntry?.tools,
+                tools: toolsForTransform,
                 logger: logger as any,
               },
             );

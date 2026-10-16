@@ -239,6 +239,19 @@ async function handleModel(req, res) {
   let body = '';
   for await (const data of req) body += data;
   const input = JSON.parse(body);
+  // Thread titles run on the same model in the background; answer them without touching scenario state.
+  if (
+    input.messages?.some(m => typeof m.content === 'string' && m.content.includes('you will generate a short title'))
+  ) {
+    res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+    const common = { id: 'chatcmpl-acp-title', object: 'chat.completion.chunk', created: 0, model: 'acp-test' };
+    res.write(
+      `data: ${JSON.stringify({ ...common, choices: [{ index: 0, delta: { role: 'assistant', content: 'ACP title' }, finish_reason: null }] })}\n\n`,
+    );
+    res.write(`data: ${JSON.stringify({ ...common, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })}\n\n`);
+    res.end('data: [DONE]\n\n');
+    return;
+  }
   calls++;
   modelMessages = input.messages;
   if (scenario === 'concurrent') {

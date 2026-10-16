@@ -135,6 +135,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
               <Input
                 name="name"
                 type="text"
+                autoComplete="name"
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="Your name"
@@ -149,6 +150,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
             <Input
               name="email"
               type="email"
+              autoComplete="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
               placeholder="you@example.com"
@@ -164,6 +166,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
             <Input
               name="password"
               type="password"
+              autoComplete={isSignIn ? 'current-password' : 'new-password'}
               value={password}
               onChange={e => setPassword(e.target.value)}
               placeholder={isSignIn ? 'Enter your password' : 'Create a password'}

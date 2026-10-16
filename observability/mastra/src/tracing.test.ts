@@ -2730,6 +2730,75 @@ describe('Tracing', () => {
       span.end();
     });
 
+    it('should not export reserved Mastra keys, while keeping full detail for user values', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      class FakeSlackAdapter {
+        appToken = 'xapp-FAKE-SLACK-TOKEN';
+        socketForwardingSecret = 'FAKE-FORWARDING-SECRET';
+      }
+      class FakeTelegramAdapter {
+        staticBotToken = '123456789:FAKE-TELEGRAM-TOKEN';
+        chat = { adapters: { slack: new FakeSlackAdapter() } };
+      }
+      class FakeMemory {
+        connectionString = 'postgres://user:FAKE-DB-PASSWORD@db/mastra';
+      }
+      class FakeWorkspace {
+        id = 'ws-1';
+        config = { sandboxApiKey: 'FAKE-SANDBOX-KEY' };
+        serializeForSpan() {
+          return { id: this.id };
+        }
+      }
+      class UserProfile {
+        name = 'Ada';
+        plan = 'pro';
+      }
+
+      const requestContext = new RequestContext();
+      // Shapes core sets on channel, delegated, and agent-controller runs.
+      requestContext.set('__mastra_chat_channel_render', {
+        adapter: new FakeTelegramAdapter(),
+        chatThread: { id: 'thread-1' },
+        platform: 'telegram',
+      });
+      requestContext.set('mastra__inheritedMemory', { agentId: 'sub-agent', memory: new FakeMemory() });
+      requestContext.set('mastra__authToken', 'FAKE-AUTH-TOKEN');
+      requestContext.set('controller', { controllerId: 'ctrl-1', workspace: new FakeWorkspace() });
+      // A user value wrapping a class instance stays fully visible.
+      requestContext.set('user', { id: 'user-123', profile: new UserProfile() });
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {},
+        requestContext,
+      });
+      span.end();
+
+      const exported = testExporter.events.at(-1)!.exportedSpan.requestContext;
+      expect(exported).toEqual({
+        controller: { controllerId: 'ctrl-1', workspace: { id: 'ws-1' } },
+        user: { id: 'user-123', profile: { name: 'Ada', plan: 'pro' } },
+      });
+      const serialized = JSON.stringify(exported);
+      for (const secret of [
+        'FAKE-TELEGRAM-TOKEN',
+        'xapp-FAKE-SLACK-TOKEN',
+        'FAKE-FORWARDING-SECRET',
+        'FAKE-DB-PASSWORD',
+        'FAKE-AUTH-TOKEN',
+        'FAKE-SANDBOX-KEY',
+      ]) {
+        expect(serialized).not.toContain(secret);
+      }
+    });
+
     it('should store requestContext on child spans when passed', () => {
       const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',

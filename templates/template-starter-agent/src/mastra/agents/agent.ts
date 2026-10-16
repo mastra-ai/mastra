@@ -2,11 +2,12 @@ import { pathToFileURL } from 'node:url';
 import { tools } from '@mastra/connect';
 import { Agent } from '@mastra/core/agent';
 import { TaskSignalProvider } from '@mastra/core/signals';
-import { askUserTool, webFetchTool, webSearchTool } from '@mastra/core/tools';
+import { askUserTool, webFetchTool } from '@mastra/core/tools';
 import { LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS, Workspace } from '@mastra/core/workspace';
-import { Memory } from '@mastra/memory';
+import { AUTO_MODEL_BY_PROVIDER, Memory } from '@mastra/memory';
 import { PlatformFilesystem, PlatformSandbox } from '@mastra/platform-workspace';
 import { startScheduleTool, stopScheduleTool } from '../tools/schedule-tools';
+import { webSearchTool } from '../tools/web-search';
 
 const workspacePath = 'workspace';
 
@@ -62,9 +63,28 @@ const localFilesNote = usePlatformFilesystem
   ? ''
   : `\n\nFor local file changes, end with a plain-text URL using ${pathToFileURL(`${workspacePath}/`).href}; avoid Markdown links, localhost, /workspace, relative paths, and static-file servers.`;
 
+/**
+ * The agent's display name in Studio and in its own replies. Mastra platform
+ * sets AGENT_NAME from the name chosen during onboarding; set it yourself
+ * elsewhere. The agent id stays 'agent', so renaming never orphans threads or
+ * channel connections.
+ */
+export const agentName = process.env.AGENT_NAME?.trim() || 'Starter Agent';
+const agentInstructions = process.env.AGENT_INSTRUCTIONS?.trim();
+const agentFocus = agentInstructions
+  ? `\n\n## Your purpose\n\nYour team set you up for the work below. Make it your main focus, and still help with anything else the user asks.\n\n${agentInstructions}`
+  : ' If the user is new or just exploring, help them try what Mastra can do and shape you into a starting point for their own work.';
+const agentModel = process.env.AGENT_MODEL?.trim() || 'mastra/openai/gpt-6-luna';
+const memoryModel = (() => {
+  const route = agentModel.startsWith('mastra/') ? 'mastra/' : '';
+  const provider = agentModel.slice(route.length).split('/', 1)[0] ?? '';
+  const lowCost = AUTO_MODEL_BY_PROVIDER[provider];
+  return lowCost ? `${route}${lowCost}` : agentModel;
+})();
+
 export const agent = new Agent({
   id: 'agent',
-  name: 'Starter Agent',
+  name: agentName,
   description:
     'A general-purpose assistant that can research, manage tasks, work with workspace files, run approved commands, create recurring schedules, and use your connected platform integrations as tools.',
   metadata: {
@@ -74,7 +94,7 @@ export const agent = new Agent({
       'Build a Japanese sakura festival landing page.',
     ],
   },
-  instructions: `You are a friendly starter agent for exploring what Mastra can do. Help the user try useful capabilities, build small projects, answer current questions, and shape this harness into a starting point for future work.
+  instructions: `You are ${agentName}. Your job is to support the user with whatever they need to get done: answer questions, research current information, plan and track work, build things in the workspace, and act through their connected integrations. Be practical, do the work when you can, and keep the user in control of anything that changes their systems.${agentFocus}
 
 ## Integration tools
 
@@ -88,7 +108,7 @@ Tools named \`<integration>_<action>\` (for example \`linear_list_issues\`, \`no
 
 Ask concise questions when something is unclear or a good question could surface a useful insight.${localFilesNote}
 `,
-  model: 'mastra/openai/gpt-6-luna',
+  model: agentModel,
   defaultOptions: {
     maxSteps: 100,
     autoResumeSuspendedTools: true,
@@ -97,7 +117,7 @@ Ask concise questions when something is unclear or a good question could surface
     options: {
       generateTitle: true,
       observationalMemory: {
-        model: 'mastra/openai/gpt-6-luna',
+        model: memoryModel,
       },
     },
   }),

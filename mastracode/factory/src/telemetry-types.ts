@@ -13,7 +13,6 @@ export const FACTORY_WEB_PAGES = [
   'slack_connection',
   'workspace',
   'thread',
-  'supervisor',
   'new_session',
   'new_factory',
 ] as const;

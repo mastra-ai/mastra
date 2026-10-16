@@ -133,7 +133,7 @@ export async function fetchAuthState(baseUrl: string): Promise<FactoryAuthState>
   const data = (await res.json()) as {
     authenticated?: boolean;
     telemetryEnabled?: boolean;
-    user?: { userId?: string; email?: string; name?: string; organizationId?: string } | null;
+    user?: FactoryAuthState['user'] | null;
     provider?: string;
     signUpDisabled?: boolean;
     customDomainUnsupported?: boolean;

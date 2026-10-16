@@ -40,6 +40,7 @@ import type {
   UpdateIntakeIssueInput,
 } from '../../capabilities/intake.js';
 import type {
+  CommitCheck,
   PullRequest,
   PullRequestComment,
   Review,
@@ -52,7 +53,7 @@ import { resolveGithubRules } from './default-rules.js';
 import { attachGithubIssueReconciler } from './issue-reconciler.js';
 import { GithubReconcileWorker } from './reconcile-worker.js';
 import { reconcileInterval, reconciliationEnabled } from './reconciliation-config.js';
-import { buildGithubRoutes } from './routes.js';
+import { buildGithubRoutes, ingestLinkedRepositoryBacklog } from './routes.js';
 import { attachGithubReconciler, attachGithubRules } from './rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
 import {
@@ -63,9 +64,11 @@ import {
 import { settleOrAbort } from './settle-or-abort.js';
 import type { GithubSubscriptionStorage } from './subscriptions.js';
 
-type InputOf<TMethod extends keyof VersionControl> = VersionControl[TMethod] extends (input: infer TInput) => unknown
-  ? TInput
-  : never;
+type InputOf<TMethod extends keyof VersionControl> =
+  NonNullable<VersionControl[TMethod]> extends (input: infer TInput) => unknown ? TInput : never;
+
+const GITHUB_CHECK_TITLE_LIMIT = 255;
+const GITHUB_CHECK_TEXT_LIMIT = 65_535;
 
 /**
  * Normalize a PEM private key supplied via env. Env tooling tends to mangle
@@ -126,6 +129,11 @@ const COLLABORATOR_PERMISSION_CACHE_TTL_MS = 30 * 60_000;
 const COLLABORATOR_PERMISSION_CACHE_MAX_ENTRIES = 1000;
 /** Bound on the shared upstream lookup; callers race their own signal against it. */
 const COLLABORATOR_PERMISSION_LOOKUP_TIMEOUT_MS = 10_000;
+/** Installations whose Octokit (and cached token) is kept; least recently used is evicted. */
+const INSTALLATION_OCTOKIT_CACHE_MAX_ENTRIES = 1000;
+/** Missed-open issue discovery reads at most this many pages per repository per sweep. */
+const OPEN_ISSUE_DISCOVERY_MAX_PAGES = 5;
+const OPEN_ISSUE_DISCOVERY_PAGE_SIZE = 100;
 
 export interface IssueSummary {
   number: number;
@@ -364,6 +372,7 @@ export class GithubIntegration implements FactoryIntegration {
     listRequestedReviewers: input => this.#listRequestedReviewers(input),
     requestReviewers: input => this.#requestReviewers(input),
     removeRequestedReviewers: input => this.#removeReviewers(input),
+    publishCommitCheck: input => this.#publishCommitCheck(input),
   };
   /**
    * The OAuth/install flow round-trips a signed `state` through GitHub, so a
@@ -379,6 +388,7 @@ export class GithubIntegration implements FactoryIntegration {
   readonly #webhookSecret: string | undefined;
   readonly #authorizedBots: readonly string[];
   #storage: IntegrationContext['storage'] | undefined;
+  #ingestFactoryEvent: ReturnType<typeof attachGithubRules>;
   #sourceControlStorage: IntegrationContext['storage']['sourceControl'] | undefined;
   /** `installationId:owner/repo:login` → cached collaborator permission (TTL-bounded). */
   readonly #collaboratorPermissionCache = new Map<
@@ -387,6 +397,12 @@ export class GithubIntegration implements FactoryIntegration {
   >();
   /** Same key → lookup already in flight, so overlapping callers share one request. */
   readonly #collaboratorPermissionInFlight = new Map<string, Promise<GithubRepositoryPermission | undefined>>();
+  /**
+   * One Octokit per installation, so its auth instance keeps the installation
+   * token cached (auth-app refreshes it before expiry) instead of minting a new
+   * token on every call.
+   */
+  readonly #installationOctokits = new Map<number, Octokit>();
 
   constructor(config: GithubIntegrationConfig) {
     this.#rules = resolveGithubRules(config.rules);
@@ -491,7 +507,29 @@ export class GithubIntegration implements FactoryIntegration {
    * token). Used to list repos and to operate on a repo on the user's behalf.
    */
   getInstallationOctokit(installationId: number): Octokit {
-    return new Octokit({ authStrategy: createAppAuth, auth: { ...this.#appAuth(), installationId } });
+    let octokit = this.#installationOctokits.get(installationId);
+    if (octokit) {
+      // Re-insert so Map order tracks recency for LRU eviction.
+      this.#installationOctokits.delete(installationId);
+    } else {
+      const created = new Octokit({ authStrategy: createAppAuth, auth: { ...this.#appAuth(), installationId } });
+      // auth-app keeps serving a cached token GitHub has revoked (it only retries
+      // 401s within 5 s of minting), so drop this client and mint fresh next call.
+      // Not on 403: GitHub also uses it for rate limits.
+      created.hook.error('request', error => {
+        if ('status' in error && error.status === 401 && this.#installationOctokits.get(installationId) === created) {
+          this.#installationOctokits.delete(installationId);
+        }
+        throw error;
+      });
+      octokit = created;
+      if (this.#installationOctokits.size >= INSTALLATION_OCTOKIT_CACHE_MAX_ENTRIES) {
+        const oldest = this.#installationOctokits.keys().next().value;
+        if (oldest !== undefined) this.#installationOctokits.delete(oldest);
+      }
+    }
+    this.#installationOctokits.set(installationId, octokit);
+    return octokit;
   }
 
   /** Octokit authenticated as a user via their OAuth token (the identify step). */
@@ -525,8 +563,11 @@ export class GithubIntegration implements FactoryIntegration {
     }));
   }
 
-  /** List repos accessible to an installation (paginated). */
-  async listInstallationRepos(installationId: number): Promise<RepoSummary[]> {
+  /**
+   * List repos accessible to an installation (paginated). Always reads
+   * GitHub directly, so `fresh` has nothing to bypass here.
+   */
+  async listInstallationRepos(installationId: number, _options?: { fresh?: boolean }): Promise<RepoSummary[]> {
     const octokit = this.getInstallationOctokit(installationId);
     const repos = await octokit.paginate(octokit.apps.listReposAccessibleToInstallation, {
       per_page: 100,
@@ -1074,6 +1115,38 @@ export class GithubIntegration implements FactoryIntegration {
     return parseRequestedReviewers(data);
   }
 
+  /**
+   * Always creates a new check run: GitHub shows the latest run per app and
+   * name on a commit, so a completed run supersedes an earlier in-progress one.
+   */
+  async #publishCommitCheck(input: InputOf<'publishCommitCheck'>): Promise<CommitCheck> {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { status } = input;
+    const { data } = await octokit.checks
+      .create({
+        ...parts,
+        name: input.name,
+        head_sha: input.headSha,
+        ...(status === 'in-progress'
+          ? { status: 'in_progress' as const }
+          : { status: 'completed' as const, conclusion: status, completed_at: new Date().toISOString() }),
+        output: {
+          title: input.title.slice(0, GITHUB_CHECK_TITLE_LIMIT),
+          summary: input.summary.slice(0, GITHUB_CHECK_TEXT_LIMIT),
+          ...(input.details ? { text: input.details.slice(0, GITHUB_CHECK_TEXT_LIMIT) } : {}),
+        },
+      })
+      .catch((error: unknown) => {
+        if ((error as { status?: number } | null)?.status === 403) {
+          throw new Error(
+            'github cannot publish commit checks: the GitHub App lacks the "checks: write" permission; nothing was published.',
+          );
+        }
+        throw error;
+      });
+    return { id: String(data.id), name: data.name, headSha: data.head_sha, status: input.status, url: data.html_url };
+  }
+
   /** Add labels to an issue (deduplicated; no-op on empty/malformed input). */
   async addIssueLabels(
     installationId: number,
@@ -1208,6 +1281,7 @@ export class GithubIntegration implements FactoryIntegration {
   routes(ctx: IntegrationContext): ApiRoute[] {
     this.#storage = ctx.storage;
     const ingestFactoryEvent = attachGithubRules(this, ctx);
+    this.#ingestFactoryEvent = ingestFactoryEvent;
     return buildGithubRoutes({
       github: this,
       auth: ctx.auth,
@@ -1224,6 +1298,14 @@ export class GithubIntegration implements FactoryIntegration {
       sessionRetirement: ctx.sessionRetirement,
       ...(ctx.workItems ? { workItems: ctx.workItems } : {}),
     });
+  }
+
+  /**
+   * Import a newly linked repository's open issues and pull requests onto
+   * the board. No-op until routes are mounted with rules configured.
+   */
+  async ingestLinkedRepositoryBacklog(args: { orgId: string; projectRepositoryId: string }): Promise<void> {
+    await ingestLinkedRepositoryBacklog({ github: this, ...args, ingestFactoryEvent: this.#ingestFactoryEvent });
   }
 
   /**
@@ -1245,7 +1327,12 @@ export class GithubIntegration implements FactoryIntegration {
       ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
       : undefined;
     const issues = issueEnabled
-      ? attachGithubIssueReconciler(this, ctx, input => this.fetchIssueState(input))
+      ? attachGithubIssueReconciler(
+          this,
+          ctx,
+          input => this.fetchIssueState(input),
+          input => this.listOpenIssueStates(input),
+        )
       : undefined;
     if (!reconcile && !issues) return [];
 
@@ -1335,6 +1422,47 @@ export class GithubIntegration implements FactoryIntegration {
     } catch {
       return undefined;
     }
+  }
+
+  /**
+   * Lists a repository's open issues (pull requests excluded) so the issue
+   * sweep can mint cards for issues whose webhook never arrived.
+   */
+  async listOpenIssueStates(input: {
+    installationId: number;
+    repository: string;
+  }): Promise<Array<ReconcileIssueState & { number: number }>> {
+    const parts = splitRepoFullName(input.repository);
+    if (!parts) return [];
+    const octokit = this.getInstallationOctokit(input.installationId);
+    const issues: Array<ReconcileIssueState & { number: number }> = [];
+    for (let page = 1; page <= OPEN_ISSUE_DISCOVERY_MAX_PAGES; page += 1) {
+      const { data } = await octokit.issues.listForRepo({
+        owner: parts.owner,
+        repo: parts.repo,
+        state: 'open',
+        per_page: OPEN_ISSUE_DISCOVERY_PAGE_SIZE,
+        page,
+      });
+      for (const issue of data) {
+        if (issue.pull_request) continue;
+        issues.push({
+          number: issue.number,
+          title: issue.title,
+          url: issue.html_url,
+          state: 'open',
+          assignees: (issue.assignees ?? []).map(user => user.login).filter((login): login is string => Boolean(login)),
+          labels: (issue.labels ?? [])
+            .map(label => (typeof label === 'string' ? label : label.name))
+            .filter((name): name is string => Boolean(name)),
+          ...(issue.user?.login ? { author: issue.user.login } : {}),
+          createdAt: issue.created_at,
+          updatedAt: issue.updated_at,
+        });
+      }
+      if (data.length < OPEN_ISSUE_DISCOVERY_PAGE_SIZE) break;
+    }
+    return issues;
   }
 
   /**

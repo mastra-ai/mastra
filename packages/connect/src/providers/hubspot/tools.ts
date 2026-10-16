@@ -41,6 +41,7 @@ import { listFormsTool } from './tools/list-forms.js';
 import { listMarketingEmailsTool } from './tools/list-marketing-emails.js';
 import { listTicketsTool } from './tools/list-tickets.js';
 import { searchCompaniesTool } from './tools/search-companies.js';
+import { searchContactsTool } from './tools/search-contacts.js';
 import { searchDealsTool } from './tools/search-deals.js';
 import { searchTicketsTool } from './tools/search-tickets.js';
 import { submitFormTool } from './tools/submit-form.js';
@@ -94,6 +95,7 @@ export function createHubspotTools(options?: ProviderToolsOptions) {
     hubspot_list_marketing_emails: listMarketingEmailsTool(platformProxy),
     hubspot_list_tickets: listTicketsTool(platformProxy),
     hubspot_search_companies: searchCompaniesTool(platformProxy),
+    hubspot_search_contacts: searchContactsTool(platformProxy),
     hubspot_search_deals: searchDealsTool(platformProxy),
     hubspot_search_tickets: searchTicketsTool(platformProxy),
     hubspot_submit_form: submitFormTool(platformProxy),

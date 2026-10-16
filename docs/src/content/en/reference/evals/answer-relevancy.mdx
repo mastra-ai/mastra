@@ -21,18 +21,32 @@ The `createAnswerRelevancyScorer()` function accepts a single options object wit
     description: 'Configuration for the model used to evaluate relevancy.',
   },
   {
-    name: 'uncertaintyWeight',
-    type: 'number',
+    name: 'options',
+    type: "Record<'uncertaintyWeight' | 'scale', number>",
     required: false,
-    defaultValue: '0.3',
-    description: "Weight given to 'unsure' verdicts in scoring (0-1).",
-  },
-  {
-    name: 'scale',
-    type: 'number',
-    required: false,
-    defaultValue: '1',
-    description: 'Maximum score value.',
+    defaultValue: '{ uncertaintyWeight: 0.3, scale: 1 }',
+    description: 'Configuration options for the scorer.',
+    properties: [
+      {
+        type: "Record<'uncertaintyWeight' | 'scale', number>",
+        parameters: [
+          {
+            name: 'uncertaintyWeight',
+            type: 'number',
+            required: false,
+            defaultValue: '0.3',
+            description: "Weight given to 'unsure' verdicts in scoring (0-1).",
+          },
+          {
+            name: 'scale',
+            type: 'number',
+            required: false,
+            defaultValue: '1',
+            description: 'Maximum score value.',
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
