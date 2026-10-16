@@ -757,6 +757,17 @@ export class MastraFactory {
       sandboxConfig && storage.isDomainReady('source-control')
         ? new SessionRetirementCoordinator({
             invalidateSession: sessionId => workspaceRegistry.invalidateSession(sessionId),
+            // Never started: recreate destroys it through the provider directly,
+            // so it carries only the identity and the persisted physical id.
+            constructDetachedSandbox: session =>
+              sandboxConfig.create(
+                {
+                  sessionId: session.id,
+                  ...(session.sandboxId ? { sandboxId: session.sandboxId } : {}),
+                  getRepositoryAccess: undefined,
+                },
+                {},
+              ),
           })
         : undefined;
     const retireTerminalSessions =
