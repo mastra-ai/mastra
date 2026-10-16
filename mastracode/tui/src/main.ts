@@ -7,6 +7,8 @@ import fs from 'node:fs';
 import { createMastraCode } from '@mastra/code-sdk';
 import { createMastraCodeAnalytics } from '@mastra/code-sdk/analytics';
 import { isStreamDestroyedError } from '@mastra/code-sdk/error-classification';
+import { RemoteController } from '@mastra/code-sdk/factory/remote-controller';
+import { RemoteSession } from '@mastra/code-sdk/factory/remote-session';
 import { hasHeadlessFlag, runMCCli } from '@mastra/code-sdk/headless/index';
 import { resolveModePackArg } from '@mastra/code-sdk/onboarding/pack-activation';
 import {
@@ -15,6 +17,8 @@ import {
   resolveStagehandModel,
   toActiveBrowserSettings,
 } from '@mastra/code-sdk/onboarding/settings';
+import type { FactoryConnectionSettings } from '@mastra/code-sdk/onboarding/settings';
+import { getPlatformSession } from '@mastra/code-sdk/platform/index';
 import { formatScaffoldSuccess, scaffoldPlugin } from '@mastra/code-sdk/plugins/scaffold';
 import {
   stopProcessMemoryDiagnosticsWithTimeout,
@@ -85,15 +89,81 @@ process.on('unhandledRejection', reason => {
   handleFatalError(reason instanceof Error ? reason : new Error(String(reason)));
 });
 
-async function tuiMain(
-  startupMessage: ReturnType<typeof initialMessageOptions> = {},
-  resumeThreadId?: string,
-  startupPackId?: string,
-) {
+type StartupMessage = ReturnType<typeof initialMessageOptions>;
+
+async function tuiMain(startupMessage: StartupMessage = {}, resumeThreadId?: string, startupPackId?: string) {
   const settings = loadSettings();
   processMemoryDiagnostics = await startTuiProcessMemoryDiagnostics(process.env, warning => {
     console.info(`⚠ ${warning}`);
   });
+
+  setupDebugLogging();
+
+  // Detect and apply terminal theme
+  // MASTRA_THEME env var is the highest-priority override (mode name or custom theme name)
+  const envTheme = normalizeThemePreference(process.env.MASTRA_THEME ?? '');
+  const themeMode = envTheme || settings.preferences.theme || 'auto';
+  await applyThemePreference(themeMode);
+
+  analytics = createMastraCodeAnalytics({ version: getCurrentVersion() });
+  if (settings.factory) return bootFactory(settings.factory, themeMode, startupMessage);
+  return bootLocal(settings, themeMode, startupMessage, resumeThreadId, startupPackId);
+}
+
+/**
+ * Factory client: the agent, tools, storage, and model auth live in the Factory.
+ * Nothing local is constructed; the TUI only renders and forwards input.
+ */
+async function bootFactory(factory: FactoryConnectionSettings, themeMode: string, startupMessage: StartupMessage) {
+  const platform = await getPlatformSession();
+  if (!platform) {
+    throw new Error(
+      'Mastra Platform login expired. Run `/factory connect` again, or `/factory disconnect` to work locally.',
+    );
+  }
+  const address = { url: factory.url, session: { token: platform.token, orgId: factory.orgId } };
+  const session = new RemoteSession(address, factory.sessionId);
+  const remoteController = new RemoteController(address);
+  await Promise.all([session.connect(), remoteController.connect()]);
+  getResumeThreadId = () => (tui ? tui.getResumeThreadId() : session.thread.getId());
+
+  analytics?.capture('mastracode_session_started', {
+    mode: session.mode.get(),
+    resourceId: session.identity.getResourceId(),
+    runtime: 'factory',
+    theme: themeMode,
+  });
+
+  tui = new MastraTUI({
+    runtime: 'factory',
+    controller: remoteController,
+    session,
+    factory: {
+      projectName: factory.factoryProjectName,
+      repositorySlug: factory.repositorySlug,
+      branch: factory.branch,
+      url: factory.url,
+    },
+    analytics,
+    processMemoryDiagnostics,
+    appName: 'Mastra Code',
+    version: getCurrentVersion(),
+    inlineQuestions: true,
+    exit: exitCode => void shutdownAndExit(exitCode),
+    ...startupMessage,
+  });
+  tui.run().catch(error => {
+    handleFatalError(error);
+  });
+}
+
+async function bootLocal(
+  settings: ReturnType<typeof loadSettings>,
+  themeMode: string,
+  startupMessage: StartupMessage,
+  resumeThreadId?: string,
+  startupPackId?: string,
+) {
   let browserPromise: ReturnType<typeof createBrowserFromSettings> | undefined;
   const loadBrowser = (chatModelId: string | undefined) => {
     browserPromise ??= createBrowserFromSettings(settings.browser, { chatModelId });
@@ -133,30 +203,22 @@ async function tuiMain(
   // status messages use showInfo() instead of console.info(), which would
   // corrupt the terminal.  Headless mode still inits from headless/cli.ts.
 
-  setupDebugLogging();
-
-  // Detect and apply terminal theme
-  // MASTRA_THEME env var is the highest-priority override (mode name or custom theme name)
-  const envTheme = normalizeThemePreference(process.env.MASTRA_THEME ?? '');
-  const themePref = envTheme || loadSettings().preferences.theme || 'auto';
-  await applyThemePreference(themePref);
-
   // createMastraCode() brought up shared resources and minted the single
   // session that all work runs through. The AgentController owns no session of its own.
   const session = result.session;
   getResumeThreadId = () => (tui ? tui.getResumeThreadId() : session.thread.getId());
 
-  analytics = createMastraCodeAnalytics({ version: getCurrentVersion() });
-  analytics.capture('mastracode_session_started', {
+  analytics?.capture('mastracode_session_started', {
     mode: session.mode.get(),
     resourceId: session.identity.getResourceId(),
     hasAuthStorage: Boolean(authStorage),
     hasMcp: Boolean(mcpManager),
-    theme: themePref,
+    theme: themeMode,
+    runtime: 'local',
   });
 
   tui = new MastraTUI({
-    controller: controller,
+    controller,
     session,
     hookManager,
     analytics,

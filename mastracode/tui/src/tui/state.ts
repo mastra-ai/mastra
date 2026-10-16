@@ -51,6 +51,7 @@ import type { OnboardingInlineComponent } from './onboarding-inline.js';
 import { pruneChatContainer } from './prune-chat.js';
 import { installRenderScheduler } from './render-scheduler.js';
 import type { RenderScheduler } from './render-scheduler.js';
+import type { FactoryRuntimeInfo, LocalRuntime, TuiController, TuiSession } from './runtime.js';
 import { getEditorTheme, getTermWidth, mastra } from './theme.js';
 import { VoiceController } from './voice/voice-controller.js';
 
@@ -104,13 +105,26 @@ export function getGithubPrSubscriptionsFromMetadata(
 // MastraTUIOptions
 // =============================================================================
 
-export interface MastraTUIOptions {
+/** In-process Mastra Code: agent, tools, and storage run in this process. */
+export interface LocalRuntimeOptions {
+  runtime?: 'local';
   /** The controller instance */
   controller: AgentController<any>;
-
   /** The session created from the controller that all work runs through */
   session: Session<any>;
+}
 
+/** Factory client: the agent runs in a Factory; the TUI only renders and forwards input. */
+export interface FactoryRuntimeOptions {
+  runtime: 'factory';
+  controller: TuiController;
+  session: TuiSession;
+  factory: FactoryRuntimeInfo;
+}
+
+export type MastraTUIOptions = MastraTUIBaseOptions & (LocalRuntimeOptions | FactoryRuntimeOptions);
+
+export interface MastraTUIBaseOptions {
   /** Hook manager for session lifecycle hooks */
   hookManager?: HookManager;
 
@@ -203,8 +217,12 @@ export interface MastraTUIOptions {
 
 export interface TUIState {
   // ── Core dependencies (set once) ──────────────────────────────────────
-  controller: AgentController<any>;
-  session: Session<any>;
+  controller: TuiController;
+  session: TuiSession;
+  /** The in-process runtime; undefined when connected to a Factory. */
+  local?: LocalRuntime;
+  /** Factory connection; set only when connected to a Factory. */
+  factory?: FactoryRuntimeInfo;
   options: MastraTUIOptions;
   hookManager?: HookManager;
   analytics?: MastraCodeAnalytics;
@@ -426,6 +444,8 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // Core dependencies
     controller: options.controller,
     session: options.session,
+    local: options.runtime === 'factory' ? undefined : { controller: options.controller, session: options.session },
+    factory: options.runtime === 'factory' ? options.factory : undefined,
     options,
     hookManager: options.hookManager,
     analytics: options.analytics,

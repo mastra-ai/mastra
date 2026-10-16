@@ -60,6 +60,7 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/mcp', description: 'Show/reload MCP connections' },
     { key: '/connect', description: 'Connect a provider account or API key' },
     { key: '/login', description: 'Sign in with a provider account' },
+    { key: '/factory', description: 'Connect to a Factory on Mastra Platform' },
     { key: '/logout', description: 'Logout from OAuth provider' },
     { key: '/setup', description: 'Run the setup wizard' },
     { key: '/browser', description: 'Configure browser automation' },
