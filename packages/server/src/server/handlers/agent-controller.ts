@@ -956,7 +956,7 @@ export const TRANSFER_AGENT_CONTROLLER_THREAD_OWNERSHIP_ROUTE = createRoute({
   responseSchema: transferOwnershipResponseSchema,
   summary: 'Take ownership of a thread',
   description:
-    'Transfers ownership of the specified thread to the authenticated user from the request context. The session switches to the thread if it is not already active.',
+    "Transfers ownership of the specified thread to the authenticated user from the request context. The session's active thread does not change.",
   tags: ['AgentController', 'Threads'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
@@ -968,10 +968,7 @@ export const TRANSFER_AGENT_CONTROLLER_THREAD_OWNERSHIP_ROUTE = createRoute({
       }
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      if (session.thread.getId() !== threadId) {
-        await session.thread.switch({ threadId, requestContext });
-      }
-      await session.thread.transferOwnership({ toOwnerId: ownerId });
+      await session.thread.transferOwnership({ toOwnerId: ownerId, threadId });
       return { ok: true, ownerId };
     } catch (error) {
       return handleError(error, 'error transferring controller thread ownership');

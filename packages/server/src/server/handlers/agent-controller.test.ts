@@ -467,23 +467,27 @@ describe('agent-controller routes', () => {
       await expect(session.thread.getOwner()).resolves.toBe('user-123');
     });
 
-    it('switches to a non-active thread before transferring its ownership', async () => {
-      const session = await getRouteSession('user-transfer-switch');
-      const switchSpy = vi.spyOn(session.thread, 'switch').mockResolvedValue(undefined);
-      const transferSpy = vi.spyOn(session.thread, 'transferOwnership').mockResolvedValue(undefined);
-      const requestContext = makeRequestContext();
+    it('transfers a non-active thread without changing the active thread', async () => {
+      const session = await getRouteSession('user-transfer-other');
+      const targetThreadId = session.thread.getId()!;
+      await session.thread.create({ title: 'Active' });
+      const activeThreadId = session.thread.getId()!;
+      const activeOwnerBefore = await session.thread.getOwner({ threadId: activeThreadId });
+      expect(activeThreadId).not.toBe(targetThreadId);
 
-      await TRANSFER_AGENT_CONTROLLER_THREAD_OWNERSHIP_ROUTE.handler({
+      const res = await TRANSFER_AGENT_CONTROLLER_THREAD_OWNERSHIP_ROUTE.handler({
         mastra,
         controllerId: 'code',
-        resourceId: 'user-transfer-switch',
-        threadId: 'another-thread',
-        requestContext,
+        resourceId: 'user-transfer-other',
+        threadId: targetThreadId,
+        requestContext: makeRequestContext(),
       } as any);
 
-      expect(switchSpy).toHaveBeenCalledWith({ threadId: 'another-thread', requestContext });
-      expect(transferSpy).toHaveBeenCalledWith({ toOwnerId: 'user-123' });
-      expect(switchSpy.mock.invocationCallOrder[0]).toBeLessThan(transferSpy.mock.invocationCallOrder[0]!);
+      expect(res).toEqual({ ok: true, ownerId: 'user-123' });
+      expect(session.thread.getId()).toBe(activeThreadId);
+      await expect(session.thread.getOwner({ threadId: targetThreadId })).resolves.toBe('user-123');
+      await expect(session.thread.getOwner({ threadId: activeThreadId })).resolves.toBe(activeOwnerBefore);
+      expect(activeOwnerBefore).not.toBe('user-123');
     });
 
     it('rejects ownership transfer without an authenticated user id', async () => {
