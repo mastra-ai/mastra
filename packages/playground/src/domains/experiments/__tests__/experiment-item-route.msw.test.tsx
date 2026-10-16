@@ -98,7 +98,7 @@ const renderExperimentRoute = (initialPath = `/experiments/${EXPERIMENT_ID}`) =>
  */
 const findResultPanel = async (resultId: string) => {
   const panel = await screen.findByRole('region', { name: `Experiment item ${resultId.replace('res-', 'item-')}` });
-  await within(panel).findByRole('heading', { name: 'Experiment result' });
+  await within(panel).findByText('Item Id');
   return panel;
 };
 

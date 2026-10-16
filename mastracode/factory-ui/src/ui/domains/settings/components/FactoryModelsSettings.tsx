@@ -6,14 +6,14 @@ import { CustomProvidersSection } from './CustomProvidersSection';
 import { FactoryDefaultModelSection } from './FactoryDefaultModelSection';
 import { FactoryModelScopeSection } from './FactoryModelScopeSection';
 import { SettingsSubsection } from './SettingsSubsection';
-import { BaseThinkingSection } from './ThinkingDefaultsSection';
 import { ProviderAccessSection } from './ProviderAccessSection';
 
 interface FactoryModelsSettingsProps {
   models: AvailableModelOption[];
+  modelsLoaded: boolean;
 }
 
-export function FactoryModelsSettings({ models }: FactoryModelsSettingsProps) {
+export function FactoryModelsSettings({ models, modelsLoaded }: FactoryModelsSettingsProps) {
   const { anyConnected, providersKnown } = useProviderConnectionState();
 
   const providerSubsections = (
@@ -40,10 +40,7 @@ export function FactoryModelsSettings({ models }: FactoryModelsSettingsProps) {
       <SettingsContainer>
         <FactoryModelScopeSection />
         {(!providersKnown || anyConnected) && (
-          <>
-            <FactoryDefaultModelSection models={models} />
-            <BaseThinkingSection />
-          </>
+          <FactoryDefaultModelSection models={models} modelsLoaded={modelsLoaded} />
         )}
       </SettingsContainer>
     </SettingsSubsection>

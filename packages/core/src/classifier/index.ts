@@ -293,6 +293,7 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
       name: `classifier evaluate: '${this.id}'`,
       tracingContext: { currentSpan: resolveCurrentSpan() },
       mastra: this.#mastra,
+      input: { state: options.state, questions },
       attributes: {
         classifierId: this.id,
         modelId: this.model.modelId,
@@ -381,7 +382,7 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
           },
         },
       });
-      span?.end();
+      span?.end({ output: { answers: result.answers } });
       return result;
     } catch (error) {
       span?.update({
