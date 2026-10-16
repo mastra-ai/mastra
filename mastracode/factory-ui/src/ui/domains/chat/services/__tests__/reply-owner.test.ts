@@ -16,7 +16,7 @@ describe('replyOwner', () => {
     expected: ReplyOwner | undefined;
   }> = [
     {
-      name: 'nothing before the catalog has settled who pays',
+      name: 'nothing before the catalog has resolved the thread owner',
       catalog: undefined,
       sessionOwner: ward,
       expected: undefined,
@@ -28,19 +28,19 @@ describe('replyOwner', () => {
       expected: undefined,
     },
     {
-      name: 'the organization when the factory pays, whoever owns the session',
+      name: 'the organization when it owns the credentials, whoever owns the session',
       catalog: { models: [], modelScope: 'factory', owner: { credentials } },
       sessionOwner: ward,
       expected: { credentials },
     },
     {
-      name: 'the session owner when they pay',
+      name: 'the session owner when the credentials are theirs',
       catalog: { models: [], modelScope: 'user', owner: { credentials } },
       sessionOwner: ward,
       expected: { ...ward, credentials },
     },
     {
-      name: 'nothing while the paying session owner is still unknown',
+      name: 'nothing while the session owner is still unknown',
       catalog: { models: [], modelScope: 'user', owner: { credentials } },
       sessionOwner: undefined,
       expected: undefined,
