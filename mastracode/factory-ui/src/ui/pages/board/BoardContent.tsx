@@ -12,6 +12,7 @@ import type { BoardKind } from '../../domains/factory/boardStages';
 import { BoardAutomationSettings } from '../../domains/factory/components/BoardAutomationSettings';
 import { RepositoryPickerDialog } from '../../domains/factory/components/RepositoryPickerDialog';
 import { BoardStageCards } from '../../domains/factory/components/BoardStageCards';
+import { BoardEmptyStateActions } from '../../domains/factory/components/BoardEmptyStateActions';
 import { BoardStageCreateButton } from '../../domains/factory/components/BoardStageCreateButton';
 import { BoardViewControls } from '../../domains/factory/components/BoardViewControls';
 import { useBoardComposer } from '../../domains/factory/hooks/useBoardComposer';
@@ -239,6 +240,9 @@ export function BoardContent({
     const feedFailed = Boolean(columnFeed?.error);
     const canCreate =
       !review && !loading && stage.kind !== 'terminal' && (composer.stage === undefined || composerOpen);
+    const canConnectSource = stage.id === 'intake' && intake.active === undefined;
+    const showEmptyStateActions =
+      stage.id === definition.initialPhase && (filtersExcludeAll || canCreate || canConnectSource);
     const collapsed =
       builtin &&
       stage.id !== definition.initialPhase &&
@@ -277,6 +281,17 @@ export function BoardContent({
           intakeSource={intake.active}
           filtersExcludeAll={filtersExcludeAll}
           alreadyMaterialized={stage.id === definition.initialPhase ? intake.alreadyMaterialized : 0}
+          emptyStateActions={
+            showEmptyStateActions && (
+              <BoardEmptyStateActions
+                factoryId={factoryProjectId}
+                kind={kind}
+                connectSource={canConnectSource}
+                onCreate={canCreate ? () => composer.open(stage.id) : undefined}
+                onClearFilters={filtersExcludeAll ? view.clearFilters : undefined}
+              />
+            )
+          }
           composer={
             composerOpen && (
               <InlineWorkItemComposer

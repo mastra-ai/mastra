@@ -1,4 +1,5 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import type { ReactNode } from 'react';
 
 import type { BoardLayout } from '../boardLayout';
 import type { BoardKind } from '../boardStages';
@@ -16,7 +17,10 @@ function boardColumnEmptyCopy(stage: BoardStageId, kind: BoardKind, hasIntakeSou
       if (!hasIntakeSource) {
         return {
           title: 'No intake sources',
-          description: 'Choose GitHub, GitLab, Linear, or Jira in Settings to feed this column.',
+          description:
+            kind === 'review'
+              ? 'Connect a repository to see its change requests here.'
+              : 'Create a card or connect an issue source in Work Intake settings.',
         };
       }
       if (kind === 'review')
@@ -106,6 +110,7 @@ export function BoardColumnEmptyState({
   filtersExcludeAll = false,
   alreadyMaterialized = 0,
   layout,
+  actionSlot,
 }: {
   stage: BoardStageId;
   kind: BoardKind;
@@ -114,14 +119,18 @@ export function BoardColumnEmptyState({
   /** Feed items withheld because their card sits on another board in this Factory. */
   alreadyMaterialized?: number;
   layout: BoardLayout;
+  actionSlot?: ReactNode;
 }) {
   const copy = boardEmptyCopy(stage, kind, hasIntakeSource, filtersExcludeAll, alreadyMaterialized);
   if (layout === 'list') {
     return (
-      <Txt as="p" variant="meta" tone="muted" className="m-0 truncate px-3 py-2 max-sm:whitespace-normal">
-        {copy.title}
-        <Txt as="span" variant="meta" tone="faint">{` · ${copy.description}`}</Txt>
-      </Txt>
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+        <Txt as="p" variant="meta" tone="muted" className="m-0">
+          {copy.title}
+          <Txt as="span" variant="meta" tone="faint">{` · ${copy.description}`}</Txt>
+        </Txt>
+        {actionSlot && <div className="flex flex-wrap gap-2">{actionSlot}</div>}
+      </div>
     );
   }
   return (
@@ -132,6 +141,7 @@ export function BoardColumnEmptyState({
       <Txt tone="muted" as="p" variant="meta" className="mt-1 mb-0 max-w-60">
         {copy.description}
       </Txt>
+      {actionSlot && <div className="mt-3 flex flex-wrap gap-2">{actionSlot}</div>}
     </div>
   );
 }

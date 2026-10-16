@@ -21,6 +21,7 @@ export function BoardStageCards({
   filtersExcludeAll,
   alreadyMaterialized,
   composer,
+  emptyStateActions,
   children,
 }: {
   stage: { id: BoardStageId; label: string };
@@ -33,6 +34,7 @@ export function BoardStageCards({
   filtersExcludeAll: boolean;
   alreadyMaterialized: number;
   composer?: ReactNode;
+  emptyStateActions?: ReactNode;
   children: ReactNode;
 }) {
   const showEmptyState = !loading && !composer && taskCount === 0 && !feed?.error;
@@ -51,6 +53,7 @@ export function BoardStageCards({
           filtersExcludeAll={filtersExcludeAll}
           alreadyMaterialized={alreadyMaterialized}
           layout={layout}
+          actionSlot={emptyStateActions}
         />
       )}
       {feed && <IntakeFeedNotice source={intakeSource} feed={feed} />}
