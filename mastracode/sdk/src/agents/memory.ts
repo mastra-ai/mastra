@@ -12,7 +12,7 @@ import { loadSettings } from '../onboarding/settings.js';
 import { ANTHROPIC_PROMPT_CACHE_TTL } from '../providers/anthropic-prompt-cache.js';
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
-import { getActiveMemoryRoute, resolveModel } from './model.js';
+import { canUseProvider, getActiveMemoryRoute, resolveModel } from './model.js';
 
 /** Route-backed OM fallback entry. */
 type MemoryModelRouteEntry = { id: string; model: ReturnType<typeof resolveModel> };
@@ -114,7 +114,12 @@ function resolveOmRoleModelForRequest(
     // These two keys are declared in the span-context allowlist
     // (`mastracode/sdk/src/index.ts`), so traces can report intent separately from
     // the effective concrete model without either being mistaken for a model ID.
-    requestContext.set(`om.${role}.effectiveModelId`, resolveAutoOMModelId(getMainModelId(requestContext)));
+    requestContext.set(
+      `om.${role}.effectiveModelId`,
+      resolveAutoOMModelId(getMainModelId(requestContext), providerId =>
+        canUseProvider(providerId, { requestContext }),
+      ),
+    );
     return 'auto' as const;
   };
 
@@ -369,7 +374,12 @@ export function getDynamicMemory(
                 model: ({ requestContext }) => {
                   const resolved = getObserverModel({ requestContext });
                   if (resolved === 'auto') {
-                    return resolveMemoryModel(resolveAutoOMModelId(getMainModelId(requestContext)), { requestContext });
+                    return resolveMemoryModel(
+                      resolveAutoOMModelId(getMainModelId(requestContext), providerId =>
+                        canUseProvider(providerId, { requestContext }),
+                      ),
+                      { requestContext },
+                    );
                   }
                   return Array.isArray(resolved) ? resolved[0]!.model : resolved;
                 },
@@ -380,6 +390,7 @@ export function getDynamicMemory(
             : {
                 enabled: true,
                 autoModels: MASTRACODE_AUTO_OM_MODELS,
+                canUseProvider,
                 resolveModel: resolveMemoryModel,
                 temporalMarkers: true,
                 retrieval: vector ? { vector: true } : true,

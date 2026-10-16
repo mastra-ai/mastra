@@ -1,6 +1,6 @@
 {
   "name": "@internal/core",
-  "version": "0.1.2",
+  "version": "0.1.3-alpha.0",
   "license": "Apache-2.0",
   "private": true,
   "type": "module",
@@ -108,6 +108,16 @@
         "default": "./dist/memory/index.cjs"
       }
     },
+    "./frontmatter": {
+      "import": {
+        "types": "./dist/frontmatter/index.d.ts",
+        "default": "./dist/frontmatter/index.js"
+      },
+      "require": {
+        "types": "./dist/frontmatter/index.d.cts",
+        "default": "./dist/frontmatter/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "sideEffects": false,
@@ -116,6 +126,9 @@
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix .",
     "build:lib": "tsdown --config tsdown.config.ts"
+  },
+  "dependencies": {
+    "yaml": "^2.9.0"
   },
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0"

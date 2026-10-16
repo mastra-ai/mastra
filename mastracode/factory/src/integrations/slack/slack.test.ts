@@ -11,9 +11,13 @@ const prime = vi.fn(async (context: RequestContext) => {
   primedUsers.push(context.get('user'));
 });
 const primeTenant = vi.fn(async (_tenant: unknown) => undefined);
+const providerDefault = vi.fn(async (_tenant: unknown, _current: string | undefined): Promise<string | undefined> =>
+  undefined,
+);
 vi.mock('../../routes/tenant-credentials.js', () => ({
   primeTenantCredentialsForRequestContext: (context: RequestContext) => prime(context),
   primeTenantCredentialsForTenant: (tenant: unknown) => primeTenant(tenant),
+  resolveTenantProviderDefaultModel: (tenant: unknown, current: string | undefined) => providerDefault(tenant, current),
 }));
 
 import {
@@ -438,6 +442,43 @@ describe('handler dispatch gating', () => {
       'This thread belongs to a Factory session in another organization.',
     );
     expect(output).not.toHaveBeenCalled();
+    expect(defaultHandler).not.toHaveBeenCalled();
+    expect(prime).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      name: 'no source-control session row resolves',
+      session: null,
+      reason: 'no source-control session row exists for it, or its project repository row is missing',
+    },
+    {
+      name: 'the source-control session row has no organization',
+      session: { orgId: ' ', userId: 'owner-1' },
+      reason: 'its source-control session row has no organization',
+    },
+  ])('logs why the existing Factory session owner could not be authorized when $name', async ({ session, reason }) => {
+    const thread = makeSubscribedThread();
+    const accountLinks = fullStore({ orgId: 'org-1', userId: 'responder-1', defaultFactoryProjectId: 'fp-1' });
+    const projects = makeProjects([{ id: 'fp-1' }]);
+    const sourceControl = { sessions: { getBySessionId: vi.fn().mockResolvedValue(session) } } as any;
+    const output = vi.fn();
+    const mastra = {
+      getLogger: () => ({ error: output }),
+      getStorage: () => ({
+        getStore: vi.fn().mockResolvedValue({
+          listThreads: vi.fn().mockResolvedValue({ threads: [{ id: 'thread-1', resourceId: 'session-1' }] }),
+        }),
+      }),
+    };
+    const defaultHandler = vi.fn();
+    const handlers = createHandlers({ accountLinks, projects, sourceControl });
+
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(mastra));
+
+    expect(output).toHaveBeenCalledExactlyOnceWith(
+      expect.stringContaining(`Could not authorize the owner of Slack Factory session session-1: ${reason}.`),
+    );
     expect(defaultHandler).not.toHaveBeenCalled();
     expect(prime).not.toHaveBeenCalled();
   });
@@ -1097,14 +1138,12 @@ describe('channel session creation context (resolveSession)', () => {
   it('seeds Factory ownership before the controller session is created', async () => {
     const sourceControl = {
       sessions: {
-        getBySessionId: vi
-          .fn()
-          .mockResolvedValue({
-            orgId: 'org-1',
-            userId: 'user-1',
-            projectRepositoryId: 'pr-1',
-            factoryProjectId: 'fp-1',
-          }),
+        getBySessionId: vi.fn().mockResolvedValue({
+          orgId: 'org-1',
+          userId: 'user-1',
+          projectRepositoryId: 'pr-1',
+          factoryProjectId: 'fp-1',
+        }),
       },
     };
     const controller = { id: 'code', createSession: vi.fn().mockResolvedValue({ identity: 'session' }) };
@@ -1123,6 +1162,9 @@ describe('channel session creation context (resolveSession)', () => {
       resourceId: 'session-1',
       requestContext,
       tags: { factoryProjectId: 'fp-1' },
+      // Binds the Slack-created thread itself: a scoped session would otherwise
+      // auto-select (or create) a different thread and switch onto this one later.
+      threadId: 'session-1',
     });
   });
 
@@ -1161,6 +1203,7 @@ describe('channel session creation context (resolveSession)', () => {
       id: 'channel:slack:C-1:1700.42',
       ownerId: 'code',
       resourceId: 'channel:slack:C-1:1700.42',
+      threadId: 'thread-1',
       requestContext: undefined,
     });
   });
@@ -1843,6 +1886,43 @@ describe('session start (onSessionStart)', () => {
 
     expect(session.model.switch).toHaveBeenCalledExactlyOnceWith('openai/gpt-5.5');
     expect(session.restoredModel()).toBe('openai/gpt-5.5');
+  });
+
+  it("records a connected provider's default model, for the main model and every subagent, when the mode default has no credential", async () => {
+    providerDefault.mockResolvedValueOnce('anthropic/claude-fable-5');
+    const deps = makeStartDeps({ defaultModelId: null });
+    const session = makeSession({ currentModel: 'openai/gpt-5.5' });
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    expect(providerDefault).toHaveBeenCalledWith(expect.objectContaining({ orgId: 'org-1' }), 'openai/gpt-5.5');
+    expect(session.model.switch).toHaveBeenCalledExactlyOnceWith('anthropic/claude-fable-5');
+    expect(session.restoredModel()).toBe('anthropic/claude-fable-5');
+    for (const agentType of ['explore', 'plan', 'execute']) {
+      await expect(session.thread.getSetting({ key: `slackSubagentModelId_${agentType}` })).resolves.toBe(
+        'anthropic/claude-fable-5',
+      );
+    }
+  });
+
+  it('pins subagents to the running model when the selected model is rejected', async () => {
+    providerDefault.mockResolvedValueOnce('anthropic/claude-fable-5');
+    const deps = makeStartDeps({ defaultModelId: null });
+    const session = makeSession({ currentModel: 'openai/gpt-5.5' });
+    session.model.switch.mockRejectedValueOnce(new Error('unknown model'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+    } finally {
+      warn.mockRestore();
+    }
+
+    for (const agentType of ['explore', 'plan', 'execute']) {
+      await expect(session.thread.getSetting({ key: `slackSubagentModelId_${agentType}` })).resolves.toBe(
+        'openai/gpt-5.5',
+      );
+    }
   });
 
   it('records nothing when the session has no model to record', async () => {

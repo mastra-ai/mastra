@@ -25,6 +25,7 @@ import {
   approveToolCallBodySchema,
   declineToolCallBodySchema,
   queueAgentMessageBodySchema,
+  queueAgentSignalBodySchema,
   sendAgentMessageBodySchema,
   sendAgentSignalBodySchema,
   subscribeAgentThreadBodySchema,
@@ -47,6 +48,7 @@ import {
   SEND_TOOL_APPROVAL_ROUTE,
   LIST_SUSPENDED_RUNS_ROUTE,
   QUEUE_AGENT_MESSAGE_ROUTE,
+  QUEUE_AGENT_SIGNAL_ROUTE,
   SEND_AGENT_MESSAGE_ROUTE,
   SEND_AGENT_SIGNAL_ROUTE,
   ABORT_AGENT_THREAD_ROUTE,
@@ -1992,6 +1994,43 @@ describe('Agent Routes Authorization', () => {
       expect(execution).not.toHaveBeenCalled();
     });
 
+    function withMapper(fga = false) {
+      vi.spyOn(mastra, 'getServer').mockReturnValue({
+        auth: { mapUserToResourceId: (user: { id: string }) => user.id },
+        ...(fga ? { fga: {} } : {}),
+      } as any);
+    }
+
+    it.each(resumeRoutes)('$name denies a mapped caller a durable run with no owner', async ({ route, method }) => {
+      withMapper();
+      await persistSuspendedDurableRun({ resourceId: '' });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+      await expect(callResume(route, { resourceId: 'user-a' })).rejects.toMatchObject({ status: 403 });
+      expect(execution).not.toHaveBeenCalled();
+    });
+
+    it.each(resumeRoutes)(
+      '$name denies an unscoped caller without FGA when a mapper is configured',
+      async ({ route, method }) => {
+        withMapper();
+        await persistSuspendedDurableRun({ resourceId: 'user-b' });
+        const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+        await expect(callResume(route, {})).rejects.toMatchObject({ status: 403 });
+        expect(execution).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(resumeRoutes)('$name lets an unscoped caller resume when FGA is configured', async ({ route, method }) => {
+      withMapper(true);
+      await persistSuspendedDurableRun({ resourceId: 'user-b' });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+      await callResume(route, {});
+      expect(execution).toHaveBeenCalled();
+    });
+
     it.each(resumeRoutes)('$name rejects a missing durable run', async ({ route, method }) => {
       const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
 
@@ -2210,6 +2249,48 @@ describe('Agent Routes Authorization', () => {
       );
 
       delete (mockAgent as any).recover;
+    });
+
+    it.each([
+      ['a mapped caller recovering a run with no owner', { resourceId: 'user-a' }, undefined, false],
+      ['an unscoped caller without FGA', {}, 'user-b', false],
+    ])('denies %s when a mapper is configured', async (_name, ctx, owner, _fga) => {
+      vi.spyOn(mastra, 'getServer').mockReturnValue({
+        auth: { mapUserToResourceId: (user: { id: string }) => user.id },
+      } as any);
+      const recoverMock = vi.fn().mockResolvedValue({ fullStream: new ReadableStream() });
+      (mockDurableAgent as any).recover = recoverMock;
+      await persistDurableAgenticLoopRun({ runId: 'recover-mapped', resourceId: owner });
+
+      await expect(
+        RECOVER_ROUTE.handler({
+          mastra,
+          agentId: 'test-durable-agent',
+          requestContext: createContextWithReservedKeys(ctx),
+          abortSignal: new AbortController().signal,
+          runId: 'recover-mapped',
+        } as any),
+      ).rejects.toMatchObject({ status: 403 });
+      expect(recoverMock).not.toHaveBeenCalled();
+    });
+
+    it('lets an unscoped caller recover when FGA is configured with a mapper', async () => {
+      vi.spyOn(mastra, 'getServer').mockReturnValue({
+        auth: { mapUserToResourceId: (user: { id: string }) => user.id },
+        fga: {},
+      } as any);
+      const recoverMock = vi.fn().mockResolvedValue({ fullStream: new ReadableStream() });
+      (mockDurableAgent as any).recover = recoverMock;
+      await persistDurableAgenticLoopRun({ runId: 'recover-fga', resourceId: 'user-b' });
+
+      await RECOVER_ROUTE.handler({
+        mastra,
+        agentId: 'test-durable-agent',
+        requestContext: createContextWithReservedKeys({}),
+        abortSignal: new AbortController().signal,
+        runId: 'recover-fga',
+      } as any);
+      expect(recoverMock).toHaveBeenCalled();
     });
 
     it('should call agent.recover(runId, { abortSignal }) and return fullStream', async () => {
@@ -2650,6 +2731,26 @@ describe('Agent Routes Authorization', () => {
       expect(
         sendAgentMessageBodySchema.safeParse({
           message: { contents: [{ role: 'user', content: 'not allowed' }] },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(false);
+    });
+
+    it('should validate queue signal route bodies', () => {
+      const parsed = queueAgentSignalBodySchema.parse({
+        signal: { type: 'reactive', tagName: 'skill', attributes: { name: 'factory-triage' }, contents: 'Triage it.' },
+        resourceId: 'user-a',
+        threadId: 'thread-a',
+      });
+      expect(parsed.signal).toMatchObject({
+        type: 'reactive',
+        tagName: 'skill',
+        attributes: { name: 'factory-triage' },
+      });
+      expect(
+        queueAgentSignalBodySchema.safeParse({
+          message: 'hello',
           resourceId: 'user-a',
           threadId: 'thread-a',
         }).success,
@@ -3345,6 +3446,71 @@ describe('Agent Routes Authorization', () => {
         },
         defaultStatus: 'published',
       });
+    });
+
+    it('should queue a typed signal through Agent.queueSignal', async () => {
+      await mockMemory.createThread({
+        threadId: 'queue-signal-thread',
+        resourceId: 'user-a',
+        title: 'Queue Signal Thread',
+      });
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+      let capturedSignal: any;
+      let capturedTarget: any;
+
+      (mockAgent as any).queueSignal = vi.fn((signal: unknown, target: unknown) => {
+        capturedSignal = signal;
+        capturedTarget = target;
+        return {
+          accepted: Promise.resolve({ action: 'deliver', runId: 'queued-signal-run-id' }),
+          signal: { id: 'queued-signal-id' },
+        };
+      });
+
+      const result = await (QUEUE_AGENT_SIGNAL_ROUTE.handler as any)({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        signal: { type: 'reactive', tagName: 'skill', attributes: { name: 'factory-triage' }, contents: 'Triage it.' },
+        resourceId: 'user-a',
+        threadId: 'queue-signal-thread',
+      });
+
+      expect(result).toEqual({ accepted: true, runId: 'queued-signal-run-id', signal: { id: 'queued-signal-id' } });
+      expect(capturedSignal).toEqual({
+        type: 'reactive',
+        tagName: 'skill',
+        attributes: { name: 'factory-triage' },
+        contents: 'Triage it.',
+      });
+      expect(capturedTarget).toMatchObject({ resourceId: 'user-a', threadId: 'queue-signal-thread' });
+      expect(capturedTarget.ifIdle.streamOptions.requestContext).toBe(requestContext);
+    });
+
+    it('should reject queueing a signal on a thread owned by another resource', async () => {
+      await mockMemory.createThread({
+        threadId: 'queue-signal-thread-owned-by-b',
+        resourceId: 'user-b',
+        title: 'Queue Signal Thread B',
+      });
+      (mockAgent as any).queueSignal = vi.fn();
+
+      await expect(
+        (QUEUE_AGENT_SIGNAL_ROUTE.handler as any)({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          signal: {
+            type: 'reactive',
+            tagName: 'skill',
+            attributes: { name: 'factory-triage' },
+            contents: 'Triage it.',
+          },
+          resourceId: 'user-a',
+          threadId: 'queue-signal-thread-owned-by-b',
+        }),
+      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      expect((mockAgent as any).queueSignal).not.toHaveBeenCalled();
     });
 
     it('should merge idle stream request context before waking a thread with a signal', async () => {

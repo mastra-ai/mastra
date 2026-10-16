@@ -829,6 +829,32 @@ describe('FactoryPhaseStateProcessor', () => {
     ]);
   });
 
+  it('pre-approves a skill run queued by the bound agent’s own tool result', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepare(storage);
+    const boards = createToolRuleTestRegistry({
+      submit_plan: {
+        onResult: () => ({
+          type: 'invokeSkill' as const,
+          idempotencyKey: 'open-change-request',
+          role: 'work',
+          prompt: 'Open the pull request.',
+        }),
+      },
+    });
+    const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage });
+
+    await processor.processInputStep(inputArgs(requestContext(), [toolMessage()]));
+
+    await expect(storage.listDeferredDecisions('org-1', PROJECT_ID)).resolves.toEqual([
+      expect.objectContaining({
+        idempotencyKey: 'open-change-request',
+        approvedBy: `agent:${prepared.binding.id}`,
+        approvedAt: expect.any(Date),
+      }),
+    ]);
+  });
+
   it('records invalid rule output as a typed rule error without enqueuing an effect', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepare(storage);

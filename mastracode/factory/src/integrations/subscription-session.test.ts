@@ -144,7 +144,7 @@ describe('prepareSessionRunContext', () => {
       prepareSessionRunContext(requestContext, 'channel:slack:C1', {
         sessions: { getBySessionId: async () => null },
       }),
-    ).resolves.toBe('unavailable');
+    ).resolves.toBe('session-not-found');
     expect(requestContext.get('user')).toBeUndefined();
     expect(prime).not.toHaveBeenCalled();
   });
@@ -155,7 +155,7 @@ describe('prepareSessionRunContext', () => {
       prepareSessionRunContext(requestContext, 'session-9', {
         sessions: { getBySessionId: async () => ({ userId: 'user-9', orgId: ' ' }) },
       }),
-    ).resolves.toBe('unavailable');
+    ).resolves.toBe('organization-unresolved');
     expect(requestContext.get('user')).toBeUndefined();
     expect(prime).not.toHaveBeenCalled();
   });

@@ -15,7 +15,6 @@
     "anthropic/claude-opus-4.8",
     "anthropic/claude-opus-5",
     "anthropic/claude-opus-5.5",
-    "anthropic/claude-sonnet-4",
     "anthropic/claude-sonnet-4.5",
     "anthropic/claude-sonnet-4.6",
     "anthropic/claude-sonnet-5",
@@ -75,6 +74,7 @@
     "meta/muse-spark-1.2-contributor",
     "meta/muse-spark-1.3",
     "meta/muse-spark-1.3-contributor",
+    "meta/muse-spark-open",
     "meta/muse-wonder",
     "minimax/minimax-01",
     "minimax/minimax-m3",
@@ -96,6 +96,8 @@
     "mistralai/mistral-small-3.2-24b-instruct",
     "mistralai/mixtral-8x22b-instruct",
     "mistralai/voxtral-small-24b-2507",
+    "moondream/moondream3-preview",
+    "moondream/moondream3.1-9b-a2b",
     "moonshotai/kimi-k2.5",
     "moonshotai/kimi-k2.6",
     "moonshotai/kimi-k2.7-code",
@@ -105,6 +107,8 @@
     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
     "nvidia/nemotron-3.5-content-safety",
     "nvidia/nemotron-3.5-content-safety:free",
+    "nvidia/nemotron-3.5-super-vl",
+    "nvidia/nemotron-3.5-super-vl:free",
     "openai/gpt-3.5-turbo",
     "openai/gpt-3.5-turbo-0613",
     "openai/gpt-3.5-turbo-16k",
@@ -214,11 +218,9 @@
     "stealth/qwen3.6-plus",
     "stepfun/step-3.7-flash",
     "stepfun/step-5-preview",
-    "stepfun/step-5-preview-free",
     "thinkingmachines/inkling",
     "thinkingmachines/inkling-small",
     "thinkingmachines/inkling-small:free",
-    "unbiased/pareto-26.10-preview",
     "unbiased/pareto-26.9",
     "x-ai/grok-4.20",
     "x-ai/grok-4.20-multi-agent",
@@ -270,7 +272,6 @@
     "anthropic/claude-opus-4.1",
     "anthropic/claude-opus-4.5",
     "anthropic/claude-opus-4.6",
-    "anthropic/claude-sonnet-4",
     "anthropic/claude-sonnet-4.5",
     "anthropic/claude-sonnet-4.6",
     "arcee-ai/trinity-large-thinking",
@@ -367,6 +368,7 @@
     "meta/muse-spark-1.2-contributor",
     "meta/muse-spark-1.3",
     "meta/muse-spark-1.3-contributor",
+    "meta/muse-spark-open",
     "meta/muse-wonder",
     "microsoft/phi-4",
     "microsoft/wizardlm-2-8x22b",
@@ -398,6 +400,8 @@
     "mistralai/mistral-small-3.2-24b-instruct",
     "mistralai/mixtral-8x22b-instruct",
     "mistralai/voxtral-small-24b-2507",
+    "moondream/moondream3-preview",
+    "moondream/moondream3.1-9b-a2b",
     "moonshotai/kimi-k2",
     "moonshotai/kimi-k2-0905",
     "moonshotai/kimi-k2-thinking",
@@ -422,6 +426,8 @@
     "nvidia/nemotron-3.5-content-safety:free",
     "nvidia/nemotron-3.5-lightning",
     "nvidia/nemotron-3.5-lightning:free",
+    "nvidia/nemotron-3.5-super-vl",
+    "nvidia/nemotron-3.5-super-vl:free",
     "openai/gpt-3.5-turbo",
     "openai/gpt-3.5-turbo-0613",
     "openai/gpt-3.5-turbo-16k",
@@ -500,12 +506,14 @@
     "qwen/qwen3.8-max-0902",
     "qwen/qwen3.8-max-prime",
     "qwen/qwen3.8-omni-flash",
+    "reflection/beam-1.0-501b-a23b",
     "rekaai/reka-edge",
     "rekaai/reka-flash-3",
     "relace/relace-search",
     "sao10k/l3-lunaris-8b",
     "sao10k/l3.1-euryale-70b",
     "sao10k/l3.3-euryale-70b",
+    "stealth/cat-jam",
     "stealth/claude-opus-4.6",
     "stealth/claude-opus-4.7",
     "stealth/claude-opus-4.8",
@@ -515,7 +523,6 @@
     "stepfun/step-3.5-flash",
     "stepfun/step-3.7-flash",
     "stepfun/step-5-preview",
-    "stepfun/step-5-preview-free",
     "tencent/hunyuan-a13b-instruct",
     "tencent/hy-mt2-1.8b",
     "tencent/hy-mt2-30b-a3b",
@@ -529,7 +536,6 @@
     "thinkingmachines/inkling",
     "thinkingmachines/inkling-small",
     "thinkingmachines/inkling-small:free",
-    "unbiased/pareto-26.10-preview",
     "unbiased/pareto-26.9",
     "undi95/remm-slerp-l2-13b",
     "upstage/solar-mini4",
@@ -667,6 +673,7 @@
     "meta/muse-spark-1.2-contributor",
     "meta/muse-spark-1.3",
     "meta/muse-spark-1.3-contributor",
+    "meta/muse-spark-open",
     "meta/muse-wonder",
     "microsoft/phi-4",
     "minimax/minimax-m2",
@@ -703,11 +710,14 @@
     "nex-agi/nex-n2.5-pro",
     "nousresearch/hermes-3-llama-3.1-405b",
     "nousresearch/hermes-3-llama-3.1-70b",
+    "nousresearch/hermes-4-405b",
     "nvidia/nemotron-3-nano-30b-a3b",
     "nvidia/nemotron-3-super-120b-a12b",
     "nvidia/nemotron-3-super-120b-a12b:free",
     "nvidia/nemotron-3-ultra-550b-a55b",
     "nvidia/nemotron-3.5-lightning",
+    "nvidia/nemotron-3.5-super-vl",
+    "nvidia/nemotron-3.5-super-vl:free",
     "openai/gpt-3.5-turbo",
     "openai/gpt-3.5-turbo-0613",
     "openai/gpt-3.5-turbo-16k",
@@ -816,6 +826,7 @@
     "qwen/qwen3.8-max-0902",
     "qwen/qwen3.8-max-prime",
     "qwen/qwen3.8-omni-flash",
+    "reflection/beam-1.0-501b-a23b",
     "rekaai/reka-edge",
     "rekaai/reka-flash-3",
     "sakana/fugu-max",
@@ -901,6 +912,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "stealth/cat-jam": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "stealth/claude-sonnet-4.6": [
@@ -1057,12 +1074,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-sonnet-4": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
       }
     ],
     "anthropic/claude-sonnet-5": [
@@ -1323,6 +1334,12 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "reflection/beam-1.0-501b-a23b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "thinkingmachines/inkling-small:free": [
       {
         "type": "effort",
@@ -1350,13 +1367,13 @@
     "perplexity/sonar-deep-research": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["high"]
       }
     ],
     "perplexity/sonar-reasoning-pro": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["high"]
       }
     ],
     "perplexity/sonar-pro-search": [
@@ -1405,6 +1422,12 @@
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "meta/muse-spark-open": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "nousresearch/hermes-4-405b": [
@@ -1719,6 +1742,18 @@
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
+    "moondream/moondream3-preview": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "moondream/moondream3.1-9b-a2b": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
     "ibm-granite/granite-4.2-8b": [
       {
         "type": "effort",
@@ -1794,7 +1829,7 @@
     "moonshotai/kimi-k3": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "moonshotai/kimi-k2.6": [
@@ -1827,6 +1862,12 @@
         "values": ["high"]
       }
     ],
+    "nvidia/nemotron-3.5-super-vl:free": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
     "nvidia/nemotron-3-nano-30b-a3b": [
       {
         "type": "effort",
@@ -1855,6 +1896,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium"]
+      }
+    ],
+    "nvidia/nemotron-3.5-super-vl": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "nvidia/nemotron-3-ultra-550b-a55b:free": [
@@ -1966,12 +2013,6 @@
       }
     ],
     "stepfun/step-3.7-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "stepfun/step-5-preview-free": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -2262,13 +2303,13 @@
     "openai/o4-mini": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["high"]
       }
     ],
     "openai/o3-mini": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["high"]
       }
     ],
     "openai/gpt-5.3-codex": [
@@ -2286,7 +2327,7 @@
     "openai/o1": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["high"]
       }
     ],
     "openai/gpt-5-pro": [
@@ -2328,7 +2369,7 @@
     "openai/o3-pro": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["high"]
       }
     ],
     "openai/gpt-oss-20b": [
@@ -2436,13 +2477,13 @@
     "openai/gpt-5.1-codex-mini": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "openai/o3": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["high"]
       }
     ],
     "openai/gpt-5": [
@@ -2466,7 +2507,7 @@
     "openai/o1-pro": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["high"]
       }
     ]
   }

@@ -4,6 +4,8 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  FACTORY_INTERACTIVE_KEY,
+  createFactoryInteractiveMarker,
   ensureFactoryAuthUser,
   factoryUserOrgId,
   getFactoryAuthOrgId,
@@ -447,6 +449,46 @@ describe('mountFactoryAuth gate (enabled)', () => {
       name: 'user@example.com',
       avatarUrl: 'https://avatars.example/user.png',
     });
+  });
+
+  it('marks requests a signed-in person makes as interactive, and signature-verified webhooks as not', async () => {
+    mockAuthenticate.mockImplementation(async (token: string | undefined) =>
+      token ? { workosId: 'user_123', organizationId: 'org_123' } : null,
+    );
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('requestContext' as never, new RequestContext() as never);
+      await next();
+    });
+    mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+    const interactive = (c: { get(key: never): unknown }) =>
+      (c.get('requestContext' as never) as RequestContext).get(FACTORY_INTERACTIVE_KEY) === true;
+    app.get('/web/whoami', c => c.json({ interactive: interactive(c) }));
+    app.post('/web/github/webhook', c => c.json({ interactive: interactive(c) }));
+
+    const signedIn = await app.request('/web/whoami', {
+      headers: { Accept: 'application/json', Authorization: 'Bearer cli-token' },
+    });
+    expect(await signedIn.json()).toEqual({ interactive: true });
+
+    const webhook = await app.request('/web/github/webhook', { method: 'POST' });
+    expect(await webhook.json()).toEqual({ interactive: false });
+  });
+
+  it('marks every request interactive when auth is disabled', async () => {
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('requestContext' as never, new RequestContext() as never);
+      await next();
+    });
+    app.use('*', createFactoryInteractiveMarker());
+    app.get('/web/whoami', c =>
+      c.json({
+        interactive: (c.get('requestContext' as never) as RequestContext).get(FACTORY_INTERACTIVE_KEY) === true,
+      }),
+    );
+    const res = await app.request('/web/whoami');
+    expect(await res.json()).toEqual({ interactive: true });
   });
 
   it('selects a requested bearer organization proven by provider memberships', async () => {

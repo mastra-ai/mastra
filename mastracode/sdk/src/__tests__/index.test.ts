@@ -81,7 +81,9 @@ function resolveInputProcessors(): Array<{ id?: string }> {
 function resolveOutputProcessors(): Array<{ id?: string }> {
   const config = agentConstructorMock.mock.calls[0]?.[0] as { outputProcessors?: unknown } | undefined;
   expect(typeof config?.outputProcessors).toBe('function');
-  return (config!.outputProcessors as () => Array<{ id?: string }>)();
+  return (config!.outputProcessors as (args: { requestContext: RequestContext }) => Array<{ id?: string }>)({
+    requestContext: new RequestContext(),
+  });
 }
 
 const controllerConstructorMock = vi.fn();
@@ -626,6 +628,25 @@ describe('createMastraCode', () => {
     } finally {
       setCredentialStoreProvider(undefined);
     }
+  });
+
+  it('skips the host thinking default when the session picked its own level', async () => {
+    const { getDynamicModel } = await import('../agents/model.js');
+    const { createMastraCodeAgentController } = await import('../index.js');
+    const resolveDefaultThinkingLevel = vi.fn(async () => 'high' as const);
+    vi.mocked(getDynamicModel).mockClear();
+    await createMastraCodeAgentController({ resolveDefaultThinkingLevel });
+    const agentConfig = agentConstructorMock.mock.calls.at(-1)![0];
+
+    const withSessionLevel = new RequestContext();
+    withSessionLevel.set('controller', { state: { thinkingLevel: 'low' } });
+    await agentConfig.model({ requestContext: withSessionLevel });
+    expect(resolveDefaultThinkingLevel).not.toHaveBeenCalled();
+    expect(vi.mocked(getDynamicModel).mock.calls.at(-1)![2]).toMatchObject({ defaultThinkingLevel: undefined });
+
+    await agentConfig.model({ requestContext: new RequestContext() });
+    expect(resolveDefaultThinkingLevel).toHaveBeenCalledOnce();
+    expect(vi.mocked(getDynamicModel).mock.calls.at(-1)![2]).toMatchObject({ defaultThinkingLevel: 'high' });
   });
 
   it.each([
@@ -1797,6 +1818,17 @@ describe('createMastraCode', () => {
       'mastracode-account-start-notice',
     ]);
     expect(resolveOutputProcessors().map(processor => processor.id)).toEqual(['cyber-refusal-handler']);
+  });
+
+  it('appends embedding output processors after the built-in output processors', async () => {
+    const { createMastraCode } = await import('../index.js');
+    const customProcessor = { id: 'embedding-stamper', processOutputStep: vi.fn() };
+
+    await createMastraCode({ outputProcessors: () => [customProcessor], disablePlugins: true });
+
+    const processors = resolveOutputProcessors();
+    expect(processors.map(processor => processor.id)).toEqual(['cyber-refusal-handler', 'embedding-stamper']);
+    expect(processors[1]).toBe(customProcessor);
   });
 
   it('resolves request-scoped input processors before mandatory built-ins', async () => {

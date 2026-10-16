@@ -39,6 +39,7 @@ import {
   buildAuthDisabledRoutes,
   buildAuthRoutes,
   createFactoryAuthGate,
+  createFactoryInteractiveMarker,
   createFactoryRouteAuth,
   factoryUserOrgId,
   getFactoryAuthOrgId,
@@ -47,6 +48,7 @@ import {
 } from './auth.js';
 import { createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
+import { boardForWorkItem } from './boards/semantics.js';
 import { EnvironmentBuildRunner } from './environment/build-runner.js';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from './environment/build-workflow.js';
 import { touchFeed } from './feed-events.js';
@@ -85,6 +87,7 @@ import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import type { FactoryRuleActor } from './rules/index.js';
 import { FactoryPhaseStateProcessor, reportMemorySettingsUnavailable } from './rules/processor.js';
 import { createReviewSourceTool, resolveReviewSourceUiOrigin } from './rules/review-source-tool.js';
+import type { FactoryStartCoordinator } from './rules/start-coordinator.js';
 import { createTerminalStageCleanup } from './rules/terminal-cleanup.js';
 import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
@@ -106,8 +109,10 @@ import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
 import { LiveSessions } from './session/live-sessions.js';
 import { hydrateSessionMemorySettings, layerPersonalMemorySettings } from './session/memory-settings-hydration.js';
+import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
 import { createSourceControlTools } from './session/source-control-tools.js';
+import { readFactoryThinkingLevel, resolveFactoryThinkingLevel } from './session/thinking-default.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
@@ -135,13 +140,18 @@ import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type { FactoryRunBindingRecord, WorkItemRow } from './storage/domains/work-items/base.js';
-import { FactorySupervisorHealthWorker } from './supervisor/health-worker.js';
-import { SUPERVISOR_INSTRUCTIONS } from './supervisor/instructions.js';
-import { createFactorySupervisorReadTools } from './supervisor/read-tools.js';
-import { messageWorkerSession } from './supervisor/session-messaging.js';
-import { hydrateSupervisorSession, parseSupervisorResourceId, resolveSupervisorScope } from './supervisor/session.js';
-import { createFactorySupervisorWriteTools } from './supervisor/write-tools.js';
 import { timedPhase } from './timing.js';
+import { deliverFactorySessionNotification } from './tools/deliver.js';
+import { applyFactoryToolPermissions, createFactoryTools, resolveFactoryToolScope } from './tools/index.js';
+import {
+  createSessionApprovalNotifier,
+  createSessionRunEndReporter,
+  createStageChangeNotifier,
+  createWorkItemRunEndReporter,
+} from './tools/reports.js';
+import type { FactoryReporting } from './tools/reports.js';
+import { observeSessionRunReports } from './tools/run-watch.js';
+import { FactorySessionsStateProcessor } from './tools/sessions-state-processor.js';
 import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
 import type { FactorySandboxStart } from './workspace.js';
 
@@ -434,6 +444,7 @@ export class MastraFactory {
   readonly #configVersion: string;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
   #dispatcher: FactoryDecisionDispatcher | undefined;
+  #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   /** Environment builds through the sandbox's `builds`; undefined when the sandbox has none. */
   #environmentBuilds: EnvironmentBuildRunner | undefined;
@@ -735,7 +746,6 @@ export class MastraFactory {
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
     const knowledgeEnabled =
       this.#config.knowledge !== undefined || process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
-    const deploymentOrganizationId = process.env.MASTRACODE_DEPLOYMENT_ORGANIZATION_ID?.trim() || undefined;
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
       | GithubIntegration
       | undefined;
@@ -796,6 +806,27 @@ export class MastraFactory {
           ...(retireTerminalSessions ? { releaseSandboxes: retireTerminalSessions } : {}),
         })
       : undefined;
+    // Factory messaging needs the controller and its notifications store, which exist once the mount is up.
+    const factoryMessaging = async () => {
+      const controller = this.#prepared?.base.controller;
+      const notifications = await controller?.getMastra()?.getStorage()?.getStore('notifications');
+      return controller && notifications ? { controller, notifications } : null;
+    };
+    const factoryReporting = async (): Promise<FactoryReporting | null> => {
+      const messaging = await factoryMessaging();
+      if (!messaging) return null;
+      return {
+        notifications: messaging.notifications,
+        deliver: (target, notification, options) =>
+          deliverFactorySessionNotification({
+            controller: messaging.controller,
+            sessions: sourceControlSessions,
+            target,
+            notification,
+            ...options,
+          }),
+      };
+    };
     const onTerminalStage = terminalCleanup
       ? (args: {
           orgId: string;
@@ -825,7 +856,16 @@ export class MastraFactory {
             const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
             return project?.autoApprovePlans ?? false;
           },
+          selfReviewEnabled: async ({ orgId, factoryProjectId }) => {
+            await factoryProjectsStorage.ensureReady();
+            const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
+            return project?.selfReviewEnabled ?? false;
+          },
           ...(onTerminalStage ? { onTerminalStage } : {}),
+          onTransitionCommitted: createStageChangeNotifier({
+            workItems: workItemsStorage,
+            reporting: factoryReporting,
+          }),
           ...(githubIntegration
             ? {
                 onAccepted: (args: { orgId: string; factoryProjectId: string; item: WorkItemRow }) =>
@@ -1001,6 +1041,7 @@ export class MastraFactory {
           storage: workItemsStorage,
           boards: this.#boards,
           loadMemorySettings,
+          factoryThinkingLevel: factoryProjectId => readFactoryThinkingLevel(factoryProjectsStorage, factoryProjectId),
           ...(transitionService ? { transitionService } : {}),
           ...(githubIntegration
             ? {
@@ -1076,6 +1117,12 @@ export class MastraFactory {
         coAuthor: { name: 'mastra-platform[bot]' },
         ...(this.#config.disableBuiltinTools?.length ? { disableBuiltinTools: this.#config.disableBuiltinTools } : {}),
         modes: false,
+        // Thinking defaults are stored per Factory, not in the host's settings.json.
+        resolveDefaultThinkingLevel: ({ requestContext }) =>
+          resolveFactoryThinkingLevel(requestContext, {
+            projects: factoryProjectsStorage,
+            sourceControl: sourceControlSessions,
+          }),
         workspace: createWorkspaceFactory({
           ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
           ...(this.#config.sandboxStart ? { sandboxStart: this.#config.sandboxStart } : {}),
@@ -1110,7 +1157,6 @@ export class MastraFactory {
           const context = requestContext.get('controller') as
             | AgentControllerRequestContext<MastraCodeState>
             | undefined;
-          if (parseSupervisorResourceId(context?.resourceId)) return SUPERVISOR_INSTRUCTIONS;
           // The SDK resolves this callback before it loads repository
           // AGENTS.md/CLAUDE.md. A controller recreated after restart has
           // only initialState, and a partially persisted one can keep
@@ -1174,9 +1220,26 @@ export class MastraFactory {
         // comes after it.
         inputProcessors: async ({ requestContext }: { requestContext: RequestContext }) => {
           const environmentProcessor = new FactoryEnvironmentStateProcessor();
+          const sessionsProcessor =
+            workItemsStorage && storage.isDomainReady('source-control')
+              ? [
+                  new FactorySessionsStateProcessor({
+                    authEnabled: routeAuth.enabled(),
+                    sessions: sourceControlSessions,
+                    projects: factoryProjectsStorage,
+                    workItems: workItemsStorage,
+                    boards: this.#boards,
+                    isRunning: async sessionId => {
+                      const session = await this.#prepared?.base.controller.getSessionByResource(sessionId);
+                      return session?.stream.isActive() ?? false;
+                    },
+                    notifications: async () => (await factoryMessaging())?.notifications ?? null,
+                  }),
+                ]
+              : [];
           if (factoryProcessor) {
             await factoryProcessor.prepareMemorySettings(requestContext);
-            return [environmentProcessor, factoryProcessor];
+            return [environmentProcessor, ...sessionsProcessor, factoryProcessor];
           }
           // Without work items there is no run binding, so the caller's row applies.
           try {
@@ -1184,8 +1247,9 @@ export class MastraFactory {
           } catch (error) {
             reportMemorySettingsUnavailable(requestContext, error instanceof Error ? error.message : String(error));
           }
-          return [environmentProcessor];
+          return [environmentProcessor, ...sessionsProcessor];
         },
+        outputProcessors: [new FactoryReplyCredentialProcessor()],
         ...(vector ? { vector } : {}),
         ...(toolIntegrations.length > 0 ||
         sourceControlToolProviders.length > 0 ||
@@ -1213,6 +1277,55 @@ export class MastraFactory {
                       requestContext,
                       providers: sourceControlToolProviders,
                       audit: auditDomain,
+                      testChecksEnabled: async ({ orgId, factoryProjectId }) => {
+                        await factoryProjectsStorage.ensureReady();
+                        const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
+                        return project?.reviewTestChecksEnabled ?? false;
+                      },
+                      ...(workItemsStorage
+                        ? {
+                            selfReviewApprovedHead: async () => {
+                              const resolution = await resolveFactorySessionAddress({
+                                requestContext,
+                                storage: workItemsStorage,
+                              });
+                              if (!resolution) return undefined;
+                              const binding =
+                                resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
+                              if (!binding) return undefined;
+                              const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
+                              if (!item || boardForWorkItem(item) !== 'work') return undefined;
+                              if (typeof item.metadata?.openPullRequestNumber === 'number') return undefined;
+                              // A verdict already recorded still binds the change request to its head.
+                              if (item.metadata?.selfReviewVerdict === undefined) {
+                                await factoryProjectsStorage.ensureReady();
+                                const project = await factoryProjectsStorage.get({
+                                  orgId: binding.orgId,
+                                  id: binding.factoryProjectId,
+                                });
+                                if (!project?.selfReviewEnabled) return undefined;
+                              }
+                              const sha = item.metadata?.selfReviewedHeadSha;
+                              return item.metadata?.selfReviewVerdict === 'approve' && typeof sha === 'string'
+                                ? sha
+                                : null;
+                            },
+                            boundChangeRequestId: async () => {
+                              const resolution = await resolveFactorySessionAddress({
+                                requestContext,
+                                storage: workItemsStorage,
+                              });
+                              if (!resolution) return undefined;
+                              const binding =
+                                resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
+                              if (binding?.role !== 'review') return undefined;
+                              const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
+                              const source = item?.externalSource;
+                              if (!source || !/pull-request|merge-request/.test(source.type)) return undefined;
+                              return /(\d+)$/.exec(source.externalId)?.[1];
+                            },
+                          }
+                        : {}),
                     }),
                   );
                 }
@@ -1261,63 +1374,33 @@ export class MastraFactory {
                       ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
                     }),
                   );
-                  // The supervisor session has no seat, so it never gets the
-                  // transition tool above; it gets the read surface instead,
-                  // and only once the caller's org is shown to own the project.
-                  const supervisorScope = await resolveSupervisorScope({
-                    requestContext,
-                    projects: factoryProjectsStorage,
-                  });
-                  if (supervisorScope) {
-                    const userId = getFactoryAuthUserId(getFactoryAuthUserFromContext(requestContext));
-                    mergeTools(
-                      'factory-supervisor',
-                      createFactorySupervisorReadTools({
-                        scope: supervisorScope,
-                        workItems: workItemsStorage,
-                        boards: this.#boards,
-                        comments: workItemCommentsStorage,
-                        audit: auditStorage,
-                        messageReader: {
-                          listMessages: async input => {
-                            const memory = await storage.getMastraStorage().getStore('memory');
-                            return memory ? memory.listMessages(input) : { messages: [], hasMore: false };
-                          },
-                        },
-                      }),
-                    );
-                    if (userId) {
+                  if (storage.isDomainReady('source-control')) {
+                    const scope = await resolveFactoryToolScope({
+                      requestContext,
+                      authEnabled: routeAuth.enabled(),
+                      sessions: sourceControlSessions,
+                      projects: factoryProjectsStorage,
+                      workItems: workItemsStorage,
+                    });
+                    if (scope) {
                       mergeTools(
-                        'factory-supervisor-write',
-                        createFactorySupervisorWriteTools({
-                          scope: supervisorScope,
-                          userId,
-                          workItems: workItemsStorage,
-                          boards: this.#boards,
-                          audit: auditDomain,
-                          transitionService,
-                          ...(githubIntegration
-                            ? {
-                                reconcileAcceptanceLabels: (args: {
-                                  orgId: string;
-                                  factoryProjectId: string;
-                                  item: WorkItemRow;
-                                }) =>
-                                  reconcileGithubAcceptanceLabels(
-                                    githubIntegration,
-                                    sourceControlStorage.forIntegration(githubIntegration.id),
-                                    args,
-                                  ),
-                              }
-                            : {}),
-                          messageSession: ({ sessionId, message, delivery }) =>
-                            messageWorkerSession({
-                              controller: prepared.base.controller,
-                              sessionId,
-                              message,
-                              delivery,
-                              ...(requestContext ? { requestContext } : {}),
-                            }),
+                        'factory-tools',
+                        createFactoryTools({
+                          scope,
+                          deps: {
+                            workItems: workItemsStorage,
+                            comments: workItemCommentsStorage,
+                            feed: commentsDomain,
+                            audit: auditStorage,
+                            boards: this.#boards,
+                            transitionService,
+                            auditRecorder: auditDomain,
+                            sessions: sourceControlSessions,
+                            sessionModel: { projects: factoryProjectsStorage, modelDefaults: modelDefaultsStorage },
+                            intake: intakeStorage,
+                            startCoordinator: () => this.#startCoordinator,
+                            messaging: factoryMessaging,
+                          },
                         }),
                       );
                     }
@@ -1403,13 +1486,13 @@ export class MastraFactory {
             intakeReady,
             factoryReady,
             knowledgeEnabled,
-            deploymentOrganizationId,
             deploymentModelProviders,
             knowledgeKey: this.#config.knowledge?.key,
             configVersion,
             boardRegistry: this.#boards,
             factoryTransitionService: transitionService,
-            onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
+            onFactoryRuntime: ({ transitionService: runtimeTransitionService, startCoordinator, prepareBinding }) => {
+              this.#startCoordinator = startCoordinator;
               this.#dispatcher ??= new FactoryDecisionDispatcher({
                 controller,
                 transitionService: runtimeTransitionService,
@@ -1448,6 +1531,10 @@ export class MastraFactory {
                     }
                   : {}),
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
+                reportRunEnd: createWorkItemRunEndReporter({
+                  workItems: storage.getDomain<WorkItemsStorage>('work-items'),
+                  reporting: factoryReporting,
+                }),
                 resolveLinkedWorkItemParentId: async ({ orgId, factoryProjectId, decision }) => {
                   if (decision.source !== 'github-pr') return null;
                   const repositoryId = decision.metadata?.githubRepositoryId;
@@ -1494,6 +1581,7 @@ export class MastraFactory {
             // provider snapshot so model calls see DB rows, then SPA + CORS.
             return {
               middleware: [
+                createFactoryInteractiveMarker(),
                 createCustomProvidersPrimer({ auth: routeAuth, storage: customProvidersStorage, authEnabled: false }),
                 ...spa,
               ],
@@ -1532,6 +1620,13 @@ export class MastraFactory {
       }),
     );
 
+    const sessionReports = {
+      sessions: sourceControlSessions,
+      workItems: storage.getDomain<WorkItemsStorage>('work-items'),
+      reporting: factoryReporting,
+    };
+    const reportSessionRunEnd = createSessionRunEndReporter(sessionReports);
+    const notifyApprovalRequested = createSessionApprovalNotifier(sessionReports);
     prepared.base.controller.onSessionCreated(session => {
       observeSessionFilesystem(session, {
         filesystem: filesystemStorage,
@@ -1547,23 +1642,28 @@ export class MastraFactory {
         sourceControl: { sessions: sourceControlSessions },
       });
       observeSessionRunEnd(session, { audit: auditDomain });
+      // Every run end of a work or side session, and every tool call it holds for
+      // approval, reaches whoever follows it, however the run started;
+      // re-attached when a session is created again.
+      observeSessionRunReports(
+        session,
+        (outcome, since) =>
+          reportSessionRunEnd({
+            sessionId: session.identity.getResourceId(),
+            threadId: session.thread.getId(),
+            outcome,
+            since,
+          }),
+        {
+          onApprovalRequested: request =>
+            notifyApprovalRequested({
+              sessionId: session.identity.getResourceId(),
+              threadId: session.thread.getId(),
+              ...request,
+            }),
+        },
+      );
     });
-
-    // Supervisor sessions carry their project in the resourceId; re-stamp
-    // scope, instructions and factory defaults on every (re)creation so a
-    // restarted server heals the in-memory state.
-    prepared.base.controller.onSessionCreated(
-      session =>
-        hydrateSupervisorSession(session, {
-          projects: factoryProjectsStorage,
-          modelDefaults: modelDefaultsStorage,
-        }).catch(error => {
-          console.warn('[Factory Supervisor] Failed to hydrate supervisor session', {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }),
-      { blocking: true },
-    );
 
     // Blocking: `createSession` awaits the organization seed so per-invocation
     // memory settings and knowledge capture use the correct tenant immediately.
@@ -1585,6 +1685,13 @@ export class MastraFactory {
           workItems: workItemsStorage,
           modelDefaults: modelDefaultsStorage,
         }),
+      { blocking: true },
+    );
+
+    // Factory tools fall in the SDK's `mcp` category (default `ask`); allow the
+    // no-approval ones per session before the session's first turn.
+    prepared.base.controller.onSessionCreated(
+      session => applyFactoryToolPermissions(session, { sessions: sourceControlSessions }),
       { blocking: true },
     );
 
@@ -1672,43 +1779,32 @@ export class MastraFactory {
     // workers and `finalize()`'s `startWorkers()` starts them alongside the
     // built-ins. Never passed for the disabled/not-ready case — a worker for
     // an unavailable integration must not run.
-    const integrationWorkers = [
-      ...(factoryReady
-        ? [
-            new FactorySupervisorHealthWorker({
-              projects: factoryProjectsStorage,
-              workItems: workItemsStorage,
-              boards: this.#boards,
-            }),
-          ]
-        : []),
-      ...integrationRegistrations
-        .filter(({ integration, ready }) => ready && integration.workers)
-        .flatMap(({ integration }) =>
-          integration.workers!(
-            buildIntegrationContext(
-              {
-                controller: prepared.base.controller,
-                publicOrigin,
-                auth: routeAuth,
-                stateSigner,
-                sandbox: sandboxConfig,
-                factoryStorage: storage,
-                integrationStorage,
-                sourceControlStorage,
-                integrations: integrationRegistrations,
-                configVersion,
-                boardRegistry: this.#boards,
-                factoryReady,
-                domains,
-                feed: commentsDomain,
-                ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
-              },
-              integration.id,
-            ),
+    const integrationWorkers = integrationRegistrations
+      .filter(({ integration, ready }) => ready && integration.workers)
+      .flatMap(({ integration }) =>
+        integration.workers!(
+          buildIntegrationContext(
+            {
+              controller: prepared.base.controller,
+              publicOrigin,
+              auth: routeAuth,
+              stateSigner,
+              sandbox: sandboxConfig,
+              factoryStorage: storage,
+              integrationStorage,
+              sourceControlStorage,
+              integrations: integrationRegistrations,
+              configVersion,
+              boardRegistry: this.#boards,
+              factoryReady,
+              domains,
+              feed: commentsDomain,
+              ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
+            },
+            integration.id,
           ),
         ),
-    ];
+      );
 
     return {
       ...prepared.mastraArgs,

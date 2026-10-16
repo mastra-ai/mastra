@@ -8,6 +8,7 @@ import {
   type Experimental_DecisionModelV4Input as DecisionModelV4Input,
   type Experimental_DecisionModelV4Question as DecisionModelV4Question,
   type Experimental_DecisionModelV4Result as DecisionModelV4Result,
+  type Experimental_DecisionModelV4State as DecisionModelV4State,
   type Experimental_EvaluationModelV4 as EvaluationModelV4,
   type SharedV4ProviderMetadata,
   type SharedV4ProviderOptions,
@@ -293,6 +294,7 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
       name: `classifier evaluate: '${this.id}'`,
       tracingContext: { currentSpan: resolveCurrentSpan() },
       mastra: this.#mastra,
+      input: { state: options.state, questions },
       attributes: {
         classifierId: this.id,
         modelId: this.model.modelId,
@@ -321,7 +323,7 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
           attemptCount += 1;
           try {
             const callOptions = {
-              state: options.state,
+              state: toProviderState(options.state),
               questions: providerQuestions,
               abortSignal: options.abortSignal,
               providerOptions: options.providerOptions,
@@ -381,7 +383,7 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
           },
         },
       });
-      span?.end();
+      span?.end({ output: { answers: result.answers } });
       return result;
     } catch (error) {
       span?.update({
@@ -399,6 +401,17 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
       throw error;
     }
   }
+}
+
+// Mirrors the AI SDK's decide(): providers receive state as an array of parts.
+function toProviderState(state: ClassifierState): DecisionModelV4State {
+  if (typeof state === 'string') return [{ type: 'text', text: state }];
+  if (Array.isArray(state) && state.every(isStatePart)) return state;
+  return [{ type: 'json', value: state }];
+}
+
+function isStatePart(value: unknown): value is DecisionModelV4State[number] {
+  return isPlainObject(value) && (value.type === 'text' || value.type === 'file' || value.type === 'json');
 }
 
 function toProviderQuestions(questions: ClassifierQuestions): Readonly<Record<string, DecisionModelV4Question>> {
@@ -521,7 +534,7 @@ function validateProviderResult(
   questions: ClassifierQuestions,
   answers: Record<string, DecisionModelV4Answer>,
   rounding?: { probabilityDecimals?: number; scoreDecimals?: number },
-): void {
+): asserts answers is ClassifierAnswers<ClassifierQuestions> {
   if (!isPlainObject(answers)) throw new TypeError('The evaluation model returned invalid answers.');
   const questionIds = Object.keys(questions);
   const answerIds = Object.keys(answers);

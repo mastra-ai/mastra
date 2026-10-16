@@ -19,6 +19,7 @@
     "anthropic/claude-fable-5-1",
     "anthropic/claude-fable-latest",
     "anthropic/claude-haiku-5-5",
+    "anthropic/claude-haiku-latest",
     "anthropic/claude-opus-4-5",
     "anthropic/claude-opus-4-5-20251101",
     "anthropic/claude-opus-4-6",
@@ -49,12 +50,14 @@
     "deepinfra/meta-models/Muse-Glimmer-30B",
     "deepinfra/moonshotai/Kimi-K2.5",
     "deepinfra/stepfun-ai/Step-3.7-Flash",
+    "deepinfra/stepfun-ai/Step-5-Preview",
     "deepinfra/thinkingmachines/Inkling",
     "deepinfra/thinkingmachines/Inkling-Small",
     "deepseek-v4-flash-vision-exp",
     "deepseek/deepseek-v4-flash",
     "deepseek/deepseek-v4-flash-vision-exp",
     "fireworks_ai/accounts/fireworks/models/inkling",
+    "fireworks_ai/accounts/fireworks/models/muse-spark-open",
     "flexai/DeepSeek-V4.1-Flash",
     "flexai/Muse-Glimmer-30B",
     "flexai/Step-3.7-Flash",
@@ -81,6 +84,7 @@
     "google/gemini-nano-banana-2.1",
     "google/gemini-pro-latest",
     "greenpt/deepseek-v4.1-flash",
+    "infomaniak/mistralai/Ministral-3-14B-Instruct-2512",
     "minimax/MiniMax-M3",
     "mistral/codestral-2508",
     "mistral/devstral-2512",
@@ -104,6 +108,7 @@
     "moonshot/kimi-k3",
     "nebius/deepseek-ai/DeepSeek-V4.1-Flash",
     "nebius/google/gemma-3-27b-it",
+    "nebius/meta-models/muse-spark-open",
     "openai/gpt-4-turbo",
     "openai/gpt-4.1",
     "openai/gpt-4.1-mini",
@@ -301,6 +306,7 @@
     "deepseek/deepseek-v4-pro",
     "fireworks_ai/accounts/fireworks/models/gpt-oss-120b",
     "fireworks_ai/accounts/fireworks/models/inkling",
+    "fireworks_ai/accounts/fireworks/models/muse-spark-open",
     "fireworks_ai/gpt-oss-120b",
     "flexai/DeepSeek-V4-Flash-0731",
     "flexai/DeepSeek-V4-Flash-0731@eu",
@@ -326,7 +332,6 @@
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
     "google/gemini-flash-latest",
-    "google/gemini-pro-latest",
     "greenference/deepseek-v4.1-flash",
     "greenference/gpt-oss-20b",
     "greenpt/deepseek-v4-flash-0731",
@@ -371,6 +376,7 @@
     "nebius/deepseek-ai/DeepSeek-V4-Pro-0813",
     "nebius/deepseek-ai/DeepSeek-V4.1-Flash",
     "nebius/google/gemma-3-27b-it",
+    "nebius/meta-models/muse-spark-open",
     "nebius/nvidia/Nemotron-3-Ultra-550b-a55b",
     "nebius/nvidia/nemotron-3-super-120b-a12b",
     "nebius/openai/gpt-oss-120b",
@@ -390,7 +396,6 @@
     "openai/gpt-5.4",
     "openai/gpt-5.4-mini",
     "openai/gpt-5.4-nano",
-    "openai/gpt-mini-latest",
     "ovhcloud/gpt-oss-120b",
     "ovhcloud/gpt-oss-20b",
     "perplexityai/sonar",
@@ -452,7 +457,6 @@
     "vertex/gemini-3.8-flash@eu",
     "vertex/gemini-3.8-flash@us",
     "vertex/gemini-flash-latest",
-    "vertex/gemini-pro-latest",
     "xai/grok-4-fast-non-reasoning",
     "xai/grok-4.20-0309-non-reasoning",
     "xai/grok-4.20-0309-reasoning",
@@ -495,6 +499,7 @@
     "anthropic/claude-fable-5-1",
     "anthropic/claude-fable-latest",
     "anthropic/claude-haiku-5-5",
+    "anthropic/claude-haiku-latest",
     "anthropic/claude-opus-4-5",
     "anthropic/claude-opus-4-5-20251101",
     "anthropic/claude-opus-4-6",
@@ -548,6 +553,7 @@
     "deepinfra/openai/gpt-oss-20b",
     "deepinfra/stepfun-ai/Step-3.5-Flash",
     "deepinfra/stepfun-ai/Step-3.7-Flash",
+    "deepinfra/stepfun-ai/Step-5-Preview",
     "deepinfra/tencent/Hy3",
     "deepinfra/tencent/Hy4-preview",
     "deepinfra/thinkingmachines/Inkling",
@@ -560,6 +566,7 @@
     "deepseek/deepseek-v4-pro",
     "fireworks_ai/accounts/fireworks/models/gpt-oss-120b",
     "fireworks_ai/accounts/fireworks/models/inkling",
+    "fireworks_ai/accounts/fireworks/models/muse-spark-open",
     "flexai/DeepSeek-V4-Flash-0731",
     "flexai/DeepSeek-V4-Flash-0731@eu",
     "flexai/DeepSeek-V4.1-Flash",
@@ -595,6 +602,10 @@
     "groq/openai/gpt-oss-120b",
     "groq/openai/gpt-oss-20b",
     "groq/openai/gpt-oss-safeguard-20b",
+    "infomaniak/mistralai/Ministral-3-14B-Instruct-2512",
+    "ionos/Qwen/Qwen3-Coder-Next",
+    "ionos/meta-llama/Llama-3.3-70B-Instruct",
+    "ionos/openai/gpt-oss-120b",
     "minimax/MiniMax-M2.1",
     "minimax/MiniMax-M2.5",
     "minimax/MiniMax-M2.7",
@@ -625,6 +636,7 @@
     "nebius/deepseek-ai/DeepSeek-V4-Flash-0731",
     "nebius/deepseek-ai/DeepSeek-V4-Pro-0813",
     "nebius/google/gemma-3-27b-it",
+    "nebius/meta-models/muse-spark-open",
     "nebius/nvidia/Nemotron-3-Ultra-550b-a55b",
     "nebius/nvidia/nemotron-3-super-120b-a12b",
     "nebius/openai/gpt-oss-120b",
@@ -803,6 +815,12 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "deepinfra/stepfun-ai/Step-5-Preview": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "deepinfra/stepfun-ai/Step-3.5-Flash": [
       {
         "type": "effort",
@@ -885,6 +903,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "anthropic/claude-haiku-latest": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "anthropic/claude-opus-5-5": [
@@ -1112,7 +1136,7 @@
     "azure/gpt-5.1-codex-mini": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "flexai/DeepSeek-V4-Flash-0731@eu": [
@@ -1290,6 +1314,12 @@
       }
     ],
     "xai/grok-4.6": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "nebius/meta-models/muse-spark-open": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
@@ -1655,6 +1685,12 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "fireworks_ai/accounts/fireworks/models/muse-spark-open": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
     "mistral/mistral-small-latest": [
       {
         "type": "effort",
@@ -1874,7 +1910,7 @@
     "openai/gpt-mini-latest": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "openai/gpt-6-luna": [
@@ -1922,7 +1958,7 @@
     "openai/gpt-pro-latest": [
       {
         "type": "effort",
-        "values": ["medium", "high", "xhigh"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "moonshot/kimi-k3": [
