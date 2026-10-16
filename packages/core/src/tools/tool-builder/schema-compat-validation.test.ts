@@ -4,7 +4,7 @@ import { z } from 'zod/v4';
 import { RequestContext } from '../../request-context';
 import { createTool } from '../tool';
 import type { ToolAction } from '../types';
-import { validateToolInput } from '../validation';
+import { resolveToolOutputValidationSchema, validateToolInput } from '../validation';
 import { CoreToolBuilder } from './builder';
 
 const haikuModelConfig = {
@@ -77,6 +77,7 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       };
     }
     expect(isStandardSchemaWithJSON(Input)).toBe(true);
+    expect(resolveToolOutputValidationSchema({ outputSchema: Input })).toBe(Input);
 
     const tool: ToolAction<any, any> = {
       id: 'class_probe',
