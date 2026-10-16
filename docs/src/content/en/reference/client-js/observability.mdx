@@ -106,9 +106,9 @@ Pages default to 100 rows and allow at most 1,000. The response is `{ spans, pag
 
 Combine predicates with `and`, `or` and `not`. Membership uses `{ op: 'in', value: { path: 'spanType' }, set: ['agent_run', 'tool_call'] }`. Status is `error` when the span has an error, otherwise `success`; it doesn't represent a separate execution-failure classification. User predicates don't override server authorization.
 
-Each summary includes identity, context, entity lineage, status, timestamps, `durationMs`, model/provider and input/output/error previews. Model/provider are extracted for the selected page and aren't filterable. Costs, token counts, truncation flags, full payloads, metadata and attributes aren't returned. A null stored preview is generated from its payload at read time without saving it back; an empty stored preview means there's nothing to preview.
+Each summary includes identity, context, entity lineage, status, timestamps, `durationMs`, model/provider and input/output/error previews. Model/provider are available in returned rows but aren't filterable. A null stored preview is generated from its payload at read time without saving it back; an empty stored preview means there's nothing to preview.
 
-DuckDB currently returns null for parent/root entity type, ID and name, and for `executionSource`. Filters on those fields use null semantics. Parent/root version IDs remain available. Core and storage adapters can be updated independently. Older adapters may omit newly added response fields, which core returns as null; newer filters require an adapter that supports them. With older core, adapters retain the earlier query contract, although cost is reported as missing because these adapters no longer fetch cost metrics.
+DuckDB currently returns null for parent/root entity type, ID and name, and for `executionSource`. Filters on those fields use null semantics. Parent/root version IDs remain available. Fields unavailable in older storage adapters are returned as null.
 
 ## Querying traces
 
