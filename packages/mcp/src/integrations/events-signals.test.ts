@@ -93,6 +93,21 @@ describe('MCPEventsSignalProvider', () => {
     ]);
   });
 
+  it('with coalesce on, a burst keeps only the latest occurrence', async () => {
+    const { provider, subscriptions, sent, storage } = setup({ coalesce: true });
+    await provider.subscribeThread(thread1, pushA);
+    subscriptions[0]!.push({ n: 1 }, { eventId: 'evt-1' });
+    subscriptions[0]!.push({ n: 2 }, { eventId: 'evt-2' });
+    await vi.waitFor(() => expect(sent()).toHaveLength(2));
+    const coalesceKey = `mcp-events:${MCPEventsSignalProvider.key(pushA)}`;
+    expect(sent().map(call => call.notification.coalesceKey)).toEqual([coalesceKey, coalesceKey]);
+
+    const notifications = await storage.getStore('notifications');
+    const records = await notifications!.listNotifications({ threadId: 'thread-1' });
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({ coalescedCount: 2, payload: { occurrence: { eventId: 'evt-2', data: { n: 2 } } } });
+  });
+
   it('wraps event data as untrusted so it cannot escape the data block', async () => {
     const { provider, subscriptions, sent } = setup();
     await provider.subscribeThread(thread1, pushA);
