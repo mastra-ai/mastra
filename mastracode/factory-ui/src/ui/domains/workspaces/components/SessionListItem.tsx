@@ -52,7 +52,8 @@ export function SessionListItem({
       onRegenerateTitle={row.canRegenerateTitle ? regenerate : undefined}
       regeneratingTitle={regenerating}
       visibility={row.origin === 'user' ? row.session.visibility : undefined}
-      onVisibilityChange={ownUserSession ? changeVisibility : undefined}
+      // Slack threads keep the visibility they were created with; the server refuses a change.
+      onVisibilityChange={ownUserSession && !row.session.branch.startsWith('slack/') ? changeVisibility : undefined}
     />
   );
 }
