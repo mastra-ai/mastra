@@ -4,6 +4,8 @@
 
 Added separate response messages for the current iteration in final output processors, allowing processors to transform each iteration independently.
 
+Fixed feedback continuations with output processors so rewrites and redactions are preserved in `getFullOutput().text` and `steps[].text` instead of returning raw earlier-iteration text.
+
 Processors that persist transcripts should use `messageList.cloneForPersistence()` because the current iteration may appear as a temporary separate response message during final output processing.
 
 ```ts
