@@ -8,3 +8,4 @@ export * from './ulid';
 export * from './tools';
 export * from './output';
 export * from './agent-options';
+export * from './repair';

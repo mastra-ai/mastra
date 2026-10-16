@@ -1,13 +1,15 @@
 import type { LanguageModel, ToolSet } from '@internal/ai-v7';
 import { stepCountIs, streamText } from '@internal/ai-v7';
 import { streamActions } from './from-ai-sdk';
+import { trimResentInput } from './input-filter';
+import { repairOpenRun } from './repair';
+import type { RepairCloser } from './repair';
 import { createActionIdGenerator } from './storage';
 import type { ListActionsQuery } from './storage';
-import { trimResentInput } from './input-filter';
 import type { ActionDraft, AgentInput } from './to-actions';
 import { toModelMessages } from './to-model-messages';
 import type { ActionBase, MastraAction, PersistableAction } from './types';
-import { isPersistable } from './types';
+import { isPersistable, isReadableAction, ToolNotStartedError } from './types';
 
 export type ActionStore = {
   saveActions(args: { actions: PersistableAction[] }): Promise<void>;
@@ -45,9 +47,14 @@ export function lastRuns(count: number): (history: PersistableAction[]) => Persi
 
 /**
  * One agent run over actions: input → actions, thread recall → prompt, model stream → actions.
- * Every action is yielded. `run-start` and the accepted input are saved before the model is called, so a
- * crash mid-run can't lose them; the rest is saved at each `turn-end` and when the run finishes.
- * Input the log already holds (a client resending the conversation) is dropped first.
+ * Every action is yielded.
+ *
+ * - Runs a crash left open are closed first (`repairOpenRun`), so the prompt is valid.
+ * - `run-start` and the accepted input are saved before the model is called, so a crash mid-run can't
+ *   lose them; a `tool-started` is saved before each tool executes; the rest is saved at each `turn-end`.
+ * - If the run stops early (abort, error), the text streamed so far is stored marked `interrupted`, then
+ *   the closers for this run: `run-aborted` on abort, `run-end` `interrupted` on error.
+ * - Input the log already holds (a client resending the conversation) is dropped first.
  */
 export async function* runAgent(options: RunAgentOptions): AsyncGenerator<MastraAction> {
   const { model, threadId, resourceId, memory } = options;
@@ -55,19 +62,33 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
   const generateId = options.generateId ?? (await createActionIdGenerator(memory, threadId));
   const modelId = typeof model === 'object' && 'modelId' in model ? model.modelId : 'unknown';
 
-  const history = memory ? await memory.listActions({ threadId }) : [];
-  const recalled = options.recall ? options.recall(history) : history;
-
+  const stored = memory ? await memory.listActions({ threadId }) : [];
+  // Rows this reader can't read (a newer format version) are skipped, as projection skips them; a required
+  // one throws here, as it would there.
+  const history = stored.filter(isReadableAction);
   const { system, actions: drafts } = trimResentInput(options.input ?? [], history);
-  const stamp = (): ActionBase => ({
+  const stamp = (forRunId: string | undefined = runId): ActionBase => ({
     id: generateId(),
     threadId,
     createdAt: new Date(),
-    runId,
+    ...(forRunId !== undefined ? { runId: forRunId } : {}),
     ...(resourceId !== undefined ? { resourceId } : {}),
   });
+  const close = (closers: RepairCloser[]) =>
+    closers.map(c => ({ ...stamp(c.runId), ...c.action }) as PersistableAction);
+
   // A resumed run (an approval answer) continues under its runId and already has a run-start.
-  const runStart: PersistableAction[] = history.some(a => a.runId === runId)
+  const resuming = history.some(a => a.runId === runId);
+  const additions = [...drafts, ...(options.append ?? [])];
+  const repairs = close(
+    repairOpenRun(history, {
+      ...(resuming ? { resumingRunId: runId } : {}),
+      answeredCallIds: answeredCalls(additions),
+    }),
+  );
+  const recalled = options.recall ? options.recall([...history, ...repairs]) : [...history, ...repairs];
+
+  const runStart: PersistableAction[] = resuming
     ? []
     : [
         {
@@ -81,19 +102,107 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
           },
         },
       ];
-  const input = [...drafts, ...(options.append ?? [])].map(draft => ({ ...stamp(), ...draft }) as PersistableAction);
+  const input = additions.map(draft => ({ ...stamp(), ...draft }) as PersistableAction);
 
-  let pending: PersistableAction[] = [...runStart, ...input];
-  const flush = async () => {
-    if (!memory || pending.length === 0) return;
+  let pending: PersistableAction[] = [...repairs, ...runStart, ...input];
+  /** Everything of this run that was saved or is about to be, for closing it if it stops early. */
+  const own: PersistableAction[] = [...runStart, ...input];
+  // One write queue: batches commit in the order their ids were minted, so a reader paging by id never
+  // passes a row that lands later. Once a write fails, later rows can't be trusted to follow it.
+  let writes: Promise<void> = Promise.resolve();
+  let writeFailed = false;
+  const flush = (): Promise<void> => {
+    if (!memory || pending.length === 0) return writes;
     const batch = pending;
     pending = [];
-    await memory.saveActions({ actions: batch });
+    const write = writes.then(() => memory.saveActions({ actions: batch }));
+    writes = write.catch(() => {
+      writeFailed = true;
+    });
+    return write;
   };
 
+  // The start gate. A tool runs only once its `tool-call` and `tool-started` are both saved and the run is
+  // still going; otherwise its execute throws `ToolNotStartedError` instead of running. So `tool-started`
+  // in the log means the tool may have run, and its absence means it did not.
+  const seen = new Map<string, () => void>();
+  const seenCall = new Map<string, Promise<void>>();
+  // Calls already in the log (an approved call executing on resume) need no wait.
+  for (const a of history) if (a.type === 'tool-call') seenCall.set(a.toolCallId, Promise.resolve());
+  const callSeen = (toolCallId: string) => {
+    if (!seenCall.has(toolCallId)) seenCall.set(toolCallId, new Promise(resolve => seen.set(toolCallId, resolve)));
+    return seenCall.get(toolCallId)!;
+  };
+  const read = new Set(history.flatMap(a => (a.type === 'tool-call' ? [a.toolCallId] : [])));
+  let stopped = false;
+  let markStopped!: () => void;
+  const whenStopped = new Promise<void>(resolve => (markStopped = resolve));
+  const halted = () => stopped || !!options.abortSignal?.aborted;
+  const mayRun = new Set<string>();
+  const extra: MastraAction[] = [];
+  const onToolExecutionStart = async (event: { toolCall: { toolCallId: string; toolName: string } }) => {
+    const { toolCallId, toolName } = event.toolCall;
+    await Promise.race([callSeen(toolCallId), aborted(options.abortSignal), whenStopped]);
+    if (halted() || !read.has(toolCallId)) return;
+    const started: PersistableAction = { ...stamp(), type: 'tool-started', toolCallId, toolName };
+    pending.push(started);
+    own.push(started);
+    extra.push(started);
+    try {
+      await flush();
+    } catch {
+      return;
+    }
+    if (!writeFailed && !halted()) mayRun.add(toolCallId);
+  };
+  const tools = options.tools ? gateTools(options.tools, toolCallId => mayRun.has(toolCallId)) : undefined;
+
+  const converter: { drain?: () => MastraAction[] } = {};
+  let ended = false;
+  // The stream's run-aborted is held back so the run's closers come before it.
+  let abortedBy: PersistableAction | undefined;
+  let failure: { error: unknown } | undefined;
+  /** Every queued tool-started minted before `id` (all of them when `id` is undefined), in id order. */
+  const takeExtra = (id?: string) => {
+    const out: MastraAction[] = [];
+    while (extra.length && (id === undefined || ('id' in extra[0]! && (extra[0].id as string) < id)))
+      out.push(extra.shift()!);
+    return out;
+  };
+  /**
+   * The actions that close a run the stream didn't finish, queued for writing in log order: queued
+   * tool-starteds, the text so far marked interrupted, open calls, an open turn, then run-aborted (on abort)
+   * or run-end. Stops the start gate first, with no await before the closers are computed, so a late
+   * tool-started is either already in `own` or refused.
+   */
+  const closeRun = (): MastraAction[] => {
+    stopped = true;
+    markStopped();
+    const wasAborted = !!abortedBy || !!options.abortSignal?.aborted;
+    const out: MastraAction[] = takeExtra();
+    for (const action of converter.drain?.() ?? []) {
+      out.push(action);
+      if (!isPersistable(action)) continue;
+      pending.push(action);
+      own.push(action);
+    }
+    const closers = close(repairOpenRun([...history, ...repairs, ...own], { resumingRunId: runId }));
+    if (wasAborted) {
+      const runAborted = { ...(abortedBy ?? { type: 'run-aborted' }), ...stamp() } as PersistableAction;
+      const runEnd = closers.findIndex(a => a.type === 'run-end');
+      if (runEnd >= 0) closers.splice(runEnd, 1, runAborted);
+      else closers.push(runAborted);
+    } else {
+      const runEnd = closers.findIndex(a => a.type === 'run-end');
+      if (runEnd >= 0) closers[runEnd] = { ...closers[runEnd]!, finishReason: 'error' } as PersistableAction;
+    }
+    pending.push(...closers);
+    own.push(...closers);
+    return [...out, ...closers];
+  };
   try {
     await flush();
-    for (const action of [...runStart, ...input]) yield action;
+    for (const action of [...repairs, ...runStart, ...input]) yield action;
 
     // A run with several approval requests resumes only once every one of them has an answer.
     const runLog = [...history.filter(a => a.runId === runId), ...input];
@@ -105,25 +214,108 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
       model,
       ...(instructions ? { system: instructions } : {}),
       messages: toModelMessages([...recalled, ...input]),
-      tools: options.tools,
+      tools,
       stopWhen: stepCountIs(options.maxTurns ?? 5),
       abortSignal: options.abortSignal,
+      onToolExecutionStart,
     });
 
-    let ended = false;
-    for await (const action of streamActions(result.fullStream, { threadId, resourceId, runId, modelId, generateId })) {
-      if (isPersistable(action)) pending.push(action);
+    for await (const action of streamActions(result.fullStream, {
+      threadId,
+      resourceId,
+      runId,
+      modelId,
+      generateId,
+      open: converter,
+    })) {
+      if (action.type === 'run-aborted') {
+        abortedBy = action;
+        continue;
+      }
+      if (isPersistable(action)) {
+        pending.push(action);
+        own.push(action);
+      }
+      if (action.type === 'tool-call') {
+        read.add(action.toolCallId);
+        void callSeen(action.toolCallId);
+        seen.get(action.toolCallId)?.();
+      }
+      if (action.type === 'run-end') ended = true;
+      // Yield in id order: a tool-started minted before this action goes first. Live readers (useChat,
+      // Studio) then see what a reload of the log shows.
+      yield* takeExtra(isPersistable(action) ? action.id : undefined);
       yield action;
-      if (action.type === 'run-end' || action.type === 'run-aborted') ended = true;
       if (action.type === 'turn-end') await flush();
     }
-    // A provider error ends the stream without a finish part; every run still closes.
+    // The stream ended without a finish part: an abort, or a provider error (no throw). The consumer is
+    // still reading, so it's told how the run closed, in the order the log holds it: the text so far,
+    // open calls and the turn, then run-aborted or run-end with reason error. `finally` handles only an
+    // early return, where nothing more can be yielded.
     if (!ended) {
-      const runEnd: PersistableAction = { ...stamp(), type: 'run-end', finishReason: 'error', usage: {} };
-      pending.push(runEnd);
-      yield runEnd;
+      // Marked first: a consumer that returns while these are yielded must not close the run twice.
+      ended = true;
+      for (const closer of closeRun()) yield closer;
     }
+  } catch (error) {
+    failure = { error };
+    throw error;
   } finally {
-    await flush();
+    // An early return or a throw: close the run without yielding. Writes still in flight (a tool-started)
+    // land first: the queue keeps id order.
+    if (!ended) closeRun();
+    try {
+      await flush();
+    } catch (error) {
+      // A failing closer write must not mask why the run stopped.
+      if (!failure) throw error;
+    }
   }
 }
+
+/**
+ * Wraps each executable tool so it runs only when `mayRun` says so. The SDK awaits `onToolExecutionStart`
+ * before calling execute, so the decision is made by then. The original's return value (a promise, a value,
+ * or an async iterable for streaming tools) passes through untouched.
+ */
+function gateTools(tools: ToolSet, mayRun: (toolCallId: string) => boolean): ToolSet {
+  return Object.fromEntries(
+    Object.entries(tools).map(([name, tool]) => {
+      const execute = (tool as { execute?: (...args: unknown[]) => unknown }).execute;
+      if (!execute) return [name, tool];
+      return [
+        name,
+        {
+          ...tool,
+          execute: (...args: unknown[]) => {
+            const { toolCallId } = (args[1] ?? {}) as { toolCallId?: string };
+            if (!toolCallId || !mayRun(toolCallId)) throw new ToolNotStartedError();
+            return execute.apply(tool, args);
+          },
+        },
+      ];
+    }),
+  ) as ToolSet;
+}
+
+/** Calls the incoming input answers (tool outcomes, approval answers): repair must leave them open. */
+function answeredCalls(actions: ActionDraft[]): Set<string> {
+  const ids = new Set<string>();
+  for (const a of actions) {
+    if (
+      a.type === 'tool-result' ||
+      a.type === 'tool-error' ||
+      a.type === 'tool-denied' ||
+      a.type === 'tool-approval-responded'
+    )
+      ids.add(a.toolCallId);
+  }
+  return ids;
+}
+
+const aborted = (signal: AbortSignal | undefined) =>
+  new Promise<void>(resolve => {
+    if (!signal) return;
+    if (signal.aborted) return resolve();
+    signal.addEventListener('abort', () => resolve(), { once: true });
+  });
