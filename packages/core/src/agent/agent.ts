@@ -67,6 +67,14 @@ import { normalizeMessageHistoryConfig } from '../memory/message-history-config'
 import { getMemoryRunState } from '../memory/run-state';
 import { checkThreadFGA } from '../memory/thread-fga';
 import type { MemoryConfig, MemoryConfigInternal } from '../memory/types';
+import { instructionsToText } from '../new-message-format/agent-options';
+import type { ActionResumeOptions, ActionRunOptions } from '../new-message-format/agent-options';
+import { createRunOutput } from '../new-message-format/output';
+import type { ActionRunOutput, ActionRunResult } from '../new-message-format/output';
+import { lastRuns, runAgent } from '../new-message-format/run';
+import type { ActionStore, RunAgentOptions } from '../new-message-format/run';
+import type { ActionDraft, AgentInput } from '../new-message-format/to-actions';
+import { toV7Tools } from '../new-message-format/tools';
 import { resolveDeliveryFailureUpdate, resolveNotificationDeliveryDecision } from '../notifications/delivery-policy';
 import type { NotificationDeliveryPolicyInput } from '../notifications/delivery-policy';
 import { applyNotificationRoutingRequirement } from '../notifications/routing';
@@ -281,14 +289,6 @@ import type {
 } from './types';
 import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
-import { instructionsToText } from '../new-message-format/agent-options';
-import type { ActionResumeOptions, ActionRunOptions } from '../new-message-format/agent-options';
-import { createRunOutput } from '../new-message-format/output';
-import type { ActionRunOutput, ActionRunResult } from '../new-message-format/output';
-import { runAgent } from '../new-message-format/run';
-import type { ActionStore, RunAgentOptions } from '../new-message-format/run';
-import type { ActionDraft, AgentInput } from '../new-message-format/to-actions';
-import { toV7Tools } from '../new-message-format/tools';
 import type { AgentCapabilities } from './workflows/prepare-stream/schema';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
@@ -9612,12 +9612,14 @@ export class Agent<
     const threadId = resolveThreadIdFromArgs({ memory: options.memory })?.id;
     const memory = threadId ? await this.#actionStore(requestContext) : undefined;
     const resourceId = options.memory?.resource;
-    if (threadId && memory && resourceId) {
-      const memoryInstance = await this.getMemory({ requestContext });
-      if (memoryInstance && !(await memoryInstance.getThreadById({ threadId }))) {
-        await memoryInstance.createThread({ threadId, resourceId });
-      }
+    const memoryInstance = memory ? await this.getMemory({ requestContext }) : undefined;
+    if (threadId && memoryInstance && resourceId && !(await memoryInstance.getThreadById({ threadId }))) {
+      await memoryInstance.createThread({ threadId, resourceId });
     }
+    // `lastMessages` counts runs on this path: each run is one user exchange with its tool calls.
+    const lastMessages = memoryInstance?.getMergedThreadConfig().lastMessages;
+    const recall =
+      lastMessages === false ? lastRuns(0) : typeof lastMessages === 'number' ? lastRuns(lastMessages) : undefined;
 
     const resolvedModel =
       typeof this.model === 'object' && this.model !== null && 'specificationVersion' in this.model
@@ -9642,6 +9644,7 @@ export class Agent<
       resourceId,
       runId,
       memory,
+      recall,
       maxTurns: options.maxSteps,
       abortSignal: options.abortSignal,
     });

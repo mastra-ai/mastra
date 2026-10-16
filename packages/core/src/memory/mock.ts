@@ -3,6 +3,8 @@ import { z } from 'zod/v4';
 import type { MastraDBMessage } from '../agent/message-list';
 import type { AgentSignalType } from '../agent/signals';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
+import type { ListActionsQuery } from '../new-message-format/storage';
+import type { PersistableAction } from '../new-message-format/types';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import type {
   MemoryStorage,
@@ -125,6 +127,14 @@ export class MockMemory extends MastraMemory {
       });
     }
     return store;
+  }
+
+  override async saveActions(args: { actions: PersistableAction[] }): Promise<void> {
+    return (await this.getMemoryStore()).saveActions(args);
+  }
+
+  override async listActions(query: ListActionsQuery): Promise<PersistableAction[]> {
+    return (await this.getMemoryStore()).listActions(query);
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
