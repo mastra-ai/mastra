@@ -133,6 +133,7 @@ function fakeController(calls: string[], onSessionCreated: (session: FakeSession
     };
   }
   const controller = {
+    queryThreadById: vi.fn(async () => null),
     createSession: vi.fn(async (options: Record<string, unknown>) => {
       const session = fakeSession(options.threadId as string);
       created.push({ options, session });

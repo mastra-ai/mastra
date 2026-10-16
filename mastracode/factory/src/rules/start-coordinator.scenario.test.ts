@@ -39,7 +39,11 @@ function sourceControl() {
   };
 }
 
-function runRequest(sessionId: string, externalId: string) {
+function runRequest(
+  sessionId: string,
+  externalId: string,
+  source: { type?: 'issue' | 'pull-request'; authorTrusted?: boolean } = {},
+) {
   return {
     orgId: 'org-1',
     userId: 'user-1',
@@ -51,42 +55,47 @@ function runRequest(sessionId: string, externalId: string) {
     workItem: {
       role: 'work',
       input: {
-        externalSource: { integrationId: 'github', type: 'issue' as const, externalId },
+        externalSource: { integrationId: 'github', type: source.type ?? 'issue', externalId },
         title: `Issue ${externalId}`,
         stages: ['intake'],
         sessions: {},
-        metadata: {},
+        metadata: { authorTrusted: source.authorTrusted ?? true },
       },
     },
   };
 }
 
+async function setup() {
+  const controller = new AgentController({
+    id: 'code',
+    storage: new InMemoryStore({ id: 'concurrent-runs' }),
+    stateSchema: undefined,
+    modes: [
+      {
+        id: 'build',
+        name: 'Build',
+        default: true,
+        defaultModelId: 'openai/gpt-5.5',
+        agent: new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'Test.', model: 'openai/gpt-5.5' }),
+      },
+    ],
+  });
+  await controller.init();
+  controller.onSessionCreated(session => observeSessionThreadStamp(session));
+  const seed = await createFactoryStorageForTests();
+  const coordinator = new FactoryStartCoordinator(
+    controller as never,
+    seed.workItems,
+    undefined,
+    sourceControl() as never,
+  );
+
+  return { controller, coordinator };
+}
+
 describe('scenario: concurrent runs in one Factory', () => {
   it('keeps two runs live side by side under the Factory resource (#19357)', async () => {
-    const controller = new AgentController({
-      id: 'code',
-      storage: new InMemoryStore({ id: 'concurrent-runs' }),
-      stateSchema: undefined,
-      modes: [
-        {
-          id: 'build',
-          name: 'Build',
-          default: true,
-          defaultModelId: 'openai/gpt-5.5',
-          agent: new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'Test.', model: 'openai/gpt-5.5' }),
-        },
-      ],
-    });
-    await controller.init();
-    controller.onSessionCreated(session => observeSessionThreadStamp(session));
-    const seed = await createFactoryStorageForTests();
-    const coordinator = new FactoryStartCoordinator(
-      controller as never,
-      seed.workItems,
-      undefined,
-      sourceControl() as never,
-    );
-
+    const { controller, coordinator } = await setup();
     const first = await coordinator.prepare(runRequest('run-a', '1'));
     const runA = await controller.getSession('run-a');
     const abortA = vi.spyOn(runA!, 'abort');
@@ -118,5 +127,38 @@ describe('scenario: concurrent runs in one Factory', () => {
       ),
     );
     expect((await listFactorySessionThreads(controller, 'run-b')).map(thread => thread.id)).toEqual(['run-b']);
+  });
+
+  it('keeps a run on untrusted content off the shared Factory memory', async () => {
+    const { controller, coordinator } = await setup();
+
+    const trusted = await coordinator.prepare(runRequest('run-trusted', '1'));
+    const pullRequest = await coordinator.prepare(runRequest('run-pr', '2', { type: 'pull-request' }));
+    const outsiderIssue = await coordinator.prepare(runRequest('run-outsider', '3', { authorTrusted: false }));
+
+    expect(trusted.resourceId).toBe(PROJECT_ID);
+    expect(pullRequest.resourceId).toBe('run-pr');
+    expect(outsiderIssue.resourceId).toBe('run-outsider');
+    expect((await controller.getSession('run-pr'))!.identity.getResourceId()).toBe('run-pr');
+    expect((await controller.getSession('run-outsider'))!.identity.getResourceId()).toBe('run-outsider');
+    // Resource-scoped memory follows the resource: only the trusted run sits on the Factory's.
+    expect((await controller.queryThreads({ resourceId: PROJECT_ID })).map(thread => thread.id)).toEqual([
+      'run-trusted',
+    ]);
+  });
+
+  it('keeps an isolated session isolated, and refuses untrusted work in a shared one', async () => {
+    const { controller, coordinator } = await setup();
+
+    await coordinator.prepare(runRequest('run-a', '1', { authorTrusted: false }));
+    // The author is later stamped as a collaborator; the session keeps its own memory.
+    const again = await coordinator.prepare(runRequest('run-a', '1'));
+    expect(again.resourceId).toBe('run-a');
+    expect((await controller.getSession('run-a'))!.identity.getResourceId()).toBe('run-a');
+
+    await coordinator.prepare(runRequest('run-b', '2'));
+    await expect(coordinator.prepare(runRequest('run-b', '3', { type: 'pull-request' }))).rejects.toThrow(
+      'already shares memory with this Factory',
+    );
   });
 });

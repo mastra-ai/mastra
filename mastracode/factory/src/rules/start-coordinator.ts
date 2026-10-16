@@ -12,6 +12,7 @@ import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/dom
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { CreateWorkItemInput, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactoryTransitionService } from './transition-service.js';
+import { externallyAuthoredWorkItem } from './types.js';
 import type { FactoryRuleStage, FactoryTransitionResult } from './types.js';
 
 export interface FactoryStartRequest {
@@ -32,6 +33,34 @@ export interface FactoryStartRequest {
     input: CreateWorkItemInput;
   };
   requestContext?: RequestContext;
+}
+
+export class UntrustedSharedSessionError extends Error {
+  constructor(readonly sessionId: string) {
+    super(
+      `Session ${sessionId} already shares memory with this Factory, so it cannot run untrusted content. Start the run in a new session.`,
+    );
+    this.name = 'UntrustedSharedSessionError';
+  }
+}
+
+/**
+ * The memory resource a run works on. Trusted runs share the Factory's resource.
+ * A run that reads attacker-controllable content (a pull request checkout, or a
+ * card written outside the write-access circle) keeps its own resource, so it can
+ * neither plant observations that trusted runs read nor read what they observed.
+ * A session that was isolated stays isolated; one already sharing memory refuses
+ * untrusted work instead of carrying that memory into it.
+ */
+async function runMemoryResource(
+  controller: Pick<FactoryController, 'queryThreadById'>,
+  input: { sessionId: string; factoryProjectId: string; untrusted: boolean },
+): Promise<string> {
+  const existing = await controller.queryThreadById({ threadId: input.sessionId });
+  if (existing?.resourceId === input.sessionId) return input.sessionId;
+  if (!input.untrusted) return existing?.resourceId ?? input.factoryProjectId;
+  if (existing) throw new UntrustedSharedSessionError(input.sessionId);
+  return input.sessionId;
 }
 
 export class WorkItemRepositoryError extends Error {
@@ -222,6 +251,18 @@ export class FactoryStartCoordinator {
     const baseRef =
       (sourceSession.baseBranch || undefined) ??
       (typeof metadataBaseBranch === 'string' && metadataBaseBranch ? metadataBaseBranch : undefined);
+    const memoryResourceId = await runMemoryResource(this.#controller, {
+      sessionId: sourceSession.sessionId,
+      factoryProjectId: request.factoryProjectId,
+      untrusted:
+        untrustedCheckout ||
+        externallyAuthoredWorkItem(
+          storedItem ?? {
+            externalSource: request.workItem.input.externalSource ?? null,
+            metadata: request.workItem.input.metadata ?? null,
+          },
+        ),
+    });
     const sessionTags = {
       factoryProjectId: request.factoryProjectId,
       projectRepositoryId: sourceSession.projectRepositoryId,
@@ -231,7 +272,7 @@ export class FactoryStartCoordinator {
     const session = await this.#controller.createSession({
       id: sourceSession.sessionId,
       ownerId: request.userId,
-      resourceId: request.factoryProjectId,
+      resourceId: memoryResourceId,
       threadId: sourceSession.sessionId,
       requestContext,
       tags: sessionTags,
@@ -284,7 +325,7 @@ export class FactoryStartCoordinator {
       workItem: { id: request.workItem.id, input: request.workItem.input },
       role: request.workItem.role,
       session: { sessionId: sourceSession.sessionId, branch: sourceSession.branch, threadId },
-      resourceId: request.factoryProjectId,
+      resourceId: memoryResourceId,
       kickoffKey: request.kickoffKey,
       kickoffMessage: null,
     });
@@ -319,7 +360,7 @@ export class FactoryStartCoordinator {
       workItemId: prepared.item.id,
       bindingId: prepared.binding.id,
       threadId,
-      resourceId: request.factoryProjectId,
+      resourceId: memoryResourceId,
       sessionId: sourceSession.sessionId,
       branch: sourceSession.branch,
       revision,
