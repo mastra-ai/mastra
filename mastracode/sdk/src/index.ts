@@ -31,7 +31,7 @@ import {
   ProviderHistoryCompat,
   StreamErrorRetryProcessor,
 } from '@mastra/core/processors';
-import type { InputProcessor, Processor } from '@mastra/core/processors';
+import type { InputProcessor, OutputProcessor, Processor } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
 import type { ApiRoute } from '@mastra/core/server';
@@ -310,6 +310,14 @@ export interface MastraCodeConfig {
   inputProcessors?:
     | InputProcessor[]
     | ((args: { requestContext: RequestContext }) => InputProcessor[] | Promise<InputProcessor[]>);
+  /**
+   * Output processor instances appended after Mastra Code's built-in output processors,
+   * or a per-request resolver. They run before the memory layers the Agent appends,
+   * so changes they make to response messages are persisted.
+   */
+  outputProcessors?:
+    | OutputProcessor[]
+    | ((args: { requestContext: RequestContext }) => OutputProcessor[] | Promise<OutputProcessor[]>);
   /** Tools removed from the dynamic tool set before exposure to the model */
   disabledTools?: string[];
   /**
@@ -1356,13 +1364,19 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     },
     // Like the input lane, plugin processors sit last — after the layers they
     // customize, before the channel and memory layers the Agent appends.
-    outputProcessors: () => [
-      // Anthropic cyber refusals finish a step instead of throwing, so they are
-      // handled here; OpenAI's throw and are handled in the error lane below.
-      new CyberRefusalHandler(),
-      ...readPluginProcessors().output.map(entry => entry.value),
-      ...(pluginSignalLane?.getOutputProcessors() ?? []),
-    ],
+    outputProcessors: ({ requestContext }) => {
+      const resolveProcessors = (configured: OutputProcessor[]) => [
+        // Anthropic cyber refusals finish a step instead of throwing, so they are
+        // handled here; OpenAI's throw and are handled in the error lane below.
+        new CyberRefusalHandler(),
+        ...configured,
+        ...readPluginProcessors().output.map(entry => entry.value),
+        ...(pluginSignalLane?.getOutputProcessors() ?? []),
+      ];
+      if (typeof config?.outputProcessors !== 'function') return resolveProcessors(config?.outputProcessors ?? []);
+      const configured = config.outputProcessors({ requestContext });
+      return configured instanceof Promise ? configured.then(resolveProcessors) : resolveProcessors(configured);
+    },
     errorProcessors: [
       // ProviderHistoryCompat must run before StreamErrorRetryProcessor: both react to
       // HTTP 400s, but ProviderHistoryCompat repairs the incompatible history (e.g.
