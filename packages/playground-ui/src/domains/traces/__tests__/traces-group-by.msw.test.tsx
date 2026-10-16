@@ -43,10 +43,14 @@ let lastError: Error | null = null;
 let lastGroups: ReturnType<typeof useTraceGroupBy> | undefined;
 const onProjectDrillDown = vi.fn<(projectId: string) => void>();
 
-type HarnessProps = { enabled?: boolean; entityIdFallback?: boolean };
+type HarnessProps = {
+  enabled?: boolean;
+  entityIdFallback?: boolean;
+  formatValue?: (dimension: TraceGroupByDimension, value: string) => string | undefined;
+};
 
 /** The grouped view as a page wires it: Group by chips in a FilterBar above the grouped table. */
-function Harness({ enabled = true, entityIdFallback = false }: HarnessProps) {
+function Harness({ enabled = true, entityIdFallback = false, formatValue }: HarnessProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const dimensions = enabled ? DIMENSIONS : [];
   const groups = useTraceGroupBy({
@@ -83,6 +87,7 @@ function Harness({ enabled = true, entityIdFallback = false }: HarnessProps) {
           filtersApplied
           sort={groups.sort}
           onSortChange={groups.setSort}
+          formatValue={formatValue}
           onDrillDown={drillDown =>
             drillDown.projectId
               ? onProjectDrillDown(drillDown.projectId)
@@ -276,6 +281,17 @@ describe('Traces group by', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /^Cost, sorted ascending/ }));
     await waitFor(() => expect(locationParams().get('groupSort')).toBe('cost.sum:desc'));
+  });
+
+  it('labels groups with the page-supplied names, keeping drill-down on the raw value', async () => {
+    serveAggregate(() => groupedByEntityName);
+    renderHarness('?groupBy=entityName', {
+      formatValue: (dimension, value) => (value === 'support-agent' ? 'Support' : undefined),
+    });
+    const support = await screen.findByRole('button', { name: 'Show traces for Support' });
+    expect(screen.getByRole('button', { name: 'Show traces for billing-agent' })).not.toBeNull();
+    fireEvent.click(support);
+    await waitFor(() => expect(locationParams().getAll('filterEntityName')).toEqual(['support-agent']));
   });
 
   it('drills down into a group: sets its filter and returns to the trace list', async () => {

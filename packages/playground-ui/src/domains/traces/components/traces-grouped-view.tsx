@@ -48,6 +48,8 @@ export interface TracesGroupedViewProps {
   onSortChange: (sort: TraceGroupSort) => void;
   /** Called with how to narrow the trace list to the clicked group. Groups without a drill-down aren't clickable. */
   onDrillDown: (drillDown: TraceGroupDrillDown) => void;
+  /** Label for a set dimension value, e.g. a project's name for its ID; return undefined for the default label. */
+  formatValue?: (dimension: TraceGroupByDimension, value: string) => string | undefined;
 }
 
 const sortPhrase = (measure: TraceGroupByMeasure) =>
@@ -82,6 +84,7 @@ export function TracesGroupedView({
   sort,
   onSortChange,
   onDrillDown,
+  formatValue,
 }: TracesGroupedViewProps) {
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col gap-2">
@@ -118,7 +121,10 @@ export function TracesGroupedView({
         ) : (
           rows.map(row => {
             const values = dimensions.map(dimension => getTraceGroupValue(row, dimension));
-            const labels = dimensions.map((dimension, index) => formatTraceGroupValue(dimension, values[index]));
+            const labels = dimensions.map((dimension, index) => {
+              const value = values[index];
+              return (value && formatValue?.(dimension, value)) ?? formatTraceGroupValue(dimension, value);
+            });
             const drillDown = getTraceGroupDrillDown(dimensions, row);
             const cells = (
               <>
