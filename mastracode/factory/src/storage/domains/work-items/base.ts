@@ -165,7 +165,14 @@ export interface FactoryRuleEvaluationRecord {
 
 /** `proposed` is parked awaiting approval; `dismissed` is human, `superseded` is automatic. */
 export type FactoryDispatchStatus =
-  'pending' | 'proposed' | 'dismissed' | 'superseded' | 'leased' | 'retry' | 'succeeded' | 'failed';
+  | 'pending'
+  | 'proposed'
+  | 'dismissed'
+  | 'superseded'
+  | 'leased'
+  | 'retry'
+  | 'succeeded'
+  | 'failed';
 
 const FACTORY_DISPATCH_FAILURE_CODES = [
   'session_unavailable',
@@ -259,7 +266,11 @@ export interface FactoryDeferredDecisionRecord {
 }
 
 export type FactoryAttentionKind =
-  'automation-failed' | 'automation-proposed' | 'mention' | 'activity' | 'agent-waiting';
+  | 'automation-failed'
+  | 'automation-proposed'
+  | 'mention'
+  | 'activity'
+  | 'agent-waiting';
 export type FactoryAttentionReceiptState = 'read' | 'archived';
 
 export type FactoryAttentionReceiptAction = 'read' | 'archive' | 'restore';
