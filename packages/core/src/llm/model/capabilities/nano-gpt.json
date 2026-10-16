@@ -85,6 +85,7 @@
     "deepseek/deepseek-v4.1-flash:thinking",
     "doubao-1.5-vision-pro-32k",
     "ernie-5.0-thinking-preview",
+    "fireworks/ember-1",
     "gemini-2.0-pro-exp-02-05",
     "gemini-2.0-pro-reasoner",
     "gemini-2.5-flash",
@@ -688,6 +689,7 @@
     "deepseek/deepseek-v4-pro:thinking",
     "deepseek/deepseek-v4.1-flash",
     "deepseek/deepseek-v4.1-flash:thinking",
+    "fireworks/ember-1",
     "gemini-2.5-flash-lite-preview-09-2025",
     "gemini-2.5-flash-lite-preview-09-2025-thinking",
     "gemini-2.5-flash-preview-09-2025",
@@ -1746,6 +1748,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "fireworks/ember-1": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "mistralai/mistral-large-4": [
