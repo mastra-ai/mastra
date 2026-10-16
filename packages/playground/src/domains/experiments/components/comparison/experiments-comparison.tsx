@@ -2,6 +2,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import {
   useAllDatasetExperimentResultsQueries,
@@ -10,10 +11,11 @@ import {
   useScoresByExperimentIdsQueries,
 } from '@mastra/react/hooks/datasets';
 import { useExperimentsItemUsage } from '@mastra/react/hooks/experiments';
-import { useMemo } from 'react';
-import type { CSSProperties } from 'react';
+import { useMemo, useState } from 'react';
+import type { CSSProperties, MouseEvent } from 'react';
 import { buildComparisonRows, sideDurationMs } from './build-comparison-rows';
 import type { ComparisonRow } from './build-comparison-rows';
+import { ComparisonItemPanel } from './comparison-item-panel';
 import { ComparisonItemPayload } from './comparison-item-payload';
 import { totalTokens } from './comparison-metric-format';
 import { sectionStackClass } from './comparison-section';
@@ -38,6 +40,18 @@ const gridRow =
   'grid border-border xl:grid-cols-[minmax(22rem,26rem)_repeat(var(--compare-cols),minmax(32rem,1fr))] xl:divide-x xl:divide-border';
 
 const columnLabel = (index: number) => (index === 0 ? 'Baseline' : `Contender ${index}`);
+
+/**
+ * Rows open on click, but their buttons, links and fields keep their own behaviour. Portaled
+ * content (tooltips, popovers) bubbles through React yet sits outside the row in the DOM.
+ */
+const isFromControl = (event: MouseEvent<HTMLElement>) =>
+  !(event.target instanceof Element) ||
+  !event.currentTarget.contains(event.target) ||
+  event.target.closest('a, button, input, select, textarea, [role="button"], [role="link"]') !== null;
+
+/** Selecting text to copy it shouldn't open the item. */
+const hasTextSelection = () => Boolean(window.getSelection()?.toString());
 
 const isNumber = (value: number | null): value is number => value != null;
 
@@ -71,6 +85,7 @@ export function ExperimentsComparison({
   onSetBaseline,
 }: ExperimentsComparisonProps) {
   const experimentIds = useMemo(() => [baselineId, ...contenderIds], [baselineId, contenderIds]);
+  const [selectedItemId, setSelectedItemId] = useState<string>();
 
   const {
     data: comparison,
@@ -207,7 +222,26 @@ export function ExperimentsComparison({
         </div>
 
         {rows.map(row => (
-          <div key={row.itemId} role="row" aria-label={row.itemId} className={cn(gridRow, 'border-b')}>
+          <div
+            key={row.itemId}
+            role="row"
+            aria-label={row.itemId}
+            tabIndex={0}
+            onClick={event => {
+              if (isFromControl(event) || hasTextSelection()) return;
+              setSelectedItemId(row.itemId);
+            }}
+            onKeyDown={event => {
+              if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return;
+              event.preventDefault();
+              setSelectedItemId(row.itemId);
+            }}
+            className={cn(
+              gridRow,
+              'cursor-pointer border-b transition-colors duration-normal ease-out-custom hover:bg-fill-subtle',
+              focusRingInset,
+            )}
+          >
             <div role="cell" className={cn(cell, sectionStackClass)}>
               <ComparisonItemPayload label="Input" value={row.input} />
               <ComparisonItemPayload label="Ground truth" value={row.groundTruth} />
@@ -221,6 +255,7 @@ export function ExperimentsComparison({
           </div>
         ))}
       </div>
+      <ComparisonItemPanel datasetId={datasetId} itemId={selectedItemId} onClose={() => setSelectedItemId(undefined)} />
     </ScrollArea>
   );
 }

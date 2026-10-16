@@ -232,7 +232,7 @@
       }
     },
     {
-      "hash": "65e2e3be509c9b26",
+      "hash": "2464d516ace3c9d6",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -256,7 +256,7 @@
               "type": "function_call",
               "call_id": "call_ZB6br4ET65cchnpfwediWraC",
               "name": "research",
-              "arguments": "{\"topic\":\"machine learning\",\"_background\":{\"enabled\":true,\"disposition\":\"deferred\",\"timeoutMs\":30000,\"maxRetries\":3}}"
+              "arguments": "{\"_background\":{\"disposition\":\"deferred\",\"enabled\":true,\"maxRetries\":3,\"timeoutMs\":30000},\"topic\":\"machine learning\"}"
             },
             {
               "type": "function_call_output",

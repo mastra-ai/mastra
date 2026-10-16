@@ -222,6 +222,36 @@ describe('ExperimentResultPanel review controls', () => {
 
     expect(screen.queryByRole('button', { name: 'Mark as reviewed' })).toBeNull();
   });
+
+  it('drops the "Experiment result" title from the header', () => {
+    renderPanel(makeResult());
+
+    expect(screen.queryByRole('heading', { name: 'Experiment result' })).toBeNull();
+  });
+
+  it('renders the complete action with a visible label, before the other header actions', () => {
+    renderPanel(makeResult({ status: 'needs-review' }), {
+      onComplete: vi.fn(),
+      experimentLink: '/experiments/exp-1',
+    });
+
+    const button = screen.getByRole('button', { name: 'Mark as reviewed' });
+    expect(button.textContent).toBe('Mark as reviewed');
+    const experimentLink = screen.getByRole('link', { name: /See experiment/ });
+    expect(button.compareDocumentPosition(experimentLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Sits on the left of the header, outside the right-aligned actions group.
+    expect(experimentLink.parentElement?.contains(button)).toBe(false);
+  });
+
+  it('renders the request review action with a visible label', () => {
+    const onFlagForReview = vi.fn();
+    renderPanel(makeResult({ status: null }), { onFlagForReview });
+
+    const button = screen.getByRole('button', { name: 'Request review' });
+    expect(button.textContent).toBe('Request review');
+    fireEvent.click(button);
+    expect(onFlagForReview).toHaveBeenCalled();
+  });
 });
 
 describe('ExperimentResultPanel trace usage', () => {
@@ -416,6 +446,34 @@ describe('ExperimentResultPanel summary', () => {
       renderPanel(makeResult(), { scores: [{ id: 'score-1', scorerId: 'accuracy', score: 0.5 }] });
 
       expect(screen.getByRole('link', { name: 'Open accuracy' }).getAttribute('href')).toBe('/scorers/accuracy');
+    });
+  });
+});
+
+describe('ExperimentResultPanel score reason', () => {
+  describe('when a score has a reason', () => {
+    const scores = [{ id: 'score-1', scorerId: 'accuracy', score: 0.5, reason: 'Because **bold**' }];
+
+    it('shows an info button next to the score', () => {
+      renderPanel(makeResult(), { scores });
+
+      expect(screen.getByRole('button', { name: 'Show accuracy reason' })).toBeDefined();
+    });
+
+    it('renders the reason as markdown when the info button is focused', async () => {
+      renderPanel(makeResult(), { scores });
+
+      fireEvent.focus(screen.getByRole('button', { name: 'Show accuracy reason' }));
+
+      expect((await screen.findByText('bold')).tagName).toBe('STRONG');
+    });
+  });
+
+  describe('when a score has no reason', () => {
+    it('does not show an info button', () => {
+      renderPanel(makeResult(), { scores: [{ id: 'score-1', scorerId: 'accuracy', score: 0.5, reason: null }] });
+
+      expect(screen.queryByRole('button', { name: 'Show accuracy reason' })).toBeNull();
     });
   });
 });

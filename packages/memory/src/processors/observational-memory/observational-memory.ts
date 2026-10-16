@@ -1,7 +1,7 @@
-import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
+import type { MastraDBMessage, MessageList, ModelWithRetries } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
-import type { MastraModelConfig } from '@mastra/core/llm';
+import type { MastraModelConfig, WidenModelId } from '@mastra/core/llm';
 import { modelSupportsTemperature, resolveModelConfig } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
@@ -144,6 +144,11 @@ export function getLastActivityFromMessages(messages?: MastraDBMessage[]): numbe
   }
 
   return undefined;
+}
+
+function firstFallbackModel(fallbacks: ModelWithRetries[]): WidenModelId<ModelWithRetries['model']> {
+  const model: WidenModelId<ModelWithRetries['model']> | undefined = fallbacks[0]?.model;
+  return model ?? 'unknown';
 }
 
 function formatModelContext(provider?: string, modelId?: string): string | undefined {
@@ -460,6 +465,7 @@ export class ObservationalMemory {
   private mastra?: Mastra;
   private readonly autoModels?: ObservationalMemoryConfig['autoModels'];
   private readonly resolveAutoModelHook?: ObservationalMemoryConfig['resolveModel'];
+  private readonly canUseProvider?: ObservationalMemoryConfig['canUseProvider'];
   private memory?: Memory;
 
   /**
@@ -597,6 +603,7 @@ export class ObservationalMemory {
     this.hooks = config.hooks;
     this.autoModels = config.autoModels;
     this.resolveAutoModelHook = config.resolveModel;
+    this.canUseProvider = config.canUseProvider;
     this.hookExecution = config.hookExecution ?? 'non-blocking';
     this.mastra = config.mastra;
     this.memory = config.memory;
@@ -749,6 +756,7 @@ export class ObservationalMemory {
             config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
           ),
       bufferOnIdle: config.observation?.bufferOnIdle ?? false,
+      observeOnContextOverflow: config.observation?.observeOnContextOverflow ?? true,
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config.observation?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferActivation),
@@ -944,14 +952,14 @@ export class ObservationalMemory {
     const concreteModel = this.getConcreteModel(model, inputTokens);
 
     if (Array.isArray(concreteModel)) {
-      return (concreteModel[0]?.model ?? 'unknown') as Parameters<typeof resolveModelConfig>[0];
+      return firstFallbackModel(concreteModel);
     }
     if (typeof concreteModel === 'function') {
       // Wrap to handle functions that may return ModelWithRetries[]
       return async (ctx: any) => {
         const result = await concreteModel(ctx);
         if (Array.isArray(result)) {
-          return (result[0]?.model ?? 'unknown') as MastraModelConfig;
+          return firstFallbackModel(result) as MastraModelConfig;
         }
         return result as MastraModelConfig;
       };
@@ -1025,6 +1033,16 @@ export class ObservationalMemory {
     };
   }
 
+  private autoModelOptions(requestContext?: RequestContext) {
+    const canUseProvider = this.canUseProvider;
+    return {
+      autoModels: this.autoModels,
+      canUseProvider: canUseProvider
+        ? (providerId: string) => canUseProvider(providerId, { requestContext })
+        : undefined,
+    };
+  }
+
   private async resolveAutoModel(options?: {
     requestContext?: RequestContext;
     mainAgent?: ProcessorContext['agent'];
@@ -1038,7 +1056,7 @@ export class ObservationalMemory {
     }
     const mainModelId = getModelId(mainModel);
     const pick =
-      resolveAutoModelId(mainModelId, { autoModels: this.autoModels }) ??
+      resolveAutoModelId(mainModelId, this.autoModelOptions(options?.requestContext)) ??
       (mainModel ? undefined : OBSERVATIONAL_MEMORY_DEFAULTS.observation.model);
 
     // No cheaper sibling is known: reuse the main model exactly as configured.
@@ -1159,7 +1177,7 @@ export class ObservationalMemory {
       const reflectionModel = await this.resolveModelFunction(this.reflectionConfig.model, requestContext);
       const modelId =
         reflectionModel === 'auto'
-          ? (resolveAutoModelId(undefined, { autoModels: this.autoModels }) ?? '')
+          ? (resolveAutoModelId(undefined, this.autoModelOptions(requestContext)) ?? '')
           : ((await this.resolveModelContext(reflectionModel as ObservationalMemoryModel, requestContext))?.modelId ??
             '');
 
@@ -4173,6 +4191,11 @@ ${formattedMessages}
     hooks?: ObserveLifecycleHooks;
     /** Which pipeline path initiated this cycle; defaults to 'manual'. */
     trigger?: ObserveTrigger;
+    /**
+     * Observe even when unobserved tokens are below the observation threshold.
+     * Applies to this call only; nothing is written to the record's config.
+     */
+    force?: boolean;
     agent?: ProcessorContext['agent'];
     sendSignal?: ProcessorContext['sendSignal'];
     sendStateSignal?: ProcessorContext['sendStateSignal'];
@@ -4215,7 +4238,9 @@ ${formattedMessages}
               freshRecord.lastObservedAt ? new Date(freshRecord.lastObservedAt) : undefined,
             );
 
-        if (
+        if (opts.force) {
+          if (unobservedMessages.length === 0) return;
+        } else if (
           !this.meetsObservationThreshold({
             record: freshRecord,
             unobservedTokens: await this.tokenCounter.countMessagesAsync(unobservedMessages),

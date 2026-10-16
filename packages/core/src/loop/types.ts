@@ -280,6 +280,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
    * version instead of whatever a status selector points at later.
    */
   agentVersionId?: string;
+  resolvedScopes?: string[];
   toolCallConcurrency?: ToolCallConcurrency;
   eagerToolExecution?: boolean;
   /**

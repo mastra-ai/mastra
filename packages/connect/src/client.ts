@@ -19,6 +19,12 @@ export interface ConnectClientOptions {
   /** Organization id. Falls back to MASTRA_ORG_ID; the x-organization-id header is omitted when absent. */
   orgId?: string;
   /**
+   * Project id, sent as the x-mastra-project-id header so the platform can
+   * attribute proxy activity to this project. Falls back to MASTRA_PROJECT_ID;
+   * the header is omitted when absent.
+   */
+  projectId?: string;
+  /**
    * Integrations service base URL. Falls back to MASTRA_INTEGRATIONS_API_URL,
    * then the regional default from MASTRA_PLATFORM_REGION ('us' | 'eu'),
    * then https://integrations.mastra.ai.
@@ -117,6 +123,10 @@ export function resolveClient(options?: ConnectClientOptions): ResolvedClient {
   const orgId = options?.orgId?.trim() || process.env.MASTRA_ORG_ID?.trim();
   if (orgId) {
     headers['x-organization-id'] = orgId;
+  }
+  const projectId = options?.projectId?.trim() || process.env.MASTRA_PROJECT_ID?.trim();
+  if (projectId) {
+    headers['x-mastra-project-id'] = projectId;
   }
   const resourceId = options?.resourceId !== undefined ? validateResourceId(options.resourceId) : undefined;
   if (resourceId !== undefined) {

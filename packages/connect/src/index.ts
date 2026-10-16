@@ -1,6 +1,7 @@
 export { tools } from './tools.js';
 export type {
   ToolsOptions,
+  ToolsOptionsInput,
   ToolsProviderOptions,
   ToolsResolver,
   ToolsResolverContext,

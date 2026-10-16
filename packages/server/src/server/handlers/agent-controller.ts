@@ -18,6 +18,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { z } from 'zod/v4';
 
 import { MASTRA_USER_KEY } from '../constants';
+import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import { filterSchema, includeSchema, messageOrderBySchema } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -199,25 +200,31 @@ const MAX_TOTAL_FILE_DATA_LENGTH = 28 * 1024 * 1024;
  */
 const bodyRequestContextSchema = z.record(z.string(), z.unknown()).optional();
 
+// Optional attachments (e.g. pasted images). `data` is base64-encoded.
+const messageFilesSchema = z
+  .array(
+    z.object({
+      data: z.string().max(MAX_FILE_DATA_LENGTH),
+      mediaType: z.string(),
+      filename: z.string().optional(),
+    }),
+  )
+  .max(20)
+  .refine(files => files.reduce((total, file) => total + file.data.length, 0) <= MAX_TOTAL_FILE_DATA_LENGTH, {
+    message: 'Total attachment size exceeds limit',
+  })
+  .optional();
+
 const sendMessageBodySchema = z.object({
   message: z.string(),
   requestContext: bodyRequestContextSchema,
-  // Optional attachments (e.g. pasted images). `data` is base64-encoded.
-  files: z
-    .array(
-      z.object({
-        data: z.string().max(MAX_FILE_DATA_LENGTH),
-        mediaType: z.string(),
-        filename: z.string().optional(),
-      }),
-    )
-    .max(20)
-    .refine(files => files.reduce((total, file) => total + file.data.length, 0) <= MAX_TOTAL_FILE_DATA_LENGTH, {
-      message: 'Total attachment size exceeds limit',
-    })
-    .optional(),
+  files: messageFilesSchema,
 });
-const steerBodySchema = z.object({ message: z.string(), requestContext: bodyRequestContextSchema });
+const steerBodySchema = z.object({
+  message: z.string(),
+  requestContext: bodyRequestContextSchema,
+  files: messageFilesSchema,
+});
 const toolApprovalBodySchema = z.object({
   toolCallId: z.string(),
   approved: z.boolean(),
@@ -292,7 +299,11 @@ const listThreadsQuerySchema = z.object({
     }, z.record(z.string(), z.string()).optional())
     .optional(),
 });
-const followUpBodySchema = z.object({ message: z.string(), requestContext: bodyRequestContextSchema });
+const followUpBodySchema = z.object({
+  message: z.string(),
+  requestContext: bodyRequestContextSchema,
+  files: messageFilesSchema,
+});
 
 const sendNotificationBodySchema = z.object({
   source: z.string(),
@@ -318,6 +329,7 @@ const createSessionResponseSchema = z.object({
 const ackResponseSchema = z.object({
   ok: z.boolean(),
 });
+const transferOwnershipResponseSchema = ackResponseSchema.extend({ ownerId: z.string() });
 
 const toolCommandAckResponseSchema = z.object({
   ok: z.boolean(),
@@ -840,13 +852,13 @@ export const STEER_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, requestContext }) => {
+  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, files, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
       const author = getRequestMessageAuthor(requestContext);
       ackBackgroundSessionWork({
-        work: session.steer({ content: message, requestContext, ...(author ? { author } : {}) }),
+        work: session.steer({ content: message, files, requestContext, ...(author ? { author } : {}) }),
         session,
         mastra,
         operation: 'steer',
@@ -932,6 +944,48 @@ export const SWITCH_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error switching controller thread');
+    }
+  },
+});
+
+export const TRANSFER_AGENT_CONTROLLER_THREAD_OWNERSHIP_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/owner',
+  responseType: 'json' as const,
+  pathParamSchema: threadPathParams,
+  queryParamSchema: sessionScopeQuerySchema,
+  responseSchema: transferOwnershipResponseSchema,
+  summary: 'Take ownership of a thread',
+  description:
+    "Transfers ownership of the specified thread to the authenticated user from the request context. The thread must belong to the session's resource, and the caller needs memory write access to it. The session's active thread does not change.",
+  tags: ['AgentController', 'Threads'],
+  requiresAuth: true,
+  requiresPermission: 'agent-controller:execute',
+  handler: async ({ mastra, controllerId, resourceId, sessionScope, threadId, requestContext }) => {
+    try {
+      const ownerId = getRequestMessageAuthor(requestContext)?.id;
+      if (!ownerId) {
+        throw new HTTPException(401, { message: 'An authenticated user is required to transfer thread ownership' });
+      }
+      const controller = getAgentControllerOrThrow(mastra, controllerId);
+      await controller.init();
+      const thread = await controller.queryThreadById({ threadId });
+      if (!thread || thread.resourceId !== resourceId) {
+        throw new HTTPException(404, { message: 'Thread not found' });
+      }
+      await enforceThreadAccess({
+        mastra,
+        requestContext,
+        threadId,
+        thread,
+        effectiveResourceId: resourceId,
+        permission: MastraFGAPermissions.MEMORY_WRITE,
+      });
+      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      await session.thread.transferOwnership({ toOwnerId: ownerId, threadId });
+      return { ok: true, ownerId };
+    } catch (error) {
+      return handleError(error, 'error transferring controller thread ownership');
     }
   },
 });
@@ -1439,12 +1493,12 @@ export const FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, requestContext }) => {
+  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, files, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
       ackBackgroundSessionWork({
-        work: session.followUp({ content: message, requestContext }),
+        work: session.followUp({ content: message, files, requestContext }),
         session,
         mastra,
         operation: 'followUp',

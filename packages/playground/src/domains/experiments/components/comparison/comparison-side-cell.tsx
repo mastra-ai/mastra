@@ -4,7 +4,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { getResultErrorMessage, getResultOutputText } from '../../utils/result-output';
-import { sideDurationMs } from './build-comparison-rows';
+import { sideAverageScore, sideDurationMs } from './build-comparison-rows';
 import type { ComparisonColumn } from './build-comparison-rows';
 import { ComparisonMetricList } from './comparison-metric-list';
 import type { ComparisonMetric } from './comparison-metric-list';
@@ -34,9 +34,11 @@ function sideMetrics(side: ComparisonColumn, showUsage: boolean): ComparisonMetr
     costDelta: side.costDelta,
     tokenDelta: side.tokenDelta,
     durationDeltaMs: side.durationDeltaMs,
+    averageScore: side.scores.length > 0 ? { value: sideAverageScore(side), delta: side.averageScoreDelta } : undefined,
     scores: side.scores.map(score => ({
       scorerId: score.scorerId,
       value: score.value,
+      reason: score.reason,
       delta: side.deltas?.[score.scorerId] ?? null,
     })),
   });

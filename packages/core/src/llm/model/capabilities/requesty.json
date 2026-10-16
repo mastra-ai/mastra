@@ -50,6 +50,8 @@
     "gemini-3.7-flash@eu",
     "gemini-3.8-flash",
     "gemini-3.8-flash@eu",
+    "gemini-4-argon",
+    "gemini-4-argon@eu",
     "gemma-4-26b-a4b-it",
     "gemma-4-31b-it",
     "glm-5.3-flash",
@@ -113,6 +115,9 @@
     "mistral-small-2603",
     "mistral-small-2603@eu",
     "muse-glimmer-30b",
+    "muse-spark-1.3",
+    "muse-spark-open",
+    "muse-wonder-1.0",
     "nemotron-3-nano-omni-30b-a3b-reasoning",
     "nemotron-3.5-content-safety",
     "o4-mini@eu",
@@ -129,7 +134,8 @@
     "seed-2.0-code",
     "seed-2.0-mini",
     "seed-2.0-pro",
-    "step-3.7-flash"
+    "step-3.7-flash",
+    "step-5-preview"
   ],
   "temperature": [
     "claude-haiku-4-5",
@@ -211,11 +217,16 @@
     "minimax-m3@eu",
     "mistral-large-4",
     "mistral-large-4@eu",
+    "mistral-medium-3-5",
+    "mistral-medium-3-5@eu",
     "mistral-medium-latest",
     "mistral-medium-latest@eu",
     "mistral-small-2603",
     "mistral-small-2603@eu",
     "muse-glimmer-30b",
+    "muse-spark-1.3",
+    "muse-spark-open",
+    "muse-wonder-1.0",
     "nemotron-3-nano-omni-30b-a3b-reasoning",
     "nemotron-3-super-120b-a12b",
     "nemotron-3-ultra-550b-a55b",
@@ -293,6 +304,8 @@
     "gemini-3.7-flash@eu",
     "gemini-3.8-flash",
     "gemini-3.8-flash@eu",
+    "gemini-4-argon",
+    "gemini-4-argon@eu",
     "gemma-4-26b-a4b-it",
     "glm-5.1@eu",
     "glm-5.2",
@@ -358,6 +371,8 @@
     "mistral-medium-latest@eu",
     "mistral-small-2603",
     "mistral-small-2603@eu",
+    "muse-spark-1.3",
+    "muse-wonder-1.0",
     "nemotron-3-nano-omni",
     "nemotron-3-nano-omni@eu",
     "nemotron-lightning-3.5-30b-a3b",
@@ -375,7 +390,8 @@
     "qwen3.8-flash-next",
     "qwen3.8-flash-next@eu",
     "qwen3.8-max",
-    "step-3.7-flash"
+    "step-3.7-flash",
+    "step-5-preview"
   ],
   "reasoning": {
     "ring-2.6-1t": [
@@ -439,6 +455,12 @@
       }
     ],
     "qwen3.7-max": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "muse-spark-1.3": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -714,7 +736,19 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
+    "step-5-preview": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
     "claude-opus-5-5@eu": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "gemini-4-argon@eu": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -1200,6 +1234,12 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
+    "muse-wonder-1.0": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
     "claude-sonnet-4-6": [
       {
         "type": "effort",
@@ -1297,6 +1337,18 @@
       }
     ],
     "claude-opus-4-5@eu": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "muse-spark-open": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "gemini-4-argon": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]

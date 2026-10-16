@@ -20,6 +20,7 @@
     "XiaomiMiMo/MiMo-V2.5-Pro",
     "XiaomiMiMo/MiMo-V2.6-Flash",
     "XiaomiMiMo/MiMo-V2.6-Pro",
+    "anthropic/claude-fable-5",
     "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
     "deepseek-ai/DeepSeek-V4.1-Flash",
     "google/gemma-3-12b-it",
@@ -36,6 +37,7 @@
     "moonshotai/Kimi-K3",
     "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning",
     "stepfun-ai/Step-3.7-Flash",
+    "stepfun-ai/Step-5-Preview",
     "thinkingmachines/Inkling",
     "thinkingmachines/Inkling-Small",
     "zai-org/GLM-5.3-Flash"
@@ -87,6 +89,7 @@
     "google/gemma-4-26B-A4B-it",
     "google/gemma-4-31B-it",
     "google/gemma-4-E4B-it",
+    "mistralai/Mistral-Small-24B-Instruct-2501",
     "moonshotai/Kimi-K2.5",
     "moonshotai/Kimi-K2.6",
     "nvidia/Llama-3.3-Nemotron-Super-49B-v1.5",
@@ -137,6 +140,7 @@
     "XiaomiMiMo/MiMo-V2.5-Pro",
     "XiaomiMiMo/MiMo-V2.6-Flash",
     "XiaomiMiMo/MiMo-V2.6-Pro",
+    "anthropic/claude-fable-5",
     "deepseek-ai/DeepSeek-R1-0528",
     "deepseek-ai/DeepSeek-V3",
     "deepseek-ai/DeepSeek-V3-0324",
@@ -157,6 +161,7 @@
     "meta-llama/Llama-3.3-70B-Instruct-Turbo",
     "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
     "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+    "mistralai/Mistral-Small-24B-Instruct-2501",
     "moonshotai/Kimi-K2.5",
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
@@ -165,6 +170,7 @@
     "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
+    "stepfun-ai/Step-5-Preview",
     "tencent/Hy3",
     "tencent/Hy4-preview",
     "thinkingmachines/Inkling",
@@ -179,6 +185,12 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
+    "anthropic/claude-fable-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "tencent/Hy4-preview": [
       {
         "type": "effort",
@@ -287,6 +299,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "stepfun-ai/Step-5-Preview": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "moonshotai/Kimi-K2.6": [

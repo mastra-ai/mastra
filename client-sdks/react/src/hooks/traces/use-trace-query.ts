@@ -86,6 +86,8 @@ export function lightSpanToTraceQueryTrace(span: LightSpanRecord): TraceQueryTra
     createdAt: toIsoString(span.createdAt),
     metadata: span.metadata ?? null,
     inputPreview: span.inputPreview ?? null,
+    outputPreview: span.outputPreview ?? null,
+    errorPreview: span.errorPreview ?? null,
     threadId: span.threadId ?? null,
     resourceId: span.resourceId ?? null,
     startedAt: toIsoString(span.startedAt),

@@ -7,7 +7,7 @@ import type { IMastraLogger } from '../../logger';
 import type { TracingContext } from '../../observability';
 import type { OutputProcessorOrWorkflow, ProcessorState } from '../../processors';
 import type { RequestContext } from '../../request-context';
-import { safeClose, safeEnqueue } from '../../stream/base';
+import { safeClose, safeEnqueue, safeError } from '../../stream/base';
 import { MastraModelOutput } from '../../stream/base/output';
 import { markChunkOutputProcessed } from '../../stream/base/output-processed';
 import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
@@ -93,6 +93,33 @@ export function createRunGenerationFilter({
  * Map workflow usage (which may use legacy promptTokens/completionTokens) to
  * the canonical LanguageModelUsage shape (inputTokens/outputTokens).
  */
+/**
+ * The run's serialized steps are the authoritative step list (a resumed segment's output only buffered
+ * its own suffix), but only the buffered steps carry each step's `response` and `content` (#26780).
+ * Overlay those onto the run steps, aligned from the last finished step.
+ */
+async function withBufferedStepResponses(
+  runSteps: unknown[] | undefined,
+  output: { steps: Promise<unknown[]> },
+): Promise<unknown[]> {
+  const buffered = ((await output.steps.catch(() => undefined)) ?? []) as Record<string, unknown>[];
+  if (!runSteps?.length) return buffered;
+  // An aborted run ends with a step that never finished, so it was never buffered.
+  const trailingAborted =
+    (runSteps.at(-1) as { finishReason?: string } | undefined)?.finishReason === 'abort' &&
+    buffered.at(-1)?.finishReason !== 'abort';
+  const offset = runSteps.length - (trailingAborted ? 1 : 0) - buffered.length;
+  return runSteps.map((step, i) => {
+    const match = i >= offset ? buffered[i - offset] : undefined;
+    if (!match) return step;
+    return {
+      ...(step as Record<string, unknown>),
+      ...(match.response !== undefined ? { response: match.response } : {}),
+      ...(match.content !== undefined ? { content: match.content } : {}),
+    };
+  });
+}
+
 function normalizeUsage(raw?: Record<string, unknown>): LanguageModelUsage {
   const inputTokens = (raw?.inputTokens as number | undefined) ?? (raw?.promptTokens as number | undefined);
   const outputTokens = (raw?.outputTokens as number | undefined) ?? (raw?.completionTokens as number | undefined);
@@ -411,9 +438,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       runDead = true;
     }
     // No probe (bare timeout) or provably dead ⇒ terminate with an error chunk,
-    // mirroring the ERROR-event path (enqueue error chunk + safeClose, NOT
-    // controller.error which MastraModelOutput swallows). Fire onError with
-    // `runDead` — observe() schedules registry + pubsub-topic cleanup only when
+    // mirroring the ordinary ERROR-event path (enqueue error chunk + safeClose).
+    // Fire onError with `runDead` — observe() schedules registry + pubsub-topic cleanup only when
     // isAlive confirmed the run is dead; a bare timeout just means this observer
     // stopped hearing from the run — then unsubscribe in finally.
     const error = new Error(`Durable agent stream idle for ${idleTimeoutMs}ms with no live producer`);
@@ -447,6 +473,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   };
 
   const keepGeneration = createRunGenerationFilter({ minGeneration, rereadMinGeneration });
+  let onChunkDelivery = Promise.resolve();
 
   const handleEvent = async (event: Event) => {
     // After a terminal event the stream is closed and its callbacks have fired.
@@ -486,7 +513,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             lastErrorCause = errPayload?.error ?? errPayload;
           }
           safeEnqueue(controller, chunk as ChunkType<OUTPUT>);
-          await onChunk?.(chunk as ChunkType<OUTPUT>);
+          const delivery = onChunkDelivery.then(() => onChunk?.(chunk as ChunkType<OUTPUT>));
+          onChunkDelivery = delivery.catch(() => {});
+          await delivery;
           break;
         }
 
@@ -506,6 +535,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
         }
 
         case AgentStreamEventTypes.FINISH: {
+          clearIdleTimer();
+          await onChunkDelivery;
+          if (!controller || terminated) return;
           const data = streamEvent.data as AgentFinishEventData;
           const finishReason = data.stepResult?.reason;
 
@@ -533,8 +565,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           // consume the stream (for example, resume() with a delay-only wait).
           if (finishReason === 'abort') {
             try {
+              const steps = onAbort ? await withBufferedStepResponses(data.output?.steps, output) : [];
               await onAbort?.({
-                steps: (data.output?.steps ?? []) as unknown[],
+                steps,
                 text: (data.output?.text ?? '') as string,
               });
             } catch (callbackError) {
@@ -559,7 +592,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             }
           } else if (onFinish) {
             try {
-              const steps = (data.output?.steps ?? []) as any[];
+              const steps = (await withBufferedStepResponses(data.output?.steps, output)) as any[];
               const allToolResults = steps.flatMap((s: any) => s?.toolResults ?? []);
               const allToolCalls = steps.flatMap((s: any) => s?.toolCalls ?? []);
               // The structured object is parsed while the output drains the (now closed) chunk
@@ -593,7 +626,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
                 totalUsage: normalizeUsage(data.output?.usage),
                 warnings: data.stepResult?.warnings ?? [],
                 request: { body: undefined },
-                response: {},
+                response: steps.at(-1)?.response ?? {},
                 reasoningText: undefined,
                 providerMetadata: undefined,
               });
@@ -618,16 +651,17 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           if (data.error.stack) {
             error.stack = data.error.stack;
           }
-          // Enqueue an error chunk and close the stream normally (mirrors the
-          // regular agent's deferred-error-chunk pattern). Using
-          // controller.error() would error the base ReadableStream, which
-          // MastraModelOutput.consumeStream swallows — leaving fullStream
-          // hanging because no 'finish' event fires on the internal emitter.
-          safeEnqueue(controller, {
-            type: 'error',
-            payload: { error },
-          } as ChunkType<OUTPUT>);
-          safeClose(controller);
+          if (data.delivery === 'reject') {
+            safeError(controller, error);
+          } else {
+            // Ordinary durable failures remain deferred error chunks so the stream
+            // closes normally even when no finish event follows.
+            safeEnqueue(controller, {
+              type: 'error',
+              payload: { error },
+            } as ChunkType<OUTPUT>);
+            safeClose(controller);
+          }
           markTerminated();
           try {
             await onError?.({ error });
@@ -732,7 +766,11 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   const subscribedCallback: EventCallback = (event, ack, nack) => {
     const delivery = Promise.resolve(ackingHandleEvent(event, ack, nack));
     inFlightDeliveries.add(delivery);
-    void delivery.finally(() => inFlightDeliveries.delete(delivery)).catch(() => {});
+    void delivery
+      .finally(() => {
+        inFlightDeliveries.delete(delivery);
+      })
+      .catch(() => {});
     return delivery;
   };
   const waitForEventDelivery = async () => {
@@ -930,6 +968,8 @@ export async function emitStepStartEvent(
     stepId?: string;
     messageId?: string;
     startedAt?: StepStartPayload['startedAt'];
+    modelId?: StepStartPayload['modelId'];
+    provider?: StepStartPayload['provider'];
     request?: StepStartPayload['request'];
     warnings?: StepStartPayload['warnings'];
   },
@@ -985,7 +1025,13 @@ export async function emitFinishEvent(pubsub: PubSub, runId: string, data: Agent
 /**
  * Helper to emit an error event to pubsub
  */
-export async function emitErrorEvent(pubsub: PubSub, runId: string, error: Error, generation?: number): Promise<void> {
+export async function emitErrorEvent(
+  pubsub: PubSub,
+  runId: string,
+  error: Error,
+  generation?: number,
+  delivery?: AgentErrorEventData['delivery'],
+): Promise<void> {
   await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.ERROR,
     runId,
@@ -996,6 +1042,7 @@ export async function emitErrorEvent(pubsub: PubSub, runId: string, error: Error
         message: error.message,
         // stack intentionally omitted — avoid leaking internals through external pubsub
       },
+      ...(delivery ? { delivery } : {}),
     },
     ...generationTag(runId, generation),
   });
