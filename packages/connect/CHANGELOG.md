@@ -1,5 +1,26 @@
 # @mastra/connect
 
+## 1.1.0-alpha.1
+
+### Minor Changes
+
+- Added Microsoft Teams as a supported Connect channel. When MASTRA_ENCRYPTION_KEY is unset, the Teams install store is encrypted with a key derived from the platform access token and a warning is logged; projects without a Teams connection are unaffected. ([#27094](https://github.com/mastra-ai/mastra/pull/27094))
+
+### Patch Changes
+
+- Fixed project-level Connect activity showing empty on the Mastra platform. @mastra/connect now sends its configured project id (MASTRA_PROJECT_ID or the projectId option) with every proxied provider request, so the platform can attribute tool and channel activity to the right project. ([#26932](https://github.com/mastra-ai/mastra/pull/26932))
+
+  ```typescript
+  import { tools } from '@mastra/connect';
+
+  // Uses MASTRA_PROJECT_ID by default; pass projectId to override.
+  const agentTools = tools({ projectId: 'proj_123' });
+  ```
+
+- Updated dependencies [[`48bee02`](https://github.com/mastra-ai/mastra/commit/48bee02e1a5cef20f4da67720191d5e85cdca13c), [`d93662b`](https://github.com/mastra-ai/mastra/commit/d93662bfee9313c376cff90e910e05ec9b0634ea), [`1874bf2`](https://github.com/mastra-ai/mastra/commit/1874bf2a5ba304f22ffb93f9ec5a9afea000a5a1), [`8c2d516`](https://github.com/mastra-ai/mastra/commit/8c2d5164714a27e720d898da612da6054a88ef91), [`14b2a7c`](https://github.com/mastra-ai/mastra/commit/14b2a7c56da4329f7fd17738056a081663deed46), [`eb0b702`](https://github.com/mastra-ai/mastra/commit/eb0b702e9939f02073fb1c4dfd7eaa51fde59e0b), [`d93662b`](https://github.com/mastra-ai/mastra/commit/d93662bfee9313c376cff90e910e05ec9b0634ea), [`425d383`](https://github.com/mastra-ai/mastra/commit/425d383d4fb15e55e9491b6bdaebb57f2de7cdc8), [`5d8f8b7`](https://github.com/mastra-ai/mastra/commit/5d8f8b78460350d581e8a92412cdfe88b4ce76bc), [`8c90438`](https://github.com/mastra-ai/mastra/commit/8c90438b404d27593927eccc47616aab4a35006e), [`6dc66e6`](https://github.com/mastra-ai/mastra/commit/6dc66e6c69a5d26cd59349a4741fa58a15edf2b9)]:
+  - @mastra/core@1.79.0-alpha.1
+  - @mastra/teams@0.1.2-alpha.1
+
 ## 1.0.4-alpha.0
 
 ### Patch Changes
