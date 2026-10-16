@@ -1079,6 +1079,51 @@ describe('pat route', () => {
 });
 
 describe('subscriptions route', () => {
+  it('returns pull request links for a thread addressed by its session', async () => {
+    tables.subscriptions.push(
+      {
+        id: 'subscription-a',
+        orgId: 'org1',
+        sessionId: 'run-a',
+        resourceId: 'factory-1',
+        threadId: 'run-a',
+        repoFullName: 'octo/hello',
+        pullRequestNumber: 42,
+        status: 'open',
+      },
+      {
+        id: 'subscription-b',
+        orgId: 'org1',
+        sessionId: 'run-b',
+        resourceId: 'factory-1',
+        threadId: 'run-b',
+        repoFullName: 'octo/hello',
+        pullRequestNumber: 43,
+        status: 'open',
+      },
+    );
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/subscriptions?sessionId=run-a&threadId=run-a');
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      subscriptions: [
+        {
+          id: 'subscription-a',
+          repoFullName: 'octo/hello',
+          pullRequestNumber: 42,
+          status: 'open',
+          url: 'https://github.com/octo/hello/pull/42',
+        },
+      ],
+    });
+  });
+
+  it('requires a thread and a session to read subscriptions', async () => {
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/subscriptions?threadId=run-a');
+    expect(res.status).toBe(400);
+  });
+
   it('returns pull request links for the exact thread', async () => {
     tables.subscriptions.push({
       id: 'subscription-1',

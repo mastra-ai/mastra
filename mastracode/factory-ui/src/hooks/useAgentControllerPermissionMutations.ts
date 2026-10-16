@@ -10,28 +10,26 @@ import {
 
 interface AgentControllerPermissionMutationArgs {
   agentControllerId: string;
-  resourceId: string;
-  scope?: string;
+  sessionId: string;
   baseUrl?: string;
   enabled?: boolean;
 }
 
 export function useSetPermissionForCategoryMutation({
   agentControllerId,
-  resourceId,
-  scope,
+  sessionId,
   baseUrl = '',
   enabled = true,
 }: AgentControllerPermissionMutationArgs) {
   const queryClient = useQueryClient();
   const { session } = createAgentControllerClient({
     agentControllerId,
-    resourceId,
+    sessionId,
     baseUrl,
     enabled,
   });
 
-  const permissionsQueryKey = queryKeys.agentControllerPermissions(agentControllerId, resourceId, scope);
+  const permissionsQueryKey = queryKeys.agentControllerPermissions(agentControllerId, sessionId);
   // Latest write per category, so an older write that fails can't undo a newer one.
   const revisions = useRef(new Map<ToolCategory, number>());
 

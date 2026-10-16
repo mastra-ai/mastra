@@ -36,7 +36,7 @@ import { PropertiesMenu } from '../../../ui/PropertiesMenu';
 
 export function SessionsSection() {
   const { factoryId, sessionId: routeSessionId } = useParams<{ factoryId: string; sessionId: string }>();
-  const { baseUrl, resourceId, sessionEnabled } = useChatSessionContext();
+  const { baseUrl, sessionId, sessionEnabled } = useChatSessionContext();
   const navigate = useNavigate();
   const { rows, hasRepositories, loaded, loadFailed, retry } = useSessionListRows(factoryId);
   const catalog = useBoardCatalog(factoryId);
@@ -52,7 +52,7 @@ export function SessionsSection() {
   } = useSessionListView();
   const viewerUserId = useFactoryAuth().data?.user?.userId;
   const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters(viewerUserId);
-  const deletion = useSessionDeletion(factoryId, resourceId);
+  const deletion = useSessionDeletion(factoryId);
 
   const sortedRows = rows.toSorted(compareSessionRows(view.sort));
   const filteredRows = filterSessionRows(sortedRows, filters, viewerUserId);
@@ -60,10 +60,9 @@ export function SessionsSection() {
   const defaultHeadings = sessionGroupHeadings(sortedRows, view.groupBy, groupContext);
   const menuGroups = orderGroupHeadings(defaultHeadings, groupOrderKeys);
   const groups = groupSessionRows(filteredRows, view.groupBy, menuGroups, hiddenGroupKeys);
-  const chatSessionOpen = sessionEnabled && Boolean(routeSessionId) && Boolean(resourceId);
+  const chatSessionOpen = sessionEnabled && Boolean(routeSessionId) && Boolean(sessionId);
   const mergedBySessionId = useWorkspacePullRequestMerges({
     baseUrl,
-    resourceId,
     targets: pullRequestMergeTargets(groups.flatMap(group => collapsedRowsKeepingActive(group.rows))),
     enabled: chatSessionOpen,
   });

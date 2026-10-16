@@ -46,6 +46,26 @@ describe('GitHub signal subscription store', () => {
     expect(await listPullRequestSubscriptionsForThread(baseInput, storage)).toHaveLength(1);
   });
 
+  it('finds a thread\'s subscriptions by its session, not by the resource sessions share', async () => {
+    const { listPullRequestSubscriptionsForThread, subscribeToPullRequest } = await import('./subscriptions.js');
+    await subscribeToPullRequest(
+      { ...baseInput, resourceId: 'factory-project', sessionId: 'run-a', threadId: 'run-a' },
+      storage,
+    );
+    await subscribeToPullRequest(
+      { ...baseInput, changeRequestId: '43', resourceId: 'factory-project', sessionId: 'run-b', threadId: 'run-b' },
+      storage,
+    );
+    const rows = await listPullRequestSubscriptionsForThread(
+      { orgId: 'org-a', sessionId: 'run-a', threadId: 'run-a' },
+      storage,
+    );
+    expect(rows.map(row => row.data.changeRequestId)).toEqual(['42']);
+    expect(
+      await listPullRequestSubscriptionsForThread({ orgId: 'org-b', sessionId: 'run-a', threadId: 'run-a' }, storage),
+    ).toEqual([]);
+  });
+
   it('answers a user session that addresses itself by its own id', async () => {
     const { listPullRequestSubscriptionsForThread, subscribeToPullRequest } = await import('./subscriptions.js');
     // User sessions record the Factory project as resourceId, but the chat

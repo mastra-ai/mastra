@@ -472,7 +472,7 @@ export function createChannelResourceIdResolver(
  * session id AS their thread id, matching the web convention
  * (FactoryStartCoordinator seeds threads with threadId = sessionId) so
  * `/workspaces/{sessionId}/threads/{sessionId}` resolves Slack-created
- * sessions exactly like web-created ones — no `?resourceId=` override needed.
+ * sessions exactly like web-created ones — no `?sessionId=` override needed.
  * Chat-only threads keep the default random id: their `channel:...`
  * resourceId is a memory key, not a unique thread id.
  */
@@ -908,7 +908,8 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
     // session belongs to — deep-link straight into it. A repo-backed thread is
     // addressed by its Factory session id, so the link lands on the same route
     // a web-started run navigates to; chat-only threads keep the literal
-    // `channel` segment (the real resource rides the `?resourceId=` override).
+    // `channel` segment (the session address rides the `?sessionId=` override;
+    // a chat-only session's id is its `channel:` resource).
     // Unrouted senders fall back to the factory-agnostic /threads/ redirect.
     // One predicate drives both the path segment and the query param, so the
     // two can never disagree about what the URL already carries.
@@ -922,16 +923,16 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
       : `/threads/${internalThread.id}`;
 
     // The param is an override for a URL that can't otherwise name its
-    // resource. A routed repo-backed thread already spells its session out as
+    // session. A routed repo-backed thread already spells its session out as
     // its workspace segment, so appending anything is duplication the app
     // ignores. Chat-only threads need it (their segment is the literal string
     // `channel`), and so does the unrouted fallback, which has no workspace
     // segment at all — `ChannelThreadRedirect` forwards the search through.
     // Undefined without a public origin, and the card is then skipped.
-    const needsResourceParam = isChatOnly || !gate.routed;
+    const needsSessionParam = isChatOnly || !gate.routed;
     const deepLink = process.env.MASTRACODE_PUBLIC_URL
-      ? needsResourceParam
-        ? `${process.env.MASTRACODE_PUBLIC_URL}${threadPath}?resourceId=${encodeURIComponent(sessionId ?? internalThread.resourceId)}`
+      ? needsSessionParam
+        ? `${process.env.MASTRACODE_PUBLIC_URL}${threadPath}?sessionId=${encodeURIComponent(sessionId ?? internalThread.resourceId)}`
         : `${process.env.MASTRACODE_PUBLIC_URL}${threadPath}`
       : undefined;
 

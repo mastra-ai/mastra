@@ -1327,7 +1327,7 @@ describe('View Session card link', () => {
     return thread;
   }
 
-  it('a repo-backed thread deep-links to the user-session workspace route with no resourceId param', async () => {
+  it('a repo-backed thread deep-links to the user-session workspace route with no sessionId param', async () => {
     process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
     const deps = makeCardDeps({ internalThread: { id: 'uuid-thread-1', resourceId: 'us-42' } });
     const handlers = createHandlers(deps as any);
@@ -1338,11 +1338,11 @@ describe('View Session card link', () => {
     expect(thread.post).toHaveBeenCalledTimes(1);
     const card = thread.post.mock.calls[0][0];
     const actions = card.children.find((c: any) => c.type === 'actions');
-    // The workspace segment already IS the resourceId — the param would duplicate it.
+    // The workspace segment already IS the session id — the param would duplicate it.
     expect(actions.children[0].url).toBe(
       'https://mc.example.com/factories/fp-1/workspaces/us-42/threads/uuid-thread-1',
     );
-    expect(actions.children[0].url).not.toContain('resourceId=');
+    expect(actions.children[0].url).not.toContain('sessionId=');
   });
 
   it('a Factory-resource thread deep-links to its session id, not its Factory resource', async () => {
@@ -1377,7 +1377,7 @@ describe('View Session card link', () => {
 
     const card = thread.post.mock.calls[0][0];
     const actions = card.children.find((c: any) => c.type === 'actions');
-    expect(actions.children[0].url).toBe('https://mc.example.com/threads/uuid-thread-1?resourceId=us-42');
+    expect(actions.children[0].url).toBe('https://mc.example.com/threads/uuid-thread-1?sessionId=us-42');
   });
 
   it('a chat-only thread keeps the channel workspace segment', async () => {
@@ -1392,7 +1392,7 @@ describe('View Session card link', () => {
     const actions = card.children.find((c: any) => c.type === 'actions');
     expect(actions.children[0].url).toBe(
       'https://mc.example.com/factories/fp-1/workspaces/channel/threads/uuid-thread-1' +
-        `?resourceId=${encodeURIComponent('channel:slack:C-1:1700.42')}`,
+        `?sessionId=${encodeURIComponent('channel:slack:C-1:1700.42')}`,
     );
   });
 
@@ -1408,7 +1408,7 @@ describe('View Session card link', () => {
     const card = thread.post.mock.calls[0][0];
     const actions = card.children.find((c: any) => c.type === 'actions');
     expect(actions.children[0].url).toBe(
-      `https://mc.example.com/threads/uuid-thread-1?resourceId=${encodeURIComponent('channel:slack:C-1:1700.42')}`,
+      `https://mc.example.com/threads/uuid-thread-1?sessionId=${encodeURIComponent('channel:slack:C-1:1700.42')}`,
     );
   });
 });
@@ -1493,7 +1493,7 @@ describe('Slack threads create no work items', () => {
     expect(defaultHandler).toHaveBeenCalledTimes(1);
     expectSessionCard(
       thread,
-      'https://mc.example.com/factories/fp-1/workspaces/channel/threads/uuid-thread-1?resourceId=channel%3Aslack%3AC-1%3A1700.42',
+      'https://mc.example.com/factories/fp-1/workspaces/channel/threads/uuid-thread-1?sessionId=channel%3Aslack%3AC-1%3A1700.42',
     );
     expect(deps.upsert).not.toHaveBeenCalled();
   });

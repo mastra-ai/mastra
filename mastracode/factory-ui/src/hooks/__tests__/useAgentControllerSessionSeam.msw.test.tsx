@@ -23,7 +23,7 @@ const sessionUrl = `${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessio
  */
 const hookArgs = {
   agentControllerId: controllerId,
-  resourceId: sessionId,
+  sessionId,
   baseUrl: TEST_BASE_URL,
   enabled: true,
 };

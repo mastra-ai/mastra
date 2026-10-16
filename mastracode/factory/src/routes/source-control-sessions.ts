@@ -10,7 +10,7 @@ import { reclaimDeletedSessionSandbox } from '../integrations/github/sandbox-rel
 import { isValidGitRef } from '../sandbox/git-ref.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
-import { listFactorySessionThreads } from '../session/session-threads.js';
+import { factorySessionResourceId, listFactorySessionThreads } from '../session/session-threads.js';
 import { normalizeSessionTitle } from '../session/session-title.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
@@ -378,7 +378,9 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           return c.json({ error: 'Session not found' }, 404);
         }
         const owners = await resolveOwnerProfiles([session.userId]);
-        return c.json({ session: withOwnerProfile(session, owners) });
+        // The client opens the session by its id and creates it under this resource.
+        const resourceId = await factorySessionResourceId(options.controller, session);
+        return c.json({ session: { ...withOwnerProfile(session, owners), resourceId } });
       },
     }),
     registerApiRoute('/web/user-sessions/:sessionId', {

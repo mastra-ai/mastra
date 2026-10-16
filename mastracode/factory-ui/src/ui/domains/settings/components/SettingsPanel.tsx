@@ -41,11 +41,11 @@ export function SettingsPanel() {
     if (!hash) return;
     document.getElementById(hash.slice(1))?.scrollIntoView?.({ block: 'start' });
   }, [hash, section]);
-  const { resourceId, resourceEnabled, baseUrl } = useChatSessionContext();
+  const { sessionId: chatSessionId, resourceEnabled, baseUrl } = useChatSessionContext();
   const { permissions, setPermissionForCategory } = useChatPermissions();
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
+    sessionId: chatSessionId,
     baseUrl,
     enabled: resourceEnabled,
   };
@@ -58,8 +58,7 @@ export function SettingsPanel() {
   const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
   const models = modelsQuery.data ?? [];
   const settings = settingsQuery.data ?? null;
-  // Factory sessions still run under their own id, so the resource names the session.
-  const sessionId = resourceEnabled ? resourceId : undefined;
+  const sessionId = resourceEnabled ? chatSessionId : undefined;
 
   const onBehaviorChange = (updates: Partial<AgentControllerSessionSettings>) => {
     if (!settings) return Promise.resolve();

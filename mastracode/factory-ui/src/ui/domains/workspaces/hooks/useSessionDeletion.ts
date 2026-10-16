@@ -1,12 +1,11 @@
 import { useState } from 'react';
 
 import { useDeleteUserSessionMutation, useDeleteWorkspaceMutation } from '../../../../hooks/useWorkspaces';
-import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import type { SessionListRow } from '../services/sessionRows';
 
-export function useSessionDeletion(factoryId: string | undefined, resourceId: string) {
+export function useSessionDeletion(factoryId: string | undefined) {
   const [pendingConfirmation, setPendingConfirmation] = useState<SessionListRow>();
-  const deleteWorkspace = useDeleteWorkspaceMutation(factoryId, { agentControllerId: AGENT_CONTROLLER_ID, resourceId });
+  const deleteWorkspace = useDeleteWorkspaceMutation(factoryId);
   const deleteUserSession = useDeleteUserSessionMutation(factoryId);
   const cancel = () => setPendingConfirmation(undefined);
 

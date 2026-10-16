@@ -9,13 +9,11 @@ import {
 
 interface UseAgentControllerSessionInitArgs {
   agentControllerId: string;
+  sessionId: string;
+  /** The memory resource the session runs under: the Factory id or the user's id. */
   resourceId: string;
-  /**
-   * Session scope. The Factory feeds its per-worktree project path in here;
-   * the same value is also written back into the session as a `projectPath`
-   * tag so the server side can round-trip it.
-   */
-  scope?: string;
+  /** Tags stamped onto every thread the session creates (`{ factorySessionId }`). */
+  threadTags?: Record<string, string>;
   /**
    * The session's conventional thread id (=== its sessionId for factory and
    * user workspaces). When set, session creation is an exact-thread
@@ -32,8 +30,9 @@ interface UseAgentControllerSessionInitArgs {
 
 export function useAgentControllerSessionInit({
   agentControllerId,
+  sessionId,
   resourceId,
-  scope,
+  threadTags,
   sessionThreadId,
   factorySessionState,
   baseUrl = '',
@@ -41,30 +40,31 @@ export function useAgentControllerSessionInit({
 }: UseAgentControllerSessionInitArgs) {
   const { session } = createAgentControllerClient({
     agentControllerId,
-    resourceId,
+    sessionId,
     baseUrl,
     enabled,
   });
 
   return useQuery({
     queryKey: [
-      ...queryKeys.agentControllerConnection(agentControllerId, resourceId, scope),
+      ...queryKeys.agentControllerConnection(agentControllerId, sessionId),
       'init',
+      resourceId,
       factorySessionState,
       sessionThreadId ?? null,
     ],
     queryFn: async () => {
       const activeSession = requireAgentControllerSession(session);
       const created = await activeSession.create({
-        tags: scope ? { projectPath: scope } : undefined,
+        resourceId,
+        tags: threadTags,
         threadId: sessionThreadId,
       });
-      // Factory sessions have no scope but still need their state seeded —
-      // server-side gates (the transition tool, factory-phase processor)
-      // resolve the session address from `factoryProjectId` in state.
-      if (scope || factorySessionState) {
+      // Factory sessions need their state seeded — server-side gates (the
+      // transition tool, factory-phase processor) read `factoryProjectId` from state.
+      if (factorySessionState) {
         try {
-          await activeSession.setState({ ...(scope ? { projectPath: scope } : {}), ...factorySessionState });
+          await activeSession.setState({ ...factorySessionState });
         } catch {
           // Continue connecting; session.state() remains the source of truth.
         }
