@@ -960,6 +960,44 @@ describe('Agent Handlers', () => {
       expect(reorderedModelList?.[1].model.modelId).toBe('gpt-4o');
       expect(reorderedModelList?.[2].model.modelId).toBe('gpt-4o-mini');
     });
+
+    it('persists reordered Editor-owned model lists as a draft', async () => {
+      const agent = makeMockAgent({
+        id: 'editor-owned-models',
+        model: [
+          { id: 'primary', model: 'openai/gpt-4o' },
+          { id: 'fallback', model: 'openai/gpt-4o-mini', maxRetries: 1 },
+        ],
+        editor: { model: true },
+      });
+      mockMastra = makeMastraMock({ agents: { 'editor-owned-models': agent } });
+
+      const create = vi.fn().mockResolvedValue(agent);
+      vi.spyOn(mockMastra, 'getEditor').mockReturnValue({
+        agent: {
+          applyStoredOverrides: vi.fn().mockResolvedValue(agent),
+          create,
+        },
+      } as never);
+      vi.spyOn(mockMastra, 'getStorage').mockReturnValue({
+        getStore: vi.fn().mockResolvedValue({ getById: vi.fn().mockResolvedValue(null) }),
+      } as never);
+
+      await REORDER_AGENT_MODEL_LIST_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        agentId: 'editor-owned-models',
+        reorderedModelIds: ['fallback', 'primary'],
+        requestContext,
+      });
+
+      expect(create).toHaveBeenCalledWith({
+        id: 'editor-owned-models',
+        modelList: [
+          { id: 'fallback', provider: 'openai', modelId: 'gpt-4o-mini', enabled: true, maxRetries: 1 },
+          { id: 'primary', provider: 'openai', modelId: 'gpt-4o', enabled: true, maxRetries: 0 },
+        ],
+      });
+    });
   });
 
   describe('updateAgentModelInModelListHandler', () => {
@@ -983,6 +1021,47 @@ describe('Agent Handlers', () => {
       expect(updatedModelList?.[1].model.modelId).toBe('gpt-5');
       expect(updatedModelList?.[1].maxRetries).toBe(4);
       expect(updatedModelList?.[2].model.modelId).toBe('gpt-4.1');
+    });
+
+    it('persists updated Editor-owned model lists as a draft', async () => {
+      const agent = makeMockAgent({
+        id: 'editor-owned-models',
+        model: [
+          { id: 'primary', model: 'openai/gpt-4o' },
+          { id: 'fallback', model: 'openai/gpt-4o-mini', maxRetries: 1 },
+        ],
+        editor: { model: true },
+      });
+      mockMastra = makeMastraMock({ agents: { 'editor-owned-models': agent } });
+
+      const update = vi.fn().mockResolvedValue(agent);
+      vi.spyOn(mockMastra, 'getEditor').mockReturnValue({
+        agent: {
+          applyStoredOverrides: vi.fn().mockResolvedValue(agent),
+          update,
+        },
+      } as never);
+      vi.spyOn(mockMastra, 'getStorage').mockReturnValue({
+        getStore: vi.fn().mockResolvedValue({ getById: vi.fn().mockResolvedValue({ id: 'editor-owned-models' }) }),
+      } as never);
+
+      await UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        agentId: 'editor-owned-models',
+        modelConfigId: 'fallback',
+        model: { modelId: 'gpt-4.1', provider: 'openai' },
+        maxRetries: 4,
+        enabled: false,
+        requestContext,
+      });
+
+      expect(update).toHaveBeenCalledWith({
+        id: 'editor-owned-models',
+        modelList: [
+          { id: 'primary', provider: 'openai', modelId: 'gpt-4o', enabled: true, maxRetries: 0 },
+          { id: 'fallback', provider: 'openai', modelId: 'gpt-4.1', enabled: false, maxRetries: 4 },
+        ],
+      });
     });
   });
 

@@ -49,13 +49,20 @@ import { EditorMCPNamespace } from './mcp';
 import { createVersionFromSnapshotUpdate, getProvidedSnapshotFields } from './versioned-update';
 import { computeInlineWorkspaceIdentity } from './workspace-identity';
 
-type AgentEditorConfig = false | { instructions?: boolean; tools?: boolean | { description?: boolean } };
+type AgentEditorConfig =
+  | false
+  | {
+      instructions?: boolean;
+      tools?: boolean | { description?: boolean };
+      model?: boolean;
+    };
 
 const AGENT_SNAPSHOT_CONFIG_FIELDS = [
   'name',
   'description',
   'instructions',
   'model',
+  'modelList',
   'tools',
   'defaultOptions',
   'workflows',
@@ -524,6 +531,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     }
 
     const instructionsEditable = editorConfig === undefined ? true : editorConfig.instructions === true;
+    const modelEditable = editorConfig !== undefined && editorConfig.model === true;
     const toolsConfig = editorConfig === undefined ? true : editorConfig.tools;
     const toolsEditable = toolsConfig === true;
     const toolDescriptionsEditable =
@@ -599,6 +607,36 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       if (resolved !== undefined) {
         fork.__updateInstructions(this.mergeInstructionEnvelope(agent, resolved));
       }
+    }
+
+    // --- Model list ---
+    if (modelEditable && storedConfig.modelList) {
+      const codeModel = fork.__getOverridableFields().model;
+      if (!Array.isArray(codeModel)) {
+        throw new Error(
+          `Agent "${agent.id}" delegates its model list to the editor but its code-defined model is not a static fallback list.`,
+        );
+      }
+
+      const codeModelsById = new Map(codeModel.map(model => [model.id, model]));
+      const modelList = storedConfig.modelList.map(storedModel => {
+        const codeModelEntry = codeModelsById.get(storedModel.id);
+        if (!codeModelEntry) {
+          throw new Error(
+            `Agent "${agent.id}" has a stored model-list entry "${storedModel.id}" that does not exist in its code-defined fallback list.`,
+          );
+        }
+
+        return {
+          ...codeModelEntry,
+          id: storedModel.id,
+          model: `${storedModel.provider}/${storedModel.modelId}`,
+          enabled: storedModel.enabled,
+          maxRetries: storedModel.maxRetries,
+          maxRetriesConfigured: true,
+        };
+      });
+      fork.__updateModel({ model: modelList });
     }
 
     // --- Tools (merge: stored tools override code tools, code tools not in stored config are preserved) ---

@@ -20,7 +20,9 @@ import type {
   InputProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
 } from '@mastra/core/processors';
+import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { StorageCreateAgentInput, StorageModelListEntry } from '@mastra/core/storage';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import type { PublicSchema } from '@mastra/schema-compat/schema';
@@ -138,6 +140,48 @@ function ensureDefaultVersionStatus(ctx: RequestContext, versionOptions: { versi
 
 function getIsStudioFromContext(requestContext: RequestContext): boolean {
   return requestContext.get(MASTRA_IS_STUDIO_KEY) === true;
+}
+
+function toStoredModelList(
+  modelList: NonNullable<Awaited<ReturnType<Agent['getModelList']>>>,
+): StorageModelListEntry[] {
+  return modelList.map(model => ({
+    id: model.id,
+    provider: model.model.provider,
+    modelId: model.model.modelId,
+    enabled: model.enabled,
+    maxRetries: model.maxRetries,
+  }));
+}
+
+async function persistEditorOwnedModelList({
+  mastra,
+  agent,
+  modelList,
+}: {
+  mastra: Mastra;
+  agent: Agent;
+  modelList: NonNullable<Awaited<ReturnType<Agent['getModelList']>>>;
+}): Promise<boolean> {
+  const editorConfig = agent.__getEditorConfig?.();
+  if (!editorConfig || editorConfig.model !== true) return false;
+
+  const editorAgent = mastra.getEditor?.()?.agent;
+  const storage = mastra.getStorage?.();
+  const agentsStore = await storage?.getStore('agents');
+  if (!editorAgent || !agentsStore) {
+    throw new HTTPException(500, { message: 'Editor and agent storage are required for Editor-owned model lists' });
+  }
+
+  const storedModelList = toStoredModelList(modelList);
+  const storedAgent = await agentsStore.getById(agent.id);
+  if (storedAgent) {
+    await editorAgent.update({ id: agent.id, modelList: storedModelList });
+  } else {
+    await editorAgent.create({ id: agent.id, modelList: storedModelList } as StorageCreateAgentInput);
+  }
+
+  return true;
 }
 
 function normalizePublicExecutionOptions(
@@ -3634,16 +3678,27 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
   description: 'Reorders the model list for agents with multiple model configurations',
   tags: ['Agents', 'Models'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, reorderedModelIds }) => {
+  handler: async ({ mastra, agentId, reorderedModelIds, requestContext }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const codeAgent = mastra.getAgentById(agentId);
+      const editorConfig = codeAgent.__getEditorConfig?.();
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        requestContext,
+        ...(editorConfig && editorConfig.model === true ? { versionOptions: { status: 'draft' as const } } : {}),
+      });
 
-      const modelList = await agent.getModelList();
+      const modelList = await agent.getModelList(requestContext);
       if (!modelList || modelList.length === 0) {
         throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
       }
 
       agent.reorderModels(reorderedModelIds);
+      const reorderedModelList = await agent.getModelList(requestContext);
+      if (reorderedModelList) {
+        await persistEditorOwnedModelList({ mastra, agent, modelList: reorderedModelList });
+      }
 
       return { message: 'Model list reordered' };
     } catch (error) {
@@ -3663,11 +3718,18 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
   description: 'Updates a specific model configuration in the agent model list',
   tags: ['Agents', 'Models'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, modelConfigId, model: bodyModel, maxRetries, enabled }) => {
+  handler: async ({ mastra, agentId, modelConfigId, model: bodyModel, maxRetries, enabled, requestContext }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const codeAgent = mastra.getAgentById(agentId);
+      const editorConfig = codeAgent.__getEditorConfig?.();
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        requestContext,
+        ...(editorConfig && editorConfig.model === true ? { versionOptions: { status: 'draft' as const } } : {}),
+      });
 
-      const modelList = await agent.getModelList();
+      const modelList = await agent.getModelList(requestContext);
       if (!modelList || modelList.length === 0) {
         throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
       }
@@ -3688,6 +3750,10 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
       };
 
       agent.updateModelInModelList(updated);
+      const updatedModelList = await agent.getModelList(requestContext);
+      if (updatedModelList) {
+        await persistEditorOwnedModelList({ mastra, agent, modelList: updatedModelList });
+      }
 
       return { message: 'Model updated in model list' };
     } catch (error) {

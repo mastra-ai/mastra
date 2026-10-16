@@ -159,9 +159,9 @@ See the [Editor tools reference](/reference/editor/tools) for MCP configuration,
 
 ## Decide what collaborators can edit
 
-By default, collaborators can change an agent's instructions and manage its tools, including their descriptions. The agent's `id`, `name`, and `model` always come from code.
+By default, collaborators can change an agent's instructions and manage its tools, including their descriptions. The agent's `id`, `name`, and model configuration come from code unless you explicitly enable model editing.
 
-Use the agent's `editor` field to limit what can be changed:
+Use the agent's `editor` field to choose what can be changed:
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -189,8 +189,11 @@ This agent lets collaborators change its instructions and improve the descriptio
 | `{ instructions: true }` | Instructions |
 | `{ tools: true }` | Tools and tool descriptions |
 | `{ tools: { description: true } }` | Descriptions of tools already added in code |
+| `{ model: true }` | A static model fallback list |
 
-Studio shows everything else as read-only. See [editor overrides](/reference/agents/agent#editor-overrides) for the complete configuration.
+Model editing requires a code-defined fallback array with an immutable `id` for every entry. Studio can change the order, provider and model, enabled state, and `maxRetries`. Each edit creates or updates an Editor draft. Publish the draft to make it the active configuration and persist it in code-backed Editor storage.
+
+Function-valued model configuration remains code-owned and can't be edited in Studio. See [editor overrides](/reference/agents/agent#editor-overrides) for the complete configuration.
 
 ## Choose where changes are stored
 
