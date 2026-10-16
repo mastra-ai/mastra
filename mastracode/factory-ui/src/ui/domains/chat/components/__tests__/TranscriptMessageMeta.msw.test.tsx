@@ -157,52 +157,52 @@ describe('message meta', () => {
   const gpt = { modelId: 'gpt-5', provider: 'openai.responses' };
   const grok = { modelId: 'grok-4', provider: 'xai.chat' };
   const kimi = { modelId: 'kimi-k2-thinking', provider: 'kimi-for-coding.messages' };
-  const payerCases: Array<{
-    payer: SessionOwner;
+  const ownerCases: Array<{
+    owner: SessionOwner;
     viewerId: string;
     model: { modelId: string; provider: string };
     label: string;
   }> = [
     {
-      payer: { user: ward, credentials: claudeSubscription },
+      owner: { user: ward, credentials: claudeSubscription },
       viewerId: 'damien',
       model: opus,
       label: 'Claude Opus 4.6 · Ward Peeters’s Claude Pro/Max',
     },
     {
-      payer: { user: ward, credentials: claudeSubscription },
+      owner: { user: ward, credentials: claudeSubscription },
       viewerId: 'ward',
       model: opus,
       label: 'Claude Opus 4.6 · Your Claude Pro/Max',
     },
     {
-      payer: { user: { id: 'ward' }, credentials: { openai: { type: 'api_key' } } },
+      owner: { user: { id: 'ward' }, credentials: { openai: { type: 'api_key' } } },
       viewerId: 'damien',
       model: gpt,
       label: 'GPT-5 · Personal OpenAI API key',
     },
     {
-      payer: { credentials: { xai: { type: 'oauth', subscription: 'SuperGrok/X Premium+' } } },
+      owner: { credentials: { xai: { type: 'oauth', subscription: 'SuperGrok/X Premium+' } } },
       viewerId: 'damien',
       model: grok,
       label: 'Grok 4 · Organization SuperGrok/X Premium+',
     },
     {
-      payer: { user: ward, credentials: { 'kimi-code-plan-cn': { type: 'api_key' } } },
+      owner: { user: ward, credentials: { 'kimi-code-plan-cn': { type: 'api_key' } } },
       viewerId: 'ward',
       model: kimi,
       label: 'Kimi K2 Thinking · Your Kimi API key',
     },
     {
-      payer: { user: ward, credentials: { openai: { type: 'api_key' } } },
+      owner: { user: ward, credentials: { openai: { type: 'api_key' } } },
       viewerId: 'damien',
       model: opus,
       label: 'Claude Opus 4.6',
     },
   ];
-  it.each(payerCases)(
+  it.each(ownerCases)(
     'labels a $model.provider reply for viewer $viewerId as “$label”',
-    ({ payer, viewerId, model, label }) => {
+    ({ owner, viewerId, model, label }) => {
       const reply: TimelineEntry = {
         kind: 'message',
         id: 'assistant-1',
@@ -218,7 +218,7 @@ describe('message meta', () => {
         <TranscriptEntries
           entries={[reply]}
           viewerId={viewerId}
-          payer={payer}
+          owner={owner}
           onApprove={() => {}}
           onRespond={() => {}}
         />,

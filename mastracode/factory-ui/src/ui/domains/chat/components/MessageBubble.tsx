@@ -17,7 +17,7 @@ import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
 
 import { channelOrigin, messageAuthor } from '../services/message-author';
-import { replyPayerLabel } from '../services/reply-payer';
+import { replyOwnerLabel } from '../services/reply-owner';
 import type { MessageEntry, SuspensionPrompt } from '../services/transcript';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
 import {
@@ -68,7 +68,7 @@ export function MessageBubble({
   isSubmitting,
   onRespond,
   viewerId,
-  payer,
+  owner,
 }: {
   entry: MessageEntry;
   suspensions: ReadonlyMap<string, SuspensionPrompt>;
@@ -76,7 +76,7 @@ export function MessageBubble({
   isSubmitting: boolean;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
   viewerId?: string;
-  payer?: SessionOwner;
+  owner?: SessionOwner;
 }) {
   const written = renderableParts(entry);
   const parts = useRevealedParts(written, Boolean(entry.streaming));
@@ -96,8 +96,8 @@ export function MessageBubble({
   const steeringFailed = entry.deliveryStatus === 'failed';
   const { modelId, provider } = entry.message.content.metadata ?? {};
   const replyModelId = meta && typeof modelId === 'string' ? modelId : undefined;
-  const replyPayer =
-    replyModelId && payer && typeof provider === 'string' ? replyPayerLabel(payer, provider, viewerId) : undefined;
+  const ownerLabel =
+    replyModelId && owner && typeof provider === 'string' ? replyOwnerLabel(owner, provider, viewerId) : undefined;
   const messageActions = meta ? (
     <MessageActions>
       <MessageCopyButton text={meta} />
@@ -144,7 +144,7 @@ export function MessageBubble({
                     render={
                       <MessageMetadata tabIndex={0}>
                         {formatModelName(replyModelId)}
-                        {replyPayer && ` · ${replyPayer}`}
+                        {ownerLabel && ` · ${ownerLabel}`}
                       </MessageMetadata>
                     }
                   />

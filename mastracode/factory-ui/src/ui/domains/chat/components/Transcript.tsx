@@ -31,7 +31,7 @@ import type { MessageEntry, NoticeEntry, SuspensionPrompt, TimelineEntry } from 
 export function Transcript({ tail }: { tail?: ReactNode }) {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { transcript, resolvePrompt, busy, viewerId } = useChatTranscript();
-  const payer = useChatModelScope().sessionModelsQuery.data?.owner;
+  const owner = useChatModelScope().sessionModelsQuery.data?.owner;
   const { entries } = transcript;
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -69,7 +69,7 @@ export function Transcript({ tail }: { tail?: ReactNode }) {
         onRespond={onRespond}
         running={busy}
         viewerId={viewerId}
-        payer={payer}
+        owner={owner}
         tail={tail}
       />
     </ArrivalScope>
@@ -84,7 +84,7 @@ export function TranscriptEntries({
   onRespond,
   running = false,
   viewerId,
-  payer,
+  owner,
   tail,
 }: {
   entries: TimelineEntry[];
@@ -96,7 +96,7 @@ export function TranscriptEntries({
   running?: boolean;
   /** The signed-in user; anyone else's message gets their avatar beside it. */
   viewerId?: string;
-  payer?: SessionOwner;
+  owner?: SessionOwner;
   /** Rendered inside the live turn (the activity line), so the reserved room stays under it. */
   tail?: ReactNode;
 }) {
@@ -171,7 +171,7 @@ export function TranscriptEntries({
                   }
                   isSubmitting={isSubmitting}
                   viewerId={viewerId}
-                  payer={payer}
+                  owner={owner}
                   onApprove={onApprove}
                   onRespond={onRespond}
                 />
@@ -202,7 +202,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
   redundantSuspension,
   isSubmitting,
   viewerId,
-  payer,
+  owner,
   onApprove,
   onRespond,
 }: {
@@ -212,7 +212,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
   redundantSuspension: boolean;
   isSubmitting: boolean;
   viewerId?: string;
-  payer?: SessionOwner;
+  owner?: SessionOwner;
   onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
@@ -225,7 +225,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
           reply={reply}
           isSubmitting={isSubmitting}
           viewerId={viewerId}
-          payer={payer}
+          owner={owner}
           onRespond={onRespond}
         />
       );
