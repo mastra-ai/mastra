@@ -1,0 +1,29 @@
+{
+  "name": "mcp-events",
+  "type": "module",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Subscribe to MCP Events (SEP-3415) from a Mastra MCPServer and start an agent run per occurrence",
+  "scripts": {
+    "start": "tsx src/client.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.18.2",
+  "dependencies": {
+    "@mastra/core": "latest",
+    "@mastra/mcp": "latest",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.15",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/mcp": "link:../../packages/mcp"
+    }
+  }
+}
