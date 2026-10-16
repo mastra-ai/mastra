@@ -1045,7 +1045,7 @@ The client picks `push` (a long-lived `events/stream` request) when the event of
 
 The returned `MCPEventSubscription` is an async iterable of occurrences (`eventId`, `name`, `timestamp`, `data`) with these members:
 
-- `cursor`: The latest position that is safe to persist. It never moves past an occurrence your loop hasn't received yet. It is `null` when the event type doesn't support replay.
+- `cursor`: The latest position that's safe to persist. It never moves past an occurrence your loop hasn't received yet. It's `null` when the event type doesn't support replay.
 - `truncated`: `true` when the server reported a gap, for example because the saved cursor was older than its retention window.
 - `mode`: The delivery mode in use, `'push'` or `'poll'`.
 - `onError(handler)`: Receives recoverable errors, such as a dropped stream that the client is reopening. Returns a function that removes the handler.
