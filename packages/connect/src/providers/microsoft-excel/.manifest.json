@@ -1,9 +1,9 @@
 {
-  "providerId": "microsoft-excel-oauth2-cc",
+  "providerId": "microsoft-excel",
   "localId": "microsoft-excel",
   "templateSha": "bb789a55bfcf744b3c83aa9132e4ffa562106aa3",
   "templateRepo": "NangoHQ/integration-templates",
-  "generatedAt": "2026-10-14T20:26:49.435Z",
+  "generatedAt": "2026-10-16T17:27:31.963Z",
   "toolCount": 27,
   "skippedActions": [],
   "files": {
@@ -24,7 +24,7 @@
     "tools/get-range.ts": "cd21b20a95111e79c8dc8c5195fa55753936c48fdbf9719100d3c7bcbfd91cf5",
     "tools/get-site-drive.ts": "e56936d997f9ec79647429ef9b4e511475d4ed2a9c4d5b850ad27a77538fde0f",
     "tools/get-used-range.ts": "f2d11e8bd73b573d254da96f58ae64db723fe98897b6706dbe414eb7545f9137",
-    "tools/get-user-drive.ts": "3650c090f78d3ae0579c584519f567e48be1374b362f6d0744547d016c3649cc",
+    "tools/get-user-drive.ts": "79be8e7d1ad4beda119ca532e35628df8929b8321f36fa23d1b96057d4d2ae69",
     "tools/get-workbook.ts": "5badf4f50d4b463dc25cdf22b5b2ae21b7737a29bef0133f55360f50714f7709",
     "tools/list-defined-names.ts": "2232f1fb47dad870ce093904473be4849865a39c77b8d34468d73439be479fe0",
     "tools/list-sites.ts": "fb8dbded5008d51dea124303bc6cc7a55a5720f6f280d9d5d0933d9d86c2790d",

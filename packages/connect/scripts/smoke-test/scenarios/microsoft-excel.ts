@@ -5,16 +5,19 @@ import { makeStep, errorMessage, requireTools, probeTool } from '../scenario.js'
 
 const SHEET = 'Smoke';
 
+function isAccountCapabilityError(error: unknown): boolean {
+  return /personal|msa account|tenant-directory|work or school|sharepoint operations require/i.test(
+    errorMessage(error),
+  );
+}
+
 /**
- * Deep Microsoft Excel scenario: resolves a drive (user OneDrive, falling back
- * to a SharePoint site library), uploads a throwaway workbook tagged with the
- * run id, exercises worksheet / range / table / defined-name / chart tools
- * against it, then deletes the workbook. Charts have no delete tool of their
- * own; they go away with the workbook.
- *
- * The connection is app-only (client credentials), so there is no `/me` drive.
- * Set `MASTRA_SMOKE_EXCEL_USER_ID` (id or UPN) to pin the OneDrive the scenario
- * writes to; otherwise it uses the first listed user that has one.
+ * Deep Microsoft Excel scenario: resolves the connected user's OneDrive,
+ * uploads a throwaway workbook tagged with the run id, exercises worksheet /
+ * range / table / defined-name / chart tools against it, then deletes the
+ * workbook. Charts have no delete tool of their own; they go away with the
+ * workbook. Tenant-directory and SharePoint discovery are also exercised when
+ * the connected account supports them.
  */
 export const microsoftExcelScenario: Scenario = {
   integrationId: 'microsoft-excel',
@@ -22,7 +25,6 @@ export const microsoftExcelScenario: Scenario = {
   async run({ tools, runId, call, log }) {
     const steps: ScenarioStep[] = [];
     const missing = requireTools(tools, [
-      'microsoft_excel_list_users',
       'microsoft_excel_get_user_drive',
       'microsoft_excel_create_workbook',
       'microsoft_excel_delete_workbook',
@@ -44,8 +46,28 @@ export const microsoftExcelScenario: Scenario = {
     }
 
     // ── drive discovery ────────────────────────────────────────────────────
+    let driveId: string | undefined;
+    const pinnedUser = process.env.MASTRA_SMOKE_EXCEL_USER_ID;
+    try {
+      const drive = await call<{ id: string }>(
+        'microsoft_excel_get_user_drive',
+        pinnedUser ? { userId: pinnedUser } : {},
+      );
+      driveId = drive.id;
+      steps.push(
+        makeStep(
+          'get user drive',
+          'microsoft_excel_get_user_drive',
+          'pass',
+          `${pinnedUser ?? 'connected user'} → ${drive.id}`,
+        ),
+      );
+    } catch (error) {
+      steps.push(makeStep('get user drive', 'microsoft_excel_get_user_drive', 'fail', errorMessage(error)));
+    }
+
     let users: Array<{ id: string; userPrincipalName?: string }> = [];
-    await attempt('list users', 'microsoft_excel_list_users', async () => {
+    try {
       const page = await call<{ users: typeof users; nextCursor?: string }>('microsoft_excel_list_users', { top: 5 });
       users = page.users;
       if (page.nextCursor) {
@@ -53,40 +75,66 @@ export const microsoftExcelScenario: Scenario = {
           cursor: page.nextCursor,
           top: 5,
         });
-        return `${users.length} users, next page ${next.users.length}`;
+        steps.push(
+          makeStep(
+            'list users',
+            'microsoft_excel_list_users',
+            'pass',
+            `${users.length} users, next page ${next.users.length}`,
+          ),
+        );
+      } else {
+        steps.push(makeStep('list users', 'microsoft_excel_list_users', 'pass', `${users.length} users`));
       }
-      return `${users.length} users`;
-    });
-
-    let sites: Array<{ id: string; name?: string }> = [];
-    const sitesListed = await attempt('list sites', 'microsoft_excel_list_sites', async () => {
-      const page = await call<{ items: typeof sites }>('microsoft_excel_list_sites', { query: '*' });
-      sites = page.items;
-      return `${sites.length} sites`;
-    });
-
-    let driveId: string | undefined;
-    const pinnedUser = process.env.MASTRA_SMOKE_EXCEL_USER_ID;
-    const candidates = pinnedUser ? [pinnedUser] : users.map(u => u.id);
-    let lastDriveError: string | undefined;
-    for (const userId of candidates) {
-      try {
-        const drive = await call<{ id: string }>('microsoft_excel_get_user_drive', { userId });
-        driveId = drive.id;
-        steps.push(makeStep('get user drive', 'microsoft_excel_get_user_drive', 'pass', `${userId} → ${drive.id}`));
-        break;
-      } catch (error) {
-        // Users without a OneDrive license 404 here; try the next one.
-        lastDriveError = errorMessage(error);
-      }
-    }
-    if (!driveId) {
+    } catch (error) {
       steps.push(
         makeStep(
-          'get user drive',
-          'microsoft_excel_get_user_drive',
-          pinnedUser ? 'fail' : 'skip',
-          lastDriveError ?? 'no users listed',
+          'list users',
+          'microsoft_excel_list_users',
+          isAccountCapabilityError(error) ? 'skip' : 'fail',
+          errorMessage(error),
+        ),
+      );
+    }
+
+    if (!driveId && !pinnedUser) {
+      let lastDriveError: string | undefined;
+      for (const user of users) {
+        try {
+          const drive = await call<{ id: string }>('microsoft_excel_get_user_drive', { userId: user.id });
+          driveId = drive.id;
+          steps.push(
+            makeStep('get listed user drive', 'microsoft_excel_get_user_drive', 'pass', `${user.id} → ${drive.id}`),
+          );
+          break;
+        } catch (error) {
+          lastDriveError = errorMessage(error);
+        }
+      }
+      if (!driveId && users.length > 0) {
+        steps.push(
+          makeStep(
+            'get listed user drive',
+            'microsoft_excel_get_user_drive',
+            'fail',
+            lastDriveError ?? 'no drive found',
+          ),
+        );
+      }
+    }
+
+    let sites: Array<{ id: string; name?: string }> = [];
+    try {
+      const page = await call<{ items: typeof sites }>('microsoft_excel_list_sites', { query: '*' });
+      sites = page.items;
+      steps.push(makeStep('list sites', 'microsoft_excel_list_sites', 'pass', `${sites.length} sites`));
+    } catch (error) {
+      steps.push(
+        makeStep(
+          'list sites',
+          'microsoft_excel_list_sites',
+          isAccountCapabilityError(error) ? 'skip' : 'fail',
+          errorMessage(error),
         ),
       );
     }
@@ -98,14 +146,18 @@ export const microsoftExcelScenario: Scenario = {
         driveId ??= drive.id;
         return `${site.name ?? site.id} → ${drive.id}`;
       });
-    } else if (!sitesListed) {
-      // A probe here would mistake connection-level errors (e.g. 409 re-auth) for an exercised endpoint.
-      steps.push(makeStep('get site drive', 'microsoft_excel_get_site_drive', 'skip', 'site listing failed'));
     } else {
       steps.push(
-        await probeTool(call, tools, 'get site drive (probe)', 'microsoft_excel_get_site_drive', {
-          siteId: 'contoso.sharepoint.com,00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000',
-        }),
+        await probeTool(
+          call,
+          tools,
+          'get site drive (probe)',
+          'microsoft_excel_get_site_drive',
+          {
+            siteId: 'contoso.sharepoint.com,00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000',
+          },
+          /status=(400|403|404)|personal|msa account|work or school|sharepoint/i,
+        ),
       );
     }
 

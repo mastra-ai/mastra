@@ -5,7 +5,7 @@ import { z } from 'zod';
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
 export const getUserDriveInputSchema = z.object({
-  userId: z.string().describe('User ID or user principal name. Example: "api@nango.dev"'),
+  userId: z.string().optional().describe('User ID or user principal name. Example: "api@nango.dev"'),
 });
 
 const ProviderDriveSchema = z.object({
@@ -25,14 +25,14 @@ export const getUserDriveOutputSchema = z.object({
 export function getUserDriveTool(proxy: PlatformProxy) {
   return createTool({
     id: 'microsoft_excel_get_user_drive',
-    description: "Get a user's personal OneDrive (drive).",
+    description: "Get the connected user's OneDrive, or another user's drive when userId is provided.",
     inputSchema: getUserDriveInputSchema,
     outputSchema: getUserDriveOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof getUserDriveOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
       const response = await platformProxy.get({
         // https://learn.microsoft.com/en-us/graph/api/resources/drive
-        endpoint: `/v1.0/users/${encodeURIComponent(input.userId)}/drive`,
+        endpoint: input.userId ? `/v1.0/users/${encodeURIComponent(input.userId)}/drive` : '/v1.0/me/drive',
         retries: 3,
       });
 
