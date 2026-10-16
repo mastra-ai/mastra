@@ -2492,6 +2492,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
       '@mastra/slack':
         specifier: workspace:*
         version: link:../../channels/slack
@@ -2504,6 +2507,9 @@ importers:
       chat:
         specifier: ^4.37.0
         version: 4.40.0(ai@7.0.112(zod@4.6.5))(supports-color@10.2.2)(zod@4.6.5)
+      fetch-to-node:
+        specifier: ^2.1.0
+        version: 2.1.0
       hono:
         specifier: 4.13.13
         version: 4.13.13

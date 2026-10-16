@@ -738,6 +738,29 @@ pnpm --filter ./mastracode/factory smoke:dist
 
 Tests are colocated with source as `*.test.ts`. Use `smoke:dist` after building to verify that the published entry point can be imported successfully.
 
+## MCP server (ChatGPT and other MCP clients)
+
+Every Factory with an auth provider serves an MCP endpoint over Streamable HTTP:
+
+```
+https://<your-factory>/web/factory/projects/<projectId>/mcp
+```
+
+It exposes the Factory tools a signed-in web session has (list, inspect, create, update and transition work items, start and signal sessions, decisions, approvals), plus `search` and `fetch` over work items for ChatGPT. Each tool carries MCP annotations (read-only, destructive, idempotent) so clients can ask before changes.
+
+Callers must sign in. Requests without a valid bearer token get `401` with a `WWW-Authenticate` header pointing to the RFC 9728 metadata at `/.well-known/oauth-protected-resource/web/factory/projects/<projectId>/mcp`. Tokens go through the same auth provider and org checks as the web UI. Each user gets one private connector session per Factory that the session tools act from.
+
+To connect ChatGPT, open **Settings → Connectors → Create**, paste the endpoint URL, and choose OAuth. Set the authorization server the metadata advertises:
+
+```ts
+new MastraFactory({
+  // ...
+  mcp: { authorizationServers: ['https://your-tenant.authkit.app'] },
+});
+```
+
+or set `MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER`. Pass `mcp: false` to turn the endpoint off.
+
 ## Changelog
 
 See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/mastracode/factory/CHANGELOG.md) for version history and release notes.
