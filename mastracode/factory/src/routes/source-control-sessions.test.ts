@@ -247,7 +247,7 @@ describe('source-control session routes', () => {
     expect(queryThreads).toHaveBeenCalledWith({ resourceId: sessionId });
     expect(generateTitle).toHaveBeenCalledWith({
       threadId,
-      resourceId: sessionId,
+      sessionId,
       requestContext: expect.any(RequestContext),
     });
     await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({

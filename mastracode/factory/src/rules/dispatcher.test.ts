@@ -226,7 +226,11 @@ function createSession(
   };
   const controller = {
     createSession: vi.fn(async () => session),
-    getSessionByResource: vi.fn(async (): Promise<typeof session | undefined> => session),
+    // Bindings run under the Factory resource; the session is found by its own id only.
+    getSession: vi.fn(
+      async (sessionId: string): Promise<typeof session | undefined> =>
+        sessionId === 'session-1' ? session : undefined,
+    ),
     // Empty registry by default: the level-triggered timeout check sees no run.
     listActiveThreadRuns: vi.fn((): Array<{ runId: string; resourceId?: string; threadId: string }> => []),
   };
@@ -4372,7 +4376,7 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffMessage: null,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined), listActiveThreadRuns: vi.fn(() => []) },
+      controller: { getSession: vi.fn(async () => undefined), listActiveThreadRuns: vi.fn(() => []) },
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -4674,7 +4678,7 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffMessage: null,
     });
     const { controller, session } = createSession();
-    controller.getSessionByResource.mockResolvedValueOnce(undefined as never).mockResolvedValue(session);
+    controller.getSession.mockResolvedValueOnce(undefined as never).mockResolvedValue(session);
     const prepareBinding = vi.fn(async () => {
       await storage.prepareRunStart({
         orgId: 'org-1',

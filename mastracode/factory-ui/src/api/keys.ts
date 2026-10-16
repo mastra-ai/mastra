@@ -140,8 +140,7 @@ export const queryKeys = {
     filter ? (['available-models', filter] as const) : (['available-models'] as const),
   customProviders: () => ['custom-providers'] as const,
   defaultModel: () => ['default-model'] as const,
-  om: (resourceId: string | undefined, scope?: string, factoryId?: string) =>
-    ['om', resourceId ?? null, scope ?? null, factoryId ?? null] as const,
+  om: (sessionId: string | undefined, factoryId?: string) => ['om', sessionId ?? null, factoryId ?? null] as const,
   factorySkills: () => ['factory', 'skills'] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
   artifactsList: (path: string | undefined) => ['artifacts-list', path ?? null] as const,

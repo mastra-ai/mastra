@@ -491,11 +491,10 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
 
           const resourceId = c.req.query('resourceId');
           const threadId = c.req.query('threadId');
-          const sessionScope = c.req.query('scope');
           if (!resourceId || !threadId) return c.json({ error: 'resourceId and threadId are required' }, 400);
 
           const subscriptions = await listMergeRequestSubscriptionsForThread(
-            { orgId: tenant.orgId, resourceId, threadId, sessionScope },
+            { orgId: tenant.orgId, resourceId, threadId },
             gitlab.integrationStorage,
           );
           return c.json({

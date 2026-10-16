@@ -112,7 +112,7 @@ interface ModelCatalog {
     Array<{ id?: string; modelName?: string; provider: string; hasApiKey: boolean; apiKeyEnvVar?: string }>
   >;
   listModes?: () => Array<{ id: string; defaultModelId?: string }>;
-  getSessionByResource?: (resourceId: string, scope?: string) => Promise<OMSession | undefined>;
+  getSession?: (sessionId: string) => Promise<OMSession | undefined>;
 }
 
 /**
@@ -899,10 +899,18 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             let sessionPolicy: { modelScope: 'factory' | 'user'; defaultModelId: string | null } | undefined;
             const resourceId = c.req.query('resourceId');
             const threadId = c.req.query('threadId');
-            if (resourceId !== undefined || threadId !== undefined) {
+            const sessionId = c.req.query('sessionId');
+            if (resourceId !== undefined || threadId !== undefined || sessionId !== undefined) {
+              // A caller that names no session addresses it by the resource, which is
+              // the session id for sessions that run under their own resource.
               const address = z
-                .object({ resourceId: z.string().trim().min(1), threadId: z.string().trim().min(1) })
-                .safeParse({ resourceId, threadId });
+                .object({
+                  resourceId: z.string().trim().min(1),
+                  threadId: z.string().trim().min(1),
+                  sessionId: z.string().trim().min(1).optional(),
+                })
+                .transform(data => ({ ...data, sessionId: data.sessionId ?? data.resourceId }))
+                .safeParse({ resourceId, threadId, sessionId });
               if (!address.success) return c.json({ error: 'invalid_session_context' }, 400);
               if (!tenant && auth.enabled()) return c.json({ error: 'unauthorized' }, 401);
               if (tenant) {
@@ -1087,8 +1095,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         method: 'GET',
         requiresAuth: false,
         handler: async c => {
-          const resourceId = c.req.query('resourceId');
-          const scope = c.req.query('scope') || undefined;
+          const sessionId = c.req.query('sessionId');
           const factoryProjectId = c.req.query('factoryId') || undefined;
           const context = await resolveMemorySettingsContext({
             c: loose(c),
@@ -1102,7 +1109,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
             const fallback = await factoryOmFallback(factoryProjectId);
             const availableProviders = await resolveOMResponseContext(loose(c));
-            const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
+            const session = sessionId ? await controller.getSession?.(sessionId) : undefined;
             const sessionModelId = session?.model.get();
             return c.json({
               config: readStoredOMConfig(
@@ -1126,14 +1133,13 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           if (role !== 'observer' && role !== 'reflector') {
             return c.json({ error: `Unknown OM role "${role}"` }, 400);
           }
-          let body: { resourceId?: unknown; modelId?: unknown; scope?: unknown; factoryId?: unknown };
+          let body: { sessionId?: unknown; modelId?: unknown; factoryId?: unknown };
           try {
             body = await c.req.json();
           } catch {
             return c.json({ error: 'Invalid JSON body' }, 400);
           }
-          const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
-          const scope = typeof body.scope === 'string' && body.scope ? body.scope : undefined;
+          const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
           const factoryProjectId = typeof body.factoryId === 'string' && body.factoryId ? body.factoryId : undefined;
           const model = typeof body.modelId === 'string' ? body.modelId.trim() : '';
           if (!model) {
@@ -1158,7 +1164,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               [role === 'observer' ? 'observerModelId' : 'reflectorModelId']: wantsAuto ? null : model,
             });
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
-            const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
+            const session = sessionId ? await controller.getSession?.(sessionId) : undefined;
             const sessionModelId = session?.model.get();
             const config = readStoredOMConfig(
               record,
@@ -1178,10 +1184,9 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         requiresAuth: false,
         handler: async c => {
           let body: {
-            resourceId?: unknown;
+            sessionId?: unknown;
             observationThreshold?: unknown;
             reflectionThreshold?: unknown;
-            scope?: unknown;
             factoryId?: unknown;
           };
           try {
@@ -1189,8 +1194,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           } catch {
             return c.json({ error: 'Invalid JSON body' }, 400);
           }
-          const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
-          const scope = typeof body.scope === 'string' && body.scope ? body.scope : undefined;
+          const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
           const factoryProjectId = typeof body.factoryId === 'string' && body.factoryId ? body.factoryId : undefined;
           const observation =
             typeof body.observationThreshold === 'number' && body.observationThreshold > 0
@@ -1218,7 +1222,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               ...(reflection !== undefined ? { reflectionThreshold: reflection } : {}),
             });
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
-            const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
+            const session = sessionId ? await controller.getSession?.(sessionId) : undefined;
             const sessionModelId = session?.model.get();
             const config = readStoredOMConfig(
               record,
@@ -1237,14 +1241,13 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         method: 'PUT',
         requiresAuth: false,
         handler: async c => {
-          let body: { resourceId?: unknown; value?: unknown; scope?: unknown; factoryId?: unknown };
+          let body: { sessionId?: unknown; value?: unknown; factoryId?: unknown };
           try {
             body = await c.req.json();
           } catch {
             return c.json({ error: 'Invalid JSON body' }, 400);
           }
-          const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
-          const scope = typeof body.scope === 'string' && body.scope ? body.scope : undefined;
+          const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
           const factoryProjectId = typeof body.factoryId === 'string' && body.factoryId ? body.factoryId : undefined;
           const raw = body.value;
           const value: 'auto' | boolean = raw === 'auto' || raw === true || raw === false ? raw : 'auto';
@@ -1263,7 +1266,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           try {
             await persistMemorySettings(context, { observeAttachments: value });
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
-            const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
+            const session = sessionId ? await controller.getSession?.(sessionId) : undefined;
             const sessionModelId = session?.model.get();
             const config = readStoredOMConfig(
               record,

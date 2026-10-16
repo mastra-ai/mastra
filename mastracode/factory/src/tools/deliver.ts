@@ -10,7 +10,7 @@ export const FACTORY_SESSION_NOTIFICATION_SOURCE = 'factory-session';
 
 export type FactoryDeliveryController = Pick<
   MountedMastraCode['controller'],
-  'queryThreadById' | 'queryThreads' | 'getSessionByResource' | 'createSession' | 'getCurrentAgent'
+  'queryThreadById' | 'queryThreads' | 'getSession' | 'createSession' | 'getCurrentAgent'
 >;
 
 export interface FactoryDeliveryTarget {
@@ -66,7 +66,7 @@ export async function deliverFactorySessionNotification({
 
   // No request context: without a user the controller's access check is a no-op,
   // and this is a server-side lookup on the target's behalf, not the sender's.
-  let session = await controller.getSessionByResource(ownerResourceId);
+  let session = await controller.getSession(target.sessionId);
   if (!session) {
     if (onlyIfLive) return { delivered: 'skipped', reason: 'offline' };
     const row = await sessions.getBySessionId(target.sessionId);
@@ -115,7 +115,7 @@ export async function resolveSessionThread({
   workItems,
   sessionId,
 }: {
-  controller: Pick<FactoryDeliveryController, 'getSessionByResource' | 'queryThreads'>;
+  controller: Pick<FactoryDeliveryController, 'getSession' | 'queryThreads'>;
   sessions: Pick<SourceControlSessionLookup, 'getBySessionId'>;
   workItems: Pick<WorkItemsStorage, 'findActiveRunBindingForSession'>;
   sessionId: string;
@@ -129,7 +129,7 @@ export async function resolveSessionThread({
     });
     if (binding) return binding.threadId;
   }
-  const live = await controller.getSessionByResource(sessionId);
+  const live = await controller.getSession(sessionId);
   const current = live?.thread.getId();
   if (current) return current;
   const threads = await controller.queryThreads({ resourceId: sessionId });

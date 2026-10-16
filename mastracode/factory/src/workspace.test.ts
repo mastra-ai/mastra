@@ -111,6 +111,7 @@ const mocks = vi.hoisted(() => ({
           orgId: 'org-1',
           threadId: mocks.runBindingThreadId ?? sessionId,
           resourceId: sessionId,
+          sessionId,
         }
       : null,
   ),
@@ -227,7 +228,9 @@ function createGithubRequestContext(
   const state: Record<string, unknown> = { factoryProjectId: projectId };
   requestContext.set('controller', {
     modeId: 'build',
-    resourceId: sessionId,
+    // Factory sessions run under the Factory resource and are addressed by their own id.
+    resourceId: projectId,
+    sessionId,
     threadId: sessionId,
     getState: () => state,
     setState: async (updates: Record<string, unknown>) => {
@@ -249,6 +252,7 @@ function createUnscopedGithubRequestContext(projectId: string, projectPath: stri
   requestContext.set('controller', {
     modeId: 'build',
     resourceId: projectId,
+    sessionId: projectId,
     getState,
     session: { id: projectId, state: { get: getState } },
   });

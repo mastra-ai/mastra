@@ -104,21 +104,19 @@ function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (va
 }
 
 export function OMSection({
-  resourceId,
-  scope,
+  sessionId,
   factoryId,
   models,
 }: {
-  resourceId?: string;
-  scope?: string;
+  sessionId?: string;
   factoryId?: string;
   models: AvailableModelOption[];
 }) {
-  const omQuery = useOMQuery(resourceId, scope, factoryId);
-  const observerMutation = useUpdateOMModel(resourceId, 'observer', scope, factoryId);
-  const reflectorMutation = useUpdateOMModel(resourceId, 'reflector', scope, factoryId);
-  const thresholdsMutation = useUpdateOMThresholds(resourceId, scope, factoryId);
-  const attachmentsMutation = useUpdateOMObserveAttachments(resourceId, scope, factoryId);
+  const omQuery = useOMQuery(sessionId, factoryId);
+  const observerMutation = useUpdateOMModel(sessionId, 'observer', factoryId);
+  const reflectorMutation = useUpdateOMModel(sessionId, 'reflector', factoryId);
+  const thresholdsMutation = useUpdateOMThresholds(sessionId, factoryId);
+  const attachmentsMutation = useUpdateOMObserveAttachments(sessionId, factoryId);
 
   const config = omQuery.data?.config;
   const modelsAvailable =

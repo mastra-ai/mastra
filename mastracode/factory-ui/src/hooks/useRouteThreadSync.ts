@@ -37,7 +37,6 @@ export function useRouteThreadSync() {
   const { session } = createAgentControllerClient({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    scope: projectPath,
     baseUrl,
     // The session client is used for prefetch reads (listMessages) inside the
     // fallback-for-scope-change branch — safe to build as soon as the resource

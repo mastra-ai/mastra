@@ -77,9 +77,9 @@ function context({
   if (user) requestContext.set('user', user);
   if (interactive) requestContext.set(FACTORY_INTERACTIVE_KEY, true);
   requestContext.set('controller', {
+    sessionId: resourceId,
     resourceId,
     threadId,
-    scope: '/worktree',
     getState: () => (tag ? { factoryProjectId: tag } : {}),
   });
   return requestContext;

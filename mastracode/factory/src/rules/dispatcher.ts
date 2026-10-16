@@ -294,7 +294,7 @@ interface DispatcherSession extends SkillSession {
   respondToToolSuspension(input: { resumeData: SubmitPlanResumeData; toolCallId?: string }): Promise<void>;
 }
 
-type FactoryController = Pick<AgentController<MastraCodeState>, 'getSessionByResource' | 'listActiveThreadRuns'>;
+type FactoryController = Pick<AgentController<MastraCodeState>, 'getSession' | 'listActiveThreadRuns'>;
 type BoundDispatcherSession = Session<MastraCodeState>;
 
 function factoryRequestContext(input: {
@@ -915,17 +915,17 @@ export class FactoryDecisionDispatcher {
           const resolved =
             decision.skillName === undefined
               ? await resolvePromptInvocation(this.#controller, {
-                  resourceId: binding.resourceId,
+                  sessionId: binding.sessionId,
                   prompt: decision.prompt,
                 })
               : decision.resume === true
                 ? await resolveSkillResumeInvocation(this.#controller, {
-                    resourceId: binding.resourceId,
+                    sessionId: binding.sessionId,
                     name: decision.skillName,
                     arguments: decision.arguments,
                   })
                 : await resolveSkillInvocation(this.#controller, {
-                    resourceId: binding.resourceId,
+                    sessionId: binding.sessionId,
                     name: decision.skillName,
                     arguments: decision.arguments,
                   });
@@ -1460,7 +1460,7 @@ export class FactoryDecisionDispatcher {
   ): Promise<FactoryRunBindingRecord> {
     const binding = await this.#findBinding(record, role);
     if (binding) {
-      const session = await this.#controller.getSessionByResource(binding.resourceId);
+      const session = await this.#controller.getSession(binding.sessionId);
       if (session) return binding;
     }
     if (!this.#prepareBinding) {
@@ -1475,7 +1475,7 @@ export class FactoryDecisionDispatcher {
   }
 
   async #findSession(binding: FactoryRunBindingRecord): Promise<BoundDispatcherSession | undefined> {
-    const session = await this.#controller.getSessionByResource(binding.resourceId);
+    const session = await this.#controller.getSession(binding.sessionId);
     if (!session) return undefined;
     await this.#switchThread(session, binding);
     return session;

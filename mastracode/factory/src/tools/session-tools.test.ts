@@ -96,7 +96,7 @@ function fakeController(calls: string[], onSessionCreated: (session: FakeSession
     const settings = new Map<string, unknown>();
     const listeners = new Set<(event: AgentControllerEvent) => void>();
     return {
-      identity: { getResourceId: () => id },
+      identity: { getId: () => id, getResourceId: () => id },
       emit: (event: AgentControllerEvent) => listeners.forEach(listener => listener(event)),
       listenerCount: () => listeners.size,
       subscribe: (listener: (event: AgentControllerEvent) => void) => {
@@ -133,8 +133,9 @@ function fakeController(calls: string[], onSessionCreated: (session: FakeSession
       onSessionCreated(session);
       return session;
     }),
-    getSessionByResource: vi.fn(
-      async (resourceId: string) => created.find(entry => entry.options.resourceId === resourceId)?.session ?? null,
+    getSession: vi.fn(
+      async (resourceId: string) =>
+        created.find(entry => (entry.options.id ?? entry.options.resourceId) === resourceId)?.session ?? null,
     ),
   };
   return { controller, created };
@@ -190,8 +191,8 @@ async function setup(
     }),
     queryThreads: async () => [],
     // Sessions this test created are themselves; anything else (the parent) is a live stub.
-    getSessionByResource: async (resourceId: string) =>
-      (await controller.getSessionByResource(resourceId)) ?? {
+    getSession: async (resourceId: string) =>
+      (await controller.getSession(resourceId)) ?? {
         thread: { getId: () => (resourceId === seeded.scope.sessionId ? seeded.scope.threadId : resourceId) },
       },
     getCurrentAgent: () => ({
@@ -321,7 +322,7 @@ describe('factory_start_session in side mode', () => {
     const tenantFor = (resourceId: string, threadId: string) => {
       const requestContext = new RequestContext();
       requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
-      requestContext.set('controller', { resourceId, threadId });
+      requestContext.set('controller', { sessionId: resourceId, resourceId, threadId });
       return resolveFactoryCredentialTenant(requestContext, {
         projects: seed.projects,
         sourceControl: sessions,
@@ -542,7 +543,7 @@ describe('the side session it starts', () => {
     const { childId, sessions, seed, scope } = await started();
     const requestContext = new RequestContext();
     requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
-    requestContext.set('controller', { resourceId: childId, threadId: childId });
+    requestContext.set('controller', { sessionId: childId, resourceId: childId, threadId: childId });
 
     const childScope = await resolveFactoryToolScope({
       requestContext,
@@ -568,7 +569,7 @@ describe('the side session it starts', () => {
     const { childId, sessions } = await started();
     let rules: PermissionRules = { categories: {}, tools: {} };
     const childSession = {
-      identity: { getResourceId: () => childId },
+      identity: { getId: () => childId, getResourceId: () => childId },
       permissions: {
         getRules: () => structuredClone(rules),
         setForTool: async ({ toolName, policy }: { toolName: string; policy: 'allow' | 'ask' | 'deny' }) => {
@@ -689,7 +690,7 @@ describe('factory_start_session in work-item mode', () => {
     const tenantFor = (resourceId: string, threadId: string) => {
       const requestContext = new RequestContext();
       requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
-      requestContext.set('controller', { resourceId, threadId });
+      requestContext.set('controller', { sessionId: resourceId, resourceId, threadId });
       return resolveFactoryCredentialTenant(requestContext, {
         projects: seed.projects,
         sourceControl: sessions,
@@ -948,7 +949,7 @@ describe('factory_start_session in work-item mode', () => {
     let rules: PermissionRules = { categories: {}, tools: {} };
     await applyFactoryToolPermissions(
       {
-        identity: { getResourceId: () => result.sessionId },
+        identity: { getId: () => result.sessionId, getResourceId: () => result.sessionId },
         permissions: {
           getRules: () => structuredClone(rules),
           setForTool: async ({ toolName, policy }: { toolName: string; policy: 'allow' | 'ask' | 'deny' }) => {
