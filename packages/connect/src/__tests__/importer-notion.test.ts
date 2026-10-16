@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { MastraConnectError } from '../errors.js';
 import type { ImporterProviderContext } from '../importer-registry.js';
 import { notionImporterRegistration } from '../providers/notion/importer.js';
 import { createFakeImporter, createFakeState, runImporter, type FakeImporter } from './fixtures/importer-harness.js';
@@ -52,12 +53,22 @@ interface NotionHarness {
   searchCalls: () => Array<{ method: string; path: string; body?: Record<string, unknown> }>;
   /** Recorded `v1/blocks/:id/children` calls only. */
   blockCalls: () => Array<{ method: string; path: string; query?: Record<string, unknown> }>;
+  /** Set the response for a point lookup path (`v1/pages/:id` / `v1/databases/:id`). Pass an Error to fail. */
+  setLookup: (path: string, response: unknown) => void;
+  /** Recorded point-lookup calls only. */
+  lookupCalls: () => Array<{ method: string; path: string }>;
 }
 
 function makeContext(overrides?: { role?: 'owner' | 'edit' }): NotionHarness {
   const searchQueue: unknown[] = [];
   const blockQueues = new Map<string, unknown[]>();
+  const lookups = new Map<string, unknown>();
   const request = vi.fn(async (options: { method: string; path: string; body?: unknown; query?: unknown }) => {
+    if (options.path.startsWith('v1/pages/') || options.path.startsWith('v1/databases/')) {
+      const next = lookups.get(options.path) ?? {};
+      if (next instanceof Error) throw next;
+      return next;
+    }
     if (options.path.startsWith('v1/blocks/')) {
       const pageId = options.path.split('/')[2]!;
       const queue = blockQueues.get(pageId);
@@ -92,6 +103,9 @@ function makeContext(overrides?: { role?: 'owner' | 'edit' }): NotionHarness {
     },
     searchCalls: () => calls().filter(call => call.path === 'v1/search') as never,
     blockCalls: () => calls().filter(call => call.path.startsWith('v1/blocks/')) as never,
+    setLookup: (path, response) => void lookups.set(path, response),
+    lookupCalls: () =>
+      calls().filter(call => call.path.startsWith('v1/pages/') || call.path.startsWith('v1/databases/')) as never,
   };
 }
 
@@ -527,5 +541,162 @@ describe('notion importer', () => {
 
     const record = [...importer.nodes.get('notion:page:p1')!.records.values()][0]!;
     expect((record.metadata as { links?: unknown[] }).links).toBeUndefined();
+  });
+});
+
+async function reconcileCursor(state: ReturnType<typeof createFakeState>): Promise<string | undefined> {
+  const raw = await state.get('notion:reconcile:cursor');
+  return raw ? (JSON.parse(raw) as { cursor?: string }).cursor || undefined : undefined;
+}
+
+function lookupStatusError(status: number) {
+  return new MastraConnectError('proxy_error', `Provider request failed (${status})`, { status });
+}
+
+function databaseSearchResponse(id: string, lastEditedTime: string) {
+  return {
+    results: [
+      {
+        object: 'database',
+        id,
+        archived: false,
+        url: `https://www.notion.so/${id}`,
+        last_edited_time: lastEditedTime,
+        title: [{ plain_text: 'Tracker' }],
+      },
+    ],
+    has_more: false,
+    next_cursor: null,
+  };
+}
+
+describe('notion importer — removal reconciliation by point lookup', () => {
+  async function importPage(role: 'owner' | 'edit' = 'owner') {
+    const harness = makeContext({ role });
+    harness.queueSearch(
+      searchResponse([{ id: 'p1', title: 'Alpha', lastEditedTime: '2026-09-01T00:00:00Z', propertyText: 'v1' }]),
+    );
+    const definition = notionImporterRegistration.createImporter(harness.ctx);
+    await runImporter(definition, { importer: harness.importer, state: harness.state });
+    expect(harness.importer.nodes.get('notion:page:p1')!.records.size).toBe(1);
+    return { harness, definition };
+  }
+
+  it('removes records of a trashed page that search omits once the point lookup reports in_trash', async () => {
+    const { harness, definition } = await importPage();
+    harness.setLookup('v1/pages/p1', { object: 'page', id: 'p1', in_trash: true, archived: true });
+    // Live v1/search omits trashed pages entirely.
+    harness.queueSearch(searchResponse([]));
+    await runImporter(definition, { importer: harness.importer, state: harness.state });
+
+    expect(harness.lookupCalls()).toContainEqual(expect.objectContaining({ method: 'GET', path: 'v1/pages/p1' }));
+    expect(harness.importer.nodes.get('notion:page:p1')!.records.size).toBe(0);
+    expect(harness.importer.nodes.has('notion:page:p1')).toBe(true);
+    expect(await reconcileCursor(harness.state)).toBeUndefined();
+  });
+
+  it.each([
+    ['archived', { archived: true }],
+    ['in_trash', { in_trash: true }],
+  ])('removes records of a database the retrieve endpoint reports %s', async (_label, flags) => {
+    const harness = makeContext();
+    harness.queueSearch(databaseSearchResponse('d1', '2026-09-01T00:00:00Z'));
+    const definition = notionImporterRegistration.createImporter(harness.ctx);
+    await runImporter(definition, { importer: harness.importer, state: harness.state });
+    expect(harness.importer.nodes.get('notion:database:d1')!.records.size).toBe(1);
+
+    harness.setLookup('v1/databases/d1', { object: 'database', id: 'd1', ...flags });
+    harness.queueSearch(searchResponse([]));
+    await runImporter(definition, { importer: harness.importer, state: harness.state });
+
+    expect(harness.lookupCalls()).toContainEqual(expect.objectContaining({ method: 'GET', path: 'v1/databases/d1' }));
+    expect(harness.importer.nodes.get('notion:database:d1')!.records.size).toBe(0);
+  });
+
+  it('keeps records when the point lookup reports a live page', async () => {
+    const { harness, definition } = await importPage();
+    harness.setLookup('v1/pages/p1', { object: 'page', id: 'p1', in_trash: false, archived: false });
+    harness.queueSearch(searchResponse([]));
+    await runImporter(definition, { importer: harness.importer, state: harness.state });
+    expect(harness.importer.nodes.get('notion:page:p1')!.records.size).toBe(1);
+  });
+
+  it.each([
+    ['403', lookupStatusError(403)],
+    ['404', lookupStatusError(404)],
+    ['an invalid schema', { object: 'page', id: 'p1', in_trash: 'yes' }],
+    ['a payload without tombstone flags', { object: 'page', id: 'p1' }],
+    ['a mismatched entity', { object: 'page', id: 'other', in_trash: true }],
+  ])('keeps records and advances when the point lookup returns %s', async (_label, response) => {
+    const { harness, definition } = await importPage();
+    harness.setLookup('v1/pages/p1', response);
+    harness.queueSearch(searchResponse([]));
+    await runImporter(definition, { importer: harness.importer, state: harness.state });
+    expect(harness.importer.nodes.get('notion:page:p1')!.records.size).toBe(1);
+    // Ambiguous verdicts complete the walk, clearing the cursor.
+    expect(await reconcileCursor(harness.state)).toBeUndefined();
+  });
+
+  it('a thrown point lookup fails the run without removal or cursor advancement, after the search checkpoint', async () => {
+    const { harness, definition } = await importPage();
+    harness.setLookup('v1/pages/p1', lookupStatusError(503));
+    harness.queueSearch(searchResponse([]));
+    await expect(runImporter(definition, { importer: harness.importer, state: harness.state })).rejects.toThrow(/503/);
+    expect(harness.importer.nodes.get('notion:page:p1')!.records.size).toBe(1);
+    expect(await reconcileCursor(harness.state)).toBeUndefined();
+    expect(await harness.state.get('notion:watermark')).toBe(JSON.stringify({ watermark: '2026-09-01T00:00:00Z' }));
+
+    // Transient failure clears: the next run retries the same entity and removes it.
+    harness.setLookup('v1/pages/p1', { object: 'page', id: 'p1', in_trash: true });
+    harness.queueSearch(searchResponse([]));
+    await runImporter(definition, { importer: harness.importer, state: harness.state });
+    expect(harness.importer.nodes.get('notion:page:p1')!.records.size).toBe(0);
+  });
+
+  it.each([
+    ['connection_not_found', 404],
+    ['unauthorized', 403],
+  ] as const)('a platform-originated %s lookup error throws instead of keeping-and-advancing', async (code, status) => {
+    const { harness, definition } = await importPage();
+    harness.setLookup('v1/pages/p1', new MastraConnectError(code, 'platform error', { status }));
+    harness.queueSearch(searchResponse([]));
+    await expect(runImporter(definition, { importer: harness.importer, state: harness.state })).rejects.toThrow(
+      /platform error/,
+    );
+    expect(harness.importer.nodes.get('notion:page:p1')!.records.size).toBe(1);
+  });
+
+  it('a failed search pass never reconciles', async () => {
+    const { harness, definition } = await importPage();
+    harness.setLookup('v1/pages/p1', { object: 'page', id: 'p1', in_trash: true });
+    const probesBefore = harness.lookupCalls().length;
+    harness.queueSearch(new Error('platform down'));
+    await expect(runImporter(definition, { importer: harness.importer, state: harness.state })).rejects.toThrow(
+      /platform down/,
+    );
+    expect(harness.lookupCalls()).toHaveLength(probesBefore);
+    expect(harness.importer.nodes.get('notion:page:p1')!.records.size).toBe(1);
+  });
+
+  it('edit-role bindings never probe or remove', async () => {
+    const { harness, definition } = await importPage('edit');
+    harness.setLookup('v1/pages/p1', { object: 'page', id: 'p1', in_trash: true });
+    harness.queueSearch(searchResponse([]));
+    await runImporter(definition, { importer: harness.importer, state: harness.state });
+    expect(harness.lookupCalls()).toHaveLength(0);
+    expect(harness.importer.nodes.get('notion:page:p1')!.records.size).toBe(1);
+  });
+
+  it('leaves the block-fetch degradation path unchanged alongside reconciliation', async () => {
+    const { harness, definition } = await importPage();
+    harness.setLookup('v1/pages/p1', { object: 'page', id: 'p1', in_trash: false });
+    const before = [...harness.importer.nodes.get('notion:page:p1')!.records.keys()];
+    harness.queueSearch(
+      searchResponse([{ id: 'p1', title: 'Alpha', lastEditedTime: '2026-09-02T00:00:00Z', propertyText: 'v2' }]),
+    );
+    harness.queueBlocks('p1', new Error('blocks unavailable'));
+    await runImporter(definition, { importer: harness.importer, state: harness.state });
+    expect([...harness.importer.nodes.get('notion:page:p1')!.records.keys()]).toEqual(before);
+    expect(await harness.state.get('notion:watermark')).toBe(JSON.stringify({ watermark: '2026-09-02T00:00:00Z' }));
   });
 });

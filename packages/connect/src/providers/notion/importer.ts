@@ -1,7 +1,8 @@
 import { z } from 'zod';
 
+import { MastraConnectError } from '../../errors.js';
 import type { ImporterProviderContext, ImporterProviderRegistration } from '../../importer-registry.js';
-import type { RecordLink } from '../../importer-runtime.js';
+import type { ImporterNodeProbeResult, RecordLink } from '../../importer-runtime.js';
 import {
   boundText,
   clearHighWater,
@@ -16,6 +17,7 @@ import {
   readHighWater,
   readResumeCursor,
   readWatermark,
+  reconcileImporterNodes,
   writeHighWater,
   writeResumeCursor,
   writeWatermark,
@@ -24,6 +26,9 @@ import {
 const NOTION_WATERMARK_KEY = 'notion:watermark';
 const NOTION_RESUME_CURSOR_KEY = 'notion:resume-cursor';
 const NOTION_HIGH_WATER_KEY = 'notion:high-water';
+const NOTION_RECONCILE_CURSOR_KEY = 'notion:reconcile:cursor';
+/** Point lookups per run; Notion averages ~3 requests/second per integration. */
+const NOTION_RECONCILE_PROBES_PER_RUN = 50;
 
 /** Maximum block-children pages fetched per Notion page per run (≤300 blocks). */
 export const MAX_BLOCK_PAGES_PER_ENTITY = 3;
@@ -279,6 +284,44 @@ function parentLink(result: NotionSearchResult): RecordLink | undefined {
   return undefined;
 }
 
+/** Point-lookup shape shared by `GET v1/pages/{id}` and `GET v1/databases/{id}`. */
+const pointLookupSchema = z.object({
+  object: z.enum(['page', 'database']),
+  id: z.string(),
+  archived: z.boolean().optional(),
+  in_trash: z.boolean().optional(),
+  is_archived: z.boolean().optional(),
+});
+
+/**
+ * `v1/search` omits trashed entities, so removal is confirmed by retrieving each
+ * imported page/database by id. provider 403/404 and unrecognized payloads are ambiguous
+ * (access loss, permanent delete, API drift) and keep data; other request
+ * failures throw so the reconcile cursor does not advance past the entity.
+ */
+async function probeNotionEntity(ctx: ImporterProviderContext, address: string): Promise<ImporterNodeProbeResult> {
+  const [, object, id] = address.split(':') as [string, 'page' | 'database', string];
+  let response: unknown;
+  try {
+    response = await ctx.request({ method: 'GET', path: `v1/${object}s/${encodeURIComponent(id)}` });
+  } catch (error) {
+    // Only provider-originated 403/404 are ambiguous; platform auth/connection errors must throw.
+    if (
+      error instanceof MastraConnectError &&
+      error.code === 'proxy_error' &&
+      (error.status === 403 || error.status === 404)
+    )
+      return 'uncertain';
+    throw error;
+  }
+  const parsed = pointLookupSchema.safeParse(response);
+  if (!parsed.success || parsed.data.object !== object || normalizeNotionId(parsed.data.id) !== normalizeNotionId(id))
+    return 'uncertain';
+  const flags = [parsed.data.archived, parsed.data.in_trash, parsed.data.is_archived];
+  if (flags.some(flag => flag === true)) return 'removed';
+  return flags.some(flag => flag === false) ? 'present' : 'uncertain';
+}
+
 function createNotionImporter(ctx: ImporterProviderContext) {
   return {
     id: 'notion',
@@ -449,6 +492,18 @@ function createNotionImporter(ctx: ImporterProviderContext) {
         await writeResumeCursor(context.state, NOTION_RESUME_CURSOR_KEY, nextCursorAfterLastPage);
         if (newestObserved) await writeHighWater(context.state, NOTION_HIGH_WATER_KEY, newestObserved);
       }
+
+      if (context.signal.aborted) return;
+      await reconcileImporterNodes({
+        importer,
+        state: context.state,
+        cursorKey: NOTION_RECONCILE_CURSOR_KEY,
+        addressPrefixes: ['notion:page:', 'notion:database:'],
+        canRemove,
+        probe: address => probeNotionEntity(ctx, address),
+        signal: context.signal,
+        limit: NOTION_RECONCILE_PROBES_PER_RUN,
+      });
     },
   };
 }
