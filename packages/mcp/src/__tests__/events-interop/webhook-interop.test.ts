@@ -1,5 +1,6 @@
 import type http from 'node:http';
 import path from 'node:path';
+import { noopObserve } from '@mastra/core/tools';
 import type { AuthInfo } from '@modelcontextprotocol/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -204,28 +205,26 @@ describe('MCPClient ↔ MCPServer webhook delivery over Streamable HTTP', () => 
     expect(await store.list('ticket.created')).toHaveLength(1);
   });
 
-  // INTEROP GAP (reported to the orchestrator): with webhook delivery, two live subscriptions from one
-  // MCPClient with the same (server, event, arguments) map to one server subscription, keyed by
-  // (principal, url, name, arguments). Only one of them receives deliveries, and cancelling either
-  // unsubscribes the shared one, silently ending the other. Push and poll keep them independent.
-  // This test pins the current behavior; update it when the gap is fixed.
-  it('known gap: two live same-argument webhook subscriptions share one server subscription', async () => {
+  it('shares one server subscription between same-argument webhook subscriptions until the last cancel', async () => {
     const { store, subscribe, emit } = await setup();
     const args = { project: 'hook-shared' };
     const first = await subscribe(args);
     const second = await subscribe(args);
-    expect(store.idFor(args)).toBe(store.writes[1]!.id);
+    expect(await store.list('ticket.created')).toHaveLength(1);
 
     await emit('s1', 'hook-shared');
     expect(ticketIds(await take(first, 1))).toEqual(['s1']);
-    await expect(take(second, 1, 300)).rejects.toThrow('Timed out after 0/1');
+    expect(ticketIds(await take(second, 1))).toEqual(['s1']);
 
     await first.cancel();
-    await waitFor(() => store.deletes.length === 1, 5000, 'the unsubscribe to reach the server');
-    expect(await store.list('ticket.created')).toEqual([]);
-
     await emit('s2', 'hook-shared');
-    await expect(take(second, 1, 300)).rejects.toThrow('Timed out after 0/1');
+    expect(ticketIds(await take(second, 1))).toEqual(['s2']);
+    expect(store.deletes).toEqual([]);
+    expect(await store.list('ticket.created')).toHaveLength(1);
+
+    await second.cancel();
+    await waitFor(() => store.deletes.length === 1, 5000, 'the last cancel to unsubscribe');
+    expect(await store.list('ticket.created')).toEqual([]);
   });
 
   it('refreshes before the grant expires and keeps delivering', async () => {
@@ -273,8 +272,8 @@ describe('MCPClient ↔ MCPServer webhook delivery over Streamable HTTP', () => 
       });
     });
 
-    it('rejects webhook subscriptions from an unauthenticated caller', async () => {
-      const { mcp } = await setup({ token: null });
+    it('rejects forced webhook from an unauthenticated caller and falls back by default', async () => {
+      const { mcp, emit } = await setup({ token: null });
 
       const forced = await rejectionOf(
         mcp.events.subscribe('events', 'ticket.created', { project: 'anon' }, { delivery: 'webhook' }),
@@ -284,21 +283,26 @@ describe('MCPClient ↔ MCPServer webhook delivery over Streamable HTTP', () => 
         cause: { id: 'MCP_EVENTS_SUBSCRIPTION_FAILED' },
       });
 
-      // The client can't know the server requires authentication, so the default also picks webhook
-      // and fails instead of falling back to push (interop gap, see the stdio case below).
-      const byDefault = await rejectionOf(mcp.events.subscribe('events', 'ticket.created', { project: 'anon' }));
-      expect(byDefault).toMatchObject({
-        id: 'MCP_CLIENT_SUBSCRIBE_EVENT_FAILED',
-        cause: { id: 'MCP_EVENTS_SUBSCRIPTION_FAILED' },
-      });
+      // Without forcing a mode, the client falls back to push and reports why once.
+      const byDefault = await mcp.events.subscribe('events', 'ticket.created', { project: 'anon' });
+      expect(byDefault.mode).toBe('push');
+      const errors: unknown[] = [];
+      byDefault.onError(error => errors.push(error));
+      expect(errors).toEqual([
+        expect.objectContaining({
+          id: 'MCP_EVENTS_WEBHOOK_UNAVAILABLE',
+          details: expect.objectContaining({ fallback: 'push' }),
+        }),
+      ]);
+      await emit('anon-1', 'anon');
+      expect(ticketIds(await take(byDefault, 1))).toEqual(['anon-1']);
+      await byDefault.cancel();
     });
   });
 
-  // INTEROP GAP (reported to the orchestrator): webhook subscriptions need an authenticated HTTP
-  // caller, but the server still advertises `webhook` over stdio, and a client with `webhook`
-  // settings prefers it, so the default subscribe fails instead of falling back to push. The same
-  // happens over HTTP without authentication (see the errors above). Pins the current behavior.
-  it('known gap: over stdio a webhook-configured client picks webhook by default and fails', async () => {
+  // Over stdio there is no authenticated caller, so the server refuses webhook subscriptions even
+  // though it advertises the mode.
+  it('falls back to push over stdio for a webhook-configured client, and rejects forced webhook', async () => {
     const receiver = await serveWebhookReceiver(async () => new Response(null, { status: 404 }));
     cleanups.push(() => receiver.close());
     const mcp = new MCPClient({
@@ -318,10 +322,29 @@ describe('MCPClient ↔ MCPServer webhook delivery over Streamable HTTP', () => 
     const ticket = descriptors.find(descriptor => descriptor.name === 'ticket.created');
     expect(ticket?.delivery).toEqual(['push', 'poll', 'webhook']);
 
-    const error = await rejectionOf(mcp.events.subscribe('events', 'ticket.created', { project: 'stdio' }));
-    expect(error).toMatchObject({
+    const subscription = await mcp.events.subscribe('events', 'ticket.created', { project: 'stdio' });
+    expect(subscription.mode).toBe('push');
+    const errors: unknown[] = [];
+    subscription.onError(error => errors.push(error));
+    expect(errors).toEqual([
+      expect.objectContaining({
+        id: 'MCP_EVENTS_WEBHOOK_UNAVAILABLE',
+        details: expect.objectContaining({ fallback: 'push' }),
+      }),
+    ]);
+
+    const tools = await mcp.listToolsets();
+    await tools.events!.emitTicket!.execute!({ id: 'stdio-1', project: 'stdio' }, { observe: noopObserve });
+    expect(ticketIds(await take(subscription, 1))).toEqual(['stdio-1']);
+    await subscription.cancel();
+
+    const forced = await rejectionOf(
+      mcp.events.subscribe('events', 'ticket.created', { project: 'stdio' }, { delivery: 'webhook' }),
+    );
+    expect(forced).toMatchObject({
       id: 'MCP_CLIENT_SUBSCRIBE_EVENT_FAILED',
       cause: { id: 'MCP_EVENTS_SUBSCRIPTION_FAILED' },
     });
+    expect(receiver.requests).toEqual([]);
   });
 });
