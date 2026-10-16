@@ -842,6 +842,21 @@ const SESSION_FAVICON_PATHS = new Set([
 ]);
 
 /**
+ * Request-context key marking a turn a signed-in person started over HTTP.
+ * Wakes, webhooks, channels and the dispatcher build their own request context
+ * and never carry it, so Factory management tools stay off those turns.
+ */
+export const FACTORY_INTERACTIVE_KEY = 'factoryInteractive';
+
+/** With auth disabled there is no gate; this marks every HTTP request as interactive instead. */
+export function createFactoryInteractiveMarker() {
+  return async (c: Context, next: () => Promise<void>): Promise<void> => {
+    c.get('requestContext')?.set(FACTORY_INTERACTIVE_KEY, true);
+    await next();
+  };
+}
+
+/**
  * Build the auth gate as a plain Hono middleware handler `(c, next)`. Protects
  * everything that is not a public `/auth/*` route: authenticated requests stash
  * the user on the context and continue; unauthenticated navigations redirect to
@@ -922,6 +937,7 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
       const requestContext = c.get('requestContext');
       requestContext?.set('user', user);
       requestContext?.set(MASTRA_MESSAGE_AUTHOR_KEY, messageAuthor(user));
+      requestContext?.set(FACTORY_INTERACTIVE_KEY, true);
       return next();
     }
 
