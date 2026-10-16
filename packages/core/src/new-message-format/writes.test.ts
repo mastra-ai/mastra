@@ -241,6 +241,34 @@ describe('resent history', () => {
     expect(texts(log)).toEqual(['user:hello', 'assistant:Hi!', 'user:what now?', 'assistant:This.']);
   });
 
+  it.each([
+    ['a resent [Q]', [{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hello' }] }]],
+    ['a plain-string retry', 'hello'],
+  ])('stores a first question once when its model call failed and it comes back as %s', async (_, retry) => {
+    const memory = new InMemoryActionStorage();
+    const failing = new MockLanguageModelV4({
+      modelId: 'mock-model',
+      doStream: async () => {
+        throw new Error('provider down');
+      },
+    });
+    await drain(runAgent({ model: failing, threadId: 't1', memory, input: 'hello' })).catch(() => {});
+
+    const { model } = scriptedModel([textTurn('Hi!')]);
+    await drain(runAgent({ model, threadId: 't1', memory, input: retry }));
+
+    const log = await memory.listActions({ threadId: 't1' });
+    expect(texts(log)).toEqual(['user:hello', 'assistant:Hi!']);
+  });
+
+  it('keeps a new first-turn question after an unanswered one', () => {
+    const log: PersistableAction[] = [
+      { id: createUlid()(), threadId: 't1', createdAt: new Date(), type: 'text', role: 'user', text: 'hello' },
+    ];
+    const input = [uiText('m1', 'user', 'hello'), uiText('m2', 'user', 'and another')];
+    expect(trimResentInput(input, log).actions.map(a => (a as { text: string }).text)).toEqual(['and another']);
+  });
+
   it('treats matching tool-call ids as a resend', () => {
     const log = [call('c1'), resultFor('c1')];
     const input = [ui('m2', 'assistant', [{ ...clientResult('c1'), type: 'tool-pick' }]), uiText('m3', 'user', 'next')];
