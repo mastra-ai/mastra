@@ -1,6 +1,6 @@
 import type { MastraError } from '@mastra/core/error';
 import { DEFAULT_EVENTS_HEARTBEAT_INTERVAL_MS, DEFAULT_MIN_POLL_INTERVAL_MS } from '../../shared/events';
-import type { EventOccurrence } from '../../shared/events';
+import type { EventOccurrence, WebhookDeliveryStatus } from '../../shared/events';
 import { eventsError, isFatal, toFatalError, toTransientError } from './errors';
 import type { DeliveryContext, DeliveryDriver, ResolvedDeliveryOptions } from './mode';
 import type {
@@ -53,6 +53,7 @@ export class EventSubscription implements MCPEventSubscription {
   /** Position covering only occurrences already handed to the consumer. */
   private yieldedCursor: string | null;
   private currentTruncated = false;
+  private currentDeliveryStatus?: WebhookDeliveryStatus;
   private readonly port: EventsPort;
   private readonly driver: DeliveryDriver;
   private readonly resolved: ResolvedDeliveryOptions;
@@ -133,6 +134,10 @@ export class EventSubscription implements MCPEventSubscription {
 
   get truncated(): boolean {
     return this.currentTruncated;
+  }
+
+  get deliveryStatus(): WebhookDeliveryStatus | undefined {
+    return this.currentDeliveryStatus;
   }
 
   onError(handler: (error: MCPEventSubscriptionError) => void): () => void {
@@ -274,6 +279,9 @@ export class EventSubscription implements MCPEventSubscription {
         }
       },
       reportError: error => this.emitError(error),
+      setDeliveryStatus: status => {
+        this.currentDeliveryStatus = status;
+      },
       sleep: ms => this.sleep(ms, false),
     };
   }

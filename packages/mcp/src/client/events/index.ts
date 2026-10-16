@@ -1,4 +1,5 @@
 export type {
+  MCPClientWebhookOptions,
   MCPEventDeliveryMode,
   MCPEventOccurrence,
   MCPEventRetryOptions,
@@ -6,4 +7,7 @@ export type {
   MCPEventSubscription,
   MCPEventSubscriptionError,
 } from './types';
-export type { EventDescriptor as MCPEventDescriptor } from '../../shared/events';
+export type {
+  EventDescriptor as MCPEventDescriptor,
+  WebhookDeliveryStatus as MCPWebhookDeliveryStatus,
+} from '../../shared/events';
