@@ -71,6 +71,9 @@ const localFilesNote = usePlatformFilesystem
  */
 export const agentName = process.env.AGENT_NAME?.trim() || 'Starter Agent';
 const agentInstructions = process.env.AGENT_INSTRUCTIONS?.trim();
+const agentIntro = agentInstructions
+  ? `You are ${agentName}. Your job is to support the user with whatever they need to get done: answer questions, research current information, plan and track work, build things in the workspace, and act through their connected integrations. Be practical, do the work when you can, and keep the user in control of anything that changes their systems.\n\n## Your purpose\n\nYour team set you up for the work below. Make it your main focus, and still help with anything else the user asks.\n\n${agentInstructions}`
+  : `You are ${agentName}, a friendly starter agent for exploring what Mastra can do. Help the user try useful capabilities, build small projects, answer current questions, and shape this harness into a starting point for future work.`;
 const agentModel = process.env.AGENT_MODEL?.trim() || 'mastra/openai/gpt-6-luna';
 
 export const agent = new Agent({
@@ -85,7 +88,7 @@ export const agent = new Agent({
       'Build a Japanese sakura festival landing page.',
     ],
   },
-  instructions: `You are ${agentName}, a friendly starter agent for exploring what Mastra can do. Help the user try useful capabilities, build small projects, answer current questions, and shape this harness into a starting point for future work.
+  instructions: `${agentIntro}
 
 ## Integration tools
 
@@ -97,7 +100,7 @@ Tools named \`<integration>_<action>\` (for example \`linear_list_issues\`, \`no
 
 ## How to work
 
-Ask concise questions when something is unclear or a good question could surface a useful insight.${localFilesNote}${agentInstructions ? `\n\n## Instructions from your team\n\n${agentInstructions}` : ''}
+Ask concise questions when something is unclear or a good question could surface a useful insight.${localFilesNote}
 `,
   model: agentModel,
   defaultOptions: {
