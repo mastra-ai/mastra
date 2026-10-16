@@ -12,7 +12,7 @@
     "test": "vitest run",
     "test:unit": "vitest run --project unit:factory-ui",
     "test:msw": "vitest run --project msw:factory-ui",
-    "test:board-browser": "playwright test --config e2e/board/playwright.config.ts"
+    "test:e2e": "playwright test --config e2e/playwright.config.ts"
   },
   "dependencies": {
     "@fontsource-variable/mona-sans": "5.3.0",

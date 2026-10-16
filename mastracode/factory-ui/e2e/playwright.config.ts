@@ -13,6 +13,7 @@ export default defineConfig({
   workers: 1,
   use: {
     baseURL: 'http://127.0.0.1:4178',
+    launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH },
     trace: 'on',
     video: 'on',
     screenshot: 'only-on-failure',

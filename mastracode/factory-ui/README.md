@@ -36,6 +36,8 @@ Boards open as a list grouped by workflow status. Click a status heading, or foc
 
 Saved views can use either the list or Kanban layout. Existing saved views keep their selected layout.
 
+Groups with more than 30 work items or intake candidates render the visible rows plus four overscan rows. Smaller groups stay in normal flow. Focused cards, open details and menus, active drags, and deep-link targets stay mounted so scrolling and sorting preserve ongoing interactions.
+
 ## Board activity
 
 Cards on the **Work** and **Review** boards show the last person recorded in the work item's audit history. Hover over the person's name or profile image to open the recent event timeline for that card.
@@ -65,8 +67,11 @@ Use unit tests for isolated code and MSW tests for pages, routes, hooks, mutatio
 ```shell
 pnpm --filter ./mastracode/factory-ui test:unit
 pnpm --filter ./mastracode/factory-ui test:msw
+pnpm --filter ./mastracode/factory-ui test:e2e
 pnpm --filter ./mastracode/factory-ui typecheck
 pnpm --filter ./mastracode/factory-ui build
 ```
 
 See [`AGENTS.md`](./AGENTS.md) for testing conventions.
+
+Browser tests use the shared `e2e/playwright.config.ts` and start the UI server automatically. After building workspace dependencies and installing Playwright Chromium, run `pnpm --filter ./mastracode/factory-ui test:e2e board-virtualization` for the 2,000-item scrolling, layout, collapse, and deep-link regressions on desktop, tablet, and mobile. These tests use MSW responses and need no API server. `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` can select an existing Chromium installation.
