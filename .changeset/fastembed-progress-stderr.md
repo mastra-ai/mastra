@@ -2,4 +2,4 @@
 '@mastra/fastembed': patch
 ---
 
-Fixed model download notices contaminating standard output by writing them to standard error. Quiet downloads remain silent.
+Fixed model downloads contaminating standard output, including Hugging Face download messages for dense and sparse models. Download notices use standard error, and quiet downloads remain silent.
