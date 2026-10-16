@@ -22889,7 +22889,7 @@ export interface GetAgentControllerControllerIdActiveRuns_RouteContract {
 export type PostAgentControllerControllerIdSessions_PathParams = GetAgentControllerControllerIdModes_PathParams;
 
 export type PostAgentControllerControllerIdSessions_Body = {
-  resourceId: string;
+  resourceId?: string | undefined;
   sessionId?: string | undefined;
   tags?:
     | {
