@@ -4728,8 +4728,8 @@ importers:
         specifier: npm:@ai-sdk/provider@3.0.14
         version: '@ai-sdk/provider@3.0.14'
       '@ai-sdk/provider-v7':
-        specifier: npm:@ai-sdk/provider@4.0.22
-        version: '@ai-sdk/provider@4.0.22'
+        specifier: npm:@ai-sdk/provider@4.0.27
+        version: '@ai-sdk/provider@4.0.27'
       '@isaacs/ttlcache':
         specifier: ^2.1.5
         version: 2.1.5
@@ -11080,6 +11080,10 @@ packages:
 
   '@ai-sdk/provider@4.0.22':
     resolution: {integrity: sha512-1Jtmn36VNMOBo9CMUQrPqsR744qtqRloEiXpWCYS8ffPlhS2CrSNmoho5lPjp3R7EnkzBsGI6p51TA7fQJQZdA==}
+    engines: {node: '>=22'}
+
+  '@ai-sdk/provider@4.0.27':
+    resolution: {integrity: sha512-TtWwm6SxFiPomlMIbTQa+yhJte+w4/oCsW+wJrJzMC3MqHpAY9e5dJF1Y4HxyKt3W2Csac0KiI76Ckio11TFYw==}
     engines: {node: '>=22'}
 
   '@ai-sdk/provider@4.0.4':
@@ -33962,6 +33966,10 @@ snapshots:
       json-schema: 0.4.0
 
   '@ai-sdk/provider@4.0.22':
+    dependencies:
+      json-schema: 0.4.0
+
+  '@ai-sdk/provider@4.0.27':
     dependencies:
       json-schema: 0.4.0
 
