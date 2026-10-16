@@ -672,7 +672,7 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
               outputSchema: z.object({ text: z.string() }),
               execute: async ({ inputData, mastra }) => {
                 const agent = mastra.getAgent('test-agent-1');
-                const result = await agent.generateLegacy([{ role: 'user', content: inputData.prompt }]);
+                const result = await agent.generate([{ role: 'user', content: inputData.prompt }]);
                 return { text: result.text };
               },
             }),
@@ -690,7 +690,7 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
               outputSchema: z.object({ text: z.string() }),
               execute: async ({ inputData, mastra }) => {
                 const agent = mastra.getAgent('test-agent-2');
-                const result = await agent.generateLegacy([{ role: 'user', content: inputData.prompt }]);
+                const result = await agent.generate([{ role: 'user', content: inputData.prompt }]);
                 return { text: result.text };
               },
             }),
@@ -785,7 +785,7 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
           outputSchema: z.object({ text: z.string() }),
           execute: async ({ inputData, mastra }) => {
             const agent = mastra.getAgent(inputData.agentName);
-            const result = await agent.generateLegacy([{ role: 'user', content: inputData.prompt }]);
+            const result = await agent.generate([{ role: 'user', content: inputData.prompt }]);
             return { text: result.text };
           },
         });

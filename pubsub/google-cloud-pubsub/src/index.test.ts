@@ -4,12 +4,11 @@ import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
 import { MockStore } from '@mastra/core/storage';
+import { mockTextModel } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
 import type { StreamEvent } from '@mastra/core/workflows';
 import { mapVariable } from '@mastra/core/workflows';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow } from '@mastra/core/workflows/evented';
-import { simulateReadableStream } from 'ai';
-import { MockLanguageModelV1 } from 'ai/test';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { GoogleCloudPubSub } from '.';
@@ -328,44 +327,14 @@ describe.sequential('Workflow', () => {
         id: 'test-agent-1',
         name: 'test-agent-1',
         instructions: 'test agent instructions"',
-        model: new MockLanguageModelV1({
-          doStream: async () => ({
-            stream: simulateReadableStream({
-              chunks: [
-                { type: 'text-delta', textDelta: 'Paris' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  logprobs: undefined,
-                  usage: { completionTokens: 10, promptTokens: 3 },
-                },
-              ],
-            }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-        }),
+        model: mockTextModel('Paris'),
       });
 
       const agent2 = new Agent({
         id: 'test-agent-2',
         name: 'test-agent-2',
         instructions: 'test agent instructions',
-        model: new MockLanguageModelV1({
-          doStream: async () => ({
-            stream: simulateReadableStream({
-              chunks: [
-                { type: 'text-delta', textDelta: 'London' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  logprobs: undefined,
-                  usage: { completionTokens: 10, promptTokens: 3 },
-                },
-              ],
-            }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-        }),
+        model: mockTextModel('London'),
       });
 
       const startStep = createStep({
@@ -4465,44 +4434,14 @@ describe.sequential('Workflow', () => {
         id: 'test-agent-1',
         name: 'test-agent-1',
         instructions: 'test agent instructions',
-        model: new MockLanguageModelV1({
-          doStream: async () => ({
-            stream: simulateReadableStream({
-              chunks: [
-                { type: 'text-delta', textDelta: 'Paris' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  logprobs: undefined,
-                  usage: { completionTokens: 10, promptTokens: 3 },
-                },
-              ],
-            }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-        }),
+        model: mockTextModel('Paris'),
       });
 
       const agent2 = new Agent({
         id: 'test-agent-2',
         name: 'test-agent-2',
         instructions: 'test agent instructions',
-        model: new MockLanguageModelV1({
-          doStream: async () => ({
-            stream: simulateReadableStream({
-              chunks: [
-                { type: 'text-delta', textDelta: 'London' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  logprobs: undefined,
-                  usage: { completionTokens: 10, promptTokens: 3 },
-                },
-              ],
-            }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-        }),
+        model: mockTextModel('London'),
       });
 
       const startStep = createStep({
@@ -4608,44 +4547,14 @@ describe.sequential('Workflow', () => {
         id: 'test-agent-1',
         name: 'test-agent-1',
         instructions: 'test agent instructions',
-        model: new MockLanguageModelV1({
-          doStream: async () => ({
-            stream: simulateReadableStream({
-              chunks: [
-                { type: 'text-delta', textDelta: 'Paris' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  logprobs: undefined,
-                  usage: { completionTokens: 10, promptTokens: 3 },
-                },
-              ],
-            }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-        }),
+        model: mockTextModel('Paris'),
       });
 
       const agent2 = new Agent({
         id: 'test-agent-2',
         name: 'test-agent-2',
         instructions: 'test agent instructions',
-        model: new MockLanguageModelV1({
-          doStream: async () => ({
-            stream: simulateReadableStream({
-              chunks: [
-                { type: 'text-delta', textDelta: 'London' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  logprobs: undefined,
-                  usage: { completionTokens: 10, promptTokens: 3 },
-                },
-              ],
-            }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-          }),
-        }),
+        model: mockTextModel('London'),
       });
 
       const startStep = createStep({
@@ -4765,28 +4674,14 @@ describe.sequential('Workflow', () => {
         id: 'test-agent-1',
         name: 'test-agent-1',
         instructions: 'test agent instructions',
-        model: new MockLanguageModelV1({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `Paris`,
-          }),
-        }),
+        model: mockTextModel(`Paris`),
       });
 
       const agent2 = new Agent({
         id: 'test-agent-2',
         name: 'test-agent-2',
         instructions: 'test agent instructions',
-        model: new MockLanguageModelV1({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `London`,
-          }),
-        }),
+        model: mockTextModel(`London`),
       });
 
       const startStep = createStep({
@@ -4830,7 +4725,7 @@ describe.sequential('Workflow', () => {
             outputSchema: z.object({ text: z.string() }),
             execute: async ({ inputData, mastra }) => {
               const agent = mastra.getAgent('test-agent-1');
-              const result = await agent.generateLegacy([{ role: 'user', content: inputData.prompt }]);
+              const result = await agent.generate([{ role: 'user', content: inputData.prompt }]);
               return { text: result.text };
             },
           }),
@@ -4848,7 +4743,7 @@ describe.sequential('Workflow', () => {
             outputSchema: z.object({ text: z.string() }),
             execute: async ({ inputData, mastra }) => {
               const agent = mastra.getAgent('test-agent-2');
-              const result = await agent.generateLegacy([{ role: 'user', content: inputData.prompt }]);
+              const result = await agent.generate([{ role: 'user', content: inputData.prompt }]);
               return { text: result.text };
             },
           }),
@@ -4897,27 +4792,13 @@ describe.sequential('Workflow', () => {
         id: 'test-agent-1',
         name: 'test-agent-1',
         instructions: 'test agent instructions',
-        model: new MockLanguageModelV1({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `Paris`,
-          }),
-        }),
+        model: mockTextModel(`Paris`),
       });
       const agent2 = new Agent({
         id: 'test-agent-2',
         name: 'test-agent-2',
         instructions: 'test agent instructions',
-        model: new MockLanguageModelV1({
-          doGenerate: async () => ({
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `London`,
-          }),
-        }),
+        model: mockTextModel(`London`),
       });
       const mastra = new Mastra({
         logger: false,
@@ -4936,7 +4817,7 @@ describe.sequential('Workflow', () => {
         outputSchema: z.object({ text: z.string() }),
         execute: async ({ inputData, mastra }) => {
           const agent = mastra.getAgent(inputData.agentName);
-          const result = await agent.generateLegacy([{ role: 'user', content: inputData.prompt }]);
+          const result = await agent.generate([{ role: 'user', content: inputData.prompt }]);
           return { text: result.text };
         },
       });

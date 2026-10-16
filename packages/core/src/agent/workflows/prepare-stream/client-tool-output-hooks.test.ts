@@ -555,28 +555,6 @@ describe('client tool onOutput through agent.generate (production path)', () => 
     );
   });
 
-  it('fires onOutput through generateLegacy', async () => {
-    const onOutput = vi.fn();
-    const agent = new Agent({
-      id: 'legacy-test-agent',
-      name: 'legacy-test-agent',
-      instructions: 'test agent',
-      model: mockTextModel(async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop',
-        usage: { promptTokens: 1, completionTokens: 1 },
-        text: 'ok',
-      })),
-      tools: { browserTool: browserToolWith(onOutput) },
-    });
-
-    await agent.generate(followUpMessages);
-
-    expect(onOutput).toHaveBeenCalledWith(
-      expect.objectContaining({ toolCallId: 'call-1', toolName: 'browserTool', output: { ok: true } }),
-    );
-  });
-
   it('does not fire onOutput or toModelOutput when an input processor tripwires the request', async () => {
     const onOutput = vi.fn();
     const toModelOutput = vi.fn(() => ({ type: 'text', value: 'mapped' }));
