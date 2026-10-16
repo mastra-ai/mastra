@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { ConsoleLogger } from '@mastra/core/logger';
 import { createTool } from '@mastra/core/tools';
 import { Client, ProtocolError } from '@modelcontextprotocol/client';
 import type { Notification } from '@modelcontextprotocol/client';
@@ -38,7 +39,12 @@ const buildFinished = (poll: (ctx: MCPServerEventPollContext<{ branch: string }>
       poll(context);
       const position = Number(context.cursor ?? 0);
       return {
-        events: [{ data: { branch: context.arguments.branch, n: position + 1 } }],
+        events: [
+          {
+            eventId: `build-${context.arguments.branch}-${position + 1}`,
+            data: { branch: context.arguments.branch, n: position + 1 },
+          },
+        ],
         cursor: String(position + 1),
         hasMore: true,
         nextPollMs: 5_000,
@@ -95,6 +101,11 @@ async function rejection(promise: Promise<unknown>): Promise<ProtocolError> {
 
 function registryOf(server: MCPServer) {
   return server['eventRegistry'];
+}
+
+function spyOnErrors(server: MCPServer) {
+  server.__setLogger(new ConsoleLogger({ level: 'silent' }));
+  return vi.spyOn(server['logger'], 'error');
 }
 
 describe('MCPServer events over Streamable HTTP', () => {
@@ -207,7 +218,6 @@ describe('MCPServer events over Streamable HTTP', () => {
         hasMore: true,
         nextPollMs: 5_000,
       });
-      expect(first.events[0]!.eventId).toEqual(expect.any(String));
       expect(first.events[0]!.timestamp).toEqual(expect.any(String));
 
       await c.request(
@@ -223,21 +233,61 @@ describe('MCPServer events over Streamable HTTP', () => {
       ]);
     });
 
-    it('answers -32603 when the poll source throws', async () => {
-      const c = await connect(
-        makeServer({
-          broken: defineEvent({
-            poll: async () => {
-              throw new Error('upstream down');
-            },
-          }),
+    it('passes the eventIds a poll source returns through unchanged across polls', async () => {
+      const c = await connect(makeServer({ 'build.finished': buildFinished(() => {}) }));
+      const poll = () =>
+        c.request(
+          { method: 'events/poll', params: { name: 'build.finished', arguments: { branch: 'main' } } },
+          PollEventsResultSchema,
+        );
+      const [first, again] = [await poll(), await poll()];
+      expect(first.events.map(event => event.eventId)).toEqual(['build-main-1']);
+      expect(again.events.map(event => event.eventId)).toEqual(['build-main-1']);
+    });
+
+    it('answers a poll source failure with a generic -32603 and logs the details', async () => {
+      const server = makeServer({
+        broken: defineEvent({
+          poll: async () => {
+            throw new Error('upstream down: secret-host:5432');
+          },
         }),
-      );
+      });
+      const logged = spyOnErrors(server);
+      const c = await connect(server);
       const error = await rejection(
         c.request({ method: 'events/poll', params: { name: 'broken' } }, PollEventsResultSchema),
       );
       expect(error.code).toBe(-32603);
-      expect(error.message).toContain('upstream down');
+      expect(error.message).not.toContain('upstream down');
+      expect(error.message).toContain('Polling event "broken" failed');
+      expect(logged).toHaveBeenCalledWith(
+        expect.stringContaining('broken'),
+        expect.objectContaining({ error: expect.objectContaining({ message: 'upstream down: secret-host:5432' }) }),
+      );
+    });
+
+    it('answers a throwing match on a buffer poll with a generic -32603 and logs the details', async () => {
+      const server = makeServer({
+        flaky: defineEvent({
+          match: () => {
+            throw new Error('filter bug: token=abc');
+          },
+        }),
+      });
+      const logged = spyOnErrors(server);
+      const c = await connect(server);
+      const start = await c.request({ method: 'events/poll', params: { name: 'flaky' } }, PollEventsResultSchema);
+      await server.events.emit('flaky', {});
+      const error = await rejection(
+        c.request({ method: 'events/poll', params: { name: 'flaky', cursor: start.cursor } }, PollEventsResultSchema),
+      );
+      expect(error.code).toBe(-32603);
+      expect(error.message).not.toContain('token=abc');
+      expect(logged).toHaveBeenCalledWith(
+        expect.stringContaining('flaky'),
+        expect.objectContaining({ error: expect.objectContaining({ message: 'filter bug: token=abc' }) }),
+      );
     });
 
     it('serves emitted events from the ring buffer, filtered by match', async () => {

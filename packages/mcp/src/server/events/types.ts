@@ -36,7 +36,12 @@ export interface MCPServerEventPollContext<TArgs extends MCPServerEventArgs = MC
  */
 export interface MCPServerPolledEvent<TData extends MCPServerEventData = MCPServerEventData> {
   data: TData;
-  eventId?: string;
+  /**
+   * Stable id of the occurrence. Clients dedupe by it across polls and reconnections, so return
+   * the same id every time the same occurrence is polled (for example the upstream record id).
+   */
+  eventId: string;
+  /** When the event occurred. Defaults to the time of the poll. */
   timestamp?: string | Date;
 }
 
@@ -55,8 +60,8 @@ export interface MCPServerEventPollResult<TData extends MCPServerEventData = MCP
  *
  * Without `poll`, the type is fed by `server.events.emit()` and is served over push
  * (`events/stream`) and poll (`events/poll`, from a per-type ring buffer). With `poll`, the
- * type is served over poll by calling `poll` for each request; add `'push'` to `delivery` to
- * also stream occurrences passed to `server.events.emit()`.
+ * type is served over poll only, by calling `poll` for each request; it can't also be pushed,
+ * and `server.events.emit()` rejects it.
  *
  * @experimental SEP-3415 is a draft; this API may change.
  */
@@ -74,8 +79,9 @@ export interface MCPServerEventDefinition<
   /** Pull source serving `events/poll`. */
   poll?(context: MCPServerEventPollContext<TArgs>): Promise<MCPServerEventPollResult<TData>>;
   /**
-   * Delivery modes to advertise. Narrows the modes the definition can serve; `'push'` must be
-   * listed explicitly to stream emitted events for a type that has a `poll` source.
+   * Restricts the advertised delivery modes to this list. It only narrows: a mode the
+   * definition can't serve (for example `'push'` on a type with `poll`) is dropped, and a
+   * definition left with none fails at construction.
    */
   delivery?: EventDeliveryMode[];
   /** Number of emitted events retained for replay and ring-buffer polls. Defaults to 1000. */

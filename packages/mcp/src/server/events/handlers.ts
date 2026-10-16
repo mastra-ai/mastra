@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { RequestContext } from '@mastra/core/request-context';
 import { ProtocolError, ProtocolErrorCode } from '@modelcontextprotocol/server';
@@ -80,16 +79,13 @@ export function registerEventHandlers(server: Server, deps: EventHandlerDeps): v
             });
           } catch (error) {
             deps.getLogger().error(`Poll source for event "${event.name}" failed`, { error });
-            throw new ProtocolError(
-              ProtocolErrorCode.InternalError,
-              `Polling event "${event.name}" failed: ${error instanceof Error ? error.message : String(error)}`,
-            );
+            throw new ProtocolError(ProtocolErrorCode.InternalError, `Polling event "${event.name}" failed`);
           }
           return withOptional(
             {
               events: result.events.map(
                 (polled): EventOccurrence => ({
-                  eventId: polled.eventId ?? randomUUID(),
+                  eventId: polled.eventId,
                   name: event.name,
                   timestamp: toTimestamp(polled.timestamp),
                   data: polled.data,
@@ -104,7 +100,16 @@ export function registerEventHandlers(server: Server, deps: EventHandlerDeps): v
         const read = bufferOf(event).read(params.cursor, {
           maxEvents,
           maxAgeMs: params.maxAgeMs,
-          match: match && (data => match(args, data)),
+          match:
+            match &&
+            (data => {
+              try {
+                return match(args, data);
+              } catch (error) {
+                deps.getLogger().error(`Event filter for "${event.name}" failed`, { error });
+                throw new ProtocolError(ProtocolErrorCode.InternalError, `Event filter for "${event.name}" failed`);
+              }
+            }),
         });
         return withOptional(
           { events: read.events, cursor: read.cursor },

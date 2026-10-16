@@ -19,8 +19,8 @@ describe('deriveDelivery', () => {
     expect(deriveDelivery('e', { poll })).toEqual(['poll']);
   });
 
-  it('adds push to a poll-source type only when delivery asks for it', () => {
-    expect(deriveDelivery('e', { poll, delivery: ['poll', 'push'] })).toEqual(['poll', 'push']);
+  it('never widens a poll-source type to push', () => {
+    expect(deriveDelivery('e', { poll, delivery: ['poll', 'push'] })).toEqual(['poll']);
   });
 
   it('narrows with an explicit delivery and drops modes the type cannot serve', () => {
@@ -36,6 +36,7 @@ describe('deriveDelivery', () => {
   it('rejects a definition left with no servable mode', () => {
     expect(() => deriveDelivery('e', { delivery: ['webhook'] })).toThrow(MastraError);
     expect(() => new ServerEventRegistry({ e: { delivery: [] } })).toThrow(/no delivery mode/);
+    expect(() => new ServerEventRegistry({ e: { poll, delivery: ['push'] } })).toThrow(/no delivery mode/);
   });
 });
 
@@ -91,7 +92,10 @@ describe('ServerEventRegistry', () => {
     await expect(events.emit('ticket.created', { id: 1 })).rejects.toMatchObject({
       id: 'MCP_SERVER_EVENT_INVALID_PAYLOAD',
     });
-    await expect(events.emit('build.finished', {})).rejects.toMatchObject({ id: 'MCP_SERVER_EVENT_NOT_EMITTABLE' });
+    await expect(events.emit('build.finished', {})).rejects.toMatchObject({
+      id: 'MCP_SERVER_EVENT_NOT_EMITTABLE',
+      message: expect.stringMatching(/poll source.*cannot be pushed/),
+    });
   });
 
   it('resolves subscriptions with the protocol errors of the extension', () => {

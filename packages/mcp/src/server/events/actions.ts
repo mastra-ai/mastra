@@ -22,7 +22,7 @@ export class ServerEventActions {
    *
    * @throws MastraError `MCP_SERVER_UNKNOWN_EVENT` for an unconfigured name,
    * `MCP_SERVER_EVENT_INVALID_PAYLOAD` when `data` fails `payloadSchema`, and
-   * `MCP_SERVER_EVENT_NOT_EMITTABLE` for a type served only by its `poll` source.
+   * `MCP_SERVER_EVENT_NOT_EMITTABLE` for a type with a `poll` source, which can't be pushed.
    *
    * @experimental SEP-3415 is a draft; this API may change.
    */
