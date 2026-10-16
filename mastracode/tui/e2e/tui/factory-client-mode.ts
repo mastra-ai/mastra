@@ -39,6 +39,7 @@ function fakeFactorySession() {
     switchModel: async () => {},
     switchMode: async () => {},
     setState: async () => {},
+    getPermissions: async () => ({ categories: {}, tools: {} }),
   };
 }
 
@@ -52,6 +53,7 @@ export const factoryClientModeScenario: McE2eScenario = {
     const session = new RemoteSession(address, 'factory-session-1', remote as any);
     const controller = new RemoteController(address, remote as any);
     await Promise.all([session.connect(), controller.connect()]);
+    session.setModes(controller.listModes());
 
     const tui = new MastraTUI({
       runtime: 'factory',

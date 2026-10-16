@@ -125,6 +125,7 @@ async function bootFactory(factory: FactoryConnectionSettings, themeMode: string
   const session = new RemoteSession(address, factory.sessionId);
   const remoteController = new RemoteController(address);
   await Promise.all([session.connect(), remoteController.connect()]);
+  session.setModes(remoteController.listModes());
   getResumeThreadId = () => (tui ? tui.getResumeThreadId() : session.thread.getId());
 
   analytics?.capture('mastracode_session_started', {

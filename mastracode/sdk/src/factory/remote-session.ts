@@ -1,20 +1,25 @@
 import { randomUUID } from 'node:crypto';
 
-import type { AgentControllerEvent as ClientEvent } from '@mastra/client-js';
+import type { AgentControllerEvent as ClientEvent, AgentControllerModeInfo } from '@mastra/client-js';
 import type {
   AgentControllerDisplayState,
   AgentControllerEvent,
   AgentControllerEventListener,
   AgentControllerRequestStateUpdater,
   AgentControllerThread,
+  PermissionRules,
   Session,
 } from '@mastra/core/agent-controller';
 import { defaultDisplayState } from '@mastra/core/agent-controller';
+
+import { getToolCategory } from '../permissions.js';
 
 import type { FactoryAddress } from './client.js';
 import { createFactoryClient, FACTORY_CONTROLLER_ID } from './client.js';
 
 type RemoteHandle = ReturnType<ReturnType<ReturnType<typeof createFactoryClient>['getAgentController']>['session']>;
+type RemoteMode = AgentControllerModeInfo;
+type Files = Array<{ data: string; mediaType: string; filename?: string }>;
 
 const MAP_FIELDS = [
   'activeTools',
@@ -81,6 +86,8 @@ export class RemoteSession {
   #running = false;
   #state: Record<string, unknown> = {};
   #displayState: AgentControllerDisplayState = defaultDisplayState();
+  #modes: RemoteMode[] = [];
+  #permissionRules: PermissionRules = { categories: {}, tools: {} };
   #pendingUserIds: string[] = [];
   readonly #userIdMap = new Map<string, string>();
 
@@ -92,7 +99,7 @@ export class RemoteSession {
   /** Create/resume the remote session, hydrate the mirror, and open the event stream. */
   async connect(): Promise<void> {
     await this.#remote.create();
-    await this.#hydrate();
+    await Promise.all([this.#hydrate(), this.#refreshPermissions()]);
     const subscription = await this.#remote.subscribe({
       reconnect: true,
       onEvent: event => this.#receive(hydrateEvent(event)),
@@ -100,6 +107,11 @@ export class RemoteSession {
       onReconnect: () => void this.#hydrate().catch(() => {}),
     });
     this.#unsubscribe = subscription.unsubscribe;
+  }
+
+  /** Modes come from the controller; used to resolve the current mode's name and color. */
+  setModes(modes: RemoteMode[]): void {
+    this.#modes = modes;
   }
 
   disconnect(): void {
@@ -113,7 +125,27 @@ export class RemoteSession {
     this.#modeId = snapshot.modeId;
     this.#modelId = snapshot.modelId;
     this.#running = Boolean(snapshot.running);
-    if (snapshot.tasks) this.#displayState = { ...this.#displayState, tasks: snapshot.tasks };
+    // Settings (yolo, thinkingLevel, notifications, smartEditing) are session
+    // state; the TUI reads them through state.get().
+    if (snapshot.settings) this.#state = { ...this.#state, ...snapshot.settings };
+    this.#displayState = {
+      ...this.#displayState,
+      ...(snapshot.tasks ? { tasks: snapshot.tasks } : {}),
+      ...(snapshot.tokenUsage ? { tokenUsage: snapshot.tokenUsage } : {}),
+    } as AgentControllerDisplayState;
+  }
+
+  async #refreshPermissions(): Promise<void> {
+    const rules = await this.#remote.getPermissions();
+    this.#permissionRules = {
+      categories: (rules.categories ?? {}) as PermissionRules['categories'],
+      tools: rules.tools ?? {},
+    };
+  }
+
+  /** Surface a failed remote command in the transcript instead of dropping it. */
+  #emitError(message: string): void {
+    this.#receive({ type: 'error', error: new Error(message) } as AgentControllerEvent);
   }
 
   /**
@@ -256,7 +288,7 @@ export class RemoteSession {
   readonly mode = {
     get: () => this.#modeId,
     hasSelection: () => Boolean(this.#modeId),
-    resolve: () => ({ id: this.#modeId, name: this.#modeId }),
+    resolve: () => this.#modes.find(mode => mode.id === this.#modeId) ?? { id: this.#modeId, name: this.#modeId },
     set: ({ modeId }: { modeId: string }) => {
       this.#modeId = modeId;
     },
@@ -327,11 +359,15 @@ export class RemoteSession {
   };
 
   readonly permissions = {
-    getRules: () => ({ categories: {}, tools: {} }),
-    setForCategory: ({ category, policy }: { category: any; policy: any }) =>
-      this.#remote.setPermissionForCategory(category, policy),
-    setForTool: ({ toolName, policy }: { toolName: string; policy: any }) =>
-      this.#remote.setPermissionForTool(toolName, policy),
+    getRules: () => this.#permissionRules,
+    setForCategory: async ({ category, policy }: { category: any; policy: any }) => {
+      await this.#remote.setPermissionForCategory(category, policy);
+      await this.#refreshPermissions();
+    },
+    setForTool: async ({ toolName, policy }: { toolName: string; policy: any }) => {
+      await this.#remote.setPermissionForTool(toolName, policy);
+      await this.#refreshPermissions();
+    },
   };
 
   getCurrentRunId(): string | null {
@@ -350,13 +386,7 @@ export class RemoteSession {
     return { categories: [], tools: [] };
   }
 
-  async sendMessage({
-    content,
-    files,
-  }: {
-    content: string;
-    files?: Array<{ data: string; mediaType: string; filename?: string }>;
-  }) {
+  async sendMessage({ content, files }: { content: string; files?: Files }) {
     await this.#remote.sendMessage({ content, files });
   }
 
@@ -372,9 +402,11 @@ export class RemoteSession {
         : Array.isArray(content)
           ? content.map(part => (typeof part === 'string' ? part : ((part as { text?: string })?.text ?? ''))).join('')
           : JSON.stringify(content);
+    const files = 'files' in input ? (input.files as Files | undefined) : undefined;
+    const message = files?.length ? { content: text, files } : text;
     const id = randomUUID();
     this.#pendingUserIds.push(id);
-    const sent = this.#running ? this.#remote.followUp(text) : this.#remote.sendMessage(text);
+    const sent = this.#running ? this.#remote.followUp(message) : this.#remote.sendMessage(message);
     sent.catch(() => {
       this.#pendingUserIds = this.#pendingUserIds.filter(pending => pending !== id);
     });
@@ -398,13 +430,26 @@ export class RemoteSession {
     decision: 'approve' | 'decline' | 'always_allow_category';
     toolCallId: string;
   }) {
-    void this.#remote.approveTool(toolCallId, decision !== 'decline').catch(() => {});
+    const approved = decision !== 'decline';
+    const toolName = this.#displayState.pendingApprovals.get(toolCallId)?.toolName;
+    const category = decision === 'always_allow_category' && toolName ? getToolCategory(toolName) : null;
+    void (async () => {
+      // The Factory's approval route is approve/decline only, so "always allow"
+      // becomes a session category policy before the call is approved.
+      if (category) await this.permissions.setForCategory({ category, policy: 'allow' });
+      const ack = await this.#remote.approveTool(toolCallId, approved);
+      if (ack && 'accepted' in ack && ack.accepted === false) {
+        this.#emitError(`Tool approval was not applied: ${(ack as { reason?: string }).reason ?? 'rejected'}`);
+      }
+    })().catch(error =>
+      this.#emitError(`Tool approval failed: ${error instanceof Error ? error.message : String(error)}`),
+    );
     return { accepted: true as const };
   }
 
   async respondToToolSuspension({ resumeData, toolCallId }: { resumeData: unknown; toolCallId?: string }) {
     const id = toolCallId ?? this.#displayState.pendingSuspensions.keys().next().value;
-    if (!id) return;
+    if (!id) throw new Error('No pending tool suspension to respond to');
     await this.#remote.respondToToolSuspension(
       id,
       resumeData as Parameters<RemoteHandle['respondToToolSuspension']>[1],
@@ -418,7 +463,9 @@ export class RemoteSession {
   releaseToolResponse(): void {}
 
   abort(): void {
-    void this.#remote.abort().catch(() => {});
+    void this.#remote
+      .abort()
+      .catch(error => this.#emitError(`Abort failed: ${error instanceof Error ? error.message : String(error)}`));
   }
 
   abortRun(): void {

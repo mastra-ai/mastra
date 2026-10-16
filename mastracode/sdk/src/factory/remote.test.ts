@@ -14,7 +14,13 @@ function fakeRemote() {
       modeId: 'build',
       modelId: 'anthropic/claude-opus-4-5',
       running: false,
+      settings: { yolo: true, thinkingLevel: 'high', notifications: 'off', smartEditing: true },
+      tokenUsage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
     })),
+    getPermissions: vi.fn(async () => ({ categories: { execute: 'ask' }, tools: {} })),
+    setPermissionForCategory: vi.fn(async () => {}),
+    approveTool: vi.fn(async (): Promise<any> => ({ accepted: true })),
+    respondToToolSuspension: vi.fn(async () => {}),
     subscribe: vi.fn(async (options: { onEvent: (event: any) => void }) => {
       onEvent = options.onEvent;
       return { unsubscribe: vi.fn() };
@@ -35,6 +41,53 @@ async function connected() {
 }
 
 describe('RemoteSession', () => {
+  it('hydrates settings, token usage, and permission rules', async () => {
+    const { session } = await connected();
+    expect(session.state.get()).toMatchObject({ yolo: true, thinkingLevel: 'high' });
+    expect(session.getTokenUsage()).toMatchObject({ totalTokens: 15 });
+    expect(session.permissions.getRules()).toEqual({ categories: { execute: 'ask' }, tools: {} });
+  });
+
+  it('resolves the mode name and metadata from the controller modes', async () => {
+    const { session } = await connected();
+    session.setModes([{ id: 'build', name: 'Build', metadata: { color: '#fff' } } as any]);
+    expect(session.mode.resolve()).toMatchObject({ name: 'Build', metadata: { color: '#fff' } });
+  });
+
+  it('forwards attachments with a sent message', async () => {
+    const { session, remote } = await connected();
+    const files = [{ data: 'aGk=', mediaType: 'text/plain', filename: 'a.txt' }];
+    session.sendSignal({ type: 'user', content: 'see file', files } as any);
+    expect(remote.sendMessage).toHaveBeenCalledWith({ content: 'see file', files });
+  });
+
+  it('surfaces a rejected tool approval as an error event', async () => {
+    const { session, remote } = await connected();
+    remote.approveTool.mockResolvedValueOnce({ accepted: false, reason: 'not_pending' });
+    const listener = vi.fn();
+    session.subscribe(listener);
+    session.respondToToolApproval({ decision: 'approve', toolCallId: 'call-1' });
+    await vi.waitFor(() => expect(listener).toHaveBeenCalled());
+    expect(listener.mock.calls[0][0].type).toBe('error');
+    expect(listener.mock.calls[0][0].error.message).toContain('not_pending');
+  });
+
+  it('turns "always allow" into a category policy before approving', async () => {
+    const { session, remote, emit } = await connected();
+    emit({
+      type: 'display_state_changed',
+      displayState: { pendingApprovals: { 'call-1': { toolCallId: 'call-1', toolName: 'execute_command', args: {} } } },
+    });
+    session.respondToToolApproval({ decision: 'always_allow_category', toolCallId: 'call-1' });
+    await vi.waitFor(() => expect(remote.approveTool).toHaveBeenCalledWith('call-1', true));
+    expect(remote.setPermissionForCategory).toHaveBeenCalledWith('execute', 'allow');
+  });
+
+  it('rejects a suspension response when nothing is suspended', async () => {
+    const { session } = await connected();
+    await expect(session.respondToToolSuspension({ resumeData: 'yes' })).rejects.toThrow(/No pending/);
+  });
+
   it('hydrates from the Factory snapshot', async () => {
     const { session } = await connected();
     expect(session.thread.getId()).toBe('thread-1');

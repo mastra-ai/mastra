@@ -160,8 +160,11 @@ describe('dispatchSlashCommand routing', () => {
     } as any;
     const ctx = { analytics: { trackCommand: mocks.trackCommand } } as any;
 
-    for (const command of ['/mcp', '/login', '/goal', '/om', '/models']) {
+    for (const command of ['/mcp', '/login', '/goal', '/om', '/models', '/diff', '/github', '/settings']) {
       expect(await dispatchSlashCommand(command, state, () => ctx)).toBe(true);
+    }
+    for (const command of ['diff', 'github', 'settings']) {
+      expect(mocks.showInfo).toHaveBeenCalledWith(state, `/${command} is not available in Factory mode.`);
     }
     expect(mocks.handleMcpCommand).not.toHaveBeenCalled();
     expect(mocks.handleLoginCommand).not.toHaveBeenCalled();

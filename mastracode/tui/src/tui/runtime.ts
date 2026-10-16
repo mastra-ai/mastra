@@ -123,6 +123,10 @@ const LOCAL_ONLY_COMMANDS = new Set([
   'observability',
   'goal',
   'schedules',
+  // These read the local checkout, local gh CLI, or local config — not the Factory sandbox.
+  'diff',
+  'github',
+  'settings',
 ]);
 
 export function isLocalOnlyCommand(command: string): boolean {
