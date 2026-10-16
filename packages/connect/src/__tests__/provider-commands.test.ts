@@ -128,6 +128,74 @@ const action = createAction({
 export default action;
 `;
 
+const genericTypedRequestTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ itemId: z.string() });
+const OutputSchema = z.object({ id: z.string() });
+
+const action = createAction({
+  description: 'Fetch an item with a typed response.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const response = await nango.get<unknown>({ endpoint: '/items/' + encodeURIComponent(input.itemId) });
+    return OutputSchema.parse(response.data);
+  },
+});
+
+export default action;
+`;
+
+const genericProxyRequestTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ fileId: z.string() });
+const OutputSchema = z.object({ base64: z.string() });
+
+const action = createAction({
+  description: 'Fetch binary content through the generic proxy helper.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const response = await nango.proxy({
+      endpoint: '/files/' + encodeURIComponent(input.fileId),
+      responseType: 'arraybuffer',
+    });
+    return { base64: Buffer.from(response.data as ArrayBuffer).toString('base64') };
+  },
+});
+
+export default action;
+`;
+
+const randomUuidImportTemplate = `import { randomUUID } from 'crypto';
+import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ value: z.string() });
+const OutputSchema = z.object({ id: z.string() });
+
+const action = createAction({
+  description: 'Create an item with a unique id.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const id = randomUUID();
+    await nango.post({ endpoint: '/items', data: { id, value: input.value } });
+    return { id };
+  },
+});
+
+export default action;
+`;
+
 const paginateOnlyTemplate = `import { z } from 'zod';
 import { createAction, type ProxyConfiguration } from 'nango';
 
@@ -377,6 +445,9 @@ describe('maintainer provider commands', () => {
         writeFileSync(resolve(actionDir, 'parenthesized-credentials.ts'), parenthesizedCredentialsTemplate);
         writeFileSync(resolve(actionDir, 'unsupported-no-proxy.ts'), noProxyCallTemplate);
         writeFileSync(resolve(actionDir, 'arraybuffer-response-type.ts'), arrayBufferResponseTypeTemplate);
+        writeFileSync(resolve(actionDir, 'generic-typed-request.ts'), genericTypedRequestTemplate);
+        writeFileSync(resolve(actionDir, 'generic-proxy-request.ts'), genericProxyRequestTemplate);
+        writeFileSync(resolve(actionDir, 'random-uuid-import.ts'), randomUuidImportTemplate);
         writeFileSync(resolve(actionDir, 'paginate-only.ts'), paginateOnlyTemplate);
       }
     }
@@ -644,7 +715,7 @@ export default action;
       'first-provider (1 action templates) [installed as custom]',
     ]);
     expect(listProviders({ installedOnly: false, search: 'second' })).toEqual([
-      'second-provider (11 action templates)',
+      'second-provider (14 action templates)',
     ]);
   });
 
@@ -775,6 +846,27 @@ export default action;
       'utf8',
     );
     expect(arrayBufferTool).toMatch(/responseType:\s*['"]arraybuffer['"]/);
+
+    const genericTypedRequestTool = readFileSync(
+      resolve(packageRoot, 'src/providers/second-provider/tools/generic-typed-request.ts'),
+      'utf8',
+    );
+    expect(genericTypedRequestTool).toContain('await platformProxy.get<unknown>');
+
+    const genericProxyRequestTool = readFileSync(
+      resolve(packageRoot, 'src/providers/second-provider/tools/generic-proxy-request.ts'),
+      'utf8',
+    );
+    expect(genericProxyRequestTool).toContain('await platformProxy.proxy({');
+    expect(genericProxyRequestTool).toMatch(/responseType:\s*['"]arraybuffer['"]/);
+
+    const randomUuidImportTool = readFileSync(
+      resolve(packageRoot, 'src/providers/second-provider/tools/random-uuid-import.ts'),
+      'utf8',
+    );
+    expect(randomUuidImportTool).toContain('const randomUUID = () => globalThis.crypto.randomUUID();');
+    expect(randomUuidImportTool).not.toContain("from 'crypto'");
+
     // A template that only pages through `nango.paginate` counts as calling
     // the provider proxy and generates against the runtime paginate helper.
     const paginateTool = readFileSync(
@@ -786,7 +878,7 @@ export default action;
     const manifest = JSON.parse(
       readFileSync(resolve(packageRoot, 'src/providers/second-provider/.manifest.json'), 'utf8'),
     ) as { toolCount: number; skippedActions: { action: string; reason: string }[] };
-    expect(manifest.toolCount).toBe(10);
+    expect(manifest.toolCount).toBe(13);
     expect(manifest.skippedActions).toEqual([
       {
         action: 'unsupported-no-proxy',
@@ -845,7 +937,7 @@ export default action;
     expect(providerIndex).not.toContain('.stale.generate-123');
     expect(listProviders({ installedOnly: true })).toEqual([
       'local <- first-provider (1 tools, 0 skipped)',
-      'other <- second-provider (10 tools, 1 skipped)',
+      'other <- second-provider (13 tools, 1 skipped)',
     ]);
   });
 

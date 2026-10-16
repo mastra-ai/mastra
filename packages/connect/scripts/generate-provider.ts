@@ -48,7 +48,7 @@ import { templatePinFor, type TemplatePin } from './templates-config.js';
 
 /** Module specifier the upstream templates import their SDK from. */
 const TEMPLATE_SDK_MODULE = 'nango';
-const PROXY_REQUEST_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'paginate']);
+const PROXY_REQUEST_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'paginate', 'proxy']);
 const PROXY_CONTEXT_METHODS = new Set([
   ...PROXY_REQUEST_METHODS,
   'getConnection',
@@ -121,6 +121,17 @@ function findCreateActionCall(source: SourceFile): CallExpression | undefined {
   return undefined;
 }
 
+function callsTemplateContextMethod(source: SourceFile, methods: ReadonlySet<string>): boolean {
+  return source.getDescendantsOfKind(SyntaxKind.CallExpression).some(call => {
+    const expression = call.getExpression();
+    return (
+      Node.isPropertyAccessExpression(expression) &&
+      expression.getExpression().getText() === 'nango' &&
+      methods.has(expression.getName())
+    );
+  });
+}
+
 function readStringProperty(obj: ObjectLiteralExpression, name: string): string | undefined {
   const property = obj.getProperty(name);
   if (!property || !Node.isPropertyAssignment(property)) return undefined;
@@ -133,6 +144,26 @@ function readIdentifierPropertyInitializer(obj: ObjectLiteralExpression, name: s
   if (!property || !Node.isPropertyAssignment(property)) return undefined;
   const initializer = property.getInitializer();
   return initializer && Node.isIdentifier(initializer) ? initializer.getText() : undefined;
+}
+
+function normalizeSupportedRuntimeImports(source: SourceFile): void {
+  for (const declaration of source.getImportDeclarations()) {
+    const moduleName = declaration.getModuleSpecifierValue();
+    if (moduleName !== 'crypto' && moduleName !== 'node:crypto') continue;
+
+    const namedImports = declaration.getNamedImports();
+    if (
+      declaration.getDefaultImport() ||
+      declaration.getNamespaceImport() ||
+      namedImports.length !== 1 ||
+      namedImports[0]!.getName() !== 'randomUUID' ||
+      namedImports[0]!.getAliasNode()
+    ) {
+      continue;
+    }
+
+    declaration.replaceWithText('const randomUUID = () => globalThis.crypto.randomUUID();');
+  }
 }
 
 function unsupportedImportReason(source: SourceFile): string | undefined {
@@ -458,6 +489,7 @@ function extractAction(
   candidate: ActionCandidate,
 ): { kind: 'ok'; value: ExtractedAction } | { kind: 'skip'; reason: string } {
   const source = project.addSourceFileAtPath(candidate.file);
+  normalizeSupportedRuntimeImports(source);
   const importReason = unsupportedImportReason(source);
   if (importReason) return { kind: 'skip', reason: importReason };
 
@@ -512,10 +544,7 @@ function extractAction(
   // binding-aware: `.credentials` reads on unrelated values (for example a
   // `credentials` input field) don't trigger the rewrite.
   const readsCredentials = execReadsConnectionCredentials(execInitializer);
-  const usesProviderProxy = [...PROXY_REQUEST_METHODS].some(method =>
-    // Allow an explicit type argument, e.g. `nango.paginate<Item>(config)`.
-    new RegExp(`\\bnango\\.${method}\\s*(?:<[^()]*>\\s*)?\\(`).test(source.getFullText()),
-  );
+  const usesProviderProxy = callsTemplateContextMethod(source, PROXY_REQUEST_METHODS);
   if (!usesProviderProxy) {
     return { kind: 'skip', reason: 'exec does not call the provider proxy' };
   }
