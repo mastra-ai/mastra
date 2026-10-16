@@ -435,3 +435,106 @@ describe('an abort between the grant and execute', () => {
     },
   );
 });
+
+describe('a tool-started whose save fails', () => {
+  const tools = {
+    a: tool({ inputSchema: z.object({}), execute: async () => 'a' }),
+    b: tool({ inputSchema: z.object({}), execute: async () => 'b' }),
+  };
+  const twoCalls = () => [
+    { type: 'stream-start', warnings: [] },
+    { type: 'tool-call', toolCallId: 'c1', toolName: 'a', input: '{}' },
+    { type: 'tool-call', toolCallId: 'c2', toolName: 'b', input: '{}' },
+    ...toolCallTurn('x', 'x', {}).slice(-1),
+  ];
+  const sameAsLog = async (memory: InMemoryActionStorage, streamed: MastraAction[]) => {
+    const log = await memory.listActions({ threadId: 't1' });
+    expect(streamed.filter(isPersistable).map(a => a.id)).toEqual(log.map(a => a.id));
+  };
+
+  it('mid-run: the stream holds exactly what the log holds', async () => {
+    const memory = new ObservedStorage();
+    let failed = false;
+    memory.delay = batch => (hasStarted(batch) ? 20 : 0);
+    memory.fail = batch => !failed && hasStarted(batch) && (failed = true);
+    const { model } = scriptedModel([twoCalls(), textTurn('Done.')]);
+    const streamed: MastraAction[] = [];
+    for await (const a of runAgent({ model, tools, threadId: 't1', memory, input: 'go' })) streamed.push(a);
+    await sameAsLog(memory, streamed);
+  });
+
+  it('when the stream ends on an abort while that save is in flight, it is not streamed', async () => {
+    const memory = new ObservedStorage();
+    const controller = new AbortController();
+    memory.delay = batch => (hasStarted(batch) ? 20 : 0);
+    memory.fail = batch => hasStarted(batch) && batch.some(a => a.type === 'tool-call');
+    const { model } = scriptedModel([twoCalls(), textTurn('Done.')]);
+    const streamed: MastraAction[] = [];
+    const run = runAgent({ model, tools, threadId: 't1', memory, input: 'go', abortSignal: controller.signal });
+    await expect(
+      (async () => {
+        for await (const a of run) {
+          streamed.push(a);
+          if (a.type === 'tool-call' && a.toolCallId === 'c2') controller.abort();
+        }
+      })(),
+    ).resolves.toBeUndefined();
+    await sameAsLog(memory, streamed);
+  });
+});
+
+describe('a held tool-started save that fails after an early return', () => {
+  /** Holds the first tool-started batch until `release` settles it; later batches follow `later`. */
+  class HeldStorage extends ObservedStorage {
+    held?: { resolve: () => void; reject: (e: Error) => void };
+    heldSeen!: Promise<void>;
+    private markSeen!: () => void;
+    later: 'ok' | 'fail' = 'ok';
+    constructor() {
+      super();
+      this.heldSeen = new Promise(r => (this.markSeen = r));
+    }
+    override async saveActions(args: { actions: PersistableAction[] }) {
+      if (!this.held && hasStarted(args.actions)) {
+        await new Promise<void>((resolve, reject) => {
+          this.held = { resolve, reject };
+          this.markSeen();
+        });
+      } else if (this.held && this.later === 'fail') throw new Error('write failed');
+      return super.saveActions(args);
+    }
+  }
+  const tools = {
+    deleteFile: tool({ inputSchema: z.object({ path: z.string() }), execute: async () => ({ deleted: true }) }),
+  };
+  const start = async (memory: HeldStorage) => {
+    const { model } = scriptedModel([toolCallTurn('c1', 'deleteFile', { path: '/x' }), textTurn('Done.')]);
+    const run = runAgent({ model, tools, threadId: 't1', memory, input: 'delete /x' });
+    for (let r = await run.next(); !r.done; r = await run.next()) if (r.value.type === 'tool-call') break;
+    await memory.heldSeen;
+    const returned = run.return(undefined);
+    await new Promise(r => setTimeout(r, 5));
+    memory.held!.reject(new Error('write failed'));
+    return returned;
+  };
+
+  it('(a) the retry succeeds: closers land after the call, which is closed as not started', async () => {
+    const memory = new HeldStorage();
+    await start(memory);
+    const log = await memory.listActions({ threadId: 't1' });
+    const types = log.map(a => a.type);
+    expect(types).toEqual(['run-start', 'text', 'turn-start', 'tool-call', 'tool-error', 'turn-end', 'run-end']);
+    expect(log.find(a => a.type === 'tool-error')).toMatchObject({ toolCallId: 'c1', code: 'TOOL_NOT_STARTED' });
+    expect(log.find(a => a.type === 'turn-end')).toMatchObject({ finishReason: 'interrupted' });
+    expect(memory.commits.flat()).toEqual(log.map(a => a.id));
+    expectValidToolPairs(toModelMessages(log));
+  });
+
+  it('(b) the retry fails too: runAgent rejects and nothing lands without its prefix', async () => {
+    const memory = new HeldStorage();
+    memory.later = 'fail';
+    await expect(start(memory)).rejects.toThrow('write failed');
+    const log = await memory.listActions({ threadId: 't1' });
+    expect(log.map(a => a.type)).toEqual(['run-start', 'text']);
+  });
+});
