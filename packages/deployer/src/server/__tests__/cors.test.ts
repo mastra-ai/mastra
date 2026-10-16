@@ -15,6 +15,21 @@ const preflight = (path: string, origin: string) =>
   });
 
 describe('server CORS', () => {
+  it('exposes resolved version metadata used by browser legacy-stream continuations', async () => {
+    const mastra = new Mastra();
+    const app = await createHonoServer(mastra, { tools: {} });
+
+    const response = await app.request('/api/agents', {
+      headers: { Origin: 'https://app.example' },
+    });
+    const exposedHeaders = response.headers
+      .get('Access-Control-Expose-Headers')
+      ?.split(',')
+      .map(header => header.trim().toLowerCase());
+
+    expect(exposedHeaders).toContain('x-mastra-resolved-version-overrides');
+  });
+
   it('uses the legacy CORS config for every route', async () => {
     const mastra = new Mastra({
       server: {

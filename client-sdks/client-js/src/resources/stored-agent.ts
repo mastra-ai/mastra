@@ -10,6 +10,7 @@ import type {
   ListAgentVersionsParams,
   ListAgentVersionsResponse,
   CreateAgentVersionParams,
+  ActivateAgentVersionInput,
   ActivateAgentVersionResponse,
   CompareVersionsResponse,
   DeleteAgentVersionResponse,
@@ -18,8 +19,15 @@ import type {
   ExportStoredAgentResponse,
   OpenStoredAgentChangeRequestParams,
   OpenStoredAgentChangeRequestResponse,
+  AgentVersionLabel,
+  ListAgentVersionLabelsParams,
+  ListAgentVersionLabelsResponse,
+  SetAgentVersionLabelInput,
+  DeleteAgentVersionLabelInput,
+  DeleteAgentVersionLabelResponse,
+  StoredAgentVersionIdentifier,
 } from '../types';
-import { requestContextQueryString } from '../utils';
+import { requestContextQueryString, toQueryParams } from '../utils';
 
 import { BaseResource } from './base';
 
@@ -37,16 +45,19 @@ export class StoredAgent extends BaseResource {
   /**
    * Retrieves details about the stored agent
    * @param requestContext - Optional request context to pass as query parameter
-   * @param options - Optional options like status filter
+   * @param selector - Optional exact version, label, or publication-status selector
    * @returns Promise containing stored agent details
    */
   details(
     requestContext?: RequestContext | Record<string, any>,
-    options?: { status?: 'draft' | 'published' | 'archived' },
+    selector?: StoredAgentVersionIdentifier,
   ): Promise<StoredAgentResponse> {
-    const contextString = requestContextQueryString(requestContext);
-    const statusParam = options?.status ? `status=${options.status}` : '';
-    const url = `/stored/agents/${encodeURIComponent(this.storedAgentId)}${contextString}${statusParam ? `${contextString ? '&' : '?'}${statusParam}` : ''}`;
+    const searchParams = new URLSearchParams(requestContextQueryString(requestContext).slice(1));
+    if (selector) {
+      new URLSearchParams(toQueryParams(selector)).forEach((value, key) => searchParams.set(key, value));
+    }
+    const queryString = searchParams.toString();
+    const url = `/stored/agents/${encodeURIComponent(this.storedAgentId)}${queryString ? `?${queryString}` : ''}`;
     return this.request(url);
   }
 
@@ -154,6 +165,58 @@ export class StoredAgent extends BaseResource {
   // ==========================================================================
 
   /**
+   * Lists the custom and computed labels that currently target this stored agent's versions.
+   */
+  listVersionLabels(
+    params?: ListAgentVersionLabelsParams,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ListAgentVersionLabelsResponse> {
+    const queryParams = new URLSearchParams();
+    if (params?.page !== undefined) queryParams.set('page', String(params.page));
+    if (params?.perPage !== undefined) queryParams.set('perPage', String(params.perPage));
+
+    const queryString = queryParams.toString();
+    const contextString = requestContextQueryString(requestContext);
+    return this.request(
+      `/stored/agents/${encodeURIComponent(this.storedAgentId)}/labels${queryString ? `?${queryString}` : ''}${contextString ? `${queryString ? '&' : '?'}${contextString.slice(1)}` : ''}`,
+    );
+  }
+
+  /**
+   * Creates or compare-and-swap moves a custom version label.
+   */
+  setVersionLabel(
+    label: string,
+    input: SetAgentVersionLabelInput,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<AgentVersionLabel> {
+    return this.request(
+      `/stored/agents/${encodeURIComponent(this.storedAgentId)}/labels/${encodeURIComponent(label)}${requestContextQueryString(requestContext)}`,
+      {
+        method: 'PUT',
+        body: input,
+        retries: 0,
+      },
+    );
+  }
+
+  /**
+   * Deletes a custom version label if its last-observed revision token still matches.
+   */
+  deleteVersionLabel(
+    label: string,
+    input: DeleteAgentVersionLabelInput,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<DeleteAgentVersionLabelResponse> {
+    const queryParams = new URLSearchParams({ expectedRevisionToken: input.expectedRevisionToken });
+    const contextString = requestContextQueryString(requestContext);
+    return this.request(
+      `/stored/agents/${encodeURIComponent(this.storedAgentId)}/labels/${encodeURIComponent(label)}?${queryParams.toString()}${contextString ? `&${contextString.slice(1)}` : ''}`,
+      { method: 'DELETE', retries: 0 },
+    );
+  }
+
+  /**
    * Lists all versions for this stored agent
    * @param params - Optional pagination and sorting parameters
    * @param requestContext - Optional request context to pass as query parameter
@@ -215,18 +278,36 @@ export class StoredAgent extends BaseResource {
 
   /**
    * Activates a specific version, making it the active version for this agent
-   * @param versionId - The UUID of the version to activate
+   * @param versionIdOrInput - The UUID of the version to activate, or an input with an optional active-version precondition
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing activation confirmation with success status, message, and active version ID
    */
   activateVersion(
     versionId: string,
     requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ActivateAgentVersionResponse>;
+  activateVersion(
+    input: ActivateAgentVersionInput,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ActivateAgentVersionResponse>;
+  activateVersion(
+    versionIdOrInput: string | ActivateAgentVersionInput,
+    requestContext?: RequestContext | Record<string, any>,
   ): Promise<ActivateAgentVersionResponse> {
+    const versionId = typeof versionIdOrInput === 'string' ? versionIdOrInput : versionIdOrInput.versionId;
+    const body =
+      typeof versionIdOrInput === 'string'
+        ? undefined
+        : { expectedActiveVersionId: versionIdOrInput.expectedActiveVersionId };
+    const hasActiveVersionPrecondition =
+      typeof versionIdOrInput !== 'string' && versionIdOrInput.expectedActiveVersionId !== undefined;
+
     return this.request(
       `/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions/${encodeURIComponent(versionId)}/activate${requestContextQueryString(requestContext)}`,
       {
         method: 'POST',
+        ...(body ? { body } : {}),
+        ...(hasActiveVersionPrecondition ? { retries: 0 } : {}),
       },
     );
   }

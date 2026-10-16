@@ -3,6 +3,7 @@ import { AgentController } from '@mastra/core/agent-controller';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
+import { createMockModel } from '@mastra/core/test-utils/llm-mock';
 import { Workspace } from '@mastra/core/workspace';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
@@ -37,6 +38,7 @@ import {
   GET_AGENT_CONTROLLER_GOAL_ROUTE,
   GET_AGENT_CONTROLLER_PERMISSIONS_ROUTE,
 } from './agent-controller';
+import { AGENT_VERSION_PINS_CONTEXT_KEY } from './agents';
 
 function makeAgent(id = 'test-agent') {
   return new Agent({ id, name: id, instructions: 'test', model: {} as any });
@@ -55,6 +57,18 @@ function makeMastra() {
   });
   const mastra = new Mastra({ agentControllers: { code: controller }, storage });
   return { mastra, controller };
+}
+
+async function readHttpError(promise: Promise<unknown>) {
+  let error: HTTPException | undefined;
+  try {
+    await promise;
+  } catch (caught) {
+    error = caught as HTTPException;
+  }
+  expect(error).toBeInstanceOf(HTTPException);
+  const response = error!.getResponse();
+  return { status: response.status, body: await response.json() };
 }
 
 describe('agent-controller routes', () => {
@@ -516,7 +530,11 @@ describe('agent-controller routes', () => {
         files,
       } as any);
 
-      expect(spy).toHaveBeenCalledWith({ content: 'see attached', files, requestContext: undefined });
+      expect(spy).toHaveBeenCalledWith({
+        content: 'see attached',
+        files,
+        requestContext: expect.any(RequestContext),
+      });
     });
 
     it('rejects oversized file attachments in the body schema', () => {
@@ -524,6 +542,9 @@ describe('agent-controller routes', () => {
 
       const okFile = { data: 'aGVsbG8=', mediaType: 'image/png' };
       expect(schema.safeParse({ message: 'hi', files: [okFile] }).success).toBe(true);
+      expect(
+        schema.safeParse({ message: 'hi', versions: { agents: { 'test-agent': { label: 'candidate' } } } }).success,
+      ).toBe(true);
 
       // Single file over the 14MB base64 cap (10MB binary).
       const oversized = { data: 'a'.repeat(14 * 1024 * 1024 + 1), mediaType: 'image/png' };
@@ -559,6 +580,7 @@ describe('agent-controller routes', () => {
       const session = await getRouteSession('user-rc');
       const spy = vi.spyOn(session, 'steer').mockResolvedValue(undefined);
       const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
+      const requestContext = makeRequestContext();
 
       await STEER_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,
@@ -566,9 +588,16 @@ describe('agent-controller routes', () => {
         resourceId: 'user-rc',
         message: 'look at this instead',
         files,
+        requestContext,
       } as any);
 
-      expect(spy).toHaveBeenCalledWith({ content: 'look at this instead', files, requestContext: undefined });
+      expect(spy).toHaveBeenCalledWith({
+        content: 'look at this instead',
+        files,
+        requestContext,
+        author: { id: 'user-123' },
+      });
+      expect(spy.mock.calls[0]?.[0].requestContext).toBe(requestContext);
     });
 
     it('forwards requestContext to session.followUp', async () => {
@@ -591,6 +620,7 @@ describe('agent-controller routes', () => {
       const session = await getRouteSession('user-rc');
       const spy = vi.spyOn(session, 'followUp').mockResolvedValue(undefined);
       const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
+      const requestContext = makeRequestContext();
 
       await FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,
@@ -598,9 +628,11 @@ describe('agent-controller routes', () => {
         resourceId: 'user-rc',
         message: 'also this',
         files,
+        requestContext,
       } as any);
 
-      expect(spy).toHaveBeenCalledWith({ content: 'also this', files, requestContext: undefined });
+      expect(spy).toHaveBeenCalledWith({ content: 'also this', files, requestContext });
+      expect(spy.mock.calls[0]?.[0].requestContext).toBe(requestContext);
     });
 
     it.each([
@@ -619,6 +651,229 @@ describe('agent-controller routes', () => {
 
       const large = { data: 'a'.repeat(10 * 1024 * 1024), mediaType: 'image/png' };
       expect(schema.safeParse({ message: 'hi', files: [large, large, large] }).success).toBe(false);
+    });
+
+    it.each([
+      ['message', SEND_AGENT_CONTROLLER_MESSAGE_ROUTE, 'sendMessage'],
+      ['steer', STEER_AGENT_CONTROLLER_SESSION_ROUTE, 'steer'],
+    ] as const)(
+      'resolves an HTTP %s label once and preserves its pin, author, and context',
+      async (_name, route, method) => {
+        const session = await getRouteSession('user-versioned');
+        const spy = vi.spyOn(session, method).mockResolvedValue(undefined);
+        const requestContext = makeRequestContext();
+        const selectedAgent = makeAgent();
+        selectedAgent.__setRawConfig({ resolvedVersionId: 'version-1', selectedVersionLabel: 'candidate' });
+        const applyStoredOverrides = vi.fn().mockResolvedValue(selectedAgent);
+        vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+
+        await route.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-versioned',
+          message: 'hello candidate',
+          versions: {
+            agents: { 'test-agent': { label: 'candidate' } },
+          },
+          requestContext,
+        } as any);
+
+        expect(applyStoredOverrides).toHaveBeenCalledTimes(1);
+        expect(applyStoredOverrides).toHaveBeenCalledWith(
+          expect.objectContaining({ id: 'test-agent' }),
+          { label: 'candidate' },
+          requestContext,
+        );
+        expect(requestContext.get('mastra__versions')).toEqual({
+          agents: { 'test-agent': { versionId: 'version-1' } },
+        });
+        expect(spy).toHaveBeenCalledWith({
+          content: 'hello candidate',
+          requestContext,
+          versions: { agents: { 'test-agent': { versionId: 'version-1' } } },
+          author: { id: 'user-123' },
+        });
+        expect(spy.mock.calls[0]?.[0].requestContext).toBe(requestContext);
+      },
+    );
+
+    it.each([
+      ['message', SEND_AGENT_CONTROLLER_MESSAGE_ROUTE],
+      ['steer', STEER_AGENT_CONTROLLER_SESSION_ROUTE],
+      ['follow-up', FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE],
+    ] as const)('keeps an HTTP %s label ahead of agent defaults in a real background run', async (_name, route) => {
+      const executionContexts: RequestContext[] = [];
+      const defaults = vi.fn(() => ({ versions: { agents: { 'test-agent': { versionId: 'default-version' } } } }));
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test agent',
+        instructions: ({ requestContext }) => {
+          executionContexts.push(requestContext);
+          return 'Answer briefly.';
+        },
+        model: createMockModel({ mockText: 'Completed' }),
+        defaultOptions: defaults,
+      });
+      const storage = new InMemoryStore();
+      const controller = new AgentController({
+        id: 'code',
+        storage,
+        workspace: new Workspace({ name: 'version-test-workspace', skills: ['/tmp/test-skills'] }),
+        modes: [{ id: 'default', name: 'Default', default: true, agent }],
+      });
+      const runtime = new Mastra({ logger: false, storage, agentControllers: { code: controller } });
+      let candidateVersion = 'requested-version';
+      const applyStoredOverrides = vi.fn(async (source: Agent, selector: { versionId?: string; label?: string }) => {
+        const fork = source.__fork();
+        fork.__setRawConfig({ resolvedVersionId: selector.versionId ?? candidateVersion });
+        return fork;
+      });
+      vi.spyOn(runtime, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+      const requestContext = new RequestContext();
+      requestContext.set('tenant', 'original-tenant');
+      await controller.init();
+      const session = await controller.createSession({
+        id: 'version-user',
+        resourceId: 'version-user',
+        ownerId: 'code',
+        requestContext,
+      });
+      let endReason: string | undefined;
+      session.subscribe(event => {
+        if (event.type === 'agent_end') endReason = event.reason;
+      });
+
+      await route.handler({
+        mastra: runtime,
+        controllerId: 'code',
+        resourceId: 'version-user',
+        message: 'Use the requested label',
+        versions: { agents: { 'test-agent': { label: 'candidate' } } },
+        requestContext,
+      } as any);
+      candidateVersion = 'moved-version';
+      await vi.waitFor(() => expect(endReason).toBe('complete'), { timeout: 5_000 });
+
+      expect(applyStoredOverrides).toHaveBeenCalledWith(agent, { label: 'candidate' }, requestContext);
+      expect(applyStoredOverrides).toHaveBeenCalledWith(agent, { versionId: 'requested-version' });
+      expect(defaults).toHaveBeenCalled();
+      expect(executionContexts.at(-1)?.get('tenant')).toBe('original-tenant');
+      expect(executionContexts.at(-1)?.get(AGENT_VERSION_PINS_CONTEXT_KEY)).toMatchObject({
+        root: { agentId: 'test-agent', versionId: 'requested-version' },
+      });
+      session.thread.cleanupSubscription();
+    });
+
+    it('rejects request-context dependency/default selectors that an active controller message would ignore', async () => {
+      const session = await getRouteSession('user-active-version');
+      vi.spyOn(session.stream, 'isActive').mockReturnValue(true);
+      const requestContext = makeRequestContext();
+      requestContext.set('mastra__versions', {
+        agents: { dependency: { versionId: 'dependency-v1' } },
+        defaultStatus: 'draft',
+      });
+
+      const error = await readHttpError(
+        SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-active-version',
+          message: 'interject',
+          requestContext,
+        } as any),
+      );
+      expect(error).toEqual({
+        status: 400,
+        body: {
+          error: {
+            code: 'INVALID_VERSION_SELECTOR',
+            message: 'Active controller session signals cannot replace the running agent version.',
+            details: { controllerId: 'code', agentId: 'test-agent' },
+          },
+        },
+      });
+    });
+
+    it('rejects selectors that an active controller notification would ignore with the public envelope', async () => {
+      const session = await getRouteSession('user-active-notification-version');
+      vi.spyOn(session.stream, 'isActive').mockReturnValue(true);
+
+      const error = await readHttpError(
+        SEND_AGENT_CONTROLLER_NOTIFICATION_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-active-notification-version',
+          source: 'build',
+          kind: 'finished',
+          summary: 'done',
+          versions: { agents: { dependency: { versionId: 'dependency-v1' } } },
+          requestContext: makeRequestContext(),
+        } as any),
+      );
+      expect(error).toEqual({
+        status: 400,
+        body: {
+          error: {
+            code: 'INVALID_VERSION_SELECTOR',
+            message: 'Active controller session signals cannot replace the running agent version.',
+            details: { controllerId: 'code', agentId: 'test-agent' },
+          },
+        },
+      });
+    });
+
+    it('preserves the public envelope when canonical and legacy controller selectors are mixed', async () => {
+      const requestContext = makeRequestContext();
+      requestContext.set('agentVersionId', 'version-1');
+
+      const error = await readHttpError(
+        SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-disagree-version',
+          message: 'conflicting selector',
+          versions: { agents: { 'test-agent': { versionId: 'version-2' } } },
+          requestContext,
+        } as any),
+      );
+      expect(error).toEqual({
+        status: 400,
+        body: {
+          error: {
+            code: 'INVALID_VERSION_SELECTOR',
+            message: 'Canonical version selectors cannot be combined with legacy agentVersionId',
+            details: {
+              sources: ['versions.agents.test-agent', 'requestContext.agentVersionId'],
+            },
+          },
+        },
+      });
+    });
+
+    it('rejects the removed self selector in controller requests', async () => {
+      const error = await readHttpError(
+        SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-body-disagree-version',
+          message: 'conflicting body selectors',
+          versions: {
+            self: { versionId: 'version-1' },
+            agents: { 'test-agent': { versionId: 'version-2' } },
+          },
+          requestContext: makeRequestContext(),
+        } as any),
+      );
+      expect(error).toEqual({
+        status: 400,
+        body: {
+          error: {
+            code: 'INVALID_VERSION_SELECTOR',
+            message: 'Use versions.agents[agentId] instead of versions.self',
+            details: { source: 'versions' },
+          },
+        },
+      });
     });
 
     it('forwards requestContext to session.respondToToolApproval', async () => {

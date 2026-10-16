@@ -35,6 +35,7 @@ import type {
   SendNotificationInput,
   SendNotificationResult,
   ToolCategory,
+  VersionOverrides,
 } from '../types';
 import { isTerminalReconnectError, parseClientRequestContext } from '../utils';
 import { BaseResource } from './base';
@@ -266,13 +267,19 @@ export interface PlanResume {
 }
 
 /**
- * Options accepted by session methods that trigger or resume agent execution.
+ * Options accepted by session methods that resume an existing execution.
  * The `requestContext` is merged into the server-derived request context for
  * that run (server-controlled keys win), so it reaches dynamic instructions,
  * tools, and workspace resolution — mirroring `agent.generate()`.
  */
 export interface AgentControllerRequestOptions {
   requestContext?: RequestContext | Record<string, any>;
+}
+
+/** Options accepted by session methods that may start a new agent execution. */
+export interface AgentControllerExecutionOptions extends AgentControllerRequestOptions {
+  /** Version selectors for the controller's root agent and its agent dependencies. */
+  versions?: VersionOverrides;
 }
 
 /** Options for subscribing to an agent controller session's event stream. */
@@ -614,7 +621,7 @@ export class AgentControllerSession extends BaseResource {
    */
   async sendMessage(
     message: string | { content: string; files?: Array<{ data: string; mediaType: string; filename?: string }> },
-    options?: AgentControllerRequestOptions,
+    options?: AgentControllerExecutionOptions,
   ): Promise<void> {
     const { content, files } = typeof message === 'string' ? { content: message, files: undefined } : message;
     const requestContext = parseClientRequestContext(options?.requestContext);
@@ -624,6 +631,7 @@ export class AgentControllerSession extends BaseResource {
         message: content,
         ...(files?.length ? { files } : {}),
         ...(requestContext ? { requestContext } : {}),
+        ...(options?.versions ? { versions: options.versions } : {}),
       },
     });
   }
@@ -678,7 +686,7 @@ export class AgentControllerSession extends BaseResource {
    */
   async steer(
     message: string | { content: string; files?: Array<{ data: string; mediaType: string; filename?: string }> },
-    options?: AgentControllerRequestOptions,
+    options?: AgentControllerExecutionOptions,
   ): Promise<void> {
     const { content, files } = typeof message === 'string' ? { content: message, files: undefined } : message;
     const requestContext = parseClientRequestContext(options?.requestContext);
@@ -688,6 +696,7 @@ export class AgentControllerSession extends BaseResource {
         message: content,
         ...(files?.length ? { files } : {}),
         ...(requestContext ? { requestContext } : {}),
+        ...(options?.versions ? { versions: options.versions } : {}),
       },
     });
   }
@@ -832,7 +841,7 @@ export class AgentControllerSession extends BaseResource {
    */
   async followUp(
     message: string | { content: string; files?: Array<{ data: string; mediaType: string; filename?: string }> },
-    options?: AgentControllerRequestOptions,
+    options?: AgentControllerExecutionOptions,
   ): Promise<void> {
     const { content, files } = typeof message === 'string' ? { content: message, files: undefined } : message;
     const requestContext = parseClientRequestContext(options?.requestContext);
@@ -842,6 +851,7 @@ export class AgentControllerSession extends BaseResource {
         message: content,
         ...(files?.length ? { files } : {}),
         ...(requestContext ? { requestContext } : {}),
+        ...(options?.versions ? { versions: options.versions } : {}),
       },
     });
   }

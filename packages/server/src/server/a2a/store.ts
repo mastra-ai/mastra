@@ -14,6 +14,7 @@ export class TaskStoreVersionConflictError extends Error {
 export class InMemoryTaskStore {
   private store: Map<string, Task> = new Map();
   private versions: Map<string, number> = new Map();
+  private agentVersionPins: Map<string, unknown> = new Map();
   private listeners: Map<string, Set<(update: { task: Task; version: number }) => void>> = new Map();
   private abortControllers: Map<string, AbortController> = new Map();
   public activeCancellations = new Set<string>();
@@ -92,6 +93,16 @@ export class InMemoryTaskStore {
 
   getVersion({ agentId, taskId }: { agentId: string; taskId: string }): number {
     return this.versions.get(this.getKey(agentId, taskId)) ?? 0;
+  }
+
+  /** Trusted immutable agent-version state owned by a task execution. */
+  setAgentVersionPins({ agentId, taskId, pins }: { agentId: string; taskId: string; pins: unknown }): void {
+    this.agentVersionPins.set(this.getKey(agentId, taskId), structuredClone(pins));
+  }
+
+  getAgentVersionPins({ agentId, taskId }: { agentId: string; taskId: string }): unknown {
+    const pins = this.agentVersionPins.get(this.getKey(agentId, taskId));
+    return pins === undefined ? undefined : structuredClone(pins);
   }
 
   list({ agentId }: { agentId: string }): Task[] {

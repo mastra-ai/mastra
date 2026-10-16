@@ -3,8 +3,8 @@ import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import { agentIdPathParams, agentPlanQuerySchema, agentPlanResponseSchema } from '../schemas/agents';
 import { createRoute } from '../server-adapter/routes/route-builder';
-import { getAgentFromSystem } from './agents';
-import { handleError } from './error';
+import { getAgentFromSystem, parseVersionSelector } from './agents';
+import { handleVersionLabelError } from './version-label-errors';
 
 const PLANS_DIRECTORY = '.mastracode/plans/';
 
@@ -31,9 +31,9 @@ export const READ_AGENT_PLAN_ROUTE = createRoute({
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
-  handler: async ({ agentId, mastra, path, requestContext, status, versionId }) => {
+  handler: async ({ agentId, mastra, path, requestContext, status, versionId, label }) => {
     try {
-      const versionOptions = versionId ? { versionId } : status ? { status } : undefined;
+      const versionOptions = parseVersionSelector({ versionId, label, status }, { source: 'query' });
       const agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext });
       const tools = await agent.listTools({ requestContext });
       const hasSubmitPlan = Object.values(tools).some(
@@ -62,7 +62,7 @@ export const READ_AGENT_PLAN_ROUTE = createRoute({
         content: typeof content === 'string' ? content : content.toString('utf-8'),
       };
     } catch (error) {
-      return handleError(error, 'Error reading submitted plan');
+      return handleVersionLabelError(error, 'Error reading submitted plan');
     }
   },
 });
