@@ -23,7 +23,7 @@ import { setupDebugLogging } from '../utils/debug-log.js';
 import { releaseAllThreadLocks } from '../utils/thread-lock.js';
 
 import { buildParseArgsOptions, FLAGS, renderFlagUsage } from './flags.js';
-import { createHumanFormatState, formatHuman, formatJsonl, renderJsonResult } from './format.js';
+import { createHumanFormatState, formatHuman, formatJsonl, isJsonlEvent, renderJsonResult } from './format.js';
 import { permissionModeToPolicy } from './policy.js';
 import { runMC } from './run-mc.js';
 import type { PermissionMode, RunMode, ThinkingLevel } from './types.js';
@@ -293,7 +293,7 @@ export async function runMCCli(
         const out = formatHuman(event, humanState);
         if (out.stdout) process.stdout.write(out.stdout);
         if (out.stderr) process.stderr.write(out.stderr);
-      } else if (args.output === 'jsonl') {
+      } else if (args.output === 'jsonl' && isJsonlEvent(event)) {
         process.stdout.write(JSON.stringify(formatJsonl(event)) + '\n');
       }
     }

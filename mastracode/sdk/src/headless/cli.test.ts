@@ -494,6 +494,63 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
     expect(lifecycleMocks.order.at(-1)).toBe('exit-2');
   });
 
+  it('streams controller events but not display snapshots in jsonl mode', async () => {
+    lifecycleMocks.createMastraCode.mockImplementation(async () => ({
+      controller: {
+        getMastra: vi.fn(() => ({ stopWorkers: vi.fn(async () => {}) })),
+        stopIntervals: vi.fn(async () => {}),
+      },
+      session: {},
+      mcpManager: { hasServers: () => false, disconnect: vi.fn(async () => {}) },
+      signalsPubSub: { close: vi.fn(async () => {}) },
+      stopPluginSignalProviders: vi.fn(),
+      releaseThreadClaims: vi.fn(),
+    }));
+    // A snapshot that holds a large tool result, re-sent after each event the
+    // way the session bus does.
+    const snapshot = { type: 'display_state_changed', displayState: { toolOutput: 'x'.repeat(1_000_000) } };
+    const events = [
+      { type: 'agent_start' },
+      snapshot,
+      { type: 'tool_start', toolCallId: 't1', toolName: 'execute_command', args: { command: 'ls' } },
+      snapshot,
+      { type: 'shell_output', toolCallId: 't1', output: 'a.txt\n', stream: 'stdout' },
+      snapshot,
+      { type: 'tool_end', toolCallId: 't1', result: 'a.txt', isError: false },
+      snapshot,
+      { type: 'agent_end', reason: 'complete' },
+      snapshot,
+    ];
+    lifecycleMocks.runMC.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        yield* events;
+      },
+      result: Promise.resolve({ status: 'completed', text: 'done', toolCalls: [], toolResults: [], exitCode: 0 }),
+    });
+    process.argv = argv('--prompt', 'do it', '--output', 'jsonl');
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+    let written: string;
+    try {
+      await expect(runMCCli('do it')).rejects.toThrow('EXIT:0');
+    } finally {
+      written = stdoutSpy.mock.calls.map(([chunk]) => String(chunk)).join('');
+      stdoutSpy.mockRestore();
+    }
+
+    const lines = written.trimEnd().split('\n').map(line => JSON.parse(line));
+    expect(lines.map(line => line.type)).toEqual([
+      'agent_start',
+      'tool_start',
+      'shell_output',
+      'tool_end',
+      'agent_end',
+      'result',
+    ]);
+    expect(lines.at(-1)).toMatchObject({ status: 'completed', text: 'done', exitCode: 0 });
+    expect(written.length).toBeLessThan(10_000);
+  });
+
   it('stops diagnostics when Mastra Code startup fails', async () => {
     lifecycleMocks.createMastraCode.mockRejectedValue(new Error('boot failed'));
 
