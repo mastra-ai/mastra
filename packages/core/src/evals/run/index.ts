@@ -361,8 +361,13 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
 
       // Exporters buffer spans (the storage exporter waits up to 5 s before it
       // writes). Flush so the trace is stored before gates and scorers read it,
-      // and before each scorer's addScore() looks it up.
-      await mastra?.observability?.flush?.();
+      // and before each scorer's addScore() looks it up. Best-effort: a failed
+      // flush only means the trace read below falls back.
+      try {
+        await mastra?.observability?.flush?.();
+      } catch (error) {
+        mastra?.getLogger?.()?.warn?.('Failed to flush observability before scoring:', error);
+      }
 
       // Run gates first
       if (gates) {

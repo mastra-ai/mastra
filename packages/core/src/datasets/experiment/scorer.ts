@@ -155,8 +155,12 @@ export async function flushForTrajectoryScorers(
   mastra: Mastra,
   scorers: MastraScorer<any, any, any, any>[],
 ): Promise<void> {
-  if (scorers.some(s => s.type === 'trajectory')) {
+  if (!scorers.some(s => s.type === 'trajectory')) return;
+  try {
     await mastra.observability.flush();
+  } catch (error) {
+    // Best-effort: a failed flush only means the trace read falls back.
+    console.warn('Failed to flush observability before reading the trace:', error);
   }
 }
 

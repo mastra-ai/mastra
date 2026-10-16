@@ -1197,7 +1197,13 @@ describe('runEvals', () => {
 
     describe('trace store reads', () => {
       // The storage exporter buffers spans, so the trace is only readable after a flush.
-      async function runWithTraceStore({ storedOnFlush }: { storedOnFlush: boolean }) {
+      async function runWithTraceStore({
+        storedOnFlush,
+        flushFails = false,
+      }: {
+        storedOnFlush: boolean;
+        flushFails?: boolean;
+      }) {
         const { agent } = createToolCallingAgent();
         const observability = new NoOpObservability();
         const storage = new InMemoryStore();
@@ -1212,6 +1218,7 @@ describe('runEvals', () => {
 
         let flushed = false;
         vi.spyOn(observability, 'flush').mockImplementation(async () => {
+          if (flushFails) throw new Error('flush failed');
           flushed = storedOnFlush;
         });
         const span = (spanId: string, spanType: SpanType, parentSpanId: string | null) => ({
@@ -1262,6 +1269,12 @@ describe('runEvals', () => {
         expect(warn).toHaveBeenCalledWith(
           expect.stringContaining('Trace trace-1 was not found in observability storage'),
         );
+      });
+
+      it('keeps scoring when the flush fails', async () => {
+        const { received, warn } = await runWithTraceStore({ storedOnFlush: true, flushFails: true });
+        expect(received.steps.map((s: any) => s.name)).toEqual(['weatherTool', 'calendarTool']);
+        expect(warn).toHaveBeenCalledWith('Failed to flush observability before scoring:', expect.any(Error));
       });
     });
   });
