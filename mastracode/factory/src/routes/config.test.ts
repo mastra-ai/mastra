@@ -1002,6 +1002,21 @@ describe('OM routes with a tenant', () => {
     });
   });
 
+  it('does not preview Gemini for auto when only the server has a Google key', async () => {
+    vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'server-google-key');
+    try {
+      const res = await buildApp(null, { defaultModelId: 'anthropic/claude-opus-5' }).request('/web/config/om');
+
+      expect(res.status).toBe(200);
+      const { config } = await res.json();
+      expect(config.observer).toMatchObject({ model: 'auto', providerStatus: 'available' });
+      expect(config.observer.effectiveModelId).toMatch(/^anthropic\/claude-haiku/);
+      expect(config.reflector.effectiveModelId).toBe(config.observer.effectiveModelId);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('resolves auto roles from the live session model ahead of the Factory default', async () => {
     await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'deepseek', {
       type: 'api_key',
