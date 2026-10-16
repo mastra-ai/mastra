@@ -43,7 +43,6 @@
     "test:unit": "vitest run"
   },
   "dependencies": {
-    "@ai-sdk/ui-utils": "^1.2.11",
     "@lukeed/uuid": "^2.0.1",
     "@mastra/core": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
