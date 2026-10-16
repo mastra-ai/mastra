@@ -42,6 +42,7 @@ vi.mock('../utils/project.js', () => ({
 vi.mock('./model.js', async () => ({
   getActiveMemoryRoute: (await vi.importActual<typeof import('./model.js')>('./model.js')).getActiveMemoryRoute,
   resolveModel: resolveModelMock,
+  canUseProvider: () => false,
 }));
 
 vi.mock('../onboarding/settings.js', () => ({

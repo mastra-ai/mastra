@@ -171,23 +171,23 @@ const UNDEFINED_DIFFERENCE: EngineDifference = {
 
 /**
  * COR-1390: durable and evented re-emit the thrown error as the raw serialised
- * error (`{ name, message, stack }`) instead of plain's MastraError envelope
- * (`{ name, message, cause, domain, category, details }`). The serialised stack
- * carries absolute paths from this checkout, so the payload value cannot be
- * pinned; every other field of the turn stays compared, and the difference
- * fails once the two shapes converge. The shape itself is asserted below.
- * COR-1429 strips `stack` from a `tool-error` chunk the way the helper already
- * strips it from an `error` chunk, which is what retires the `ignore`.
+ * error instead of plain's MastraError envelope. The helper removes the
+ * checkout-specific stack, so the stable payload shape can be pinned exactly.
  */
 const THROWS_DIFFERENCE: EngineDifference = {
   reason:
     "COR-1390: durable and evented re-emit a thrown tool error as the raw serialised error instead of plain's " +
-    'MastraError envelope; the serialised stack embeds checkout-specific paths, so the payload cannot be pinned.',
-  // Tried without this `ignore` on the COR-1417 helper: the wrapped payloads
-  // still carry `stack` (an absolute checkout path) and drop plain's
-  // `category`/`cause`/`details`/`domain`, so the comparison still forces it
-  // until COR-1429 stops the helper comparing a `tool-error` stack.
-  ignore: ['chunkPayloads'],
+    'MastraError envelope.',
+  expect: plain => {
+    const expected = structuredClone(plain);
+    for (const turn of expected.turns) {
+      const index = turn.chunkTypes.indexOf('tool-error');
+      if (index < 0) continue;
+      const payload = turn.chunkPayloads[index] as { error?: Record<string, unknown> };
+      payload.error = { name: payload.error?.name, message: payload.error?.message };
+    }
+    return expected;
+  },
 };
 
 const HELD_DIFFERENCES: Record<HeldVariant, EngineDifference> = {
@@ -337,11 +337,8 @@ describe('T32 tool errors (plain, durable, evented)', () => {
         // The harness's contract, pinned per engine.
         expect(contractOf(turn, requests)).toEqual(engine === 'plain' ? contracts.plain : contracts.wrapped);
         if (variant === 'throws') {
-          // The payload's `chunkPayloads` comparison is ignored because the
-          // wrapped engines serialise a `stack` with an absolute checkout path
-          // (see THROWS_DIFFERENCE), so the fields that do not depend on the
-          // process are asserted directly here — a wrapped engine reporting a
-          // different failure or a different call would still fail.
+          // A wrapped engine reporting a different failure or call still fails
+          // the precise scenario-level payload expectation above.
           const payload = turn.chunkPayloads[turn.chunkTypes.indexOf('tool-error')] as {
             toolCallId?: string;
             toolName?: string;
@@ -353,13 +350,11 @@ describe('T32 tool errors (plain, durable, evented)', () => {
             args: { n: 1 },
           });
           // COR-1390's payload shapes. The two engines differ by the
-          // classification fields and the stack, not by the failure's name or
-          // message: plain forwards the live `Error`, the wrappers serialise it.
+          // classification fields, not by the failure's name or message:
+          // plain forwards the live `Error`, the wrappers serialise it.
           const error = toolErrorOf(turn);
           expect(Object.keys(error).sort()).toEqual(
-            engine === 'plain'
-              ? ['category', 'cause', 'details', 'domain', 'message', 'name']
-              : ['message', 'name', 'stack'],
+            engine === 'plain' ? ['category', 'cause', 'details', 'domain', 'message', 'name'] : ['message', 'name'],
           );
           expect(error.name).toBe('Error');
           expect(error.message).toBe('T32 tool failure');

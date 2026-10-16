@@ -4,29 +4,26 @@ import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { useSendAgentControllerMessageMutation } from '../../../../hooks/useAgentControllerRunMutations';
-import {
-  useSwitchAgentControllerModeMutation,
-  useSwitchAgentControllerModelMutation,
-} from '../../../../hooks/useAgentControllerStateMutations';
+import { useSwitchAgentControllerModelMutation } from '../../../../hooks/useAgentControllerStateMutations';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatTranscript } from '../context/useChatTranscript';
+import { useComposerImagesState } from '../context/useComposerImagesState';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { takeHandoffFiles } from '../services/handoffFiles';
 
 interface PromptHandoff {
   handoffPrompt: string;
-  handoffModeId?: string;
   handoffModelId?: string;
   handoffThinkingLevel?: ThinkingLevelSetting;
 }
 
 export function promptHandoffState(
   prompt: string,
-  config: { modeId: string; modelId?: string; thinkingLevel?: ThinkingLevelSetting },
+  config: { modelId?: string; thinkingLevel?: ThinkingLevelSetting },
 ): PromptHandoff {
   return {
     handoffPrompt: prompt,
-    handoffModeId: config.modeId,
     handoffModelId: config.modelId,
     handoffThinkingLevel: config.thinkingLevel,
   };
@@ -40,6 +37,13 @@ function readHandoffField(state: unknown, key: keyof PromptHandoff): string | un
   if (!isRecord(state)) return undefined;
   const value = state[key];
   return typeof value === 'string' && value ? value : undefined;
+}
+
+// An image-only first prompt hands off an empty string, so only a missing field means "no handoff".
+function readHandoffPrompt(state: unknown): string | undefined {
+  if (!isRecord(state)) return undefined;
+  const value = state.handoffPrompt;
+  return typeof value === 'string' ? value : undefined;
 }
 
 const pendingHandoffKey = (resourceId: string) => `factory-pending-handoff:${resourceId}`;
@@ -74,6 +78,7 @@ export function useHandoffPrompt(): void {
   const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
   const { localUser, clearPending, pushNotice } = useChatTranscript();
   const { prefillComposer } = useChatCommands();
+  const { setImages } = useComposerImagesState();
   const mutationArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -82,12 +87,10 @@ export function useHandoffPrompt(): void {
     enabled: sessionEnabled,
   };
   const { mutateAsync: sendMessage } = useSendAgentControllerMessageMutation(mutationArgs);
-  const { mutateAsync: switchMode } = useSwitchAgentControllerModeMutation(mutationArgs);
   const { mutateAsync: switchModel } = useSwitchAgentControllerModelMutation(mutationArgs);
   const handedOff = useRef(false);
   const recovered = useRef(false);
-  const prompt = readHandoffField(location.state, 'handoffPrompt');
-  const modeId = readHandoffField(location.state, 'handoffModeId');
+  const prompt = readHandoffPrompt(location.state);
   const modelId = readHandoffField(location.state, 'handoffModelId');
   const handoffThinkingLevel = readHandoffField(location.state, 'handoffThinkingLevel');
   const thinkingLevel = isThinkingLevelSetting(handoffThinkingLevel) ? handoffThinkingLevel : undefined;
@@ -95,7 +98,7 @@ export function useHandoffPrompt(): void {
   useEffect(() => {
     if (!sessionEnabled) return;
     if (handedOff.current) return;
-    if (!prompt) {
+    if (prompt === undefined) {
       if (recovered.current) return;
       recovered.current = true;
       const interruptedPrompt = readPendingHandoff(resourceId);
@@ -106,27 +109,25 @@ export function useHandoffPrompt(): void {
       return;
     }
     handedOff.current = true;
+    const files = takeHandoffFiles(resourceId);
     // Keep a recoverable draft before dropping history state. Never auto-resend
     // after an interruption: the server may already have accepted the message.
     storePendingHandoff(resourceId, prompt);
     void navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null });
-    localUser(prompt);
+    if (!prompt && files.length === 0) return;
+    const outgoing = files.map(f => ({ data: f.data, mediaType: f.mediaType, filename: f.filename }));
+    localUser(prompt, false, outgoing);
     void (async () => {
-      // mode first — switching it resets the model; a failed bind must not lose the prompt
-      if (modeId) {
-        await switchMode(modeId).catch((error: unknown) =>
-          pushNotice(error instanceof Error ? error.message : `Could not start in ${modeId} mode.`, 'error'),
-        );
-      }
       if (modelId) {
         await switchModel({ modelId, thinkingLevel }).catch((error: unknown) =>
           pushNotice(error instanceof Error ? error.message : `Could not start on ${modelId}.`, 'error'),
         );
       }
-      await sendMessage(prompt);
+      await sendMessage(outgoing.length ? { text: prompt, files: outgoing } : prompt);
       clearPendingHandoff(resourceId);
     })().catch(error => {
       prefillComposer(prompt);
+      setImages(current => [...files, ...current]);
       clearPending();
       pushNotice(error instanceof Error ? error.message : 'The message could not be sent.', 'error');
     });
@@ -135,7 +136,6 @@ export function useHandoffPrompt(): void {
     localUser,
     location.pathname,
     location.search,
-    modeId,
     modelId,
     navigate,
     prefillComposer,
@@ -144,7 +144,7 @@ export function useHandoffPrompt(): void {
     resourceId,
     sendMessage,
     sessionEnabled,
-    switchMode,
+    setImages,
     switchModel,
     thinkingLevel,
   ]);

@@ -300,7 +300,6 @@ function factoryRequestContext(input: {
   const { session, binding, userId, orgId } = input;
   const requestContext = new RequestContext();
   requestContext.set('user', { workosId: userId, organizationId: orgId });
-  const modeId = session.mode.get();
   requestContext.set('controller', {
     state: session.state.get(),
     getState: () => session.state.get(),
@@ -309,7 +308,6 @@ function factoryRequestContext(input: {
     session: {
       id: session.identity.getId(),
       ownerId: session.identity.getOwnerId(),
-      modeId,
       modelId: session.model.get() ?? '',
     },
     workspace: session.getWorkspace(),

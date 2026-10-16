@@ -16,6 +16,7 @@ import type { Agent } from '../../agent';
 import { convertMessages, coreContentToString, MessageList } from '../../message-list';
 import type { SerializedMessageListState } from '../../message-list/state';
 import { undoSavedResponseMessages } from '../../save-queue/undo-saved-response-messages';
+import { restoreRunAgentScopes } from '../../scopes';
 import { TripWire } from '../../trip-wire';
 import type { StructuredOutputOptions } from '../../types';
 import { assertExecutionOwned, isExecutionFenceError } from '../execution-fence';
@@ -61,6 +62,7 @@ function restoreRequestContext(
 
   const restored = new RequestContext<unknown>(fallback?.entries());
   for (const [key, value] of Object.entries(entries)) restored.set(key, value);
+  restoreRunAgentScopes(restored);
   return restored;
 }
 

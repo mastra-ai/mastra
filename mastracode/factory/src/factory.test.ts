@@ -10,7 +10,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import type { AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
 
-import { LocalSandbox } from '@mastra/core/workspace';
+import { FactorySandbox, FACTORY_SANDBOX_BRAND, isFactorySandbox, LocalSandbox } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector } from '@mastra/pg';
@@ -28,6 +28,7 @@ import type * as terminalCleanupModule from './rules/terminal-cleanup.js';
 import type * as transitionServiceModule from './rules/transition-service.js';
 import { DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
 import { createFactorySecretEncryption } from './secret-encryption.js';
+import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.js';
 import type { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SourceControlStorage } from './storage/domains/source-control/base.js';
@@ -289,6 +290,12 @@ describe('MastraFactory constructor', () => {
 });
 
 describe('MastraFactory.prepare', () => {
+  it('given a Factory deployment, when the controller mounts, then sessions run without modes', async () => {
+    const config = await prepareFactory({ storage: fakeStorage(), auth: null });
+
+    expect(config.modes).toBe(false);
+  });
+
   it('loads authoritative memory settings before dynamic memory resolves for each invocation', async () => {
     const storage = fakeStorage();
     const config = await prepareFactory({ storage, auth: null });
@@ -302,7 +309,8 @@ describe('MastraFactory.prepare', () => {
     const requestContext = new RequestContext();
 
     const first = await inputProcessors({ requestContext });
-    expect(first).toHaveLength(1);
+    expect(first).toHaveLength(2);
+    expect(first[0]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
     expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
       observerModelId: 'openai/observer-1',
     });
@@ -330,7 +338,9 @@ describe('MastraFactory.prepare', () => {
     const inputProcessors = config.inputProcessors as (args: { requestContext: RequestContext }) => Promise<unknown[]>;
     const requestContext = new RequestContext();
 
-    await expect(inputProcessors({ requestContext })).resolves.toEqual([]);
+    const processors = await inputProcessors({ requestContext });
+    expect(processors).toHaveLength(1);
+    expect(processors[0]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
     expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
       observerModelId: 'openai/observer-1',
     });
@@ -349,7 +359,9 @@ describe('MastraFactory.prepare', () => {
     const emitEvent = vi.fn();
     requestContext.set('controller', { getState: () => ({}), emitEvent });
 
-    await expect(inputProcessors({ requestContext })).resolves.toEqual([]);
+    const processors = await inputProcessors({ requestContext });
+    expect(processors).toHaveLength(1);
+    expect(processors[0]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
     expect(requestContext.get('mastra__factoryMemorySettings')).toEqual({
       status: 'unavailable',
       reason: 'storage unavailable',
@@ -449,8 +461,8 @@ describe('MastraFactory.prepare', () => {
     const blockingCalls = controllerMock.onSessionCreated.mock.calls.filter(
       call => (call[1] as { blocking?: boolean } | undefined)?.blocking === true,
     );
-    expect(blockingCalls).toHaveLength(3);
-    const blockingCall = blockingCalls[1];
+    expect(blockingCalls).toHaveLength(2);
+    const blockingCall = blockingCalls[0];
 
     // Seed the owner's web session row and stored memory settings through the
     // same storage domains the factory registered.
@@ -512,10 +524,89 @@ describe('MastraFactory.prepare', () => {
     expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
   });
 
-  it('passes the sandbox callback through to integrations', async () => {
-    const create = () => ({ id: 'sb-cb' }) as never;
+  it('passes the normalized sandbox through to integrations', async () => {
+    const created = { id: 'sb-cb' } as never;
+    const create = vi.fn(() => created);
     const ctx = await prepareIntegrationContext({ storage: fakeStorage(), sandbox: create });
-    expect(ctx.sandbox).toBe(create);
+    expect(isFactorySandbox(ctx.sandbox)).toBe(true);
+    const fakeCtx = { sessionId: 's', getRepositoryAccess: undefined };
+    expect(ctx.sandbox!.create(fakeCtx, {})).toBe(created);
+    expect(create).toHaveBeenCalledWith(fakeCtx);
+  });
+
+  it('accepts a FactorySandbox instance and describes it', async () => {
+    class StubFactorySandbox extends FactorySandbox<{ size?: string }> {
+      readonly provider = 'stub';
+      readonly settings = {
+        type: 'object',
+        properties: { size: { type: 'string', enum: ['s', 'm'] } },
+        additionalProperties: false,
+      } as const;
+      create = vi.fn(() => ({ id: 'sb' }) as never);
+    }
+    const sandbox = new StubFactorySandbox();
+    const factory = new MastraFactory({ secretEncryption, storage: fakeStorage(), sandbox });
+    expect(factory.sandboxDescription).toBeUndefined();
+    await factory.prepare();
+    expect(sandbox.create).not.toHaveBeenCalled();
+    expect(factory.sandboxDescription).toMatchObject({
+      provider: 'stub',
+      capabilities: { template: false, builds: { available: false, history: false } },
+    });
+    expect(factory.sandboxDescription!.settingsSchema.properties).toHaveProperty('size');
+  });
+
+  it('registers the environment build workflow only when the sandbox can build', async () => {
+    class PlainSandbox extends FactorySandbox {
+      readonly provider = 'plain';
+      create = vi.fn(() => ({ id: 'sb' }) as never);
+    }
+    class BuildingSandbox extends PlainSandbox {
+      readonly builds = {
+        start: vi.fn(async () => ({ buildId: 'b', status: 'building' as const })),
+        get: vi.fn(async () => ({ buildId: 'b', status: 'ready' as const })),
+      };
+    }
+    const plain = await new MastraFactory({
+      secretEncryption,
+      storage: fakeStorage(),
+      sandbox: new PlainSandbox(),
+    }).prepare();
+    expect(plain).not.toHaveProperty('workflows');
+
+    const building = await new MastraFactory({
+      secretEncryption,
+      storage: fakeStorage(),
+      sandbox: new BuildingSandbox(),
+    }).prepare();
+    expect(Object.keys(building.workflows ?? {})).toEqual(['factory-environment-build']);
+    expect(building.workflows?.['factory-environment-build']?.id).toBe('factory-environment-build');
+  });
+
+  it('accepts a branded plain object as a FactorySandbox', async () => {
+    const sandbox = {
+      [FACTORY_SANDBOX_BRAND]: true,
+      provider: 'plain',
+      settings: { type: 'object', properties: {}, additionalProperties: false },
+      create: () => ({ id: 'sb' }) as never,
+    } as const;
+    const factory = new MastraFactory({ secretEncryption, storage: fakeStorage(), sandbox });
+    await factory.prepare();
+    expect(factory.sandboxDescription?.provider).toBe('plain');
+  });
+
+  it('wraps a callback as a custom sandbox with no settings', async () => {
+    const factory = new MastraFactory({
+      secretEncryption,
+      storage: fakeStorage(),
+      sandbox: () => ({ id: 'sb' }) as never,
+    });
+    await factory.prepare();
+    expect(factory.sandboxDescription).toMatchObject({
+      provider: 'custom',
+      capabilities: { template: false, builds: { available: false, history: false } },
+    });
+    expect(factory.sandboxDescription!.settingsSchema.properties).toEqual({});
   });
 
   it('hands the terminal-stage cleanup to the transition service', async () => {
@@ -627,20 +718,43 @@ describe('MastraFactory.prepare', () => {
     });
     const error = await factory.prepare().catch((e: unknown) => e as Error);
     expect(error).toBeInstanceOf(Error);
-    // Names the new shape and shows the replacement, so an existing host can
-    // fix its config from the message alone.
-    expect(error.message).toMatch(/'sandbox' is now a callback/);
-    expect(error.message).toMatch(/FactorySandboxContext/);
+    // Names both accepted shapes, instance first, so an existing host can fix
+    // its config from the message alone.
+    expect(error.message).toMatch(/'sandbox' must be a FactorySandbox instance or a callback/);
+    expect(error.message).toMatch(/sandbox: new PlatformFactorySandbox\(\)/);
     expect(error.message).toMatch(
-      /sandbox: ctx => new E2BSandbox\(\{ id: ctx\.sessionId, sandboxId: ctx\.sandboxId \}\)/,
+      /sandbox: ctx => new PlatformSandbox\(\{ id: ctx\.sessionId, sandboxId: ctx\.sandboxId \}\)/,
     );
-    // The old options had three different fates, and a host reading this
-    // message needs all three: none of them is "pass it to the provider"
-    // unchanged.
+    // Every retired option the host passed gets its own line.
     expect(error.message).toMatch(/'machine' becomes the provider instance/);
-    expect(error.message).toMatch(/'workdir' is gone/);
+    expect(error.message).toMatch(/'workdir' becomes the workingDirectory/);
     expect(error.message).toMatch(/'maxSandboxes' is gone with the sandbox fleet/);
-    expect(error.message).toMatch(/Omit 'sandbox' entirely to disable/);
+  });
+
+  it('explains only the retired options the host actually passed', async () => {
+    const factory = new MastraFactory({
+      secretEncryption,
+      storage: fakeStorage(),
+      sandbox: { machine: {} } as unknown as () => never,
+    });
+    const error = await factory.prepare().catch((e: unknown) => e as Error);
+    expect(error.message).toMatch(/'machine' becomes the provider instance/);
+    expect(error.message).not.toMatch(/'workdir'/);
+    expect(error.message).not.toMatch(/'maxSandboxes'/);
+  });
+
+  it('rejects an unbranded object even when it carries a create key', async () => {
+    // The fleet-era object form had `create`, so shape cannot stand in for the brand.
+    const factory = new MastraFactory({
+      secretEncryption,
+      storage: fakeStorage(),
+      sandbox: { create: () => ({ id: 'sb' }) } as unknown as () => never,
+    });
+    const error = await factory.prepare().catch((e: unknown) => e as Error);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toMatch(/FactorySandbox instance/);
+    // No retired option was passed, so no migration lines.
+    expect(error.message).not.toMatch(/retired alpha sandbox config/);
   });
 
   it('rejects a sandbox config that is neither a callback nor an object', async () => {
@@ -649,7 +763,7 @@ describe('MastraFactory.prepare', () => {
       storage: fakeStorage(),
       sandbox: 'e2b' as unknown as () => never,
     });
-    await expect(factory.prepare()).rejects.toThrow(/'sandbox' must be a function/);
+    await expect(factory.prepare()).rejects.toThrow(/'sandbox' must be a FactorySandbox instance or a callback/);
   });
 
   it("forwards the backend's Mastra store and the vector instance to the SDK mount", async () => {
@@ -1568,7 +1682,7 @@ describe('MastraFactory.prepare integrations', () => {
       integrations: [fakeIntegration({ id: 'custom', workers })],
     });
     const args = await factory.prepare();
-    expect(args.workers).toEqual([expect.objectContaining({ name: 'factory-supervisor-health' }), worker]);
+    expect(args.workers).toEqual([worker]);
     // The workers factory gets the same integration context shape as routes().
     const ctx = workers.mock.calls[0]![0];
     expect(ctx.stateSigner).toBeDefined();
@@ -1611,7 +1725,7 @@ describe('MastraFactory.prepare integrations', () => {
       integrations: [fakeIntegration({ id: 'custom' })],
     });
     const args = await factory.prepare();
-    expect(args.workers).toEqual([expect.objectContaining({ name: 'factory-supervisor-health' })]);
+    expect(args).not.toHaveProperty('workers');
   });
 
   /**

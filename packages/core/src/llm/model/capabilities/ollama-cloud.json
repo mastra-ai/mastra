@@ -10,6 +10,7 @@
     "minimax-m3",
     "mistral-large-3:675b",
     "mistral-large-4",
+    "muse-spark-open",
     "qwen3.5:397b"
   ],
   "temperature": [
@@ -21,6 +22,7 @@
     "glm-5.3-flash",
     "minimax-m3",
     "mistral-large-4",
+    "muse-spark-open",
     "nemotron-3-nano:30b",
     "nemotron-3-super",
     "nemotron-3-ultra"
@@ -34,7 +36,8 @@
     "glm-5.3-flash",
     "kimi-k2.7-code",
     "kimi-k3",
-    "mistral-large-4"
+    "mistral-large-4",
+    "muse-spark-open"
   ],
   "reasoning": {
     "glm-5.3-flash": [
@@ -175,6 +178,12 @@
     "nemotron-3-super": [
       {
         "type": "toggle"
+      }
+    ],
+    "muse-spark-open": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "deepseek-v4-flash": [

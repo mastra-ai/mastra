@@ -5,7 +5,7 @@ import { createSignal } from '../../agent/signals';
 import { recordTerminalErrorMessage } from '../../loop/shared/record-terminal-error-message';
 import { MemoryRunState } from '../../memory';
 import type { MemoryRuntimeContext } from '../../memory';
-import { RequestContext } from '../../request-context';
+import { MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY, RequestContext } from '../../request-context';
 import { MemoryStorage } from '../../storage';
 import type { StorageListThreadsInput, StorageListThreadsOutput } from '../../storage/types';
 
@@ -214,6 +214,59 @@ describe('MessageHistory', () => {
       }
 
       expect(listMessages).toHaveBeenCalledTimes(1);
+    });
+
+    it('loads continuation tool-call messages that fall outside the history window', async () => {
+      const toolMessage: MastraDBMessage = {
+        id: 'tool-msg',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'result', toolCallId: 'call_1', toolName: 'slowAdd', args: {}, result: 3 },
+            },
+          ],
+        },
+        threadId: 'thread-1',
+        createdAt: new Date(Date.now() - 10_000),
+      };
+      const later: MastraDBMessage[] = [1, 2, 3].map(i => ({
+        id: `later-${i}`,
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: `later ${i}` }] },
+        threadId: 'thread-1',
+        createdAt: new Date(Date.now() - 5_000 + i),
+      }));
+      mockStorage.setMessages([toolMessage, ...later]);
+      processor = new MessageHistory({ storage: mockStorage, lastMessages: 2 });
+
+      const load = async (ids?: string[]) => {
+        const requestContext = createRuntimeContextWithMemory('thread-1');
+        if (ids) requestContext.set(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY, ids);
+        const messageList = new MessageList();
+        await processor.processInput({ messages: [], messageList, abort: mockAbort, requestContext });
+        return messageList.get.all.db().map(m => m.id);
+      };
+
+      expect(await load()).toEqual(['later-2', 'later-3']);
+      expect(await load(['call_1'])).toEqual(['tool-msg', 'later-2', 'later-3']);
+      expect(await load(['call_unknown'])).toEqual(['later-2', 'later-3']);
+
+      // With a token budget the pinned message wins over the oldest unpinned history,
+      // and is skipped when it cannot fit at all.
+      const tokenProcessor = (toolTokens: number) =>
+        new MessageHistory({
+          storage: mockStorage,
+          lastMessages: 2,
+          tokenLimit: { maxTokens: 7, atMaxRemoveTokens: 1 },
+          tokenCounter: { countMessage: (m: MastraDBMessage) => (m.id === 'tool-msg' ? toolTokens : 1) },
+        });
+      processor = tokenProcessor(5);
+      expect(await load(['call_1'])).toEqual(['tool-msg', 'later-3']);
+      processor = tokenProcessor(7);
+      expect(await load(['call_1'])).toEqual(['later-2', 'later-3']);
     });
 
     it('should merge historical messages with new messages', async () => {

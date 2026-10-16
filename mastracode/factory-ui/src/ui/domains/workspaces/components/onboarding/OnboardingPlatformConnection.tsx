@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { usePlatformConnectionsQuery } from '../../../../../hooks/usePlatformConnections';
 import { isPlatformConnectUnavailableError } from '../../../factory/services/platformConnect';
 import { ProviderConnectControl } from '../../../settings/components/PlatformProviderConnections';
@@ -27,7 +28,17 @@ export function OnboardingPlatformConnection({ provider }: { provider: 'jira' | 
     const description =
       active.length === 1 ? `Connected to ${active[0]?.accountLabel ?? name}.` : `${active.length} accounts connected.`;
     return (
-      <OnboardingConnectionRow compact icon={<Icon />} name={`${name} connected`} connected description={description} />
+      <OnboardingConnectionRow
+        compact
+        icon={<Icon />}
+        name={name}
+        description={description}
+        action={
+          <Txt as="span" variant="caption" tone="muted" className="me-3">
+            Connected
+          </Txt>
+        }
+      />
     );
   }
   if (query.isError) {

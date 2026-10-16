@@ -98,6 +98,35 @@ describe('AgentController Resource', () => {
     expect(JSON.parse(init.body as string)).toEqual({ message: 'see attached', files });
   });
 
+  it('steers and follows up with file attachments', async () => {
+    const session = client.getAgentController('code').session('user-1');
+    const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
+
+    mockJson({ ok: true });
+    await session.steer({ content: 'look at this instead', files });
+    let [url, init] = lastCall();
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/steer');
+    expect(JSON.parse(init.body as string)).toEqual({ message: 'look at this instead', files });
+
+    mockJson({ ok: true });
+    await session.followUp({ content: 'also this', files });
+    [url, init] = lastCall();
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/follow-up');
+    expect(JSON.parse(init.body as string)).toEqual({ message: 'also this', files });
+  });
+
+  it('omits empty file lists from steer and follow-up bodies', async () => {
+    const session = client.getAgentController('code').session('user-1');
+
+    mockJson({ ok: true });
+    await session.steer({ content: 'focus', files: [] });
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({ message: 'focus' });
+
+    mockJson({ ok: true });
+    await session.followUp({ content: 'later', files: [] });
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({ message: 'later' });
+  });
+
   it('sends requestContext in the body for run-triggering methods', async () => {
     const session = client.getAgentController('code').session('user-1');
     const requestContext = { userId: 'u-42', tier: 'pro' };

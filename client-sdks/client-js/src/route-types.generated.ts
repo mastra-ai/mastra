@@ -242,12 +242,12 @@ type InputShared_Auxiliary_766 = {
   children?: InputShared_Auxiliary_766[] | undefined;
 };
 
-type Shared_Auxiliary_764 = {
+type Shared_Auxiliary_767 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_764[] | undefined;
+  children?: Shared_Auxiliary_767[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -769,6 +769,8 @@ type InputShared_Type_19 = {
   tags?: string[] | undefined;
   /** Filter by one or more trace IDs */
   traceIds?: string[] | undefined;
+  /** Filter by one or more experiment IDs */
+  experimentIds?: string[] | undefined;
   /** Filter by metric name(s) */
   name?: string[] | undefined;
   /** Filter by execution source */
@@ -3476,6 +3478,12 @@ type Shared_Type_61 = {
         [key: string]: unknown;
       } | null)
     | undefined;
+  /** Short text preview of the span input */
+  inputPreview?: (string | null) | undefined;
+  /** Short text preview of the span output */
+  outputPreview?: (string | null) | undefined;
+  /** Short text preview of the span error */
+  errorPreview?: (string | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
@@ -3512,6 +3520,8 @@ type Shared_Type_62 = {
       } | null)
     | undefined;
   inputPreview?: (string | null) | undefined;
+  outputPreview?: (string | null) | undefined;
+  errorPreview?: (string | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
@@ -3583,6 +3593,12 @@ type Shared_Type_63 = {
         [key: string]: unknown;
       } | null)
     | undefined;
+  /** Short text preview of the span input */
+  inputPreview?: (string | null) | undefined;
+  /** Short text preview of the span output */
+  outputPreview?: (string | null) | undefined;
+  /** Short text preview of the span error */
+  errorPreview?: (string | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
@@ -3600,6 +3616,8 @@ type Shared_Type_64 = {
     [key: string]: unknown;
   } | null;
   inputPreview: string | null;
+  outputPreview: string | null;
+  errorPreview: string | null;
   threadId: string | null;
   resourceId: string | null;
   startedAt: string;
@@ -3701,10 +3719,14 @@ type Shared_Type_67 = {
   traceQueryDiscovery: boolean;
   /** Trusted tenant scoping of trace and thread queries */
   traceQueryTenantScope: boolean;
+  /** Trace aggregation (POST /observability/traces/aggregate). Unlike `traceQuery`, clients should treat a missing value as unavailable. */
+  traceAggregate: boolean;
   /** Advanced thread queries (POST /observability/threads/query) */
   threadQuery: boolean;
   /** Span queries (POST /observability/spans/query) */
   spanQuery: boolean;
+  /** Days of traces the store keeps. Older traces are gone, so clients can stop users from picking dates before them. Omitted when the store does not report a limit. */
+  traceRetentionDays?: number | undefined;
   /** Feedback endpoints (/observability/feedback and /observability/feedback/*). Unsupported feedback routes return 501. */
   feedback: boolean;
 };
@@ -4214,7 +4236,7 @@ type Shared_Type_83 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_764[] | undefined;
+  files?: Shared_Auxiliary_767[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -5302,11 +5324,11 @@ export interface PostAgentsAgentIdQueueMessage_RouteContract {
 }
 
 // ============================================================================
-// Route: POST /agents/:agentId/signals
+// Route: POST /agents/:agentId/queue-signal
 // ============================================================================
-export type PostAgentsAgentIdSignals_PathParams = GetAgentsAgentId_PathParams;
+export type PostAgentsAgentIdQueueSignal_PathParams = GetAgentsAgentId_PathParams;
 
-export type PostAgentsAgentIdSignals_Body =
+export type PostAgentsAgentIdQueueSignal_Body =
   | {
       ifActive?: InputShared_Type_4 | undefined;
       runId: string;
@@ -5323,6 +5345,34 @@ export type PostAgentsAgentIdSignals_Body =
       ifIdle?: InputShared_Type_9 | undefined;
       signal: InputShared_Type_10 | InputShared_Type_11;
     };
+
+export type PostAgentsAgentIdQueueSignal_Response = PostAgentsAgentIdSendMessage_Response;
+
+export type PostAgentsAgentIdQueueSignal_Request = Simplify<
+  (PostAgentsAgentIdQueueSignal_PathParams extends never ? {} : { params: PostAgentsAgentIdQueueSignal_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdQueueSignal_Body extends never
+      ? {}
+      : {} extends PostAgentsAgentIdQueueSignal_Body
+        ? { body?: PostAgentsAgentIdQueueSignal_Body }
+        : { body: PostAgentsAgentIdQueueSignal_Body })
+>;
+
+export interface PostAgentsAgentIdQueueSignal_RouteContract {
+  pathParams: PostAgentsAgentIdQueueSignal_PathParams;
+  queryParams: never;
+  body: PostAgentsAgentIdQueueSignal_Body;
+  request: PostAgentsAgentIdQueueSignal_Request;
+  response: PostAgentsAgentIdQueueSignal_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agents/:agentId/signals
+// ============================================================================
+export type PostAgentsAgentIdSignals_PathParams = GetAgentsAgentId_PathParams;
+
+export type PostAgentsAgentIdSignals_Body = PostAgentsAgentIdQueueSignal_Body;
 
 export type PostAgentsAgentIdSignals_Response = PostAgentsAgentIdSendMessage_Response;
 
@@ -10705,6 +10755,8 @@ export type PostObservabilitySpansQuery_Response = {
     inputTruncated: boolean;
     outputPreview: string | null;
     outputTruncated: boolean;
+    errorPreview: string | null;
+    errorTruncated: boolean;
     cost:
       | {
           state: 'available';
@@ -10785,6 +10837,22 @@ export type PostObservabilityTracesQueryFields_Response = {
     occurrences: number;
   }[];
   observedFieldsTruncated: boolean;
+  /** What `aggregateTraces()` accepts. Present only for `predicateScope: "trace"` when the store supports aggregation. Every observed field is also a groupable dimension, and `countDistinct.<field>` accepts any dimension or `traceId`. */
+  aggregate?:
+    | {
+        dimensions: {
+          path: string;
+          valueKind: 'string';
+        }[];
+        measures: {
+          name: string;
+          kind: 'count' | 'duration' | 'error' | 'tokens' | 'cost';
+          statistic?: ('avg' | 'min' | 'max' | 'p50' | 'p90' | 'p95' | 'p99' | 'sum') | undefined;
+          unit: 'count' | 'milliseconds' | 'ratio' | 'tokens' | 'currency';
+          approximate: boolean;
+        }[];
+      }
+    | undefined;
 };
 
 export type PostObservabilityTracesQueryFields_Request = Simplify<
@@ -10878,6 +10946,7 @@ export type GetObservabilityMetrics_QueryParams = {
   executionSource?: (string | undefined) | undefined;
   tags?: ((string[] | undefined) | undefined) | string;
   traceIds?: ((string[] | undefined) | undefined) | string;
+  experimentIds?: ((string[] | undefined) | undefined) | string;
   name?: ((string[] | undefined) | undefined) | string;
   /** Filter by execution source */
   source?: (string | undefined) | undefined;
@@ -19512,6 +19581,8 @@ export type GetDatasets_QueryParams = {
   targetType?: ('agent' | 'workflow' | 'scorer' | 'processor') | undefined;
   /** Only return datasets attached to at least one of these target IDs */
   targetIds?: string[] | undefined;
+  /** Only return datasets with these IDs (up to 100). All matches come back on one page; page and perPage are ignored. A blank value matches no datasets. */
+  datasetIds?: string[] | undefined;
   orderBy?:
     | (
         | {
@@ -23236,14 +23307,8 @@ export type PostAgentControllerControllerIdSessionsResourceIdSteer_PathParams =
 export type PostAgentControllerControllerIdSessionsResourceIdSteer_QueryParams =
   PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
-export type PostAgentControllerControllerIdSessionsResourceIdSteer_Body = {
-  message: string;
-  requestContext?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-};
+export type PostAgentControllerControllerIdSessionsResourceIdSteer_Body =
+  PostAgentControllerControllerIdSessionsResourceIdMessages_Body;
 
 export type PostAgentControllerControllerIdSessionsResourceIdSteer_Response =
   DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response;
@@ -23283,7 +23348,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_QueryParam
   PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_Body =
-  PostAgentControllerControllerIdSessionsResourceIdSteer_Body;
+  PostAgentControllerControllerIdSessionsResourceIdMessages_Body;
 
 export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_Response =
   DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response;
@@ -24118,6 +24183,7 @@ export interface RouteTypes {
   'POST /agents/:agentId/observe': PostAgentsAgentIdObserve_RouteContract;
   'POST /agents/:agentId/send-message': PostAgentsAgentIdSendMessage_RouteContract;
   'POST /agents/:agentId/queue-message': PostAgentsAgentIdQueueMessage_RouteContract;
+  'POST /agents/:agentId/queue-signal': PostAgentsAgentIdQueueSignal_RouteContract;
   'POST /agents/:agentId/signals': PostAgentsAgentIdSignals_RouteContract;
   'POST /agents/:agentId/threads/abort': PostAgentsAgentIdThreadsAbort_RouteContract;
   'POST /agents/:agentId/threads/signals/cancel': PostAgentsAgentIdThreadsSignalsCancel_RouteContract;
@@ -24754,6 +24820,9 @@ export interface Client {
   };
   '/agents/:agentId/queue-message': {
     POST: PostAgentsAgentIdQueueMessage_RouteContract;
+  };
+  '/agents/:agentId/queue-signal': {
+    POST: PostAgentsAgentIdQueueSignal_RouteContract;
   };
   '/agents/:agentId/recover': {
     POST: PostAgentsAgentIdRecover_RouteContract;

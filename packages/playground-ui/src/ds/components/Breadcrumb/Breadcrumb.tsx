@@ -5,7 +5,7 @@ import { SlashIcon } from '../../icons/SlashIcon';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { controlSizeClasses } from '@/ds/primitives/control-size';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
-import { quietTextHover } from '@/ds/primitives/typography';
+import { quietTextHover, quietTextHoverInGroup } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
 export interface BreadcrumbProps {
@@ -41,7 +41,7 @@ export interface CrumbProps {
   action?: React.ReactNode;
   /**
    * Entity switcher rendered next to the label; spread `crumbSwitcherTriggerProps` on it.
-   * On the current crumb there is nowhere to navigate, so its hit area covers the whole crumb.
+   * When the crumb doesn't navigate (current crumb, or no `to`), its hit area covers the whole crumb.
    */
   switcher?: React.ReactNode;
   'data-testid'?: string;
@@ -52,6 +52,7 @@ export const CrumbSkeleton = (props: { 'data-testid'?: string }) => <Skeleton cl
 export const Crumb = ({
   className,
   as,
+  to,
   isCurrent,
   action,
   switcher,
@@ -61,7 +62,7 @@ export const Crumb = ({
   ...props
 }: CrumbProps) => {
   const Root = as || 'span';
-  const switcherCoversCrumb = Boolean(isCurrent && switcher);
+  const switcherCoversCrumb = Boolean(switcher && (isCurrent || !to));
 
   return (
     <>
@@ -84,9 +85,12 @@ export const Crumb = ({
             // Long labels truncate: the current crumb gets more room than nav crumbs.
             isCurrent
               ? 'max-w-xs cursor-default text-foreground'
-              : cn(quietTextHover, 'max-w-48 cursor-pointer hover:bg-fill-subtle active:bg-fill'),
+              : switcherCoversCrumb
+                ? cn(quietTextHoverInGroup, 'max-w-48')
+                : cn(quietTextHover, 'max-w-48 cursor-pointer hover:bg-fill-subtle active:bg-fill'),
             className,
           )}
+          to={to}
           {...props}
         >
           {icon && (

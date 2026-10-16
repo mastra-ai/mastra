@@ -3134,6 +3134,8 @@ function toTraceQueryTrace(root: RawTraceQuerySpan): TraceQueryTrace {
     createdAt: root.startedAt,
     metadata: root.metadata,
     inputPreview: null,
+    outputPreview: null,
+    errorPreview: null,
     threadId: root.threadId,
     resourceId: root.resourceId,
     startedAt: root.startedAt,

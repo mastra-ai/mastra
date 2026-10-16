@@ -41,7 +41,14 @@ import type {
   ProcessorStreamWriter,
   ProcessorStreamWriterOptions,
 } from '../processors';
-import { OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX, ProcessorRunner, ProcessorState } from '../processors/runner';
+import {
+  OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX,
+  ProcessorRunner,
+  ProcessorState,
+  endOutputStreamSpanAtStepEnd,
+  endOutputStreamSpanOutsideStep,
+  findOwnModelStepSpan,
+} from '../processors/runner';
 import { createProcessorSendSignal } from '../processors/send-signal';
 import {
   resolveProcessorSpanAttributes,
@@ -110,6 +117,7 @@ import type {
   WorkflowConfig,
   WorkflowEngineType,
   WorkflowOptions,
+  WorkflowStateTracingContext,
   WorkflowResult,
   WorkflowType,
   WorkflowRunState,
@@ -125,6 +133,7 @@ import type {
   WorkflowRunStartOptions,
   ForeachOptions,
   StepFlowEntryOptions,
+  InferWorkflowRequestContext,
 } from './types';
 import {
   cleanStepResult,
@@ -383,7 +392,7 @@ export function createStep<
   TResumeSchema extends PublicSchema ? InferPublicSchema<TResumeSchema> : unknown,
   TSuspendSchema extends PublicSchema ? InferPublicSchema<TSuspendSchema> : unknown,
   DefaultEngineType,
-  TRequestContextSchema extends PublicSchema ? InferPublicSchema<TRequestContextSchema> : unknown
+  InferWorkflowRequestContext<TRequestContextSchema>
 >;
 
 /**
@@ -493,7 +502,7 @@ export function createStep<
   TResumeSchema extends PublicSchema ? InferPublicSchema<TResumeSchema> : unknown,
   TSuspendSchema extends PublicSchema ? InferPublicSchema<TSuspendSchema> : unknown,
   DefaultEngineType,
-  TRequestContextSchema extends PublicSchema ? InferPublicSchema<TRequestContextSchema> : unknown
+  InferWorkflowRequestContext<TRequestContextSchema>
 >;
 
 // ============================================
@@ -1044,6 +1053,9 @@ export function createStepFromProcessor<TProcessorId extends string>(
       // Find appropriate parent span:
       // - For input/outputResult: find AGENT_RUN (processor runs once at start/end)
       // - For inputStep/outputStep/toolResult: find MODEL_STEP (processor runs per LLM call / tool round-trip)
+      // - For outputStream: the MODEL_STEP whose stream is processed, else AGENT_RUN. Durable agents stay
+      //   on AGENT_RUN because their stream runs with the agent run's context; their tool-result chunks
+      //   do carry a step, but they reuse the span that is already open
       // When workflow is executed, currentSpan is WORKFLOW_STEP, so we walk up the parent chain
       // Fall back to currentSpan only when its tree can reach exporters — otherwise
       // the public processor span would export as an orphan trace root.
@@ -1051,7 +1063,9 @@ export function createStepFromProcessor<TProcessorId extends string>(
       const parentSpan =
         phase === 'inputStep' || phase === 'outputStep' || phase === 'toolResult'
           ? currentSpan?.findParent(SpanType.MODEL_STEP) || fallbackSpan
-          : currentSpan?.findParent(SpanType.AGENT_RUN) || fallbackSpan;
+          : (phase === 'outputStream' && findOwnModelStepSpan(currentSpan)) ||
+            currentSpan?.findParent(SpanType.AGENT_RUN) ||
+            fallbackSpan;
 
       const processorSpan =
         phase !== 'outputStream'
@@ -1381,6 +1395,13 @@ export function createStepFromProcessor<TProcessorId extends string>(
               // Use processorState (from the shared processorStates Map) so state persists
               // across processOutputStream and processOutputResult calls
               const mutableState = processorState;
+              endOutputStreamSpanOutsideStep(
+                mutableState,
+                processor.id,
+                part as ChunkType,
+                parentSpan,
+                (streamParts ?? []).length,
+              );
               let processorSpan = mutableState[spanKey] as
                 | ReturnType<NonNullable<typeof parentSpan>['createChildSpan']>
                 | undefined;
@@ -1439,6 +1460,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
                   // post-finish chunks (e.g. step-finish) don't trigger a
                   // new span creation at the guard above.
                 }
+                endOutputStreamSpanAtStepEnd(mutableState, processor.id, part as ChunkType, (streamParts ?? []).length);
               } catch (error) {
                 // End span with error (keep reference to prevent re-creation)
                 if (error instanceof TripWire) {
@@ -1842,6 +1864,23 @@ export class Workflow<
   protected stepFlow: StepFlowEntry<TEngineType>[];
   protected serializedStepFlow: SerializedStepFlowEntry[];
   protected executionEngine: ExecutionEngine;
+
+  /**
+   * @internal For run-scoped agent loops only. Overrides the parent saved on
+   * suspension without changing live tracing. Ordinary workflows derive it
+   * from their execution span instead.
+   */
+  __setResumeTracingContext(context: WorkflowStateTracingContext | undefined): void {
+    this.executionEngine.options = { ...this.executionEngine.options, resumeTracingContext: context };
+  }
+
+  /**
+   * @internal Currently set by normal agent loops. Evented persistence also
+   * honors it for engine parity: changing engines must not change the saved parent.
+   */
+  __getResumeTracingContext(): WorkflowStateTracingContext | undefined {
+    return this.executionEngine.options.resumeTracingContext;
+  }
   protected executionGraph: ExecutionGraph;
   #options: Omit<WorkflowOptions, 'shouldPersistSnapshot' | 'validateInputs'> &
     Required<Pick<WorkflowOptions, 'shouldPersistSnapshot' | 'validateInputs'>>;

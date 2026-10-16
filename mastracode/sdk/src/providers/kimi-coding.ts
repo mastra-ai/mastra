@@ -1,6 +1,6 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
+import { ProviderAuthRequiredError, rejectUnauthorizedResponse } from '../auth/provider-auth-error.js';
 import { getKimiCodingDeviceHeaders, isKimiCodingDeviceId } from '../auth/providers/kimi-coding.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore, OAuthCredential } from '../auth/types.js';
@@ -9,8 +9,6 @@ const PROVIDER_ID = 'kimi-for-coding';
 // Pi's provider root is https://api.kimi.com/coding. The AI SDK expects the
 // versioned Anthropic base URL and appends /messages itself.
 const BASE_URL = 'https://api.kimi.com/coding/v1';
-
-export const KIMI_CODING_MODELS = ['k3', 'k3-256k', 'kimi-for-coding', 'kimi-for-coding-highspeed'] as const;
 
 let authStorageInstance: AuthStorage | null = null;
 
@@ -57,7 +55,10 @@ export function buildKimiCodingOAuthFetch(options: { credentialStore?: Credentia
     headers.delete('authorization');
     headers.delete('x-api-key');
     headers.set('Authorization', `Bearer ${token}`);
-    return fetch(input, { ...init, headers });
+    return rejectUnauthorizedResponse(await fetch(input, { ...init, headers }), {
+      providerName: 'Kimi For Coding',
+      requestUrl: input instanceof URL ? input.toString() : typeof input === 'string' ? input : input.url,
+    });
   }) as typeof fetch;
 }
 

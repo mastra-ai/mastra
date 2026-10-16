@@ -19,6 +19,7 @@ Server adapters register these routes when you call `server.init()`. All routes 
 | `POST` | `/api/agents/:agentId/stream` | Stream agent response |
 | `POST` | `/api/agents/:agentId/send-message` | Send a user message to an active or idle thread |
 | `POST` | `/api/agents/:agentId/queue-message` | Queue a user message for the next thread turn |
+| `POST` | `/api/agents/:agentId/queue-signal` | Queue a typed signal for the next thread turn |
 | `POST` | `/api/agents/:agentId/signals` | Send a lower-level signal to an active or idle thread |
 | `POST` | `/api/agents/:agentId/threads/subscribe` | Subscribe to a thread stream |
 | `POST` | `/api/agents/:agentId/threads/abort` | Abort a thread, optionally clearing pending signals |
@@ -85,6 +86,8 @@ GET /api/agents/my-agent?versionId=abc123
 ### Agent message routes
 
 Use `POST /api/agents/:agentId/send-message` to send a user message to the active agent loop or wake an idle thread. Use `POST /api/agents/:agentId/queue-message` when the active run should finish before Mastra starts a follow-up run.
+
+To queue a typed signal with the same ordering, use `POST /api/agents/:agentId/queue-signal` with a `signal` field in place of `message`. The `signal` field takes the same shape as `POST /api/agents/:agentId/signals`.
 
 Both routes accept the same request body:
 
@@ -549,10 +552,18 @@ Returns the persisted experiment result row.
 
 | Method | Path | Description |
 | - | - | - |
-| `GET` | `/api/mcp/servers` | List MCP servers |
-| `GET` | `/api/mcp/servers/:serverId/tools` | List server tools |
-| `POST` | `/api/mcp/:serverId` | MCP HTTP transport |
-| `GET` | `/api/mcp/:serverId/sse` | MCP SSE transport |
+| `GET` | `/api/mcp/v0/servers` | List MCP servers |
+| `GET` | `/api/mcp/v0/servers/:id` | Get server details |
+| `GET` | `/api/mcp/:serverId/tools` | List server tools |
+| `GET` | `/api/mcp/:serverId/tools/:toolId` | Get tool details |
+| `POST` | `/api/mcp/:serverId/tools/:toolId/execute` | Execute a tool |
+| `GET` | `/api/mcp/:serverId/resources` | List server resources |
+| `POST` | `/api/mcp/:serverId/resources/read` | Read a resource |
+| `ALL` | `/api/mcp/:serverId/mcp` | MCP HTTP transport |
+| `ALL` | `/api/mcp/:serverId/sse` | Legacy MCP SSE transport |
+| `POST` | `/api/mcp/:serverId/messages` | Legacy MCP SSE messages |
+
+All MCP routes declare `requiresAuth: true`. Authentication is enforced only when `server.auth` is configured. Paths use the default `/api` prefix. The legacy SSE routes return `404` for MCP v2 servers.
 
 ## Responses API
 

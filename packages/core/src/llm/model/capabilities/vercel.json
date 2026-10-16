@@ -32,7 +32,6 @@
     "anthropic/claude-opus-5-fast",
     "anthropic/claude-opus-5.5",
     "anthropic/claude-opus-5.5-fast",
-    "anthropic/claude-sonnet-4",
     "anthropic/claude-sonnet-4.5",
     "anthropic/claude-sonnet-4.6",
     "anthropic/claude-sonnet-5",
@@ -77,6 +76,7 @@
     "meta/muse-spark-1.2-contributor",
     "meta/muse-spark-1.3",
     "meta/muse-spark-1.3-contributor",
+    "meta/muse-spark-open",
     "meta/muse-wonder-1.0",
     "minimax/minimax-h3",
     "minimax/minimax-h3-max",
@@ -95,6 +95,7 @@
     "moonshotai/kimi-k2.7-code-highspeed",
     "moonshotai/kimi-k3",
     "moonshotai/kimi-k3-fast",
+    "nvidia/nemotron-3.5-super-vl",
     "nvidia/nemotron-nano-12b-v2-vl",
     "openai/gpt-4-turbo",
     "openai/gpt-4.1",
@@ -235,7 +236,6 @@
     "anthropic/claude-opus-4.7",
     "anthropic/claude-opus-4.8",
     "anthropic/claude-opus-4.8-fast",
-    "anthropic/claude-sonnet-4",
     "anthropic/claude-sonnet-4.5",
     "anthropic/claude-sonnet-4.6",
     "arcee-ai/trinity-large-thinking",
@@ -323,6 +323,7 @@
     "meta/muse-spark-1.1",
     "meta/muse-spark-1.2",
     "meta/muse-spark-1.3",
+    "meta/muse-spark-open",
     "meta/muse-wonder-1.0",
     "minimax/minimax-m2",
     "minimax/minimax-m2.1",
@@ -351,6 +352,7 @@
     "nvidia/nemotron-3-super-120b-a12b",
     "nvidia/nemotron-3-ultra-550b-a55b",
     "nvidia/nemotron-3.5-lightning",
+    "nvidia/nemotron-3.5-lightning-free",
     "nvidia/nemotron-nano-12b-v2-vl",
     "nvidia/nemotron-nano-9b-v2",
     "openai/gpt-3.5-turbo",
@@ -413,7 +415,6 @@
     "poolside/laguna-s-2.1",
     "poolside/laguna-s-2.1-free",
     "prodia/flux-fast-schnell",
-    "quiverai/arrow-1.1",
     "recraft/recraft-v2",
     "recraft/recraft-v3",
     "recraft/recraft-v4",
@@ -507,6 +508,7 @@
     "meta/muse-spark-1.1",
     "meta/muse-spark-1.2",
     "meta/muse-spark-1.3",
+    "meta/muse-spark-open",
     "meta/muse-wonder-1.0",
     "moonshotai/kimi-k2.5",
     "moonshotai/kimi-k2.6",
@@ -515,6 +517,7 @@
     "moonshotai/kimi-k3",
     "moonshotai/kimi-k3-fast",
     "nvidia/nemotron-3.5-lightning",
+    "nvidia/nemotron-3.5-lightning-free",
     "openai/gpt-4.1",
     "openai/gpt-4.1-fast",
     "openai/gpt-4.1-mini",
@@ -603,6 +606,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "stealth/cat-jam": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "zai/glm-4.5": [
@@ -865,15 +874,6 @@
         "type": "budget_tokens"
       }
     ],
-    "anthropic/claude-sonnet-4": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1024
-      }
-    ],
     "anthropic/claude-sonnet-5": [
       {
         "type": "effort",
@@ -1011,7 +1011,7 @@
     "meta/muse-spark-1.3": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "meta/muse-glimmer-30b": [
@@ -1041,13 +1041,19 @@
     "meta/muse-wonder-1.0": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "meta/muse-spark-1.3-contributor": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "meta/muse-spark-open": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "arcee-ai/trinity-large-thinking": [
@@ -1261,6 +1267,12 @@
         "type": "toggle"
       }
     ],
+    "liquid/lfm2.5-24b-a2b": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "google/gemini-omni-flash-preview": [
       {
         "type": "effort",
@@ -1420,12 +1432,6 @@
         "values": ["high", "xhigh"]
       }
     ],
-    "inclusionai/ling-3.1-flash-free": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
     "inclusionai/ling-3.0-flash": [
       {
         "type": "toggle"
@@ -1467,8 +1473,7 @@
     ],
     "moonshotai/kimi-k2.7-code-highspeed": [
       {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "type": "toggle"
       }
     ],
     "moonshotai/kimi-k2.6": [
@@ -1483,8 +1488,7 @@
     ],
     "moonshotai/kimi-k2.7-code": [
       {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "type": "toggle"
       }
     ],
     "nvidia/nemotron-3-nano-30b-a3b": [
@@ -1513,10 +1517,22 @@
         "values": ["none", "low", "high"]
       }
     ],
+    "nvidia/nemotron-3.5-super-vl": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
     "nvidia/nemotron-3-ultra-550b-a55b": [
       {
         "type": "effort",
         "values": ["none", "medium", "high"]
+      }
+    ],
+    "nvidia/nemotron-3.5-lightning-free": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "nvidia/nemotron-nano-12b-v2-vl": [

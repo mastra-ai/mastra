@@ -281,6 +281,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/boundless',
+          label: 'Boundless',
+        },
+        {
+          type: 'doc',
           id: 'providers/cerebras',
           label: 'Cerebras',
         },
@@ -893,6 +898,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/sakana',
           label: 'Sakana AI',
+        },
+        {
+          type: 'doc',
+          id: 'providers/sambanova',
+          label: 'SambaNova',
         },
         {
           type: 'doc',
