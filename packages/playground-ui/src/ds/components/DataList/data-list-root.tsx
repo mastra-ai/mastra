@@ -255,7 +255,7 @@ function DataListBase({
       {orderRules && <style>{orderRules}</style>}
       {/* The highlight is the old row hover color. It sits between each row's
           `before` surface (-z-2) and the row content (see `dataListRowOuterStyles`). */}
-      <FluidMenuItems menu={menu} className="bg-fill-subtle rounded-(--fluid-hover-item-radius)">
+      <FluidMenuItems menu={menu} className="rounded-(--fluid-hover-item-radius) bg-fill-subtle">
         {children}
       </FluidMenuItems>
     </div>
