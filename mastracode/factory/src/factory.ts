@@ -140,8 +140,13 @@ import type { FactoryRunBindingRecord, WorkItemRow } from './storage/domains/wor
 import { timedPhase } from './timing.js';
 import { deliverFactorySessionNotification } from './tools/deliver.js';
 import { applyFactoryToolPermissions, createFactoryTools, resolveFactoryToolScope } from './tools/index.js';
-import { createStageChangeNotifier, createWorkItemRunEndReporter } from './tools/reports.js';
+import {
+  createSessionRunEndReporter,
+  createStageChangeNotifier,
+  createWorkItemRunEndReporter,
+} from './tools/reports.js';
 import type { FactoryReporting } from './tools/reports.js';
+import { observeSessionRunReports } from './tools/run-watch.js';
 import { FactorySessionsStateProcessor } from './tools/sessions-state-processor.js';
 import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
 import type { FactorySandboxStart } from './workspace.js';
@@ -1551,6 +1556,11 @@ export class MastraFactory {
       }),
     );
 
+    const reportSessionRunEnd = createSessionRunEndReporter({
+      sessions: sourceControlSessions,
+      workItems: storage.getDomain<WorkItemsStorage>('work-items'),
+      reporting: factoryReporting,
+    });
     prepared.base.controller.onSessionCreated(session => {
       observeSessionFilesystem(session, {
         filesystem: filesystemStorage,
@@ -1566,6 +1576,16 @@ export class MastraFactory {
         sourceControl: { sessions: sourceControlSessions },
       });
       observeSessionRunEnd(session, { audit: auditDomain });
+      // Every run end of a work or side session reaches whoever follows it,
+      // however the run started; re-attached when a session is created again.
+      observeSessionRunReports(session, (outcome, since) =>
+        reportSessionRunEnd({
+          sessionId: session.identity.getResourceId(),
+          threadId: session.thread.getId(),
+          outcome,
+          since,
+        }),
+      );
     });
 
     // Blocking: `createSession` awaits the organization seed so per-invocation

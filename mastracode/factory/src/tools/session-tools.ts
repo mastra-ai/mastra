@@ -30,9 +30,7 @@ import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-item
 import { deliverFactorySessionNotification } from './deliver.js';
 import type { FactoryMessaging } from './messaging-tools.js';
 import { findWorkItem, workItemNotFound, workItemNumber, workItemRefSchema } from './read-tools.js';
-import { createWorkItemRunEndReporter, sendRunEndReport } from './reports.js';
-import type { FactoryReporting } from './reports.js';
-import { watchStartedRun } from './run-watch.js';
+import { heartbeatOpenRunUntilEnd } from './run-watch.js';
 import type { FactoryToolScope } from './scope.js';
 
 const TITLE_LENGTH = 120;
@@ -166,6 +164,8 @@ export function createFactorySessionTools(
       const threadId = session.thread.requireId();
       const threadTitle = title ?? titleFrom(prompt);
       await session.thread.rename({ title: threadTitle, pin: false });
+      // On the row too, so its run-end reports name it without waiting for the title mirror.
+      await sourceControl.sessions.rename({ sessionId: ensured.sessionId, title: threadTitle });
       await session.thread.setSetting({ key: 'factorySessionId', value: ensured.sessionId });
 
       await primeTenantCredentialsForTenant({
@@ -173,56 +173,17 @@ export function createFactorySessionTools(
         userId: scope.userId,
         credentialScope: sessionModel.modelScope,
       });
-      // The backstop: if the run ends without the agent's own final report, its origin still hears.
-      const sender = { sessionId: ensured.sessionId, threadId, userId: scope.userId };
-      const watcher = watchStartedRun(session, {
-        onEnd: async (outcome, since) => {
-          try {
-            const resolved = await reporting();
-            if (!resolved) return { waiting: false };
-            return await sendRunEndReport(resolved, {
-              sender,
-              recipients: [{ sessionId: scope.sessionId, threadId: scope.threadId }],
-              since,
-              outcome,
-              subject: `The side session "${threadTitle}"`,
-            });
-          } catch (error) {
-            console.warn('[Factory reports] Unable to send the side session run-end report.', error);
-            return { waiting: false };
-          }
-        },
-      });
+      // How its runs end reaches this session through the listener every Factory
+      // session gets (`observeSessionRunReports`), which follows the row's origin.
       // `requireDelivery` makes `accepted` reject when the wake fails; the run itself is not awaited.
-      try {
-        await session.sendSignal(
-          { id: globalThis.crypto.randomUUID(), type: 'user', tagName: 'user', contents: prompt },
-          { requestContext: kickoffContext, requireDelivery: true },
-        ).accepted;
-      } catch (error) {
-        watcher.close();
-        throw error;
-      }
+      await session.sendSignal(
+        { id: globalThis.crypto.randomUUID(), type: 'user', tagName: 'user', contents: prompt },
+        { requestContext: kickoffContext, requireDelivery: true },
+      ).accepted;
 
       return { mode: 'side' as const, sessionId: ensured.sessionId, threadId, title: threadTitle };
     },
   });
-
-  async function reporting(): Promise<FactoryReporting | null> {
-    const messaging = await deps.messaging();
-    if (!messaging) return null;
-    return {
-      notifications: messaging.notifications,
-      deliver: (target, notification) =>
-        deliverFactorySessionNotification({
-          controller: messaging.controller,
-          sessions: deps.sessions,
-          target,
-          notification,
-        }),
-    };
-  }
-  const workItemRunEnd = createWorkItemRunEndReporter({ workItems: deps.workItems, reporting });
 
   async function startWorkItemRole({
     prompt,
@@ -338,21 +299,10 @@ export function createFactorySessionTools(
     const session = await messaging.controller.getSessionByResource(prepared.resourceId);
     if (!session) throw new Error(`The ${role} session was bound but is not running; open it from the board.`);
     const kickoffId = globalThis.crypto.randomUUID();
-    // Watch before the kickoff so a fast run's end is not missed; the open-run
+    // Heartbeat from before the kickoff so a fast run's end is seen; the open-run
     // entry and audit follow the accepted kickoff, as the dispatcher records them.
-    const watcher = watchStartedRun(session, {
-      kickoffId,
-      onEnd: (outcome, since) =>
-        workItemRunEnd({
-          orgId: scope.orgId,
-          factoryProjectId: scope.factoryProjectId,
-          workItemId: item.id,
-          role,
-          sender: { sessionId: prepared.sessionId, threadId: prepared.threadId, userId: scope.userId },
-          since,
-          outcome,
-        }),
-    });
+    // The run's end reaches this item's followers through the session's listener.
+    const heartbeat = heartbeatOpenRunUntilEnd(session, kickoffId);
     const kickoffContext = new RequestContext();
     kickoffContext.set('user', { workosId: scope.userId, organizationId: scope.orgId });
     try {
@@ -361,14 +311,14 @@ export function createFactorySessionTools(
         { requestContext: kickoffContext, requireDelivery: true },
       ).accepted;
     } catch (error) {
-      watcher.close();
+      heartbeat.stop();
       throw error;
     }
 
     await recordSessionRunStart(session, {
       audit: deps.auditRecorder,
       actorType: 'human',
-      observedEnd: watcher.endReason,
+      observedEnd: heartbeat.endReason,
       run: {
         kickoffId,
         ownerId: FACTORY_TOOLS_OWNER_ID,

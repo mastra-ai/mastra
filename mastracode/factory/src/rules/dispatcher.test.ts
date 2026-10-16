@@ -6370,30 +6370,15 @@ describe('run-end backstop report', () => {
     return { storage, item, binding };
   }
 
-  it('reports done to the item’s followers when a run completes', async () => {
+  it.each([
+    ['completes', { agentEndReason: 'complete' as const }],
+    ['ends parked on a question', { suspendsOnTool: 'ask_user' }],
+  ])('leaves a run that %s to the session’s own report listener', async (_label, sessionOptions) => {
     const reportRunEnd = vi.fn(async () => {});
-    const { item, binding } = await dispatchPrompt('backstop-done', { agentEndReason: 'complete' }, reportRunEnd);
+    await dispatchPrompt(`backstop-quiet-${_label}`, sessionOptions, reportRunEnd);
 
-    await vi.waitFor(() => expect(reportRunEnd).toHaveBeenCalledTimes(1));
-    expect(reportRunEnd).toHaveBeenCalledWith({
-      orgId: 'org-1',
-      factoryProjectId: PROJECT_ID,
-      workItemId: item.id,
-      role: 'work',
-      sender: { sessionId: binding.sessionId, threadId: binding.threadId, userId: 'user-1' },
-      since: expect.any(Date),
-      outcome: { status: 'done' },
-    });
-  });
-
-  it('reports blocked, naming the tool, when the run ends parked on a question', async () => {
-    const reportRunEnd = vi.fn(async () => {});
-    await dispatchPrompt('backstop-parked', { suspendsOnTool: 'ask_user' }, reportRunEnd);
-
-    await vi.waitFor(() => expect(reportRunEnd).toHaveBeenCalledTimes(1));
-    expect(reportRunEnd).toHaveBeenCalledWith(
-      expect.objectContaining({ outcome: { status: 'blocked', toolName: 'ask_user' } }),
-    );
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(reportRunEnd).not.toHaveBeenCalled();
   });
 
   it('reports failed with the failure code when the failure is terminal', async () => {
@@ -6426,9 +6411,43 @@ describe('run-end backstop report', () => {
     expect(reportRunEnd).not.toHaveBeenCalled();
   });
 
-  it('reports done when a pending start’s kickoff run completes', async () => {
+  it('leaves a run that ran and ended in error to the listener, even on its last attempt', async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      prompt: 'Continue work.',
+      idempotencyKey: 'backstop-error-terminal',
+    });
+    // One attempt left, so this run's error is terminal.
+    await seed.storage.ops.updateMany('factory_deferred_decisions', { work_item_id: item.id }, { attempts: 4 });
+    await bindWorkRun(storage, item.id);
+    const { controller } = createSession(undefined, { agentEndReason: 'error' });
+    const reportRunEnd = vi.fn(async () => {});
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+      autoApprovePlans: async () => false,
+      reportRunEnd,
+    });
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'failed',
+      attempts: 5,
+      lastError: expect.stringContaining('ended in error'),
+    });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(reportRunEnd).not.toHaveBeenCalled();
+  });
+
+  it('leaves a pending start’s kickoff run to the listener', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const { item, transitionService } = await queueRunKickoff(storage);
+    const { transitionService } = await queueRunKickoff(storage);
     const { controller } = createSession(undefined, { agentEndReason: 'complete' });
     const reportRunEnd = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
@@ -6441,10 +6460,8 @@ describe('run-end backstop report', () => {
     });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
-    await vi.waitFor(() => expect(reportRunEnd).toHaveBeenCalledTimes(1));
-    expect(reportRunEnd).toHaveBeenCalledWith(
-      expect.objectContaining({ workItemId: item.id, outcome: { status: 'done' } }),
-    );
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(reportRunEnd).not.toHaveBeenCalled();
   });
 
   async function dispatchStageMessage(
@@ -6494,36 +6511,14 @@ describe('run-end backstop report', () => {
     return { ...fake, item, storage, dispatcher };
   }
 
-  it('reports done when a stage message wakes the role it seated and the run completes', async () => {
+  it('leaves a role a stage message seated to the listener, and keeps no watch of its own', async () => {
     const reportRunEnd = vi.fn<FactoryRunEndReporter>(async () => ({ waiting: false }));
-    const { item, storage, getAgentEndListenerCount } = await dispatchStageMessage(reportRunEnd);
+    const { storage, getAgentEndListenerCount } = await dispatchStageMessage(reportRunEnd);
 
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
-    await vi.waitFor(() => expect(reportRunEnd).toHaveBeenCalledTimes(1));
-    expect(reportRunEnd).toHaveBeenCalledWith({
-      orgId: 'org-1',
-      factoryProjectId: PROJECT_ID,
-      workItemId: item.id,
-      role: 'plan',
-      sender: { sessionId: 'session-1', threadId: 'thread-1', userId: 'user-1' },
-      since: expect.any(Date),
-      outcome: { status: 'done' },
-    });
-    await vi.waitFor(() => expect(getAgentEndListenerCount()).toBe(0));
-  });
-
-  it('keeps watching a message-started role that ended waiting, and reports the run that finishes', async () => {
-    const reportRunEnd = vi
-      .fn<FactoryRunEndReporter>()
-      .mockResolvedValueOnce({ waiting: true })
-      .mockResolvedValue({ waiting: false });
-    const { emitAgentEnd, getAgentEndListenerCount } = await dispatchStageMessage(reportRunEnd);
-
-    await vi.waitFor(() => expect(reportRunEnd).toHaveBeenCalledTimes(1));
-    expect(getAgentEndListenerCount()).toBe(1);
-    emitAgentEnd('complete');
-    await vi.waitFor(() => expect(reportRunEnd).toHaveBeenCalledTimes(2));
-    await vi.waitFor(() => expect(getAgentEndListenerCount()).toBe(0));
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(reportRunEnd).not.toHaveBeenCalled();
+    expect(getAgentEndListenerCount()).toBe(0);
   });
 
   it('does not watch a rule message that seats nobody', async () => {
@@ -6535,22 +6530,15 @@ describe('run-end backstop report', () => {
     expect(getAgentEndListenerCount()).toBe(0);
   });
 
-  it('stops watching a message-started run when the dispatcher stops', async () => {
-    const reportRunEnd = vi.fn<FactoryRunEndReporter>(async () => ({ waiting: true }));
-    const { dispatcher, getAgentEndListenerCount } = await dispatchStageMessage(reportRunEnd);
-    await vi.waitFor(() => expect(reportRunEnd).toHaveBeenCalledTimes(1));
-    expect(getAgentEndListenerCount()).toBe(1);
-
-    await dispatcher.stop();
-
-    expect(getAgentEndListenerCount()).toBe(0);
-  });
-
   it('keeps the decision’s outcome when reporting fails', async () => {
     const reportRunEnd = vi.fn(async () => Promise.reject(new Error('report failed')));
-    const { storage } = await dispatchPrompt('backstop-report-fails', { agentEndReason: 'complete' }, reportRunEnd);
+    const { storage } = await dispatchPrompt(
+      'backstop-report-fails',
+      { agentEndReason: 'aborted', omObservationError: 'HTTP 400: model not supported with ChatGPT account' },
+      reportRunEnd,
+    );
 
     await vi.waitFor(() => expect(reportRunEnd).toHaveBeenCalled());
-    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'failed' });
   });
 });
