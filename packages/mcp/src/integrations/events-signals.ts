@@ -38,7 +38,7 @@ export interface MCPEventsSignalProviderOptions {
   /** Priority of event notifications. Default `'medium'`. */
   priority?: NotificationPriority;
   /**
-   * Coalesce pending notifications per subscription key (`coalesceKey: '<id>:<key>'`, `mcp-events:<key>` by default).
+   * Coalesce pending notifications per subscription key (`coalesceKey: 'mcp-events:<key>'`, regardless of `id`).
    * When on, a burst of occurrences that arrives before the agent reads its inbox keeps only the latest
    * occurrence's summary and payload. Default `false`: every occurrence is its own notification.
    */
@@ -228,7 +228,7 @@ export class MCPEventsSignalProvider extends SignalProvider {
       attributes: { server, event, ...(truncated ? { truncated: true } : {}) },
       // Absorbs replays after a restart resumed from an older cursor.
       dedupeKey: `${this.id}:${live.key}:${occurrence.eventId}`,
-      ...(this.#options.coalesce ? { coalesceKey: `${this.id}:${live.key}` } : {}),
+      ...(this.#options.coalesce ? { coalesceKey: `mcp-events:${live.key}` } : {}),
       payload: { server, event, arguments: args, occurrence },
     };
     await this.#notifyAll(live, notification);
