@@ -1,4 +1,4 @@
-import type { CoreMessage } from '@internal/ai-sdk-v4';
+import type { CoreMessage } from '@internal/ai-sdk-v5';
 import type {
   Agent,
   AgentExecutionOptions,

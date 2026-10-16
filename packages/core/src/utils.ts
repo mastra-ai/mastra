@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { CoreMessage } from '@internal/ai-sdk-v4';
+import type { CoreMessage } from '@internal/ai-sdk-v5';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { z } from 'zod/v4';
 import type { MastraPrimitives } from './action';

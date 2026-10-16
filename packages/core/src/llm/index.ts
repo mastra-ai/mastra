@@ -13,8 +13,8 @@ import type {
   generateObject,
   StreamTextOnFinishCallback,
   StreamObjectOnFinishCallback,
-} from '@internal/ai-sdk-v4';
-import type { SystemModelMessage } from '@internal/ai-sdk-v5';
+  SystemModelMessage,
+} from '@internal/ai-sdk-v5';
 
 import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';

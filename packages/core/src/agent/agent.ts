@@ -1,5 +1,4 @@
-import type { UIMessage } from '@internal/ai-sdk-v4';
-import type { ModelMessage } from '@internal/ai-sdk-v5';
+import type { UIMessage, ModelMessage } from '@internal/ai-sdk-v5';
 import { wrapSchemaWithNullTransform } from '@mastra/schema-compat';
 import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
@@ -215,10 +214,8 @@ import type {
   AgentConfig,
   AgentUpdateThreadPeerOptions,
   AgentDurableOption,
-  AgentGenerateOptions,
   AgentNotificationConfig,
   GoalConfig,
-  AgentStreamOptions,
   ToolsetsInput,
   ToolsInput,
   AgentModelManagerConfig,

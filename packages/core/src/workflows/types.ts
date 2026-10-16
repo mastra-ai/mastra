@@ -1,5 +1,5 @@
 import type { WritableStream } from 'node:stream/web';
-import type { TextStreamPart } from '@internal/ai-sdk-v4';
+import type { TextStreamPart } from '@internal/ai-sdk-v5';
 import type { z } from 'zod/v4';
 import type { ActorSignal } from '../auth/ee';
 import type { SerializedError } from '../error';

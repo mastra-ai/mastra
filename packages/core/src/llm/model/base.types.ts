@@ -16,7 +16,7 @@ import type {
   Tool,
   ToolSet,
   DeepPartial,
-} from '@internal/ai-sdk-v4';
+} from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { MessageList } from '../../agent/types';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
@@ -26,7 +26,7 @@ import type { RequestContext } from '../../request-context';
 import type { ZodSchema } from '../../schema';
 import type { inferOutput, ScoringProperties, TripwireProperties } from './shared.types';
 
-export type { ToolSet } from '@internal/ai-sdk-v4';
+export type { ToolSet } from '@internal/ai-sdk-v5';
 
 type MastraCustomLLMOptions = ObservabilityContext & {
   tools?: Record<string, Tool>;
