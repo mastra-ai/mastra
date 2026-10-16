@@ -11,6 +11,7 @@ import type {
   SendNotificationSignalInput,
 } from '@mastra/core/notifications';
 
+import type { SourceControlSessionLookup } from '../session/factory-session.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { FACTORY_SESSION_NOTIFICATION_SOURCE } from './deliver.js';
 import type { FactoryDeliveryResult, FactoryDeliveryTarget } from './deliver.js';
@@ -169,7 +170,7 @@ export async function workItemReportAttributes(
 export type FactoryRunOutcome =
   | { status: 'done' }
   | { status: 'failed'; reason: string; failureCode?: string }
-  | { status: 'blocked'; toolName?: string };
+  | { status: 'blocked'; toolName?: string; approval?: boolean };
 
 /** `waiting`: the session is waiting for an answer, so a later run owes the final report. */
 export interface FactoryRunEndResult {
@@ -210,7 +211,9 @@ export async function sendRunEndReport(
       ? `${subject} finished.`
       : outcome.status === 'failed'
         ? `${subject} failed${outcome.failureCode ? ` (${outcome.failureCode})` : ''}: ${outcome.reason}`
-        : `${subject} is waiting${outcome.toolName ? ` on ${outcome.toolName}` : ''} and needs an answer.`;
+        : outcome.approval
+          ? `${subject} is waiting for someone to approve ${outcome.toolName ?? 'a tool call'} in that session.`
+          : `${subject} is waiting${outcome.toolName ? ` on ${outcome.toolName}` : ''} and needs an answer.`;
   const notification = reportNotification({
     sender,
     status: outcome.status,
@@ -220,6 +223,7 @@ export async function sendRunEndReport(
       backstop: 'true',
       ...(outcome.status === 'failed' && outcome.failureCode ? { 'failure-code': outcome.failureCode } : {}),
       ...(outcome.status === 'blocked' && outcome.toolName ? { 'parked-tool': outcome.toolName } : {}),
+      ...(outcome.status === 'blocked' && outcome.approval ? { 'waiting-for': 'approval' } : {}),
     },
   });
   const report = (recipient: FactoryDeliveryTarget, reportKinds: string[], agentOnly = false) =>
@@ -233,7 +237,9 @@ export async function sendRunEndReport(
   let waiting = outcome.status === 'blocked';
   const deliveries: FactoryDeliveryResult[] = [];
   for (const recipient of recipients) {
-    if (await report(recipient, kinds)) continue;
+    // Only the agent's own reports count: an earlier run's backstop lands after this
+    // run's window opened. A reply already told that follower how a finished run went.
+    if (await report(recipient, outcome.status === 'done' ? [...kinds, 'reply'] : kinds, true)) continue;
     // Only the agent's own `blocked` means it ended its turn to wait; a backstop `blocked` from a parked run doesn't.
     if (outcome.status === 'done' && (await report(recipient, ['blocked'], true))) {
       waiting = true;
@@ -345,5 +351,61 @@ export function createStageChangeNotifier({
         console.warn(`[Factory reports] Unable to tell ${subscriber.sessionId} that ${label} moved.`, error);
       }
     }
+  };
+}
+
+/** Reports one run end of a session; the thread is the one the run used. */
+export type FactorySessionRunEndReporter = (input: {
+  sessionId: string;
+  threadId: string | null;
+  outcome: FactoryRunOutcome;
+  since: Date;
+}) => Promise<void>;
+
+/**
+ * Who hears about a session's run end: a work session (one with an active run
+ * binding) reports to its item's followers, a side session to the session that
+ * started it. Any other session (a person's own) reports to nobody.
+ */
+export function createSessionRunEndReporter({
+  sessions,
+  workItems,
+  reporting,
+}: {
+  sessions: Pick<SourceControlSessionLookup, 'getBySessionId'>;
+  workItems: Pick<WorkItemsStorage, 'findActiveRunBindingForSession' | 'listWorkItemSubscribers' | 'getForProject'>;
+  reporting: () => Promise<FactoryReporting | null>;
+}): FactorySessionRunEndReporter {
+  const workItemRunEnd = createWorkItemRunEndReporter({ workItems, reporting });
+  return async ({ sessionId, threadId, outcome, since }) => {
+    const row = await sessions.getBySessionId(sessionId);
+    if (!row?.factoryProjectId) return;
+    const binding = await workItems.findActiveRunBindingForSession({
+      orgId: row.orgId,
+      factoryProjectId: row.factoryProjectId,
+      sessionId: row.sessionId,
+    });
+    if (binding) {
+      await workItemRunEnd({
+        orgId: binding.orgId,
+        factoryProjectId: binding.factoryProjectId,
+        workItemId: binding.workItemId,
+        role: binding.role,
+        sender: { sessionId: row.sessionId, threadId: binding.threadId, userId: row.userId },
+        since,
+        outcome,
+      });
+      return;
+    }
+    if (!row.originSessionId || !row.originThreadId || !threadId) return;
+    const resolved = await reporting();
+    if (!resolved) return;
+    await sendRunEndReport(resolved, {
+      sender: { sessionId: row.sessionId, threadId, userId: row.userId },
+      recipients: [{ sessionId: row.originSessionId, threadId: row.originThreadId }],
+      since,
+      outcome,
+      subject: `The side session "${row.title ?? row.sessionId}"`,
+    });
   };
 }

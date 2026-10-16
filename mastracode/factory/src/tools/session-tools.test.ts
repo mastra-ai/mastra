@@ -19,7 +19,10 @@ import {
 import { AuditDomain } from '../storage/domains/audit/domain.js';
 import type { SourceControlSessionVisibility } from '../storage/domains/source-control/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { deliverFactorySessionNotification } from './deliver.js';
 import { FACTORY_TOOLS_WITHOUT_APPROVAL, applyFactoryToolPermissions } from './permissions.js';
+import { createSessionRunEndReporter } from './reports.js';
+import { observeSessionRunReports } from './run-watch.js';
 import { FACTORY_INTERACTIVE_KEY, resolveFactoryToolScope } from './scope.js';
 import type { FactoryToolScope } from './scope.js';
 import { FACTORY_TOOLS_OWNER_ID, createFactorySessionTools } from './session-tools.js';
@@ -86,13 +89,14 @@ async function seedFactory(parentVisibility: SourceControlSessionVisibility = 'o
   return { seed, project, sessions, scope, sourceControl, connection, projectRepository, installation };
 }
 
-function fakeController(calls: string[]) {
+function fakeController(calls: string[], onSessionCreated: (session: FakeSession) => void = () => {}) {
   const created: Array<{ options: Record<string, unknown>; session: ReturnType<typeof fakeSession> }> = [];
   function fakeSession(id: string) {
     let state: Record<string, unknown> = {};
     const settings = new Map<string, unknown>();
     const listeners = new Set<(event: AgentControllerEvent) => void>();
     return {
+      identity: { getResourceId: () => id },
       emit: (event: AgentControllerEvent) => listeners.forEach(listener => listener(event)),
       listenerCount: () => listeners.size,
       subscribe: (listener: (event: AgentControllerEvent) => void) => {
@@ -111,6 +115,7 @@ function fakeController(calls: string[]) {
       subagents: { model: { set: vi.fn(async () => undefined) } },
       thread: {
         requireId: () => id,
+        getId: () => id,
         rename: vi.fn(async () => undefined),
         getSetting: async ({ key }: { key: string }) => settings.get(key),
         setSetting: vi.fn(async ({ key, value }: { key: string; value: unknown }) => void settings.set(key, value)),
@@ -125,6 +130,7 @@ function fakeController(calls: string[]) {
     createSession: vi.fn(async (options: Record<string, unknown>) => {
       const session = fakeSession(options.threadId as string);
       created.push({ options, session });
+      onSessionCreated(session);
       return session;
     }),
     getSessionByResource: vi.fn(
@@ -134,6 +140,7 @@ function fakeController(calls: string[]) {
   return { controller, created };
 }
 
+type FakeSession = Awaited<ReturnType<ReturnType<typeof fakeController>['controller']['createSession']>>;
 type Prepare = FactoryStartCoordinator['prepare'];
 
 async function setup(
@@ -146,7 +153,17 @@ async function setup(
   const seeded = await seedFactory(parentVisibility);
   const calls: string[] = [];
   prime.mockImplementation(async () => void calls.push('prime'));
-  const { controller, created } = fakeController(calls);
+  // Every session gets the run-report listener, as the Factory's session-created hook attaches it.
+  const { controller, created } = fakeController(calls, session =>
+    observeSessionRunReports(session, (outcome, since) =>
+      reportSessionRunEnd({
+        sessionId: session.identity.getResourceId(),
+        threadId: session.thread.getId(),
+        outcome,
+        since,
+      }),
+    ),
+  );
   const transition = vi.fn(async () => {
     throw new Error('a work-item start must not commit a transition');
   });
@@ -188,6 +205,21 @@ async function setup(
       },
     }),
   };
+  const reportSessionRunEnd = createSessionRunEndReporter({
+    sessions: seeded.sessions,
+    workItems: seeded.seed.workItems,
+    reporting: async () => ({
+      notifications,
+      deliver: (target, notification, options) =>
+        deliverFactorySessionNotification({
+          controller: deliveryController as never,
+          sessions: seeded.sessions,
+          target,
+          notification,
+          ...options,
+        }),
+    }),
+  });
   const deps = {
     sessions: seeded.sessions,
     sessionModel: { projects: seeded.seed.projects, modelDefaults: seeded.seed.modelDefaults },
@@ -348,7 +380,11 @@ describe('the side session run-end backstop', () => {
       summary: 'The side session "Find why the nightly build is slow." finished.',
       attributes: { backstop: 'true', 'from-session': result.sessionId, 'from-user': 'user-1' },
     });
-    expect(session.listenerCount()).toBe(0);
+
+    // A later run nobody started from here (a typed message, a wake) reports too.
+    session.emit({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
+    await vi.waitFor(() => expect(reports).toHaveLength(2));
+    expect(reports[1]!.target).toEqual({ resourceId: scope.sessionId, threadId: scope.threadId });
   });
 
   it('stays quiet when the agent already sent its own final report', async () => {
@@ -386,7 +422,8 @@ describe('the side session run-end backstop', () => {
     session.emit({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
     await vi.waitFor(() => expect(reports).toHaveLength(1));
     expect(reports[0]!.input).toMatchObject({ kind: 'done' });
-    await vi.waitFor(() => expect(session.listenerCount()).toBe(0));
+    // The session's report listener stays for its later runs.
+    expect(session.listenerCount()).toBe(1);
   });
 
   it('does not report done when the agent reported blocked and ended its turn to wait', async () => {
@@ -409,7 +446,8 @@ describe('the side session run-end backstop', () => {
     session.emit({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
     await vi.waitFor(() => expect(reports).toHaveLength(1));
     expect(reports[0]!.input).toMatchObject({ kind: 'done', attributes: { backstop: 'true' } });
-    await vi.waitFor(() => expect(session.listenerCount()).toBe(0));
+    // The session's report listener stays for its later runs.
+    expect(session.listenerCount()).toBe(1);
   });
 
   it('stays quiet after a waiting run when the next run sends its own done', async () => {
@@ -429,7 +467,8 @@ describe('the side session run-end backstop', () => {
     await new Promise(resolve => setTimeout(resolve, 10));
     await agentReport('done');
     session.emit({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
-    await vi.waitFor(() => expect(session.listenerCount()).toBe(0));
+    // The session's report listener stays for its later runs.
+    expect(session.listenerCount()).toBe(1);
     expect(reports).toHaveLength(0);
   });
 
@@ -449,7 +488,8 @@ describe('the side session run-end backstop', () => {
       session.emit({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
       await vi.waitFor(() => expect(reports).toHaveLength(2));
       expect(reports[1]!.input).toMatchObject({ kind: 'done', attributes: { backstop: 'true' } });
-      await vi.waitFor(() => expect(session.listenerCount()).toBe(0));
+      // The session's report listener stays for its later runs.
+      expect(session.listenerCount()).toBe(1);
     } finally {
       vi.useRealTimers();
     }
@@ -475,7 +515,7 @@ describe('the side session run-end backstop', () => {
     });
   });
 
-  it('stops watching when the kickoff fails', async () => {
+  it('leaves nothing but the session’s own report listener when the kickoff fails', async () => {
     const env = await setup();
     const original = env.controller.createSession.getMockImplementation()!;
     env.controller.createSession.mockImplementationOnce(async (options: Record<string, unknown>) => {
@@ -487,7 +527,7 @@ describe('the side session run-end backstop', () => {
     });
 
     await expect(env.start({ prompt: 'Go.' })).rejects.toThrow('wake failed');
-    expect(env.created[0]!.session.listenerCount()).toBe(0);
+    expect(env.created[0]!.session.listenerCount()).toBe(1);
   });
 });
 
@@ -709,7 +749,7 @@ describe('factory_start_session in work-item mode', () => {
       expect(isOpenRunLiveElsewhere(renewed, 'factory-rule-dispatcher:other')).toBe(true);
 
       session.emit({ type: 'agent_end', reason: 'suspended' } as AgentControllerEvent);
-      // A parked run waits for an answer: the watch carries on, the heartbeat does not.
+      // A parked run waits for an answer: the heartbeat stops; only the session's report listener remains.
       expect(session.listenerCount()).toBe(1);
       const parked = (await listSessionOpenRuns(session))[0]!;
       await vi.advanceTimersByTimeAsync(FACTORY_OPEN_RUN_STALE_MS * 2);
