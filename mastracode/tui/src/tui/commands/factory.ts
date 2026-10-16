@@ -147,7 +147,7 @@ async function connect(ctx: SlashCommandContext): Promise<void> {
     };
     saveSettings(settings);
     ctx.showInfo(
-      `Connected to Factory ${factoryProject.name} / ${repository.slug} — new session on ${userSession.branch} (${address.url})`,
+      `Connected to Factory ${factoryProject.name} / ${repository.slug} — new session on ${userSession.branch} (${address.url}). Restart Mastra Code to start working in it.`,
     );
   } catch (error) {
     ctx.showError(`Failed to connect to Factory: ${(error as Error).message}`);

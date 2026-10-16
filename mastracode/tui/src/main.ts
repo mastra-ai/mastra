@@ -62,6 +62,7 @@ let processMemoryDiagnostics: ProcessMemoryDiagnostics | undefined;
 let storageClosed = false;
 let cleanupPromise: Promise<void> | null = null;
 let getResumeThreadId: (() => string | null) | undefined;
+let remoteSession: RemoteSession | undefined;
 
 const CRASH_LOG_PATH = '/tmp/mastra-crash.log';
 
@@ -106,7 +107,19 @@ async function tuiMain(startupMessage: StartupMessage = {}, resumeThreadId?: str
   await applyThemePreference(themeMode);
 
   analytics = createMastraCodeAnalytics({ version: getCurrentVersion() });
-  if (settings.factory) return bootFactory(settings.factory, themeMode, startupMessage);
+  if (settings.factory && !isTruthyEnv('MASTRACODE_LOCAL')) {
+    const ignored = [resumeThreadId && 'thread resume', startupPackId && 'model pack'].filter(Boolean);
+    if (ignored.length > 0) console.info(`⚠ Factory mode ignores the requested ${ignored.join(' and ')}.`);
+    try {
+      return await bootFactory(settings.factory, themeMode, startupMessage);
+    } catch (error) {
+      // Never lock the user out of the TUI: they need it running to reconnect or disconnect.
+      console.info(
+        `⚠ Could not reach Factory ${settings.factory.factoryProjectName} (${(error as Error).message}). ` +
+          'Running locally — use /factory connect to reconnect or /factory disconnect to stay local.',
+      );
+    }
+  }
   return bootLocal(settings, themeMode, startupMessage, resumeThreadId, startupPackId);
 }
 
@@ -116,15 +129,17 @@ async function tuiMain(startupMessage: StartupMessage = {}, resumeThreadId?: str
  */
 async function bootFactory(factory: FactoryConnectionSettings, themeMode: string, startupMessage: StartupMessage) {
   const platform = await getPlatformSession();
-  if (!platform) {
-    throw new Error(
-      'Mastra Platform login expired. Run `/factory connect` again, or `/factory disconnect` to work locally.',
-    );
-  }
+  if (!platform) throw new Error('Mastra Platform login expired');
   const address = { url: factory.url, session: { token: platform.token, orgId: factory.orgId } };
   const session = new RemoteSession(address, factory.sessionId);
   const remoteController = new RemoteController(address);
-  await Promise.all([session.connect(), remoteController.connect()]);
+  try {
+    await Promise.all([session.connect(), remoteController.connect()]);
+  } catch (error) {
+    session.disconnect();
+    throw error;
+  }
+  remoteSession = session;
   session.setModes(remoteController.listModes());
   getResumeThreadId = () => (tui ? tui.getResumeThreadId() : session.thread.getId());
 
@@ -290,6 +305,7 @@ const asyncCleanup = (): Promise<void> => {
     threadScheduler?.stop();
     // Release this process's notification dispatch leases before the pubsub that holds them closes.
     await stopNotificationDispatch?.().catch(() => {});
+    remoteSession?.disconnect();
     await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals()]);
     // Mastra owns the workspaces and must destroy them to stop retained language
     // servers before storage is closed.
