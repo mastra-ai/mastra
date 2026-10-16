@@ -47,6 +47,15 @@ function buildApp(user?: { workosId: string; organizationId: string }) {
   app.all('/api/memory/*', c =>
     c.json({ reached: true, bound: (c.get('requestContext' as never) as RequestContext).get(MASTRA_RESOURCE_ID_KEY) }),
   );
+  app.get('/api/agent-controller/:controllerId/active-runs', c =>
+    c.json({
+      runs: [
+        { runId: 'run-private', resourceId: PRIVATE_ID, threadId: 'thread-private' },
+        { runId: 'run-shared', resourceId: SHARED_ID, threadId: 'thread-shared' },
+        { runId: 'run-personal', resourceId: 'teammate-own', threadId: 'thread-personal' },
+      ],
+    }),
+  );
   app.get('/web/config/om', c => c.json({ reached: true }));
   app.post('/web/config/om/:role/model', async c => c.json({ reached: true, body: await adapterBody(c) }));
   return app;
@@ -152,5 +161,16 @@ describe('createSessionAccessGuard', () => {
     expect((await post(teammate, path, { resourceId: PRIVATE_ID, modelId: 'x' })).status).toBe(404);
     const memory = `/api/memory/threads?resourceId=${SHARED_ID}`;
     expect((await post(teammate, memory, { resourceId: PRIVATE_ID })).status).toBe(404);
+  });
+
+  it('hides runs on private sessions the caller cannot see from the active-runs list', async () => {
+    const runIds = async (app: Hono) =>
+      (
+        (await (await app.request('/api/agent-controller/code/active-runs')).json()) as { runs: { runId: string }[] }
+      ).runs.map(run => run.runId);
+
+    expect(await runIds(teammate)).toEqual(['run-shared', 'run-personal']);
+    expect(await runIds(owner)).toEqual(['run-private', 'run-shared', 'run-personal']);
+    expect(await runIds(outsider)).toEqual(['run-personal']);
   });
 });

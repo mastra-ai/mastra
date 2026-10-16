@@ -20,6 +20,7 @@ const CREATE_SESSION_PATH = /\/agent-controller\/[^/]+\/sessions\/?$/;
 const SET_RESOURCE_PATH = /\/agent-controller\/[^/]+\/sessions\/[^/]+\/resource\/?$/;
 const OM_CONFIG_PATH = /^\/web\/config\/om(\/|$)/;
 const MEMORY_PATH = /^\/api\/memory(\/|$)/;
+const ACTIVE_RUNS_PATH = /\/agent-controller\/[^/]+\/active-runs\/?$/;
 
 async function bodyField(c: Context, field: string): Promise<string | undefined> {
   // Read a clone: the Mastra adapter clones `c.req.raw` again to parse params,
@@ -61,6 +62,38 @@ async function addressedResourceIds(c: Context): Promise<string[]> {
   return [...new Set(ids.filter((id): id is string => Boolean(id)))];
 }
 
+/** Drops runs on sessions the caller cannot view from the controller-wide active-runs list. */
+async function filterActiveRuns(
+  c: Context,
+  auth: RouteAuth,
+  sessions: Pick<SourceControlSessionLookup, 'getBySessionId'>,
+): Promise<void> {
+  if (!c.res.ok) return;
+  const body = (await c.res
+    .clone()
+    .json()
+    .catch(() => undefined)) as { runs?: Array<{ resourceId?: unknown }> } | undefined;
+  if (!body || !Array.isArray(body.runs)) return;
+  let viewer: ReturnType<RouteAuth['tenant']> | null = null;
+  const runs = [];
+  for (const run of body.runs) {
+    const session = typeof run.resourceId === 'string' ? await sessions.getBySessionId(run.resourceId) : null;
+    if (session) {
+      if (viewer === null) {
+        await auth.ensureUser(c);
+        viewer = auth.tenant(c);
+      }
+      if (!viewer || !canViewSourceControlSession(session, viewer)) continue;
+    }
+    runs.push(run);
+  }
+  if (runs.length === body.runs.length) return;
+  const headers = new Headers(c.res.headers);
+  headers.delete('content-length');
+  c.res.headers.delete('content-length');
+  c.res = new Response(JSON.stringify({ ...body, runs }), { status: c.res.status, headers });
+}
+
 /**
  * Keeps private sessions private on routes that address a live controller
  * session by resourceId (stream, messages, threads, state, re-keying, memory
@@ -71,6 +104,7 @@ async function addressedResourceIds(c: Context): Promise<string[]> {
  * resource. Factory user sessions use their session id as the resourceId;
  * resources that are not source-control sessions (personal, supervisor) pass
  * through untouched. Denials answer 404 so session ids do not leak existence.
+ * The controller-wide active-runs list is filtered the same way.
  */
 export function createSessionAccessGuard({
   auth,
@@ -100,6 +134,11 @@ export function createSessionAccessGuard({
       const requestContext = ctx.get('requestContext') as RequestContext | undefined;
       const bound = resourceIds[0] ?? (auth.enabled() ? auth.tenant(ctx)?.userId : undefined);
       if (requestContext && bound) requestContext.set(MASTRA_RESOURCE_ID_KEY, bound);
+    }
+    if (ctx.req.method === 'GET' && ACTIVE_RUNS_PATH.test(ctx.req.path)) {
+      await next();
+      await filterActiveRuns(ctx, auth, sessions);
+      return;
     }
     return next();
   };
