@@ -2,6 +2,7 @@
 /**
  * Main entry point for Mastra Code TUI.
  */
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 
 import { createMastraCode } from '@mastra/code-sdk';
@@ -107,7 +108,7 @@ async function tuiMain(startupMessage: StartupMessage = {}, resumeThreadId?: str
   await applyThemePreference(themeMode);
 
   analytics = createMastraCodeAnalytics({ version: getCurrentVersion() });
-  if (settings.factory && !isTruthyEnv('MASTRACODE_LOCAL')) {
+  if (settings.factory && settings.factory.active !== false && !isTruthyEnv('MASTRACODE_LOCAL')) {
     const ignored = [resumeThreadId && 'thread resume', startupPackId && 'model pack'].filter(Boolean);
     if (ignored.length > 0) console.info(`⚠ Factory mode ignores the requested ${ignored.join(' and ')}.`);
     try {
@@ -116,7 +117,7 @@ async function tuiMain(startupMessage: StartupMessage = {}, resumeThreadId?: str
       // Never lock the user out of the TUI: they need it running to reconnect or disconnect.
       console.info(
         `⚠ Could not reach Factory ${settings.factory.factoryProjectName} (${(error as Error).message}). ` +
-          'Running locally — use /factory connect to reconnect or /factory disconnect to stay local.',
+          'Running locally — use /factory to retry or /factory disconnect to forget it.',
       );
     }
   }
@@ -166,6 +167,7 @@ async function bootFactory(factory: FactoryConnectionSettings, themeMode: string
     version: getCurrentVersion(),
     inlineQuestions: true,
     exit: exitCode => void shutdownAndExit(exitCode),
+    relaunch,
     ...startupMessage,
   });
   tui.run().catch(error => {
@@ -256,6 +258,7 @@ async function bootLocal(
     backgroundToolsEnabled: result.backgroundToolsEnabled,
     backgroundCompletionEvents: result.backgroundCompletionEvents,
     exit: exitCode => void shutdownAndExit(exitCode),
+    relaunch,
     ...startupMessage,
   });
   tui.run().catch(error => {
@@ -329,6 +332,28 @@ const asyncCleanup = (): Promise<void> => {
   })();
   return cleanupPromise;
 };
+
+/**
+ * Restart Mastra Code so it boots in whichever mode settings now select. The
+ * startup prompt and resume flags are dropped: they were for the previous run.
+ */
+async function relaunch(): Promise<void> {
+  await asyncCleanup();
+  tui?.stop();
+  const env = { ...process.env };
+  delete env.MASTRACODE_LOCAL;
+  const args = [...process.execArgv, process.argv[1]!];
+  const execve = (process as { execve?: (file: string, args: string[], env: NodeJS.ProcessEnv) => never }).execve;
+  if (execve) execve(process.execPath, [process.execPath, ...args], env);
+  // No in-place exec (Windows, older Node): hand the terminal to a child and mirror its exit.
+  // The child shares the terminal's process group and handles Ctrl+C itself.
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
+    process.removeAllListeners(signal);
+    process.on(signal, () => {});
+  }
+  const child = spawn(process.execPath, args, { stdio: 'inherit', env });
+  child.on('exit', code => process.exit(code ?? 0));
+}
 
 const shutdownAndExit = createShutdownCoordinator(asyncCleanup, exitCode => process.exit(exitCode));
 

@@ -209,6 +209,9 @@ export interface MastraTUIBaseOptions {
 
   /** Process adapter exit hook. Defaults to process.exit. */
   exit?: (exitCode: number) => void;
+
+  /** Restart Mastra Code in place so a Factory/local mode switch takes effect. */
+  relaunch?: () => Promise<void>;
 }
 
 // =============================================================================

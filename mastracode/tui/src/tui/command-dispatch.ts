@@ -37,6 +37,7 @@ import {
   handleConnectCommand,
   handleLoginCommand,
   handleFactoryCommand,
+  handleLocalCommand,
   handleReviewCommand as handleReviewCmd,
   handleReportIssueCommand as handleReportIssueCmd,
   handleSetupCommand,
@@ -72,6 +73,7 @@ const TRACKED_COMMANDS = new Set([
   'connect',
   'login',
   'factory',
+  'local',
   'model',
   'models',
   'packs',
@@ -243,6 +245,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'factory':
       await handleFactoryCommand(ctx, args);
+      return true;
+    case 'local':
+      await handleLocalCommand(ctx);
       return true;
     case 'logout':
       await handleLoginCommand(ctx, 'logout');

@@ -398,6 +398,8 @@ export interface FactoryConnectionSettings {
   /** Factory user session ID; addresses the remote agent-controller session as its resourceId. */
   sessionId: string;
   branch: string;
+  /** False keeps the connection saved but starts Mastra Code locally. */
+  active?: boolean;
 }
 
 function parseFactoryConnectionSettings(raw: unknown): FactoryConnectionSettings | null {
@@ -418,7 +420,9 @@ function parseFactoryConnectionSettings(raw: unknown): FactoryConnectionSettings
     'branch',
   ] as const;
   if (!keys.every(key => typeof obj[key] === 'string' && obj[key])) return null;
-  return Object.fromEntries(keys.map(key => [key, obj[key]])) as unknown as FactoryConnectionSettings;
+  const parsed = Object.fromEntries(keys.map(key => [key, obj[key]])) as unknown as FactoryConnectionSettings;
+  if (obj.active === false) parsed.active = false;
+  return parsed;
 }
 
 export interface McpDiscoverySettings {
