@@ -232,6 +232,7 @@ export function BoardContent({
   const hasIntakeSource = intake.available.length > 0;
 
   const stageViews = stages.map(stage => {
+    const isInitialPhase = stage.id === definition.initialPhase;
     const loading = loadingStages.has(stage.id);
     const stageWorkItems = workItemsByStage.get(stage.id) ?? [];
     const stageCandidates = filteredCandidates.filter(candidate => candidate.column === stage.id);
@@ -241,12 +242,11 @@ export function BoardContent({
     const feedFailed = Boolean(columnFeed?.error);
     const canCreate =
       !review && !loading && stage.kind !== 'terminal' && (composer.stage === undefined || composerOpen);
-    const canConnectSource = stage.id === 'intake' && !hasIntakeSource;
-    const showEmptyStateActions =
-      stage.id === definition.initialPhase && (filtersExcludeAll || canCreate || canConnectSource);
+    const canConnectSource = isInitialPhase && !hasIntakeSource;
+    const showEmptyStateActions = isInitialPhase && (filtersExcludeAll || canCreate || canConnectSource);
     const collapsed =
       builtin &&
-      stage.id !== definition.initialPhase &&
+      !isInitialPhase &&
       !loading &&
       !composerOpen &&
       !feedFailed &&
@@ -274,6 +274,7 @@ export function BoardContent({
       cards: (
         <BoardStageCards
           stage={stage}
+          isInitialPhase={isInitialPhase}
           layout={layout}
           kind={kind}
           loading={loading}
@@ -282,7 +283,7 @@ export function BoardContent({
           intakeSource={intake.active}
           hasIntakeSource={hasIntakeSource}
           filtersExcludeAll={filtersExcludeAll}
-          alreadyMaterialized={stage.id === definition.initialPhase ? intake.alreadyMaterialized : 0}
+          alreadyMaterialized={isInitialPhase ? intake.alreadyMaterialized : 0}
           emptyStateActions={
             showEmptyStateActions && (
               <BoardEmptyStateActions

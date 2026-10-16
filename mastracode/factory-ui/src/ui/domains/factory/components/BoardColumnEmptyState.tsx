@@ -11,27 +11,33 @@ interface BoardColumnEmptyCopy {
   description: string;
 }
 
-function boardColumnEmptyCopy(stage: BoardStageId, kind: BoardKind, hasIntakeSource: boolean): BoardColumnEmptyCopy {
-  switch (stage) {
-    case 'intake':
-      if (!hasIntakeSource) {
-        return {
-          title: 'No intake sources',
-          description:
-            kind === 'review'
-              ? 'Connect a repository to see its change requests here.'
-              : 'Create a card or connect an issue source in Work Intake settings.',
-        };
-      }
-      if (kind === 'review')
-        return {
-          title: 'No change requests waiting',
-          description: 'Open change requests from connected repositories appear here.',
-        };
+function boardColumnEmptyCopy(
+  stage: BoardStageId,
+  kind: BoardKind,
+  hasIntakeSource: boolean,
+  isInitialPhase: boolean,
+): BoardColumnEmptyCopy {
+  if (isInitialPhase) {
+    if (!hasIntakeSource) {
       return {
-        title: 'Intake is clear',
-        description: 'New issues from your connected sources appear here.',
+        title: 'No intake sources',
+        description:
+          kind === 'review'
+            ? 'Connect a repository to see its change requests here.'
+            : 'Create a card or connect an issue source in Work Intake settings.',
       };
+    }
+    if (kind === 'review')
+      return {
+        title: 'No change requests waiting',
+        description: 'Open change requests from connected repositories appear here.',
+      };
+    return {
+      title: 'Intake is clear',
+      description: 'New issues from your connected sources appear here.',
+    };
+  }
+  switch (stage) {
     case 'triage':
       return {
         title: 'Nothing to triage',
@@ -86,6 +92,7 @@ function boardEmptyCopy(
   hasIntakeSource: boolean,
   filtersExcludeAll: boolean,
   alreadyMaterialized: number,
+  isInitialPhase: boolean,
 ): BoardColumnEmptyCopy {
   if (filtersExcludeAll) {
     return {
@@ -93,7 +100,7 @@ function boardEmptyCopy(
       description: 'Try adjusting or clearing your filters.',
     };
   }
-  const copy = boardColumnEmptyCopy(stage, kind, hasIntakeSource);
+  const copy = boardColumnEmptyCopy(stage, kind, hasIntakeSource, isInitialPhase);
   if (alreadyMaterialized <= 0) return copy;
   const itemsLabel =
     alreadyMaterialized === 1 ? 'item from this source already has' : 'items from this source already have';
@@ -105,6 +112,7 @@ function boardEmptyCopy(
 
 export function BoardColumnEmptyState({
   stage,
+  isInitialPhase,
   kind,
   hasIntakeSource,
   filtersExcludeAll = false,
@@ -113,6 +121,7 @@ export function BoardColumnEmptyState({
   actionSlot,
 }: {
   stage: BoardStageId;
+  isInitialPhase: boolean;
   kind: BoardKind;
   hasIntakeSource: boolean;
   filtersExcludeAll?: boolean;
@@ -121,7 +130,7 @@ export function BoardColumnEmptyState({
   layout: BoardLayout;
   actionSlot?: ReactNode;
 }) {
-  const copy = boardEmptyCopy(stage, kind, hasIntakeSource, filtersExcludeAll, alreadyMaterialized);
+  const copy = boardEmptyCopy(stage, kind, hasIntakeSource, filtersExcludeAll, alreadyMaterialized, isInitialPhase);
   if (layout === 'list') {
     return (
       <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">

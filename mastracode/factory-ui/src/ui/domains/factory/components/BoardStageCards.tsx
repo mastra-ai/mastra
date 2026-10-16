@@ -12,6 +12,7 @@ import { IntakeFeedNotice } from './IntakeFeedNotice';
 
 export function BoardStageCards({
   stage,
+  isInitialPhase,
   layout,
   kind,
   loading,
@@ -26,6 +27,7 @@ export function BoardStageCards({
   children,
 }: {
   stage: { id: BoardStageId; label: string };
+  isInitialPhase: boolean;
   layout: BoardLayout;
   kind: BoardKind;
   loading: boolean;
@@ -50,6 +52,7 @@ export function BoardStageCards({
       {showEmptyState && (
         <BoardColumnEmptyState
           stage={stage.id}
+          isInitialPhase={isInitialPhase}
           kind={kind}
           hasIntakeSource={hasIntakeSource}
           filtersExcludeAll={filtersExcludeAll}
