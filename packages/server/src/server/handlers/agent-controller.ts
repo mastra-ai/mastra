@@ -228,6 +228,12 @@ const steerBodySchema = z.object({
 const toolApprovalBodySchema = z.object({
   toolCallId: z.string(),
   approved: z.boolean(),
+  /**
+   * Grants the gated tool's category to the thread that owns the call, then
+   * approves — the same "always allow" the in-process TUI offers. Requires
+   * `approved: true`.
+   */
+  alwaysAllowCategory: z.boolean().optional(),
   requestContext: bodyRequestContextSchema,
 });
 const toolSuspensionBodySchema = z.object({
@@ -745,7 +751,16 @@ export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, toolCallId, approved, requestContext }) => {
+  handler: async ({
+    mastra,
+    controllerId,
+    resourceId,
+    sessionScope,
+    toolCallId,
+    approved,
+    alwaysAllowCategory,
+    requestContext,
+  }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
@@ -758,7 +773,7 @@ export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
       if (gated || !toolCallId) {
         const result = session.respondToToolApproval({
           toolCallId,
-          decision: approved ? 'approve' : 'decline',
+          decision: !approved ? 'decline' : alwaysAllowCategory ? 'always_allow_category' : 'approve',
           requestContext,
         });
         if (!result.accepted) return { ok: false, reason: result.reason };

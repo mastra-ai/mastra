@@ -12,8 +12,6 @@ import type {
 } from '@mastra/core/agent-controller';
 import { defaultDisplayState } from '@mastra/core/agent-controller';
 
-import { getToolCategory } from '../permissions.js';
-
 import type { FactoryAddress } from './client.js';
 import { createFactoryClient, FACTORY_CONTROLLER_ID } from './client.js';
 
@@ -430,14 +428,10 @@ export class RemoteSession {
     decision: 'approve' | 'decline' | 'always_allow_category';
     toolCallId: string;
   }) {
-    const approved = decision !== 'decline';
-    const toolName = this.#displayState.pendingApprovals.get(toolCallId)?.toolName;
-    const category = decision === 'always_allow_category' && toolName ? getToolCategory(toolName) : null;
     void (async () => {
-      // The Factory's approval route is approve/decline only, so "always allow"
-      // becomes a session category policy before the call is approved.
-      if (category) await this.permissions.setForCategory({ category, policy: 'allow' });
-      const ack = await this.#remote.approveTool(toolCallId, approved);
+      const ack = await this.#remote.approveTool(toolCallId, decision !== 'decline', {
+        alwaysAllowCategory: decision === 'always_allow_category',
+      });
       if (ack && 'accepted' in ack && ack.accepted === false) {
         this.#emitError(`Tool approval was not applied: ${(ack as { reason?: string }).reason ?? 'rejected'}`);
       }

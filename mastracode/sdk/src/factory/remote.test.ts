@@ -72,15 +72,13 @@ describe('RemoteSession', () => {
     expect(listener.mock.calls[0][0].error.message).toContain('not_pending');
   });
 
-  it('turns "always allow" into a category policy before approving', async () => {
-    const { session, remote, emit } = await connected();
-    emit({
-      type: 'display_state_changed',
-      displayState: { pendingApprovals: { 'call-1': { toolCallId: 'call-1', toolName: 'execute_command', args: {} } } },
-    });
+  it('forwards "always allow" to the Factory as a thread grant, not a session policy', async () => {
+    const { session, remote } = await connected();
     session.respondToToolApproval({ decision: 'always_allow_category', toolCallId: 'call-1' });
-    await vi.waitFor(() => expect(remote.approveTool).toHaveBeenCalledWith('call-1', true));
-    expect(remote.setPermissionForCategory).toHaveBeenCalledWith('execute', 'allow');
+    await vi.waitFor(() =>
+      expect(remote.approveTool).toHaveBeenCalledWith('call-1', true, { alwaysAllowCategory: true }),
+    );
+    expect(remote.setPermissionForCategory).not.toHaveBeenCalled();
   });
 
   it('rejects a suspension response when nothing is suspended', async () => {

@@ -777,6 +777,23 @@ describe('agent-controller routes', () => {
       expect(spy).toHaveBeenCalledWith({ toolCallId: 'call-1', decision: 'approve', requestContext });
     });
 
+    it('passes "always allow" through so the category is granted to the thread', async () => {
+      const session = await getRouteSession('user-aa');
+      vi.spyOn(session.approval, 'isArmed').mockReturnValue(true);
+      const spy = vi.spyOn(session, 'respondToToolApproval').mockReturnValue({ accepted: true });
+
+      await AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-aa',
+        toolCallId: 'call-1',
+        approved: true,
+        alwaysAllowCategory: true,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ decision: 'always_allow_category' }));
+    });
+
     it('answers an approval with no parked gate through the stored suspended run', async () => {
       const session = await getRouteSession('user-rc');
       const gate = vi.spyOn(session, 'respondToToolApproval');
