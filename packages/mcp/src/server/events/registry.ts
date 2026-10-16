@@ -22,25 +22,26 @@ export interface RegisteredEvent {
   delivery: EventDeliveryMode[];
   inputSchema?: StandardSchemaWithJSON;
   payloadSchema?: StandardSchemaWithJSON;
-  /** Present when the type accepts `emit()`. */
+  /** Present when the type has no `poll` source, i.e. when it accepts `emit()`. */
   buffer?: EventRingBuffer;
   listeners: Set<EventListener>;
 }
 
 /**
- * Delivery modes advertised for a definition. Without a `poll` source the type is fed by
- * `emit()` and served over push and poll; with one it is served over poll, and over push only
- * when `delivery` lists it. An explicit `delivery` only narrows. `extraModes` lets other
- * delivery mechanisms (webhooks) add themselves.
+ * Delivery modes advertised for a definition. They are fixed at construction because clients
+ * only learn them from `events/list` (no `listChanged` yet). Without a `poll` source the type
+ * is fed by `emit()` and served over push and poll; with one it is served over poll only. An
+ * explicit `delivery` only narrows that set. `extraModes` lets other delivery mechanisms
+ * (webhooks) add themselves.
  */
 export function deriveDelivery(
   name: string,
   definition: Pick<MCPServerEventDefinition, 'poll' | 'delivery'>,
   extraModes: EventDeliveryMode[] = [],
 ): EventDeliveryMode[] {
-  const servable: EventDeliveryMode[] = definition.poll ? ['poll', 'push'] : ['push', 'poll'];
+  const servable: EventDeliveryMode[] = definition.poll ? ['poll'] : ['push', 'poll'];
   servable.push(...extraModes);
-  const requested = definition.delivery ?? (definition.poll ? ['poll', ...extraModes] : servable);
+  const requested = definition.delivery ?? servable;
   const delivery = servable.filter(mode => requested.includes(mode));
   if (delivery.length === 0) {
     throw new MastraError({
@@ -61,15 +62,13 @@ export class ServerEventRegistry {
 
   constructor(definitions: Record<string, MCPServerEventDefinition> | undefined) {
     for (const [name, definition] of Object.entries(definitions ?? {})) {
-      const delivery = deriveDelivery(name, definition);
-      const emittable = !definition.poll || delivery.includes('push');
       this.events.set(name, {
         name,
         definition,
-        delivery,
+        delivery: deriveDelivery(name, definition),
         inputSchema: definition.inputSchema ? toStandardSchema(definition.inputSchema) : undefined,
         payloadSchema: definition.payloadSchema ? toStandardSchema(definition.payloadSchema) : undefined,
-        buffer: emittable
+        buffer: !definition.poll
           ? new EventRingBuffer(`${this.bootId}/${name}`, definition.bufferSize ?? DEFAULT_BUFFER_SIZE)
           : undefined,
         listeners: new Set(),
@@ -141,7 +140,7 @@ export class ServerEventRegistry {
         id: 'MCP_SERVER_EVENT_NOT_EMITTABLE',
         domain: ErrorDomain.MCP,
         category: ErrorCategory.USER,
-        text: `Event "${name}" is served by its poll source; add 'push' to its delivery to emit it`,
+        text: `Cannot emit event "${name}": it has a poll source, so it is served by its poll function only and cannot be pushed`,
       });
     }
     let payload = data;
