@@ -254,6 +254,15 @@ export class FlagEmbedding extends Embedding {
     return new FlagEmbedding(tokenizer, session, model);
   }
 
+  /**
+   * Counts texts longer than the model's token window. `embed()` silently truncates these to `maxLength`.
+   */
+  async countTruncated(textStrings: string[]): Promise<{ count: number; maxLength: number }> {
+    const encodings = await Promise.all(textStrings.map(textString => this.tokenizer.encode(textString)));
+    const truncated = encodings.filter(encoding => encoding.getOverflowing().length > 0);
+    return { count: truncated.length, maxLength: truncated[0]?.getLength() ?? 0 };
+  }
+
   static async retrieveModel(
     model: EmbeddingModel,
     cacheDir: PathLike,
