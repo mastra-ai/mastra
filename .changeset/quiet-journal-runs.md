@@ -2,7 +2,7 @@
 '@mastra/core': patch
 ---
 
-Added an experimental `storageVersion` workflow option. With `storageVersion: 2`, each run is stored as a header plus one entry per step, and each write saves only the steps that changed instead of rewriting the whole run. This cuts storage writes for long workflows and loops.
+Added an experimental `storageVersion` workflow option. With `storageVersion: 2`, each run is stored as a header plus one entry per step, and each write saves only the steps that changed instead of rewriting the whole run. Runs also keep in memory only the step results the next step needs, and read older ones from storage when `getStepResultAsync` asks for them. This cuts storage writes and memory use for long workflows and loops.
 
 ```ts
 const workflow = createWorkflow({
@@ -13,4 +13,4 @@ const workflow = createWorkflow({
 });
 ```
 
-Version 2 works only with in-memory storage and the default engine for now. Inside version 2 runs, use `await getStepResultAsync(step)` instead of `getStepResult(step)`. Runs keep the version they were created with, so resuming a run after changing this option throws.
+Version 2 works only with in-memory storage and the default engine for now. Inside version 2 runs, use `await getStepResultAsync(step)` instead of `getStepResult(step)`. A `shouldPersistSnapshot` predicate on a version 2 run sees earlier successful steps without their `output`. Runs keep the version they were created with, so resuming a run after changing this option throws.
