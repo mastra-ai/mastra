@@ -434,7 +434,10 @@ export function setupAutocomplete(state: TUIState): void {
     THINK_COMMAND_DESCRIPTOR,
     { name: 'connect', description: 'Connect a provider account or API key' },
     { name: 'login', description: 'Sign in with a provider account' },
-    { name: 'factory', description: 'Switch to Factory mode, connecting first if needed (connect|status|local|disconnect)' },
+    {
+      name: 'factory',
+      description: 'Switch to Factory mode, connecting first if needed (connect|status|local|disconnect)',
+    },
     { name: 'local', description: 'Switch from Factory mode back to local mode' },
     { name: 'skills', description: 'List available skills' },
     { name: 'skill/', description: 'Activate a skill by name' },

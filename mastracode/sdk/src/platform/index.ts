@@ -267,7 +267,9 @@ export function resolveFactoryUrl(env: PlatformEnvironment): string | null {
   if (env.customServerUrl) {
     // The Platform session token is sent to this URL, so only accept HTTPS.
     try {
-      const url = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(env.customServerUrl) ? env.customServerUrl : `https://${env.customServerUrl}`);
+      const url = new URL(
+        /^[a-z][a-z\d+.-]*:\/\//i.test(env.customServerUrl) ? env.customServerUrl : `https://${env.customServerUrl}`,
+      );
       if (url.protocol !== 'https:') return null;
       return `${url.origin}${url.pathname}`.replace(/\/+$/, '');
     } catch {
