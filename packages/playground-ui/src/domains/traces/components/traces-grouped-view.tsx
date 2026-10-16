@@ -19,15 +19,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip
 import { Txt } from '@/ds/components/Txt/Txt';
 
 // Sized like the trace list (`buildTraceListColumns`): the label columns flex like its Name/Input/Output columns, so
-// the grid fills the panel, and the measures are fixed tracks wide enough for their header and sort icon. Once the
-// columns outgrow the panel, the list scrolls horizontally.
+// the grid fills the panel, and the measures size to their header (with sort icon) and values, so headers are never
+// cut off however many dimensions share the row. Once the columns outgrow the panel, the list scrolls horizontally.
 const DIMENSION_COLUMN_WIDTH = 'minmax(10rem,1fr)';
-
-const measureColumnWidth = (measure: TraceGroupByMeasure) =>
-  `${Math.max(7, (TRACE_GROUP_BY_MEASURE_LABELS[measure].length + 5) / 2)}rem`;
+const MEASURE_COLUMN_WIDTH = 'max-content';
 
 const buildColumns = (dimensions: readonly TraceGroupByDimension[], measures: readonly TraceGroupByMeasure[]) =>
-  [...dimensions.map(() => DIMENSION_COLUMN_WIDTH), ...measures.map(measureColumnWidth)].join(' ');
+  [...dimensions.map(() => DIMENSION_COLUMN_WIDTH), ...measures.map(() => MEASURE_COLUMN_WIDTH)].join(' ');
 
 const buildColumnKeys = (dimensions: readonly TraceGroupByDimension[], measures: readonly TraceGroupByMeasure[]) => [
   ...dimensions.map(dimension => `dimension:${dimension}`),
