@@ -22,18 +22,28 @@ import type { FactoryMcpRoutesDeps } from './routes.js';
 
 describe('resolveMcpAuthorizationServers', () => {
   it('prefers config, then env, then Platform AuthKit', () => {
-    expect(resolveMcpAuthorizationServers(PLATFORM_AUTH_PROVIDER, { authorizationServers: ['https://a'] }, {})).toEqual(['https://a']);
+    expect(resolveMcpAuthorizationServers(PLATFORM_AUTH_PROVIDER, { authorizationServers: ['https://a'] }, {})).toEqual(
+      ['https://a'],
+    );
     expect(
-      resolveMcpAuthorizationServers(PLATFORM_AUTH_PROVIDER, undefined, { MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER: 'https://e' }),
+      resolveMcpAuthorizationServers(PLATFORM_AUTH_PROVIDER, undefined, {
+        MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER: 'https://e',
+      }),
     ).toEqual(['https://e']);
-    expect(resolveMcpAuthorizationServers(PLATFORM_AUTH_PROVIDER, undefined, {})).toEqual([PLATFORM_MCP_AUTHORIZATION_SERVER]);
+    expect(resolveMcpAuthorizationServers(PLATFORM_AUTH_PROVIDER, undefined, {})).toEqual([
+      PLATFORM_MCP_AUTHORIZATION_SERVER,
+    ]);
   });
 
   it('treats a blank env var as unset', () => {
-    expect(resolveMcpAuthorizationServers(PLATFORM_AUTH_PROVIDER, undefined, { MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER: '  ' })).toEqual([
-      PLATFORM_MCP_AUTHORIZATION_SERVER,
-    ]);
-    expect(resolveMcpAuthorizationServers('workos', undefined, { MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER: '' })).toEqual([]);
+    expect(
+      resolveMcpAuthorizationServers(PLATFORM_AUTH_PROVIDER, undefined, {
+        MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER: '  ',
+      }),
+    ).toEqual([PLATFORM_MCP_AUTHORIZATION_SERVER]);
+    expect(
+      resolveMcpAuthorizationServers('workos', undefined, { MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER: '' }),
+    ).toEqual([]);
   });
 
   it('returns nothing for other providers without config', () => {

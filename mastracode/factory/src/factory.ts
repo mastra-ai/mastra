@@ -534,9 +534,7 @@ export class MastraFactory {
     const routeAuth = createFactoryRouteAuth(auth);
     const mcpConfig = this.#config.mcp;
     const mcpAuthorizationServers =
-      mcpConfig === false || mcpConfig?.enabled === false
-        ? []
-        : resolveMcpAuthorizationServers(auth?.name, mcpConfig);
+      mcpConfig === false || mcpConfig?.enabled === false ? [] : resolveMcpAuthorizationServers(auth?.name, mcpConfig);
 
     // Explicit integrations win. Platform credentials fill only missing
     // provider slots so callers can override each integration independently.
