@@ -321,9 +321,10 @@ export type SlackStartedSessions = WeakMap<object, string>;
 
 /**
  * Resolve the resourceId for a NEW Slack channel thread. A linked sender whose
- * factory has a repository gets a Factory session, and the thread belongs to
+ * factory has a repository gets a Factory session. A channel thread belongs to
  * the Factory: its resourceId is the Factory id, so the thread shares the
- * Factory's memory. The session id is recorded in `startedSessions` for the
+ * Factory's memory. A DM is private to the sender, so it runs under the
+ * sender's user id and shares memory with their own sessions. The session id is recorded in `startedSessions` for the
  * thread-id resolver. The controller
  * session then materializes the repo sandbox via the factory's dynamic
  * workspace (clone + PAT), the session shows up in the web Sessions list, and
@@ -428,6 +429,7 @@ export function createChannelResourceIdResolver(
       }
 
       const branch = threadBranch(thread.id);
+      const memoryResourceId = thread.isDM ? link.userId : factoryProjectId;
       // Attributed to the Slack sender, not to whoever connected the repository:
       // unlike an autonomous rule run, a Slack thread has a real interactive user.
       // Keyed by factory, not by link: the thread's session stays found when the
@@ -439,7 +441,7 @@ export function createChannelResourceIdResolver(
       });
       if (existing) {
         startedSessions.set(message, existing.sessionId);
-        return factoryProjectId;
+        return memoryResourceId;
       }
       const session = await sourceControl.sessions.create({
         sessionId: globalThis.crypto.randomUUID(),
@@ -453,7 +455,7 @@ export function createChannelResourceIdResolver(
         visibility: thread.isDM ? 'private' : 'org',
       });
       startedSessions.set(message, session.sessionId);
-      return factoryProjectId;
+      return memoryResourceId;
     } catch (error) {
       if (error instanceof ChannelSessionRejectedError || error instanceof SlackSessionStartError) throw error;
       if (error instanceof FactorySourceControlConflictError) {

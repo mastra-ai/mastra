@@ -1003,12 +1003,12 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     expect(gitlab.sessions.create).toHaveBeenCalledWith(expect.objectContaining({ projectRepositoryId: 'pr-1' }));
   });
 
-  it('a DM thread creates a private session; channel threads stay org-visible', async () => {
+  it('a DM thread creates a private session under the sender; channel threads stay org-visible on the Factory', async () => {
     const deps = makeResolverDeps();
     const resolve = createChannelResourceIdResolver(deps as any, started);
 
     const args = resolveArgs({ id: 'slack:D-1:1700.42', isDM: true } as any);
-    await expect(resolve(args)).resolves.toBe('fp-1');
+    await expect(resolve(args)).resolves.toBe('user-1');
     expect(threadIdFor(args)).toBe('us-new');
 
     expect(deps.sourceControl.sessions.create).toHaveBeenCalledWith(expect.objectContaining({ visibility: 'private' }));
