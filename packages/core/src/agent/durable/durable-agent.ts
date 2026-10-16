@@ -101,6 +101,7 @@ const localRecoveryClaims = new Map<string, string>();
 const RECOVER_ALREADY_IN_PROGRESS_ERROR_ID = 'DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS';
 const RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID = 'DURABLE_AGENT_RECOVER_SNAPSHOT_NOT_FOUND';
 const RECOVER_RUN_SUSPENDED_ERROR_ID = 'DURABLE_AGENT_RECOVER_RUN_SUSPENDED';
+const OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS = 5_000;
 const RECOVER_RUN_NOT_ACTIVE_ERROR_ID = 'DURABLE_AGENT_RECOVER_RUN_NOT_ACTIVE';
 /** Stores already reported as unable to fence run writes, so each is warned about once per process. */
 const unfencedStoresWarned = new WeakSet<WorkflowsStorage | MemoryStorage>();
@@ -952,23 +953,23 @@ export class DurableAgent<
   async #loadLatestMessageListState(
     workflowsStore: WorkflowsStorage,
     runId: string,
-    loopSnapshot: WorkflowRunState,
-  ): Promise<unknown> {
+    fallbackSnapshot: WorkflowRunState,
+  ): Promise<Awaited<ReturnType<typeof hydrateMessageListState>> | undefined> {
     let latest: unknown;
     try {
       const nested = await workflowsStore.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_EXECUTION });
       const snapshot = typeof nested?.snapshot === 'string' ? JSON.parse(nested.snapshot) : nested?.snapshot;
       latest = snapshot && latestMessageListState(snapshot);
     } catch {
-      // Fall back to the loop snapshot.
+      // Fall back to the supplied snapshot.
     }
-    latest ??= latestMessageListState(loopSnapshot);
-    if (!latest) return latest;
+    latest ??= latestMessageListState(fallbackSnapshot);
+    if (!latest) return undefined;
     // Messages memory already stores are kept as refs; restore them so callers
     // see the full rows (e.g. ToolSearch results). #loadRecalledMessages has
     // already loaded them, so this normally needs no storage read.
     return hydrateMessageListState(
-      { state: undefined, getInitData: () => loopSnapshot.context?.input, mastra: this.#mastra },
+      { state: undefined, getInitData: () => fallbackSnapshot.context?.input, mastra: this.#mastra },
       latest as Parameters<typeof hydrateMessageListState>[1],
     );
   }
@@ -4836,7 +4837,7 @@ export class DurableAgent<
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
     },
   ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string; detach: () => void }> {
-    const memoryInfo = this.#runRegistry.getMemoryInfo(runId);
+    let memoryInfo = this.#runRegistry.getMemoryInfo(runId);
 
     // Track cleanup state to avoid double cleanup
     let cleanedUp = false;
@@ -4875,44 +4876,208 @@ export class DurableAgent<
       }
     };
 
-    const observedEntry = getRunRegistryEntry(runId, this.#mastra) ?? this.#runRegistry.get(runId);
+    const localEntry = this.#runRegistry.get(runId);
+    const observedEntry = localEntry ?? getRunRegistryEntry(runId, this.#mastra);
     const observedAgentSpan = observedEntry?.resumeAgentSpan ?? observedEntry?.agentSpan;
     let structuredOutput = observedEntry?.structuredOutput;
+    let outputProcessors = observedEntry?.outputProcessors;
+    const processorStates = observedEntry?.processorStates;
+    let returnScorerData = observedEntry?.returnScorerData;
+    let requestContext = observedEntry?.requestContext;
+    let messageList = observedEntry?.messageList ?? this.#runRegistry.getMessageList(runId);
+    // Worker entries can carry runtime dependencies without the caller's live transcript.
+    const liveEntry = messageList ? observedEntry : undefined;
+    let workflowInput: DurableAgenticWorkflowInput | undefined;
+    let loopSnapshot: WorkflowRunState | undefined;
+    let workflowInputSnapshot: WorkflowRunState | undefined;
+    const workflowsStore = !liveEntry ? await this.#mastra?.getStorage()?.getStore('workflows') : undefined;
 
-    if (!structuredOutput) {
-      const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-      let workflowInput: DurableAgenticWorkflowInput | undefined;
+    if (!structuredOutput || !liveEntry) {
+      const snapshotStore = workflowsStore ?? (await this.#mastra?.getStorage()?.getStore('workflows'));
 
       for (const workflowName of [DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION]) {
-        const persisted = await workflowsStore?.getWorkflowRunById({ runId, workflowName });
+        const persisted = await snapshotStore?.getWorkflowRunById({ runId, workflowName });
         if (!persisted) continue;
 
         const snapshot =
           typeof persisted.snapshot === 'string'
             ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
             : persisted.snapshot;
+        if (workflowName === DurableStepIds.AGENTIC_LOOP) loopSnapshot = snapshot;
         const persistedInput = snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
         if (persistedInput?.__workflowKind !== 'durable-agent') continue;
 
         workflowInput = persistedInput;
+        workflowInputSnapshot = snapshot;
         break;
       }
+    }
 
-      if (workflowInput) {
-        const persistedStructuredOutput = workflowInput.options?.structuredOutput;
-        if (persistedStructuredOutput?.schema) {
-          const { errorStrategy, fallbackValue, ...rest } = persistedStructuredOutput;
-          const schema = toStandardSchema<{}>(persistedStructuredOutput.schema);
-          // A non-JSON-safe fallbackValue is not persisted; keep the default strategy then.
-          structuredOutput =
-            errorStrategy === 'fallback'
-              ? fallbackValue === undefined
-                ? { ...rest, schema }
-                : { ...rest, schema, errorStrategy, fallbackValue: fallbackValue as {} }
-              : { ...rest, schema, errorStrategy };
-        }
+    if (!liveEntry && workflowInput && workflowInput.agentId !== this.id) {
+      throw new MastraError({
+        id: 'DURABLE_AGENT_OBSERVE_AGENT_MISMATCH',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `DurableAgent "${this.name}" observe(${runId}): persisted run belongs to agent "${workflowInput.agentId}", not "${this.id}".`,
+        details: { agentName: this.name, runId, ownerAgentId: workflowInput.agentId },
+      });
+    }
+
+    if (!structuredOutput && workflowInput) {
+      const persistedStructuredOutput = workflowInput.options?.structuredOutput;
+      if (persistedStructuredOutput?.schema) {
+        const { errorStrategy, fallbackValue, ...rest } = persistedStructuredOutput;
+        const schema = toStandardSchema<{}>(persistedStructuredOutput.schema);
+        // A non-JSON-safe fallbackValue is not persisted; keep the default strategy then.
+        structuredOutput =
+          errorStrategy === 'fallback'
+            ? fallbackValue === undefined
+              ? { ...rest, schema }
+              : { ...rest, schema, errorStrategy, fallbackValue: fallbackValue as {} }
+            : { ...rest, schema, errorStrategy };
       }
     }
+
+    if (!liveEntry && workflowInput) {
+      requestContext = workflowInput.requestContextEntries
+        ? new RequestContext(
+            Object.entries(workflowInput.requestContextEntries) as Iterable<readonly [string, unknown]>,
+          )
+        : new RequestContext();
+
+      const messageListMemoryInfo = (
+        workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
+      )?.memoryInfo;
+      const threadId = workflowInput.state?.threadId ?? messageListMemoryInfo?.threadId;
+      const resourceId = workflowInput.state?.resourceId ?? messageListMemoryInfo?.resourceId;
+      memoryInfo = threadId && resourceId ? { threadId, resourceId } : undefined;
+
+      if (threadId && resourceId) {
+        requestContext.set('MastraMemory', {
+          thread: { id: threadId },
+          resourceId,
+          memoryConfig: workflowInput.state?.memoryConfig,
+        });
+      } else {
+        requestContext.delete('MastraMemory');
+      }
+
+      messageList = new MessageList({ threadId, resourceId });
+      try {
+        const snapshot = workflowInputSnapshot ?? loopSnapshot;
+        const storedState = workflowInput.messageListState ?? (snapshot ? latestMessageListState(snapshot) : undefined);
+        if (storedState) {
+          const initialState = await hydrateMessageListState(
+            { state: undefined, getInitData: () => workflowInput!, mastra: this.#mastra },
+            storedState,
+          );
+          messageList.deserialize(initialState);
+        }
+
+        if (workflowsStore && snapshot) {
+          const inputMessages = messageList.get.input.db();
+          const latestState = await this.#loadLatestMessageListState(workflowsStore, runId, snapshot);
+          if (latestState) {
+            messageList.deserialize(latestState);
+            if (messageList.get.input.db().length === 0 && inputMessages.length > 0) {
+              messageList.add(inputMessages, 'input');
+            }
+          }
+        }
+      } catch (error) {
+        this.#mastra
+          ?.getLogger?.()
+          ?.warn?.(`[DurableAgent] observe(${runId}) messageList deserialize skipped: ${error}`);
+      }
+
+      let processorAgent: Agent<any, any, TOutput> = this.#wrappedAgent as Agent<any, any, TOutput>;
+      const pinnedVersionId = workflowInput.agentVersionId;
+      if (pinnedVersionId && this.#mastra && !this.__isStoredVersionApplied()) {
+        const currentVersionId = this.toRawConfig()?.resolvedVersionId;
+        if (pinnedVersionId !== currentVersionId) {
+          try {
+            processorAgent = (await this.#mastra.resolveVersionedAgent(this as unknown as Agent, {
+              versionId: pinnedVersionId,
+            })) as unknown as Agent<any, any, TOutput>;
+          } catch (error) {
+            this.#mastra
+              .getLogger?.()
+              ?.warn?.(
+                `[DurableAgent] Failed to resolve pinned agent version for durable observe, using current definition: ${error}`,
+              );
+          }
+        }
+      }
+
+      try {
+        outputProcessors = (await processorAgent.listOutputProcessors(requestContext)) ?? [];
+      } catch (error) {
+        outputProcessors = [];
+        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] observe(${runId}) processor resolution failed: ${error}`);
+      }
+      returnScorerData = workflowInput.options?.returnScorerData;
+    }
+
+    const refreshObservedMessageList = async (isExpired: () => boolean) => {
+      const targetMessageList = messageList;
+      const snapshot = workflowInputSnapshot ?? loopSnapshot;
+      if (!workflowsStore || !snapshot || !targetMessageList) return;
+
+      try {
+        const inputMessages = targetMessageList.get.input.db();
+        const latestState = await this.#loadLatestMessageListState(workflowsStore, runId, snapshot);
+        if (latestState && !isExpired()) {
+          targetMessageList.deserialize(latestState);
+          if (targetMessageList.get.input.db().length === 0 && inputMessages.length > 0) {
+            targetMessageList.add(inputMessages, 'input');
+          }
+        }
+      } catch (error) {
+        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] observe(${runId}) messageList refresh failed: ${error}`);
+      }
+    };
+
+    const refreshObservedMessageListWithTimeout = async () => {
+      const refreshTimeoutMs = Math.min(
+        options?.idleTimeoutMs && options.idleTimeoutMs > 0
+          ? options.idleTimeoutMs
+          : OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS,
+        OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS,
+      );
+      let expired = false;
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const timedOut = new Promise<boolean>(resolve => {
+        timeout = setTimeout(() => {
+          expired = true;
+          resolve(true);
+        }, refreshTimeoutMs);
+      });
+
+      try {
+        const didTimeOut = await Promise.race([refreshObservedMessageList(() => expired).then(() => false), timedOut]);
+        if (didTimeOut) {
+          this.#mastra
+            ?.getLogger?.()
+            ?.warn?.(`[DurableAgent] observe(${runId}) messageList refresh timed out after ${refreshTimeoutMs}ms`);
+        }
+      } finally {
+        if (timeout) clearTimeout(timeout);
+      }
+    };
+
+    let observedResponseText = '';
+    const handleObservedChunk = async (chunk: ChunkType<TOutput>) => {
+      if (chunk.type === 'text-delta' && typeof chunk.payload.text === 'string') {
+        observedResponseText += chunk.payload.text;
+      }
+      if (chunk.type === 'step-finish') {
+        await refreshObservedMessageListWithTimeout();
+        if (messageList && messageList.get.response.db().length === 0 && observedResponseText) {
+          messageList.add({ role: 'assistant', content: observedResponseText }, 'response');
+        }
+      }
+      await options?.onChunk?.(chunk);
+    };
 
     const replayFloor = await this.#readReplayFloor(runId, options?.offset);
 
@@ -4931,7 +5096,7 @@ export class DurableAgent<
       ...replayFloor,
       idleTimeoutMs: options?.idleTimeoutMs,
       isAlive: options?.isAlive,
-      onChunk: options?.onChunk,
+      onChunk: handleObservedChunk,
       experimentalTransform: options?.experimentalTransform,
       onStepFinish: options?.onStepFinish,
       onFinish: options?.onFinish,
@@ -4955,11 +5120,12 @@ export class DurableAgent<
       },
       onSuspended: options?.onSuspended,
       structuredOutput: structuredOutput as any,
-      outputProcessors: this.#runRegistry.get(runId)?.outputProcessors,
-      processorStates: this.#runRegistry.get(runId)?.processorStates,
-      returnScorerData: this.#runRegistry.get(runId)?.returnScorerData,
+      outputProcessors,
+      processorStates,
+      returnScorerData,
+      requestContext,
       tracingContext: observedAgentSpan ? { currentSpan: observedAgentSpan } : undefined,
-      messageList: getRunRegistryEntry(runId, this.#mastra)?.messageList ?? this.#runRegistry.getMessageList(runId),
+      messageList,
     });
     const { output, ready, detach } = stream;
     streamCleanup = stream.cleanup;
