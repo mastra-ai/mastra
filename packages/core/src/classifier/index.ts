@@ -8,6 +8,7 @@ import {
   type Experimental_DecisionModelV4Input as DecisionModelV4Input,
   type Experimental_DecisionModelV4Question as DecisionModelV4Question,
   type Experimental_DecisionModelV4Result as DecisionModelV4Result,
+  type Experimental_DecisionModelV4State as DecisionModelV4State,
   type Experimental_EvaluationModelV4 as EvaluationModelV4,
   type SharedV4ProviderMetadata,
   type SharedV4ProviderOptions,
@@ -322,7 +323,7 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
           attemptCount += 1;
           try {
             const callOptions = {
-              state: options.state,
+              state: toProviderState(options.state),
               questions: providerQuestions,
               abortSignal: options.abortSignal,
               providerOptions: options.providerOptions,
@@ -400,6 +401,13 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
       throw error;
     }
   }
+}
+
+// Mirrors the AI SDK's decide(): providers receive state as an array of parts.
+function toProviderState(state: ClassifierState): DecisionModelV4State {
+  if (typeof state === 'string') return [{ type: 'text', text: state }];
+  if (!Array.isArray(state)) return [{ type: 'json', value: state }];
+  return state as unknown as DecisionModelV4State;
 }
 
 function toProviderQuestions(questions: ClassifierQuestions): Readonly<Record<string, DecisionModelV4Question>> {
@@ -522,7 +530,7 @@ function validateProviderResult(
   questions: ClassifierQuestions,
   answers: Record<string, DecisionModelV4Answer>,
   rounding?: { probabilityDecimals?: number; scoreDecimals?: number },
-): void {
+): asserts answers is ClassifierAnswers<ClassifierQuestions> {
   if (!isPlainObject(answers)) throw new TypeError('The evaluation model returned invalid answers.');
   const questionIds = Object.keys(questions);
   const answerIds = Object.keys(answers);
