@@ -18,6 +18,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { z } from 'zod/v4';
 
 import { MASTRA_USER_KEY } from '../constants';
+import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import { filterSchema, includeSchema, messageOrderBySchema } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -956,7 +957,7 @@ export const TRANSFER_AGENT_CONTROLLER_THREAD_OWNERSHIP_ROUTE = createRoute({
   responseSchema: transferOwnershipResponseSchema,
   summary: 'Take ownership of a thread',
   description:
-    "Transfers ownership of the specified thread to the authenticated user from the request context. The session's active thread does not change.",
+    "Transfers ownership of the specified thread to the authenticated user from the request context. The thread must belong to the session's resource, and the caller needs memory write access to it. The session's active thread does not change.",
   tags: ['AgentController', 'Threads'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
@@ -967,6 +968,19 @@ export const TRANSFER_AGENT_CONTROLLER_THREAD_OWNERSHIP_ROUTE = createRoute({
         throw new HTTPException(401, { message: 'An authenticated user is required to transfer thread ownership' });
       }
       const controller = getAgentControllerOrThrow(mastra, controllerId);
+      await controller.init();
+      const thread = await controller.queryThreadById({ threadId });
+      if (!thread || thread.resourceId !== resourceId) {
+        throw new HTTPException(404, { message: 'Thread not found' });
+      }
+      await enforceThreadAccess({
+        mastra,
+        requestContext,
+        threadId,
+        thread,
+        effectiveResourceId: resourceId,
+        permission: MastraFGAPermissions.MEMORY_WRITE,
+      });
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
       await session.thread.transferOwnership({ toOwnerId: ownerId, threadId });
       return { ok: true, ownerId };
