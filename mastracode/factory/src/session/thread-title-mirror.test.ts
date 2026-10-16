@@ -8,7 +8,7 @@ import {
   type ThreadTitleMirrorSession,
 } from './thread-title-mirror.js';
 
-function createSession(title?: string, metadata?: Record<string, unknown>) {
+function createSession(title?: string) {
   const listeners: Array<(event: AgentControllerEvent) => void> = [];
   const getById = vi.fn(
     async ({ threadId }: { threadId: string }): Promise<AgentControllerThread | null> => ({
@@ -17,7 +17,6 @@ function createSession(title?: string, metadata?: Record<string, unknown>) {
       createdAt: new Date(),
       updatedAt: new Date(),
       ...(title ? { title } : {}),
-      ...(metadata ? { metadata } : {}),
     }),
   );
   const session: ThreadTitleMirrorSession = {
@@ -180,23 +179,16 @@ describe('observeSessionThreadTitle', () => {
     );
   });
 
-  it.each([
-    { case: 'has no title yet', title: undefined, metadata: undefined },
-    { case: 'still carries its channel label', title: 'slack conversation', metadata: { channel_platform: 'slack' } },
-  ])('waits for a real name when the bound thread $case', async ({ title, metadata }) => {
-    const { session, emit, getById } = createSession(title, metadata);
+  it('leaves the row alone when the thread has not been named yet', async () => {
+    const { session, emit, getById } = createSession();
     const dependencies = createDependencies(null);
     observeSessionThreadTitle(session, dependencies);
 
     emit({ type: 'thread_changed', threadId: 'thread-1', previousThreadId: null });
-    await getById.mock.results[0]!.value;
-    emit({ type: 'thread_title_updated', threadId: 'thread-1', title: 'Log parser rewrite' });
 
-    await vi.waitFor(() => expect(dependencies.sourceControl.sessions.rename).toHaveBeenCalled());
-    expect(dependencies.sourceControl.sessions.rename).toHaveBeenCalledExactlyOnceWith({
-      sessionId: 'resource-1',
-      title: 'Log parser rewrite',
-    });
+    await vi.waitFor(() => expect(getById).toHaveBeenCalledOnce());
+    expect(dependencies.sourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
+    expect(dependencies.sourceControl.sessions.rename).not.toHaveBeenCalled();
   });
 
   it('leaves the row alone when it already holds the title', async () => {

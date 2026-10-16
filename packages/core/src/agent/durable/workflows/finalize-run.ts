@@ -3,7 +3,6 @@ import type { IMastraLogger } from '../../../logger';
 import { noopLogger } from '../../../logger/noop-logger';
 import type { Mastra } from '../../../mastra';
 import type { MastraMemory } from '../../../memory/memory';
-import { needsThreadTitle, saveGeneratedThreadTitle } from '../../../memory/thread-title';
 import { createObservabilityContext } from '../../../observability';
 import type { TracingContext } from '../../../observability';
 import type { OutputResult } from '../../../processors';
@@ -510,7 +509,7 @@ export async function generateDurableThreadTitle({
   const { shouldGenerate, model, instructions, minMessages } = agent.resolveTitleGenerationConfig(
     mergedConfig.generateTitle,
   );
-  if (!shouldGenerate || (thread && !needsThreadTitle(thread))) return;
+  if (!shouldGenerate || thread?.title) return;
 
   const titleMessageList = new MessageList().deserialize(messageListState);
   const uiMessages = agent.filterUiMessagesByThread(titleMessageList, threadId, titleMessageList.get.all.ui());
@@ -529,11 +528,24 @@ export async function generateDurableThreadTitle({
   );
   if (!title) return;
 
-  // createThread upserts the whole row, so re-read in case another writer created it meanwhile.
-  const threadNeverExisted = !thread && !(await memory.getThreadById({ threadId }));
-  if (threadNeverExisted) {
-    await memory.createThread({ threadId, resourceId, memoryConfig, title });
-    return;
+  // genTitle is a model round trip, so another writer may have created the thread in the
+  // meantime. Re-read before falling back to createThread, which upserts the whole row and
+  // would drop metadata that writer stored.
+  const currentThread = thread ?? (await memory.getThreadById({ threadId }));
+
+  if (currentThread) {
+    await memory.updateThread({
+      id: threadId,
+      title,
+      metadata: currentThread.metadata ?? {},
+      memoryConfig,
+    });
+  } else {
+    await memory.createThread({
+      threadId,
+      resourceId,
+      memoryConfig,
+      title,
+    });
   }
-  await saveGeneratedThreadTitle({ memory, threadId, title, memoryConfig });
 }

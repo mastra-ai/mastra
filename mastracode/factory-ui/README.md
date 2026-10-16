@@ -65,7 +65,7 @@ Opening a Factory lands on its first board; **Boards** lead the sidebar, followe
 
 ## Session titles
 
-Slack sessions use the same automatic title generation as web sessions, including the preceding Slack thread context available to the agent. Until naming succeeds, the sidebar shows the session's work item title, or its branch when it has none, instead of the generic `slack conversation` label. Older sessions that already show that label are renamed on their next turn; custom and pinned titles are preserved.
+Slack sessions use the same automatic title generation as web sessions, including the preceding Slack thread context available to the agent. Until naming succeeds, the sidebar shows the session's work item title, or its branch when it has none. Older sessions that still show the generic `slack conversation` label keep it until observational memory retitles the conversation or the owner regenerates the title.
 
 Owners can choose **Regenerate title** from a web or Slack session's sidebar menu to name it from its stored conversation. Regeneration uses the existing title model and does not start a workspace. Automatic naming failures leave the conversation usable; an explicit regeneration reports its error.
 

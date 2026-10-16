@@ -4,5 +4,4 @@ export * from './message-history-config';
 export * from './memory';
 export * from './mock';
 export * from './run-state';
-export { isChannelPlaceholderTitle } from './thread-title';
 export * from './working-memory-utils';

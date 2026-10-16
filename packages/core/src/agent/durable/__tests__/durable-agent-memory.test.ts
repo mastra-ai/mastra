@@ -859,81 +859,6 @@ describe('DurableAgent memory edge cases', () => {
   // title-generation branch, so `memory.options.generateTitle` silently never fired for
   // durable/evented agents (and Inngest). See create-durable-agentic-workflow.ts.
   describe('generateTitle', () => {
-    it.each(['renamed', 'deleted'])('does not overwrite a thread %s during title generation', async action => {
-      const memory = new MockMemory({ options: { generateTitle: true } });
-      await memory.createThread({
-        threadId: 'slack-thread',
-        resourceId: 'slack-session',
-        title: 'slack conversation',
-        metadata: { channel_platform: 'slack' },
-      });
-      const agent = new Agent({
-        id: 'pending-title-agent',
-        name: 'Pending title agent',
-        instructions: 'Help the user',
-        model: createTextModel('On it'),
-        memory,
-      });
-      let release = () => {};
-      const pending = new Promise<void>(resolve => {
-        release = resolve;
-      });
-      vi.spyOn(agent, 'genTitle').mockImplementation(async () => {
-        await pending;
-        return 'Generated title';
-      });
-      const durableAgent = createDurableAgent({ agent, pubsub });
-      const result = await durableAgent.stream('Investigate checkout timeouts', {
-        memory: { thread: 'slack-thread', resource: 'slack-session' },
-      });
-      for await (const _chunk of result.fullStream) {
-      }
-      if (action === 'renamed') {
-        await memory.updateThread({ id: 'slack-thread', title: 'My custom title', metadata: { titlePinned: true } });
-      } else {
-        await memory.deleteThread('slack-thread');
-      }
-      const read = vi.spyOn(memory, 'getThreadById');
-      release();
-      await vi.waitFor(() => expect(read).toHaveBeenCalled());
-      expect((await memory.getThreadById({ threadId: 'slack-thread' }))?.title).toBe(
-        action === 'renamed' ? 'My custom title' : undefined,
-      );
-      result.cleanup();
-    });
-
-    it('replaces a legacy channel placeholder using the configured title model', async () => {
-      const mockMemory = new MockMemory({
-        options: { generateTitle: { model: createTextModel('Checkout timeout investigation') } },
-      });
-      await mockMemory.createThread({
-        threadId: 'slack-thread',
-        resourceId: 'slack-session',
-        title: 'slack conversation',
-        metadata: { channel_platform: 'slack', channel_externalThreadId: 'C123:456' },
-      });
-      const agent = new Agent({
-        id: 'channel-title-agent',
-        name: 'Channel title agent',
-        instructions: 'Investigate checkout failures',
-        model: createTextModel('On it'),
-        memory: mockMemory,
-      });
-      const durableAgent = createDurableAgent({ agent, pubsub });
-      const result = await durableAgent.stream('Investigate checkout timeouts', {
-        memory: { thread: 'slack-thread', resource: 'slack-session' },
-      });
-      for await (const _chunk of result.fullStream) {
-      }
-      await vi.waitFor(async () => {
-        expect(await mockMemory.getThreadById({ threadId: 'slack-thread' })).toMatchObject({
-          title: 'Checkout timeout investigation',
-          metadata: { channel_platform: 'slack', channel_externalThreadId: 'C123:456' },
-        });
-      });
-      result.cleanup();
-    });
-
     it('finishes the stream before lifecycle-managed title generation completes', async () => {
       const mockMemory = new MockMemory();
       mockMemory.getMergedThreadConfig = () => ({ generateTitle: true });
@@ -969,16 +894,12 @@ describe('DurableAgent memory edge cases', () => {
       result.cleanup();
     });
 
-    it.each([
-      { title: 'Existing Title', metadata: {} },
-      { title: 'slack conversation', metadata: { channel_platform: 'slack', titlePinned: true } },
-    ])('does not overwrite an existing title: $title, $metadata', async ({ title, metadata }) => {
+    it('does not overwrite an existing thread title', async () => {
       const mockMemory = new MockMemory();
       await mockMemory.createThread({
         threadId: 'thread-titled',
         resourceId: 'resource-titled',
-        title,
-        metadata,
+        title: 'Existing Title',
       });
 
       const titleModel = createTextModel('Should Not Be Used');
@@ -1000,7 +921,7 @@ describe('DurableAgent memory edge cases', () => {
       }
 
       const thread = await mockMemory.getThreadById({ threadId: 'thread-titled' });
-      expect(thread?.title).toBe(title);
+      expect(thread?.title).toBe('Existing Title');
       result.cleanup();
     });
   });

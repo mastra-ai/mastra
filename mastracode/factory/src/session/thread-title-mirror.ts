@@ -1,5 +1,4 @@
 import type { AgentControllerEvent, AgentControllerThread } from '@mastra/core/agent-controller';
-import { isChannelPlaceholderTitle } from '@mastra/core/memory';
 
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import { normalizeSessionTitle } from './session-title.js';
@@ -14,11 +13,6 @@ export interface ThreadTitleMirrorDependencies {
   sourceControl: {
     sessions: Pick<SourceControlStorageHandle['sessions'], 'getBySessionId' | 'rename'>;
   };
-}
-
-function chosenTitle(thread: AgentControllerThread | null): string | undefined {
-  if (!thread || isChannelPlaceholderTitle(thread)) return undefined;
-  return thread.title;
 }
 
 /**
@@ -72,7 +66,7 @@ export function observeSessionThreadTitle(
         boundThreadId = event.threadId;
         void session.thread
           .getById({ threadId: event.threadId })
-          .then(thread => project(event.threadId, chosenTitle(thread)))
+          .then(thread => project(event.threadId, thread?.title))
           .catch(error => console.warn('[Factory thread-title mirror] Unable to read the bound thread.', error));
         return;
       }

@@ -1,7 +1,7 @@
 ---
-'@mastra/core': patch
+"@mastra/core": patch
 ---
 
-Fixed automatic conversation titles for Slack and other channels. Threads still showing the generic channel label, such as `slack conversation`, are named on their next successful turn. Custom and pinned titles are kept.
+Fixed channel conversations (Slack, Discord, Telegram and others) never getting an automatic title. New channel threads now start without a title, like any other thread, so `generateTitle` names them from the conversation.
 
-Automatic title generation also no longer overwrites a title set while the title model was running, and never names a thread whose title is pinned, even when that title is empty.
+Before, every new channel thread was saved with a generic label such as `slack conversation`, which counted as an existing title and blocked title generation. With `generateTitle` turned off, new channel threads now appear untitled in Studio, which lists them by creation date, instead of showing that label. Existing threads keep their current title.

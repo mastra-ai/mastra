@@ -66,7 +66,6 @@ import type { MastraMemory } from '../memory/memory';
 import { normalizeMessageHistoryConfig } from '../memory/message-history-config';
 import { getMemoryRunState } from '../memory/run-state';
 import { checkThreadFGA } from '../memory/thread-fga';
-import { needsThreadTitle, saveGeneratedThreadTitle } from '../memory/thread-title';
 import type { MemoryConfig, MemoryConfigInternal } from '../memory/types';
 import {
   resolveDeliveryFailureUpdate,
@@ -8942,7 +8941,7 @@ export class Agent<
         const uiMessages = messageList.get.all.ui();
         const requiredMessages = minMessages ?? 1;
 
-        if (shouldGenerate && needsThreadTitle(thread)) {
+        if (shouldGenerate && !thread.title) {
           const threadUiMessages = this.filterUiMessagesByThread(messageList, thread.id, uiMessages);
 
           if (threadUiMessages.length >= requiredMessages) {
@@ -8964,8 +8963,22 @@ export class Agent<
               )
                 .then(async title => {
                   if (title) {
-                    const saved = await saveGeneratedThreadTitle({ memory, threadId: thread.id, title, memoryConfig });
-                    if (!saved) return undefined;
+                    // Update-only write: the thread may have been deleted while the
+                    // title was generating, and an upsert would resurrect it (#25203).
+                    const existingThread = await memory.getThreadById({ threadId: thread.id });
+                    if (!existingThread) {
+                      this.logger.debug('Skipping generated title save: thread was deleted', {
+                        threadId: thread.id,
+                      });
+                      return undefined;
+                    }
+                    try {
+                      await memory.updateThread({ id: thread.id, title, memoryConfig });
+                    } catch (error) {
+                      // A delete can still land between the check and the update; only swallow that case.
+                      if (!(await memory.getThreadById({ threadId: thread.id }))) return undefined;
+                      throw error;
+                    }
 
                     if (emitEvent && writer && !abortSignal?.aborted) {
                       try {
