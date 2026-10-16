@@ -203,7 +203,16 @@ export const traceQueryFieldsWithAggregate: GetTraceQueryFieldsResponse = {
       { path: 'entityName', valueKind: 'string' },
       { path: 'status', valueKind: 'string' },
     ],
-    measures: [{ name: 'count', kind: 'count', unit: 'count', approximate: false }],
+    measures: [
+      { name: 'count', kind: 'count', unit: 'count', approximate: false },
+      { name: 'errorCount', kind: 'count', unit: 'count', approximate: false },
+      { name: 'errorRate', kind: 'ratio', unit: 'ratio', approximate: false },
+      { name: 'duration.p50', kind: 'duration', unit: 'ms', approximate: true },
+      { name: 'duration.p95', kind: 'duration', unit: 'ms', approximate: true },
+      { name: 'tokens.input.sum', kind: 'tokens', unit: 'tokens', approximate: false },
+      { name: 'tokens.output.sum', kind: 'tokens', unit: 'tokens', approximate: false },
+      { name: 'cost.sum', kind: 'cost', unit: 'currency', approximate: false },
+    ],
   },
 };
 
@@ -242,6 +251,7 @@ export function aggregateByEntityName(page: TraceQueryKeysetTraceResponse): Aggr
       dimensions: { entityName },
       measures: {
         count,
+        errorCount: errors,
         errorRate: errors / count,
         'duration.p50': 1000,
         'duration.p95': 1000,

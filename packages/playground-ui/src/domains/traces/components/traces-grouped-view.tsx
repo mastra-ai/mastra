@@ -1,8 +1,8 @@
 import {
   TRACE_GROUP_BY_DIMENSION_LABELS,
   TRACE_GROUP_BY_LIMIT,
+  DEFAULT_TRACE_GROUP_COLUMNS,
   TRACE_GROUP_BY_MEASURE_LABELS,
-  TRACE_GROUP_BY_MEASURES,
   formatTraceGroupMeasure,
   formatTraceGroupValue,
   getTraceGroupDrillDown,
@@ -19,26 +19,27 @@ import { DataList, DataListSkeletonRows } from '@/ds/components/DataList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt/Txt';
 
-// Fixed tracks like the trace list's, so columns pack to the left instead of spreading across the panel.
-const MEASURE_COLUMN_WIDTHS: Record<TraceGroupByMeasure, string> = {
-  count: '7rem',
-  errorRate: '7rem',
-  'duration.p50': '8rem',
-  'duration.p95': '8rem',
-  'tokens.input.sum': '9rem',
-  'tokens.output.sum': '9rem',
-  'cost.sum': '8rem',
-};
+// Sized like the trace list (`buildTraceListColumns`): the label columns flex like its Name/Input/Output columns, so
+// the grid fills the panel, and the measures are fixed tracks wide enough for their header and sort icon. Once the
+// columns outgrow the panel, the list scrolls horizontally.
+const DIMENSION_COLUMN_WIDTH = 'minmax(10rem,1fr)';
 
-const columnsFor = (dimensionCount: number) =>
-  [
-    ...Array.from({ length: dimensionCount }, () => 'minmax(10rem, 16rem)'),
-    ...TRACE_GROUP_BY_MEASURES.map(measure => MEASURE_COLUMN_WIDTHS[measure]),
-  ].join(' ');
+const measureColumnWidth = (measure: TraceGroupByMeasure) =>
+  `${Math.max(7, (TRACE_GROUP_BY_MEASURE_LABELS[measure].length + 5) / 2)}rem`;
+
+const buildColumns = (dimensions: readonly TraceGroupByDimension[], measures: readonly TraceGroupByMeasure[]) =>
+  [...dimensions.map(() => DIMENSION_COLUMN_WIDTH), ...measures.map(measureColumnWidth)].join(' ');
+
+const buildColumnKeys = (dimensions: readonly TraceGroupByDimension[], measures: readonly TraceGroupByMeasure[]) => [
+  ...dimensions.map(dimension => `dimension:${dimension}`),
+  ...measures,
+];
 
 export interface TracesGroupedViewProps {
   /** Grouped dimensions, in order: one label column each. */
   dimensions: TraceGroupByDimension[];
+  /** Measure columns to show, from `useTraceGroupColumnPreferences`. */
+  columns?: readonly TraceGroupByMeasure[];
   rows: TraceGroupRow[];
   /** More groups exist than the top-N returned. */
   truncated?: boolean;
@@ -74,6 +75,7 @@ function MeasureCell({ row, measure }: { row: TraceGroupRow; measure: TraceGroup
 /** One row per group of the Traces table's filtered selection, with its counts, latency, tokens and cost. */
 export function TracesGroupedView({
   dimensions,
+  columns = DEFAULT_TRACE_GROUP_COLUMNS,
   rows,
   truncated,
   isLoading,
@@ -83,13 +85,20 @@ export function TracesGroupedView({
   onDrillDown,
 }: TracesGroupedViewProps) {
   return (
-    <div className="flex min-h-0 min-w-0 flex-col gap-2">
-      <DataList columns={columnsFor(dimensions.length)} fit="container" className="min-w-0">
+    <div className="flex h-full min-h-0 min-w-0 flex-col gap-2">
+      <DataList
+        reorderable
+        id="trace-groups"
+        columns={buildColumns(dimensions, columns)}
+        columnKeys={buildColumnKeys(dimensions, columns)}
+        fit="container"
+        className="min-h-0 min-w-0 flex-1"
+      >
         <DataList.Top>
           {dimensions.map(dimension => (
             <DataList.TopCell key={dimension}>{TRACE_GROUP_BY_DIMENSION_LABELS[dimension]}</DataList.TopCell>
           ))}
-          {TRACE_GROUP_BY_MEASURES.map(measure => (
+          {columns.map(measure => (
             <DataList.SortableTopCell
               key={measure}
               sortKey={measure}
@@ -102,7 +111,7 @@ export function TracesGroupedView({
         </DataList.Top>
 
         {isLoading ? (
-          <DataListSkeletonRows columnCount={TRACE_GROUP_BY_MEASURES.length + dimensions.length} />
+          <DataListSkeletonRows columnCount={columns.length + dimensions.length} />
         ) : rows.length === 0 ? (
           <DataList.NoMatch
             message={filtersApplied ? 'No traces match these filters' : 'No traces in this time range'}
@@ -117,7 +126,7 @@ export function TracesGroupedView({
                 {labels.map((label, index) => (
                   <DataList.TextCell key={dimensions[index]}>{label}</DataList.TextCell>
                 ))}
-                {TRACE_GROUP_BY_MEASURES.map(measure => (
+                {columns.map(measure => (
                   <MeasureCell key={measure} row={row} measure={measure} />
                 ))}
               </>

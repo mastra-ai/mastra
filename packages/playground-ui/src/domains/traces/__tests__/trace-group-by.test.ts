@@ -9,10 +9,12 @@ import {
   formatTraceGroupMeasure,
   formatTraceGroupValue,
   getOfferedTraceGroupByDimensions,
+  getOfferedTraceGroupColumns,
   getTraceGroupDrillDown,
   getTraceGroupValue,
   mergeTraceGroupEntityIdFallback,
   parseTraceGroupBy,
+  parseTraceGroupColumns,
   parseTraceGroupHaving,
   parseTraceGroupSort,
   serializeTraceGroupSort,
@@ -173,11 +175,51 @@ describe('buildTraceGroupByRequest', () => {
     });
   });
 
+  it('requests the visible columns, plus the measures the sort and group filters read', () => {
+    const request = buildTraceGroupByRequest(
+      query,
+      { groupBy: ['status'], having: [{ measure: 'duration.p99', operatorId: 'gt', value: 1000 }] },
+      { measure: 'cost.avg', direction: 'asc' },
+      ['count', 'errorCount', 'countDistinct.userId'],
+    );
+    expect(request.measures).toEqual(['count', 'errorCount', 'countDistinct.userId', 'cost.avg', 'duration.p99']);
+  });
+
   it('omits where and having when there is nothing to filter', () => {
     const unfiltered = buildTraceQueryRequest({ tokens: [], now: new Date('2026-10-15T12:00:00.000Z') });
     const request = buildTraceGroupByRequest(unfiltered, { groupBy: ['status'], having: [] }, DEFAULT_TRACE_GROUP_SORT);
     expect(request).not.toHaveProperty('where');
     expect(request).not.toHaveProperty('having');
+  });
+});
+
+describe('grouped view columns', () => {
+  it('offers every column when the server does not describe its measures', () => {
+    expect(getOfferedTraceGroupColumns(undefined)).toContain('countDistinct.sessionId');
+  });
+
+  it('offers the reported measures, and unique counts only of reported dimensions', () => {
+    const reported: TraceAggregateDiscovery = {
+      dimensions: [{ path: 'userId', valueKind: 'string' }],
+      measures: [
+        { name: 'count', kind: 'count', unit: 'count', approximate: false },
+        { name: 'duration.p99', kind: 'duration', unit: 'ms', approximate: true },
+      ],
+    } as TraceAggregateDiscovery;
+    expect(getOfferedTraceGroupColumns(reported)).toEqual(['count', 'duration.p99', 'countDistinct.userId']);
+  });
+
+  it('reads saved columns in menu order, always with the trace count, dropping unknown ones', () => {
+    expect(parseTraceGroupColumns(['cost.avg', 'nope', 'errorCount'])).toEqual(['count', 'errorCount', 'cost.avg']);
+    expect(parseTraceGroupColumns('not a list')).toEqual([
+      'count',
+      'errorRate',
+      'duration.p50',
+      'duration.p95',
+      'tokens.input.sum',
+      'tokens.output.sum',
+      'cost.sum',
+    ]);
   });
 });
 
@@ -294,6 +336,26 @@ describe('formatTraceGroupMeasure', () => {
     expect(formatTraceGroupMeasure(row(measures), 'duration.p95').text).toBe('2.4s');
     expect(formatTraceGroupMeasure(row(measures), 'tokens.input.sum').text).toBe('15.2K');
     expect(formatTraceGroupMeasure(row(measures), 'tokens.output.sum').text).toBe('0');
+  });
+
+  it('formats the optional columns by their kind', () => {
+    const measures = {
+      errorCount: 1234,
+      'duration.p99': 61_000,
+      'tokens.cached.avg': 1500,
+      'cost.avg': 0.5,
+      'countDistinct.userId': 12,
+    };
+    const priced = row(measures, { coverage: 1, unit: 'USD' });
+    expect(formatTraceGroupMeasure(priced, 'errorCount').text).toBe('1,234');
+    expect(formatTraceGroupMeasure(priced, 'duration.p99').text).toBe('1m 1s');
+    expect(formatTraceGroupMeasure(priced, 'tokens.cached.avg').text).toBe('1.5K');
+    expect(formatTraceGroupMeasure(priced, 'cost.avg').text).toBe('$0.50');
+    expect(formatTraceGroupMeasure(priced, 'countDistinct.userId').text).toBe('12');
+  });
+
+  it('shows a placeholder for a column not in the response yet', () => {
+    expect(formatTraceGroupMeasure(row({ count: 3 }), 'errorCount')).toEqual({ text: '…' });
   });
 
   it('explains missing tokens', () => {

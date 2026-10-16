@@ -1,8 +1,10 @@
 import { GroupIcon, SigmaIcon } from 'lucide-react';
 import { traceFilterFieldColor } from './trace-filters';
 import {
+  DEFAULT_TRACE_GROUP_COLUMNS,
   TRACE_GROUP_BY_DIMENSION_LABELS,
   TRACE_GROUP_BY_MAX_DIMENSIONS,
+  TRACE_GROUP_BY_MEASURE_LABELS,
   TRACE_GROUP_BY_MEASURES,
   TRACE_GROUP_HAVING_OPERATORS,
 } from './trace-group-by';
@@ -17,14 +19,11 @@ const HAVING_FIELD_PREFIX = 'groupHaving.';
 
 export const traceGroupHavingFieldId = (measure: TraceGroupByMeasure) => `${HAVING_FIELD_PREFIX}${measure}`;
 
-const HAVING_FIELD_LABELS: Record<TraceGroupByMeasure, string> = {
-  count: 'Group trace count',
-  errorRate: 'Group error rate (%)',
-  'duration.p50': 'Group p50 duration (ms)',
-  'duration.p95': 'Group p95 duration (ms)',
-  'tokens.input.sum': 'Group input tokens',
-  'tokens.output.sum': 'Group output tokens',
-  'cost.sum': 'Group cost',
+const havingFieldLabel = (measure: TraceGroupByMeasure) => {
+  if (measure === 'count') return 'Group trace count';
+  const label = `Group ${TRACE_GROUP_BY_MEASURE_LABELS[measure].toLowerCase()}`;
+  if (measure === 'errorRate') return `${label} (%)`;
+  return measure.startsWith('duration.') ? `${label} (ms)` : label;
 };
 
 // Error rate is a ratio on the wire but typed as a percent in the bar.
@@ -44,17 +43,20 @@ export const isTraceGroupingFieldId = (fieldId: string) =>
 
 /**
  * FilterBar fields for the grouped view: `Group by` (pick up to two dimensions) and, while grouped, one
- * `Group <measure>` number field per measure to keep only matching groups.
+ * `Group <measure>` number field per visible column (`measures`) to keep only matching groups.
  *
  * `disabled` keeps existing chips readable but stops new ones being added, e.g. where the list shows nested traces.
  */
 export function createTraceGroupByFilterBarFields({
   dimensions,
   grouped,
+  measures = DEFAULT_TRACE_GROUP_COLUMNS,
   disabled = false,
 }: {
   dimensions: readonly TraceGroupByDimension[];
   grouped: boolean;
+  /** Measures offered as group filters; defaults to the standard columns. Pass the visible columns plus those already filtered on. */
+  measures?: readonly TraceGroupByMeasure[];
   disabled?: boolean;
 }): FilterBarField[] {
   if (dimensions.length === 0) return [];
@@ -69,15 +71,17 @@ export function createTraceGroupByFilterBarFields({
     strict: true,
     hidden: disabled,
   };
-  const havingFields = TRACE_GROUP_BY_MEASURES.map<FilterBarField>(measure => ({
-    id: traceGroupHavingFieldId(measure),
-    label: HAVING_FIELD_LABELS[measure],
-    icon: SigmaIcon,
-    color: traceFilterFieldColor(TRACE_GROUP_BY_FIELD_ID),
-    type: 'number',
-    operators: [...TRACE_GROUP_HAVING_OPERATORS],
-    hidden: disabled || !grouped,
-  }));
+  const havingFields = TRACE_GROUP_BY_MEASURES.filter(measure => measures.includes(measure)).map<FilterBarField>(
+    measure => ({
+      id: traceGroupHavingFieldId(measure),
+      label: havingFieldLabel(measure),
+      icon: SigmaIcon,
+      color: traceFilterFieldColor(TRACE_GROUP_BY_FIELD_ID),
+      type: 'number',
+      operators: [...TRACE_GROUP_HAVING_OPERATORS],
+      hidden: disabled || !grouped,
+    }),
+  );
   return [groupByField, ...havingFields];
 }
 

@@ -37,7 +37,43 @@ export const TRACE_GROUP_BY_DIMENSION_LABELS: Record<TraceGroupByDimension, stri
   projectId: 'Project',
 };
 
+/** Every measure the grouped view can show as a column, in menu order. */
 export const TRACE_GROUP_BY_MEASURES = [
+  'count',
+  'errorCount',
+  'errorRate',
+  'duration.avg',
+  'duration.min',
+  'duration.max',
+  'duration.p50',
+  'duration.p90',
+  'duration.p95',
+  'duration.p99',
+  'tokens.input.sum',
+  'tokens.input.avg',
+  'tokens.output.sum',
+  'tokens.output.avg',
+  'tokens.total.sum',
+  'tokens.total.avg',
+  'tokens.reasoning.sum',
+  'tokens.reasoning.avg',
+  'tokens.cached.sum',
+  'tokens.cached.avg',
+  'cost.sum',
+  'cost.avg',
+  'countDistinct.entityName',
+  'countDistinct.threadId',
+  'countDistinct.resourceId',
+  'countDistinct.userId',
+  'countDistinct.sessionId',
+] as const satisfies AggregateTracesArgs['measures'];
+
+export type TraceGroupByMeasure = (typeof TRACE_GROUP_BY_MEASURES)[number];
+
+const COUNT_DISTINCT_PREFIX = 'countDistinct.';
+
+/** Columns shown until the user picks others. */
+export const DEFAULT_TRACE_GROUP_COLUMNS: readonly TraceGroupByMeasure[] = [
   'count',
   'errorRate',
   'duration.p50',
@@ -45,19 +81,86 @@ export const TRACE_GROUP_BY_MEASURES = [
   'tokens.input.sum',
   'tokens.output.sum',
   'cost.sum',
-] as const satisfies AggregateTracesArgs['measures'];
-
-export type TraceGroupByMeasure = (typeof TRACE_GROUP_BY_MEASURES)[number];
+];
 
 export const TRACE_GROUP_BY_MEASURE_LABELS: Record<TraceGroupByMeasure, string> = {
   count: 'Traces',
+  errorCount: 'Errors',
   errorRate: 'Error rate',
+  'duration.avg': 'Avg duration',
+  'duration.min': 'Min duration',
+  'duration.max': 'Max duration',
   'duration.p50': 'p50 duration',
+  'duration.p90': 'p90 duration',
   'duration.p95': 'p95 duration',
+  'duration.p99': 'p99 duration',
   'tokens.input.sum': 'Input tokens',
+  'tokens.input.avg': 'Avg input tokens',
   'tokens.output.sum': 'Output tokens',
+  'tokens.output.avg': 'Avg output tokens',
+  'tokens.total.sum': 'Total tokens',
+  'tokens.total.avg': 'Avg total tokens',
+  'tokens.reasoning.sum': 'Reasoning tokens',
+  'tokens.reasoning.avg': 'Avg reasoning tokens',
+  'tokens.cached.sum': 'Cached tokens',
+  'tokens.cached.avg': 'Avg cached tokens',
   'cost.sum': 'Cost',
+  'cost.avg': 'Avg cost',
+  'countDistinct.entityName': 'Entities',
+  'countDistinct.threadId': 'Threads',
+  'countDistinct.resourceId': 'Resources',
+  'countDistinct.userId': 'Users',
+  'countDistinct.sessionId': 'Sessions',
 };
+
+/** Sections of the grouped view's Columns menu. */
+export const TRACE_GROUP_COLUMN_SECTIONS: ReadonlyArray<{ label: string; measures: readonly TraceGroupByMeasure[] }> = [
+  { label: 'Traces', measures: ['count', 'errorCount', 'errorRate'] },
+  {
+    label: 'Duration',
+    measures: [
+      'duration.avg',
+      'duration.min',
+      'duration.max',
+      'duration.p50',
+      'duration.p90',
+      'duration.p95',
+      'duration.p99',
+    ],
+  },
+  {
+    label: 'Tokens',
+    measures: [
+      'tokens.input.sum',
+      'tokens.input.avg',
+      'tokens.output.sum',
+      'tokens.output.avg',
+      'tokens.total.sum',
+      'tokens.total.avg',
+      'tokens.reasoning.sum',
+      'tokens.reasoning.avg',
+      'tokens.cached.sum',
+      'tokens.cached.avg',
+    ],
+  },
+  { label: 'Cost', measures: ['cost.sum', 'cost.avg'] },
+  {
+    label: 'Unique counts',
+    measures: [
+      'countDistinct.entityName',
+      'countDistinct.threadId',
+      'countDistinct.resourceId',
+      'countDistinct.userId',
+      'countDistinct.sessionId',
+    ],
+  },
+];
+
+/** Parse saved column choices: known measures in menu order, always including the trace count. */
+export function parseTraceGroupColumns(value: unknown): TraceGroupByMeasure[] {
+  if (!Array.isArray(value)) return [...DEFAULT_TRACE_GROUP_COLUMNS];
+  return TRACE_GROUP_BY_MEASURES.filter(measure => measure === 'count' || value.includes(measure));
+}
 
 export type TraceGroupSortDirection = 'asc' | 'desc';
 export type TraceGroupSort = { measure: TraceGroupByMeasure; direction: TraceGroupSortDirection };
@@ -102,6 +205,21 @@ export function getOfferedTraceGroupByDimensions({
   if (!discovery) return [...TRACE_GROUP_BY_DIMENSIONS];
   const reported = new Set(discovery.dimensions.map(dimension => dimension.path));
   return [...TRACE_GROUP_BY_DIMENSIONS, ...extraDimensions].filter(dimension => reported.has(dimension));
+}
+
+/**
+ * Measures the grouped view can show as columns. Without discovery every column is offered; with it, only the
+ * measures it lists, and unique counts only for fields it can group by.
+ */
+export function getOfferedTraceGroupColumns(discovery?: TraceAggregateDiscovery): TraceGroupByMeasure[] {
+  if (!discovery) return [...TRACE_GROUP_BY_MEASURES];
+  const measures = new Set(discovery.measures.map(measure => measure.name));
+  const dimensions = new Set(discovery.dimensions.map(dimension => dimension.path));
+  return TRACE_GROUP_BY_MEASURES.filter(measure =>
+    measure.startsWith(COUNT_DISTINCT_PREFIX)
+      ? dimensions.has(measure.slice(COUNT_DISTINCT_PREFIX.length))
+      : measures.has(measure),
+  );
 }
 
 /** The dimensions to group by, in order: offered ones only, without repeats, at most two. */
@@ -169,6 +287,7 @@ export function buildTraceGroupByRequest(
   query: Pick<QueryTracesInput, 'timeRange' | 'where'>,
   { groupBy, having }: TraceGrouping,
   sort: TraceGroupSort,
+  columns: readonly TraceGroupByMeasure[] = DEFAULT_TRACE_GROUP_COLUMNS,
 ): AggregateTracesArgs {
   const comparisons = having.map(({ measure, operatorId, value }) => ({
     op: operatorId,
@@ -179,7 +298,8 @@ export function buildTraceGroupByRequest(
     timeRange: query.timeRange,
     ...(query.where ? { where: query.where } : {}),
     groupBy: groupBy.slice(0, TRACE_GROUP_BY_MAX_DIMENSIONS),
-    measures: [...TRACE_GROUP_BY_MEASURES],
+    // The visible columns, plus whatever the sort and group filters read.
+    measures: [...new Set<TraceGroupByMeasure>([...columns, sort.measure, ...having.map(entry => entry.measure)])],
     ...(comparisons.length === 1 ? { having: comparisons[0] } : {}),
     ...(comparisons.length > 1 ? { having: { op: 'and' as const, args: comparisons } } : {}),
     orderBy: { field: sort.measure, direction: sort.direction },
@@ -334,8 +454,10 @@ const MISSING = '—';
 
 /** Display text for one measure of a group, with a tooltip explaining missing or partial values. */
 export function formatTraceGroupMeasure(row: TraceGroupRow, measure: TraceGroupByMeasure): TraceGroupCell {
+  // Not in this response yet, e.g. a column just added while its request loads.
+  if (!(measure in row.measures)) return { text: '…' };
   const value = row.measures[measure] ?? null;
-  if (measure === 'cost.sum') {
+  if (measure.startsWith('cost.')) {
     if (row.cost?.unit === 'mixed') return { text: MISSING, tooltip: 'Costs use more than one currency' };
     if (value === null) return { text: MISSING, tooltip: 'No priced usage for these traces' };
     const text = formatCost(value, row.cost?.unit);
@@ -345,21 +467,13 @@ export function formatTraceGroupMeasure(row: TraceGroupRow, measure: TraceGroupB
     }
     return { text };
   }
-  if (value === null) {
-    return measure.startsWith('tokens.')
+  if (measure.startsWith('tokens.')) {
+    return value === null
       ? { text: MISSING, tooltip: 'No token usage recorded for these traces' }
-      : { text: MISSING };
+      : { text: formatCompactNumber(value) };
   }
-  switch (measure) {
-    case 'count':
-      return { text: formatFullNumber(value) };
-    case 'tokens.input.sum':
-    case 'tokens.output.sum':
-      return { text: formatCompactNumber(value) };
-    case 'errorRate':
-      return { text: formatPercent(value) ?? MISSING };
-    case 'duration.p50':
-    case 'duration.p95':
-      return { text: formatDuration(value) ?? MISSING };
-  }
+  if (value === null) return { text: MISSING };
+  if (measure === 'errorRate') return { text: formatPercent(value) ?? MISSING };
+  if (measure.startsWith('duration.')) return { text: formatDuration(value) ?? MISSING };
+  return { text: formatFullNumber(value) };
 }

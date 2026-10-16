@@ -1865,7 +1865,48 @@ describe('Traces page group by', () => {
 
       const counts = [support, billing].map(row => Number(within(row).getAllByText(/^\d+$/)[0]!.textContent));
       expect(counts.reduce((sum, count) => sum + count, 0)).toBe(groupedTraceQueryPage.traces.length);
-      expect(screen.queryByRole('button', { name: 'Columns' })).toBeNull();
+    });
+
+    it('lets the user pick the measure columns, requests only those, and remembers them', async () => {
+      setGroupByHandlers(traceAggregateCapabilities);
+      const { unmount } = renderPage('/traces?groupBy=entityName');
+      await screen.findByRole('button', { name: 'Show traces for support-agent' });
+      expect(onAggregateRequest.mock.lastCall![0].measures).not.toContain('errorCount');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
+      // Only measures the server reports are offered, and the trace count can't be hidden.
+      expect(screen.queryByRole('menuitemcheckbox', { name: 'p99 duration' })).toBeNull();
+      expect((await screen.findByRole('menuitemcheckbox', { name: 'Traces' })).getAttribute('aria-disabled')).toBe(
+        'true',
+      );
+      fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Errors' }));
+      fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Error rate' }));
+      fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+
+      await waitFor(() => {
+        const { measures } = onAggregateRequest.mock.lastCall![0];
+        expect(measures).toContain('errorCount');
+        expect(measures).not.toContain('errorRate');
+      });
+      const support = await screen.findByRole('button', { name: 'Show traces for support-agent' });
+      expect(screen.getByText('Errors')).not.toBeNull();
+      expect(screen.queryByText('Error rate')).toBeNull();
+      const supportTraces = groupedTraceQueryPage.traces.filter(trace => trace.entityName === 'support-agent');
+      const supportErrors = supportTraces.filter(trace => trace.status === 'error');
+      expect(supportErrors.length).toBeGreaterThan(0);
+      await waitFor(() =>
+        expect(
+          within(support)
+            .getAllByText(/^\d+$/)
+            .map(cell => cell.textContent),
+        ).toEqual([String(supportTraces.length), String(supportErrors.length)]),
+      );
+
+      unmount();
+      renderPage('/traces?groupBy=entityName');
+      await screen.findByRole('button', { name: 'Show traces for support-agent' });
+      expect(screen.getByText('Errors')).not.toBeNull();
+      expect(onAggregateRequest.mock.lastCall![0].measures).toContain('errorCount');
     });
 
     it('drills down into a group and lists its traces', async () => {

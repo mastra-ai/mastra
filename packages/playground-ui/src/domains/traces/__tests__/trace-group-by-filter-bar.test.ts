@@ -44,6 +44,18 @@ describe('createTraceGroupByFilterBarFields', () => {
     ]);
   });
 
+  it('offers group filters for the measures shown as columns', () => {
+    expect(
+      createTraceGroupByFilterBarFields({ dimensions, grouped: true, measures: ['count', 'duration.p99', 'cost.avg'] })
+        .slice(1)
+        .map(field => [field.id, field.label]),
+    ).toEqual([
+      ['groupHaving.count', 'Group trace count'],
+      ['groupHaving.duration.p99', 'Group p99 duration (ms)'],
+      ['groupHaving.cost.avg', 'Group avg cost'],
+    ]);
+  });
+
   it('offers nothing new while disabled, and nothing at all without dimensions', () => {
     expect(
       createTraceGroupByFilterBarFields({ dimensions, grouped: true, disabled: true }).every(field => field.hidden),

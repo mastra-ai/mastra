@@ -14,7 +14,13 @@ import {
   serializeTraceGroupSort,
   writeTraceGrouping,
 } from '../trace-group-by';
-import type { TraceGroupByDimension, TraceGroupFilter, TraceGroupSort, TraceGrouping } from '../trace-group-by';
+import type {
+  TraceGroupByDimension,
+  TraceGroupByMeasure,
+  TraceGroupFilter,
+  TraceGroupSort,
+  TraceGrouping,
+} from '../trace-group-by';
 import { clearSelectionParams } from './use-trace-url-state';
 import type { SetURLSearchParamsLike } from './use-trace-url-state';
 
@@ -33,6 +39,8 @@ export interface UseTraceGroupByArgs {
    * leaves them in one "(not set)" group.
    */
   entityIdFallback?: boolean;
+  /** Measure columns to request, from `useTraceGroupColumnPreferences`. Defaults to the standard set. */
+  columns?: readonly TraceGroupByMeasure[];
 }
 
 const isSameDimensions = (a: readonly TraceGroupByDimension[], b: readonly TraceGroupByDimension[]) =>
@@ -51,6 +59,7 @@ export function useTraceGroupBy({
   query,
   enabled,
   entityIdFallback = false,
+  columns,
 }: UseTraceGroupByArgs) {
   const groupBy = enabled ? parseTraceGroupBy(searchParams, dimensions) : [];
   const grouping: TraceGrouping = { groupBy, having: groupBy.length > 0 ? parseTraceGroupHaving(searchParams) : [] };
@@ -58,7 +67,7 @@ export function useTraceGroupBy({
   const sort = parseTraceGroupSort(searchParams);
   const [now, setNow] = useState(() => new Date());
 
-  const request = buildTraceGroupByRequest(query(now), grouping, sort);
+  const request = buildTraceGroupByRequest(query(now), grouping, sort, columns);
   const result = useTraceAggregate({
     request,
     enabled: grouped,

@@ -19,6 +19,7 @@ import { NoTracesInfo } from '@mastra/playground-ui/domains/traces/components/no
 import { SpanFeedbackTab } from '@mastra/playground-ui/domains/traces/components/span-feedback-tab';
 import { TraceColumnsMenu } from '@mastra/playground-ui/domains/traces/components/trace-columns-menu';
 import { TraceFeedbackTab } from '@mastra/playground-ui/domains/traces/components/trace-feedback-tab';
+import { TraceGroupColumnsMenu } from '@mastra/playground-ui/domains/traces/components/trace-group-columns-menu';
 import {
   TRACE_TIME_RANGE_FIELD,
   TRACE_TIME_RANGE_FIELD_ID,
@@ -32,6 +33,7 @@ import { TracesPageSkeleton } from '@mastra/playground-ui/domains/traces/compone
 import { useTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/hooks/use-trace-column-preferences';
 import { useTraceFilterPersistence } from '@mastra/playground-ui/domains/traces/hooks/use-trace-filter-persistence';
 import { useTraceGroupBy } from '@mastra/playground-ui/domains/traces/hooks/use-trace-group-by';
+import { useTraceGroupColumnPreferences } from '@mastra/playground-ui/domains/traces/hooks/use-trace-group-column-preferences';
 import { useTraceListNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-list-navigation';
 import { clearSelectionParams, useTraceUrlState } from '@mastra/playground-ui/domains/traces/hooks/use-trace-url-state';
 import { useTracesListSource } from '@mastra/playground-ui/domains/traces/hooks/use-traces-list-source';
@@ -48,6 +50,7 @@ import {
 } from '@mastra/playground-ui/domains/traces/trace-filters';
 import {
   getOfferedTraceGroupByDimensions,
+  getOfferedTraceGroupColumns,
   supportsTraceGroupEntityIdFallback,
 } from '@mastra/playground-ui/domains/traces/trace-group-by';
 import {
@@ -266,6 +269,9 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // Grouping counts the same selection as the list. The scoped tabs (one agent or workflow) don't offer it.
   const withGroupBy = useTraceAggregateAvailable().enabled && !isScoped;
   const groupByDimensions = withGroupBy ? getOfferedTraceGroupByDimensions({ discovery: aggregateDiscovery }) : [];
+  const groupColumnPreferences = useTraceGroupColumnPreferences();
+  const offeredGroupColumns = getOfferedTraceGroupColumns(aggregateDiscovery);
+  const groupColumns = groupColumnPreferences.columns.filter(measure => offeredGroupColumns.includes(measure));
   const groupView = useTraceGroupBy({
     searchParams,
     setSearchParams: setPersistedSearchParams,
@@ -273,6 +279,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     query: buildListQuery,
     enabled: withGroupBy,
     entityIdFallback: supportsTraceGroupEntityIdFallback(aggregateDiscovery),
+    columns: groupColumns,
   });
 
   const traceFilterBarFields = useMemo(
@@ -301,7 +308,12 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // Group by sits first in the field list so it's easy to find; its group filters appear only while grouped.
   const filterBarFields = [
     TRACE_TIME_RANGE_FIELD,
-    ...createTraceGroupByFilterBarFields({ dimensions: groupByDimensions, grouped: groupView.grouped }),
+    ...createTraceGroupByFilterBarFields({
+      dimensions: groupByDimensions,
+      grouped: groupView.grouped,
+      // Filter on the visible columns, and keep the fields of group filters already applied.
+      measures: [...groupColumns, ...groupView.grouping.having.map(entry => entry.measure)],
+    }),
     ...traceFilterBarFields,
   ];
   const groupingFilterBarItems = traceGroupingToFilterBarItems(groupView.grouping);
@@ -475,7 +487,15 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         </FilterBar>
       </ActionRow.Start>
       <ActionRow.End>
-        {/* The grouped view has fixed columns and doesn't poll. */}
+        {/* The grouped view picks its own measure columns and doesn't poll. */}
+        {groupView.grouped && (
+          <TraceGroupColumnsMenu
+            columns={groupColumns}
+            offered={offeredGroupColumns}
+            onToggleColumn={groupColumnPreferences.toggleColumn}
+            onReset={groupColumnPreferences.resetColumns}
+          />
+        )}
         {!groupView.grouped && (
           <>
             <TraceColumnsMenu
@@ -528,6 +548,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         ) : (
           <TracesGroupedView
             dimensions={groupView.grouping.groupBy}
+            columns={groupColumns}
             rows={groupView.rows}
             truncated={groupView.truncated}
             isLoading={groupView.isLoading}
