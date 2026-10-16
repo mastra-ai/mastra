@@ -26,12 +26,13 @@ function setup({ withMemory = true } = {}) {
   const trim = vi.spyOn(pubsub, 'trimTopic');
   /** Resolves `getMemory`; tests hold it to delay a trim until later publishes land. */
   let memoryGate: Promise<void> = Promise.resolve();
+  const getMemory = vi.fn(async () => {
+    await memoryGate;
+    return withMemory ? {} : undefined;
+  });
   const agent = {
     id: 'trim-agent',
-    getMemory: async () => {
-      await memoryGate;
-      return withMemory ? {} : undefined;
-    },
+    getMemory,
   } as unknown as Agent<any, any, any, any>;
   const options = { memory: { thread: 'trim-thread', resource: 'trim-user' } } as any;
 
@@ -74,10 +75,35 @@ function setup({ withMemory = true } = {}) {
     memoryGate = new Promise<void>(resolve => (release = resolve));
     return release;
   };
-  return { trim, register, entriesFor, holdMemory, published };
+  return { pubsub, getMemory, trim, register, entriesFor, holdMemory, published };
 }
 
 describe('thread topic trim', () => {
+  it('starts resolving the completed caller memory before announcing completion without blocking it', async () => {
+    const { pubsub, getMemory, trim, register, entriesFor, holdMemory } = setup();
+    let memoryCallsAtCompletion: number | undefined;
+    await pubsub.subscribe(
+      `agent.thread-stream.${encodeURIComponent('trim-user\u0000trim-thread')}`,
+      async (event, ack) => {
+        if (event.type === 'run-completed') memoryCallsAtCompletion = getMemory.mock.calls.length;
+        await ack();
+      },
+    );
+    const run = register('trim-run-caller');
+    await run.registered;
+    const release = holdMemory();
+
+    run.complete();
+    await waitFor(() => memoryCallsAtCompletion !== undefined);
+
+    expect(memoryCallsAtCompletion).toBe(1);
+    expect(trim).not.toHaveBeenCalled();
+    release();
+    await waitFor(() => trim.mock.calls.length === 1);
+    expect(getMemory).toHaveBeenCalledOnce();
+    expect(entriesFor('trim-run-caller')).toEqual([]);
+  });
+
   it("deletes a saved run's own entries once it completes", async () => {
     const { trim, register, entriesFor } = setup();
     const run = register('trim-run-1');

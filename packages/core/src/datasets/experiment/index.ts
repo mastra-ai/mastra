@@ -1,12 +1,14 @@
+import { MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY, MASTRA_AGENT_VERSION_PINS_KEY } from '../../agent/version-pins';
 import { MastraError } from '../../error/index.js';
 import type { MastraScorer } from '../../evals/base';
 import type { TrajectoryExpectation } from '../../evals/types';
 import type { Mastra } from '../../mastra';
+import { MASTRA_VERSIONS_KEY } from '../../request-context';
 import type { DatasetRecord } from '../../storage/types';
 import { ExperimentEventDispatcher, createItemCompletedEvent, toExperimentJsonValue } from './events';
 import { executeTarget } from './executor';
 import type { ExecutionResult } from './executor';
-import { resolveTarget } from './resolve-target';
+import { resolveExperimentTarget, resolveTarget } from './resolve-target';
 import {
   createItemScorerResolver,
   EXPERIMENT_ITEM_SCORER_NOT_FOUND,
@@ -333,20 +335,38 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       };
     } else if (targetType && targetId) {
       // Registry-based target path (existing)
-      const resolved = await resolveTarget(mastra, targetType, targetId, agentVersion);
+      const resolved = await resolveExperimentTarget(mastra, targetType, targetId, {
+        agentVersion,
+        versions,
+        requestContext: globalRequestContext,
+      });
       if (!resolved) {
         throw new Error(`Target not found: ${targetType}/${targetId}`);
       }
-      const { target } = resolved;
+      const { target, versions: frozenVersions, versionPins: frozenPins } = resolved;
       execFn = (item, itemSignal) => {
         // Merge global request context with per-item request context (item takes precedence)
         const mergedRequestContext =
-          globalRequestContext || item.requestContext ? { ...globalRequestContext, ...item.requestContext } : undefined;
+          globalRequestContext || item.requestContext || frozenPins
+            ? {
+                ...globalRequestContext,
+                ...item.requestContext,
+                // Each item and retry consumes the experiment's original graph,
+                // including agents that resolved to code rather than a stored version.
+                ...(frozenPins
+                  ? {
+                      [MASTRA_AGENT_VERSION_PINS_KEY]: frozenPins,
+                      [MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY]: true,
+                      [MASTRA_VERSIONS_KEY]: frozenVersions ?? {},
+                    }
+                  : {}),
+              }
+            : undefined;
         return executeTarget(target, targetType, item, {
           signal: itemSignal,
           requestContext: mergedRequestContext,
           experimentId,
-          versions,
+          versions: frozenVersions,
           toolMocks: targetType === 'agent' ? item.toolMocks : undefined,
           unmockedToolPolicy:
             targetType === 'agent' ? (item.unmockedToolPolicy ?? config.unmockedToolPolicy ?? 'allow') : undefined,

@@ -77,14 +77,6 @@ export interface AgentLegacyCapabilities {
   id: string;
   /** Mastra instance for generating IDs */
   mastra?: Mastra;
-  /** Get default generate options for legacy */
-  getDefaultGenerateOptionsLegacy(options: {
-    requestContext?: RequestContext;
-  }): AgentGenerateOptions | Promise<AgentGenerateOptions>;
-  /** Get default stream options for legacy */
-  getDefaultStreamOptionsLegacy(options: {
-    requestContext?: RequestContext;
-  }): AgentStreamOptions | Promise<AgentStreamOptions>;
   /** Check if agent has own memory */
   hasOwnMemory(): boolean;
   /** Get the agent's configured scopes */
@@ -989,6 +981,7 @@ export class AgentLegacyHandler {
   >(
     messages: MessageListInput,
     generateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
+    defaultGenerateOptionsLegacy: AgentGenerateOptions = {},
   ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
     if ('structuredOutput' in generateOptions && generateOptions.structuredOutput) {
       throw new MastraError({
@@ -998,12 +991,6 @@ export class AgentLegacyHandler {
         text: 'This method does not support structured output. Please use generate() instead.',
       });
     }
-
-    const defaultGenerateOptionsLegacy = await Promise.resolve(
-      this.capabilities.getDefaultGenerateOptionsLegacy({
-        requestContext: generateOptions.requestContext,
-      }),
-    );
 
     const mergedGenerateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {
       ...defaultGenerateOptionsLegacy,
@@ -1336,16 +1323,11 @@ export class AgentLegacyHandler {
   >(
     messages: MessageListInput,
     streamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
+    defaultStreamOptionsLegacy: AgentStreamOptions = {},
   ): Promise<
     | StreamTextResult<any, EXPERIMENTAL_OUTPUT>
     | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties)
   > {
-    const defaultStreamOptionsLegacy = await Promise.resolve(
-      this.capabilities.getDefaultStreamOptionsLegacy({
-        requestContext: streamOptions.requestContext,
-      }),
-    );
-
     const mergedStreamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {
       ...defaultStreamOptionsLegacy,
       ...streamOptions,

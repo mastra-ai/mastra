@@ -11,6 +11,12 @@
  * - Optional `postPipeInner` hooks for durable-specific cleanup/abort tracking
  */
 import { resolveAgentScopes } from '../../agent/scopes';
+import {
+  MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY,
+  exactVersionOverridesForPins,
+  getAgentVersionPins,
+  setAgentVersionPins,
+} from '../../agent/version-pins';
 import type { BackgroundTaskManager } from '../../background-tasks/manager';
 import type { MastraMemory } from '../../memory/memory';
 import {
@@ -18,6 +24,7 @@ import {
   MASTRA_RESOURCE_ID_KEY,
   MASTRA_SCOPES_KEY,
   MASTRA_THREAD_ID_KEY,
+  MASTRA_VERSIONS_KEY,
   RequestContext,
 } from '../../request-context';
 import { deepMerge } from '../../utils';
@@ -374,6 +381,10 @@ export async function runIdleLoop<
     defaultOptions as Record<string, unknown>,
     (restStreamOptions ?? {}) as Record<string, unknown>,
   ) as Record<string, any>;
+  // The first turn and every background-task continuation must share the run
+  // context so the first turn's exact version selections can be captured.
+  const runRequestContext = (mergedOptions.requestContext as RequestContext | undefined) ?? new RequestContext();
+  mergedOptions.requestContext = runRequestContext;
 
   const scope = await resolveScope(agent, mergedOptions);
 
@@ -392,6 +403,7 @@ export async function runIdleLoop<
   const { runId: _runId, ...continuationStreamOptions } = restStreamOptions as Record<string, any>;
   const baseContinuationOpts = {
     ...continuationStreamOptions,
+    requestContext: runRequestContext,
     onFinish: undefined,
     _skipBgTaskWait: true,
   } as Record<string, any>;
@@ -401,8 +413,24 @@ export async function runIdleLoop<
   const initialStreamOpts = {
     ...(restStreamOptions ?? {}),
     abortSignal: callerAbortSignal ? AbortSignal.any([callerAbortSignal, initialAbort.signal]) : initialAbort.signal,
+    requestContext: runRequestContext,
     _skipBgTaskWait: true,
   } as Record<string, any>;
+
+  let continuationPins = getAgentVersionPins(runRequestContext);
+  const continuationBaseOptions = () => {
+    if (!continuationPins) return baseContinuationOpts;
+    const requestContext = runRequestContext;
+    const exactVersions = exactVersionOverridesForPins(continuationPins);
+    setAgentVersionPins(requestContext, continuationPins);
+    requestContext.set(MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY, true);
+    if (exactVersions) requestContext.set(MASTRA_VERSIONS_KEY, exactVersions);
+    return {
+      ...baseContinuationOpts,
+      requestContext,
+      versions: exactVersions,
+    };
+  };
 
   // --- State ---
   const runningTaskIds = new Set<string>();
@@ -509,6 +537,7 @@ export async function runIdleLoop<
     isProcessing = true;
     let continuationContext: RequestContext | undefined;
     let continuationToolCallIds: string[] = [];
+    let restoreVersionPolicy: (() => void) | undefined;
     try {
       const batch = pendingCompletions.splice(0, pendingCompletions.length);
       for (const chunk of batch) {
@@ -516,7 +545,26 @@ export async function runIdleLoop<
         const ctype = (chunk as { type?: string }).type;
         if (tid && ctype) processedTerminalKeys.add(`${tid}:${ctype}`);
       }
-      const continuationOpts = buildContinuationOpts(baseContinuationOpts, restStreamOptions?.context as any[], batch);
+      if (continuationPins) {
+        // Keep caller-visible context updates, but do not leave this segment's
+        // exact selectors or delegated marker on the caller's selection policy.
+        const priorPolicy = [MASTRA_VERSIONS_KEY, MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY].map(key => ({
+          key,
+          present: runRequestContext.has(key),
+          value: runRequestContext.get(key),
+        }));
+        restoreVersionPolicy = () => {
+          for (const { key, present, value } of priorPolicy) {
+            if (present) runRequestContext.set(key, value);
+            else runRequestContext.delete(key);
+          }
+        };
+      }
+      const continuationOpts = buildContinuationOpts(
+        continuationBaseOptions(),
+        restStreamOptions?.context as any[],
+        batch,
+      );
       continuationContext = continuationOpts.requestContext;
       continuationToolCallIds = continuationOpts.continuationToolCallIds;
       delete continuationOpts.continuationToolCallIds;
@@ -547,6 +595,7 @@ export async function runIdleLoop<
       return;
     } finally {
       releaseContinuationToolCallIds(continuationContext, continuationToolCallIds);
+      restoreVersionPolicy?.();
       isProcessing = false;
       if (runningTaskIds.size === 0 && pendingCompletions.length > 0) {
         void processIfIdle();
@@ -687,6 +736,7 @@ export async function runIdleLoop<
     wrapperRunId = first.runId;
     acquireRunStreamSlot(deps.activeStreams, wrapperRunId, abortWrapper);
   }
+  continuationPins = getAgentVersionPins(runRequestContext);
   hooks?.onInnerResult?.(first);
 
   void (async () => {

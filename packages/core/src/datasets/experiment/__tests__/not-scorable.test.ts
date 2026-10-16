@@ -68,6 +68,7 @@ describe('runExperiment with notScorable()', () => {
     ({ storage, datasetsStorage, scoresStorage } = buildStorage());
     const mockAgent = createMockAgent();
     mastra = {
+      getVersionOverrides: vi.fn(),
       getStorage: vi.fn().mockReturnValue(storage),
       getAgent: vi.fn().mockReturnValue(mockAgent),
       getAgentById: vi.fn().mockReturnValue(mockAgent),

@@ -25,6 +25,7 @@ import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraModelConfig } from '../llm/model/shared.types';
 import { createRunScopeKey } from '../mastra/run-scope';
 import type { RunScope } from '../mastra/run-scope';
+import type { VersionOverrides } from '../mastra/types';
 import { TITLE_PINNED_THREAD_METADATA_KEY } from '../memory';
 import type { MastraMemory } from '../memory/memory';
 import type { SendNotificationSignalInput } from '../notifications';
@@ -115,6 +116,8 @@ export type SessionSendNotificationSignalOptions = {
   tracingContext?: TracingContext;
   tracingOptions?: TracingOptions;
   requestContext?: RequestContext;
+  /** Per-call selectors for a new run, overriding the agent's configured defaults. */
+  versions?: VersionOverrides;
 };
 
 /** Usage fields that are summed across steps when present on a step's usage. */
@@ -437,6 +440,7 @@ export interface SessionMachinery {
   /** Build the per-call stream options (instructions, memory, toolsets, abort signal, tracing). */
   buildStreamOptions(input: {
     requestContext?: RequestContext;
+    versions?: VersionOverrides;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     untilIdle?: boolean | { maxIdleMs?: number };
@@ -4904,6 +4908,8 @@ export class Session<TState = unknown> {
           tracingContext?: TracingContext;
           tracingOptions?: TracingOptions;
           requestContext?: RequestContext;
+          /** Per-call selectors for a new run; active runs retain their existing pins. */
+          versions?: VersionOverrides;
           untilIdle?: boolean | { maxIdleMs?: number };
           author?: MessageAuthor;
           /**
@@ -4920,6 +4926,8 @@ export class Session<TState = unknown> {
       tracingContext?: TracingContext;
       tracingOptions?: TracingOptions;
       requestContext?: RequestContext;
+      /** Per-call selectors for a new run; active runs retain their existing pins. */
+      versions?: VersionOverrides;
       untilIdle?: boolean | { maxIdleMs?: number };
       /**
        * When true, the returned `accepted` promise awaits the agent's real
@@ -4957,6 +4965,9 @@ export class Session<TState = unknown> {
     const tracingContext = options?.tracingContext ?? contentOptions?.tracingContext;
     const tracingOptions = options?.tracingOptions ?? contentOptions?.tracingOptions;
     const requestContextInput = options?.requestContext ?? contentOptions?.requestContext;
+    const callerVersions = options?.versions ?? contentOptions?.versions;
+    // Background startup must not observe caller mutations after submission.
+    const versions = callerVersions === undefined ? undefined : structuredClone(callerVersions);
     const untilIdle = options?.untilIdle ?? contentOptions?.untilIdle;
     const requireDelivery = options?.requireDelivery ?? false;
     const ifActive = options?.ifActive ?? ('content' in input ? input.ifActive : undefined);
@@ -5109,6 +5120,7 @@ export class Session<TState = unknown> {
       const streamOptions = await this.machinery
         .buildStreamOptions({
           requestContext: requestContextInput,
+          versions,
           tracingContext,
           tracingOptions,
           untilIdle,
@@ -5185,6 +5197,7 @@ export class Session<TState = unknown> {
     options: SessionSendNotificationSignalOptions = {},
   ): Promise<SendAgentNotificationSignalResult> {
     const { ifActive, ifIdle, requestContext: requestContextInput, tracingContext, tracingOptions } = options;
+    const versions = options.versions === undefined ? undefined : structuredClone(options.versions);
     await this.machinery.authorizeExecute?.(requestContextInput);
     const threadId = await this.thread.ensureId({ requestContext: requestContextInput });
 
@@ -5202,6 +5215,7 @@ export class Session<TState = unknown> {
 
     const streamOptions = await this.machinery.buildStreamOptions({
       requestContext: requestContextInput,
+      versions,
       tracingContext,
       tracingOptions,
     });
@@ -5216,6 +5230,7 @@ export class Session<TState = unknown> {
 
   private async prepareMessageTarget({
     requestContext,
+    versions,
     tracingContext,
     tracingOptions,
     untilIdle,
@@ -5223,6 +5238,7 @@ export class Session<TState = unknown> {
     includeStreamOptions = true,
   }: {
     requestContext?: RequestContext;
+    versions?: VersionOverrides;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     untilIdle?: boolean | { maxIdleMs?: number };
@@ -5238,6 +5254,7 @@ export class Session<TState = unknown> {
 
     const streamOptions = await this.machinery.buildStreamOptions({
       requestContext,
+      versions,
       tracingContext,
       tracingOptions,
       untilIdle,
@@ -5261,6 +5278,7 @@ export class Session<TState = unknown> {
     tracingContext,
     tracingOptions,
     requestContext: requestContextInput,
+    versions,
     untilIdle,
     author,
   }: {
@@ -5269,6 +5287,8 @@ export class Session<TState = unknown> {
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     requestContext?: RequestContext;
+    /** Per-call selectors for a new run, overriding the agent's configured defaults. */
+    versions?: VersionOverrides;
     untilIdle?: boolean | { maxIdleMs?: number };
     author?: MessageAuthor;
   }): Promise<void> {
@@ -5279,6 +5299,7 @@ export class Session<TState = unknown> {
         tracingContext,
         tracingOptions,
         requestContext: requestContextInput,
+        versions,
         untilIdle,
         author,
       },
@@ -5303,6 +5324,7 @@ export class Session<TState = unknown> {
     tracingOptions,
     requestContext: requestContextInput,
     author,
+    versions: callerVersions,
   }: {
     content: string;
     files?: Array<{ data: string; mediaType: string; filename?: string }>;
@@ -5310,11 +5332,15 @@ export class Session<TState = unknown> {
     tracingOptions?: TracingOptions;
     requestContext?: RequestContext;
     author?: MessageAuthor;
+    /** Selectors for the queued run, captured when the message is submitted. */
+    versions?: VersionOverrides;
   }): Promise<void> {
+    const versions = callerVersions === undefined ? undefined : structuredClone(callerVersions);
     await this.machinery.authorizeExecute?.(requestContextInput);
     const wasActive = this.stream.isActive();
     const target = await this.prepareMessageTarget({
       requestContext: requestContextInput,
+      versions,
       tracingContext,
       tracingOptions,
       // A message queued behind an active run must not inherit that run's abort
@@ -5353,16 +5379,21 @@ export class Session<TState = unknown> {
       tracingContext,
       tracingOptions,
       requestContext: requestContextInput,
+      versions: callerVersions,
     }: {
       tracingContext?: TracingContext;
       tracingOptions?: TracingOptions;
       requestContext?: RequestContext;
+      /** Selectors for the queued run, captured when the signal is submitted. */
+      versions?: VersionOverrides;
     } = {},
   ): Promise<void> {
+    const versions = callerVersions === undefined ? undefined : structuredClone(callerVersions);
     await this.machinery.authorizeExecute?.(requestContextInput);
     const wasActive = this.stream.isActive();
     const target = await this.prepareMessageTarget({
       requestContext: requestContextInput,
+      versions,
       tracingContext,
       tracingOptions,
       // See queueMessage: a queued run must not inherit the active run's abort signal.
@@ -5383,14 +5414,17 @@ export class Session<TState = unknown> {
     files,
     requestContext,
     author,
+    versions,
   }: {
     content: string;
     files?: Array<{ data: string; mediaType: string; filename?: string }>;
     requestContext?: RequestContext;
     author?: MessageAuthor;
+    /** Selectors for the replacement run, not for the interrupted run. */
+    versions?: VersionOverrides;
   }): Promise<void> {
     this.abort();
-    await this.sendMessage({ content, files, requestContext, author });
+    await this.sendMessage({ content, files, requestContext, author, versions });
   }
 
   ensureFollowUpBinding(agent: Agent, resourceId: string, threadId: string) {
@@ -5432,12 +5466,16 @@ export class Session<TState = unknown> {
     content,
     files,
     requestContext,
+    versions: callerVersions,
   }: {
     content: string;
     files?: Array<{ data: string; mediaType: string; filename?: string }>;
     requestContext?: RequestContext;
+    /** Selectors for the follow-up run, captured without changing the active run. */
+    versions?: VersionOverrides;
   }): Promise<void> {
-    if (!this.run.isRunning()) return this.sendMessage({ content, files, requestContext });
+    const versions = callerVersions === undefined ? undefined : structuredClone(callerVersions);
+    if (!this.run.isRunning()) return this.sendMessage({ content, files, requestContext, versions });
     await this.machinery.authorizeExecute?.(requestContext);
     const threadId = this.thread.getId();
     if (!threadId) return;
@@ -5450,6 +5488,7 @@ export class Session<TState = unknown> {
     try {
       const streamOptions = await this.machinery.buildStreamOptions({
         requestContext,
+        versions,
         abortSignal: operation.controller.signal,
       });
       if (operation.controller.signal.aborted || operation.generation !== this.#followUpGeneration) return;

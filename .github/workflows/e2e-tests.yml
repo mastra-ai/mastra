@@ -539,6 +539,16 @@ jobs:
         working-directory: ./packages/playground
         run: pnpm exec playwright test -c e2e/playwright.config.ts --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
+      - name: Upload Studio browser artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: studio-browser-${{ matrix.shard }}
+          path: |
+            packages/playground/test-results/
+            packages/playground/playwright-report/
+          retention-days: 7
+
   e2e-client-js:
     name: E2E client-js (optional)
     runs-on: starsling-ubuntu-26.04

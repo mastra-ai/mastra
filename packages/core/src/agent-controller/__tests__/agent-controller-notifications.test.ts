@@ -48,12 +48,18 @@ describe('AgentController notification signals', () => {
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
-    const result = await session.sendNotificationSignal({
-      source: 'mastracode',
-      kind: 'manual',
-      priority: 'high',
-      summary: 'Check this notification',
-    });
+    const versions = { agents: { 'agent-1': { versionId: 'notification-version' } } };
+    const pendingNotification = session.sendNotificationSignal(
+      {
+        source: 'mastracode',
+        kind: 'manual',
+        priority: 'high',
+        summary: 'Check this notification',
+      },
+      { versions },
+    );
+    versions.agents['agent-1'].versionId = 'mutated-version';
+    const result = await pendingNotification;
 
     const threadId = session.thread.getId();
     expect(threadId).toBeTruthy();
@@ -78,6 +84,7 @@ describe('AgentController notification signals', () => {
         threadId,
         ifIdle: expect.objectContaining({
           streamOptions: expect.objectContaining({
+            versions: { agents: { 'agent-1': { versionId: 'notification-version' } } },
             memory: expect.objectContaining({ resource: 'resource-1', thread: threadId }),
             maxSteps: 1000,
             savePerStep: false,

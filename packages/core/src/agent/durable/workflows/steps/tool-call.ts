@@ -44,6 +44,7 @@ import type { MessageList } from '../../../message-list';
 import type { SaveQueueManager } from '../../../save-queue';
 import { resolveDeclineReason } from '../../../tool-approval';
 import { TripWire } from '../../../trip-wire';
+import type { AgentVersionPins } from '../../../version-pins';
 import { DurableStepIds } from '../../constants';
 import { assertExecutionNotSuperseded, assertExecutionOwned, isExecutionFenceError } from '../../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
@@ -398,6 +399,7 @@ export function createDurableToolCallStep() {
           threadExists?: boolean;
         };
         requestContextEntries?: Record<string, unknown>;
+        agentVersionPins?: AgentVersionPins;
         agentSpanData?: unknown;
         modelSpanData?: unknown;
         completionStartTime?: Date | string;
@@ -546,6 +548,7 @@ export function createDurableToolCallStep() {
           state: state as any,
           options: agentOptions,
           requestContextEntries: initData.requestContextEntries,
+          agentVersionPins: initData.agentVersionPins,
           requestContext,
           rehydrateProcessors: true,
           logger,

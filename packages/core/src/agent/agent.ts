@@ -61,7 +61,7 @@ import type { AgentLoopResumeClaim } from '../loop/types';
 import type { Mastra } from '../mastra';
 import { mastraCtorHolder } from '../mastra/mastra-ctor-holder';
 import type { VersionOverrides } from '../mastra/types';
-import { mergeVersionOverrides } from '../mastra/types';
+import { getAgentVersionSelector, mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import { normalizeMessageHistoryConfig } from '../memory/message-history-config';
 import { getMemoryRunState } from '../memory/run-state';
@@ -273,6 +273,24 @@ import type {
   ZodSchema,
 } from './types';
 import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
+import {
+  applySelectedLabelToResolvedAgent,
+  assertAgentVersionPinsOwnerIntegrity,
+  assertContinuationVersionOverrides,
+  exactVersionOverridesForPins,
+  getAgentVersionPins,
+  getResolvedAgentVersionSelection,
+  MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY,
+  mergeLegacyContinuationRootPins,
+  normalizeAgentVersionPins,
+  reconcileAgentVersionPinPayloads,
+  recordAgentVersionPin,
+  resolveLegacyContinuationRootPin,
+  scopeAgentVersionPins,
+  setAgentVersionPinDefaultStatus,
+  setAgentVersionPins,
+} from './version-pins';
+import type { AgentVersionPins, ResolvedAgentVersionSelection } from './version-pins';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 import type { AgentCapabilities } from './workflows/prepare-stream/schema';
 
@@ -3280,8 +3298,6 @@ export class Agent<
         name: this.name,
         id: this.id,
         mastra: this.#mastra,
-        getDefaultGenerateOptionsLegacy: this.getDefaultGenerateOptionsLegacy.bind(this),
-        getDefaultStreamOptionsLegacy: this.getDefaultStreamOptionsLegacy.bind(this),
         hasOwnMemory: this.hasOwnMemory.bind(this),
         getScopes: this.getScopes.bind(this),
         getInstructions: async (options: { requestContext: RequestContext }) => {
@@ -5542,6 +5558,88 @@ export class Agent<
   }
 
   /**
+   * Resolve graph-wide defaults and explicit selectors before any model, processor, or tool
+   * behavior begins. The resulting immutable identities live on the run's
+   * RequestContext and are serialized by each continuation boundary.
+   *
+   * @internal
+   */
+  async __resolveExplicitAgentVersionPins({
+    requestContext,
+    versions,
+    preservePins = false,
+    rootAgentId = this.id,
+  }: {
+    requestContext: RequestContext;
+    versions?: VersionOverrides;
+    preservePins?: boolean;
+    rootAgentId?: string;
+  }): Promise<void> {
+    if (!versions || !this.#mastra) return;
+
+    const queue = Object.values(await this.listAgents({ requestContext }));
+    const pinnedGraph = getAgentVersionPins(requestContext)?.resolvedAgentIds;
+    // Root selection has already happened. A cycle must not resolve its label again.
+    const visited = new Set<string>([rootAgentId]);
+    while (queue.length > 0) {
+      const configuredAgent = queue.shift()!;
+      if (visited.has(configuredAgent.id)) continue;
+      if (preservePins && pinnedGraph && !pinnedGraph.includes(configuredAgent.id)) {
+        throw new MastraError({
+          id: 'PINNED_VERSION_REQUIRED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `Agent "${configuredAgent.id}" was not pinned when the run's version graph was resolved.`,
+          details: { agentId: configuredAgent.id },
+        });
+      }
+      visited.add(configuredAgent.id);
+
+      let traversalAgent = configuredAgent;
+      const pin = getAgentVersionPins(requestContext)?.agents?.[configuredAgent.id];
+      const selector = pin
+        ? { versionId: pin.versionId }
+        : !preservePins
+          ? getAgentVersionSelector(versions, configuredAgent.id)
+          : undefined;
+      if (selector && configuredAgent instanceof Agent) {
+        try {
+          const resolvedAgent = await this.#mastra.resolveVersionedAgent(configuredAgent, selector);
+          traversalAgent = resolvedAgent;
+          const selection =
+            pin ??
+            getResolvedAgentVersionSelection(resolvedAgent, selector) ??
+            (typeof selector.versionId === 'string'
+              ? { agentId: configuredAgent.id, versionId: selector.versionId }
+              : undefined);
+          if (selection) {
+            applySelectedLabelToResolvedAgent(resolvedAgent, selection);
+            recordAgentVersionPin(requestContext, selection, 'agent');
+          }
+        } catch (versionError) {
+          if ('versionId' in selector || 'label' in selector) throw versionError;
+          this.logger.warn('Failed to resolve versioned sub-agent during run preparation, using code-defined default', {
+            agent: this.name,
+            targetAgentId: configuredAgent.id,
+            versionSelector: selector,
+            error: versionError,
+          });
+        }
+      }
+
+      if (traversalAgent instanceof Agent) {
+        queue.push(...Object.values(await traversalAgent.listAgents({ requestContext })));
+      }
+    }
+    if (!preservePins) {
+      setAgentVersionPins(requestContext, {
+        ...getAgentVersionPins(requestContext),
+        resolvedAgentIds: [...visited],
+      });
+    }
+  }
+
+  /**
    * Retrieves and converts agent tools to CoreTool format.
    * @internal
    */
@@ -5582,6 +5680,57 @@ export class Agent<
 
     if (Object.keys(agents).length > 0) {
       for (const [agentName, agent] of Object.entries(agents)) {
+        // Resolve every explicit sub-agent selector while the run is being prepared,
+        // before the routing model or any tool behavior can suspend. The resulting
+        // immutable identity is carried in requestContext and reused by retries and
+        // continuations; labels are never looked up from inside the tool execution.
+        const existingPin = getAgentVersionPins(requestContext)?.agents?.[agent.id];
+        const requestedSelector = getAgentVersionSelector(
+          requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined,
+          agent.id,
+        );
+        const pinnedGraph = getAgentVersionPins(requestContext)?.resolvedAgentIds;
+        if ((pinnedGraph && !pinnedGraph.includes(agent.id)) || (!existingPin && requestedSelector?.label)) {
+          throw new MastraError({
+            id: 'PINNED_VERSION_REQUIRED',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            text: `Agent "${agent.id}" was not pinned when the run's version graph was resolved.`,
+            details: { agentId: agent.id, ...(requestedSelector?.label ? { label: requestedSelector.label } : {}) },
+          });
+        }
+        let runScopedAgent = agent;
+        let runScopedSelection = existingPin;
+        let runScopedSelectorResolved = false;
+        const preparationSelector = existingPin ? ({ versionId: existingPin.versionId } as const) : undefined;
+        if (preparationSelector && this.#mastra && agent instanceof Agent) {
+          try {
+            const resolvedVersionedAgent = await this.#mastra.resolveVersionedAgent(agent, preparationSelector);
+            runScopedAgent = resolvedVersionedAgent;
+            runScopedSelectorResolved = true;
+            runScopedSelection =
+              existingPin ?? getResolvedAgentVersionSelection(resolvedVersionedAgent, preparationSelector);
+            if (runScopedSelection) {
+              applySelectedLabelToResolvedAgent(resolvedVersionedAgent, runScopedSelection);
+              recordAgentVersionPin(requestContext, runScopedSelection, 'agent');
+            }
+          } catch (versionError) {
+            if ('versionId' in preparationSelector || 'label' in preparationSelector) {
+              throw versionError;
+            }
+            this.logger.warn(
+              'Failed to resolve versioned sub-agent during run preparation, using code-defined default',
+              {
+                agent: this.name,
+                targetAgent: agentName,
+                targetAgentId: agent.id,
+                versionSelector: preparationSelector,
+                error: versionError,
+              },
+            );
+          }
+        }
+
         const { inputSchema: agentInputSchema, outputSchema: agentOutputSchema } = this.getSubAgentToolSchemas(
           refRegistry ? 'withResultRefs' : 'default',
         );
@@ -5652,6 +5801,13 @@ export class Agent<
               if (inheritedScopes.length > 0) setRunAgentScopes(subAgentRequestContext, inheritedScopes);
               else subAgentRequestContext.delete(MASTRA_SCOPES_KEY);
             }
+            subAgentRequestContext.set(MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY, true);
+
+            // A delegated run consumes the graph's immutable identities, never its
+            // mutable label defaults. The child boundary scopes the same map to itself.
+            const inheritedVersions = exactVersionOverridesForPins(getAgentVersionPins(requestContext));
+            if (inheritedVersions) subAgentRequestContext.set(MASTRA_VERSIONS_KEY, inheritedVersions);
+            else subAgentRequestContext.delete(MASTRA_VERSIONS_KEY);
 
             // Expand `contextFromRefs` into the prompt before any hook runs so
             // onDelegationStart and messageFilter see the prompt the sub-agent
@@ -5772,15 +5928,19 @@ export class Agent<
 
             // Resolve versioned sub-agent if a version override exists on the
             // delegated run's requestContext (inherited from the parent).
-            let resolvedAgent = agent;
+            let resolvedAgent = runScopedAgent;
             const versionOverrides = subAgentRequestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
             const agentVersionSelector =
-              versionOverrides?.agents?.[agent.id] ??
-              (versionOverrides?.defaultStatus ? { status: versionOverrides.defaultStatus } : undefined);
+              runScopedSelectorResolved || getAgentVersionPins(requestContext)
+                ? undefined
+                : getAgentVersionSelector(versionOverrides, agent.id);
             if (agentVersionSelector && this.#mastra && agent instanceof Agent) {
               try {
                 resolvedAgent = await this.#mastra.resolveVersionedAgent(agent, agentVersionSelector);
               } catch (versionError) {
+                if ('versionId' in agentVersionSelector || 'label' in agentVersionSelector) {
+                  throw versionError;
+                }
                 this.logger.warn('Failed to resolve versioned sub-agent, using code-defined default', {
                   agent: this.name,
                   targetAgent: agentName,
@@ -7732,6 +7892,32 @@ export class Agent<
     return undefined;
   }
 
+  /**
+   * Root and explicit dependency pins persisted with a suspended execution.
+   * New snapshots carry the complete object; the legacy exact root field is
+   * promoted by #execute when this object is absent.
+   */
+  #getSnapshotAgentVersionPins(existingSnapshot: WorkflowRunState | null | undefined): AgentVersionPins | undefined {
+    const payloads: unknown[] = [];
+    for (const key in existingSnapshot?.context) {
+      const step = existingSnapshot?.context[key];
+      if (!step || step.status !== 'suspended') continue;
+
+      payloads.push(step.suspendPayload?.__agentVersionPins);
+
+      const suspendedIterations = this.#getSuspendedForeachIterations(step.suspendPayload ?? {});
+      for (const iteration of suspendedIterations) {
+        payloads.push(iteration.suspendPayload?.__agentVersionPins);
+      }
+    }
+
+    payloads.push((existingSnapshot?.context as Record<string, any> | undefined)?.input?.agentVersionPins);
+    const validatedPayloads = payloads.map(payload =>
+      assertAgentVersionPinsOwnerIntegrity(normalizeAgentVersionPins(payload), this.id),
+    );
+    return assertAgentVersionPinsOwnerIntegrity(reconcileAgentVersionPinPayloads(...validatedPayloads), this.id);
+  }
+
   #getSuspendedToolCalls(existingSnapshot: WorkflowRunState | null | undefined): AgentRunToolCall[] {
     const toolCalls: AgentRunToolCall[] = [];
 
@@ -8342,16 +8528,57 @@ export class Agent<
    * Executes the agent call, handling tools, memory, and streaming.
    * @internal
    */
-  async #execute<OUTPUT>({
+  async #execute<OUTPUT>(
+    options: InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub; _preserveVersionPins?: boolean },
+  ) {
+    const requestContext = options.requestContext ?? new RequestContext();
+    const callerVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+    const restoreCallerVersions =
+      !options._preserveVersionPins && requestContext.get(MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY) !== true;
+    try {
+      return await this.#executeWithVersionContext<OUTPUT>({ ...options, requestContext } as typeof options);
+    } finally {
+      // Cover early selector/graph failures as well as execution preparation.
+      // Pins are run-owned; the caller's mutable policy is not.
+      if (restoreCallerVersions) {
+        if (callerVersions) requestContext.set(MASTRA_VERSIONS_KEY, callerVersions);
+        else requestContext.delete(MASTRA_VERSIONS_KEY);
+      }
+    }
+  }
+
+  async #executeWithVersionContext<OUTPUT>({
     methodType,
     resumeContext,
     _threadStreamPubSub,
+    _preserveVersionPins = false,
     ...options
-  }: InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub }) {
+  }: InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub; _preserveVersionPins?: boolean }) {
     const threadStreamPubSub = _threadStreamPubSub ?? this.getPubSub();
     const existingSnapshot = resumeContext?.snapshot;
     const snapshotMemoryInfo = this.#getSnapshotMemoryInfo(existingSnapshot);
     const requestContext = options.requestContext || new RequestContext();
+
+    // Pins are run-owned, even though RequestContext is caller-owned. Clear a
+    // prior run's internal pins when the same context object is reused. A stored
+    // fork keeps them only for the private recursion that follows resolution.
+    const inheritedDelegationPins = requestContext.get(MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY) === true;
+    requestContext.delete(MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY);
+    if (!existingSnapshot && !_preserveVersionPins && !inheritedDelegationPins) {
+      setAgentVersionPins(requestContext, undefined);
+    } else if (inheritedDelegationPins) {
+      setAgentVersionPins(requestContext, scopeAgentVersionPins(getAgentVersionPins(requestContext), this.id));
+      const inheritedVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+      const exactInheritedVersions = exactVersionOverridesForPins(
+        getAgentVersionPins(requestContext),
+        inheritedVersions?.defaultStatus,
+      );
+      if (exactInheritedVersions) {
+        requestContext.set(MASTRA_VERSIONS_KEY, exactInheritedVersions);
+      } else {
+        requestContext.delete(MASTRA_VERSIONS_KEY);
+      }
+    }
 
     // Build version overrides by merging: Mastra defaults < requestContext < call-site
     const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
@@ -8366,59 +8593,145 @@ export class Agent<
       requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
     }
 
-    // A run that suspended while executing a stored version must resume on *that* version.
-    // The exact id was persisted into the suspend payload, so prefer it over any status
-    // selector, which would otherwise re-resolve to whatever is published now. Kept as a
-    // local value: the caller's requestContext keeps its original selector so their later
-    // (new) runs still hot-switch.
-    const pinnedVersionId =
-      existingSnapshot &&
-      (() => {
-        const snapshotAgentId = this.#getSnapshotAgentId(existingSnapshot);
-        // Sub-agent suspensions carry the sub-agent's id/version; those must not pin the root.
-        if (snapshotAgentId && snapshotAgentId !== this.id) return undefined;
-        return this.#getSnapshotAgentVersionId(existingSnapshot);
-      })();
+    // A continuation consumes immutable run pins before it considers any selector.
+    // New snapshots persist the complete root/dependency map; legacy snapshots only
+    // carry the exact root id, which is promoted into the new shape here.
+    let persistedPins = existingSnapshot
+      ? this.#getSnapshotAgentVersionPins(existingSnapshot)
+      : inheritedDelegationPins
+        ? getAgentVersionPins(requestContext)
+        : undefined;
+    if (existingSnapshot && persistedPins === undefined) {
+      const snapshotAgentId = this.#getSnapshotAgentId(existingSnapshot);
+      const legacyVersionId = this.#getSnapshotAgentVersionId(existingSnapshot);
+      if ((!snapshotAgentId || snapshotAgentId === this.id) && legacyVersionId) {
+        persistedPins = {
+          root: { agentId: this.id, versionId: legacyVersionId },
+        };
+      } else {
+        const legacyRootPin = mergeLegacyContinuationRootPins(
+          this.id,
+          resolveLegacyContinuationRootPin(options.versions, this.id),
+          resolveLegacyContinuationRootPin(requestVersions, this.id),
+        );
+        if (legacyRootPin) persistedPins = { root: legacyRootPin };
+      }
+    }
+
+    const rootPin = persistedPins?.root;
+    if (rootPin && rootPin.agentId !== this.id) {
+      throw new MastraError({
+        id: 'PINNED_VERSION_CONFLICT',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Suspended run belongs to agent "${rootPin.agentId}", not "${this.id}".`,
+        details: {
+          agentId: this.id,
+          pinnedAgentId: rootPin.agentId,
+          pinnedVersionId: rootPin.versionId,
+        },
+      });
+    }
+
+    if (persistedPins) {
+      // Explicit continuation selectors are assertions, not replacements. Mutable
+      // labels/statuses and different immutable ids fail before any editor lookup.
+      assertContinuationVersionOverrides(options.versions, persistedPins, this.id);
+      assertContinuationVersionOverrides(requestVersions, persistedPins, this.id);
+      const frozenVersions = exactVersionOverridesForPins(persistedPins);
+      if (frozenVersions) {
+        requestContext.set(MASTRA_VERSIONS_KEY, frozenVersions);
+        mergedVersions = frozenVersions;
+      } else {
+        requestContext.delete(MASTRA_VERSIONS_KEY);
+        mergedVersions = undefined;
+      }
+      setAgentVersionPins(requestContext, persistedPins);
+    }
+
+    const currentSelection = getResolvedAgentVersionSelection(this);
+    if (persistedPins && !persistedPins.root && currentSelection) {
+      throw new MastraError({
+        id: 'PINNED_VERSION_CONFLICT',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.id}" continuation was persisted without a root version and cannot run on resolved version "${currentSelection.versionId}".`,
+        details: { agentId: this.id, resolvedVersionId: currentSelection.versionId },
+      });
+    }
+    if (currentSelection) {
+      if (rootPin) applySelectedLabelToResolvedAgent(this, rootPin);
+      recordAgentVersionPin(requestContext, rootPin ?? currentSelection, 'root');
+    }
 
     // Resolve a versioned variant of *this* agent when a version override
-    // selects it (by id or defaultStatus) and delegate execution to it. This
+    // selects it through the same precedence used for every agent in the graph.
+    // and delegate execution to it. This
     // keeps direct programmatic calls consistent with HTTP routes and
     // sub-agent delegation, which already honor version overrides.
-    if ((mergedVersions || pinnedVersionId) && !this.#storedVersionApplied && this.#mastra) {
-      const callSiteSelector = options.versions?.agents?.[this.id];
-      const selfVersionSelector =
-        // An explicit exact version at the call site is an operator escape hatch and wins
-        // over the pin; status selectors and defaults do not.
-        (callSiteSelector && 'versionId' in callSiteSelector ? callSiteSelector : undefined) ??
-        (pinnedVersionId ? { versionId: pinnedVersionId } : undefined) ??
-        mergedVersions?.agents?.[this.id] ??
-        (mergedVersions?.defaultStatus ? { status: mergedVersions.defaultStatus } : undefined);
-      if (selfVersionSelector) {
+    const needsPinnedHydration = !!rootPin && currentSelection?.versionId !== rootPin.versionId;
+    const explicitNewRunSelector = !_preserveVersionPins ? getAgentVersionSelector(mergedVersions, this.id) : undefined;
+    const needsExplicitNewRunResolution =
+      !!explicitNewRunSelector &&
+      (typeof explicitNewRunSelector.versionId !== 'string' ||
+        explicitNewRunSelector.versionId !== currentSelection?.versionId);
+    if (
+      (mergedVersions || rootPin) &&
+      (!this.#storedVersionApplied || needsPinnedHydration || needsExplicitNewRunResolution) &&
+      this.#mastra
+    ) {
+      const rootVersionSelector =
+        (rootPin ? { versionId: rootPin.versionId } : undefined) ??
+        (!persistedPins ? getAgentVersionSelector(mergedVersions, this.id) : undefined);
+      if (rootVersionSelector) {
         try {
-          const resolved = await this.#mastra.resolveVersionedAgent(this as unknown as Agent, selfVersionSelector);
+          const resolved = await this.#mastra.resolveVersionedAgent(this as unknown as Agent, rootVersionSelector);
           if (resolved !== (this as unknown as Agent)) {
+            const resolvedSelection = rootPin ?? getResolvedAgentVersionSelection(resolved, rootVersionSelector);
+            if (resolvedSelection) {
+              applySelectedLabelToResolvedAgent(resolved, resolvedSelection);
+              recordAgentVersionPin(requestContext, resolvedSelection, 'root');
+            }
             // Cast: reassembled options are exactly this method's input. The
             // `unknown` annotation breaks the circular return-type inference
             // of the self-recursion (TS7023).
-            const delegated: unknown = (resolved as unknown as this).#execute<OUTPUT>({
+            if (inheritedDelegationPins) requestContext.set(MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY, true);
+            const delegated: unknown = await (resolved as unknown as this).#execute<OUTPUT>({
               methodType,
               resumeContext,
               _threadStreamPubSub,
+              _preserveVersionPins: true,
               ...options,
               requestContext,
-            } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub });
+            } as unknown as InnerAgentExecutionOptions<OUTPUT> & {
+              _threadStreamPubSub?: PubSub;
+              _preserveVersionPins?: boolean;
+            });
             return delegated as never;
           }
         } catch (versionError) {
+          if ('versionId' in rootVersionSelector || 'label' in rootVersionSelector) {
+            throw versionError;
+          }
           this.logger.warn('Failed to resolve versioned agent for direct call, using code-defined default', {
             agent: this.name,
             agentId: this.id,
-            versionSelector: selfVersionSelector,
+            versionSelector: rootVersionSelector,
             error: versionError,
           });
         }
       }
     }
+
+    // Explicit dependency selectors must be made immutable before processors,
+    // model routing, or tool creation can observe the run. Delegated tools later
+    // hydrate these exact pins; they never look a label up again.
+    await this.__resolveExplicitAgentVersionPins({
+      requestContext,
+      versions: mergedVersions,
+      preservePins: !!persistedPins,
+    });
+    setAgentVersionPinDefaultStatus(requestContext, mergedVersions?.defaultStatus);
 
     // Resolve workspace early so we can get browser from it if needed
     const earlyWorkspace = await this.getWorkspace({ requestContext });
@@ -9110,6 +9423,84 @@ export class Agent<
     });
   }
 
+  async #loadNetworkAgentVersionPins(runId: string): Promise<AgentVersionPins | undefined> {
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+      workflowName: 'agent-loop-main-workflow',
+      runId,
+    });
+    const input = (snapshot?.context as Record<string, any> | undefined)?.input;
+    return assertAgentVersionPinsOwnerIntegrity(normalizeAgentVersionPins(input?.agentVersionPins), this.id);
+  }
+
+  async #resolveNetworkVersionedAgent({
+    requestContext,
+    versions,
+    persistedPins,
+  }: {
+    requestContext: RequestContext;
+    versions?: VersionOverrides;
+    persistedPins?: AgentVersionPins;
+  }): Promise<Agent<any, any, any, any>> {
+    if (persistedPins) {
+      setAgentVersionPins(requestContext, persistedPins);
+    } else {
+      setAgentVersionPins(requestContext, undefined);
+    }
+
+    const currentSelection = getResolvedAgentVersionSelection(this);
+    if (persistedPins && !persistedPins.root && currentSelection) {
+      throw new MastraError({
+        id: 'PINNED_VERSION_CONFLICT',
+        domain: ErrorDomain.AGENT_NETWORK,
+        category: ErrorCategory.USER,
+        text: `Network continuation was persisted without a root version and cannot run on resolved version "${currentSelection.versionId}".`,
+        details: { agentId: this.id, resolvedVersionId: currentSelection.versionId },
+      });
+    }
+    const explicitRootSelector = !persistedPins ? getAgentVersionSelector(versions, this.id) : undefined;
+    const rootPin = persistedPins?.root ?? (!explicitRootSelector ? currentSelection : undefined);
+    const selector =
+      (persistedPins?.root ? { versionId: persistedPins.root.versionId } : undefined) ?? explicitRootSelector;
+    let routingAgent: Agent<any, any, any, any> = this;
+    if (selector && this.#mastra) {
+      try {
+        routingAgent = (await this.#mastra.resolveVersionedAgent(this as unknown as Agent, selector)) as Agent<
+          any,
+          any,
+          any,
+          any
+        >;
+      } catch (versionError) {
+        if ('versionId' in selector || 'label' in selector) throw versionError;
+        this.logger.warn('Failed to resolve versioned network routing agent, using code-defined default', {
+          agent: this.name,
+          agentId: this.id,
+          versionSelector: selector,
+          error: versionError,
+        });
+      }
+    }
+
+    const selection = rootPin ?? getResolvedAgentVersionSelection(routingAgent, selector);
+    if (selection) {
+      applySelectedLabelToResolvedAgent(routingAgent, selection);
+      recordAgentVersionPin(requestContext, selection, 'root');
+    }
+    await routingAgent.__resolveExplicitAgentVersionPins({ requestContext, versions, preservePins: !!persistedPins });
+    setAgentVersionPinDefaultStatus(requestContext, versions?.defaultStatus);
+    return routingAgent;
+  }
+
+  #installNetworkDependencyVersions(requestContext: RequestContext): void {
+    const dependencyVersions = exactVersionOverridesForPins(getAgentVersionPins(requestContext));
+    if (dependencyVersions) {
+      requestContext.set(MASTRA_VERSIONS_KEY, dependencyVersions);
+    } else {
+      requestContext.delete(MASTRA_VERSIONS_KEY);
+    }
+  }
+
   /**
    * Executes a network loop where multiple agents can collaborate to handle messages.
    * The routing agent delegates tasks to appropriate sub-agents based on the conversation.
@@ -9167,39 +9558,62 @@ export class Agent<
       requestContextToUse = stamped;
     }
 
-    const runId = mergedOptions?.runId || this.#mastra?.generateId() || globalThis.crypto.randomUUID();
+    // A caller may reuse RequestContext across independent network runs.
+    setAgentVersionPins(requestContextToUse, undefined);
 
-    // Reserved keys from requestContext take precedence for security (see resolveAgentScopes).
-    // This allows middleware to securely set resourceId/threadId based on authenticated user,
-    // preventing attackers from hijacking another user's memory by passing different values in the body.
-    const { threadId, resourceId } = resolvedScopes;
+    const requestVersions = requestContextToUse.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+    try {
+      const mergedVersions = mergeVersionOverrides(
+        mergeVersionOverrides(this.#mastra?.getVersionOverrides(), requestVersions),
+        mergedOptions.versions,
+      );
+      if (mergedVersions) requestContextToUse.set(MASTRA_VERSIONS_KEY, mergedVersions);
+      const routingAgent = await this.#resolveNetworkVersionedAgent({
+        requestContext: requestContextToUse,
+        versions: mergedVersions,
+      });
+      this.#installNetworkDependencyVersions(requestContextToUse);
 
-    return await networkLoop<OUTPUT>({
-      networkName: this.name,
-      requestContext: requestContextToUse,
-      runId,
-      routingAgent: this,
-      routingAgentOptions: {
-        model: mergedOptions?.model,
-        modelSettings: mergedOptions?.modelSettings,
-        memory: mergedOptions?.memory,
-      },
-      generateId: context => this.#mastra?.generateId(context) || globalThis.crypto.randomUUID(),
-      maxIterations: mergedOptions?.maxSteps || 1,
-      messages,
-      threadId,
-      resourceId,
-      validation: mergedOptions?.completion,
-      routing: mergedOptions?.routing,
-      onIterationComplete: mergedOptions?.onIterationComplete,
-      autoResumeSuspendedTools: mergedOptions?.autoResumeSuspendedTools,
-      mastra: this.#mastra,
-      structuredOutput: mergedOptions?.structuredOutput as OUTPUT extends {} ? StructuredOutputOptions<OUTPUT> : never,
-      onStepFinish: mergedOptions?.onStepFinish as NetworkOptions<OUTPUT>['onStepFinish'],
-      onError: mergedOptions?.onError,
-      onAbort: mergedOptions?.onAbort,
-      abortSignal: mergedOptions?.abortSignal,
-    });
+      const runId = mergedOptions?.runId || this.#mastra?.generateId() || globalThis.crypto.randomUUID();
+
+      // Reserved keys from requestContext take precedence for security (see resolveAgentScopes).
+      // This allows middleware to securely set resourceId/threadId based on authenticated user,
+      // preventing attackers from hijacking another user's memory by passing different values in the body.
+      const { threadId, resourceId } = resolvedScopes;
+
+      return await networkLoop<OUTPUT>({
+        networkName: this.name,
+        requestContext: requestContextToUse,
+        runId,
+        routingAgent,
+        routingAgentOptions: {
+          model: mergedOptions?.model,
+          modelSettings: mergedOptions?.modelSettings,
+          memory: mergedOptions?.memory,
+        },
+        generateId: context => this.#mastra?.generateId(context) || globalThis.crypto.randomUUID(),
+        maxIterations: mergedOptions?.maxSteps || 1,
+        messages,
+        threadId,
+        resourceId,
+        validation: mergedOptions?.completion,
+        routing: mergedOptions?.routing,
+        onIterationComplete: mergedOptions?.onIterationComplete,
+        autoResumeSuspendedTools: mergedOptions?.autoResumeSuspendedTools,
+        mastra: this.#mastra,
+        structuredOutput: mergedOptions?.structuredOutput as OUTPUT extends {}
+          ? StructuredOutputOptions<OUTPUT>
+          : never,
+        onStepFinish: mergedOptions?.onStepFinish as NetworkOptions<OUTPUT>['onStepFinish'],
+        onError: mergedOptions?.onError,
+        onAbort: mergedOptions?.onAbort,
+        abortSignal: mergedOptions?.abortSignal,
+        agentVersionPins: getAgentVersionPins(requestContextToUse),
+      });
+    } finally {
+      if (requestVersions) requestContextToUse.set(MASTRA_VERSIONS_KEY, requestVersions);
+      else requestContextToUse.delete(MASTRA_VERSIONS_KEY);
+    }
   }
 
   /**
@@ -9248,47 +9662,81 @@ export class Agent<
       },
     );
     const requestContextToUse = mergedOptions.requestContext;
+    let persistedPins = await this.#loadNetworkAgentVersionPins(runId);
+    const requestVersions = requestContextToUse.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+    try {
+      if (!persistedPins) {
+        const legacyRootPin = mergeLegacyContinuationRootPins(
+          this.id,
+          resolveLegacyContinuationRootPin(this.#mastra?.getVersionOverrides(), this.id),
+          resolveLegacyContinuationRootPin(requestVersions, this.id),
+          resolveLegacyContinuationRootPin(mergedOptions.versions, this.id),
+        );
+        if (legacyRootPin) persistedPins = { root: legacyRootPin };
+      }
+      if (persistedPins) {
+        assertContinuationVersionOverrides(options.versions, persistedPins, this.id);
+        assertContinuationVersionOverrides(requestVersions, persistedPins, this.id);
+      }
+      const mergedVersions = persistedPins
+        ? exactVersionOverridesForPins(persistedPins)
+        : mergeVersionOverrides(
+            mergeVersionOverrides(this.#mastra?.getVersionOverrides(), requestVersions),
+            mergedOptions.versions,
+          );
+      if (mergedVersions) requestContextToUse.set(MASTRA_VERSIONS_KEY, mergedVersions);
+      const routingAgent = await this.#resolveNetworkVersionedAgent({
+        requestContext: requestContextToUse,
+        versions: mergedVersions,
+        persistedPins,
+      });
+      this.#installNetworkDependencyVersions(requestContextToUse);
 
-    // The snapshot is used only to check re-supplied scopes. Identity comes from scopes when
-    // present, else from the reserved keys then memory, as before scopes existed.
-    const hasScopeIdentity = (type: 'resource' | 'thread') =>
-      resolvedScopes.scopes.some(scope => parseAgentScope(scope)?.type === type);
-    const threadId = hasScopeIdentity('thread')
-      ? resolvedScopes.threadId
-      : (requestContextToUse.get(MASTRA_THREAD_ID_KEY) as string | undefined) ||
-        (typeof mergedOptions?.memory?.thread === 'string'
-          ? mergedOptions.memory.thread
-          : mergedOptions?.memory?.thread?.id);
-    const resourceId = hasScopeIdentity('resource')
-      ? resolvedScopes.resourceId
-      : (requestContextToUse.get(MASTRA_RESOURCE_ID_KEY) as string | undefined) || mergedOptions?.memory?.resource;
+      // The snapshot is used only to check re-supplied scopes. Identity comes from scopes when
+      // present, else from the reserved keys then memory, as before scopes existed.
+      const hasScopeIdentity = (type: 'resource' | 'thread') =>
+        resolvedScopes.scopes.some(scope => parseAgentScope(scope)?.type === type);
+      const threadId = hasScopeIdentity('thread')
+        ? resolvedScopes.threadId
+        : (requestContextToUse.get(MASTRA_THREAD_ID_KEY) as string | undefined) ||
+          (typeof mergedOptions?.memory?.thread === 'string'
+            ? mergedOptions.memory.thread
+            : mergedOptions?.memory?.thread?.id);
+      const resourceId = hasScopeIdentity('resource')
+        ? resolvedScopes.resourceId
+        : (requestContextToUse.get(MASTRA_RESOURCE_ID_KEY) as string | undefined) || mergedOptions?.memory?.resource;
 
-    return await networkLoop({
-      networkName: this.name,
-      requestContext: requestContextToUse,
-      runId,
-      routingAgent: this,
-      routingAgentOptions: {
-        model: mergedOptions?.model,
-        modelSettings: mergedOptions?.modelSettings,
-        memory: mergedOptions?.memory,
-      },
-      generateId: context => this.#mastra?.generateId(context) || globalThis.crypto.randomUUID(),
-      maxIterations: mergedOptions?.maxSteps || 1,
-      messages: [],
-      threadId,
-      resourceId,
-      resumeData,
-      validation: mergedOptions?.completion,
-      routing: mergedOptions?.routing,
-      onIterationComplete: mergedOptions?.onIterationComplete,
-      autoResumeSuspendedTools: mergedOptions?.autoResumeSuspendedTools,
-      mastra: this.#mastra,
-      onStepFinish: mergedOptions?.onStepFinish,
-      onError: mergedOptions?.onError,
-      onAbort: mergedOptions?.onAbort,
-      abortSignal: mergedOptions?.abortSignal,
-    });
+      return await networkLoop({
+        networkName: this.name,
+        requestContext: requestContextToUse,
+        runId,
+        routingAgent,
+        routingAgentOptions: {
+          model: mergedOptions?.model,
+          modelSettings: mergedOptions?.modelSettings,
+          memory: mergedOptions?.memory,
+        },
+        generateId: context => this.#mastra?.generateId(context) || globalThis.crypto.randomUUID(),
+        maxIterations: mergedOptions?.maxSteps || 1,
+        messages: [],
+        threadId,
+        resourceId,
+        resumeData,
+        validation: mergedOptions?.completion,
+        routing: mergedOptions?.routing,
+        onIterationComplete: mergedOptions?.onIterationComplete,
+        autoResumeSuspendedTools: mergedOptions?.autoResumeSuspendedTools,
+        mastra: this.#mastra,
+        onStepFinish: mergedOptions?.onStepFinish,
+        onError: mergedOptions?.onError,
+        onAbort: mergedOptions?.onAbort,
+        abortSignal: mergedOptions?.abortSignal,
+        agentVersionPins: getAgentVersionPins(requestContextToUse),
+      });
+    } finally {
+      if (requestVersions) requestContextToUse.set(MASTRA_VERSIONS_KEY, requestVersions);
+      else requestContextToUse.delete(MASTRA_VERSIONS_KEY);
+    }
   }
 
   /**
@@ -9389,6 +9837,11 @@ export class Agent<
       },
       { callScopes: options?.scopes, defaultScopes: defaultOptions?.scopes },
     );
+    if (options?.requestContext?.get(MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY) === true) {
+      mergedOptions.versions = options.versions;
+    } else {
+      mergedOptions.versions = mergeVersionOverrides(defaultOptions?.versions, options?.versions);
+    }
     const loopOptions = { ...mergedOptions };
     const actor = mergedOptions.actor;
     delete loopOptions.actor;
@@ -10144,6 +10597,11 @@ export class Agent<
       },
       { callScopes: streamOptions?.scopes, defaultScopes: defaultOptions?.scopes },
     );
+    if (streamOptions?.requestContext?.get(MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY) === true) {
+      mergedOptions.versions = streamOptions.versions;
+    } else {
+      mergedOptions.versions = mergeVersionOverrides(defaultOptions?.versions, streamOptions?.versions);
+    }
     validateModelTimeoutSettings(mergedOptions.modelSettings?.timeout);
     const loopOptions = { ...mergedOptions };
     const actor = mergedOptions.actor;
@@ -10503,6 +10961,9 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (streamOptions ?? {}) as Record<string, unknown>,
     ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
+    // Defaults select new runs; only caller-supplied selectors assert the
+    // identity of a suspended run. The snapshot supplies its execution policy.
+    mergedStreamOptions.versions = streamOptions?.versions;
     const loopStreamOptions = { ...mergedStreamOptions };
     const actor = mergedStreamOptions.actor;
     delete loopStreamOptions.actor;
@@ -10740,6 +11201,7 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (options ?? {}) as Record<string, unknown>,
     ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
+    mergedOptions.versions = options?.versions;
     const loopOptions = { ...mergedOptions };
     const actor = mergedOptions.actor;
     delete loopOptions.actor;
@@ -11023,6 +11485,8 @@ export class Agent<
       declineContext?: { reason?: string; message?: string };
       messages?: MessageListInput;
       streamOptions?: AgentExecutionOptions<OUTPUT>;
+      /** Existing run whose immutable version pins a message continuation consumes. */
+      sourceRunId?: string;
     },
   ): Promise<{ accepted: true; runId: string; toolCallId?: string }> {
     const {
@@ -11033,10 +11497,20 @@ export class Agent<
       declineContext,
       messages,
       streamOptions,
+      sourceRunId,
       ...executionOptions
     } = options;
 
     if (messages && approved) {
+      const hydratedRun = await agentThreadStreamRuntime.hydrateThreadRunVersionPins(
+        {
+          agentId: this.id,
+          resourceId,
+          threadId,
+          runId: sourceRunId ?? this.getActiveThreadRunId({ threadId, resourceId }),
+        },
+        this.getPubSub(),
+      );
       const continuation = agentThreadStreamRuntime.continueWithMessages(
         this as Agent<any, any, any, any>,
         messages,
@@ -11044,6 +11518,8 @@ export class Agent<
           resourceId,
           threadId,
           runId: executionOptions.runId,
+          sourceRunId: sourceRunId ?? hydratedRun?.runId,
+          sourceVersionPins: hydratedRun?.versionPins,
           streamOptions: deepMerge(
             (streamOptions ?? {}) as Record<string, unknown>,
             executionOptions as Record<string, unknown>,
@@ -11301,6 +11777,127 @@ export class Agent<
   }
 
   /**
+   * Freeze version selection before the AI SDK v4 execution path prepares its
+   * model or tools. Legacy generate/stream do not pass through #execute, so
+   * they need the same root/dependency boundary explicitly.
+   */
+  async #prepareLegacyVersionedRun<
+    OPTIONS extends {
+      requestContext?: RequestContext;
+      versions?: VersionOverrides;
+    },
+  >(options: OPTIONS): Promise<{ agent: Agent<any, any, any, any>; options: OPTIONS; restoreVersions?: () => void }> {
+    const requestContext = options.requestContext ?? new RequestContext();
+    const inheritedDelegationPins = requestContext.get(MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY) === true;
+    requestContext.delete(MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY);
+
+    if (inheritedDelegationPins) {
+      const scopedPins = scopeAgentVersionPins(getAgentVersionPins(requestContext), this.id);
+      setAgentVersionPins(requestContext, scopedPins);
+      const inheritedVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+      const exactInheritedVersions = exactVersionOverridesForPins(scopedPins, inheritedVersions?.defaultStatus);
+      if (exactInheritedVersions) requestContext.set(MASTRA_VERSIONS_KEY, exactInheritedVersions);
+      else requestContext.delete(MASTRA_VERSIONS_KEY);
+    } else {
+      // A caller may reuse one RequestContext for independent runs. Pins are
+      // execution-owned and must always be recomputed for a public new run.
+      setAgentVersionPins(requestContext, undefined);
+    }
+
+    const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+    let mergedVersions = mergeVersionOverrides(
+      mergeVersionOverrides(this.#mastra?.getVersionOverrides(), requestVersions),
+      options.versions,
+    );
+    const inheritedPins = inheritedDelegationPins ? getAgentVersionPins(requestContext) : undefined;
+    if (inheritedPins) {
+      assertContinuationVersionOverrides(options.versions, inheritedPins, this.id);
+      mergedVersions = exactVersionOverridesForPins(inheritedPins);
+      setAgentVersionPins(requestContext, inheritedPins);
+    }
+
+    const rootPin = inheritedPins?.root;
+    if (rootPin && rootPin.agentId !== this.id) {
+      throw new MastraError({
+        id: 'PINNED_VERSION_CONFLICT',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Legacy delegated run is pinned to agent "${rootPin.agentId}", not "${this.id}".`,
+        details: { agentId: this.id, pinnedAgentId: rootPin.agentId, pinnedVersionId: rootPin.versionId },
+      });
+    }
+
+    const currentSelection = getResolvedAgentVersionSelection(this);
+    if (inheritedPins && !rootPin && currentSelection) {
+      throw new MastraError({
+        id: 'PINNED_VERSION_CONFLICT',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Legacy delegated run was persisted without a root version and cannot run on resolved version "${currentSelection.versionId}".`,
+        details: { agentId: this.id, resolvedVersionId: currentSelection.versionId },
+      });
+    }
+
+    const explicitRootSelector = !inheritedPins ? getAgentVersionSelector(mergedVersions, this.id) : undefined;
+    const rootSelector =
+      (rootPin && currentSelection?.versionId !== rootPin.versionId ? { versionId: rootPin.versionId } : undefined) ??
+      (!rootPin ? explicitRootSelector : undefined);
+    let executionAgent: Agent<any, any, any, any> = this as Agent<any, any, any, any>;
+    if (rootSelector && this.#mastra) {
+      try {
+        executionAgent = await this.#mastra.resolveVersionedAgent(this as unknown as Agent, rootSelector);
+      } catch (versionError) {
+        if ('versionId' in rootSelector || 'label' in rootSelector) throw versionError;
+        this.logger.warn('Failed to resolve versioned agent for legacy call, using code-defined default', {
+          agent: this.name,
+          agentId: this.id,
+          versionSelector: rootSelector,
+          error: versionError,
+        });
+      }
+    }
+
+    const resolvedSelection =
+      rootPin ??
+      (explicitRootSelector
+        ? getResolvedAgentVersionSelection(executionAgent, explicitRootSelector)
+        : (currentSelection ?? getResolvedAgentVersionSelection(executionAgent, rootSelector)));
+    if (resolvedSelection) {
+      applySelectedLabelToResolvedAgent(executionAgent, resolvedSelection);
+      recordAgentVersionPin(requestContext, resolvedSelection, 'root');
+    }
+
+    await executionAgent.__resolveExplicitAgentVersionPins({
+      requestContext,
+      versions: mergedVersions,
+      preservePins: !!inheritedPins,
+    });
+    setAgentVersionPinDefaultStatus(requestContext, mergedVersions?.defaultStatus);
+
+    const exactVersions = exactVersionOverridesForPins(getAgentVersionPins(requestContext));
+    const executionVersions = inheritedDelegationPins ? exactVersions : mergedVersions;
+    if (executionVersions) requestContext.set(MASTRA_VERSIONS_KEY, executionVersions);
+    else requestContext.delete(MASTRA_VERSIONS_KEY);
+
+    return {
+      agent: executionAgent,
+      options: {
+        ...options,
+        requestContext,
+        ...(exactVersions ? { versions: exactVersions } : { versions: undefined }),
+      },
+      // The caller owns this context. Its original policy must remain available
+      // when the same context is used for a later independent run.
+      restoreVersions: !inheritedDelegationPins
+        ? () => {
+            if (requestVersions) requestContext.set(MASTRA_VERSIONS_KEY, requestVersions);
+            else requestContext.delete(MASTRA_VERSIONS_KEY);
+          }
+        : undefined,
+    };
+  }
+
+  /**
    * Legacy implementation of generate method using AI SDK v4 models.
    * Use this method if you need to continue using AI SDK v4 models.
    *
@@ -11343,7 +11940,25 @@ export class Agent<
       model?: DynamicArgument<MastraModelConfig>;
     } = {},
   ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
-    return this.getLegacyHandler().generateLegacy(messages, generateOptions);
+    const defaultEvaluationContext = generateOptions.requestContext ?? new RequestContext();
+    // Resolve defaults on the original agent before choosing an immutable
+    // version. Pass the result through so the selected fork cannot evaluate a
+    // dynamic factory again or replace its request context.
+    const defaults = await this.getDefaultGenerateOptionsLegacy({ requestContext: defaultEvaluationContext });
+    const requestContext = generateOptions.requestContext ?? defaults.requestContext ?? defaultEvaluationContext;
+    const prepared = await this.#prepareLegacyVersionedRun({
+      ...generateOptions,
+      requestContext,
+      versions:
+        requestContext.get(MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY) === true
+          ? generateOptions.versions
+          : mergeVersionOverrides(defaults.versions, generateOptions.versions),
+    });
+    try {
+      return await prepared.agent.getLegacyHandler().generateLegacy(messages, prepared.options, defaults);
+    } finally {
+      prepared.restoreVersions?.();
+    }
   }
 
   /**
@@ -11407,10 +12022,25 @@ export class Agent<
     | StreamTextResult<any, OUTPUT>
     | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties)
   > {
-    return this.getLegacyHandler().streamLegacy(messages, streamOptions) as Promise<
-      | StreamTextResult<any, OUTPUT>
-      | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties)
-    >;
+    const defaultEvaluationContext = streamOptions.requestContext ?? new RequestContext();
+    const defaults = await this.getDefaultStreamOptionsLegacy({ requestContext: defaultEvaluationContext });
+    const requestContext = streamOptions.requestContext ?? defaults.requestContext ?? defaultEvaluationContext;
+    const prepared = await this.#prepareLegacyVersionedRun({
+      ...streamOptions,
+      requestContext,
+      versions:
+        requestContext.get(MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY) === true
+          ? streamOptions.versions
+          : mergeVersionOverrides(defaults.versions, streamOptions.versions),
+    });
+    try {
+      return await (prepared.agent.getLegacyHandler().streamLegacy(messages, prepared.options, defaults) as Promise<
+        | StreamTextResult<any, OUTPUT>
+        | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties)
+      >);
+    } finally {
+      prepared.restoreVersions?.();
+    }
   }
 
   /**

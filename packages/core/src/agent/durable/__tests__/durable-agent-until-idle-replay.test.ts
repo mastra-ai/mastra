@@ -21,8 +21,9 @@
  * Timing note: the harness's artificial 1500 ms tool delay is reduced to 400 ms.
  * T19 excludes exact timing from its claims and no check depends on the duration.
  */
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
@@ -31,7 +32,7 @@ import { expectEngineParity, textOnlyTape, toolCallTape } from './parity-harness
 
 const ENGINES = ['plain', 'durable', 'evented'] as const;
 
-const VARIANT = ['caller-runid', 'no-runid'] as const;
+const VARIANT = ['caller-runid', 'no-runid', 'version-label'] as const;
 
 const MAX_STEPS = 6;
 const IDLE_MS = 20_000;
@@ -141,9 +142,21 @@ function contractOf(where: string, turn: ParitySnapshot, log: ToolLogEntry[]): T
 }
 
 describe('T19 untilIdle continuation does not replay earlier chunks', () => {
+  afterEach(() => vi.restoreAllMocks());
+
   for (const variant of VARIANT) {
     it(`${variant}: background wake-up streams each segment once on every engine`, async () => {
       const logs = new Map<ParityEngine, ToolLogEntry[]>();
+      const selectedVersions: Array<{ label?: string; versionId?: string }> = [];
+      if (variant === 'version-label') {
+        vi.spyOn(Mastra.prototype, 'resolveVersionedAgent').mockImplementation(async (agent, selector) => {
+          selectedVersions.push(selector);
+          const fork = agent.__fork();
+          fork.__setRawConfig({ resolvedVersionId: selector.versionId ?? 'version-v1' });
+          fork.__markStoredVersionApplied();
+          return fork as typeof agent;
+        });
+      }
 
       const results = await expectEngineParity({
         engines: ENGINES,
@@ -167,6 +180,7 @@ describe('T19 untilIdle continuation does not replay earlier chunks', () => {
             memory: MEMORY,
             untilIdle: { maxIdleMs: IDLE_MS },
             maxSteps: MAX_STEPS,
+            ...(variant === 'version-label' ? { versions: { defaultLabel: 'production' } } : {}),
             ...(variant === 'caller-runid' ? { runId: `t19-run-${handle.engine}` } : {}),
           });
         },
@@ -182,6 +196,13 @@ describe('T19 untilIdle continuation does not replay earlier chunks', () => {
       // The harness compares the contract, not the chunk payloads.
       expect(observed.get('durable'), `${variant}: durable contract`).toEqual(observed.get('plain'));
       expect(observed.get('evented'), `${variant}: evented contract`).toEqual(observed.get('plain'));
+      if (variant === 'version-label') {
+        expect(selectedVersions.filter(selector => selector.label)).toHaveLength(ENGINES.length);
+        expect(selectedVersions.filter(selector => selector.versionId).length).toBeGreaterThan(0);
+        expect(
+          selectedVersions.every(selector => selector.label === 'production' || selector.versionId === 'version-v1'),
+        ).toBe(true);
+      }
     });
   }
 });

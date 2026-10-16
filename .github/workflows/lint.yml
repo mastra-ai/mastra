@@ -3,7 +3,7 @@ name: Quality assurance
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-    branches: [main, 0.x]
+    branches: [main, 0.x, 'codex/agent-version-labels-*']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}

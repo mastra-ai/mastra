@@ -174,7 +174,7 @@ All namespaces extend a shared CRUD base class, so they expose the same `create`
             name: 'getById',
             type: '(id: string, options?: GetByIdOptions) => Promise<Agent | null>',
             description:
-              'Return a hydrated Agent instance for a stored agent. Pass options with versionId, versionNumber, or status ("draft" | "published" | "archived") to target a specific version. Default version requests are cached.',
+              'Return a hydrated Agent instance for a stored agent. Pass options with versionId, label, versionNumber, or status ("draft" | "published" | "archived") to target a specific version. Default version requests are cached.',
           },
           {
             name: 'update',
@@ -200,9 +200,9 @@ All namespaces extend a shared CRUD base class, so they expose the same `create`
           },
           {
             name: 'applyStoredOverrides',
-            type: '(agent: Agent, options?: { versionId?: string; status?: "draft" | "published" }) => Promise<Agent>',
+            type: '(agent: Agent, options?: { versionId: string } | { label: string } | { status?: "draft" | "published" }) => Promise<Agent>',
             description:
-              'Mutate a code-defined agent in place to apply any stored overrides (instructions, tools, variables). Called internally by mastra.getAgent() — you rarely call it directly.',
+              "Mutate a code-defined agent in place to apply any stored overrides (instructions, tools, variables). An explicit versionId or label fails if it can't be resolved. Called internally by mastra.getAgent() — you rarely call it directly.",
           },
           {
             name: 'clone',

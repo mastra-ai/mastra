@@ -134,7 +134,7 @@ describe('durable delegated approval persisted runId', () => {
     await pubsub.close();
   });
 
-  const buildSupervisor = (mockMemory: MockMemory, toolExecutions: { count: number }) => {
+  const buildSupervisor = (mockMemory: MockMemory, toolExecutions: { count: number }, defaultLabel?: string) => {
     const secretTool = createTool({
       id: 'secretTool',
       description: 'Fetch a secret',
@@ -160,6 +160,7 @@ describe('durable delegated approval persisted runId', () => {
       model: makeSupervisorModel() as LanguageModelV2,
       agents: { subAgent },
       memory: mockMemory,
+      ...(defaultLabel ? { defaultOptions: { versions: { defaultLabel } } } : {}),
     });
   };
 
@@ -343,42 +344,107 @@ describe('durable delegated approval persisted runId', () => {
     await drainAndAssertResumed(resumed, toolExecutions);
   }, 30000);
 
-  it('resumes with the persisted pair on a fresh process over the same storage', async () => {
-    const storage = new InMemoryStore();
-    const memoryStorage = new InMemoryStore();
-    const mockMemory1 = new MockMemory({ storage: memoryStorage });
-    const memory = { thread: 'durable-restart-thread', resource: 'durable-restart-resource' };
-    const toolExecutions = { count: 0 };
+  it.each(['none', 'mastra', 'agent'] as const)(
+    'resumes with the persisted pair on a fresh process (defaultLabel source: %s)',
+    async defaultLabelSource => {
+      const useDefaultLabel = defaultLabelSource !== 'none';
+      const storage = new InMemoryStore();
+      const memoryStorage = new InMemoryStore();
+      const mockMemory1 = new MockMemory({ storage: memoryStorage });
+      const memory = { thread: 'durable-restart-thread', resource: 'durable-restart-resource' };
+      const toolExecutions = { count: 0 };
+      let labelVersion = 'v1';
+      const selectors: Array<{ agentId: string; versionId?: string; label?: string }> = [];
+      const installVersionResolver = (mastra: Mastra) => {
+        if (!useDefaultLabel) return;
+        vi.spyOn(mastra, 'resolveVersionedAgent').mockImplementation(async (agent, selector) => {
+          selectors.push({ agentId: agent.id, ...selector });
+          const fork = agent.__fork();
+          fork.__setRawConfig({
+            resolvedVersionId: selector.versionId ?? `${agent.id}-${labelVersion}`,
+            ...(selector.label ? { selectedVersionLabel: selector.label } : {}),
+          });
+          fork.__markStoredVersionApplied();
+          return fork as typeof agent;
+        });
+      };
 
-    // ---- Process 1: run to the approval suspension ----
-    const durableAgent1 = createDurableAgent({ agent: buildSupervisor(mockMemory1, toolExecutions), pubsub });
-    new Mastra({ agents: { durableAgent: durableAgent1 }, storage, logger: false });
-    await runToApproval(durableAgent1, memory, storage);
-
-    const entry = await getApprovalEntry(mockMemory1, memory);
-    expect(entry.delegatedRunId).toBeDefined();
-
-    // ---- Simulate restart: clear process-local runtime state, then use fresh
-    // pubsub, memory/agent instances, and Mastra backed by the same persisted
-    // workflow and message storage. ----
-    globalRunRegistry.clear();
-    const pubsub2 = new EventEmitterPubSub();
-    const mockMemory2 = new MockMemory({ storage: memoryStorage });
-    try {
-      const durableAgent2 = createDurableAgent({
-        agent: buildSupervisor(mockMemory2, toolExecutions),
-        pubsub: pubsub2,
+      // ---- Process 1: run to the approval suspension ----
+      const durableAgent1 = createDurableAgent({
+        agent: buildSupervisor(mockMemory1, toolExecutions, defaultLabelSource === 'agent' ? 'production' : undefined),
+        pubsub,
       });
-      new Mastra({ agents: { durableAgent: durableAgent2 }, storage, logger: false });
+      installVersionResolver(
+        new Mastra({
+          agents: { durableAgent: durableAgent1 },
+          storage,
+          logger: false,
+          ...(defaultLabelSource === 'mastra' ? { versions: { defaultLabel: 'production' } } : {}),
+        }),
+      );
+      const outerRunId = await runToApproval(durableAgent1, memory, storage);
 
-      const resumed = await durableAgent2.approveToolCall({
-        runId: entry.runId,
-        toolCallId: entry.toolCallId,
-        memory,
-      });
-      await drainAndAssertResumed(resumed, toolExecutions);
-    } finally {
-      await pubsub2.close();
-    }
-  }, 30000);
+      if (useDefaultLabel) {
+        const workflows = (await storage.getStore('workflows'))!;
+        const persisted = await workflows.getWorkflowRunById({
+          runId: outerRunId,
+          workflowName: DurableStepIds.AGENTIC_LOOP,
+        });
+        const snapshot = typeof persisted?.snapshot === 'string' ? JSON.parse(persisted.snapshot) : persisted?.snapshot;
+        expect(snapshot.context.input.agentVersionPins).toMatchObject({
+          root: { agentId: 'supervisor', versionId: 'supervisor-v1', selectedLabel: 'production' },
+          agents: { subAgent: { agentId: 'subAgent', versionId: 'subAgent-v1', selectedLabel: 'production' } },
+        });
+        labelVersion = 'v2';
+        selectors.length = 0;
+      }
+
+      const entry = await getApprovalEntry(mockMemory1, memory);
+      expect(entry.delegatedRunId).toBeDefined();
+
+      // ---- Simulate restart: clear process-local runtime state, then use fresh
+      // pubsub, memory/agent instances, and Mastra backed by the same persisted
+      // workflow and message storage. ----
+      globalRunRegistry.clear();
+      const pubsub2 = new EventEmitterPubSub();
+      const mockMemory2 = new MockMemory({ storage: memoryStorage });
+      try {
+        const durableAgent2 = createDurableAgent({
+          agent: buildSupervisor(
+            mockMemory2,
+            toolExecutions,
+            defaultLabelSource === 'agent' ? 'production' : undefined,
+          ),
+          pubsub: pubsub2,
+        });
+        installVersionResolver(
+          new Mastra({
+            agents: { durableAgent: durableAgent2 },
+            storage,
+            logger: false,
+            ...(defaultLabelSource === 'mastra' ? { versions: { defaultLabel: 'production' } } : {}),
+          }),
+        );
+
+        const resumed = await durableAgent2.approveToolCall({
+          runId: entry.runId,
+          toolCallId: entry.toolCallId,
+          memory,
+        });
+        await drainAndAssertResumed(resumed, toolExecutions);
+        if (useDefaultLabel) {
+          expect(selectors).toEqual(
+            expect.arrayContaining([
+              { agentId: 'supervisor', versionId: 'supervisor-v1' },
+              { agentId: 'subAgent', versionId: 'subAgent-v1' },
+            ]),
+          );
+          expect(selectors.every(selector => selector.versionId?.endsWith('-v1'))).toBe(true);
+        }
+      } finally {
+        await pubsub2.close();
+      }
+    },
+    30000,
+  );
 });

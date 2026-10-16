@@ -7,13 +7,22 @@ import { MessageList } from '../../agent/message-list';
 import type { MastraDBMessage, MessageListInput } from '../../agent/message-list';
 import { DEFAULT_TOOL_DECLINE_REASON, resolveDeclineReason } from '../../agent/tool-approval';
 import type { StructuredOutputOptions } from '../../agent/types';
+import {
+  exactVersionOverridesForPins,
+  getAgentVersionPins,
+  MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY,
+  scopeAgentVersionPins,
+  setAgentVersionPins,
+} from '../../agent/version-pins';
+import type { AgentVersionPins } from '../../agent/version-pins';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraLLMVNext } from '../../llm/model/model.loop';
 import { noopLogger } from '../../logger';
+import type { VersionOverrides } from '../../mastra/types';
 import type { ObservabilityContext } from '../../observability';
 import { createObservabilityContext, InternalSpans, resolveObservabilityContext } from '../../observability';
 import { ProcessorRunner } from '../../processors/runner';
-import type { RequestContext } from '../../request-context';
+import { MASTRA_VERSIONS_KEY, RequestContext } from '../../request-context';
 import type { PublicSchema } from '../../schema';
 import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import { ChunkFrom } from '../../stream';
@@ -552,6 +561,9 @@ export async function createNetworkLoop({
   abortSignal?: AbortSignal;
 }) {
   assertNetworkSupportsMemory(await agent.getMemory({ requestContext }), routingAgentMemoryConfig);
+  // The network owns this immutable graph. Internal routing generations and
+  // caller context reuse must not replace it before a delegated step starts.
+  const networkPins = getAgentVersionPins(requestContext);
 
   /**
    * Shared abort handler for all primitive execution steps.
@@ -892,6 +904,24 @@ export async function createNetworkLoop({
       }
 
       const agentId = agentForStep.id;
+      if (networkPins?.resolvedAgentIds && !networkPins.resolvedAgentIds.includes(agentId)) {
+        throw new MastraError({
+          id: 'PINNED_VERSION_REQUIRED',
+          domain: ErrorDomain.AGENT_NETWORK,
+          category: ErrorCategory.USER,
+          text: `Agent "${agentId}" was not pinned when the network's version graph was resolved.`,
+          details: { agentId },
+        });
+      }
+      const delegatedPins = scopeAgentVersionPins(networkPins, agentId);
+      const delegatedVersions = networkPins
+        ? exactVersionOverridesForPins(delegatedPins)
+        : (requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined);
+      const delegatedContext = new RequestContext<unknown>(requestContext.entries());
+      setAgentVersionPins(delegatedContext, delegatedPins);
+      delegatedContext.set(MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY, true);
+      if (delegatedVersions) delegatedContext.set(MASTRA_VERSIONS_KEY, delegatedVersions);
+      else delegatedContext.delete(MASTRA_VERSIONS_KEY);
       const stepId = generateId({
         idType: 'step',
         source: 'agent',
@@ -931,7 +961,7 @@ export async function createNetworkLoop({
       // threadId/resourceId so working memory tools function correctly.
       const result = await (resumeData
         ? agentForStep.resumeStream(resumeData, {
-            requestContext: requestContext,
+            requestContext: delegatedContext,
             runId,
             memory: {
               thread: threadId,
@@ -944,9 +974,10 @@ export async function createNetworkLoop({
             onError,
             abortSignal,
             onAbort,
+            versions: delegatedVersions,
           })
         : agentForStep.stream(messagesForSubAgent, {
-            requestContext: requestContext,
+            requestContext: delegatedContext,
             runId,
             memory: {
               thread: threadId,
@@ -959,6 +990,7 @@ export async function createNetworkLoop({
             onError,
             abortSignal,
             onAbort,
+            versions: delegatedVersions,
           }));
 
       let requireApprovalMetadata: Record<string, any> | undefined;
@@ -2132,6 +2164,7 @@ export async function networkLoop<OUTPUT = undefined>({
   onError,
   onAbort,
   abortSignal,
+  agentVersionPins,
 }: {
   networkName: string;
   requestContext: RequestContext;
@@ -2179,6 +2212,7 @@ export async function networkLoop<OUTPUT = undefined>({
   onError?: NetworkOptions<OUTPUT>['onError'];
   onAbort?: NetworkOptions<OUTPUT>['onAbort'];
   abortSignal?: NetworkOptions<OUTPUT>['abortSignal'];
+  agentVersionPins?: AgentVersionPins;
 }): Promise<MastraAgentNetworkStream<OUTPUT>> {
   // Validate that memory is available before starting the network
   const memoryToUse = await routingAgent.getMemory({ requestContext });
@@ -2672,6 +2706,7 @@ export async function networkLoop<OUTPUT = undefined>({
       threadResourceId: z.string().optional(),
       isOneOff: z.boolean(),
       verboseIntrospection: z.boolean(),
+      agentVersionPins: z.custom<AgentVersionPins>().optional(),
     }),
     outputSchema: z.object({
       task: z.string(),
@@ -2749,6 +2784,7 @@ export async function networkLoop<OUTPUT = undefined>({
           threadId: thread?.id,
           isOneOff: false,
           verboseIntrospection: true,
+          agentVersionPins,
         },
         requestContext,
       }).fullStream;

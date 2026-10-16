@@ -7,6 +7,7 @@ export * from './domains/memory/child-process-memory-storage';
 export * from './domains/knowledge';
 export * from './domains/datasets/fidelity';
 export * from './domains/run-fencing';
+export * from './domains/agents/version-labels';
 export * from './vector-factory';
 export * from './config-validation';
 export * from './client-acceptance';

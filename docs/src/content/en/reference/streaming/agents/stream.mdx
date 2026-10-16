@@ -885,16 +885,24 @@ const stream = await agent.stream('message for agent')
             type: 'VersionOverrides',
             isOptional: true,
             description:
-              'Per-invocation version overrides for sub-agent delegation. Merged on top of Mastra instance-level versions and propagated automatically through sub-agent calls via requestContext. Requires the editor package. See [Editor versioning](/docs/studio/editor#versioning).',
+              'Per-invocation selectors for the root agent and delegated sub-agents. Selectors merge on top of request-context and Mastra instance defaults and propagate through delegation. Stored-version selection requires the editor package. See [Editor versioning](/reference/editor/versioning#sub-agent-versioning).',
             properties: [
               {
                 type: 'VersionOverrides',
                 parameters: [
                   {
+                    name: 'defaultLabel',
+                    type: 'string',
+                    isOptional: true,
+                    description:
+                      'Label to resolve for every agent without an explicit `agents[id]` selector, including the root. Takes precedence over `defaultStatus`. A missing label rejects the run.',
+                  },
+                  {
                     name: 'agents',
                     type: 'Record<string, VersionSelector>',
                     isOptional: true,
-                    description: 'A map of agent IDs to their version selectors.',
+                    description:
+                      'A map of agent IDs to their version selectors, including the root agent. Each entry selects exactly one `versionId`, `label`, or `status` and takes precedence over both defaults.',
                     properties: [
                       {
                         type: 'VersionSelector',
@@ -905,10 +913,12 @@ const stream = await agent.stream('message for agent')
                             isOptional: true,
                             description: 'Target a specific version by ID.',
                           },
-                        ],
-                      },
-                      {
-                        parameters: [
+                          {
+                            name: 'label',
+                            type: 'string',
+                            isOptional: true,
+                            description: 'Resolve a computed or custom version label.',
+                          },
                           {
                             name: 'status',
                             type: "'draft' | 'published'",
@@ -918,6 +928,13 @@ const stream = await agent.stream('message for agent')
                         ],
                       },
                     ],
+                  },
+                  {
+                    name: 'defaultStatus',
+                    type: "'draft' | 'published'",
+                    isOptional: true,
+                    description:
+                      'Publication status for any agent without an explicit selector when `defaultLabel` is absent. If neither default is set, existing system defaults apply.',
                   },
                 ],
               },
