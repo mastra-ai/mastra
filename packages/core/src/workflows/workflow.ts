@@ -5708,7 +5708,12 @@ export class Run<
     // until the target step actually starts, so without an atomic claim two concurrent
     // timeTravel() callers can both pass the status check above and both run the target step.
     // See https://github.com/mastra-ai/mastra/issues/27279.
-    await this.#claimRun({ workflowsStore, snapshot, operation: 'timeTravel' });
+    try {
+      await this.#claimRun({ workflowsStore, snapshot, operation: 'timeTravel' });
+    } catch (error) {
+      workflowSpan?.error({ error: error as Error, endSpan: true });
+      throw error;
+    }
 
     const releaseClaimIfUnused = async () => {
       // Only roll the claim back when the engine never persisted anything: the snapshot is still
