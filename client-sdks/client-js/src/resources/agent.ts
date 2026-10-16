@@ -3167,9 +3167,14 @@ export class Agent extends BaseResource {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    // Not every fetch implementation rejects a pending read on abort; cancel it explicitly.
+    const signal = options.abortSignal;
+    const cancelRead = () => void reader.cancel().catch(() => {});
+    signal?.addEventListener('abort', cancelRead, { once: true });
     try {
       while (true) {
         const { done, value } = await reader.read();
+        if (signal?.aborted) throw signal.reason ?? new DOMException('This operation was aborted', 'AbortError');
         buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
         const frames = buffer.split('\n\n');
         buffer = done ? '' : (frames.pop() ?? '');
@@ -3181,6 +3186,7 @@ export class Agent extends BaseResource {
         if (done) return;
       }
     } finally {
+      signal?.removeEventListener('abort', cancelRead);
       reader.releaseLock();
     }
   }
