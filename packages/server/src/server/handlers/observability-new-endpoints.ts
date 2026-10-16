@@ -108,6 +108,7 @@ import {
   OBSERVABILITY_LIST_ENDPOINTS,
   supportsObservabilityTraceQueryContextIds,
   supportsObservabilityTraceQueryRootDuration,
+  supportsObservabilityTraceAggregate,
   supportsSpanQueryCore,
   supportsTraceAggregateCore,
   supportsTraceQueryDiscoveryCore,
@@ -692,7 +693,22 @@ export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
           field =>
             !isTraceQueryContextIdField(field.path) || supportsObservabilityTraceQueryContextIds(observabilityStore),
         );
-      return { canonicalFields, ...observed };
+      // Older Core's strict response schema has no `aggregate` key, so only send it when Core can describe it.
+      const describesAggregate =
+        predicateScope === 'trace' &&
+        supportsTraceAggregateCore() &&
+        coreStorage.traceAggregateDiscoverySchema !== undefined &&
+        supportsObservabilityTraceAggregate(observabilityStore);
+      return {
+        canonicalFields,
+        ...observed,
+        ...(describesAggregate && {
+          aggregate: {
+            dimensions: coreStorage.getTraceAggregateDimensionDescriptors(),
+            measures: coreStorage.getTraceAggregateMeasureDescriptors(),
+          },
+        }),
+      };
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryResourceLimitError) {
         throwTraceQueryError(503, { code: error.code, message: error.message });

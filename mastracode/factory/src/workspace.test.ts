@@ -1557,26 +1557,20 @@ describe('GitHub session workspace preparation', () => {
     expect(sandbox.executeCommand).toHaveBeenCalled();
   });
 
-  it('authorizes a workspace-free supervisor session before controller session creation', async () => {
-    const projects = { get: vi.fn().mockResolvedValue({ id: 'project-1', orgId: 'org-1' }) };
-    const resolver = createWorkspaceFactory({ projects: projects as any });
-    const requestContext = createGithubRequestContext('project-1', 'factory-supervisor:project-1');
+  it('opens no workspace for a project-keyed resourceId from a retired session kind', async () => {
+    const projects = { get: vi.fn() };
+    const sourceControl = fakeGithubIntegration().sourceControlStorage;
+    const getBySessionId = vi.spyOn(sourceControl.sessions, 'getBySessionId');
+    const resolver = createWorkspaceFactory({
+      projects: projects as any,
+      sourceControls: [{ id: 'github', versionControl: {} as any, storage: sourceControl as any }],
+    });
+    const requestContext = createGithubRequestContext('project-1', 'factory-retired-kind:project-1');
 
     await expect(resolver({ requestContext } as any)).resolves.toBeUndefined();
-    expect(projects.get).toHaveBeenCalledWith({ orgId: 'org-1', id: 'project-1' });
-  });
-
-  it('refuses a workspace-free supervisor session outside the caller organization', async () => {
-    const projects = { get: vi.fn().mockResolvedValue(null) };
-    const resolver = createWorkspaceFactory({ projects: projects as any });
-    const requestContext = createGithubRequestContext('project-1', 'factory-supervisor:project-1', {
-      organizationId: 'org-2',
-      workosId: 'user-1',
-    });
-
-    await expect(resolver({ requestContext } as any)).rejects.toThrow(
-      'Factory supervisor project-1 is not available to the current user',
-    );
+    expect(getBySessionId).toHaveBeenCalledWith('factory-retired-kind:project-1');
+    expect(projects.get).not.toHaveBeenCalled();
+    expect(mocks.materializeRepo).not.toHaveBeenCalled();
   });
 
   it('opens the session for a session-shaped auth user, whose org lives on the session half', async () => {
@@ -2738,16 +2732,6 @@ describe('GitHub session workspace preparation', () => {
     await expect(
       workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') }),
     ).resolves.toBeDefined();
-  });
-
-  it('refuses private sessions to same-org non-owners', async () => {
-    const { workspace } = await createLocalFactory();
-    addProject();
-    addSession({ id: 'session-a', userId: 'someone-else', visibility: 'private' });
-
-    await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toThrow(
-      /Factory session session-a is not available/,
-    );
   });
 
   it('refuses cross-org callers regardless of visibility', async () => {

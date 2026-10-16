@@ -303,7 +303,6 @@
     "anthropic/claude-sonnet-4-5",
     "anthropic/claude-sonnet-4-5-20250929",
     "anthropic/claude-sonnet-4-6",
-    "atria/atria-dawn-preview",
     "aws-bedrock/claude-haiku-4-5",
     "aws-bedrock/claude-haiku-4-5-20251001",
     "aws-bedrock/claude-opus-4-1-20250805",
@@ -399,6 +398,7 @@
     "embercloud/glm-5.2",
     "embercloud/qwen3-coder-next",
     "entrim/deepseek-v4.1-flash",
+    "entrim/glm-5.3",
     "entrim/glm-5.3-flash",
     "fireworks/deepseek-v4-flash",
     "fireworks/deepseek-v4.1-flash",
@@ -695,6 +695,7 @@
     "deepinfra/muse-glimmer-30b",
     "deepinfra/qwen3.5-9b",
     "entrim/deepseek-v4.1-flash",
+    "entrim/glm-5.3",
     "entrim/glm-5.3-flash",
     "fireworks/deepseek-v4-flash",
     "fireworks/deepseek-v4.1-flash",
@@ -815,6 +816,12 @@
       }
     ],
     "entrim/deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "entrim/glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -2599,12 +2606,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "atria/atria-dawn-preview": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "mistral/glm-5.3": [

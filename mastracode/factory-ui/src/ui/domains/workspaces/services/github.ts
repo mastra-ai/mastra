@@ -13,6 +13,8 @@
  * still reaches the Mastra server — same pattern as the shared API client.
  */
 
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+
 import { postRepositoryGitOp, postSourceControlRepositoryOp, readJsonOrThrow } from './http';
 import type { GitLabRepository } from '../../factory/services/gitlab';
 
@@ -244,6 +246,8 @@ export interface FactoryProjectPayload {
   defaultModelId?: string | null;
   /** Where sessions and runs get their model and credentials. */
   modelScope?: FactoryModelScope;
+  /** Thinking level every session and run uses until it picks its own. */
+  defaultThinkingLevel?: ThinkingLevelSetting;
   /** Whether Factory rules may start agent runs without someone asking for them. */
   autoRunEnabled?: boolean;
   /** Whether the Factory answers a run's plan itself instead of waiting for a person. */
@@ -420,6 +424,25 @@ export async function updateFactoryModelScope(
   const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
     res,
     'Failed to update Factory model scope',
+  );
+  return project;
+}
+
+/** Set the thinking level this Factory's sessions and runs use until they pick their own. Admin-only. */
+export async function updateFactoryThinkingDefault(
+  baseUrl: string,
+  factoryProjectId: string,
+  defaultThinkingLevel: ThinkingLevelSetting,
+): Promise<FactoryProjectPayload> {
+  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ defaultThinkingLevel }),
+  });
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
+    res,
+    'Failed to update Factory thinking level',
   );
   return project;
 }

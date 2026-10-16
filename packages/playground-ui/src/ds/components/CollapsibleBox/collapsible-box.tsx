@@ -59,7 +59,7 @@ export function CollapsibleBox({ state, expandLabel, children, className, style,
         >
           {expandLabel && (
             <Button
-              variant="ghost"
+              variant="default"
               size="sm"
               icon={<Maximize2 />}
               className="relative"

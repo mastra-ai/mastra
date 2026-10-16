@@ -57,7 +57,8 @@ const defaultListeningModel = {
 };
 
 export class SarvamVoice extends MastraVoice {
-  private apiKey?: string;
+  private speechApiKey?: string;
+  private listeningApiKey?: string;
   private model: SarvamTTSModel = 'bulbul:v3';
   private language: SarvamTTSLanguage = 'en-IN';
   private properties: Record<string, any> = {};
@@ -86,8 +87,9 @@ export class SarvamVoice extends MastraVoice {
       speaker,
     });
 
-    this.apiKey = speechModel?.apiKey || listeningModel?.apiKey || defaultSpeechModel.apiKey;
-    if (!this.apiKey) {
+    this.speechApiKey = speechModel?.apiKey || defaultSpeechModel.apiKey;
+    this.listeningApiKey = listeningModel?.apiKey || defaultListeningModel.apiKey;
+    if (!this.speechApiKey && !this.listeningApiKey) {
       throw new Error('SARVAM_API_KEY must be set');
     }
     this.model = speechModel?.model || defaultSpeechModel.model;
@@ -103,9 +105,20 @@ export class SarvamVoice extends MastraVoice {
     this.speaker = speaker || defaultSpeaker;
   }
 
+  private async throwApiError(response: Response): Promise<never> {
+    let errorMessage: string | undefined;
+    try {
+      const body = (await response.json()) as { error?: { message?: string }; message?: string };
+      errorMessage = body?.error?.message || body?.message;
+    } catch {
+      // Non-JSON error body; fall back to the status text below.
+    }
+    throw new Error(`Sarvam AI API Error: ${errorMessage || response.statusText || `HTTP ${response.status}`}`);
+  }
+
   private async makeRequest(endpoint: string, payload: any) {
     const headers = new Headers({
-      'api-subscription-key': this.apiKey!,
+      'api-subscription-key': (this.speechApiKey || this.listeningApiKey)!,
       'Content-Type': 'application/json',
     });
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
@@ -114,14 +127,7 @@ export class SarvamVoice extends MastraVoice {
       body: JSON.stringify(payload),
     });
     if (!response.ok) {
-      let errorMessage;
-      try {
-        const error = (await response.json()) as { message?: string };
-        errorMessage = error.message || response.statusText;
-      } catch {
-        errorMessage = response.statusText;
-      }
-      throw new Error(`Sarvam AI API Error: ${errorMessage}`);
+      await this.throwApiError(response);
     }
 
     return response;
@@ -217,18 +223,22 @@ export class SarvamVoice extends MastraVoice {
     const requestOptions = {
       method: 'POST',
       headers: {
-        'api-subscription-key': this.apiKey!,
+        'api-subscription-key': (options?.apiKey || this.listeningApiKey || this.speechApiKey)!,
       },
       body: form,
     };
 
+    let response: Response;
     try {
-      const response = await fetch(`${this.baseUrl}/speech-to-text`, requestOptions);
-      const result = (await response.json()) as any;
-      return result.transcript;
+      response = await fetch(`${this.baseUrl}/speech-to-text`, requestOptions);
     } catch (error) {
       console.error('Error during speech-to-text request:', error);
       throw error;
     }
+    if (!response.ok) {
+      await this.throwApiError(response);
+    }
+    const result = (await response.json()) as any;
+    return result.transcript;
   }
 }

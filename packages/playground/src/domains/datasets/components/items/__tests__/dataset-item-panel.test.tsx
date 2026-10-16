@@ -56,7 +56,8 @@ const enterEditMode = async () => {
 const openScorerSelector = async () => {
   const selector = await screen.findByRole('combobox');
   await waitFor(() => expect(selector.hasAttribute('disabled')).toBe(false));
-  fireEvent.click(selector);
+  // The scorer field searches in itself and opens on mousedown (a real press), which fireEvent.click doesn't send.
+  fireEvent.mouseDown(selector);
 };
 
 const selectScorer = async (name: string) => {
@@ -64,6 +65,9 @@ const selectScorer = async (name: string) => {
   const option = await screen.findByRole('option', { name: new RegExp(name, 'i') });
   fireEvent.pointerDown(option, { pointerType: 'mouse' });
   fireEvent.click(option, { detail: 1 });
+  // A multi-select keeps its list open for more picks; Escape closes it like a keyboard user would.
+  fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('option', { name: new RegExp(name, 'i') })).toBeNull());
 };
 
 afterEach(() => cleanup());
@@ -219,7 +223,8 @@ describe('DatasetItemPanel', () => {
           'true',
         );
         expect(await screen.findByRole('combobox')).not.toBeNull();
-        expect(screen.getByRole('combobox').textContent).toContain('1 selected');
+        // The persisted scorer shows as one chip in the field.
+        expect(screen.getAllByRole('button', { name: /^Remove / })).toHaveLength(1);
       },
       scorerControlTestTimeout,
     );

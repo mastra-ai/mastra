@@ -78,6 +78,11 @@ export interface ChannelSessionResolveContext {
  * `thread.resourceId` — a session can only bind threads it owns. Hosts that
  * want a different session identity choose it on both ends, by pairing this
  * with the channels `resolveResourceId` option.
+ *
+ * Create the session with `threadId: thread.id` so it binds the mapped thread
+ * directly. Without it, a session scoped by tags or `projectPath` auto-selects
+ * or creates a different thread and is only switched onto the mapped one
+ * afterwards, leaving an extra empty thread behind.
  */
 export type ChannelSessionResolve = (ctx: ChannelSessionResolveContext) => Session<any> | Promise<Session<any>>;
 
@@ -472,6 +477,9 @@ export class AgentControllerChannels extends AgentChannels {
           resourceId: channelResourceId,
           id: channelResourceId,
           ownerId: controller.id,
+          // The mapped thread is authoritative: bind it at creation so a scoped
+          // session never auto-selects or creates a different thread.
+          threadId: thread.id,
           requestContext,
         });
     // A session may only bind threads it owns, and the mapped thread's owner is
@@ -485,9 +493,11 @@ export class AgentControllerChannels extends AgentChannels {
       );
     }
     // Bind the mapped thread. Guard is mandatory: `switch` aborts any active
-    // run, so never re-switch when the session is already on this thread.
+    // run, so never re-switch when the session is already on this thread. The
+    // inbound context flows in so the bind's history load resolves memory as
+    // the stamped tenant.
     if (session.thread.getId() !== thread.id) {
-      await session.thread.switch({ threadId: thread.id });
+      await session.thread.switch({ threadId: thread.id, requestContext });
     }
     await this.runSessionStartHook(session, thread, requestContext);
     return session;

@@ -10,7 +10,7 @@
 
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { OpenAICompatibleProvider } from '@ai-sdk/openai-compatible';
-import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
+import { ProviderAuthRequiredError, rejectUnauthorizedResponse } from '../auth/provider-auth-error.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
 
@@ -66,7 +66,10 @@ export function buildXAIOAuthFetch(opts: { authStorage?: CredentialStore } = {})
     headers.set('Authorization', `Bearer ${accessToken}`);
 
     try {
-      return await fetch(url, { ...init, headers });
+      return await rejectUnauthorizedResponse(await fetch(url, { ...init, headers }), {
+        providerName: 'xAI',
+        requestUrl: url instanceof URL ? url.toString() : typeof url === 'string' ? url : (url as Request).url,
+      });
     } catch (error) {
       if (error && typeof error === 'object') {
         Object.assign(error as Record<string, unknown>, {
