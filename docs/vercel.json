@@ -16,6 +16,31 @@
   ],
   "redirects": [
     {
+      "source": "/reference/ai-sdk/to-ai-sdk-v4-messages",
+      "destination": "/reference/ai-sdk/to-ai-sdk-v5-messages",
+      "permanent": true
+    },
+    {
+      "source": "/reference/agents/generateLegacy",
+      "destination": "/reference/agents/generate",
+      "permanent": true
+    },
+    {
+      "source": "/reference/streaming/agents/streamLegacy",
+      "destination": "/reference/streaming/agents/stream",
+      "permanent": true
+    },
+    {
+      "source": "/reference/agents/getDefaultGenerateOptions",
+      "destination": "/reference/agents/getDefaultOptions",
+      "permanent": true
+    },
+    {
+      "source": "/reference/agents/getDefaultStreamOptions",
+      "destination": "/reference/agents/getDefaultOptions",
+      "permanent": true
+    },
+    {
       "source": "/docs/workspace/overview",
       "destination": "/docs/sandbox/overview",
       "permanent": true
@@ -2263,6 +2288,31 @@
     {
       "source": "/reference/migrations/agentnetwork",
       "destination": "/reference/migrations/network-to-supervisor",
+      "permanent": true
+    },
+    {
+      "source": "/reference/ai-sdk/to-ai-sdk-v4-messages/llms.txt",
+      "destination": "/reference/ai-sdk/to-ai-sdk-v5-messages/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/agents/generateLegacy/llms.txt",
+      "destination": "/reference/agents/generate/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/streaming/agents/streamLegacy/llms.txt",
+      "destination": "/reference/streaming/agents/stream/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/agents/getDefaultGenerateOptions/llms.txt",
+      "destination": "/reference/agents/getDefaultOptions/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/agents/getDefaultStreamOptions/llms.txt",
+      "destination": "/reference/agents/getDefaultOptions/llms.txt",
       "permanent": true
     },
     {
