@@ -899,11 +899,15 @@ export class MessageList {
     message.content = contentForParts(parts.slice(0, partOffset));
     this.messages.splice(messageIndex, 1, message, currentMessage);
 
+    const prunedResponseMessages = this.#prunedResponseMessages;
     const state = this.serialize();
     for (const key of ['newResponseMessages', 'newResponseMessagesPersisted'] as const) {
       state[key] = state[key].flatMap(id => (id === messageId ? [earlierMessageId, currentMessageId] : [id]));
     }
     this.deserialize(state);
+    for (const [id, message] of this.#prunedResponseMessages) {
+      if (message === undefined) this.#prunedResponseMessages.set(id, prunedResponseMessages.get(id));
+    }
     this.responseMessageSplits.set(currentMessageId, earlierMessageId);
 
     return { earlierMessageId, currentMessageId };

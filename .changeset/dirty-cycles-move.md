@@ -2,14 +2,14 @@
 '@mastra/core': minor
 ---
 
-Added separate response messages for the current iteration in final output processors, allowing processors to transform each iteration independently.
+Added iteration-aware final output processing so processors receive the current feedback-continuation iteration as its own assistant message and can transform each iteration independently.
 
 Fixed feedback continuations with output processors so rewrites and redactions are preserved in `getFullOutput().text` and `steps[].text` instead of returning raw earlier-iteration text.
 
-Processors that persist transcripts should use `messageList.cloneForPersistence()` because the current iteration may appear as a temporary separate response message during final output processing.
+Custom output processors that persist transcripts should use `messageList.cloneForPersistence()` to retain one assistant response with its original identity and order.
 
 ```ts
-// Before: may persist the temporary split response.
+// Before: may persist processor-visible response messages separately.
 const processor = {
   id: 'transcript-persister',
   processOutputResult: async ({ messages, messageList }) => {
