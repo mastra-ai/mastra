@@ -134,6 +134,17 @@ describe('User session visibility', () => {
     expect(screen.queryByRole('menuitem', { name: 'Share with organization' })).not.toBeInTheDocument();
   });
 
+  it('does not offer visibility changes on the owner’s Slack thread session', async () => {
+    useFactoryFixtures(() => [{ ...session, branch: 'slack/1700000000-000100', visibility: 'org' }]);
+
+    const user = userEvent.setup();
+    renderSection();
+
+    await openActions(user, name);
+    expect(await screen.findByRole('menuitem', { name: 'Pin session' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Make private' })).not.toBeInTheDocument();
+  });
+
   it('reports a failed change and keeps the session private', async () => {
     useFactoryFixtures(() => [session]);
     server.use(
