@@ -859,7 +859,7 @@ describe('webhook route', () => {
         id: threadId,
         resourceId: 'resource-1',
       })),
-      getSessionByResource: vi.fn(async () => session),
+      getSession: vi.fn(async () => session),
       createSession: vi.fn(),
     } as unknown as NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller'];
     tables.subscriptions.push({
@@ -878,7 +878,6 @@ describe('webhook route', () => {
       subscribedByUserId: 'owner-1',
       resourceId: 'resource-1',
       threadId: 'thread-1',
-      sessionScope: '/worktrees/a',
       source: 'explicit-tool',
       status: 'open',
       // Delivery runs the woken session as the subscribing user; a row without
@@ -898,7 +897,7 @@ describe('webhook route', () => {
 
     expect(res.status).toBe(202);
     expect(await res.json()).toEqual({ ok: true });
-    expect(controller!.getSessionByResource).toHaveBeenCalledWith('resource-1', '/worktrees/a');
+    expect(controller!.getSession).toHaveBeenCalledWith('session-1');
     expect(sendNotificationSignal).toHaveBeenCalledWith(
       expect.objectContaining({
         priority: 'high',
@@ -1080,20 +1079,19 @@ describe('pat route', () => {
 });
 
 describe('subscriptions route', () => {
-  it('returns pull request links for the exact scoped thread', async () => {
+  it('returns pull request links for the exact thread', async () => {
     tables.subscriptions.push({
       id: 'subscription-1',
       orgId: 'org1',
       resourceId: 'resource-1',
       threadId: 'thread-1',
-      sessionScope: '/tmp/worktree',
       repoFullName: 'octo/hello',
       pullRequestNumber: 42,
       status: 'open',
     });
 
     const res = await buildApp({ workosId: 'u1' }).request(
-      '/web/github/subscriptions?resourceId=resource-1&threadId=thread-1&scope=%2Ftmp%2Fworktree',
+      '/web/github/subscriptions?resourceId=resource-1&threadId=thread-1',
     );
 
     expect(res.status).toBe(200);
@@ -2292,7 +2290,7 @@ describe('Factory session routes', () => {
     const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
 
     expect(deleted.status).toBe(200);
-    expect(controller.deleteSession).toHaveBeenCalledWith({ resourceId: sessionId });
+    expect(controller.deleteSession).toHaveBeenCalledWith({ sessionId });
     expect(runTeardownCommand).toHaveBeenCalledWith(live, '/workspace/hello', 'docker compose down --remove-orphans', {
       timeoutMs: 15 * 60_000,
     });
@@ -2334,7 +2332,7 @@ describe('Factory session routes', () => {
     expect(await response.json()).toEqual({ title: 'Log parser rewrite' });
     const named = controller.generateThreadTitle.mock.calls[0][0];
     expect(named.threadId).toBe('thread-1');
-    expect(named.resourceId).toBe(sessionId);
+    expect(named.sessionId).toBe(sessionId);
     // Naming runs as the session's owner, so it bills their model credentials.
     expect(named.requestContext.get('user')).toEqual({ workosId: 'u1', organizationId: 'org1' });
     expect(named.requestContext.get('mastra__factoryMemorySettings')).toEqual({
@@ -2497,7 +2495,7 @@ describe('Factory session routes', () => {
       const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
 
       expect(deleted.status).toBe(200);
-      expect(controller.deleteSession).toHaveBeenCalledWith({ resourceId: sessionId });
+      expect(controller.deleteSession).toHaveBeenCalledWith({ sessionId });
       expect(tables.sessions).toHaveLength(0);
       expect(warn).toHaveBeenCalledWith(
         '[GitHub Sessions] Failed to drain filesystem capture before delete',

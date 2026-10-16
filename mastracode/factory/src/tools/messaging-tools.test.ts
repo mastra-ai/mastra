@@ -94,7 +94,7 @@ function setup({
       threads === 'gone' ? undefined : { id: threadId, resourceId: threadId.replace(/^thread-/, '') },
     ),
     queryThreads: vi.fn(async () => []),
-    getSessionByResource: vi.fn(async (resourceId: string) => liveSession(resourceId)),
+    getSession: vi.fn(async (resourceId: string) => liveSession(resourceId)),
     createSession: vi.fn(),
     getCurrentAgent: vi.fn(() => agent),
   };
@@ -727,10 +727,10 @@ describe('side session tools', () => {
     const env = setup();
     const messaging = (await env.deps.messaging())!;
     const controller = messaging.controller as unknown as {
-      getSessionByResource: ReturnType<typeof vi.fn>;
+      getSession: ReturnType<typeof vi.fn>;
       queryThreadById: ReturnType<typeof vi.fn>;
     };
-    controller.getSessionByResource.mockImplementation(async (resourceId: string) => ({
+    controller.getSession.mockImplementation(async (resourceId: string) => ({
       thread: { getId: () => `thread-${resourceId}` },
       stream: { isActive: () => resourceId === 'session-side' },
       model: { get: () => (resourceId === 'session-side' ? 'openai/gpt-5' : '') },

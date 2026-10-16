@@ -49,9 +49,9 @@ function sourceControlRow(): SourceControlSession {
   };
 }
 
-function createSession(state: Record<string, unknown> = {}): DefaultModelHydrationSession {
+function createSession(state: Record<string, unknown> = {}, resourceId = 'session-1'): DefaultModelHydrationSession {
   return {
-    identity: { getResourceId: () => 'session-1' },
+    identity: { getId: () => 'session-1', getResourceId: () => resourceId },
     model: { get: () => 'openai/mode-default', switch: vi.fn().mockResolvedValue(undefined), setDefault: vi.fn() },
     state: {
       get: () => state,
@@ -319,6 +319,23 @@ describe('hydrateSessionDefaultModel', () => {
       rejectAmbiguous: true,
     });
     expect(dependencies.modelDefaults.get).not.toHaveBeenCalled();
+  });
+
+  it('looks up the source session and run binding by session id when the session runs under its Factory', async () => {
+    const session = createSession({}, 'factory-1');
+    const dependencies = createDependencies();
+    vi.mocked(dependencies.workItems.findRunBindingByThread).mockResolvedValue({} as never);
+
+    await hydrateSessionDefaultModel(session, dependencies);
+
+    expect(dependencies.sourceControl.getBySessionId).toHaveBeenCalledWith('session-1');
+    expect(dependencies.workItems.findRunBindingByThread).toHaveBeenCalledExactlyOnceWith({
+      orgId: 'org-1',
+      threadId: 'session-1',
+      resourceId: 'factory-1',
+      sessionId: 'session-1',
+      rejectAmbiguous: true,
+    });
   });
 
   it("primes the owner's scope and applies the owner default to an unbound session in hybrid scope", async () => {

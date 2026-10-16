@@ -113,6 +113,7 @@ function renderRoute(initialThreadId: string) {
           status: 'ready',
           state: {
             controllerId: AGENT_CONTROLLER_ID,
+            sessionId: RESOURCE_ID,
             resourceId: RESOURCE_ID,
             modeId: 'build',
             modelId: 'openai/gpt-5',

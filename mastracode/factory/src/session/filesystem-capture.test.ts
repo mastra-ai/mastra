@@ -29,12 +29,16 @@ function commandResult(overrides: Partial<{ exitCode: number; stdout: string; st
   };
 }
 
-function createSession(results = [commandResult(), commandResult()], resourceId = 'resource-1') {
+function createSession(
+  results = [commandResult(), commandResult()],
+  resourceId = 'resource-1',
+  sessionId = resourceId,
+) {
   const executeCommand = vi.fn(async () => results.shift() ?? commandResult());
   const listeners: SessionBeforeAgentEndListener[] = [];
   const eventListeners: Array<(event: unknown) => void> = [];
   const session: FilesystemCaptureSession = {
-    identity: { getResourceId: () => resourceId },
+    identity: { getId: () => sessionId, getResourceId: () => resourceId },
     thread: { requireId: () => 'thread-1' },
     getWorkspace: () => ({
       sandbox: {
@@ -194,6 +198,18 @@ describe('captureSessionFilesystem', () => {
     });
     // One checkout: git and artifacts only, the root is the checkout itself.
     expect(executeCommand).toHaveBeenCalledTimes(2);
+  });
+
+  it('finds the source-control session by session id when the session runs under a shared resource', async () => {
+    const { session } = createSession(undefined, 'factory-1', 'session-1');
+    const dependencies = createDependencies();
+
+    await captureSessionFilesystem(session, dependencies);
+
+    expect(dependencies.sourceControl.sessions.getBySessionId).toHaveBeenCalledWith('session-1');
+    expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledWith(
+      expect.objectContaining({ resourceId: 'factory-1', threadId: 'thread-1' }),
+    );
   });
 
   it('clears persisted files after successful empty Git and artifact listings', async () => {
@@ -632,12 +648,12 @@ describe('observeSessionFilesystem', () => {
     completeFirstCapture?.();
   });
 
-  it('serializes captures across sessions observing the same resource', async () => {
-    // Sessions are deduplicated by (resourceId, scope), so two scoped
-    // sessions can observe the same resource; their captures must extend one
-    // shared chain instead of interleaving through independent ones.
-    const first = createSession(undefined, 'resource-shared');
-    const second = createSession(undefined, 'resource-shared');
+  it('serializes captures across observers of the same session', async () => {
+    // A session re-created while its previous instance is still capturing
+    // observes the same session id; both captures must extend one shared
+    // chain instead of interleaving through independent ones.
+    const first = createSession(undefined, 'resource-shared', 'session-shared');
+    const second = createSession(undefined, 'resource-shared', 'session-shared');
     let releaseExec: ((value: ReturnType<typeof commandResult>) => void) | undefined;
     const gate = new Promise<ReturnType<typeof commandResult>>(resolve => {
       releaseExec = resolve;

@@ -16,7 +16,7 @@ export function useSetAgentControllerStateMutation({
   enabled = true,
 }: AgentControllerMutationArgs) {
   const queryClient = useQueryClient();
-  const { session } = createAgentControllerClient({ agentControllerId, resourceId, scope, baseUrl, enabled });
+  const { session } = createAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
 
   return useMutation({
     mutationFn: (updates: Record<string, unknown>) => requireAgentControllerSession(session).setState(updates),

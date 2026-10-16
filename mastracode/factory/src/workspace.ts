@@ -587,7 +587,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
 
   const resolve = async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
-    const resolvedSession = ctx?.resourceId ? await resolveSourceControlSession(sourceControls, ctx.resourceId) : null;
+    const resolvedSession = ctx?.sessionId ? await resolveSourceControlSession(sourceControls, ctx.sessionId) : null;
     const session = resolvedSession?.session ?? null;
     const sourceControl = resolvedSession?.provider;
 
@@ -908,7 +908,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         sessionId: session.sessionId,
       });
       if (!binding || !ctx?.threadId) return binding;
-      return binding.threadId === ctx.threadId && binding.resourceId === ctx.resourceId ? binding : null;
+      return binding.threadId === ctx.threadId && binding.sessionId === ctx.sessionId ? binding : null;
     };
     // Fails closed: without a readable active review binding, review skills stay hidden.
     const isReviewSession = async (): Promise<boolean> => {

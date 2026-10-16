@@ -71,7 +71,7 @@ const controllerMock = {
   onSessionCreated: vi.fn(),
   setChannels: vi.fn(),
   queryThreadById: vi.fn(),
-  getSessionByResource: vi.fn(),
+  getSession: vi.fn(),
   createSession: vi.fn(),
 };
 
@@ -1319,7 +1319,7 @@ describe('MastraFactory.prepare', () => {
       const project = await seedUserSession(storage);
       const resumeWake = config.resumeWakeSession as (args: { resourceId: string; threadId: string }) => Promise<void>;
       controllerMock.queryThreadById.mockResolvedValue({ id: 'thread-1', resourceId: 'session-1' });
-      controllerMock.getSessionByResource.mockResolvedValue(undefined);
+      controllerMock.getSession.mockResolvedValue(undefined);
       controllerMock.createSession.mockResolvedValue({});
 
       await resumeWake({ resourceId: 'session-1', threadId: 'thread-1' });

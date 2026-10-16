@@ -236,7 +236,11 @@ function createSession(
   };
   const controller = {
     createSession: vi.fn(async () => session),
-    getSessionByResource: vi.fn(async (): Promise<typeof session | undefined> => session),
+    // Bindings run under the Factory resource; the session is found by its own id only.
+    getSession: vi.fn(
+      async (sessionId: string): Promise<typeof session | undefined> =>
+        sessionId === 'session-1' ? session : undefined,
+    ),
     // Empty registry by default: the level-triggered timeout check sees no run.
     listActiveThreadRuns: vi.fn((): Array<{ runId: string; resourceId?: string; threadId: string }> => []),
   };
@@ -578,11 +582,11 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date(t0.getTime() + 11 * 60_000));
     const keep = sweep.mock.calls[0]?.[0].keep;
     expect(keep).toBeTypeOf('function');
-    const binding = { resourceId: PROJECT_ID, threadId: 'thread-1' } as Parameters<NonNullable<typeof keep>>[0];
+    const binding = { sessionId: 'session-1', resourceId: PROJECT_ID, threadId: 'thread-1' } as Parameters<NonNullable<typeof keep>>[0];
 
     // Idle session: nothing waits on it, so the age limit applies.
     await expect(keep!(binding)).resolves.toBe(false);
-    expect(controller.getSessionByResource).toHaveBeenLastCalledWith(PROJECT_ID);
+    expect(controller.getSession).toHaveBeenLastCalledWith('session-1');
 
     // Parked on ask_user / submit_plan.
     session.suspensions.hasPending.mockReturnValue(true);
@@ -597,9 +601,9 @@ describe('FactoryDecisionDispatcher', () => {
     await expect(keep!({ ...binding, threadId: 'thread-other' })).resolves.toBe(false);
 
     // No live session (e.g. after a restart) or a failed lookup: revoke.
-    controller.getSessionByResource.mockResolvedValueOnce(undefined);
+    controller.getSession.mockResolvedValueOnce(undefined);
     await expect(keep!(binding)).resolves.toBe(false);
-    controller.getSessionByResource.mockRejectedValueOnce(new Error('forbidden'));
+    controller.getSession.mockRejectedValueOnce(new Error('forbidden'));
     await expect(keep!(binding)).resolves.toBe(false);
 
     await dispatcher.stop();
@@ -4428,7 +4432,7 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffMessage: null,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined), listActiveThreadRuns: vi.fn(() => []) },
+      controller: { getSession: vi.fn(async () => undefined), listActiveThreadRuns: vi.fn(() => []) },
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -4730,7 +4734,7 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffMessage: null,
     });
     const { controller, session } = createSession();
-    controller.getSessionByResource.mockResolvedValueOnce(undefined as never).mockResolvedValue(session);
+    controller.getSession.mockResolvedValueOnce(undefined as never).mockResolvedValue(session);
     const prepareBinding = vi.fn(async () => {
       await storage.prepareRunStart({
         orgId: 'org-1',

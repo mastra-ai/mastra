@@ -14,7 +14,7 @@ export type FactoryDeliveryController = Pick<
   | 'queryThreads'
   | 'setThreadModel'
   | 'listAvailableModels'
-  | 'getSessionByResource'
+  | 'getSession'
   | 'createSession'
   | 'getCurrentAgent'
 >;
@@ -77,7 +77,7 @@ export async function deliverFactorySessionNotification({
 
   // No request context: without a user the controller's access check is a no-op,
   // and this is a server-side lookup on the target's behalf, not the sender's.
-  let session = await controller.getSessionByResource(ownerResourceId);
+  let session = await controller.getSession(target.sessionId);
   if (!session) {
     if (onlyIfLive) return { delivered: 'skipped', reason: 'offline' };
     const row = await sessions.getBySessionId(target.sessionId);
@@ -128,12 +128,12 @@ export interface FactorySessionActivity {
 
 /** Whether a session is busy right now, and when its thread last moved, so a stuck run is told apart from a long one. */
 export async function sessionActivity(
-  controller: Pick<FactoryDeliveryController, 'getSessionByResource' | 'queryThreadById'>,
+  controller: Pick<FactoryDeliveryController, 'getSession' | 'queryThreadById'>,
   sessionId: string,
   threadId: string,
 ): Promise<FactorySessionActivity> {
   const [live, thread] = await Promise.all([
-    controller.getSessionByResource(sessionId),
+    controller.getSession(sessionId),
     controller.queryThreadById({ threadId }),
   ]);
   const updatedAt = thread?.updatedAt ? new Date(thread.updatedAt) : null;
@@ -153,7 +153,7 @@ export async function resolveSessionThread({
   workItems,
   sessionId,
 }: {
-  controller: Pick<FactoryDeliveryController, 'getSessionByResource' | 'queryThreads'>;
+  controller: Pick<FactoryDeliveryController, 'getSession' | 'queryThreads'>;
   sessions: Pick<SourceControlSessionLookup, 'getBySessionId'>;
   workItems: Pick<WorkItemsStorage, 'findActiveRunBindingForSession'>;
   sessionId: string;
@@ -167,7 +167,7 @@ export async function resolveSessionThread({
     });
     if (binding) return binding.threadId;
   }
-  const live = await controller.getSessionByResource(sessionId);
+  const live = await controller.getSession(sessionId);
   const current = live?.thread.getId();
   if (current) return current;
   const threads = await controller.queryThreads({ resourceId: sessionId });

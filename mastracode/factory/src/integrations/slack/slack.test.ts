@@ -1445,10 +1445,13 @@ describe('session start (onSessionStart)', () => {
     // Thread settings outlive the session object that wrote them; pass the same
     // map to a second session to stand in for a restarted process.
     settings = new Map<string, unknown>(),
+    sessionId = 'us-1',
+    resourceId = sessionId,
   } = {}) {
     if (persistedModel) settings.set('currentModelId', persistedModel);
     if (persistedModeModel) settings.set(`modeModelId_${mode}`, persistedModeModel);
     return {
+      identity: { getId: () => sessionId, getResourceId: () => resourceId },
       mode: { get: () => mode, resolve: () => ({ defaultModelId: currentModel }) },
       thread: {
         getId: vi.fn(() => 'thread-1'),
@@ -1561,6 +1564,17 @@ describe('session start (onSessionStart)', () => {
     });
     expect(session.model.switch).toHaveBeenCalledTimes(1);
     expect(session.restoredModel()).toBe('anthropic/claude-opus-5');
+  });
+
+  it('finds the source session by session id when the session runs under its Factory resource', async () => {
+    const deps = makeStartDeps();
+    const session = makeSession({ sessionId: 'us-1', resourceId: 'fp-1' });
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session, 'fp-1') as any);
+
+    expect(deps.sourceControl.sessions.getBySessionId).toHaveBeenCalledWith('us-1');
+    expect(deps.sourceControl.sessions.getBySessionId).not.toHaveBeenCalledWith('fp-1');
+    expect(session.model.switch).toHaveBeenCalledWith('anthropic/claude-opus-5');
   });
 
   // The sender's own choice outranks the factory's shared default.

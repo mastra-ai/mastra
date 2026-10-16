@@ -992,7 +992,7 @@ describe('GithubRules', () => {
 
     const controller = {
       createSession: vi.fn(async ({ id, threadId }: { id: string; threadId: string }) => makeSession(id, threadId)),
-      getSessionByResource: vi.fn(async (resourceId: string) => sessions.get(resourceId)),
+      getSession: vi.fn(async (sessionId: string) => sessions.get(sessionId)),
     };
     await sourceControl.sessions.create({
       sessionId: 'session-issue-42',
@@ -1217,7 +1217,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -1296,7 +1296,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -1601,7 +1601,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -1692,7 +1692,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -1780,7 +1780,7 @@ describe('GithubRules', () => {
     });
     const configVersion = 'factory-config-v1';
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({ storage: workItems, configVersion, boards: createBoardRegistry() }),
       storage: workItems,
       boards: createBoardRegistry(),
@@ -2437,7 +2437,7 @@ describe('GithubRules', () => {
     };
     const controller = {
       createSession: vi.fn(async () => session),
-      getSessionByResource: vi.fn(async () => session),
+      getSession: vi.fn(async () => session),
     };
     await sourceControl.sessions.create({
       sessionId: 'session-work-42',
@@ -2752,7 +2752,7 @@ describe('GithubRules', () => {
       configVersion: 'factory-config-v1',
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion: 'factory-config-v1',
@@ -2943,7 +2943,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,

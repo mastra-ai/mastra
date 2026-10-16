@@ -420,7 +420,7 @@ export function createFactorySessionTools(
         binding.revokedAt >= startedAt,
     );
 
-    const session = await messaging.controller.getSessionByResource(prepared.resourceId);
+    const session = await messaging.controller.getSession(prepared.sessionId);
     if (!session) throw new Error(`The ${role} session was bound but is not running; open it from the board.`);
     const kickoffId = globalThis.crypto.randomUUID();
     // Heartbeat from before the kickoff so a fast run's end is seen; the open-run

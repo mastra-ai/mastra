@@ -95,6 +95,7 @@ describe('ChatModelsProvider', () => {
               status: 'ready',
               state: {
                 controllerId: AGENT_CONTROLLER_ID,
+                sessionId: 'session-1',
                 resourceId: 'session-1',
                 modeId: 'build',
                 modelId: 'openai/gpt-5',
@@ -212,6 +213,7 @@ describe('ChatModelsProvider', () => {
             status: 'ready',
             state: {
               controllerId: AGENT_CONTROLLER_ID,
+              sessionId: 'session-1',
               resourceId: 'session-1',
               modeId: 'build',
               modelId: 'openai/gpt-5',

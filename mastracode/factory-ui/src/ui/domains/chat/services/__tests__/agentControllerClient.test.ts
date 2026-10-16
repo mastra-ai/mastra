@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const sessionSpy = vi.fn((resourceId: string, scope?: string) => ({ resourceId, scope }));
+const sessionSpy = vi.fn((sessionId: string) => ({ sessionId }));
 
 vi.mock('@mastra/client-js', () => ({
   MastraClient: class {
@@ -16,44 +16,30 @@ import { createAgentControllerClient, invokeWorkspaceSkill, prepareWorkspaceSkil
 afterEach(() => vi.restoreAllMocks());
 
 describe('createAgentControllerClient', () => {
-  it('given a worktree scope, then the server session is created with that scope (regression: dropping it merged all worktrees into one session)', () => {
+  it('addresses the server session by its session id', () => {
     createAgentControllerClient({
       agentControllerId: 'controller',
-      resourceId: 'org-1',
-      scope: '/worktrees/factory-issue-12',
-      baseUrl: 'http://scope-test',
+      resourceId: 'session-1',
+      baseUrl: 'http://session-test',
     });
 
-    expect(sessionSpy).toHaveBeenCalledWith('org-1', '/worktrees/factory-issue-12');
+    expect(sessionSpy).toHaveBeenCalledWith('session-1');
   });
 
-  it('given no scope, then the session is created unscoped', () => {
-    createAgentControllerClient({
-      agentControllerId: 'controller',
-      resourceId: 'org-1',
-      baseUrl: 'http://unscoped-test',
-    });
-
-    expect(sessionSpy).toHaveBeenCalledWith('org-1', undefined);
-  });
-
-  it('given two scopes over the same resource, then each gets its own cached session', () => {
+  it('caches one client session per session id', () => {
     const a = createAgentControllerClient({
       agentControllerId: 'controller',
-      resourceId: 'org-1',
-      scope: '/worktrees/a',
+      resourceId: 'session-a',
       baseUrl: 'http://cache-test',
     });
     const b = createAgentControllerClient({
       agentControllerId: 'controller',
-      resourceId: 'org-1',
-      scope: '/worktrees/b',
+      resourceId: 'session-b',
       baseUrl: 'http://cache-test',
     });
     const aAgain = createAgentControllerClient({
       agentControllerId: 'controller',
-      resourceId: 'org-1',
-      scope: '/worktrees/a',
+      resourceId: 'session-a',
       baseUrl: 'http://cache-test',
     });
 
@@ -63,7 +49,7 @@ describe('createAgentControllerClient', () => {
 });
 
 describe('workspace skill requests', () => {
-  it('prepares a scoped skill without invoking it', async () => {
+  it('prepares a session skill without invoking it', async () => {
     const message = '<skill name="understand-issue">\nInvestigate it.\n</skill>';
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
@@ -71,8 +57,7 @@ describe('workspace skill requests', () => {
 
     const result = await prepareWorkspaceSkill({
       agentControllerId: 'code',
-      resourceId: 'project-1',
-      scope: '/worktrees/issue-42',
+      sessionId: 'session-1',
       name: 'understand-issue',
       baseUrl: 'https://code.example',
     });
@@ -84,7 +69,7 @@ describe('workspace skill requests', () => {
     );
   });
 
-  it('posts the scoped skill request with browser credentials', async () => {
+  it('posts the session skill request with browser credentials', async () => {
     const message = '<skill name="understand-pr">\nReview it.\n</skill>';
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
@@ -92,8 +77,7 @@ describe('workspace skill requests', () => {
 
     const result = await invokeWorkspaceSkill({
       agentControllerId: 'code',
-      resourceId: 'project-1',
-      scope: '/worktrees/review-42',
+      sessionId: 'session-1',
       name: 'understand-pr',
       arguments: 'octo/repo#42',
       baseUrl: 'https://code.example',
@@ -105,8 +89,7 @@ describe('workspace skill requests', () => {
       credentials: 'include',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        resourceId: 'project-1',
-        scope: '/worktrees/review-42',
+        sessionId: 'session-1',
         name: 'understand-pr',
         arguments: 'octo/repo#42',
       }),
@@ -118,7 +101,7 @@ describe('workspace skill requests', () => {
 
     const invocation = invokeWorkspaceSkill({
       agentControllerId: 'code',
-      resourceId: 'project-1',
+      sessionId: 'session-1',
       name: 'understand-pr',
     });
 
@@ -141,8 +124,7 @@ describe('workspace skill requests', () => {
 
     const invocation = invokeWorkspaceSkill({
       agentControllerId: 'code',
-      resourceId: 'project-1',
-      scope: '/worktrees/review-42',
+      sessionId: 'session-1',
       name: 'understand-pr',
     });
 

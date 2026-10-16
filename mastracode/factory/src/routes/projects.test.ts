@@ -325,7 +325,7 @@ describe('ProjectRoutes', () => {
       const failingSetSettingOn = vi.fn().mockRejectedValue(new Error('write failed'));
       const sessions = new Map([
         [
-          'resource-applied',
+          'session-thread-applied',
           {
             thread: {
               getById: vi.fn().mockResolvedValue({ metadata: { currentModeId: 'plan' } }),
@@ -333,10 +333,13 @@ describe('ProjectRoutes', () => {
             },
           },
         ],
-        ['resource-thread-missing', { thread: { getById: vi.fn().mockResolvedValue(null), setSettingOn } }],
-        ['resource-mode-unknown', { thread: { getById: vi.fn().mockResolvedValue({ metadata: {} }), setSettingOn } }],
+        ['session-thread-missing', { thread: { getById: vi.fn().mockResolvedValue(null), setSettingOn } }],
         [
-          'resource-apply-failed',
+          'session-thread-mode-unknown',
+          { thread: { getById: vi.fn().mockResolvedValue({ metadata: {} }), setSettingOn } },
+        ],
+        [
+          'session-thread-apply-failed',
           {
             thread: {
               getById: vi.fn().mockResolvedValue({ metadata: { currentModeId: 'plan' } }),
@@ -350,7 +353,7 @@ describe('ProjectRoutes', () => {
         get: vi.fn(async ({ id }: { id: string }) => items.get(id) ?? null),
       } as unknown as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['workItems']>;
       const controller = {
-        getSessionByResource: vi.fn(async (resourceId: string) => sessions.get(resourceId) ?? null),
+        getSession: vi.fn(async (sessionId: string) => sessions.get(sessionId) ?? null),
       } as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['controller']>;
 
       const response = await mount(seed, { workItems, controller }).request(

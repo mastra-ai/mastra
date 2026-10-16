@@ -173,6 +173,17 @@ describe('session-owner model catalog', () => {
     expect(body.models.map((m: { id: string }) => m.id)).toEqual(['anthropic/claude-opus-4-6']);
   });
 
+  it('finds the session by sessionId when the session runs under its Factory resource', async () => {
+    const { app, project } = await setup('user');
+    const response = await app.request(
+      `/web/config/models?sessionId=session-1&resourceId=${project.id}&threadId=chat-thread`,
+    );
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.modelScope).toBe('user');
+    expect(body.defaultModelId).toBe('anthropic/claude-opus-4-6');
+  });
+
   it('denies collaborators on private sessions and foreign organizations', async () => {
     const privateSession = await setup('hybrid', 'private');
     expect(
