@@ -1,5 +1,17 @@
 # @mastra/deployer
 
+## 1.79.0-alpha.2
+
+### Patch Changes
+
+- Removed the `find-workspaces` and `gray-matter` dependencies. Monorepo workspace discovery now uses `tinyglobby` and markdown frontmatter is parsed by a helper shared with `@mastra/core`. This removes the vulnerable `braces` (GHSA-vfj7-8cjw-p6xm) and `sprintf-js` (GHSA-hp3w-g68c-fv3c) packages, neither of which has a patched release, from the production dependency tree of `@mastra/deployer`. `npm audit` no longer reports them for this package. ([#27198](https://github.com/mastra-ai/mastra/pull/27198))
+
+- Fixed `mastra dev` failing when a `server.apiRoutes` handler or `bundler`/`deployer` option imports a workspace package that ships raw TypeScript. These packages are now inlined into the extracted config instead of being left as imports that Node cannot load. Their own dependencies still resolve from the workspace package, so dependencies installed only for that package (for example with pnpm) keep working. ([#27303](https://github.com/mastra-ai/mastra/pull/27303))
+
+- Updated dependencies [[`871f3c8`](https://github.com/mastra-ai/mastra/commit/871f3c801640148cffa09474fc9f9032495ddccf), [`aaedaa6`](https://github.com/mastra-ai/mastra/commit/aaedaa634aa7394789952d4f9fe04b1aec8619a1), [`d8bfd3d`](https://github.com/mastra-ai/mastra/commit/d8bfd3d502dd9952db66f0c4f53cd04f5c8e71ef), [`871f3c8`](https://github.com/mastra-ai/mastra/commit/871f3c801640148cffa09474fc9f9032495ddccf), [`12991bd`](https://github.com/mastra-ai/mastra/commit/12991bd0945ca36e13b213ebcbfaf0880d04d44d), [`323b021`](https://github.com/mastra-ai/mastra/commit/323b0212bc57c2b9acaed2716812a873c0fa43ee), [`4e44e7f`](https://github.com/mastra-ai/mastra/commit/4e44e7f518debb3b0aebc5ad71ea3e4a3902d8c9), [`3c2c033`](https://github.com/mastra-ai/mastra/commit/3c2c033aa68cd8cd7e4c630abd7f1bfeb440f457), [`12407df`](https://github.com/mastra-ai/mastra/commit/12407df9e6bd2f82cd27533bd4a9aa8057b97f2e), [`6889aa2`](https://github.com/mastra-ai/mastra/commit/6889aa29d661a8892f503e37bc3d8ffe18aa7e37)]:
+  - @mastra/core@1.79.0-alpha.2
+  - @mastra/server@1.79.0-alpha.2
+
 ## 1.79.0-alpha.1
 
 ### Patch Changes
