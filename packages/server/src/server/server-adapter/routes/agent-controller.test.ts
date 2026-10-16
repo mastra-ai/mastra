@@ -25,8 +25,7 @@ describe('agent-controller routes', () => {
   it('requires execute permission to take thread ownership', () => {
     const route = AGENT_CONTROLLER_ROUTES.find(
       r =>
-        r.method === 'POST' &&
-        r.path === '/agent-controller/:controllerId/sessions/:sessionId/threads/:threadId/owner',
+        r.method === 'POST' && r.path === '/agent-controller/:controllerId/sessions/:sessionId/threads/:threadId/owner',
     );
     expect(route?.requiresPermission).toBe('agent-controller:execute');
   });
