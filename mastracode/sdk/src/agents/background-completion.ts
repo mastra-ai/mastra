@@ -3,7 +3,24 @@ import type { BackgroundTask, BackgroundTaskManagerConfig } from '@mastra/core/b
 import type { BackgroundCompletionEvents } from './background-completion-events.js';
 
 interface BackgroundCompletionRouter {
-  getSessionByResource(resourceId: string): Promise<Session<unknown> | undefined>;
+  getSession(sessionId: string): Promise<Session<unknown> | undefined>;
+}
+
+/**
+ * Find the live session a thread runs in. Factory sessions are addressed by
+ * their thread id; Mastra Code sessions by their resource id. Only a session
+ * working on the same resource qualifies, so a thread is never run by a
+ * session of another resource.
+ */
+export async function findSessionForThread(
+  controller: BackgroundCompletionRouter,
+  { resourceId, threadId }: { resourceId: string; threadId: string },
+): Promise<Session<unknown> | undefined> {
+  for (const sessionId of new Set([threadId, resourceId])) {
+    const session = await controller.getSession(sessionId);
+    if (session?.identity.getResourceId() === resourceId) return session;
+  }
+  return undefined;
 }
 
 async function persistBackgroundCompletion(
@@ -13,7 +30,7 @@ async function persistBackgroundCompletion(
 ): Promise<void> {
   if (!task.resourceId || !task.threadId) return;
 
-  const session = await controller.getSessionByResource(task.resourceId);
+  const session = await findSessionForThread(controller, { resourceId: task.resourceId, threadId: task.threadId });
   if (!session) return;
 
   const eventId = `background-task:${task.id}:${status}`;

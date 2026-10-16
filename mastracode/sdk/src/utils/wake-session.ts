@@ -42,12 +42,20 @@ export function threadScopeKey(scope: Record<string, string>): string | undefine
  * project's other threads stay with the project.
  */
 export async function findWakeSession<TState>(
-  controller: Pick<AgentController<TState>, 'getSessionByResource'>,
+  controller: Pick<AgentController<TState>, 'getSession'>,
   liveSessions: Iterable<Session<TState>>,
   { resourceId, threadId }: { resourceId: string; threadId: string },
   leases?: Pick<LeaseProvider, 'getLeaseOwner'>,
 ): Promise<WakeSession<TState> | typeof FOREIGN_THREAD | undefined> {
-  const first = await controller.getSessionByResource(resourceId);
+  // Factory sessions are addressed by their thread id, Mastra Code sessions by their resource id.
+  let first: Session<TState> | undefined;
+  for (const sessionId of new Set([threadId, resourceId])) {
+    const session = await controller.getSession(sessionId);
+    if (session?.identity.getResourceId() === resourceId) {
+      first = session;
+      break;
+    }
+  }
   if (!first) return undefined;
   const thread = await first.thread.getById({ threadId });
   if (!thread || thread.resourceId !== resourceId) return { session: first };

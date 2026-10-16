@@ -1043,6 +1043,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       isThreadActive: () => session.thread.getId() === threadId,
       threadId,
       resourceId,
+      sessionId: session.identity.getId(),
       session: {
         id: session.identity.getId(),
         ownerId: session.identity.getOwnerId(),
