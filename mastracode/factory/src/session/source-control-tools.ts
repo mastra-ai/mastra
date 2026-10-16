@@ -246,7 +246,7 @@ export async function createSourceControlTools({
   requestContext: RequestContext;
   providers: readonly SourceControlToolProvider[];
   audit: AuditAgentEmitter;
-  /** Per-project opt-out for `source_control_publish_test_check`. Publishing is allowed when omitted. */
+  /** Per-project switch for `source_control_publish_test_check`. The host decides the default; Factory projects default to off. */
   testChecksEnabled?: (input: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   /**
    * Self-review gate for opening a change request. `undefined` means the session
@@ -254,7 +254,10 @@ export async function createSourceControlTools({
    * `null` means Self-review has not approved; a SHA is the approved head.
    */
   selfReviewApprovedHead?: () => Promise<string | null | undefined>;
-  /** The change request a Review-bound session reviews; test checks may only target it. */
+  /**
+   * The change request a Review-bound session reviews; test checks may only target it.
+   * When provided, sessions that are not Review-bound (it resolves `undefined`) cannot publish.
+   */
   boundChangeRequestId?: () => Promise<string | undefined>;
 }): Promise<IntegrationTools> {
   if (!requestContext || typeof (requestContext as { get?: unknown }).get !== 'function') return {};
@@ -392,36 +395,6 @@ export async function createSourceControlTools({
             'Self-review has not approved this branch. Move the work item to Self-review; the change request opens after it approves.',
           );
         }
-        if (approvedHead !== undefined) {
-          const sandbox = executableSandbox(execution?.workspace?.sandbox);
-          const workdir = await resolveSessionWorkdir(target.session.id, sandbox, target.repository.slug);
-          let headSha = '';
-          let lastError = '';
-          for (const ref of [target.session.branch, `refs/remotes/origin/${target.session.branch}`]) {
-            const head = await sandbox.executeCommand('git', [
-              '-C',
-              workdir,
-              'rev-parse',
-              '--verify',
-              `${ref}^{commit}`,
-            ]);
-            if (head.exitCode === 0) {
-              headSha = head.stdout.trim().toLowerCase();
-              break;
-            }
-            lastError = `${head.stderr ?? ''}`.trim();
-          }
-          if (!headSha) {
-            throw new Error(
-              `Could not read the head of branch ${target.session.branch} in ${workdir}${lastError ? `: ${lastError}` : ''}. Nothing was opened.`,
-            );
-          }
-          if (headSha !== approvedHead.toLowerCase()) {
-            throw new Error(
-              `Self-review approved ${approvedHead}, but the branch is at ${headSha}. Move the work item back to Self-review to review the new commits.`,
-            );
-          }
-        }
         const baseBranch = target.ownRepository
           ? target.session.baseBranch
           : (target.projectRepository.branch ?? target.repository.defaultBranch);
@@ -433,6 +406,15 @@ export async function createSourceControlTools({
           headBranch: target.session.branch,
           ...(input.draft !== undefined ? { draft: input.draft } : {}),
         });
+        if (approvedHead !== undefined && created.headSha.toLowerCase() !== approvedHead.toLowerCase()) {
+          await target.provider.versionControl.closePullRequest({
+            ...(await reference(target)),
+            pullRequestId: created.id,
+          });
+          throw new Error(
+            `Self-review approved ${approvedHead}, but the pushed branch is at ${created.headSha}; the change request was closed. Push the approved head, or move the work item back to Self-review to review the new commits.`,
+          );
+        }
         await target.provider.storage.sessionRepositories.upsert({
           sessionId: target.session.sessionId,
           projectRepositoryId: target.projectRepository.id,
@@ -742,7 +724,7 @@ export async function createSourceControlTools({
             !(await testChecksEnabled({ orgId: target.orgId, factoryProjectId: connection.factoryProjectId }))
           ) {
             throw new Error(
-              'Test check publishing is turned off for this Factory project; nothing was published. Report the test results in the verdict instead.',
+              'Test check publishing is turned off for this Factory project; nothing was published. Report the test results in the test report comment instead.',
             );
           }
         }
@@ -750,11 +732,18 @@ export async function createSourceControlTools({
         if (!publishCommitCheck) {
           throw new Error(`${target.provider.id} does not support publishing commit checks; nothing was published.`);
         }
-        const bound = await boundChangeRequestId?.();
-        if (bound !== undefined && bound !== changeRequestId(input.changeRequestId)) {
-          throw new Error(
-            `This session reviews change request ${bound}, not ${input.changeRequestId}; nothing was published.`,
-          );
+        if (boundChangeRequestId) {
+          const bound = await boundChangeRequestId();
+          if (bound === undefined) {
+            throw new Error(
+              'Only a Review session bound to this change request can publish test checks; nothing was published.',
+            );
+          }
+          if (bound !== changeRequestId(input.changeRequestId)) {
+            throw new Error(
+              `This session reviews change request ${bound}, not ${input.changeRequestId}; nothing was published.`,
+            );
+          }
         }
         const ref = await reference(target);
         const pullRequest = await target.provider.versionControl.getPullRequest({

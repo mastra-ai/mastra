@@ -136,7 +136,9 @@ async function fixture(integrationId = 'gitlab') {
   const listReviews = vi.fn(async () => ({ reviews: [], nextCursor: null }));
   const getPullRequest = vi.fn(async () => ({ id: '17', headSha: 'cd1e5903851234567890abcdef1234567890abcd' }));
   const createReview = vi.fn(async () => ({ id: 'review-1' }));
+  const closePullRequest = vi.fn(async () => ({ id: '17', state: 'closed' }));
   const versionControl = {
+    closePullRequest,
     getRepositoryTarget,
     getRepositoryAccess,
     getPullRequest,
@@ -152,6 +154,7 @@ async function fixture(integrationId = 'gitlab') {
     storage,
     versionControl,
     createPullRequest,
+    closePullRequest,
     createReviewComment,
     resolveReviewThread,
     listReviews,
@@ -220,28 +223,20 @@ describe('createSourceControlTools', () => {
 
   describe('self-review gate', () => {
     const approved = 'a'.repeat(40);
-    const gated = async (approvedHead: string | null, branchHead = approved, localBranchMissing = false) => {
+    const gated = async (approvedHead: string | null, pushedHead = approved) => {
       const setup = await fixture();
+      const original = setup.createPullRequest.getMockImplementation()!;
+      setup.createPullRequest.mockImplementation(async (input: any) => ({
+        ...(await original(input)),
+        headSha: pushedHead,
+      }));
       const tools = await createSourceControlTools({
         requestContext: requestContext(),
         providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
         audit: setup.audit,
         selfReviewApprovedHead: async () => approvedHead,
       });
-      const sandbox = {
-        id: 'sandbox-1',
-        provider: 'custom',
-        workingDirectory: '/home/user',
-        executeCommand: vi.fn(async (_command: string, args: string[]) => {
-          const remote = args.some(arg => arg.startsWith('refs/remotes/origin/'));
-          if (args.includes('rev-parse') && localBranchMissing && !remote) {
-            return { exitCode: 128, stdout: '', stderr: 'fatal: Needed a single revision' };
-          }
-          return { exitCode: 0, stdout: args.includes('rev-parse') ? `${branchHead}\n` : '', stderr: '' };
-        }),
-      };
-      const run = () =>
-        (tools.source_control_create_change_request!.execute as any)({ title: 'Ship it' }, { workspace: { sandbox } });
+      const run = () => (tools.source_control_create_change_request!.execute as any)({ title: 'Ship it' });
       return { setup, run };
     };
 
@@ -251,22 +246,16 @@ describe('createSourceControlTools', () => {
       expect(setup.createPullRequest).not.toHaveBeenCalled();
     });
 
-    it('refuses when the branch moved past the approved head', async () => {
+    it('closes the change request when the pushed head differs from the approved head', async () => {
       const { setup, run } = await gated(approved, 'b'.repeat(40));
-      await expect(run()).rejects.toThrow('back to Self-review');
-      expect(setup.createPullRequest).not.toHaveBeenCalled();
+      await expect(run()).rejects.toThrow('the change request was closed');
+      expect(setup.closePullRequest).toHaveBeenCalledWith(expect.objectContaining({ pullRequestId: '17' }));
     });
 
-    it('opens the change request from the approved head', async () => {
-      const { setup, run } = await gated(approved);
+    it('opens the change request when the pushed head matches the approved head', async () => {
+      const { setup, run } = await gated(approved, approved.toUpperCase());
       await expect(run()).resolves.toMatchObject({ id: '17' });
-      expect(setup.createPullRequest).toHaveBeenCalled();
-    });
-
-    it('reads the pushed head when the checkout has no local branch ref', async () => {
-      const { setup, run } = await gated(approved, approved, true);
-      await expect(run()).resolves.toMatchObject({ id: '17' });
-      expect(setup.createPullRequest).toHaveBeenCalled();
+      expect(setup.closePullRequest).not.toHaveBeenCalled();
     });
   });
 
@@ -976,6 +965,12 @@ describe('createSourceControlTools', () => {
     it('refuses to publish on a change request other than the one the session reviews', async () => {
       const { run, publishCommitCheck } = await publish({}, { boundChangeRequestId: async () => '18' });
       await expect(run()).rejects.toThrow(/reviews change request 18, not 17/);
+      expect(publishCommitCheck).not.toHaveBeenCalled();
+    });
+
+    it('refuses to publish from a session that is not Review-bound, such as a builder', async () => {
+      const { run, publishCommitCheck } = await publish({}, { boundChangeRequestId: async () => undefined });
+      await expect(run()).rejects.toThrow(/Only a Review session bound to this change request/);
       expect(publishCommitCheck).not.toHaveBeenCalled();
     });
 

@@ -107,7 +107,7 @@ export interface FactoryTransitionServiceOptions {
    * a plan without explicit approval is a plan a person must review.
    */
   autoApprovePlans?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
-  /** Resolves whether a project self-reviews Work items before the change request opens. Unset means on. */
+  /** Resolves whether a project self-reviews Work items before the change request opens. Unset means off. */
   selfReviewEnabled?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
 }
 
