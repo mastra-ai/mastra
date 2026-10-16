@@ -150,6 +150,7 @@
     "google/gemma-4-26b-a4b-it:thinking",
     "google/gemma-4-31b-it",
     "google/gemma-4-31b-it:thinking",
+    "heabsy/qwen3.8-27b-uncensored-fast",
     "holo3-35b-a3b",
     "holo3-35b-a3b:thinking",
     "inclusionai/ling-3.0-flash-vl",
@@ -179,6 +180,8 @@
     "mistralai/mistral-small-3.1-24b-instruct",
     "mistralai/mistral-small-4-119b-2603",
     "mistralai/mistral-small-4-119b-2603:thinking",
+    "moondream/moondream3-preview",
+    "moondream/moondream3.1-9b-a2b",
     "moonshotai/kimi-k2.5",
     "moonshotai/kimi-k2.5:thinking",
     "moonshotai/kimi-k2.6",
@@ -831,6 +834,7 @@
     "qwen/qwen3.8-max-prime",
     "qwen/qwen3.8-max:thinking",
     "qwen/qwen3.8-omni-flash",
+    "reflection/beam-1.0",
     "reka/reka-edge-2603",
     "reka/reka-flash-3",
     "sakana/fugu-max",
@@ -1444,6 +1448,12 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "reflection/beam-1.0": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "thinkingmachines/inkling:thinking": [
       {
         "type": "effort",
@@ -1544,6 +1554,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "heabsy/qwen3.8-27b-uncensored-fast": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "heabsy/cyberheabsy": [
@@ -1745,6 +1761,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "high"]
+      }
+    ],
+    "TheDrummer/orion-26b-a4b-v1.1": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "stepfun-ai/step-3.5-flash-2603": [

@@ -165,7 +165,10 @@ describe('DurableAgent.resumeGenerate()', () => {
     await pubsub.close();
   });
 
-  it('drives a generate → tool-approval suspend → resumeGenerate round-trip', async () => {
+  it.each([
+    ['Agent order: resumeGenerate(resumeData, { runId })', 'agent'],
+    ['deprecated order: resumeGenerate(runId, resumeData)', 'legacy'],
+  ] as const)('drives a generate → tool-approval suspend → resumeGenerate round-trip (%s)', async (_label, order) => {
     const model = createToolCallThenTextModel('searchTool', { query: 'mastra' }, 'Found: mastra');
     const searchTool = createTool({
       id: 'searchTool',
@@ -202,7 +205,11 @@ describe('DurableAgent.resumeGenerate()', () => {
     expect(first.runId).toBeDefined();
 
     // Second turn: approve and drain to a final answer via resumeGenerate.
-    const second = await durableAgent.resumeGenerate(first.runId!, { approved: true });
+    // Code typed against the base `Agent` must be able to resume a durable agent.
+    const second =
+      order === 'agent'
+        ? await (durableAgent as unknown as Agent).resumeGenerate({ approved: true }, { runId: first.runId! })
+        : await durableAgent.resumeGenerate(first.runId!, { approved: true });
 
     expect(second.text).toBe('Found: mastra');
     expect(second.finishReason).toBe('stop');
