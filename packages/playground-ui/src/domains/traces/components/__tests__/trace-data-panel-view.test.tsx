@@ -233,52 +233,81 @@ describe('TraceDataPanelView — header actions', () => {
 });
 
 describe('TraceDataPanelView — Add to dataset', () => {
-  it('saves the full trace against the root span', () => {
-    const onSaveAsDatasetItem = vi.fn();
-    render(<TraceDataPanelView {...baseProps} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
+  describe('when a span is selected', () => {
+    it('saves that span from "This span"', () => {
+      const onSaveAsDatasetItem = vi.fn();
+      render(
+        <TraceDataPanelView
+          {...baseProps}
+          spans={nestedSpanFixture}
+          initialSpanId="child"
+          onSaveAsDatasetItem={onSaveAsDatasetItem}
+        />,
+      );
 
-    openAddToDataset();
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Full trace' }));
+      openAddToDataset();
+      fireEvent.click(screen.getByRole('menuitem', { name: 'This span' }));
 
-    expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
+      expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root', spanId: 'child' });
+    });
+
+    it('still saves the whole trace from "Full trace"', () => {
+      const onSaveAsDatasetItem = vi.fn();
+      render(
+        <TraceDataPanelView
+          {...baseProps}
+          spans={nestedSpanFixture}
+          initialSpanId="child"
+          onSaveAsDatasetItem={onSaveAsDatasetItem}
+        />,
+      );
+
+      openAddToDataset();
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Full trace' }));
+
+      expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
+      expect(onSaveAsDatasetItem.mock.calls[0][0].spanId).toBeUndefined();
+    });
   });
 
-  it('saves the selected span', () => {
-    const onSaveAsDatasetItem = vi.fn();
-    render(
-      <TraceDataPanelView
-        {...baseProps}
-        spans={nestedSpanFixture}
-        initialSpanId="child"
-        onSaveAsDatasetItem={onSaveAsDatasetItem}
-      />,
-    );
+  describe('when no span is selected', () => {
+    it('saves the full trace against the root span', () => {
+      const onSaveAsDatasetItem = vi.fn();
+      render(<TraceDataPanelView {...baseProps} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
 
-    openAddToDataset();
-    fireEvent.click(screen.getByRole('menuitem', { name: 'This span' }));
+      openAddToDataset();
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Full trace' }));
 
-    expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root', spanId: 'child' });
+      expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
+    });
+
+    it('offers no span to save', () => {
+      const onSaveAsDatasetItem = vi.fn();
+      render(<TraceDataPanelView {...baseProps} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
+
+      openAddToDataset();
+      const thisSpan = screen.getByRole('menuitem', { name: 'This span' });
+      expect(thisSpan.getAttribute('aria-disabled')).toBe('true');
+      fireEvent.click(thisSpan);
+
+      expect(onSaveAsDatasetItem).not.toHaveBeenCalled();
+    });
   });
 
-  it('offers no span to save until one is selected', () => {
-    const onSaveAsDatasetItem = vi.fn();
-    render(<TraceDataPanelView {...baseProps} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
+  describe('when there is no save handler', () => {
+    it('does not render', () => {
+      render(<TraceDataPanelView {...baseProps} />);
 
-    openAddToDataset();
-    const thisSpan = screen.getByRole('menuitem', { name: 'This span' });
-    expect(thisSpan.getAttribute('aria-disabled')).toBe('true');
-    fireEvent.click(thisSpan);
-
-    expect(onSaveAsDatasetItem).not.toHaveBeenCalled();
+      expect(screen.queryByRole('button', { name: 'Add to dataset' })).toBeNull();
+    });
   });
 
-  it('does not render without a save handler, or on the trace page', () => {
-    const { unmount } = render(<TraceDataPanelView {...baseProps} />);
-    expect(screen.queryByRole('button', { name: 'Add to dataset' })).toBeNull();
-    unmount();
+  describe('on the trace page', () => {
+    it('does not render', () => {
+      render(<TraceDataPanelView {...baseProps} placement="trace-page" onSaveAsDatasetItem={vi.fn()} />);
 
-    render(<TraceDataPanelView {...baseProps} placement="trace-page" onSaveAsDatasetItem={vi.fn()} />);
-    expect(screen.queryByRole('button', { name: 'Add to dataset' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Add to dataset' })).toBeNull();
+    });
   });
 });
 

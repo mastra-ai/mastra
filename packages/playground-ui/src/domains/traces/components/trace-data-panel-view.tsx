@@ -1,6 +1,5 @@
 import {
   ChartGanttIcon,
-  CircleDotIcon,
   CircleGaugeIcon,
   DownloadIcon,
   Link2Icon,
@@ -9,7 +8,6 @@ import {
   MessageSquareReplyIcon,
   MessageSquareTextIcon,
   MoreHorizontalIcon,
-  PlusIcon,
   WrenchIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -21,6 +19,7 @@ import { useTraceSearch } from '../hooks/use-trace-search';
 import type { TraceUsageSummary } from '../trace-list-columns';
 import type { LightSpanRecord } from '../types';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
+import { TraceAddToDatasetMenu } from './trace-add-to-dataset-menu';
 import { TraceIdButton } from './trace-id-button';
 import { TraceSpanTimeline } from './trace-span-timeline';
 import { TraceSpanTree } from './trace-span-tree';
@@ -319,31 +318,10 @@ export function TraceDataPanelView({
   );
 
   const addToDatasetMenu = traceId && !isOnTracePage && onSaveAsDatasetItem && (
-    <DropdownMenu>
-      <DropdownMenu.Trigger
-        render={
-          <Button size="sm" variant="default">
-            <PlusIcon />
-            Add to dataset
-          </Button>
-        }
-      />
-      <DropdownMenu.Content align="end">
-        <DropdownMenu.Item
-          disabled={!selectedSpanId}
-          onSelect={() =>
-            selectedSpanId && onSaveAsDatasetItem({ traceId, rootSpanId: rootSpan?.spanId, spanId: selectedSpanId })
-          }
-        >
-          <CircleDotIcon />
-          This span
-        </DropdownMenu.Item>
-        <DropdownMenu.Item onSelect={() => onSaveAsDatasetItem({ traceId, rootSpanId: rootSpan?.spanId })}>
-          <ListTreeIcon />
-          Full trace
-        </DropdownMenu.Item>
-      </DropdownMenu.Content>
-    </DropdownMenu>
+    <TraceAddToDatasetMenu
+      selectedSpanId={selectedSpanId}
+      onSave={spanId => onSaveAsDatasetItem({ traceId, rootSpanId: rootSpan?.spanId, spanId })}
+    />
   );
 
   const traceActionsMenu = traceId && (

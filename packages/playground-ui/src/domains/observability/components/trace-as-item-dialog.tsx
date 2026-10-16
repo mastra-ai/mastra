@@ -20,7 +20,7 @@ type TraceAsItemDialogProps = {
    * Saves this one span instead of the full trace: its input and output are loaded, and the
    * trace-wide trajectory and tool mocks are left out since they describe the whole trace.
    */
-  spanId?: string | null;
+  spanId?: string;
   traceId?: string;
   isOpen: boolean;
   onClose: () => void;
@@ -70,15 +70,17 @@ export function TraceAsItemDialog({
 
   const traceDetails = externalTraceDetails ?? lazySpanDetail?.span;
 
-  const { data: trajectory, isLoading: isTrajectoryLoading } = useQuery({
+  const { data: traceTrajectory, isLoading: isTrajectoryLoading } = useQuery({
     queryKey: ['trace-trajectory', traceId],
     queryFn: () => client.getTraceTrajectory(traceId ?? ''),
     enabled: isOpen && !!traceId && !isSingleSpan,
   });
+  // The disabled query still returns a trajectory cached by an earlier full-trace save.
+  const trajectory = isSingleSpan ? undefined : traceTrajectory;
 
   // Convert trajectory to a TrajectoryExpectation JSON string
   const initialTrajectory =
-    !isSingleSpan && trajectory?.steps && trajectory.steps.length > 0
+    trajectory?.steps && trajectory.steps.length > 0
       ? safeStringify(
           {
             steps: trajectory.steps.map(step => {
@@ -98,7 +100,7 @@ export function TraceAsItemDialog({
       : undefined;
 
   // Derive item-level tool mocks from the recorded tool calls in the trajectory
-  const toolMocks = !isSingleSpan && trajectory?.steps ? collectToolMocks(trajectory.steps) : [];
+  const toolMocks = trajectory?.steps ? collectToolMocks(trajectory.steps) : [];
   const initialToolMocks = toolMocks.length > 0 ? safeStringify(toolMocks, 2) : undefined;
 
   return (
@@ -106,7 +108,7 @@ export function TraceAsItemDialog({
       initialInput={getInitialInput(traceDetails)}
       initialGroundTruth={traceDetails?.output != null ? safeStringify(traceDetails.output, 2) : ''}
       initialTrajectory={initialTrajectory}
-      trajectoryLoading={!isSingleSpan && isTrajectoryLoading}
+      trajectoryLoading={isTrajectoryLoading}
       initialToolMocks={initialToolMocks}
       breadcrumb={
         <TextAndIcon>
