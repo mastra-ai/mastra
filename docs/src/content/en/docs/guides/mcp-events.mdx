@@ -23,7 +23,7 @@ MCP events implement [SEP-3415](https://github.com/modelcontextprotocol/modelcon
 - **Event type:** A named kind of occurrence, such as `ticket.created`. Each type has an optional `inputSchema` for subscription arguments and a `payloadSchema` for occurrence data. Clients discover types with `events/list`.
 - **Subscription:** One client request for one event type with arguments, such as `{ project: 'web' }`. The server only delivers occurrences that match those arguments.
 - **Occurrence:** One delivered event with an `eventId`, `name`, `timestamp`, and `data`.
-- **Delivery mode:** How occurrences reach the client. In `push` mode the client holds one long-lived `events/stream` request open per subscription. In `poll` mode it repeats `events/poll` requests.
+- **Delivery mode:** How occurrences reach the client. In `push` mode the client holds one long-lived `events/stream` request open per subscription. In `poll` mode it repeats `events/poll` requests. In `webhook` mode the server POSTs each occurrence to a URL the client registered.
 - **Cursor:** An opaque position in the event sequence. The client saves it and passes it back to resume after a restart without missing occurrences.
 
 Delivery is at least once. After a reconnect or a resume, the server can send an occurrence the client has already seen. `MCPClient` drops duplicates by `eventId` within a window of recent ids, and your handler should still tolerate a repeat.
@@ -77,7 +77,7 @@ An event type gets its occurrences from one of two sources, and the source decid
 
 | Source | Advertised delivery | Use it when |
 | - | - | - |
-| `server.events.emit()` | `push` and `poll` | Your server process learns about the event directly, for example from a tool call or an incoming webhook. Polls read an in-memory buffer of recent occurrences. |
+| `server.events.emit()` | `push` and `poll`, plus `webhook` when enabled | Your server process learns about the event directly, for example from a tool call or an incoming webhook. Polls read an in-memory buffer of recent occurrences. |
 | A `poll` function | `poll` only | The events live in another system you can query, such as a database table or an upstream API. The server calls your function for each `events/poll` request. |
 
 A `poll` source receives the subscription arguments and the client's cursor, and returns the occurrences after that cursor with the new cursor:
@@ -126,7 +126,7 @@ for await (const event of subscription) {
 }
 ```
 
-`subscribe()` resolves once the server has accepted the subscription, so invalid arguments reject there instead of inside the loop. The client uses `push` when the event type offers it and `poll` otherwise. Pass `{ delivery: 'poll' }` or `{ delivery: 'push' }` in the options to force a mode.
+`subscribe()` resolves once the server has accepted the subscription, so invalid arguments reject there instead of inside the loop. The client picks the first mode the event type offers in this order: `webhook` (only when the client has [`webhook` settings](#webhook-delivery)), `push`, then `poll`. Pass `delivery` in the options, such as `{ delivery: 'poll' }`, to force a mode.
 
 A new subscription starts from now. Occurrences emitted before `subscribe()` resolves aren't delivered unless you resume from a cursor.
 
@@ -161,11 +161,76 @@ Errors before delivery starts reject `subscribe()` with a `MastraError` whose id
 | `MCP_EVENTS_NOT_SUPPORTED` | The server doesn't advertise the events extension. The client sends it no `events/*` requests. |
 | `MCP_EVENTS_UNKNOWN_EVENT` | The server doesn't offer an event type with that name. |
 | `MCP_EVENTS_NO_COMPATIBLE_DELIVERY_MODE` | You forced a delivery mode the event type doesn't offer. |
-| `MCP_EVENTS_SUBSCRIPTION_FAILED` | The server rejected the subscription, for example because the arguments failed `inputSchema`. |
+| `MCP_EVENTS_WEBHOOK_NOT_CONFIGURED` | You forced `webhook` on a client without `webhook` settings. |
+| `MCP_EVENTS_SUBSCRIPTION_FAILED` | The server rejected the subscription, for example because the arguments failed `inputSchema` or a webhook subscription came from an unauthenticated caller. |
 
 `mcp.events.list()` rejects with `MCP_CLIENT_LIST_EVENTS_FAILED` and the same kind of `cause`.
 
-After delivery starts, the client retries transient failures with backoff and reports them to `subscription.onError()`. The loop throws when the subscription can't continue, for example with `MCP_EVENTS_SUBSCRIPTION_TERMINATED` when the server ends a push subscription. Breaking out of the loop or calling `subscription.cancel()` stops the subscription.
+After delivery starts, the client retries transient failures with backoff and reports them to `subscription.onError()`. The loop throws when the subscription can't continue, for example with `MCP_EVENTS_SUBSCRIPTION_TERMINATED` when the server ends a push or webhook subscription. Breaking out of the loop or calling `subscription.cancel()` stops the subscription.
+
+## Webhook delivery
+
+With webhook delivery, the server POSTs each occurrence to an HTTP endpoint on the client side, so the client doesn't hold a connection open. Use it when the server is remote and your application already serves HTTP.
+
+Enable it on the server with `eventsOptions.webhook`. Event types fed by `emit()` then also advertise `webhook`. Types with a `poll` source stay poll only:
+
+```typescript title="src/mcp/server.ts"
+export const server: MCPServer = new MCPServer({
+  id: 'tickets',
+  name: 'Tickets',
+  version: '1.0.0',
+  tools: { openTicket },
+  events: {
+    'ticket.created': defineEvent({
+      inputSchema: z.object({ project: z.string() }),
+      payloadSchema: ticket,
+      match: (args, data) => data.project === args.project,
+    }),
+  },
+  eventsOptions: {
+    webhook: { ttl: { defaultMs: 30 * 60_000 } },
+  },
+})
+```
+
+The server only accepts webhook subscriptions from authenticated callers over HTTP, because it identifies each subscription by the caller, the URL, the event name, and the arguments. Serve it with [authentication](/docs/guides/mcp-authentication-authorization). By default, callback URLs must use `https` and resolve to public addresses.
+
+On the client, set `webhook.url` and mount `mcp.events.handleWebhook()` on that route. The handler verifies each request's signature, answers the server's verification challenge, and routes occurrences to the matching subscription:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { registerApiRoute } from '@mastra/core/server'
+import { MCPClient } from '@mastra/mcp'
+
+export const mcp = new MCPClient({
+  servers: {
+    tickets: {
+      url: new URL('https://tickets.example.com/mcp'),
+      requestInit: { headers: { Authorization: `Bearer ${process.env.TICKETS_MCP_TOKEN}` } },
+    },
+  },
+  webhook: { url: 'https://agent.example.com/mcp/webhook' },
+})
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      registerApiRoute('/mcp/webhook', {
+        method: 'POST',
+        // Deliveries are authenticated by their signature, not by Mastra auth
+        requiresAuth: false,
+        handler: c => mcp.events.handleWebhook(c.req.raw),
+      }),
+    ],
+  },
+})
+```
+
+Subscribe and iterate the same way as with the other modes. `subscription.mode` is `'webhook'`. The client refreshes the subscription before it expires and updates `subscription.deliveryStatus` with the server's report. When the server reports failing deliveries, for example because your endpoint timed out, `onError` receives `MCP_EVENTS_WEBHOOK_DELIVERY_FAILING`. Cancelling sends `events/unsubscribe`.
+
+The `cursor` in each webhook delivery only covers occurrences your endpoint has already acknowledged. Resuming from a saved cursor can deliver the last handled occurrence again, so drop repeats by `eventId`.
+
+Visit the [`MCPServer` webhook reference](/reference/tools/mcp-server#webhook-delivery) and the [`MCPClient` webhook reference](/reference/tools/mcp-client#webhook-delivery) for every option.
 
 ## Start an agent run per occurrence
 
@@ -194,6 +259,8 @@ The loop handles one occurrence at a time. A slow run delays the next one. Start
 
 The [MCP events example](https://github.com/mastra-ai/mastra/tree/main/examples/mcp-events) runs this flow end to end against a local stdio server.
 
+To deliver occurrences to an agent's threads as notifications instead of writing your own loop, use [`MCPEventsSignalProvider`](/reference/tools/mcp-client#events-in-agents-and-workflows-experimental).
+
 ## Start a workflow run per occurrence
 
 A subscription can start a workflow the same way. Pass the occurrence data as the workflow's `inputData`:
@@ -217,7 +284,9 @@ Use the occurrence's `eventId` to detect a run you already started, because deli
 - **In-process emits:** Occurrences from `server.events.emit()` stay in the process that emitted them. Push streams and buffered polls only see events emitted by the same `MCPServer` instance. On serverless or multi-instance deployments, use a `poll` source backed by shared storage.
 - **In-memory buffer:** The emit buffer holds the most recent occurrences per type (1000 by default, set with `bufferSize`). A restarted server treats earlier cursors as a gap and reports `truncated`.
 - **No list change notifications:** The server doesn't announce changes to its event types yet, because the MCP TypeScript SDK 2.2.0 doesn't carry the events filter on `subscriptions/listen`. Call `mcp.events.list()` again to see new types.
-- **Delivery modes:** Mastra supports `push` and `poll`. Webhook delivery from SEP-3415 isn't supported yet.
+- **Webhook subscription store:** The server keeps webhook subscriptions in memory by default. After a restart they're lost until clients refresh them. Pass a durable `store` to keep them across restarts or share them between instances. Subscriptions that never expire (`allowNoExpiry`) need a durable store.
+- **Webhooks need authenticated HTTP:** Webhook subscriptions fail over stdio and from unauthenticated callers. A client with `webhook` settings still picks `webhook` for those servers, so pass `{ delivery: 'push' }` there.
+- **One webhook subscription per arguments:** The server treats webhook subscriptions with the same event name and arguments from one client as one subscription. Keep a single subscription per event name and arguments, because cancelling one of two ends both.
 
 ## Related
 
