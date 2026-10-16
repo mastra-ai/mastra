@@ -470,7 +470,12 @@ describe('agent connection tools', () => {
 
     expect(result).toMatchObject({ isError: true, messageId: 'queued-reply', routingAction: 'persist' });
     expect(result.content).toMatch(/^Failed to establish a reply obligation: the signal was queued for /);
-    expect(result.content).toContain('It is retried automatically, so do not resend it.');
+    expect(result.content).toContain(
+      'It is retried automatically, so do not resend it; the reply obligation is established once that retry delivers the signal.',
+    );
+    // Telling the model to send again would deliver the same content twice: the
+    // dispatcher retries this record, and a new send has a new messageId.
+    expect(result.content).not.toContain('Send a new signal at a priority that routes directly');
     expect(getStored().sentSignals).toBeUndefined();
   });
 

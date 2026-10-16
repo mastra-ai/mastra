@@ -459,7 +459,7 @@ The target must already be saved and freshly advertise the same exact thread end
             const reason = notification.record.lastDeliveryError ?? 'the target thread owner did not acknowledge it';
             return {
               content: expectsReply
-                ? `Failed to establish a reply obligation: the signal was queued for ${untrustedPeerLabel(target)} but not delivered directly (${reason}). It is retried automatically, so do not resend it. Send a new signal at a priority that routes directly when a reply is required.`
+                ? `Failed to establish a reply obligation: the signal was queued for ${untrustedPeerLabel(target)} but not delivered directly (${reason}). It is retried automatically, so do not resend it; the reply obligation is established once that retry delivers the signal.`
                 : `Queued for ${untrustedPeerLabel(target)}: direct delivery failed (${reason}), so the signal waits in their notification inbox and is retried automatically. Do not resend it.`,
               target,
               priority: priority as AgentSignalPriority,
