@@ -3,3 +3,5 @@
 ---
 
 Added plan review to Factory user sessions. When a task is ambiguous, spans several areas of the codebase, or the user asks to see the approach first, the agent explores read-only, writes a plan to `.artifacts/plans/`, and submits it for review before changing code. Approving the plan continues into the build in the same run. Small, clear changes still run straight away. Workspaces, sessions working on a board card, and Slack conversations are unchanged.
+
+Sessions that are not working on a board card no longer see the board-only `factory-plan`, `factory-triage` and `factory-complete-issue` skills. A request for a plan could load `factory-plan`, which skips the review card and ends on a board transition the session cannot make.

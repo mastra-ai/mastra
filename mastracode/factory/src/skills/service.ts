@@ -5,7 +5,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { formatSkillActivation } from '@mastra/core/workspace';
 import type { Workspace } from '@mastra/core/workspace';
 
-import { REVIEW_ONLY_FACTORY_SKILLS, rescanFactorySkills } from '../workspace.js';
+import { BOARD_ROLE_FACTORY_SKILLS, REVIEW_ONLY_FACTORY_SKILLS, rescanFactorySkills } from '../workspace.js';
 
 export interface SkillInvocationInput {
   resourceId: string;
@@ -50,8 +50,8 @@ async function findSkill(session: SkillSession, name: string) {
   if (!skills) return undefined;
   await skills.maybeRefresh();
   const skill = await skills.get(name);
-  if (skill || !REVIEW_ONLY_FACTORY_SKILLS.has(name)) return skill;
-  // The cache may predate the review binding this run was just given.
+  if (skill || !(REVIEW_ONLY_FACTORY_SKILLS.has(name) || BOARD_ROLE_FACTORY_SKILLS.has(name))) return skill;
+  // The cache may predate the run binding this run was just given.
   try {
     await rescanFactorySkills(skills);
   } catch {
