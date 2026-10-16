@@ -726,7 +726,7 @@ The tools take their scope as an argument rather than reading the request, so th
 
 ### MCP server (ChatGPT and other MCP clients)
 
-Every Factory with an auth provider serves an MCP endpoint over Streamable HTTP:
+A Factory with an auth provider and an OAuth authorization server serves an MCP endpoint over Streamable HTTP:
 
 ```
 https://<your-factory>/web/factory/projects/<projectId>/mcp
@@ -736,7 +736,7 @@ It exposes the Factory tools a signed-in web session has (list, inspect, create,
 
 Callers must sign in. Requests without a valid bearer token get `401` with a `WWW-Authenticate` header pointing to the RFC 9728 metadata at `/.well-known/oauth-protected-resource/web/factory/projects/<projectId>/mcp`. Tokens go through the same auth provider and org checks as the web UI. Each user gets one private connector session per Factory that the session tools act from.
 
-To connect ChatGPT, open **Settings → Connectors → Create**, paste the endpoint URL, and choose OAuth. Set the authorization server the metadata advertises:
+To connect ChatGPT, open **Settings → Connectors → Create**, paste the endpoint URL, and choose OAuth. Factories on Mastra Platform auth advertise Platform's AuthKit (`https://auth-kit.mastra.ai`) automatically. With other auth providers, set the authorization server the metadata advertises, or the endpoint isn't served:
 
 ```ts
 new MastraFactory({

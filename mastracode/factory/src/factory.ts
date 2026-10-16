@@ -71,7 +71,7 @@ import { PlatformIncidentioIntegration } from './integrations/platform/incidenti
 import { PlatformJiraIntegration } from './integrations/platform/jira/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { prepareSessionRunContext } from './integrations/subscription-session.js';
-import { buildFactoryMcpRoutes } from './mcp/routes.js';
+import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
 import type { FactoryMcpConfig } from './mcp/routes.js';
 import { resolveDeploymentModelProviders } from './routes/config.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
@@ -217,7 +217,8 @@ export interface MastraFactoryConfig {
   /**
    * The Factory MCP server at `/web/factory/projects/:projectId/mcp`, which lets
    * MCP clients such as ChatGPT use the Factory tools as the signed-in user.
-   * On by default whenever an auth provider is active; pass `false` to turn it off.
+   * On by default with Mastra Platform auth; other providers need
+   * `authorizationServers` set. Pass `false` to turn it off.
    */
   mcp?: false | FactoryMcpConfig;
   /**
@@ -531,6 +532,11 @@ export class MastraFactory {
     // One RouteAuth seam per boot, closed over the resolved provider. Every
     // factory route module receives this handle — no service locator.
     const routeAuth = createFactoryRouteAuth(auth);
+    const mcpConfig = this.#config.mcp;
+    const mcpAuthorizationServers =
+      mcpConfig === false || mcpConfig?.enabled === false
+        ? []
+        : resolveMcpAuthorizationServers(auth?.name, mcpConfig);
 
     // Explicit integrations win. Platform credentials fill only missing
     // provider slots so callers can override each integration independently.
@@ -1471,15 +1477,11 @@ export class MastraFactory {
           // Hono app the deployer generates. `requiresAuth: false`; the gate
           // skips `/auth/*`. Auth-disabled mode still answers `/auth/me` (404).
           ...(auth ? buildAuthRoutes(auth, { publicUrl: publicOrigin }) : buildAuthDisabledRoutes()),
-          ...(auth && this.#config.mcp !== false && this.#config.mcp?.enabled !== false
+          ...(auth && mcpAuthorizationServers.length > 0
             ? buildFactoryMcpRoutes({
                 auth: routeAuth,
                 publicOrigin,
-                authorizationServers:
-                  (this.#config.mcp && this.#config.mcp.authorizationServers) ??
-                  (process.env.MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER?.trim()
-                    ? [process.env.MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER.trim()]
-                    : []),
+                authorizationServers: mcpAuthorizationServers,
                 projects: factoryProjectsStorage,
                 sourceControls: sourceControlHandles,
                 tools: factoryToolDeps,

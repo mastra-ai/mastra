@@ -8,11 +8,38 @@ import type { Context } from 'hono';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../boards/index.js';
+import { PLATFORM_AUTH_PROVIDER } from '../platform-auth-host.js';
 import type { RouteAuth } from '../routes/route.js';
 import type { WorkItemRow } from '../storage/domains/work-items/base.js';
 import type { FactoryToolDependencies } from '../tools/index.js';
-import { buildFactoryMcpRoutes, connectorSessionId } from './routes.js';
+import {
+  buildFactoryMcpRoutes,
+  connectorSessionId,
+  PLATFORM_MCP_AUTHORIZATION_SERVER,
+  resolveMcpAuthorizationServers,
+} from './routes.js';
 import type { FactoryMcpRoutesDeps } from './routes.js';
+
+describe('resolveMcpAuthorizationServers', () => {
+  it('prefers config, then env, then Platform AuthKit', () => {
+    expect(resolveMcpAuthorizationServers(PLATFORM_AUTH_PROVIDER, { authorizationServers: ['https://a'] }, {})).toEqual(['https://a']);
+    expect(
+      resolveMcpAuthorizationServers(PLATFORM_AUTH_PROVIDER, undefined, { MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER: 'https://e' }),
+    ).toEqual(['https://e']);
+    expect(resolveMcpAuthorizationServers(PLATFORM_AUTH_PROVIDER, undefined, {})).toEqual([PLATFORM_MCP_AUTHORIZATION_SERVER]);
+  });
+
+  it('treats a blank env var as unset', () => {
+    expect(resolveMcpAuthorizationServers(PLATFORM_AUTH_PROVIDER, undefined, { MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER: '  ' })).toEqual([
+      PLATFORM_MCP_AUTHORIZATION_SERVER,
+    ]);
+    expect(resolveMcpAuthorizationServers('workos', undefined, { MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER: '' })).toEqual([]);
+  });
+
+  it('returns nothing for other providers without config', () => {
+    expect(resolveMcpAuthorizationServers('workos', undefined, {})).toEqual([]);
+  });
+});
 
 const ITEM_ID = '7f3c2a10-1111-4222-8333-444455556666';
 

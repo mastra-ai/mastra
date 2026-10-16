@@ -10,6 +10,7 @@ import type { Context } from 'hono';
 import { z } from 'zod';
 
 import { getFactoryAuthUser } from '../auth.js';
+import { PLATFORM_AUTH_PROVIDER } from '../platform-auth-host.js';
 import type { RouteAuth } from '../routes/route.js';
 import { ensureFactorySourceSession, FactorySourceSessionResolutionError } from '../session/factory-session.js';
 import { auditActorProfile } from '../storage/domains/audit/base.js';
@@ -34,9 +35,26 @@ export interface FactoryMcpConfig {
   /**
    * OAuth authorization servers advertised in the protected-resource metadata
    * (RFC 9728) so clients like ChatGPT know where to sign in. Defaults to the
-   * `MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER` env var.
+   * `MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER` env var, then to Mastra Platform's
+   * AuthKit when the Factory uses Platform auth. The endpoint isn't served
+   * without one, since clients would have nowhere to sign in.
    */
   authorizationServers?: string[];
+}
+
+/** Mastra Platform's WorkOS AuthKit, which issues tokens Platform's `/auth/verify` accepts. */
+export const PLATFORM_MCP_AUTHORIZATION_SERVER = 'https://auth-kit.mastra.ai';
+
+export function resolveMcpAuthorizationServers(
+  providerName: string | undefined,
+  config: FactoryMcpConfig | undefined,
+  env: Record<string, string | undefined> = process.env,
+): string[] {
+  if (config?.authorizationServers?.length) return config.authorizationServers;
+  const fromEnv = env.MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER?.trim();
+  if (fromEnv) return [fromEnv];
+  if (providerName === PLATFORM_AUTH_PROVIDER) return [PLATFORM_MCP_AUTHORIZATION_SERVER];
+  return [];
 }
 
 export interface FactoryMcpRoutesDeps {
