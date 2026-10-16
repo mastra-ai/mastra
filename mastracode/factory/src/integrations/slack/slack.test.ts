@@ -1523,7 +1523,8 @@ describe('session start (onSessionStart)', () => {
     // map to a second session to stand in for a restarted process.
     settings = new Map<string, unknown>(),
     sessionId = 'us-1',
-    resourceId = sessionId,
+    // Session-bound Slack sessions run under their Factory's resource.
+    resourceId = 'fp-1',
   } = {}) {
     if (persistedModel) settings.set('currentModelId', persistedModel);
     if (persistedModeModel) settings.set(`modeModelId_${mode}`, persistedModeModel);
@@ -1628,10 +1629,17 @@ describe('session start (onSessionStart)', () => {
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
     expect(session.model.switch).toHaveBeenCalledWith('anthropic/claude-opus-5');
-    // Resolved from the session row, not from anything held in memory, so it
-    // works on a thread created before this process started.
+    // Resolved from the session row, by session id rather than the shared Factory
+    // resource, so it works on a thread created before this process started.
     expect(deps.sourceControl.sessions.getBySessionId).toHaveBeenCalledWith('us-1');
+    expect(deps.sourceControl.sessions.getBySessionId).not.toHaveBeenCalledWith('fp-1');
     expect(deps.projects.getById).toHaveBeenCalledWith({ id: 'fp-1' });
+    // The Factory's threads share one resource; the stamp ties this one to its session.
+    expect(session.thread.setSettingOn).toHaveBeenCalledWith({
+      threadId: expect.any(String),
+      key: 'factorySessionId',
+      value: 'us-1',
+    });
     // Factory scope never reads the owner's personal model default.
     expect(deps.modelDefaults.get).not.toHaveBeenCalled();
     expect(session.state.set).toHaveBeenCalledWith({
@@ -1641,23 +1649,6 @@ describe('session start (onSessionStart)', () => {
     });
     expect(session.model.switch).toHaveBeenCalledTimes(1);
     expect(session.restoredModel()).toBe('anthropic/claude-opus-5');
-  });
-
-  it('finds the source session by session id when the session runs under its Factory resource', async () => {
-    const deps = makeStartDeps();
-    const session = makeSession({ sessionId: 'us-1', resourceId: 'fp-1' });
-
-    await createChannelSessionStartHook(deps as any)(startArgs(session, 'fp-1') as any);
-
-    expect(deps.sourceControl.sessions.getBySessionId).toHaveBeenCalledWith('us-1');
-    expect(deps.sourceControl.sessions.getBySessionId).not.toHaveBeenCalledWith('fp-1');
-    expect(session.model.switch).toHaveBeenCalledWith('anthropic/claude-opus-5');
-    // The Factory's threads share one resource; the stamp ties this one to its session.
-    expect(session.thread.setSettingOn).toHaveBeenCalledWith({
-      threadId: expect.any(String),
-      key: 'factorySessionId',
-      value: 'us-1',
-    });
   });
 
   // The sender's own choice outranks the factory's shared default.
@@ -1707,7 +1698,7 @@ describe('session start (onSessionStart)', () => {
 
       expect(deps.workItems.findRunBindingByThread).toHaveBeenCalledWith({
         orgId: 'org-1',
-        resourceId: 'us-1',
+        resourceId: 'fp-1',
         sessionId: 'us-1',
         threadId: 'thread-1',
         rejectAmbiguous: true,
