@@ -27,6 +27,7 @@
     "@mastra/mcp": "latest",
     "@mastra/memory": "latest",
     "@mastra/observability": "latest",
+    "@mastra/react": "latest",
     "@mastra/slack": "latest",
     "@mastra/voice-openai": "latest",
     "@modelcontextprotocol/sdk": "^1.32.1",
@@ -104,7 +105,8 @@
       "undici@<8.11.2": "8.11.2",
       "yargs@<18.1.0": "18.2.0",
       "raw-body@<4.0.0": "4.0.0",
-      "nanoid@<5.1.16": "5.1.16"
+      "nanoid@<5.1.16": "5.1.16",
+      "@mastra/react": "link:../../client-sdks/react"
     },
     "patchedDependencies": {
       "body-parser@2.3.0": "patches/body-parser@2.3.0.patch"
@@ -130,6 +132,7 @@
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.29.3+sha512.498e1fb4cca5aa06c1dcf2611e6fafc50972ffe7189998c409e90de74566444298ffe43e6cd2acdc775ba1aa7cc5e092a8b7054c811ba8c5770f84693d33d2dc",
   "devDependencies": {
+    "@types/react": "^19.2.0",
     "concurrently": "^9.1.2",
     "msw": "^2.12.2",
     "tsx": "^4",

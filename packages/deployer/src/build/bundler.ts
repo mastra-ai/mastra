@@ -10,6 +10,8 @@ import { minify as esbuildMinify } from 'rollup-plugin-esbuild';
 import type { WorkspacePackageInfo } from '../bundler/workspaceDependencies';
 import { esbuild } from './plugins/esbuild';
 import { esmShim } from './plugins/esm-shim';
+import { extractToolUI } from './plugins/extract-tool-ui';
+import type { ToolUIRegistry } from './plugins/extract-tool-ui';
 import { localStorageDetector } from './plugins/local-storage-detector';
 import { moduleAlias } from './plugins/module-alias';
 import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
@@ -79,6 +81,8 @@ export async function getInputOptions(
     externalsPreset = false,
     explicitExternals = [],
     alias = {},
+    toolUIRegistry,
+    onToolUIWarning,
   }: {
     sourcemap?: boolean;
     minify?: boolean;
@@ -89,6 +93,9 @@ export async function getInputOptions(
     externalsPreset?: boolean;
     explicitExternals?: string[];
     alias?: Record<string, string>;
+    /** Collects `ui.studioComponent` entries stripped from the server bundle */
+    toolUIRegistry?: ToolUIRegistry;
+    onToolUIWarning?: (message: string) => void;
   },
 ): Promise<InputOptions> {
   const nodeResolvePlugin = nodeResolve({
@@ -143,6 +150,7 @@ export async function getInputOptions(
         platform,
         define: env,
       }),
+      extractToolUI({ registry: toolUIRegistry, sourcemap, onWarning: onToolUIWarning }),
       optimizeLodashImports({
         include: '**/*.{js,ts,mjs,cjs}',
       }),

@@ -242,12 +242,12 @@ type InputShared_Auxiliary_766 = {
   children?: InputShared_Auxiliary_766[] | undefined;
 };
 
-type Shared_Auxiliary_764 = {
+type Shared_Auxiliary_767 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_764[] | undefined;
+  children?: Shared_Auxiliary_767[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -2223,6 +2223,12 @@ type Shared_Type_0 = {
   outputSchema?: string | undefined;
   requestContextSchema?: string | undefined;
   requireApproval?: boolean | undefined;
+  ui?:
+    | {
+        /** Id of the Studio component that renders calls to this tool */
+        studioComponent?: string | undefined;
+      }
+    | undefined;
 };
 
 type Shared_Type_1 = {
@@ -4236,7 +4242,7 @@ type Shared_Type_83 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_764[] | undefined;
+  files?: Shared_Auxiliary_767[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {

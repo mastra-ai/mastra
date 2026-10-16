@@ -123,6 +123,28 @@ describe('BuildBundler', () => {
       expect(writeFile).not.toHaveBeenCalledWith('/output/output/worker-manifest.mjs', expect.any(String));
       expect(loadEnvVarsSpy).not.toHaveBeenCalled();
     });
+
+    it('builds Studio tool UI components when studio is enabled', async () => {
+      const { BuildBundler } = await import('./BuildBundler');
+      const bundler = new BuildBundler({ studio: true });
+      vi.spyOn(bundler as any, '_bundle').mockResolvedValue(undefined);
+      const buildToolUI = vi.spyOn(bundler as any, 'buildToolUI').mockResolvedValue(undefined);
+
+      await bundler.bundle('/entry.ts', '/output', { toolsPaths: [], projectRoot: '/project' });
+
+      expect(buildToolUI).toHaveBeenCalledWith('/output');
+    });
+
+    it('does not build Studio tool UI components without studio', async () => {
+      const { BuildBundler } = await import('./BuildBundler');
+      const bundler = new BuildBundler();
+      vi.spyOn(bundler as any, '_bundle').mockResolvedValue(undefined);
+      const buildToolUI = vi.spyOn(bundler as any, 'buildToolUI').mockResolvedValue(undefined);
+
+      await bundler.bundle('/entry.ts', '/output', { toolsPaths: [], projectRoot: '/project' });
+
+      expect(buildToolUI).not.toHaveBeenCalled();
+    });
   });
 
   describe('bundler options', () => {

@@ -100,6 +100,32 @@ describe('toolCardKind', () => {
       expect(toolCardKind(fields('view'), {})).toBe('plain');
     });
   });
+
+  describe('when the tool ships a custom Studio component', () => {
+    const studioComponents = { weather: '0123456789abcdef' };
+
+    it('draws the studio component', () => {
+      expect(toolCardKind(fields('weather'), { studioComponents })).toBe('studio_component');
+    });
+
+    it('prefers the studio component over an MCP app registration', () => {
+      expect(toolCardKind(fields('weather'), { studioComponents, mcpAppTools: { weather: {} } })).toBe(
+        'studio_component',
+      );
+    });
+
+    it('draws plain while the call waits for approval', () => {
+      const metadata: MessageMetadata = { requireApprovalMetadata: { 'call-1': approval('call-1') } };
+      expect(toolCardKind(fields('weather'), { studioComponents, metadata })).toBe('plain');
+    });
+
+    it('draws plain while the call is suspended', () => {
+      const metadata: MessageMetadata = {
+        suspendedTools: { weather: { toolCallId: 'call-1', toolName: 'weather', args: {}, suspendPayload: {} } },
+      };
+      expect(toolCardKind(fields('weather'), { studioComponents, metadata })).toBe('plain');
+    });
+  });
 });
 
 describe('badgeStatus', () => {

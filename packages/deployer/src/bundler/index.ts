@@ -6,12 +6,15 @@ import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { Config } from '@mastra/core/mastra';
 import virtual from '@rollup/plugin-virtual';
 import * as pkg from 'empathic/package';
+import type { BuildContext } from 'esbuild';
 import fsExtra, { copy, ensureDir, emptyDir, readJSON } from 'fs-extra/esm';
 import type { InputOptions, OutputOptions } from 'rollup';
 import { glob } from 'tinyglobby';
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions, getUnresolvedWorkspaceImport } from '../build/bundler';
 import { getBundlerOptions } from '../build/bundlerOptions';
+import type { ToolUIRegistry } from '../build/plugins/extract-tool-ui';
+import { buildToolUI, getToolUIOutputDir } from '../build/tool-ui/build-tool-ui';
 import type { ExternalDependencyInfo, InternalBundlerOptions } from '../build/types';
 import type { BundlerPlatform } from '../build/utils';
 import { getPackageName, isBareModuleSpecifier, shouldSkipInstall, slash } from '../build/utils';
@@ -293,6 +296,10 @@ export abstract class Bundler extends MastraBundler {
   protected outputDir = 'output';
   protected platform: BundlerPlatform = 'node';
   protected defaultExternalsPreset = false;
+  /** `ui.studioComponent` entries stripped from the server bundle by the last build */
+  protected toolUIRegistry: ToolUIRegistry = new Map();
+  /** Package root of the last bundled entry; `react` is resolved from here for the tool UI build */
+  protected toolUIProjectRoot?: string;
 
   constructor(name: string, component: 'BUNDLER' | 'DEPLOYER' = 'BUNDLER') {
     super({ name, component });
@@ -494,6 +501,8 @@ export abstract class Bundler extends MastraBundler {
         externalsPreset: externals === true || !!externalsPreset,
         explicitExternals: Array.isArray(externals) ? externals : [],
         alias,
+        toolUIRegistry: this.toolUIRegistry,
+        onToolUIWarning: message => this.logger.warn(message),
       },
     );
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths, projectRoot);
@@ -594,6 +603,24 @@ export abstract class Bundler extends MastraBundler {
     );
   }
 
+  /**
+   * Builds the Studio components collected from `ui.studioComponent` during `_bundle` into
+   * `<output>/studio/tool-ui/<id>.js`. Must run after the server bundle is built.
+   * With `watch`, returns an esbuild context that rebuilds when component files change.
+   */
+  protected async buildToolUI(
+    outputDirectory: string,
+    { watch = false }: { watch?: boolean } = {},
+  ): Promise<BuildContext | undefined> {
+    return buildToolUI({
+      registry: this.toolUIRegistry,
+      outDir: getToolUIOutputDir(join(outputDirectory, this.outputDir)),
+      projectRoot: this.toolUIProjectRoot ?? process.cwd(),
+      minify: !watch,
+      watch,
+    });
+  }
+
   protected async _bundle(
     serverFile: string,
     mastraEntryFile: string,
@@ -613,8 +640,10 @@ export abstract class Bundler extends MastraBundler {
   ): Promise<void> {
     const analyzeDir = join(outputDirectory, this.analyzeOutputDir);
     const additionalEntries = this.getAdditionalEntries();
+    this.toolUIRegistry.clear();
     const closestPkgJson = pkg.up({ cwd: dirname(mastraEntryFile) });
     const entryProjectRoot = closestPkgJson ? dirname(closestPkgJson) : projectRoot;
+    this.toolUIProjectRoot = entryProjectRoot;
 
     const bundlerOptions = await this.getUserBundlerOptions(mastraEntryFile, outputDirectory);
     const resolvedAlias = Object.fromEntries(

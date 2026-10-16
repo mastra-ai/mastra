@@ -239,10 +239,10 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     }
   }
 
-  async function runBuild(path: string) {
+  async function runBuild(path: string, args: string[] = []) {
     const build = buildQueue.then(async () => {
       await removeOutputDir(path);
-      return execa(pkgManager, ['build'], {
+      return execa(pkgManager, ['build', ...args], {
         cwd: join(path, 'apps', 'custom'),
         stdio: 'inherit',
         env: process.env,
@@ -354,8 +354,15 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       const body = await res.json();
       expect(res.status).toBe(200);
       expect(Object.keys(body).sort()).toEqual(
-        ['calculatorTool', 'lodashTool', 'hello-world', 'generate-password', 'compare-password'].sort(),
+        ['calculatorTool', 'lodashTool', 'weatherTool', 'hello-world', 'generate-password', 'compare-password'].sort(),
       );
+    });
+
+    it('exposes the extracted Studio component id instead of the component', async () => {
+      const res = await fetch(`http://localhost:${port}/api/agents/inner-agent`);
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body.tools.weatherTool.ui).toEqual({ studioComponent: expect.stringMatching(/^[a-f0-9]{16}$/) });
     });
 
     it('should list a registered MCP server and execute its tool', async () => {
@@ -516,6 +523,25 @@ export const environmentRoute = registerApiRoute('/environment', {
       const res = await fetch(`http://localhost:${port}/versionless`);
       expect(res.status).toBe(200);
       await expect(res.json()).resolves.toEqual({ value: 'versionless-workspace-package' });
+    });
+
+    it('serves the tool Studio component as a browser module sharing Studio React', async () => {
+      const agent = await (await fetch(`http://localhost:${port}/api/agents/inner-agent`)).json();
+      const id = agent.tools.weatherTool.ui.studioComponent;
+
+      const res = await fetch(`http://localhost:${port}/tool-ui/${id}.js`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toMatch(/javascript/);
+      const source = await res.text();
+      expect(source).toMatch(/\bexport\s*\{/);
+
+      const toolUIDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'studio', 'tool-ui');
+      const files = await glob('**/*.js', { cwd: toolUIDir });
+      const output = (await Promise.all(files.map(file => readFile(join(toolUIDir, file), 'utf-8')))).join('\n');
+      expect(output).toContain('weather-card-studio-marker');
+      expect(output).toContain('__MASTRA_STUDIO_SHARED_MODULES__');
+      // React comes from Studio, so no copy of it is bundled with the component.
+      expect(output).not.toContain('react.transitional.element');
     });
 
     it('layers development dotenv files without overriding the shell environment', async () => {
@@ -852,6 +878,20 @@ export const environmentRoute = registerApiRoute('/environment', {
       const agentResponse = await fetch(`http://localhost:${port}/api/agents/my-agent`);
       expect(agentResponse.status).toBe(200);
       expect((await agentResponse.json()).name).toBe('My Agent');
+    });
+
+    it('should keep tool Studio components and react out of the server bundle', async () => {
+      const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+      const bundleFiles = await glob('**/*.mjs', { cwd: outputDir, ignore: ['node_modules/**'] });
+      const output = (await Promise.all(bundleFiles.map(file => readFile(join(outputDir, file), 'utf-8')))).join('\n');
+      const packageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
+
+      expect(output).not.toContain('weather-card-studio-marker');
+      expect(output).not.toMatch(/from ["']react(?:-dom)?(?:\/[^"']*)?["']/);
+      expect(packageJson.dependencies?.react).toBeUndefined();
+      expect(packageJson.dependencies?.['react-dom']).toBeUndefined();
+      // Component bundles are only emitted for Studio builds.
+      expect(await glob('studio/tool-ui/**', { cwd: outputDir })).toEqual([]);
     });
 
     it('should exclude imports from dead NODE_ENV branches', async () => {
@@ -1330,6 +1370,26 @@ export const mastra = new Mastra({
       // not the older copy installed at the workspace root (0.2.0) (#18849).
       expect(dependencies['unicorn-magic']).toBe('0.4.0');
     });
+  });
+
+  describe.sequential('build with studio', () => {
+    it(
+      'bundles tool Studio components next to Studio without bundling react',
+      async () => {
+        await runBuild(fixturePath, ['--studio']);
+
+        const toolUIDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'studio', 'tool-ui');
+        const entries = await glob('*.js', { cwd: toolUIDir });
+        expect(entries).toEqual([expect.stringMatching(/^[a-f0-9]{16}\.js$/)]);
+
+        const files = await glob('**/*.js', { cwd: toolUIDir });
+        const output = (await Promise.all(files.map(file => readFile(join(toolUIDir, file), 'utf-8')))).join('\n');
+        expect(output).toContain('weather-card-studio-marker');
+        expect(output).toContain('__MASTRA_STUDIO_SHARED_MODULES__');
+        expect(output).not.toContain('react.transitional.element');
+      },
+      timeout,
+    );
   });
 
   describe.sequential('deployer module aliases', () => {

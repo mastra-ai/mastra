@@ -1,7 +1,7 @@
 export default {
   '*.{ts,tsx}': [
     'oxlint --fix --deny-warnings',
-    'eslint --fix --max-warnings=0',
+    'eslint --fix --max-warnings=0 --no-warn-ignored',
     'oxfmt --no-error-on-unmatched-pattern',
   ],
   '*.{js,jsx}': ['oxlint --fix', 'eslint --fix', 'oxfmt --no-error-on-unmatched-pattern'],
