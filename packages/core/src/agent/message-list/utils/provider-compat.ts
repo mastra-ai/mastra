@@ -405,3 +405,65 @@ export function findToolCallArgs(messages: MastraDBMessage[], toolCallId: string
   // If not found in DB messages, return empty object
   return {};
 }
+
+const SEPARATE_SYSTEM_MESSAGE_PROVIDERS = ['anthropic', 'google', 'vertex', 'bedrock', 'amazon-bedrock'];
+
+function keepsSeparateSystemMessages(targetProvider: string): boolean {
+  // The OpenAI Responses API accepts system/developer items anywhere in the input.
+  if (targetProvider === 'openai.responses') return true;
+  const vendor = targetProvider.split('.')[0]!.toLowerCase();
+  return SEPARATE_SYSTEM_MESSAGE_PROVIDERS.some(p => vendor === p || vendor.startsWith(`${p}-`));
+}
+
+function systemText(message: ModelMessage): string {
+  return typeof message.content === 'string'
+    ? message.content
+    : (message.content as Array<{ type: string; text?: string }>)
+        .map(part => (part.type === 'text' ? (part.text ?? '') : ''))
+        .join('');
+}
+
+/**
+ * Collapses system messages into a single leading system message for OpenAI-compatible targets.
+ *
+ * Strict chat templates (e.g. Qwen3.x served by vLLM) reject any `system` message that is not the
+ * single first message. Leading system messages are merged in order; any system message appearing
+ * after conversation content is demoted to a user message wrapped in `<system-reminder>`.
+ * Providers with native multi-block system prompts (Anthropic cache control, Google, Bedrock, OpenAI Responses) are untouched.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/25435
+ */
+export function normalizeSystemMessagesForProvider<T extends ModelMessage>(
+  messages: T[],
+  targetProvider: string | undefined,
+): T[] {
+  if (!targetProvider || keepsSeparateSystemMessages(targetProvider)) return messages;
+
+  let leading = 0;
+  while (leading < messages.length && messages[leading]?.role === 'system') leading++;
+  const needsMerge = leading > 1;
+  const hasLateSystem = messages.slice(leading).some(m => m?.role === 'system');
+  if (!needsMerge && !hasLateSystem) return messages;
+
+  const result: T[] = [];
+  if (leading > 0) {
+    if (needsMerge) {
+      const text = messages
+        .slice(0, leading)
+        .map(systemText)
+        .filter(t => t.length > 0)
+        .join('\n\n');
+      result.push({ role: 'system', content: text } as T);
+    } else {
+      result.push(messages[0]!);
+    }
+  }
+  for (const message of messages.slice(leading)) {
+    if (message?.role === 'system') {
+      result.push({ role: 'user', content: `<system-reminder>${systemText(message)}</system-reminder>` } as T);
+    } else {
+      result.push(message);
+    }
+  }
+  return result;
+}

@@ -27,15 +27,16 @@ const EXPLORER_INSTRUCTIONS = 'Explore the codebase.';
 const IMPLEMENTER_INSTRUCTIONS = 'Implement the fix.';
 
 /**
- * Requests whose PRIMARY (first) system message contains the given
- * instructions. The default engine forwards the supervisor's system message
- * into the sub-agent request as an additional system entry, so matching any
- * system message would misclassify sub-agent requests as supervisor ones.
+ * Requests whose system prompt starts with the given instructions. The default
+ * engine forwards the supervisor's system message into the sub-agent request
+ * after the sub-agent's own instructions (merged into one system message for
+ * OpenAI-compatible providers), so a substring match would misclassify
+ * sub-agent requests as supervisor ones.
  */
 function requestsFor(requests: Array<{ body?: { messages?: any[] } }>, instructions: string) {
   return requests.filter(request => {
     const primary = (request?.body?.messages ?? []).find((message: any) => message?.role === 'system');
-    return String(primary?.content ?? '').includes(instructions);
+    return String(primary?.content ?? '').startsWith(instructions);
   });
 }
 
