@@ -439,6 +439,25 @@ describe('AgentController session registry', () => {
     expect(second).toBe(first);
   });
 
+  it("refuses to hand another resource's live session to a caller that reuses its sessionId", async () => {
+    const controller = createController(new InMemoryStore());
+    await controller.init();
+
+    const victim = await controller.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
+    const victimThread = victim.thread.getId();
+    await controller.createSession({ id: 'own-thread', ownerId: 'test-owner', resourceId: 'user-a' });
+
+    await expect(
+      controller.createSession({
+        id: 'session-b',
+        ownerId: 'test-owner',
+        resourceId: 'user-a',
+        threadId: 'own-thread',
+      }),
+    ).rejects.toThrow('Session session-b belongs to another resource');
+    expect(victim.thread.getId()).toBe(victimThread);
+  });
+
   it('keeps a session reachable by its sessionId when its resourceId changes', async () => {
     const controller = createController(new InMemoryStore());
     await controller.init();
