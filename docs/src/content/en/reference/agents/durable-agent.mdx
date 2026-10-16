@@ -671,7 +671,7 @@ Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
     type: "AgentExecutionOptions['stopWhen']",
     isOptional: true,
     description:
-      'Predicate or composition that ends the agentic loop early. The closure rides on the in-process run registry; cross-process resumes degrade to `maxSteps` only.',
+      'Predicate or composition that ends the agentic loop early. If it throws, `fullStream` rejects without emitting a `step-finish` or `error` chunk. Durable transports preserve the error name and message, but not its stack, cause, or subclass identity. The closure rides on the in-process run registry; cross-process resumes degrade to `maxSteps` only.',
   },
   {
     name: 'system',

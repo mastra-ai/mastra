@@ -137,6 +137,7 @@ export {
   AGENT_CONTROL_TOPIC,
   AgentStreamEventTypes,
   AgentControlEventTypes,
+  DURABLE_STOP_WHEN_ERROR_ID,
   DurableAgentDefaults,
   DurableStepIds,
 } from './constants';

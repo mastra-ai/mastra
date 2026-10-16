@@ -663,6 +663,7 @@ export interface AgentErrorEventData {
     message: string;
     stack?: string;
   };
+  delivery?: 'reject';
 }
 
 /**
