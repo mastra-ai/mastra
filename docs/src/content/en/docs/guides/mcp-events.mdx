@@ -226,7 +226,7 @@ export const mastra = new Mastra({
 })
 ```
 
-Subscribe and iterate the same way as with the other modes. `subscription.mode` is `'webhook'`. The client refreshes the subscription before it expires and updates `subscription.deliveryStatus` with the server's report. When the server reports failing deliveries, for example because your endpoint timed out, `onError` receives `MCP_EVENTS_WEBHOOK_DELIVERY_FAILING`. Cancelling sends `events/unsubscribe`.
+Subscribe and iterate the same way as with the other modes. `subscription.mode` is `'webhook'`. Subscriptions with the same event name and arguments share one server-side subscription, and each still receives every occurrence. The client refreshes the subscription before it expires and updates `subscription.deliveryStatus` with the server's report. When the server reports failing deliveries, for example because your endpoint timed out, `onError` receives `MCP_EVENTS_WEBHOOK_DELIVERY_FAILING`. Cancelling sends `events/unsubscribe`.
 
 The `cursor` in each webhook delivery only covers occurrences your endpoint has already acknowledged. Resuming from a saved cursor can deliver the last handled occurrence again, so drop repeats by `eventId`.
 
@@ -285,8 +285,7 @@ Use the occurrence's `eventId` to detect a run you already started, because deli
 - **In-memory buffer:** The emit buffer holds the most recent occurrences per type (1000 by default, set with `bufferSize`). A restarted server treats earlier cursors as a gap and reports `truncated`.
 - **No list change notifications:** The server doesn't announce changes to its event types yet, because the MCP TypeScript SDK 2.2.0 doesn't carry the events filter on `subscriptions/listen`. Call `mcp.events.list()` again to see new types.
 - **Webhook subscription store:** The server keeps webhook subscriptions in memory by default. After a restart they're lost until clients refresh them. Pass a durable `store` to keep them across restarts or share them between instances. Subscriptions that never expire (`allowNoExpiry`) need a durable store.
-- **Webhooks need authenticated HTTP:** Webhook subscriptions fail over stdio and from unauthenticated callers. A client with `webhook` settings still picks `webhook` for those servers, so pass `{ delivery: 'push' }` there.
-- **One webhook subscription per arguments:** The server treats webhook subscriptions with the same event name and arguments from one client as one subscription. Keep a single subscription per event name and arguments, because cancelling one of two ends both.
+- **Webhooks need authenticated HTTP:** The server refuses webhook subscriptions over stdio and from unauthenticated callers. A subscription that doesn't force a mode falls back to `push` or `poll`, and `onError` receives `MCP_EVENTS_WEBHOOK_UNAVAILABLE` once. Forcing `delivery: 'webhook'` rejects instead.
 
 ## Related
 
