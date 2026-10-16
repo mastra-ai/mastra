@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import { Mastra } from '../mastra';
-import { InMemoryStore } from '../storage';
+import { InMemoryStore, MemoryStorage } from '../storage';
 import { createTool } from '../tools';
 import { trimResentInput } from './input-filter';
 import { scriptedModel, textTurn, toolCallTurn } from './model.mock';
@@ -92,6 +92,19 @@ describe('agent without Memory', () => {
     const log = await store.listActions({ threadId: 'th1' });
     expect(log.some(a => a.type === 'tool-approval-responded' && a.approved)).toBe(true);
     expect(texts(log)).toEqual(['user:Delete /tmp/x', 'assistant:Deleted.']);
+  });
+
+  it('runs unrecorded, as before, when the Mastra storage cannot store actions', async () => {
+    const { agent, storage } = setup();
+    const store = (await storage.getStore('memory'))!;
+    // An adapter without action support (Postgres, Mongo, …) keeps the base methods, which throw.
+    store.saveActions = MemoryStorage.prototype.saveActions;
+    store.listActions = MemoryStorage.prototype.listActions;
+    store.getLatestActionId = MemoryStorage.prototype.getLatestActionId;
+
+    const out = await (await agent.stream('Delete /tmp/x', { memory: { thread: 'th1', resource: 'u1' } })).result;
+    expect(out.actions.some(a => a.type === 'tool-approval-requested')).toBe(true);
+    expect(await store.getThreadById({ threadId: 'th1' })).toBeNull();
   });
 
   it('falls back to the runId as the thread and still declines from the log', async () => {
@@ -267,6 +280,12 @@ describe('resent history', () => {
     ];
     const input = [uiText('m1', 'user', 'hello'), uiText('m2', 'user', 'and another')];
     expect(trimResentInput(input, log).actions.map(a => (a as { text: string }).text)).toEqual(['and another']);
+  });
+
+  it('drops an echo of the last assistant turn whose outcomes the log already has', () => {
+    const log = [call('c1'), resultFor('c1')];
+    const input = [ui('m2', 'assistant', [clientResult('c1')])];
+    expect(trimResentInput(input, log).actions).toEqual([]);
   });
 
   it('treats matching tool-call ids as a resend', () => {

@@ -138,8 +138,7 @@ import type { SignalProvider } from '../signals/signal-provider';
 import { resolveAgentSkills, mergeWorkspaceSkills } from '../skills/agent-skills-resolver';
 import type { AgentSkillsInput, AgentSkillsResolver, SkillInput } from '../skills/types';
 
-import { getSnapshotMemoryInfo, InMemoryStore } from '../storage';
-import type { MemoryStorage } from '../storage';
+import { getSnapshotMemoryInfo, InMemoryStore, MemoryStorage } from '../storage';
 import type { GoalObjectiveRecord } from '../storage/domains/thread-state/base';
 import { matchesRunFence } from '../storage/run-fencing';
 import type { RunFence } from '../storage/run-fencing';
@@ -9608,7 +9607,10 @@ export class Agent<
   async #actionStore(requestContext?: RequestContext): Promise<MemoryStorage | undefined> {
     const memory = await this.getMemory({ requestContext });
     const storage = (memory?.hasOwnStorage ? memory.storage : undefined) ?? this.#mastra?.getStorage();
-    return storage?.getStore('memory');
+    const store = await storage?.getStore('memory');
+    // Without Memory, an adapter that can't store actions means the run isn't recorded, as before.
+    if (!memory && store && store.saveActions === MemoryStorage.prototype.saveActions) return undefined;
+    return store;
   }
 
   async #runActions(

@@ -112,6 +112,19 @@ describe('repairOpenRun', () => {
     ]);
   });
 
+  it('leaves a finished run closed when it writes rows after its run-end', () => {
+    const log = [
+      runStart('r1'),
+      userText('r1', 'hi'),
+      at('r1', { type: 'turn-start' }),
+      at('r1', { type: 'text', role: 'assistant', text: 'Hello.' }),
+      at('r1', { type: 'turn-end', finishReason: 'stop', usage: {} }),
+      at('r1', { type: 'run-end', finishReason: 'stop', usage: {} }),
+      at('r1', { type: 'thread-title-changed', title: 'Greeting' }),
+    ];
+    expect(repairOpenRun(log)).toEqual([]);
+  });
+
   describe('a call waiting on approval', () => {
     const waiting = [
       ...crashedAtToolCall(false),
