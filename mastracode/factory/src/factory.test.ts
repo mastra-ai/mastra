@@ -1165,7 +1165,12 @@ describe('MastraFactory.prepare', () => {
       const requestContext = new RequestContext();
       requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
       if (interactive) requestContext.set('factoryInteractive', true);
-      requestContext.set('controller', { resourceId: 'session-1', threadId: 'thread-1', getState: () => ({}) });
+      requestContext.set('controller', {
+        sessionId: 'session-1',
+        resourceId: 'session-1',
+        threadId: 'thread-1',
+        getState: () => ({}),
+      });
       return requestContext;
     }
 
