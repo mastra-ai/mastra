@@ -1130,7 +1130,7 @@
     "azure/gpt-5.1-codex-mini": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "flexai/DeepSeek-V4-Flash-0731@eu": [

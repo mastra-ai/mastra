@@ -154,6 +154,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 10
   },
   {
+    "model": "prime/anthropic/claude-sonnet-5.5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
     "model": "prime/deepseek/deepseek-v4-flash",
     "imageInput": false,
     "audioInput": false,
@@ -502,18 +514,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 14
   },
   {
-    "model": "prime/openai/gpt-5.2-pro",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 400000,
-    "maxOutput": 128000,
-    "inputCost": 21,
-    "outputCost": 168
-  },
-  {
     "model": "prime/openai/gpt-5.3-codex",
     "imageInput": true,
     "audioInput": false,
@@ -821,7 +821,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 943717,
+    "maxOutput": 943718,
     "inputCost": 0.15,
     "outputCost": 0.5
   }

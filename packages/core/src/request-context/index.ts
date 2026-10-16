@@ -11,3 +11,10 @@ export {
   mergeVersionOverrides,
 } from '@internal/core/request-context';
 export type { VersionOverrides, VersionSelector } from '@internal/core/request-context';
+
+/**
+ * Internal key carrying the tool-call IDs an `untilIdle` continuation turn reports
+ * as finished, so message history can load their messages even when they fall
+ * outside the history window.
+ */
+export const MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY = '__mastra_continuationToolCallIds';

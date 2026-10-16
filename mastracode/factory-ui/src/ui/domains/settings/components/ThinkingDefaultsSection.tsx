@@ -1,37 +1,42 @@
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
+import { useParams } from 'react-router';
 
-import { useThinkingConfigQuery, useUpdateThinkingMutation } from '../../../../hooks/use-thinking';
+import { useFactoryThinkingDefaultQuery, useSetFactoryThinkingDefaultMutation } from '../../../../hooks/use-thinking';
 import { ThinkingLevelPicker } from './SettingsFields';
-
-const READ_ONLY_REASON = 'Read-only here — these defaults are shared by everyone on this deployment';
 
 function RowError({ error }: { error: unknown }) {
   if (!error) return null;
-  return <span className="text-destructive-foreground">{error instanceof Error ? error.message : String(error)}</span>;
+  const message =
+    (error as { status?: number }).status === 403
+      ? 'Only organization admins can change the thinking level'
+      : error instanceof Error
+        ? error.message
+        : String(error);
+  return <span className="text-destructive-foreground">{message}</span>;
 }
 
 export function BaseThinkingSection() {
-  const configQuery = useThinkingConfigQuery();
-  const update = useUpdateThinkingMutation();
-  const config = configQuery.data;
-  const readOnly = !!config && !config.editable;
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const levelQuery = useFactoryThinkingDefaultQuery(factoryId);
+  const update = useSetFactoryThinkingDefaultMutation(factoryId);
+
+  if (!factoryId) return null;
 
   return (
     <SettingsRow
-      label="Base thinking level"
+      label="Thinking level"
       description={
         <>
-          <span>Used by every run without its own level</span>
-          {readOnly && <span className="text-placeholder">{READ_ONLY_REASON}</span>}
-          <RowError error={update.error ?? configQuery.error} />
+          <span>Used by every session and work-item run in this Factory until it picks its own level</span>
+          <RowError error={update.error ?? levelQuery.error} />
         </>
       }
     >
       <ThinkingLevelPicker
-        ariaLabel="Base thinking level"
-        value={config?.globalDefault ?? 'off'}
-        disabled={!config || readOnly}
-        onChange={level => update.mutateAsync({ globalDefault: level }).catch(() => {})}
+        ariaLabel="Thinking level"
+        value={levelQuery.data ?? 'medium'}
+        disabled={levelQuery.data === undefined}
+        onChange={level => update.mutateAsync(level).catch(() => {})}
       />
     </SettingsRow>
   );

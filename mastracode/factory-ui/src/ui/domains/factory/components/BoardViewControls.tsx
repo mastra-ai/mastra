@@ -7,12 +7,12 @@ import { Kanban, List, ListFilter } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
-import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import { boardFilterItems, boardFiltersActive } from '../boardFilters';
 import type { BoardLayout } from '../boardLayout';
 import type { BoardParticipant } from '../boardRelevance';
 import type { BoardViewSettings } from '../boardSavedViews';
 import type { BoardKind } from '../boardStages';
+import { useBoardFilterSources } from '../hooks/useBoardFilterSources';
 import type { BoardView } from '../hooks/useBoardView';
 import { BOARD_FILTER_OPERATORS, BoardFilters, boardFilterFields } from './BoardFilters';
 import { BOARD_SORT_LABELS, BoardSortControl } from './BoardSortControl';
@@ -45,13 +45,14 @@ export function BoardViewControls({
 }) {
   const { savedViews } = view;
   const [pageFiltersOpen, setPageFiltersOpen] = useState(false);
-  const linearStatus = useLinearStatusQuery();
-  const linearProjects = useLinearProjectsQuery(Boolean(linearStatus.data?.connected));
+  const { connectedSources, linearProjects } = useBoardFilterSources();
   const fields = boardFilterFields({
     kind,
     participants,
     availableLabels,
-    linearProjects: linearProjects.data,
+    connectedSources,
+    selectedSources: view.filters.sources,
+    linearProjects,
     currentUserId,
     teammateSelected: view.filters.participantIds.size > 0,
   });

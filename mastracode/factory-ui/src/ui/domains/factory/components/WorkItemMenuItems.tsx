@@ -1,16 +1,14 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { ArrowUpRight, CircleSlash, ShieldCheck, Trash2 } from 'lucide-react';
+import { ArrowUpRight, CircleSlash, Trash2 } from 'lucide-react';
 import type { ReactElement } from 'react';
-import { Link, useParams } from 'react-router';
 
-import { externalLinkLabel, githubNumberForItem } from '../boardItems';
+import { externalLinkLabel } from '../boardItems';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { itemBoard, itemStageOptions } from '../boardStages';
 import { canMoveTo, canStartRun } from '../boardCardState';
 import type { BoardCardOwner } from '../boardCardState';
 import { TRIAGE_DECISIONS, awaitsTriageDecision } from '../cardPrimaryAction';
 import type { CardMove } from '../cardPrimaryAction';
-import { workItemPrompt } from '../../supervisor/services/supervisor';
 import type { FactoryDecisionSummary } from '../services/decisions';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
@@ -28,16 +26,6 @@ export interface WorkItemMenuProps {
   onDismissProposal: (decisionId: string) => void;
   onMove: (toStage: string) => void;
   onRemove: () => void;
-}
-
-/** Deep link into the Supervisor chat with a question about this card prefilled. */
-export function askSupervisorPath(
-  factoryId: string | undefined,
-  item: Pick<WorkItem, 'id' | 'source' | 'metadata' | 'title'>,
-) {
-  const number = githubNumberForItem(item);
-  const ask = workItemPrompt({ id: item.id, title: item.title, ...(number ? { number } : {}) });
-  return `/factories/${factoryId}/supervisor?ask=${encodeURIComponent(ask)}`;
 }
 
 /** A lane's available move. Plan approval remains a separate human decision. */
@@ -63,7 +51,6 @@ export function WorkItemMenuItems({
   onMove,
   onRemove,
 }: WorkItemMenuProps): ReactElement {
-  const { factoryId } = useParams<{ factoryId: string }>();
   const catalog = useBoardCatalog(item.githubProjectId);
   const boardId = itemBoard(item);
   const custom = boardId !== 'work' && boardId !== 'review';
@@ -112,10 +99,6 @@ export function WorkItemMenuItems({
           <span>{externalLinkLabel(item.source)}</span>
         </DropdownMenu.Item>
       )}
-      <DropdownMenu.Item render={<Link to={askSupervisorPath(factoryId, item)} />}>
-        <ShieldCheck aria-hidden />
-        <span>Ask supervisor</span>
-      </DropdownMenu.Item>
       {stages
         .filter(stage => stage.id !== columnStage)
         .filter(stage => !awaitsTriage || !TRIAGE_DECISIONS.some(choice => choice.stage === stage.id))

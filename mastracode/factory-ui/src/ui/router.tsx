@@ -29,7 +29,6 @@ import { SettingsPage } from './pages/SettingsPage';
 import { SlackConnectionPage } from './pages/SlackConnectionPage';
 import { RulesPage } from './pages/RulesPage';
 import { SignInPage } from './pages/SignInPage';
-import { SupervisorPage } from './pages/SupervisorPage';
 import { ThreadPage } from './pages/ThreadPage';
 
 import { useFactoriesQuery } from '../hooks/useFactories';
@@ -151,7 +150,6 @@ export function createAppRoutes(): RouteObject[] {
                 { path: 'workspaces/:sessionId/threads/:threadId', element: <ThreadPage /> },
                 { path: 'user/new/:draftSessionId', element: <NewPage /> },
                 { path: 'user/threads/:threadId', element: <ThreadPage /> },
-                { path: 'supervisor', element: <SupervisorPage /> },
                 { path: 'new', element: <NewPage /> },
                 { path: 'new-factory', element: <CreateFactoryPage /> },
                 { path: 'work', element: <WorkBoardPage /> },
