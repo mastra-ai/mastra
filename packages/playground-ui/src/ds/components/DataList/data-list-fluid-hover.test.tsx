@@ -79,6 +79,34 @@ describe('DataList fluid hover', () => {
     expect(activeRows().map(r => r.textContent)).toEqual(['b']);
   });
 
+  it('rounds the highlight only at the ends of the hovered row section', async () => {
+    await setup(
+      <>
+        <DataList.RowButton>a</DataList.RowButton>
+        <DataList.RowButton>b</DataList.RowButton>
+        <DataList.Subheader>group</DataList.Subheader>
+        <DataList.RowButton>c</DataList.RowButton>
+      </>,
+    );
+    const ends = () => [grid().hasAttribute('data-active-row-first'), grid().hasAttribute('data-active-row-last')];
+
+    hoverAt(5);
+    await flushFrames();
+    expect(ends()).toEqual([true, false]);
+
+    hoverAt(ROW_HEIGHT + 5);
+    await flushFrames();
+    expect(ends()).toEqual([false, true]);
+
+    hoverAt(ROW_HEIGHT * 3 + 5);
+    await flushFrames();
+    expect(ends()).toEqual([true, true]);
+
+    fireEvent.mouseLeave(grid());
+    await flushFrames();
+    expect(ends()).toEqual([false, false]);
+  });
+
   it('lights the RowWrapper, never the nested RowButton', async () => {
     await setup(
       <>

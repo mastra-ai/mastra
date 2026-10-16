@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode, RefObject } from 'react';
-import { useId, useMemo } from 'react';
+import { useEffect, useId, useMemo, useRef } from 'react';
 import {
   columnOrderSchema,
   getColumnOrderStorageKey,
@@ -16,6 +16,7 @@ import type { DataListReorderContextValue } from './data-list-reorder-context';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea/scroll-area';
 import type { ScrollAreaMask, ScrollAreaProps } from '@/ds/components/ScrollArea/scroll-area';
 import { FluidMenuItems, useFluidMenu } from '@/ds/primitives/fluid-menu';
+import { ACTIVE_ATTR } from '@/hooks/use-fluid-hover';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { useLocalStorageState } from '@/hooks/use-local-storage-state';
 import { cn } from '@/lib/utils';
@@ -106,13 +107,9 @@ const dataListGridStyles = [
   '[&_.data-list-row:has(+.data-list-subheader)]:rounded-b-lg',
   '[&_.data-list-subheader+.data-list-row>.data-list-sticky-start]:rounded-tl-lg',
   '[&_.data-list-row:has(+.data-list-subheader)>.data-list-sticky-start]:rounded-bl-lg',
-  // The fluid highlight follows the same ends: rounded only when the active
-  // row is the first/last of its section, square everywhere else. `:has()`
-  // cannot nest, so "last" is written as "no row follows the active one".
-  '[&:has(.data-list-row[data-fluid-hover-active]:not(.data-list-row~.data-list-row))_[data-slot=fluid-hover-highlight]]:rounded-t-lg',
-  '[&:has(.data-list-row[data-fluid-hover-active]):not(:has(.data-list-row[data-fluid-hover-active]~.data-list-row))_[data-slot=fluid-hover-highlight]]:rounded-b-lg',
-  '[&:has(.data-list-subheader+.data-list-row[data-fluid-hover-active])_[data-slot=fluid-hover-highlight]]:rounded-t-lg',
-  '[&:has(.data-list-row[data-fluid-hover-active]+.data-list-subheader)_[data-slot=fluid-hover-highlight]]:rounded-b-lg',
+  // Set by `useActiveRowEnds`: a root `:has()` over the active row restyled every row on each hover move.
+  '[&[data-active-row-first]>[data-slot=fluid-hover-highlight]]:rounded-t-lg',
+  '[&[data-active-row-last]>[data-slot=fluid-hover-highlight]]:rounded-b-lg',
   '[&_.data-list-top]:bg-(--data-list-background)',
   '[&_.data-list-row>.data-list-sticky-start]:bg-background',
   // A sticky cell must stay opaque over horizontally scrolled cells, so it
@@ -141,6 +138,20 @@ const dataListFitClasses: Record<DataListFit, string> = {
 };
 
 const disabledReorder: DataListReorderContextValue = { reorderable: false, order: [], move: () => {} };
+
+const FIRST_ROW_OF_SECTION =
+  '.data-list-row:not(.data-list-row ~ .data-list-row), .data-list-subheader + .data-list-row';
+const LAST_ROW_OF_SECTION = '.data-list-row:not(:has(~ .data-list-row)), .data-list-row:has(+ .data-list-subheader)';
+
+function useActiveRowEnds(gridRef: RefObject<HTMLDivElement | null>, activeIndex: number | null) {
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    const activeRow = activeIndex === null ? null : grid.querySelector(`.data-list-row[${ACTIVE_ATTR}]`);
+    grid.toggleAttribute('data-active-row-first', activeRow?.matches(FIRST_ROW_OF_SECTION) ?? false);
+    grid.toggleAttribute('data-active-row-last', activeRow?.matches(LAST_ROW_OF_SECTION) ?? false);
+  }, [gridRef, activeIndex]);
+}
 
 export function DataListRoot({ reorderable, id, columns, columnKeys, ...props }: DataListRootProps) {
   const tracks = reorderable && id ? splitGridTracks(columns) : null;
@@ -250,6 +261,8 @@ function DataListBase({
   // One hover surface travels between rows (same primitive as menus/selects).
   // Subheaders, pagination and whitespace stay inert, so no gap-click routing.
   const menu = useFluidMenu<HTMLDivElement>({ gapClick: false });
+  const gridRef = useRef<HTMLDivElement>(null);
+  useActiveRowEnds(gridRef, menu.hover.activeIndex);
 
   const grid = (
     <div
@@ -258,7 +271,7 @@ function DataListBase({
       className={cn('grid content-start', ...dataListGridStyles, dataListFitClasses[fit], menu.containerClassName)}
       style={gridStyle}
       data-data-list={reorder.reorderable ? scopeId : undefined}
-      {...menu.getContainerProps({})}
+      {...menu.getContainerProps({}, gridRef)}
     >
       {orderRules && <style>{orderRules}</style>}
       {/* The highlight is the old row hover color. It sits between each row's
