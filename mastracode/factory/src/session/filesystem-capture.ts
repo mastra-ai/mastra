@@ -49,7 +49,7 @@ export function touchStamp(date: Date): string {
 }
 
 export interface FilesystemCaptureSession {
-  readonly identity: { getId(): string; getResourceId(): string };
+  readonly identity: { getId(): string };
   readonly thread: { requireId(): string };
   getWorkspace(): { sandbox?: Pick<WorkspaceSandbox, 'executeCommand'> } | undefined;
   onBeforeAgentEnd(listener: SessionBeforeAgentEndListener): () => void;
@@ -77,13 +77,12 @@ export function parseFilesystemCaptureFiles(output: string): FilesystemFile[] {
 export async function captureSessionFilesystem(
   session: FilesystemCaptureSession,
   { filesystem, sourceControl }: FilesystemCaptureDependencies,
-  ids?: { sessionId: string; resourceId: string; threadId: string },
+  ids?: { sessionId: string; threadId: string },
 ): Promise<void> {
   try {
     // Scheduled captures pass ids read at schedule time: a session deleted
     // before the queued capture runs has already cleared its thread.
     const sessionId = ids?.sessionId ?? session.identity.getId();
-    const resourceId = ids?.resourceId ?? session.identity.getResourceId();
     const threadId = ids?.threadId ?? session.thread.requireId();
     const sourceSession = await sourceControl.sessions.getBySessionId(sessionId);
     // Chat-only sessions run without a workspace; there is nothing to capture.
@@ -185,8 +184,10 @@ export async function captureSessionFilesystem(
       }
     }
 
+    // The listing describes the session's workspace, not its memory resource,
+    // which the session shares with others: rows are keyed by the session id.
     await filesystem.replaceFiles({
-      resourceId,
+      resourceId: sessionId,
       threadId,
       files: [...files.values()].toSorted((a, b) => a.path.localeCompare(b.path)),
     });
@@ -296,10 +297,8 @@ export function observeSessionFilesystem(
     // runs inside its own try/catch, and disposal of this listener does not
     // cancel an in-flight chain, so a final turn's capture still persists.
     let sessionId: string;
-    let resourceId: string;
     try {
       sessionId = session.identity.getId();
-      resourceId = session.identity.getResourceId();
     } catch {
       // No identity means no route can address this session's listing; keep
       // a per-observer chain so captures still run sequentially.
@@ -312,7 +311,7 @@ export function observeSessionFilesystem(
     } catch {
       return;
     }
-    const ids = { sessionId, resourceId, threadId };
+    const ids = { sessionId, threadId };
     const chain = (pendingCaptures.get(sessionId) ?? Promise.resolve()).then(() =>
       captureSessionFilesystem(session, dependencies, ids),
     );

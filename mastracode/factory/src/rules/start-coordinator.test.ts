@@ -216,12 +216,21 @@ describe('FactoryStartCoordinator', () => {
 
     expect(prepared).toMatchObject({
       threadId: 'session-1',
-      resourceId: 'session-1',
+      resourceId: PROJECT_ID,
       sessionId: 'session-1',
       kickoffStatus: 'sent',
       replayed: false,
     });
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
+    // The binding names the session and its thread; the resource is the Factory.
+    expect(
+      await storage.findRunBindingByThread({
+        orgId: 'org-1',
+        resourceId: PROJECT_ID,
+        sessionId: 'session-1',
+        threadId: 'session-1',
+      }),
+    ).toMatchObject({ factoryProjectId: PROJECT_ID, resourceId: PROJECT_ID, sessionId: 'session-1' });
     const session = await vi.mocked(controller.createSession).mock.results[0]?.value;
     expect(session.thread.rename).toHaveBeenCalledWith({ title: 'Investigate issue 1', pin: false });
     expect(session.permissions.setForTool).toHaveBeenCalledWith({
@@ -489,11 +498,13 @@ describe('FactoryStartCoordinator', () => {
 
     const prepared = await coordinator.prepare(startRequest());
 
-    expect(prepared).toMatchObject({ threadId: 'session-1', resourceId: 'session-1', sessionId: 'session-1' });
+    expect(prepared).toMatchObject({ threadId: 'session-1', resourceId: PROJECT_ID, sessionId: 'session-1' });
+    // Addressed by its session id, bound to the session's own thread, and
+    // running under the Factory so its memory is shared with other runs.
     expect(controller.createSession).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'session-1',
-        resourceId: 'session-1',
+        resourceId: PROJECT_ID,
         threadId: 'session-1',
         tags: { factoryProjectId: PROJECT_ID, projectRepositoryId: 'project-repository-1' },
       }),
