@@ -89,6 +89,7 @@ import type {
   RunRegistryEntry,
   SerializableModelListEntry,
 } from './types';
+import { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
 import { createDurableAgenticWorkflow } from './workflows';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
 import { hydrateMessageListState, loadMessageListStateForResume } from './workflows/shared/message-list-state';
@@ -4117,18 +4118,17 @@ export class DurableAgent<
     options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
   ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
     const { runId, ...resumeOptions } = options;
-    return this.resumeGenerate(runId, { approved: true }, resumeOptions as any) as any;
+    return this.resumeGenerate({ approved: true }, { ...resumeOptions, runId } as any) as any;
   }
 
   override async declineToolCallGenerate<OUTPUT = undefined>(
     options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string; reason?: string },
   ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
     const { runId, reason, ...resumeOptions } = options;
-    return this.resumeGenerate(
+    return this.resumeGenerate({ approved: false, ...(reason !== undefined ? { reason } : {}) }, {
+      ...resumeOptions,
       runId,
-      { approved: false, ...(reason !== undefined ? { reason } : {}) },
-      resumeOptions as any,
-    ) as any;
+    } as any) as any;
   }
 
   /**
@@ -4403,10 +4403,17 @@ export class DurableAgent<
    * persistence noted on `generate()` applies if the resumed turn suspends.
    */
   async resumeGenerate(
+    resumeData: unknown,
+    options: Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2] & { runId: string },
+  ): Promise<FullOutput<TOutput>>;
+  /** @deprecated Use `resumeGenerate(resumeData, { runId, ...options })`, matching `Agent.resumeGenerate`. */
+  async resumeGenerate(
     runId: string,
     resumeData: unknown,
     options?: Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2],
-  ): Promise<FullOutput<TOutput>> {
+  ): Promise<FullOutput<TOutput>>;
+  async resumeGenerate(...args: unknown[]): Promise<FullOutput<TOutput>> {
+    const { runId, resumeData, options } = normalizeResumeGenerateArgs(args);
     const result = await this.resume(runId, resumeData, {
       ...(options ?? {}),
       closeOnSuspend: true,

@@ -111,6 +111,9 @@ export {
   type ExtendedRunRegistryEntry,
 } from './run-registry';
 
+// Shared resumeGenerate argument normalization (Agent order + deprecated runId-first order)
+export { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
+
 // Lets shared test suites simulate a process crash
 export { __resetExecutionFencesForTests } from './execution-fence';
 

@@ -1546,7 +1546,8 @@ describe('InngestAgent parity surface', () => {
     });
 
     try {
-      const result = await durableAgent.resumeGenerate(runId, { approved: true });
+      // Agent signature: resumeGenerate(resumeData, { runId }).
+      const result = await durableAgent.resumeGenerate({ approved: true }, { runId });
 
       expect(result.finishReason).toBe('stop');
       expect(result.text).toBe('Done.');
@@ -2775,8 +2776,8 @@ describe('InngestAgent fork and resume overrides (#24736)', () => {
     await durableAgent.approveToolCallGenerate({ runId: 'r1', toolCallId: 't1' });
     await durableAgent.declineToolCallGenerate({ runId: 'r2', reason: 'no' });
 
-    expect(resumeGenerateSpy).toHaveBeenNthCalledWith(1, 'r1', { approved: true }, { toolCallId: 't1' });
-    expect(resumeGenerateSpy).toHaveBeenNthCalledWith(2, 'r2', { approved: false, reason: 'no' }, {});
+    expect(resumeGenerateSpy).toHaveBeenNthCalledWith(1, { approved: true }, { toolCallId: 't1', runId: 'r1' });
+    expect(resumeGenerateSpy).toHaveBeenNthCalledWith(2, { approved: false, reason: 'no' }, { runId: 'r2' });
   });
 
   it('__fork returns an independent InngestAgent', () => {

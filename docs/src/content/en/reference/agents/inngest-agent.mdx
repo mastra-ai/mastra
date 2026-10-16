@@ -281,16 +281,16 @@ result.finishReason // 'suspended' when approval is required
 
 Returns: `Promise<FullOutput<TOutput>>`
 
-#### `resumeGenerate(runId, resumeData, options?)`
+#### `resumeGenerate(resumeData, options)`
 
-Resumes a suspended `generate()` run and resolves with a single `FullOutput`.
+Resumes a suspended `generate()` run and resolves with a single `FullOutput`. Pass the run ID as `options.runId`, the same as `Agent.resumeGenerate()`. The older `resumeGenerate(runId, resumeData, options?)` order still works but is deprecated.
 
 ```typescript
 if (!result.runId) {
   throw new Error('Run ID is missing')
 }
 
-const resumedResult = await durableAgent.resumeGenerate(result.runId, { approved: true })
+const resumedResult = await durableAgent.resumeGenerate({ approved: true }, { runId: result.runId })
 ```
 
 Returns: `Promise<FullOutput<TOutput>>`
