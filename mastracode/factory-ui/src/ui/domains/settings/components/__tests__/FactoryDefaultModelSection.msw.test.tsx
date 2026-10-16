@@ -30,15 +30,22 @@ const models: AvailableModelOption[] = [
   },
 ];
 
-function renderSection() {
-  return renderWithProviders(
+function sectionRoutes(modelsLoaded: boolean) {
+  return (
     <MemoryRouter initialEntries={['/factories/fp-1/settings/models']}>
       <Routes>
-        <Route path="/factories/:factoryId/settings/models" element={<FactoryDefaultModelSection models={models} />} />
+        <Route
+          path="/factories/:factoryId/settings/models"
+          element={<FactoryDefaultModelSection models={modelsLoaded ? models : []} modelsLoaded={modelsLoaded} />}
+        />
       </Routes>
       <Toaster position="bottom-right" />
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+}
+
+function renderSection({ modelsLoaded = true }: { modelsLoaded?: boolean } = {}) {
+  return renderWithProviders(sectionRoutes(modelsLoaded));
 }
 
 function stubProject(
@@ -274,6 +281,25 @@ describe('FactoryDefaultModelSection thinking', () => {
     const ramp = await openRamp(user, 'Thinking: High');
     expect(ramp).toHaveAttribute('aria-valuetext', 'High');
     expect(screen.queryByText('Max')).not.toBeInTheDocument();
+  });
+
+  it('holds the thinking control until the model catalog loads', async () => {
+    server.use(
+      http.get(FACTORY_URL, () =>
+        HttpResponse.json({ project: { ...factory, defaultModelId: 'openai/gpt-5', defaultThinkingLevel: 'max' } }),
+      ),
+    );
+
+    const { rerender } = renderSection({ modelsLoaded: false });
+
+    expect(
+      await screen.findByLabelText("Thinking: unavailable. The default model's thinking levels aren't available."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Thinking: (Max|Extra high)$/ })).not.toBeInTheDocument();
+
+    rerender(sectionRoutes(true));
+
+    expect(await screen.findByRole('button', { name: 'Thinking: High' })).toBeEnabled();
   });
 
   it('saves once, the level the drag ended on', async () => {

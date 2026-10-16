@@ -20,7 +20,10 @@ describe('FactoryModelsSettings', () => {
     renderWithProviders(
       <MemoryRouter initialEntries={['/factories/fp-1/settings/models']}>
         <Routes>
-          <Route path="/factories/:factoryId/settings/models" element={<FactoryModelsSettings models={[]} />} />
+          <Route
+            path="/factories/:factoryId/settings/models"
+            element={<FactoryModelsSettings models={[]} modelsLoaded />}
+          />
         </Routes>
       </MemoryRouter>,
     );

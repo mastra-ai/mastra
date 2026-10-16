@@ -17,9 +17,10 @@ interface FactoryThinkingControlProps {
   factoryId: string;
   modelId: string;
   models: AvailableModelOption[];
+  modelsLoaded: boolean;
 }
 
-export function FactoryThinkingControl({ factoryId, modelId, models }: FactoryThinkingControlProps) {
+export function FactoryThinkingControl({ factoryId, modelId, models, modelsLoaded }: FactoryThinkingControlProps) {
   const levelQuery = useFactoryThinkingDefaultQuery(factoryId);
   const setLevel = useSetFactoryThinkingDefaultMutation(factoryId);
   const reasoningOptions = models.find(model => model.id === modelId)?.reasoningOptions;
@@ -33,6 +34,15 @@ export function FactoryThinkingControl({ factoryId, modelId, models }: FactoryTh
   if (levelQuery.data === undefined) {
     return (
       <ThinkingLevelUnavailable options={options} label="Thinking" reason="The thinking level isn't loaded yet." />
+    );
+  }
+  if (!modelsLoaded) {
+    return (
+      <ThinkingLevelUnavailable
+        options={options}
+        label="Thinking"
+        reason="The default model's thinking levels aren't available."
+      />
     );
   }
 
