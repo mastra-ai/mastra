@@ -176,6 +176,25 @@ describe('signal content escaping (escapeContents)', () => {
     expect(content).toBe('<skill name="triage">before &lt;/skill&gt; after <skill></skill>');
   });
 
+  it('escapes closing tags that have whitespace before the bracket', () => {
+    const content = createSignal({
+      ...skill,
+      escapeContents: false,
+      contents: 'a </skill > b </skill\n\t> c </skills> d',
+    }).toLLMMessage().content;
+    expect(content).toBe('<skill name="triage">a &lt;/skill &gt; b &lt;/skill\n\t&gt; c </skills> d</skill>');
+  });
+
+  it('matches a dotted tag name literally', () => {
+    const content = createSignal({
+      type: 'reactive',
+      tagName: 'my.skill',
+      escapeContents: false,
+      contents: '</myXskill> </my.skill >',
+    }).toLLMMessage().content;
+    expect(content).toBe('<my.skill></myXskill> &lt;/my.skill &gt;</my.skill>');
+  });
+
   it('still escapes attributes when escapeContents is false', () => {
     const content = createSignal({
       ...skill,

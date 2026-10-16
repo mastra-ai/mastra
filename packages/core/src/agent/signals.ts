@@ -283,9 +283,10 @@ export function signalToXmlMarkup(
   assertXmlName(tagName, 'tag name');
   const attributesXml = signalAttributesToXml(signal.attributes);
   if (!signal.contents) return `<${tagName}${attributesXml} />`;
+  // XML allows whitespace before an end tag's `>`, so `</skill >` closes the tag too.
   const body =
     signal.escapeContents === false
-      ? signal.contents.replaceAll(`</${tagName}>`, `&lt;/${tagName}&gt;`)
+      ? signal.contents.replace(new RegExp(`</${tagName.replaceAll('.', '\\.')}\\s*>`, 'g'), escapeXml)
       : escapeXml(signal.contents);
   return `<${tagName}${attributesXml}>${body}</${tagName}>`;
 }
