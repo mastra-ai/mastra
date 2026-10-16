@@ -184,6 +184,11 @@ export interface AgentRunAttributes extends AIBaseAttributes {
     /** Additional metadata */
     metadata?: unknown;
   };
+  /**
+   * When the run's model streamed its first chunk; copied from the first
+   * MODEL_GENERATION of the agent's own loop. Absent when no chunk was streamed.
+   */
+  completionStartTime?: Date;
 }
 
 /**
@@ -360,6 +365,8 @@ export interface ModelStepAttributes extends AIBaseAttributes {
   isContinued?: boolean;
   /** Result warnings */
   warnings?: Record<string, any>;
+  /** When the step's first inference streamed its first chunk. Absent when no chunk was streamed. */
+  completionStartTime?: Date;
 }
 
 /**
@@ -1568,7 +1575,16 @@ export interface BridgeSpanContext {
  */
 export interface AIModelGenerationSpan extends Span<SpanType.MODEL_GENERATION> {
   /** Create a ModelSpanTracker for tracking model execution steps and chunks */
-  createTracker(): IModelSpanTracker | undefined;
+  createTracker(options?: ModelSpanTrackerOptions): IModelSpanTracker | undefined;
+}
+
+export interface ModelSpanTrackerOptions {
+  /**
+   * The AGENT_RUN span that owns this generation. Only the agent's main loop
+   * passes it, so the first chunk's `completionStartTime` lands on that span
+   * and never on an outer agent's run (nested agents, title generation).
+   */
+  agentRunSpan?: Span<SpanType.AGENT_RUN>;
 }
 
 /**
@@ -1640,6 +1656,12 @@ export interface IModelSpanTracker {
   reportGenerationError(options: ErrorSpanOptions<SpanType.MODEL_GENERATION>): void;
   endGeneration(options?: EndGenerationOptions): void;
   updateGeneration(options: UpdateSpanOptions<SpanType.MODEL_GENERATION>): void;
+  /**
+   * When the first inference seen by this tracker streamed its first chunk.
+   * Durable execution reads it per step and carries it to the final
+   * `endGeneration`, since that step uses a fresh tracker.
+   */
+  getCompletionStartTime?(): Date | undefined;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
   startStep(payload?: StepStartPayload): void;
   updateStep?(payload?: StepStartPayload): void;

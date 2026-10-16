@@ -2000,11 +2000,16 @@ export class MastraClient extends BaseResource {
    * Lists all datasets with optional pagination
    */
   public listDatasets(params?: ListDatasetsParams): Promise<SerializedRouteResponse<'GET /datasets'>> {
+    // An empty ID list matches no datasets, and repeated query params cannot carry an empty list.
+    if (params?.datasetIds?.length === 0) {
+      return Promise.resolve({ datasets: [], pagination: { total: 0, page: 0, perPage: false, hasMore: false } });
+    }
     const searchParams = new URLSearchParams();
     if (params?.page !== undefined) searchParams.set('page', String(params.page));
     if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
     if (params?.targetType !== undefined) searchParams.set('targetType', params.targetType);
     for (const id of params?.targetIds ?? []) searchParams.append('targetIds', id);
+    for (const id of params?.datasetIds ?? []) searchParams.append('datasetIds', id);
     if (params?.orderBy) {
       searchParams.set('orderBy[field]', params.orderBy.field);
       searchParams.set('orderBy[direction]', params.orderBy.direction);

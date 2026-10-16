@@ -48,6 +48,7 @@ import {
 } from './auth.js';
 import { createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
+import { boardForWorkItem } from './boards/semantics.js';
 import { EnvironmentBuildRunner } from './environment/build-runner.js';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from './environment/build-workflow.js';
 import { touchFeed } from './feed-events.js';
@@ -109,6 +110,7 @@ import { LiveSessions } from './session/live-sessions.js';
 import { hydrateSessionMemorySettings, layerPersonalMemorySettings } from './session/memory-settings-hydration.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
 import { createSourceControlTools } from './session/source-control-tools.js';
+import { readFactoryThinkingLevel, resolveFactoryThinkingLevel } from './session/thinking-default.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
@@ -731,7 +733,6 @@ export class MastraFactory {
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
     const knowledgeEnabled =
       this.#config.knowledge !== undefined || process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
-    const deploymentOrganizationId = process.env.MASTRACODE_DEPLOYMENT_ORGANIZATION_ID?.trim() || undefined;
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
       | GithubIntegration
       | undefined;
@@ -820,6 +821,11 @@ export class MastraFactory {
             await factoryProjectsStorage.ensureReady();
             const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
             return project?.autoApprovePlans ?? false;
+          },
+          selfReviewEnabled: async ({ orgId, factoryProjectId }) => {
+            await factoryProjectsStorage.ensureReady();
+            const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
+            return project?.selfReviewEnabled ?? false;
           },
           ...(onTerminalStage ? { onTerminalStage } : {}),
           ...(githubIntegration
@@ -997,6 +1003,7 @@ export class MastraFactory {
           storage: workItemsStorage,
           boards: this.#boards,
           loadMemorySettings,
+          factoryThinkingLevel: factoryProjectId => readFactoryThinkingLevel(factoryProjectsStorage, factoryProjectId),
           ...(transitionService ? { transitionService } : {}),
           ...(githubIntegration
             ? {
@@ -1072,6 +1079,12 @@ export class MastraFactory {
         coAuthor: { name: 'mastra-platform[bot]' },
         ...(this.#config.disableBuiltinTools?.length ? { disableBuiltinTools: this.#config.disableBuiltinTools } : {}),
         modes: false,
+        // Thinking defaults are stored per Factory, not in the host's settings.json.
+        resolveDefaultThinkingLevel: ({ requestContext }) =>
+          resolveFactoryThinkingLevel(requestContext, {
+            projects: factoryProjectsStorage,
+            sourceControl: sourceControlSessions,
+          }),
         workspace: createWorkspaceFactory({
           ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
           ...(this.#config.sandboxStart ? { sandboxStart: this.#config.sandboxStart } : {}),
@@ -1208,6 +1221,55 @@ export class MastraFactory {
                       requestContext,
                       providers: sourceControlToolProviders,
                       audit: auditDomain,
+                      testChecksEnabled: async ({ orgId, factoryProjectId }) => {
+                        await factoryProjectsStorage.ensureReady();
+                        const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
+                        return project?.reviewTestChecksEnabled ?? false;
+                      },
+                      ...(workItemsStorage
+                        ? {
+                            selfReviewApprovedHead: async () => {
+                              const resolution = await resolveFactorySessionAddress({
+                                requestContext,
+                                storage: workItemsStorage,
+                              });
+                              if (!resolution) return undefined;
+                              const binding =
+                                resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
+                              if (!binding) return undefined;
+                              const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
+                              if (!item || boardForWorkItem(item) !== 'work') return undefined;
+                              if (typeof item.metadata?.openPullRequestNumber === 'number') return undefined;
+                              // A verdict already recorded still binds the change request to its head.
+                              if (item.metadata?.selfReviewVerdict === undefined) {
+                                await factoryProjectsStorage.ensureReady();
+                                const project = await factoryProjectsStorage.get({
+                                  orgId: binding.orgId,
+                                  id: binding.factoryProjectId,
+                                });
+                                if (!project?.selfReviewEnabled) return undefined;
+                              }
+                              const sha = item.metadata?.selfReviewedHeadSha;
+                              return item.metadata?.selfReviewVerdict === 'approve' && typeof sha === 'string'
+                                ? sha
+                                : null;
+                            },
+                            boundChangeRequestId: async () => {
+                              const resolution = await resolveFactorySessionAddress({
+                                requestContext,
+                                storage: workItemsStorage,
+                              });
+                              if (!resolution) return undefined;
+                              const binding =
+                                resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
+                              if (binding?.role !== 'review') return undefined;
+                              const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
+                              const source = item?.externalSource;
+                              if (!source || !/pull-request|merge-request/.test(source.type)) return undefined;
+                              return /(\d+)$/.exec(source.externalId)?.[1];
+                            },
+                          }
+                        : {}),
                     }),
                   );
                 }
@@ -1372,7 +1434,6 @@ export class MastraFactory {
             intakeReady,
             factoryReady,
             knowledgeEnabled,
-            deploymentOrganizationId,
             deploymentModelProviders,
             knowledgeKey: this.#config.knowledge?.key,
             configVersion,

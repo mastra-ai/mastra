@@ -12,9 +12,6 @@ describe('FactoryModelsSettings', () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers: [] })),
       http.get(`${TEST_BASE_URL}/web/config/custom-providers`, () => HttpResponse.json({ providers: [] })),
-      http.get(`${TEST_BASE_URL}/web/config/thinking`, () =>
-        HttpResponse.json({ globalDefault: 'off', levels: ['off'], editable: false }),
-      ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
         HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', modelScope: 'factory' } }),
       ),
@@ -25,13 +22,15 @@ describe('FactoryModelsSettings', () => {
         <Routes>
           <Route
             path="/factories/:factoryId/settings/models"
-            element={<FactoryModelsSettings models={[]} settings={null} onBehaviorChange={() => Promise.resolve()} />}
+            element={<FactoryModelsSettings models={[]} modelsLoaded />}
           />
         </Routes>
       </MemoryRouter>,
     );
 
-    await waitFor(() => expect(screen.queryByText('Thinking defaults')).not.toBeInTheDocument());
-    expect(screen.getByRole('combobox', { name: 'Model scope' })).toHaveTextContent('Factory model and credentials');
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Model scope' })).toHaveTextContent('Factory model and credentials'),
+    );
+    expect(screen.queryByRole('combobox', { name: 'Factory default model' })).not.toBeInTheDocument();
   });
 });

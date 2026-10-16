@@ -1,5 +1,13 @@
 # create-mastra
 
+## 1.34.3-alpha.1
+
+## 1.34.3-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
 ## 1.34.2
 
 ## 1.34.2-alpha.9

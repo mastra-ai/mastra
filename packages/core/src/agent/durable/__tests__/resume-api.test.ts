@@ -21,13 +21,17 @@ import { PubSub } from '../../../events/pubsub';
 import type { Event, EventCallback, SubscribeOptions } from '../../../events/types';
 import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
+import type { Processor } from '../../../processors';
+import { RequestContext } from '../../../request-context';
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import type { WorkflowRunState } from '../../../workflows/types';
 import { Agent } from '../../agent';
+import { MessageList } from '../../message-list';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import { globalRunRegistry } from '../run-registry';
+import { emitChunkEvent, emitFinishEvent } from '../stream-adapter';
 
 // ============================================================================
 // Helper Functions
@@ -196,7 +200,10 @@ async function seedSuspendedRun(
   agentId: string,
   memory: { threadId: string; resourceId: string },
   status: WorkflowRunState['status'] = 'suspended',
+  prompt?: string,
 ) {
+  const messageList = new MessageList(memory);
+  if (prompt) messageList.add({ role: 'user', content: prompt }, 'input');
   const workflows = (await store.getStore('workflows'))!;
   await workflows.persistWorkflowSnapshot({
     workflowName: DurableStepIds.AGENTIC_LOOP,
@@ -211,7 +218,7 @@ async function seedSuspendedRun(
           __workflowKind: 'durable-agent',
           runId,
           agentId,
-          messageListState: { memoryInfo: memory },
+          messageListState: prompt ? messageList.serialize() : { memoryInfo: memory },
           requestContextEntries: { tenantId: 'tenant-1' },
           state: memory,
         },
@@ -1279,6 +1286,236 @@ describe('Observe API', () => {
     });
 
     expect(typeof durableAgent.observe).toBe('function');
+  });
+
+  it('preserves live call-time state when another wrapper observes in the same Mastra instance', async () => {
+    const store = new InMemoryStore();
+    const processOutputStream = vi.fn<NonNullable<Processor['processOutputStream']>>(({ part }) => part);
+    const processor: Processor = { id: 'call-time-observer-processor', processOutputStream };
+    const baseAgent = new Agent({
+      id: 'shared-observe-agent',
+      name: 'Shared Observe Agent',
+      instructions: 'Test shared observer state',
+      model: createTextModel('unused') as LanguageModelV2,
+    });
+    const producer = createDurableAgent({ agent: baseAgent, pubsub: cachingPubsub });
+    const observer = createDurableAgent({ agent: baseAgent, pubsub: cachingPubsub });
+    const mastra = new Mastra({ agents: { producer }, storage: store, logger: false });
+    observer.__setMastra(mastra);
+    const requestContext = new RequestContext([['tenantId', 'live-tenant']]);
+    const { runId } = await producer.prepare('Live observer prompt', {
+      requestContext,
+      outputProcessors: [processor],
+      returnScorerData: true,
+    });
+    const entry = globalRunRegistry.get(runId)!;
+    entry.messageList!.add({ role: 'assistant', content: 'Live observer answer' }, 'response');
+    await seedSuspendedRun(store, runId, producer.id, {
+      threadId: 'persisted-thread',
+      resourceId: 'persisted-resource',
+    });
+    const resolveProcessors = vi.spyOn(baseAgent, 'listOutputProcessors');
+    expect(observer.runRegistry.has(runId)).toBe(false);
+    const result = await observer.observe(runId);
+    const fullOutput = result.output.getFullOutput();
+
+    try {
+      await emitChunkEvent(cachingPubsub, runId, {
+        type: 'text-delta',
+        runId,
+        from: 'AGENT',
+        payload: { id: 'observed-text', text: 'Live observer answer' },
+      });
+      await emitFinishEvent(cachingPubsub, runId, {
+        output: { text: 'Live observer answer', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
+        stepResult: { reason: 'stop', warnings: [], isContinued: false },
+      });
+      const output = await fullOutput;
+
+      expect(resolveProcessors).not.toHaveBeenCalled();
+      expect(processOutputStream).toHaveBeenCalledWith(expect.objectContaining({ requestContext }));
+      expect(JSON.stringify(output.scoringData?.input.inputMessages)).toContain('Live observer prompt');
+      expect(JSON.stringify(output.scoringData?.output)).toContain('Live observer answer');
+    } finally {
+      result.detach();
+      producer.runRegistry.cleanup(runId);
+      globalRunRegistry.delete(runId);
+      resolveProcessors.mockRestore();
+    }
+  });
+
+  describe.each(['placeholder', 'rebuilt', 'absent'] as const)('with a %s worker registry entry', entryKind => {
+    it('restores persisted context, processors, and transcript without live state', async () => {
+      const store = new InMemoryStore();
+      const baseAgent = new Agent({
+        id: 'partial-observe-agent',
+        name: 'Partial Observe Agent',
+        instructions: 'Test partial worker state',
+        model: createTextModel('unused') as LanguageModelV2,
+        outputProcessors: [{ id: 'persisted-observer-processor', processOutputStream: ({ part }) => part }],
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub: cachingPubsub });
+      new Mastra({ agents: { durableAgent }, storage: store, logger: false });
+      const runId = `observe-${entryKind}-worker-run`;
+      await seedSuspendedRun(
+        store,
+        runId,
+        durableAgent.id,
+        { threadId: 'persisted-thread', resourceId: 'persisted-resource' },
+        'suspended',
+        'Persisted observer prompt',
+      );
+      if (entryKind !== 'absent') {
+        globalRunRegistry.set(runId, {
+          isPlaceholder: entryKind === 'placeholder',
+          ...(entryKind === 'rebuilt' ? { tools: {}, outputProcessors: [], processorStates: new Map() } : {}),
+        } as Parameters<typeof globalRunRegistry.set>[1]);
+      }
+      const resolveProcessors = vi.spyOn(baseAgent, 'listOutputProcessors');
+      let result: Awaited<ReturnType<typeof durableAgent.observe>> | undefined;
+      try {
+        result = await durableAgent.observe(runId);
+        const fullOutput = result.output.getFullOutput();
+        await emitFinishEvent(cachingPubsub, runId, {
+          output: { text: '', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 }, steps: [] },
+          stepResult: { reason: 'stop', warnings: [], isContinued: false },
+        });
+        const output = await fullOutput;
+        expect(resolveProcessors).toHaveBeenCalledOnce();
+        const context = resolveProcessors.mock.calls[0]![0];
+        expect(context?.get('tenantId')).toBe('tenant-1');
+        expect(JSON.stringify(output.messages)).toContain('Persisted observer prompt');
+      } finally {
+        result?.detach();
+        globalRunRegistry.delete(runId);
+        resolveProcessors.mockRestore();
+      }
+    });
+
+    it('rejects a foreign persisted run without live state', async () => {
+      const store = new InMemoryStore();
+      const baseAgent = new Agent({
+        id: 'partial-owner-observe-agent',
+        name: 'Partial Owner Observe Agent',
+        instructions: 'Test partial worker ownership',
+        model: createTextModel('unused') as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub: cachingPubsub });
+      new Mastra({ agents: { durableAgent }, storage: store, logger: false });
+      const runId = `observe-${entryKind}-foreign-worker-run`;
+      await seedSuspendedRun(store, runId, 'foreign-agent', {
+        threadId: 'foreign-thread',
+        resourceId: 'foreign-resource',
+      });
+      if (entryKind !== 'absent') {
+        globalRunRegistry.set(runId, {
+          isPlaceholder: entryKind === 'placeholder',
+          ...(entryKind === 'rebuilt' ? { tools: {}, outputProcessors: [], processorStates: new Map() } : {}),
+        } as Parameters<typeof globalRunRegistry.set>[1]);
+      }
+      let result: Awaited<ReturnType<typeof durableAgent.observe>> | undefined;
+      try {
+        await expect(
+          durableAgent.observe(runId).then(observed => {
+            result = observed;
+            return observed;
+          }),
+        ).rejects.toMatchObject({
+          id: 'DURABLE_AGENT_OBSERVE_AGENT_MISMATCH',
+          details: { runId, ownerAgentId: 'foreign-agent' },
+        });
+      } finally {
+        result?.detach();
+        globalRunRegistry.delete(runId);
+      }
+    });
+  });
+
+  it('continues observing when configured processor resolution fails', async () => {
+    const store = new InMemoryStore();
+    const baseAgent = new Agent({
+      id: 'observe-failed-processors-agent',
+      name: 'Observe Failed Processors Agent',
+      instructions: 'Test observer processor fallback',
+      model: createTextModel('unused') as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub: cachingPubsub });
+    const mastra = new Mastra({ agents: { durableAgent }, storage: store, logger: false });
+    const runId = 'observe-failed-processors-run';
+    await seedSuspendedRun(store, runId, durableAgent.id, {
+      threadId: 'fallback-thread',
+      resourceId: 'fallback-resource',
+    });
+    const resolveProcessors = vi
+      .spyOn(baseAgent, 'listOutputProcessors')
+      .mockRejectedValue(new Error('resolver failed'));
+    const warn = vi.spyOn(mastra.getLogger(), 'warn');
+    const result = await durableAgent.observe(runId);
+    const fullOutput = result.output.getFullOutput();
+
+    try {
+      await emitChunkEvent(cachingPubsub, runId, {
+        type: 'text-delta',
+        runId,
+        from: 'AGENT',
+        payload: { id: 'fallback-text', text: 'Fallback answer' },
+      });
+      await emitFinishEvent(cachingPubsub, runId, {
+        output: { text: 'Fallback answer', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
+        stepResult: { reason: 'stop', warnings: [], isContinued: false },
+      });
+
+      expect((await fullOutput).text).toBe('Fallback answer');
+      expect(resolveProcessors).toHaveBeenCalledOnce();
+      expect(warn).toHaveBeenCalledWith(
+        `[DurableAgent] observe(${runId}) processor resolution failed: Error: resolver failed`,
+      );
+    } finally {
+      result.detach();
+      resolveProcessors.mockRestore();
+      warn.mockRestore();
+    }
+  });
+
+  it('rejects a persisted run owned by another agent', async () => {
+    const runId = 'observe-foreign-agent-run';
+    const store = new InMemoryStore();
+    const baseAgent = new Agent({
+      id: 'observing-agent',
+      name: 'Observing Agent',
+      instructions: 'Test observer ownership',
+      model: createTextModel('unused') as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub: cachingPubsub });
+    new Mastra({ agents: { observingAgent: durableAgent }, storage: store, logger: false });
+    await seedSuspendedRun(
+      store,
+      runId,
+      'foreign-agent',
+      { threadId: 'observe-foreign-thread', resourceId: 'observe-foreign-resource' },
+      'running',
+    );
+
+    await expect(durableAgent.observe(runId)).rejects.toMatchObject({
+      id: 'DURABLE_AGENT_OBSERVE_AGENT_MISMATCH',
+      details: { runId, ownerAgentId: 'foreign-agent' },
+    });
+  });
+
+  it('does not insert a global registry entry when observing an unknown run', async () => {
+    const runId = 'observe-missing-global-entry';
+    const baseAgent = new Agent({
+      id: 'observe-missing-entry-agent',
+      name: 'Observe Missing Entry Agent',
+      instructions: 'Test missing observer state',
+      model: createTextModel('unused') as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub: cachingPubsub });
+
+    expect(globalRunRegistry.has(runId)).toBe(false);
+    const observed = await durableAgent.observe(runId);
+    expect(globalRunRegistry.has(runId)).toBe(false);
+    observed.detach();
   });
 
   it('should return stream result from observe', async () => {

@@ -1,5 +1,21 @@
 # create-factory
 
+## 0.2.11-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`8c2d516`](https://github.com/mastra-ai/mastra/commit/8c2d5164714a27e720d898da612da6054a88ef91), [`0e1d0dc`](https://github.com/mastra-ai/mastra/commit/0e1d0dc587dbecade6157f825918021daf6571a0), [`a954fcc`](https://github.com/mastra-ai/mastra/commit/a954fccd473406d6912ce263074a17d66f9cd2d8), [`a1fbf27`](https://github.com/mastra-ai/mastra/commit/a1fbf275e587d56a86c52295eceff6c0756169e8), [`277f267`](https://github.com/mastra-ai/mastra/commit/277f267300052669540a56da6e8f309ac546713a), [`b8d29a1`](https://github.com/mastra-ai/mastra/commit/b8d29a160e2c8aa7b3cdd4d88f45f2f8bad5965e), [`9a5b346`](https://github.com/mastra-ai/mastra/commit/9a5b34652760414399f3986a9aaf06cea191897c), [`425d383`](https://github.com/mastra-ai/mastra/commit/425d383d4fb15e55e9491b6bdaebb57f2de7cdc8), [`e4bb741`](https://github.com/mastra-ai/mastra/commit/e4bb741c62e9e9bc368096a3de772f393d58ef93)]:
+  - mastra@1.34.3-alpha.1
+
+## 0.2.11-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+- Updated dependencies [[`5dea3ae`](https://github.com/mastra-ai/mastra/commit/5dea3aec360148541d7b284d422fd68e73d52943), [`b432f01`](https://github.com/mastra-ai/mastra/commit/b432f0103fbeba40b26250a8eea1c9497433f62e), [`f7c9793`](https://github.com/mastra-ai/mastra/commit/f7c9793c2110caa53d9f04b6d7493de694191f1e), [`9a012c2`](https://github.com/mastra-ai/mastra/commit/9a012c28a66406610e903c15423d5f6c94b62581), [`6a465f9`](https://github.com/mastra-ai/mastra/commit/6a465f9d1da730e179c44bfb4ef3e6ec398ba81f), [`7a78914`](https://github.com/mastra-ai/mastra/commit/7a78914b94b2ad14dababb912a748b7170b7ec83), [`fae54c5`](https://github.com/mastra-ai/mastra/commit/fae54c57917cd1f527937ca42b5ab7dfe1d55a2a)]:
+  - mastra@1.34.3-alpha.0
+
 ## 0.2.10
 
 ### Patch Changes

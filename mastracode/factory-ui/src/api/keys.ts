@@ -128,8 +128,8 @@ export const queryKeys = {
     ['factory', 'decisions', githubProjectId ?? null, statusKey] as const,
   factoryAttentionRoot: (factoryProjectId: string | undefined) =>
     ['factory', 'attention', factoryProjectId ?? null] as const,
-  factoryAttention: (factoryProjectId: string | undefined, view: string, limit: number, group = 'all') =>
-    [...queryKeys.factoryAttentionRoot(factoryProjectId), view, limit, group] as const,
+  factoryAttention: (factoryProjectId: string | undefined, view: string, limit: number) =>
+    [...queryKeys.factoryAttentionRoot(factoryProjectId), view, limit] as const,
   factoryAudit: (githubProjectId: string | undefined, group: string, actorKey?: string) =>
     ['factory', 'audit', githubProjectId ?? null, group, actorKey ?? null] as const,
   factoryAuditPortal: () => ['factory', 'audit-portal'] as const,
@@ -142,7 +142,6 @@ export const queryKeys = {
   defaultModel: () => ['default-model'] as const,
   om: (resourceId: string | undefined, scope?: string, factoryId?: string) =>
     ['om', resourceId ?? null, scope ?? null, factoryId ?? null] as const,
-  thinkingConfig: () => ['thinking-config'] as const,
   factorySkills: () => ['factory', 'skills'] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
   artifactsList: (path: string | undefined) => ['artifacts-list', path ?? null] as const,
