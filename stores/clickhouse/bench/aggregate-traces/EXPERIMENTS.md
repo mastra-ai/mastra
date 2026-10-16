@@ -88,6 +88,7 @@ Numbers are warm medians on the representative project per bucket, 30-day window
 | X41 | prod       | OBS-515 `aggregateTraces()` on mobs-query (`mobs-aggregate.ts`): 4 projects × 7/30 d, project and org-wide, token fallback D0/D1/D2, 7–180 d sweep                                     | All cells but one under 1 GiB; `spans.some` on the largest org at 30 d hits 241 before #3540 and 810 MiB on `main` after it; token fallback 400 MiB window-bounded | done   |
 | X42 | prod       | OBS-666 group-by dimension audit (`mobs-dimensions.ts`): cardinality and fill of per-trace root columns, one grouped request per dimension, p99/largest × 7/30 d, project and org-wide | The dimension is never the cost: every cell within 0–15% of ungrouped (max 468 MiB, 4.1 s). Most context columns are empty on Platform                             | done   |
 | X43 | prod       | OBS-516 un-flagging check: live `/traces/aggregate` traffic (`live.ts`) and 150 cells (`mobs-live.ts`): A grid, Ex1–4, 365 d, high-cardinality, `interval`, exact percentiles          | No failures (max 424 MiB / 3.6 s; live 593 MiB). Org-wide `spans.some` on largest 816–855 MiB, 8.4 s at 365 d. Cold timeouts = the list's floor                    | done   |
+| X45 | prod       | OBS-676: cold trace reads with mobs-query's own `withQueryRetry` and a 20 s budget (`mobs-live.ts retry`), cache on, old windows                                                       | 16/16 cold-window pass; 2 first attempts hit 159 (main → 504), retry 3.7–4.4 s. Cache off: 4/4 fail after 2 × 9 s                                                  | done   |
 
 ## Entries
 
@@ -573,6 +574,41 @@ Isolating that step on prod (largest project, ~2.3M token rows): grouping alone 
 | E4   | 293–298    | 297–304   | 872–875        | 752–771       |
 | T1   | 303–305    | 289–292   | 845–854        | 766–768       |
 | T3   | 299–300    | 291       | 860–867        | 758–766       |
+
+### X45: cold trace reads with the retry mobs-query already has (OBS-676, prod replica, read-only, 2026-10-16)
+
+**Question.** X43's forced-cold service calls timed out at 9 s in 99 of 121 cells, and the no-flag traces list did too. mobs-query's `withQueryRetry` already retries a TIMEOUT_EXCEEDED (159) once, because the first attempt warms the filesystem cache. It never ran for the v-next trace reads: `runTraceQuery` gave the client a 9 s `abort_signal` next to a 9 s `max_execution_time`, and ClickHouse reports the 159 at 9.06–9.74 s (prod logs), after the signal has cancelled the call. Prod logs over 7 days show the retry only on the legacy GET routes. With platform `daniel/obs-676-cold-trace-timeouts` (`/traces/query`, `/threads/query` and `/traces/aggregate` under a 20 s budget, each statement still 9 s), do cold reads finish?
+
+**Method.** `mobs-live.ts retry --platform /tmp/platform-676/servers/mobs-query`. The guarded client is wrapped in mobs-query's own `withQueryRetry`, as `db/clickhouse.ts` does in prod. `max_threads` is the server default (X43 forced 16). One request at a time.
+
+- `--cache cold-window`: the filesystem cache stays on, and each cell reads an older window that the org's other cells don't, so the first attempt is as cold as the replica allows and a retry reads what it cached. Organizations ranked 1, 2, 3 and 8 by 30-day roots (8 ≈ X41's p99), org-wide. Cells: the list's first page of 25 (`queryTraces()`, 4 statements) and the A grouped view by `entityName` (`aggregateTraces()`), at 7 d and 30 d.
+- `--cache off`: X43's control (cache disabled, current windows), largest org, same 4 cells.
+- Per attempt: `query_log` duration, memory, and `ProfileEvents` bytes read from object storage vs the cache.
+- Only the branch runs: its first attempt is the statement main runs, so a 159 on it is a request main would have answered with 504.
+
+**Results, `cold-window`.** All 16 requests answered. Request seconds; the first attempt's object-storage / cache MiB.
+
+| org (rank) | list 7 d (−7 d) | agg 7 d (−14 d)                             | list 30 d (−21 d) | agg 30 d (−51 d)                            |
+| ---------- | --------------- | ------------------------------------------- | ----------------- | ------------------------------------------- |
+| 1          | 2.8; 41 / 211   | **159 at 9.2, retry 4.4 → 13.9**; 531 / 363 | 9.0; 139 / 277    | **159 at 9.0, retry 3.7 → 13.0**; 574 / 280 |
+| 2          | 1.2; 0 / 60     | 1.6; 25 / 132                               | 3.2; 66 / 168     | 2.4; 53 / 247                               |
+| 3          | 0.8; 3 / 74     | 2.6; 61 / 239                               | 4.0; 18 / 231     | 3.6; 45 / 423                               |
+| 8          | 0.8; 4 / 24     | 1.5; 35 / 159                               | 1.7; 4 / 80       | 2.9; 55 / 336                               |
+
+- The two largest-org aggregates were mostly cold (more from object storage than cache). Both hit 159 on the first attempt, so main would have returned 504; both retries finished in 3.7–4.4 s, reading 8–10 MiB from object storage.
+- The largest org's 30 d list finished on its first attempt, but its page statement took 8.6 s (9.0 s request), near the limit. The retry would cover it the same way.
+- Ranks 2–8 read mostly from cache even on old windows: recent benchmarks (X43's 365 d cells, OBS-664) had read them. Their numbers are a floor for those orgs, not a cold measurement.
+- `mastra_trace_roots` holds data from 2026-08-23 for every org (about 54 days; X43 said about three months). So the 30 d aggregate window ending 51 days ago covers about 3 days of data, and the 30 d list window (−21 d) about 33.
+
+**Results, `cache off` (largest org).** All 4 failed with `TRACE_QUERY_EXECUTION_TIMEOUT` after 19.0–19.7 s: each timed-out statement ran twice (159 at 9.3–9.8 s both times), and nothing started after the budget. With no cache to fill, the retry can't help; this is X43's 504 at twice the latency.
+
+**Conclusions.**
+
+1. The retry works for the v-next trace reads once the request's signal covers both attempts. Where a cold read timed out, the retry finished in 3.7–4.4 s, for 13–14 s in all instead of a 504.
+2. The cost is bounded: at most 2 statements per timed-out statement, never at the same time, 20 s per request, and each statement still stops at 9 s and 1 GiB. Under X43's cache-off method, a request that can't finish takes 19–20 s instead of 9 s.
+3. Real cold traffic is the cache-on case. X43's 99/121 came from disabling the cache, which no request does.
+4. Studio adds client-js's 3 retries on 5xx on top. A request that can never finish goes from about 4 × 9 s to 4 × 19 s. Platform can't set `retries` through `MastraReactProvider`. Proposed OSS follow-up (not filed): let the provider pass `retries`, or skip retrying a 504 the server already retried.
+5. Limits: one rep per cell; only the largest org was really cold; the 30 d aggregate window held ~3 days of data.
 
 ### X43: `/traces/aggregate` before un-flagging: live traffic and a controlled load (prod replica, read-only, 2026-10-16)
 

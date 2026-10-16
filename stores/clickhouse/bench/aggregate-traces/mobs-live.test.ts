@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { COMPILED } from './live.fixtures';
-import { buildCells, percentileDrift, rewritePercentiles, summarizeCell } from './mobs-live';
+import { buildCells, percentileDrift, RETRY_CELLS, rewritePercentiles, summarizeCell } from './mobs-live';
 import type { QueryStat, RunRecord } from './mobs-live';
 
 const FULL = { environment: 'production', tool: 'tool-x', metadataKey: 'key-x' };
@@ -159,5 +159,14 @@ describe('summarizeCell', () => {
     const cell = summarizeCell([...warm(500, 300), ...exact]);
     expect(cell.warmMiB).toBe(300);
     expect(cell.flag).toBeUndefined();
+  });
+});
+
+describe('retry cells (OBS-676)', () => {
+  it('read disjoint windows inside the roots table, clear of the last week', () => {
+    const spans = RETRY_CELLS.map(c => [c.endDaysAgo, c.endDaysAgo + c.days] as const).sort((a, b) => a[0] - b[0]);
+    expect(spans[0]![0]).toBeGreaterThanOrEqual(7);
+    for (let i = 1; i < spans.length; i++) expect(spans[i]![0]).toBeGreaterThanOrEqual(spans[i - 1]![1]);
+    expect(spans.at(-1)![1]).toBeLessThanOrEqual(85);
   });
 });

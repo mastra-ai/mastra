@@ -50,6 +50,7 @@ const SIZES_OUT = join(RESULTS_DIR, 'mobs-live-sizes.json');
 const PARITY_OUT = join(RESULTS_DIR, 'mobs-live-parity.json');
 const PCT_OUT = join(RESULTS_DIR, 'mobs-live-percentiles.jsonl');
 const COLD_OUT = join(RESULTS_DIR, 'mobs-live-cold.jsonl');
+const RETRY_OUT = join(RESULTS_DIR, 'mobs-live-retry.jsonl');
 const ALL_LOG = `clusterAllReplicas('all_groups.default', system.query_log)`;
 const DAY = 86_400_000;
 const GiB = 1024 ** 3;
@@ -281,6 +282,9 @@ export interface QueryStat {
   readMiB: number;
   resultRows: number;
   exc: number;
+  /** Bytes read from object storage vs the filesystem cache (absent on older records). */
+  sourceMiB?: number;
+  cacheMiB?: number;
 }
 
 export interface RunRecord {
@@ -305,7 +309,11 @@ export interface RunRecord {
   queries: QueryStat[];
 }
 
-function guardedClient(raw: ClickHouseClient, state: { current?: Tag }): ClickHouseClient {
+function guardedClient(
+  raw: ClickHouseClient,
+  state: { current?: Tag },
+  { maxThreads = 16 }: { maxThreads?: number | null } = {},
+): ClickHouseClient {
   const query = (params: QueryParams) => {
     assertReadOnlyStatement(params.query);
     const tag = state.current;
@@ -318,7 +326,7 @@ function guardedClient(raw: ClickHouseClient, state: { current?: Tag }): ClickHo
       clickhouse_settings: {
         ...params.clickhouse_settings,
         use_query_cache: 0,
-        max_threads: 16,
+        ...(maxThreads === null ? {} : { max_threads: maxThreads }),
         ...tag.settings,
         log_comment: 'aqa-bench:mobs-live',
       },
@@ -416,7 +424,9 @@ async function fetchStats(raw: ClickHouseClient, ids: string[]): Promise<Map<str
       raw,
       `SELECT query_id AS id, query_duration_ms AS durationMs, round(memory_usage / 1048576, 1) AS memMiB,
               read_rows AS readRows, round(read_bytes / 1048576, 2) AS readMiB, result_rows AS resultRows,
-              exception_code AS exc
+              exception_code AS exc,
+              round(ProfileEvents['CachedReadBufferReadFromSourceBytes'] / 1048576, 1) AS sourceMiB,
+              round(ProfileEvents['CachedReadBufferReadFromCacheBytes'] / 1048576, 1) AS cacheMiB
        FROM ${ALL_LOG}
        WHERE event_date >= yesterday() AND type IN ('QueryFinish', 'ExceptionWhileProcessing', 'ExceptionBeforeStart')
          AND query_id IN {ids:Array(String)}`,
@@ -870,6 +880,7 @@ const numericStat = (q: QueryStat): QueryStat => ({
   readMiB: Number(q.readMiB),
   resultRows: Number(q.resultRows),
   exc: Number(q.exc),
+  ...(q.sourceMiB === undefined ? {} : { sourceMiB: Number(q.sourceMiB), cacheMiB: Number(q.cacheMiB) }),
 });
 const peak = (r: RunRecord) => Math.max(0, ...r.queries.map(q => Number(q.memMiB)));
 const took = (r: RunRecord) => (r.queries.length ? r.queries.reduce((s, q) => s + Number(q.durationMs), 0) : r.wallMs);
@@ -960,6 +971,110 @@ function report() {
   }
 }
 
+/**
+ * OBS-676: cold reads the way prod runs them. mobs-query's own `withQueryRetry` wraps the guarded
+ * client, `max_threads` stays at the server default, and the filesystem cache stays on. Each cell
+ * reads a window nobody has read recently (shifted into older data, disjoint per org), so the first
+ * attempt is cold and the retry, if any, reads what it cached. Every attempt is logged with its
+ * object-storage and cache bytes, so one run answers both "would main have 504'd" (the first
+ * attempt, which is main's only one) and "does the branch finish". `--cache off` is X43's control:
+ * cache disabled, current windows.
+ */
+export const RETRY_CELLS: Array<{ op: 'list:25' | 'agg:A:entityName'; days: number; endDaysAgo: number }> = [
+  { op: 'list:25', days: 7, endDaysAgo: 7 },
+  { op: 'agg:A:entityName', days: 7, endDaysAgo: 14 },
+  { op: 'list:25', days: 30, endDaysAgo: 21 },
+  { op: 'agg:A:entityName', days: 30, endDaysAgo: 51 },
+];
+
+async function retryRun(options: Options & { ranks: number[]; cache: 'off' | 'cold-window' }) {
+  const raw = await connect(options.platform);
+  const state: { current?: Tag } = {};
+  const quiet = { warn() {}, error() {}, info() {}, debug() {} };
+  const { withQueryRetry } = (await import(pathToFileURL(join(options.platform, 'src/db/query-retry.ts')).href)) as {
+    withQueryRetry: (client: ClickHouseClient, logger: unknown) => ClickHouseClient;
+  };
+  const client = withQueryRetry(guardedClient(raw, state, { maxThreads: null }), quiet);
+  const mods = await loadPlatform(options.platform);
+  const usage = mods.sql.traceAggregateUsageOptions({});
+  const selection = loadSelection();
+  try {
+    const ranked = await rows<{ org: string; roots: string }>(
+      raw,
+      `SELECT organizationId AS org, count() AS roots
+       FROM mastra_trace_roots WHERE startedAt >= now() - INTERVAL 30 DAY GROUP BY org ORDER BY roots DESC LIMIT 20`,
+      {},
+    );
+    const now = Date.now();
+    for (const rank of options.ranks) {
+      const entry = ranked[rank - 1];
+      if (!entry) continue;
+      registerSensitive([entry.org]);
+      const [first] = await rows<{ oldest: string }>(
+        raw,
+        `SELECT toString(min(startedAt)) AS oldest FROM mastra_trace_roots WHERE organizationId = {org:String}`,
+        { org: entry.org },
+      );
+      const oldest = first?.oldest ?? '';
+      const org = selection
+        ? createHmac('sha256', selection.salt).update(entry.org).digest('hex').slice(0, 8)
+        : `rank${rank}`;
+      const scope = { organizationId: entry.org };
+      const cells = options.cache === 'off' ? RETRY_CELLS.map(c => ({ ...c, endDaysAgo: 0 })) : RETRY_CELLS;
+      for (const cell of cells) {
+        const end = now - cell.endDaysAgo * DAY;
+        const timeRange = { from: new Date(end - cell.days * DAY).toISOString(), to: new Date(end).toISOString() };
+        const call =
+          cell.op === 'list:25'
+            ? () =>
+                mods.query.queryTraces(
+                  client,
+                  mods.queryPlan.planPlatformTraceQuery({ timeRange, pagination: { page: 0, perPage: 25 } }, scope),
+                )
+            : () =>
+                mods.run.aggregateTraces(
+                  client,
+                  mods.plan.planPlatformTraceAggregate(
+                    {
+                      timeRange,
+                      groupBy: ['entityName'],
+                      measures: GROUPED_VIEW,
+                      orderBy: { field: 'count', direction: 'desc' },
+                      limit: 50,
+                    },
+                    scope,
+                    [],
+                  ),
+                  usage,
+                );
+        const r = await measured(state, options.cache === 'off' ? COLD : {}, call);
+        const stats = await fetchStats(raw, r.queryIds);
+        const record = {
+          at: new Date().toISOString(),
+          cache: options.cache,
+          rank,
+          org,
+          rootsOldest: oldest.slice(0, 10),
+          ...cell,
+          ok: r.ok,
+          errorCode: r.errorCode,
+          wallMs: Math.round(r.wallMs),
+          queries: r.queryIds.map(id => stats.get(id)).filter((q): q is QueryStat => !!q),
+        };
+        appendFileSync(RETRY_OUT, `${JSON.stringify(record)}\n`);
+        const attempts = record.queries.map(
+          q => `${q.exc ? `✗${q.exc}` : 'ok'} ${q.durationMs}ms src ${q.sourceMiB}/cache ${q.cacheMiB}MiB`,
+        );
+        console.log(
+          `#${rank} ${cell.op} ${cell.days}d -${cell.endDaysAgo}d ${r.ok ? 'OK' : `FAIL ${r.errorCode}`} ${record.wallMs}ms | ${attempts.join(' ; ')}`,
+        );
+      }
+    }
+  } finally {
+    await raw.close();
+  }
+}
+
 async function main() {
   installOutputRedaction();
   const { positionals, values } = parseArgs({
@@ -972,6 +1087,8 @@ async function main() {
       cases: { type: 'string' },
       reps: { type: 'string', default: '3' },
       variants: { type: 'string' },
+      ranks: { type: 'string', default: '1,2,3,8' },
+      cache: { type: 'string', default: 'cold-window' },
     },
   });
   const options: Options = {
@@ -988,8 +1105,14 @@ async function main() {
   else if (command === 'run') await run(options);
   else if (command === 'parity') await parity(options);
   else if (command === 'cold') await coldControl(options);
+  else if (command === 'retry')
+    await retryRun({
+      ...options,
+      ranks: values.ranks!.split(',').map(Number),
+      cache: values.cache === 'off' ? 'off' : 'cold-window',
+    });
   else if (command === 'report') report();
-  else throw new Error('usage: mobs-live.ts sizes|run|parity|cold|report');
+  else throw new Error('usage: mobs-live.ts sizes|run|parity|cold|retry|report');
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) await main();
