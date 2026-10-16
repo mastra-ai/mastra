@@ -406,8 +406,12 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
 // Mirrors the AI SDK's decide(): providers receive state as an array of parts.
 function toProviderState(state: ClassifierState): DecisionModelV4State {
   if (typeof state === 'string') return [{ type: 'text', text: state }];
-  if (!Array.isArray(state)) return [{ type: 'json', value: state }];
-  return state as unknown as DecisionModelV4State;
+  if (Array.isArray(state) && state.every(isStatePart)) return state;
+  return [{ type: 'json', value: state }];
+}
+
+function isStatePart(value: unknown): value is DecisionModelV4State[number] {
+  return isPlainObject(value) && (value.type === 'text' || value.type === 'file' || value.type === 'json');
 }
 
 function toProviderQuestions(questions: ClassifierQuestions): Readonly<Record<string, DecisionModelV4Question>> {

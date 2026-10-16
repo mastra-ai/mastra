@@ -220,11 +220,15 @@ describe('Classifier', () => {
       await classifier.decide({ state: 'I was charged twice' });
       await classifier.decide({ state: { message: 'hi' } });
       await classifier.decide({ state: parts });
+      await classifier.decide({ state: ['a', 1] });
+      await classifier.decide({ state: [{ type: 'text', text: 'hi' }, 'b'] });
 
       expect(doDecide.mock.calls.map(([options]) => options.state)).toEqual([
         [{ type: 'text', text: 'I was charged twice' }],
         [{ type: 'json', value: { message: 'hi' } }],
         parts,
+        [{ type: 'json', value: ['a', 1] }],
+        [{ type: 'json', value: [{ type: 'text', text: 'hi' }, 'b'] }],
       ]);
     });
 
