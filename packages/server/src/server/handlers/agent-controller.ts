@@ -213,7 +213,7 @@ const sessionStateQuerySchema = z.object({ threadId: z.string().optional() });
 const createSessionBodySchema = z.object({
   /** Whose threads and memory the session works on. */
   resourceId: z.string(),
-  /** Address of the session. Defaults to `threadId`, then to `resourceId`. */
+  /** Address of the session. Defaults to `resourceId`. */
   sessionId: z.string().optional(),
   tags: z.record(z.string(), z.string()).optional(),
   threadId: z.string().optional(),
@@ -555,7 +555,7 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   responseSchema: createSessionResponseSchema,
   summary: 'Create or resume a controller session',
   description:
-    'Creates the session addressed by `sessionId` on the given resourceId, or returns the existing one (get-or-create), so reconnects resume the conversation. Without a `sessionId` the session is addressed by `threadId`, or by `resourceId` when neither is sent. Every other session route requires a started session and returns 404 until one exists or can be recovered from a stored thread.',
+    'Creates the session addressed by `sessionId` on the given resourceId, or returns the existing one (get-or-create), so reconnects resume the conversation. Without a `sessionId` the session is addressed by `resourceId`. Every other session route requires a started session and returns 404 until one exists or can be recovered from a stored thread.',
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
@@ -564,7 +564,7 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       await controller.init();
       const session = await controller.createSession({
-        id: sessionId ?? threadId ?? resourceId,
+        id: sessionId ?? resourceId,
         resourceId,
         ownerId: controller.id,
         tags,

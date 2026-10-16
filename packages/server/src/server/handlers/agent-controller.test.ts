@@ -156,6 +156,23 @@ describe('agent-controller routes', () => {
       expect(state).toMatchObject({ sessionId: 'user-plain', resourceId: 'user-plain', threadId: created.threadId });
     });
 
+    it('addresses a session created with a resourceId and threadId but no sessionId by its resourceId', async () => {
+      const created = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-ticket',
+        threadId: 'ticket-1',
+      } as any)) as { sessionId: string; resourceId: string; threadId?: string };
+
+      expect(created).toMatchObject({ sessionId: 'user-ticket', resourceId: 'user-ticket', threadId: 'ticket-1' });
+      const state = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-ticket',
+      } as any)) as { sessionId: string; resourceId: string; threadId?: string };
+      expect(state).toMatchObject({ sessionId: 'user-ticket', resourceId: 'user-ticket', threadId: 'ticket-1' });
+    });
+
     it('drives two sessions sharing one resourceId independently', async () => {
       for (const id of ['run-a', 'run-b']) {
         await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
