@@ -2,6 +2,6 @@
 '@mastra/hono': patch
 ---
 
-Cap the request body on the raw browser-stream session-close route.
+Fixed oversized requests to the browser session-close endpoint being buffered instead of rejected.
 
-`POST {apiPrefix}/agents/:agentId/browser/close` is registered directly on the Hono app, outside the per-route `bodyLimit` the adapter applies to registered API routes, and it reads `await c.req.json()`. An authenticated caller could therefore make the server buffer an arbitrarily large JSON payload. The body only carries `{ threadId }`, so it is now capped at 4 KiB and answers `413` before parsing — the same limit the upgrade-ticket route gained for the same reason.
+`POST {apiPrefix}/agents/:agentId/browser/close` now rejects request bodies larger than 4 KiB with `413` before parsing them, so an authenticated caller can no longer make the server buffer an arbitrarily large payload. The body only carries a thread id, so supported callers are unaffected.
