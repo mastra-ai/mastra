@@ -58,12 +58,13 @@ function setup({
     created,
     controller,
     sessions,
-    deliver: () =>
+    deliver: (options: { onlyIfLive?: boolean } = {}) =>
       deliverFactorySessionNotification({
         controller: controller as unknown as FactoryDeliveryController,
         sessions,
         target: { sessionId: 'session-b', threadId: 'thread-stored' },
         notification: MESSAGE,
+        ...options,
       }),
   };
 }
@@ -131,6 +132,14 @@ describe('deliverFactorySessionNotification', () => {
   it('skips an offline target with no Factory session row without creating or sending', async () => {
     const { controller, agent, deliver } = setup({ offline: true, row: null });
     await expect(deliver()).resolves.toEqual({ delivered: 'skipped', reason: 'session-not-found' });
+    expect(controller.createSession).not.toHaveBeenCalled();
+    expect(agent.sendNotificationSignal).not.toHaveBeenCalled();
+  });
+
+  it('with onlyIfLive, skips an offline target without creating or sending', async () => {
+    const { controller, sessions, agent, deliver } = setup({ offline: true });
+    await expect(deliver({ onlyIfLive: true })).resolves.toEqual({ delivered: 'skipped', reason: 'offline' });
+    expect(sessions.getBySessionId).not.toHaveBeenCalled();
     expect(controller.createSession).not.toHaveBeenCalled();
     expect(agent.sendNotificationSignal).not.toHaveBeenCalled();
   });

@@ -20,6 +20,7 @@ import {
 } from './deliver.js';
 import type { FactoryDeliveryController, FactoryDeliveryResult } from './deliver.js';
 import { workItemNumber } from './read-tools.js';
+import { reportNotification, workItemReportAttributes, workItemReportRecipients } from './reports.js';
 import type { FactoryToolScope } from './scope.js';
 
 /** Messages plus replies, per sender session, per target thread, per window. */
@@ -35,10 +36,14 @@ export interface FactoryMessaging {
 }
 
 export interface FactoryMessagingToolDependencies {
-  sessions: Pick<SourceControlSessionLookup, 'getBySessionId'>;
+  sessions: Pick<SourceControlSessionLookup, 'getBySessionId' | 'listByOrigin'>;
   workItems: Pick<
     WorkItemsStorage,
-    'findActiveRunBindingForSession' | 'getForProject' | 'listSessionSubscriptions' | 'listRunBindings'
+    | 'findActiveRunBindingForSession'
+    | 'getForProject'
+    | 'listSessionSubscriptions'
+    | 'listRunBindings'
+    | 'listWorkItemSubscribers'
   >;
   auditRecorder: AuditRecorder;
   /** The live controller and notifications store; resolved per call because they exist only once the mount is up. */
@@ -93,13 +98,15 @@ export function createFactoryMessagingTools(
     if (row.visibility === 'private' && row.userId !== scope.userId) return 'private';
     return null;
   };
-  /** Messages and replies this session put on a thread inside the rate window. */
+  /** Messages, replies and reports (not progress) this session put on a thread inside the rate window. */
   const overRateLimit = (records: NotificationRecord[]) => {
     const since = Date.now() - SIGNAL_RATE_WINDOW_MS;
     return (
       records.filter(
         record =>
-          (record.kind === 'message' || record.kind === 'reply') &&
+          // Everything this session sends counts except coalescing progress updates.
+          record.kind !== 'progress' &&
+          record.kind !== 'stage' &&
           record.attributes?.['from-session'] === scope.sessionId &&
           record.createdAt.getTime() >= since,
       ).length >= SIGNAL_RATE_LIMIT
@@ -115,12 +122,14 @@ export function createFactoryMessagingTools(
     const bindings = await Promise.all(
       follows.map(follow => deps.workItems.listRunBindings(scope.orgId, scope.factoryProjectId, follow.workItemId)),
     );
-    return new Set(
-      bindings
+    const sideSessions = await deps.sessions.listByOrigin({ orgId: scope.orgId, originSessionId: scope.sessionId });
+    return new Set([
+      ...bindings
         .flat()
         .filter(binding => binding.status === 'active')
         .map(binding => binding.sessionId),
-    );
+      ...sideSessions.map(session => session.sessionId),
+    ]);
   };
 
   const workItemAttribute = async (sessionId: string, orgId: string, factoryProjectId: string) => {
@@ -140,7 +149,7 @@ export function createFactoryMessagingTools(
       'Priority `medium` (default) wakes an idle session and waits for a busy one to finish its step; use `urgent` only to make it stop and change course.',
       ...(scope.interactive
         ? []
-        : ['On this turn you can only message sessions working on items this session follows.']),
+        : ['On this turn you can only message your side sessions and sessions working on items this session follows.']),
     ].join(' '),
     inputSchema: z
       .object({
@@ -157,7 +166,7 @@ export function createFactoryMessagingTools(
       if (blocked === 'private') throw new Error(`Session ${sessionId} is private to its owner.`);
       if (!scope.interactive && !(await followedWorkers()).has(sessionId)) {
         throw new Error(
-          `On this turn you can only message sessions working on items this session follows; ${sessionId} isn't one.`,
+          `On this turn you can only message this session's side sessions and sessions working on items it follows; ${sessionId} isn't one.`,
         );
       }
 
@@ -198,8 +207,12 @@ export function createFactoryMessagingTools(
 
   const reply = createTool({
     id: 'factory_message_origin',
-    description:
-      'Answer a message another Factory session sent you. Pass `inReplyTo` with the id of that `factory-session` notification (kind `message`); the answer goes back to the session and thread that sent it. Each message can be answered once.',
+    description: [
+      'Answer a message another Factory session sent you, or report on your work.',
+      'With `inReplyTo` (the id of a `factory-session` notification of kind `message`) the answer goes back to the session and thread that sent it; each message can be answered once.',
+      'Without it, the report goes to whoever follows your work: the session that started you, or everyone following your work item.',
+      "Set `status`: `progress` for an update, `blocked` when you need an answer to go on, `done` when finished, `failed` when you can't finish. Send one `done` or `failed` when you finish.",
+    ].join(' '),
     inputSchema: z
       .object({
         message: message.describe('Your answer.'),
@@ -214,7 +227,7 @@ export function createFactoryMessagingTools(
       })
       .strict(),
     execute: async ({ message: text, inReplyTo, status }) => {
-      if (!inReplyTo) throw new Error('Pass inReplyTo with the id of the message you are answering.');
+      if (!inReplyTo) return report(text, status);
       const messaging = await requireMessaging();
       // Only a message that reached this session's own thread can be answered,
       // and the answer goes where that message came from: never to an address
@@ -275,6 +288,63 @@ export function createFactoryMessagingTools(
       return { notificationId: result.notificationId, delivered: result.delivered };
     },
   });
+
+  /** A report with no message to answer: to the origin, else to the item's followers. */
+  async function report(text: string, status: 'progress' | 'blocked' | 'done' | 'failed' | undefined) {
+    const sender = { sessionId: scope.sessionId, threadId: scope.threadId, userId: scope.userId };
+    let recipients: Array<{ sessionId: string; threadId: string }>;
+    let attributes: Record<string, string> = {};
+    if (scope.origin) {
+      recipients = [scope.origin];
+    } else {
+      const binding = await deps.workItems.findActiveRunBindingForSession({
+        orgId: scope.orgId,
+        factoryProjectId: scope.factoryProjectId,
+        sessionId: scope.sessionId,
+      });
+      if (!binding) throw new Error('Nothing started this session; pass inReplyTo to answer a message.');
+      recipients = await workItemReportRecipients(deps.workItems, {
+        orgId: scope.orgId,
+        workItemId: binding.workItemId,
+        senderSessionId: scope.sessionId,
+      });
+      ({ attributes } = await workItemReportAttributes(deps.workItems, {
+        orgId: scope.orgId,
+        factoryProjectId: scope.factoryProjectId,
+        workItemId: binding.workItemId,
+        role: binding.role,
+      }));
+    }
+    if (recipients.length === 0) return { delivered: 0, recipients: [] };
+
+    const messaging = await requireMessaging();
+    const notification = reportNotification({ sender, status, message: text, attributes });
+    const results: Array<{ sessionId: string; delivered: FactoryDeliveryResult['delivered']; reason?: string }> = [];
+    for (const recipient of recipients) {
+      // Progress replaces itself while unread; anything else can wake a follower, so it counts.
+      if (status !== 'progress' && overRateLimit(await recent(messaging.notifications, recipient.threadId))) {
+        results.push({ sessionId: recipient.sessionId, delivered: 'skipped', reason: 'rate-limited' });
+        continue;
+      }
+      const result = await deliverFactorySessionNotification({
+        controller: messaging.controller,
+        sessions: deps.sessions,
+        target: recipient,
+        notification,
+      });
+      results.push({ sessionId: recipient.sessionId, delivered: result.delivered });
+      if (result.delivered === 'skipped') continue;
+      await audit({
+        targetSessionId: recipient.sessionId,
+        priority: notification.priority ?? 'high',
+        kind: notification.kind,
+        delivery: result.delivered,
+      });
+    }
+    const delivered = results.filter(result => result.delivered !== 'skipped').length;
+    if (delivered === 0 && results.every(result => result.reason === 'rate-limited')) throw new Error(RATE_LIMITED);
+    return { delivered, recipients: results };
+  }
 
   if (scope.kind === 'worker') return { factory_message_origin: reply };
   return { factory_signal_session: signal, factory_message_origin: reply };
