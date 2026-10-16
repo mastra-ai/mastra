@@ -145,7 +145,7 @@ When you spot a spike in latency or token usage on the Metrics dashboard, correl
 
 ### Token metrics are missing
 
-- **Span is a model generation**: Token metrics are only emitted from `MODEL_GENERATION` spans.
+- **Span is a model generation or classifier evaluation**: Token metrics are only emitted from `MODEL_GENERATION` and `CLASSIFIER_EVALUATION` spans.
 - **Provider reports usage**: The model provider must include `usage` data in its response. Usage data is required to emit token metrics.
 
 ## Related
