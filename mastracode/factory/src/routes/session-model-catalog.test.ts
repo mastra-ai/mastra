@@ -122,7 +122,7 @@ describe('session-owner model catalog', () => {
     async scope => {
       const { app } = await setup(scope);
       const response = await app.request(
-        '/web/config/models?resourceId=session-1&threadId=chat-thread&scope=user&userId=viewer',
+        '/web/config/models?resourceId=session-1&threadId=chat-thread&scope=org&userId=viewer',
       );
       expect(response.status).toBe(200);
       const body = await response.json();

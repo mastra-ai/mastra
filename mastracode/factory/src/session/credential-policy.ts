@@ -9,7 +9,6 @@ import { UUID_PATTERN } from '../routes/contracts.js';
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { parseSupervisorResourceId } from '../supervisor/session.js';
 import type { SourceControlSessionLookup } from './factory-session.js';
 
 const FACTORY_PROJECT_ID = new RegExp(UUID_PATTERN);
@@ -37,22 +36,6 @@ export async function resolveFactoryModelPolicy(
   if (!principal) return undefined;
   const controller = requestContext.get('controller') as AgentControllerRequestContext | undefined;
   if (!controller?.resourceId) return { tenant: principal };
-
-  const supervisorProjectId = parseSupervisorResourceId(controller.resourceId);
-  if (supervisorProjectId) {
-    const project = await deps.projects.getById({ id: supervisorProjectId });
-    if (!project || project.orgId !== principal.orgId) throw new Error('Factory model policy is unavailable.');
-    // Supervisor turns are Factory-owned automation, so a hybrid Factory bills them as runs.
-    return {
-      factoryProjectId: project.id,
-      factoryDefaultModelId: project.defaultModelId,
-      tenant: {
-        orgId: project.orgId,
-        userId: project.createdBy,
-        credentialScope: effectiveModelScope(project.modelScope, 'run'),
-      },
-    };
-  }
 
   const sourceSession = await deps.sourceControl.getBySessionId(controller.resourceId);
   const binding =

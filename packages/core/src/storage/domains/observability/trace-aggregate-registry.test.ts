@@ -4,6 +4,7 @@ import {
   getTraceAggregateDimensionDescriptors,
   getTraceAggregateDimensionRule,
   getTraceAggregateMeasureDescriptors,
+  getTraceQueryFieldsResponseSchema,
   isTraceAggregateCanonicalDimension,
   isTraceAggregateCanonicalMeasure,
   isTraceAggregateCountDistinctField,
@@ -21,6 +22,7 @@ import {
   TRACE_AGGREGATE_USAGE_METRIC_NAMES,
   TRACE_QUERY_FIELD_REGISTRY,
   TRACE_QUERY_MAX_PATH_BYTES,
+  traceAggregateDiscoverySchema,
 } from '../../index';
 
 const TRACE_DIMENSIONS = [
@@ -309,5 +311,21 @@ describe('trace aggregate measure registry', () => {
       unit: 'currency',
       approximate: false,
     });
+  });
+
+  it('produces descriptors the fields discovery response accepts', () => {
+    const aggregate = {
+      dimensions: getTraceAggregateDimensionDescriptors(),
+      measures: getTraceAggregateMeasureDescriptors(),
+    };
+    expect(traceAggregateDiscoverySchema.parse(aggregate)).toEqual(aggregate);
+    expect(
+      getTraceQueryFieldsResponseSchema.safeParse({
+        canonicalFields: [],
+        observedFields: [],
+        observedFieldsTruncated: false,
+        aggregate,
+      }).success,
+    ).toBe(true);
   });
 });
