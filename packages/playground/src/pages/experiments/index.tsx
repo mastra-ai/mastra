@@ -143,6 +143,7 @@ export default function Experiments() {
   }, [experiments, selectedExperimentIds]);
   // The first pick is the baseline, so its dataset decides which experiments can join the comparison.
   const comparableDatasetId = experiments.find(exp => exp.id === selectedIds[0])?.datasetId ?? undefined;
+  const comparableDatasetName = namedDatasets.find(dataset => dataset.id === comparableDatasetId)?.name;
   const compareDisabledReason =
     selectedIds.length < 2
       ? 'Select at least two experiments to compare'
@@ -244,6 +245,7 @@ export default function Experiments() {
             compareDisabledReason,
           }}
           comparableDatasetId={comparableDatasetId}
+          comparableDatasetName={comparableDatasetName}
         />
       }
     >
