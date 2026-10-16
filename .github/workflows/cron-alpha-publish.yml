@@ -13,7 +13,19 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Alphas publish straight from main with no release PR, so they get the same full suite
+  # the release PR runs. Prebuild is reused rather than duplicated here.
+  test:
+    name: Full test suite
+    if: ${{ github.repository == 'mastra-ai/mastra' && github.ref == 'refs/heads/main' }}
+    uses: ./.github/workflows/prebuild.yml
+    permissions:
+      actions: read
+      contents: read
+    secrets: inherit
+
   alpha-version:
+    needs: test
     if: ${{ github.repository == 'mastra-ai/mastra' && github.ref == 'refs/heads/main' }}
     runs-on: starsling-ubuntu-26.04
     steps:
