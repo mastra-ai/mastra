@@ -10,18 +10,24 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { itemScorers } from '../../__tests__/fixtures/item-scorers';
 import { DatasetItemPanel } from '../dataset-item-panel';
-import { baseItem, itemWithEmptyScorers, itemWithMocks, itemWithScorers } from './fixtures/dataset-item-panel';
+import {
+  baseItem,
+  itemWithEmptyScorers,
+  itemWithMocks,
+  itemWithScorers,
+  itemWithUuid,
+} from './fixtures/dataset-item-panel';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 
-// The panel's history button renders through the framework Link (null by default).
+// Panel children render links through the framework Link (null by default).
 const StubLink = ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
   <a {...props}>{children}</a>
 );
 const scorerControlTestTimeout = 15_000;
 
-const renderPanel = (item: DatasetItem) => {
+const renderPanel = (item: DatasetItem, navigate: (path: string) => void = () => {}) => {
   // The panel embeds CompareWithList, which fetches the dataset's items.
   server.use(
     http.get(`${BASE_URL}/api/datasets/ds-1/items`, () =>
@@ -34,7 +40,7 @@ const renderPanel = (item: DatasetItem) => {
   return render(
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
-        <LinkComponentProvider Link={StubLink as never} navigate={() => {}} paths={{} as never}>
+        <LinkComponentProvider Link={StubLink as never} navigate={navigate} paths={{} as never}>
           <MemoryRouter>
             <DatasetItemPanel datasetId="ds-1" item={item} items={[item]} onItemChange={() => {}} onClose={() => {}} />
           </MemoryRouter>
@@ -77,25 +83,40 @@ describe('DatasetItemPanel', () => {
       expect(screen.getByText(/getWeather/)).not.toBeNull();
     });
 
-    it('links to the versions history with the item version pre-selected', () => {
+    it('keeps the versions history out of the header', () => {
       renderPanel(baseItem);
 
-      const link = screen.getByRole('link', { name: 'Go to item versions history' });
-      expect(link.getAttribute('href')).toBe(`/datasets/ds-1/items/${baseItem.id}/versions?version=1`);
+      expect(screen.queryByRole('link', { name: 'Go to item versions history' })).toBeNull();
     });
 
-    it('shows that absent scorer IDs inherit from the dataset', () => {
+    it('opens the versions history from the actions menu, with the item version pre-selected', async () => {
+      const navigate = vi.fn();
+      renderPanel(baseItem, navigate);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Open actions menu' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Item versions' }));
+
+      expect(navigate).toHaveBeenCalledWith(`/datasets/ds-1/items/${baseItem.id}/versions?version=1`);
+    });
+
+    it('leaves out the scorers section', () => {
+      renderPanel(itemWithScorers);
+
+      expect(screen.queryByText('Scorers')).toBeNull();
+    });
+
+    it('titles the panel like experiment results, without the id', () => {
+      renderPanel(itemWithUuid);
+
+      expect(screen.getByText('Dataset item')).not.toBeNull();
+      expect(screen.queryByRole('button', { name: /^0bbd9730-e38/ })).toBeNull();
+    });
+
+    it('leaves out the dataset id and version rows', () => {
       renderPanel(baseItem);
 
-      expect(screen.getByText('Scorers')).not.toBeNull();
-      expect(screen.getByText('Inherited from dataset')).not.toBeNull();
-    });
-
-    it('distinguishes an explicit empty scorer override from inheritance', () => {
-      renderPanel(itemWithEmptyScorers);
-
-      expect(screen.getByText('Scorers')).not.toBeNull();
-      expect(screen.queryByText('Inherited from dataset')).toBeNull();
+      expect(screen.queryByText('Dataset Id')).toBeNull();
+      expect(screen.queryByText('Version')).toBeNull();
     });
   });
 

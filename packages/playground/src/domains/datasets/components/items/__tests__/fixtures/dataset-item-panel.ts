@@ -23,3 +23,19 @@ export const itemWithEmptyScorers: DatasetItem = {
   ...baseItem,
   scorerIds: [],
 };
+
+export const itemWithTextPayload: DatasetItem = {
+  ...baseItem,
+  input: 'What is the weather in Seattle?',
+  groundTruth: 'It is rainy.',
+};
+
+export const itemWithPreviousTextInput: DatasetItem = {
+  ...baseItem,
+  input: 'What was the weather in Seattle?',
+};
+
+export const itemWithUuid: DatasetItem = {
+  ...baseItem,
+  id: '0bbd9730-e38f-43d8-bc35-67cf97c0c971',
+};

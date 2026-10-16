@@ -77,10 +77,7 @@ export function DatasetItemPanel({
   ) : itemId ? (
     <>
       <DataPanel.Header>
-        <DataPanel.Heading>
-          Item
-          <DataPanel.CopyId id={itemId} />
-        </DataPanel.Heading>
+        <DataPanel.Heading>Dataset item</DataPanel.Heading>
         <DataPanel.HeaderActions>
           <DataPanel.CloseButton icon="x" onClick={onClose} tooltip="Close detail panel" />
         </DataPanel.HeaderActions>
@@ -110,7 +107,7 @@ type DatasetItemPanelBodyProps = Omit<DatasetItemPanelProps, 'item' | 'itemId' |
 };
 
 function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }: DatasetItemPanelBodyProps) {
-  const { Link } = useLinkComponent();
+  const { navigate } = useLinkComponent();
   const { updateItem, deleteItem } = useDatasetMutations();
 
   // Edit mode state
@@ -307,44 +304,34 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
   return (
     <>
       <DataPanel.Header>
-        <DataPanel.Heading>
-          Item
-          <DataPanel.CopyId id={item.id} />
-        </DataPanel.Heading>
+        <DataPanel.Heading>Dataset item</DataPanel.Heading>
         <DataPanel.HeaderActions>
           {!isEditing && (
-            <>
-              <Button
-                render={
-                  <Link href={`/datasets/${datasetId}/items/${item.id}/versions?version=${item.datasetVersion}`} />
-                }
-
-                size="sm"
-                variant="ghost"
-                tooltip="Go to item versions history"
-                aria-label="Go to item versions history"
-              >
-                <History />
-              </Button>
-
-              <DropdownMenu>
-                <DropdownMenu.Trigger asChild>
-                  <Button size="sm" variant="ghost" tooltip="Open actions menu" aria-label="Open actions menu">
-                    <EllipsisVerticalIcon />
-                  </Button>
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Content align="end" className="w-48">
-                  <DropdownMenu.Item onSelect={() => setIsEditing(true)}>
-                    <Pencil />
-                    Edit
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item onSelect={() => setShowDeleteConfirm(true)} variant="destructive">
-                    <Trash2 />
-                    Delete Item
-                  </DropdownMenu.Item>
-                </DropdownMenu.Content>
-              </DropdownMenu>
-            </>
+            <DropdownMenu>
+              <DropdownMenu.Trigger asChild>
+                <Button size="sm" variant="ghost" tooltip="Open actions menu" aria-label="Open actions menu">
+                  <EllipsisVerticalIcon />
+                </Button>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Content align="end" className="w-48">
+                <DropdownMenu.Item
+                  onSelect={() =>
+                    navigate(`/datasets/${datasetId}/items/${item.id}/versions?version=${item.datasetVersion}`)
+                  }
+                >
+                  <History />
+                  Item versions
+                </DropdownMenu.Item>
+                <DropdownMenu.Item onSelect={() => setIsEditing(true)}>
+                  <Pencil />
+                  Edit
+                </DropdownMenu.Item>
+                <DropdownMenu.Item onSelect={() => setShowDeleteConfirm(true)} variant="destructive">
+                  <Trash2 />
+                  Delete Item
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu>
           )}
           <DataPanel.NextPrevNav
             onPrevious={onPrevious}

@@ -1,59 +1,103 @@
 'use client';
 
 import type { DatasetItem } from '@mastra/client-js';
-import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import { getShortId } from '@mastra/playground-ui/utils/id';
+import { CalendarClockIcon, CalendarIcon, FingerprintIcon } from 'lucide-react';
 
 import { datasetItemSections } from './dataset-item-sections';
+import { ComparisonMetricList } from '@/domains/experiments/components/comparison/comparison-metric-list';
+import type { ComparisonMetric } from '@/domains/experiments/components/comparison/comparison-metric-list';
+import { ComparisonPayload } from '@/domains/experiments/components/comparison/comparison-payload';
+import { ComparisonSection, sectionStackClass } from '@/domains/experiments/components/comparison/comparison-section';
 
 export interface DatasetItemDetailsProps {
   item: DatasetItem;
   /** When set, each code section highlights the lines that differ from the same field on `against`. */
   diff?: { against: DatasetItem; side: 'a' | 'b' };
+  /** Shows the scorer override section; the version compare view needs it so scorer changes stay visible in the diff. */
+  showScorers?: boolean;
 }
 
 /**
  * Read-only details of a dataset item: metadata key/values plus code sections.
  * Shared by the item side panel and the version/item compare views.
  */
-export function DatasetItemDetails({ item, diff }: DatasetItemDetailsProps) {
+export function DatasetItemDetails({ item, diff, showScorers = false }: DatasetItemDetailsProps) {
   return (
-    <>
-      <DataKeysAndValues>
-        <DataKeysAndValues.Key>Dataset Id</DataKeysAndValues.Key>
-        <DataKeysAndValues.ValueWithCopyBtn copyTooltip="Copy Dataset Id to clipboard" copyValue={item.datasetId}>
-          {item.datasetId}
-        </DataKeysAndValues.ValueWithCopyBtn>
-        <DataKeysAndValues.Key>Version</DataKeysAndValues.Key>
-        <DataKeysAndValues.Value>v{item.datasetVersion}</DataKeysAndValues.Value>
-        <DataKeysAndValues.Key>Created</DataKeysAndValues.Key>
-        <DataKeysAndValues.Value>{formatDate(item.createdAt, 'date-time')}</DataKeysAndValues.Value>
-        <DataKeysAndValues.Key>Updated</DataKeysAndValues.Key>
-        <DataKeysAndValues.Value>
-          {item.updatedAt && new Date(item.updatedAt).getTime() !== new Date(item.createdAt).getTime()
-            ? formatDate(item.updatedAt, 'date-time')
-            : 'n/a'}
-        </DataKeysAndValues.Value>
-      </DataKeysAndValues>
+    <div className={sectionStackClass}>
+      <ComparisonMetricList metrics={metadataMetrics(item)} />
 
-      <div className="mt-3 grid gap-3">
-        {datasetItemSections.map(section => {
-          const codeStr = section.value(item);
-          const againstStr = diff ? section.value(diff.against) : undefined;
-          // In diff mode keep a section that only exists on the other side so the addition/removal stays visible.
-          if (codeStr === undefined && againstStr === undefined) return null;
+      {datasetItemSections.map(section => {
+        if (section.key === 'scorerIds' && !showScorers) return null;
+        // Outside diffs, payloads read like experiment results; diffs keep the code view for line highlighting.
+        if (section.payload && !diff) {
+          const payload = section.payload(item);
+          if (payload == null) return null;
           return (
-            <DataPanel.CodeSection
+            <ComparisonSection
               key={section.key}
               title={section.title}
-              icon={section.icon}
-              codeStr={codeStr ?? ''}
-              diff={diff ? { against: againstStr ?? '', side: diff.side } : undefined}
-            />
+              framed
+              actions={
+                <CopyButton content={typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2)} />
+              }
+            >
+              <ComparisonPayload value={payload} />
+            </ComparisonSection>
           );
-        })}
-      </div>
-    </>
+        }
+        const codeStr = section.value(item);
+        const againstStr = diff ? section.value(diff.against) : undefined;
+        // In diff mode keep a section that only exists on the other side so the addition/removal stays visible.
+        if (codeStr === undefined && againstStr === undefined) return null;
+        return (
+          <DataPanel.CodeSection
+            key={section.key}
+            title={section.title}
+            icon={section.icon}
+            codeStr={codeStr ?? ''}
+            diff={diff ? { against: againstStr ?? '', side: diff.side } : undefined}
+          />
+        );
+      })}
+    </div>
   );
+}
+
+/** Item id and timestamps, laid out like the experiment result metadata. */
+function metadataMetrics(item: DatasetItem): ComparisonMetric[] {
+  const wasUpdated = item.updatedAt && new Date(item.updatedAt).getTime() !== new Date(item.createdAt).getTime();
+  return [
+    {
+      id: 'item-id',
+      icon: <FingerprintIcon />,
+      label: 'Item Id',
+      value: (
+        <span className="flex items-center gap-1.5">
+          <span className="font-mono" title={item.id}>
+            {getShortId(item.id)}
+          </span>
+          <CopyButton content={item.id} tooltip="Copy Item Id to clipboard" variant="link" />
+        </span>
+      ),
+      delta: null,
+    },
+    {
+      id: 'created',
+      icon: <CalendarIcon />,
+      label: 'Created',
+      value: formatDate(item.createdAt, 'date-time'),
+      delta: null,
+    },
+    {
+      id: 'updated',
+      icon: <CalendarClockIcon />,
+      label: 'Updated',
+      value: wasUpdated ? formatDate(item.updatedAt, 'date-time') : 'n/a',
+      delta: null,
+    },
+  ];
 }
