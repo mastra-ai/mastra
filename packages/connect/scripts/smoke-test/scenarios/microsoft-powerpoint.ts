@@ -11,6 +11,12 @@ const ESSENTIAL_TOOLS = [
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+function isAccountCapabilityError(error: unknown): boolean {
+  return /personal|msa account|tenant-directory|work or school|sharepoint operations require/i.test(
+    errorMessage(error),
+  );
+}
+
 /**
  * Full Microsoft PowerPoint lifecycle against a disposable presentation in
  * an accessible tenant drive. The tiny PPTX fixture is the same valid OOXML
@@ -27,20 +33,26 @@ export const microsoftPowerpointScenario: Scenario = {
       return steps;
     }
 
+    let userDriveId: string | undefined;
+    if (!tools['microsoft_powerpoint_get_user_drive']) {
+      steps.push(
+        makeStep('get user drive', 'microsoft_powerpoint_get_user_drive', 'skip', 'tool not in project toolset'),
+      );
+    } else {
+      try {
+        const drive = await call<{ id: string }>('microsoft_powerpoint_get_user_drive', {});
+        userDriveId = drive.id;
+        steps.push(
+          makeStep('get user drive', 'microsoft_powerpoint_get_user_drive', 'pass', `connected user: ${drive.id}`),
+        );
+      } catch (error) {
+        steps.push(makeStep('get user drive', 'microsoft_powerpoint_get_user_drive', 'fail', errorMessage(error)));
+      }
+    }
+
     let siteDriveId: string | undefined;
     if (!tools['microsoft_powerpoint_list_sites']) {
       steps.push(makeStep('list sites', 'microsoft_powerpoint_list_sites', 'skip', 'tool not in project toolset'));
-      if (!tools['microsoft_powerpoint_get_site_drive']) {
-        steps.push(
-          makeStep('get site drive', 'microsoft_powerpoint_get_site_drive', 'skip', 'tool not in project toolset'),
-        );
-      } else {
-        steps.push(
-          await probeTool(call, tools, 'get site drive (probe)', 'microsoft_powerpoint_get_site_drive', {
-            siteId: 'mastra-smoke.invalid,00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000',
-          }),
-        );
-      }
     } else {
       try {
         const result = await call<{ sites: Array<{ id: string; displayName?: string }> }>(
@@ -64,106 +76,87 @@ export const microsoftPowerpointScenario: Scenario = {
           } catch (error) {
             steps.push(makeStep('get site drive', 'microsoft_powerpoint_get_site_drive', 'fail', errorMessage(error)));
           }
-        } else if (!tools['microsoft_powerpoint_get_site_drive']) {
-          steps.push(
-            makeStep('get site drive', 'microsoft_powerpoint_get_site_drive', 'skip', 'tool not in project toolset'),
-          );
-        } else {
-          steps.push(
-            await probeTool(call, tools, 'get site drive (probe)', 'microsoft_powerpoint_get_site_drive', {
-              siteId: 'mastra-smoke.invalid,00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000',
-            }),
-          );
         }
       } catch (error) {
-        steps.push(makeStep('list sites', 'microsoft_powerpoint_list_sites', 'fail', errorMessage(error)));
         steps.push(
-          await probeTool(call, tools, 'get site drive (probe)', 'microsoft_powerpoint_get_site_drive', {
-            siteId: 'mastra-smoke.invalid,00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000',
-          }),
+          makeStep(
+            'list sites',
+            'microsoft_powerpoint_list_sites',
+            isAccountCapabilityError(error) ? 'skip' : 'fail',
+            errorMessage(error),
+          ),
         );
       }
     }
+    if (!siteDriveId) {
+      steps.push(
+        await probeTool(
+          call,
+          tools,
+          'get site drive (probe)',
+          'microsoft_powerpoint_get_site_drive',
+          {
+            siteId: 'mastra-smoke.invalid,00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000',
+          },
+          /status=(400|403|404)|personal|msa account|work or school|sharepoint/i,
+        ),
+      );
+    }
 
-    let userDriveId: string | undefined;
+    let users: Array<{ id: string; displayName?: string }> = [];
     if (!tools['microsoft_powerpoint_list_users']) {
       steps.push(makeStep('list users', 'microsoft_powerpoint_list_users', 'skip', 'tool not in project toolset'));
-      if (!tools['microsoft_powerpoint_get_user_drive']) {
-        steps.push(
-          makeStep('get user drive', 'microsoft_powerpoint_get_user_drive', 'skip', 'tool not in project toolset'),
-        );
-      } else {
-        steps.push(
-          await probeTool(call, tools, 'get user drive (probe)', 'microsoft_powerpoint_get_user_drive', {
-            userId: '00000000-0000-0000-0000-000000000000',
-          }),
-        );
-      }
     } else {
       try {
-        const result = await call<{ users: Array<{ id: string; displayName?: string }> }>(
-          'microsoft_powerpoint_list_users',
-          { top: 25 },
-        );
-        steps.push(
-          makeStep('list users', 'microsoft_powerpoint_list_users', 'pass', `${result.users.length} returned`),
-        );
-
-        if (!tools['microsoft_powerpoint_get_user_drive']) {
-          steps.push(
-            makeStep('get user drive', 'microsoft_powerpoint_get_user_drive', 'skip', 'tool not in project toolset'),
-          );
-        } else {
-          let lastError: unknown;
-          for (const user of result.users) {
-            try {
-              const drive = await call<{ id: string }>('microsoft_powerpoint_get_user_drive', { userId: user.id });
-              userDriveId = drive.id;
-              steps.push(
-                makeStep(
-                  'get user drive',
-                  'microsoft_powerpoint_get_user_drive',
-                  'pass',
-                  `${user.displayName ?? user.id}: ${drive.id}`,
-                ),
-              );
-              break;
-            } catch (error) {
-              lastError = error;
-            }
-          }
-          if (!userDriveId) {
-            if (result.users.length === 0) {
-              steps.push(
-                await probeTool(call, tools, 'get user drive (probe)', 'microsoft_powerpoint_get_user_drive', {
-                  userId: '00000000-0000-0000-0000-000000000000',
-                }),
-              );
-            } else {
-              steps.push(
-                makeStep(
-                  'get user drive',
-                  'microsoft_powerpoint_get_user_drive',
-                  'fail',
-                  `no listed user exposed a drive: ${errorMessage(lastError)}`,
-                ),
-              );
-            }
-          }
-        }
+        const result = await call<{ users: typeof users }>('microsoft_powerpoint_list_users', { top: 25 });
+        users = result.users;
+        steps.push(makeStep('list users', 'microsoft_powerpoint_list_users', 'pass', `${users.length} returned`));
       } catch (error) {
-        steps.push(makeStep('list users', 'microsoft_powerpoint_list_users', 'fail', errorMessage(error)));
         steps.push(
-          await probeTool(call, tools, 'get user drive (probe)', 'microsoft_powerpoint_get_user_drive', {
-            userId: '00000000-0000-0000-0000-000000000000',
-          }),
+          makeStep(
+            'list users',
+            'microsoft_powerpoint_list_users',
+            isAccountCapabilityError(error) ? 'skip' : 'fail',
+            errorMessage(error),
+          ),
         );
       }
     }
 
-    const driveId = siteDriveId ?? userDriveId;
+    if (!userDriveId && tools['microsoft_powerpoint_get_user_drive']) {
+      let lastError: unknown;
+      for (const user of users) {
+        try {
+          const drive = await call<{ id: string }>('microsoft_powerpoint_get_user_drive', { userId: user.id });
+          userDriveId = drive.id;
+          steps.push(
+            makeStep(
+              'get listed user drive',
+              'microsoft_powerpoint_get_user_drive',
+              'pass',
+              `${user.displayName ?? user.id}: ${drive.id}`,
+            ),
+          );
+          break;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      if (!userDriveId && users.length > 0) {
+        steps.push(
+          makeStep(
+            'get listed user drive',
+            'microsoft_powerpoint_get_user_drive',
+            'fail',
+            `no listed user exposed a drive: ${errorMessage(lastError)}`,
+          ),
+        );
+      }
+    }
+
+    const driveId = userDriveId ?? siteDriveId;
     if (!driveId) {
-      steps.push(makeStep('select writable drive', undefined, 'skip', 'no accessible SharePoint or OneDrive drive'));
+      steps.push(makeStep('select writable drive', undefined, 'skip', 'no accessible OneDrive or SharePoint drive'));
       return steps;
     }
 
