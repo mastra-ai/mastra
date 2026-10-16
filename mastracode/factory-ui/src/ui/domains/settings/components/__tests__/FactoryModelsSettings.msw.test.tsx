@@ -20,7 +20,10 @@ describe('FactoryModelsSettings', () => {
     renderWithProviders(
       <MemoryRouter initialEntries={['/factories/fp-1/settings/models']}>
         <Routes>
-          <Route path="/factories/:factoryId/settings/models" element={<FactoryModelsSettings models={[]} />} />
+          <Route
+            path="/factories/:factoryId/settings/models"
+            element={<FactoryModelsSettings models={[]} modelsLoaded />}
+          />
         </Routes>
       </MemoryRouter>,
     );
@@ -28,6 +31,6 @@ describe('FactoryModelsSettings', () => {
     await waitFor(() =>
       expect(screen.getByRole('combobox', { name: 'Model scope' })).toHaveTextContent('Factory model and credentials'),
     );
-    expect(screen.queryByRole('slider', { name: 'Thinking level' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Factory default model' })).not.toBeInTheDocument();
   });
 });
