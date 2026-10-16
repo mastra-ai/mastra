@@ -162,6 +162,47 @@ describe('webhook delivery end to end', () => {
     expect(deliveries()).toHaveLength(1);
   });
 
+  it('falls back to push when an unauthenticated connection is refused webhook delivery, unless webhook is forced', async () => {
+    const server = new MCPServer({
+      id: 'webhook-fallback',
+      name: 'Webhook fallback',
+      version: '1.0.0',
+      tools: {},
+      events: { 'ticket.created': defineEvent({ payloadSchema: z.object({ id: z.string() }) }) },
+      eventsOptions: { webhook: { url: { allowPrivate: true, allowInsecure: true } } },
+    });
+    const served: ServedHTTP = await serveHTTP(server);
+    cleanups.push(() => served.close());
+    const receiver = await serveReceiver(async () => new Response(null, { status: 500 }));
+    cleanups.push(() => receiver.close());
+    const mcp = new MCPClient({
+      id: 'webhook-fallback-client',
+      servers: { tickets: { url: served.url } },
+      webhook: { url: receiver.url },
+    });
+    cleanups.push(() => mcp.disconnect());
+
+    const sub = await mcp.events.subscribe('tickets', 'ticket.created');
+    expect(sub.mode).toBe('push');
+    const errors: unknown[] = [];
+    sub.onError(error => errors.push(error));
+    sub.onError(error => errors.push(error));
+    expect(errors).toEqual([
+      expect.objectContaining({
+        id: 'MCP_EVENTS_WEBHOOK_UNAVAILABLE',
+        details: expect.objectContaining({ code: -32024, fallback: 'push' }),
+      }),
+    ]);
+    const emitted = await server.events.emit('ticket.created', { id: 'T-1' });
+    expect(await nextEvent(sub)).toMatchObject({ eventId: emitted.eventId });
+    await sub.cancel();
+
+    await expect(
+      mcp.events.subscribe('tickets', 'ticket.created', undefined, { delivery: 'webhook' }),
+    ).rejects.toMatchObject({ cause: expect.objectContaining({ details: expect.objectContaining({ code: -32024 }) }) });
+    expect(receiver.requests).toEqual([]);
+  });
+
   it('handleWebhook answers 404 when the client has no webhook settings', async () => {
     const mcp = new MCPClient({ id: 'webhook-flow-unconfigured', servers: {} });
     cleanups.push(() => mcp.disconnect());
