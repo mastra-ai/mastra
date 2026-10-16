@@ -769,6 +769,8 @@ type InputShared_Type_19 = {
   tags?: string[] | undefined;
   /** Filter by one or more trace IDs */
   traceIds?: string[] | undefined;
+  /** Filter by one or more experiment IDs */
+  experimentIds?: string[] | undefined;
   /** Filter by metric name(s) */
   name?: string[] | undefined;
   /** Filter by execution source */
@@ -10944,6 +10946,7 @@ export type GetObservabilityMetrics_QueryParams = {
   executionSource?: (string | undefined) | undefined;
   tags?: ((string[] | undefined) | undefined) | string;
   traceIds?: ((string[] | undefined) | undefined) | string;
+  experimentIds?: ((string[] | undefined) | undefined) | string;
   name?: ((string[] | undefined) | undefined) | string;
   /** Filter by execution source */
   source?: (string | undefined) | undefined;
@@ -19578,6 +19581,8 @@ export type GetDatasets_QueryParams = {
   targetType?: ('agent' | 'workflow' | 'scorer' | 'processor') | undefined;
   /** Only return datasets attached to at least one of these target IDs */
   targetIds?: string[] | undefined;
+  /** Only return datasets with these IDs (up to 100). All matches come back on one page; page and perPage are ignored. A blank value matches no datasets. */
+  datasetIds?: string[] | undefined;
   orderBy?:
     | (
         | {
