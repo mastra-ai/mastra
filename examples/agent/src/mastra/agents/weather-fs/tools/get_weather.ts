@@ -37,5 +37,5 @@ export default createTool({
       temperatureCelsius: baseCelsius + Math.round(Math.random() * 4 - 2),
     };
   },
-  ui: { studioComponent: WeatherCard },
+  // ui: { studioComponent: WeatherCard },
 });
