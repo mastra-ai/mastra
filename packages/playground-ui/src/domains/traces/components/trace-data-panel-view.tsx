@@ -408,7 +408,8 @@ export function TraceDataPanelView({
       {traceId && (
         <>
           {headerSlot}
-          <DataPanel.Header>
+          {/* A size container, so header actions can collapse to icons when the panel is narrow. */}
+          <DataPanel.Header className="@container">
             {isOnTracePage ? (
               <>
                 <DataPanel.HeaderContent>
