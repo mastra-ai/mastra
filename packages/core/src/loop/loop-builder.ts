@@ -715,12 +715,11 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       }
     }
 
-    return this.workflowFactory()({
+    const workflow = this.workflowFactory()({
       id: AGENTIC_LOOP_WORKFLOW_ID,
       inputSchema: llmIterationOutputSchema,
       outputSchema: llmIterationOutputSchema,
       options: {
-        resumeTracingContext,
         tracingPolicy: {
           // mark all workflow spans related to the
           // VNext execution as internal
@@ -750,5 +749,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
     })
       .dowhile(this.buildIterationWorkflow(), this.buildContinuationPredicate())
       .commit();
+    workflow.__setResumeTracingContext(resumeTracingContext);
+    return workflow;
   }
 }

@@ -2553,8 +2553,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           result: currentState as any,
           requestContext: withoutAuthToken(requestContext),
         });
-        const suspendTracingContext =
-          workflow.options?.resumeTracingContext ?? this.resolveSuspendTracingContext(runId);
+        const suspendTracingContext = workflow.__getResumeTracingContext() ?? this.resolveSuspendTracingContext(runId);
         await workflowsStore?.updateWorkflowState({
           workflowName: workflowId,
           runId,
@@ -3041,7 +3040,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             });
 
             const suspendTracingContext =
-              workflow.options?.resumeTracingContext ?? this.resolveSuspendTracingContext(runId);
+              workflow.__getResumeTracingContext() ?? this.resolveSuspendTracingContext(runId);
             await workflowsStore?.updateWorkflowState({
               workflowName: workflowId,
               runId,
@@ -3286,8 +3285,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           requestContext: withoutAuthToken(requestContext),
         });
 
-        const suspendTracingContext =
-          workflow.options?.resumeTracingContext ?? this.resolveSuspendTracingContext(runId);
+        const suspendTracingContext = workflow.__getResumeTracingContext() ?? this.resolveSuspendTracingContext(runId);
         await workflowsStore?.updateWorkflowState({
           workflowName: workflowId,
           runId,

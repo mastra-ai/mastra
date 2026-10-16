@@ -532,13 +532,6 @@ export type ShouldPersistSnapshotFn = (params: {
 }) => boolean;
 
 export interface WorkflowOptions {
-  /**
-   * Explicit parent context to save when this workflow suspends. Does not change
-   * the live execution span. Without this, persistence uses the workflow span.
-   * @internal Supplied by run-scoped agent-loop workflows for agent resume linkage.
-   */
-  resumeTracingContext?: WorkflowStateTracingContext;
-
   tracingPolicy?: TracingPolicy;
   validateInputs?: boolean;
   /**

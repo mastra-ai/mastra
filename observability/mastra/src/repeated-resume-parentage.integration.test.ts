@@ -48,7 +48,8 @@ function twoApprovalsModel() {
   });
 }
 
-async function resumeParents(engine: 'normal' | 'durable', recreateAgent = false) {
+async function resumeParents(engine: 'normal' | 'durable', recreateAgent = false, overrideTrace = false) {
+  const replacementTraceId = '11111111111111111111111111111111';
   const exporter = new TestExporter();
   let executions = 0;
   const model = twoApprovalsModel();
@@ -93,7 +94,7 @@ async function resumeParents(engine: 'normal' | 'durable', recreateAgent = false
       const snapshot = await workflows!.loadWorkflowSnapshot({ workflowName: 'agentic-loop', runId });
       expect(snapshot?.tracingContext).toEqual({
         traceId: added[0]!.traceId,
-        spanId: invocationIds[0],
+        spanId: invocationIds[overrideTrace && count === 2 ? 1 : 0],
       });
     }
   }
@@ -110,7 +111,15 @@ async function resumeParents(engine: 'normal' | 'durable', recreateAgent = false
       }
       return durable
         ? durable.resumeGenerate(runId, { approved: true }, { toolCallId, maxSteps: 10 })
-        : agent.resumeGenerate({ approved: true }, { runId, toolCallId, maxSteps: 10 });
+        : agent.resumeGenerate(
+            { approved: true },
+            {
+              runId,
+              toolCallId,
+              maxSteps: 10,
+              ...(overrideTrace && toolCallId === 'call-1' ? { tracingOptions: { traceId: replacementTraceId } } : {}),
+            },
+          );
     };
     const second = await resume('call-1');
     expect(second.finishReason).toBe('suspended');
@@ -124,8 +133,14 @@ async function resumeParents(engine: 'normal' | 'durable', recreateAgent = false
     await captureInvocation(3);
 
     const spans = exporter.getSpansByType(SpanType.AGENT_RUN);
-    expect(new Set(spans.map(span => span.traceId)).size).toBe(1);
-    expect(spans.filter(span => !span.parentSpanId)).toHaveLength(1);
+    expect(new Set(spans.map(span => span.traceId)).size).toBe(overrideTrace ? 2 : 1);
+    expect(spans.filter(span => !span.parentSpanId)).toHaveLength(overrideTrace ? 2 : 1);
+    if (overrideTrace) {
+      expect(spans.find(span => span.id === invocationIds[0])!.traceId).not.toBe(replacementTraceId);
+      for (const id of invocationIds.slice(1)) {
+        expect(spans.find(span => span.id === id)!.traceId).toBe(replacementTraceId);
+      }
+    }
     // Compare both the direct parent type and its containing invocation, without
     // prescribing chain vs siblings or assuming the direct parent is AGENT_RUN.
     const allSpans = new Map(exporter.getAllSpans().map(span => [span.id, span]));
@@ -150,6 +165,14 @@ async function resumeParents(engine: 'normal' | 'durable', recreateAgent = false
     for (const host of hosts) await host.shutdown();
   }
 }
+
+it('an explicit trace override saves the new agent run as the parent for subsequent resumes', async () => {
+  expect(await resumeParents('normal', true, true)).toEqual([
+    null,
+    null,
+    { parentType: SpanType.AGENT_RUN, parentInvocation: 1 },
+  ]);
+});
 
 it('normal and durable resumes are siblings under the initial agent after two suspensions', async () => {
   const normal = await resumeParents('normal');

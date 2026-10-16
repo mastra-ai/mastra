@@ -108,7 +108,8 @@ describe('workflow resume span linkage', () => {
         spanId: '2222222222222222',
       };
       const storage = new MockStore();
-      const workflow = makeWorkflow(engine, { resumeTracingContext });
+      const workflow = makeWorkflow(engine);
+      workflow.__setResumeTracingContext(resumeTracingContext);
       const host = new Mastra({
         logger: false,
         storage,
