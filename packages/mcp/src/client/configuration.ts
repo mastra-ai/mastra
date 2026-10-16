@@ -12,6 +12,7 @@ import { InternalMastraMCPClient } from './client';
 import type { MastraMCPServerDefinition, MCPServerAuthState } from './client';
 import { getMCPDiscoveryErrorDetails, isReconnectableMCPError } from './error-utils';
 import type { MCPDiscoveryErrorDetails } from './error-utils';
+import type { MCPEventDescriptor, MCPEventSubscribeOptions, MCPEventSubscription } from './events';
 import { loadInputSchemaMetaValidator } from './input-schema-meta-schema';
 import { createOAuthCallbackServer } from './oauth-callback-server';
 import type { OAuthCallbackServer } from './oauth-callback-server';
@@ -227,6 +228,63 @@ To fix this you have three different options:
           );
         }
       },
+    };
+  }
+
+  /**
+   * Provides access to MCP Events (SEP-3415) on configured servers: list event types and
+   * subscribe to their occurrences over poll or push delivery.
+   *
+   * @experimental SEP-3415 is a draft; this API may change.
+   *
+   * @example
+   * ```typescript
+   * const events = await mcp.events.list('github');
+   * const sub = await mcp.events.subscribe('github', 'push', { repo: 'mastra-ai/mastra' });
+   * for await (const event of sub) {
+   *   console.log(event.eventId, event.data);
+   *   await saveCursor(sub.cursor);
+   * }
+   * ```
+   */
+  public get events() {
+    this.addToInstanceCache();
+    const wrap = async <T>(
+      id: Uppercase<string>,
+      details: Record<string, string>,
+      run: () => Promise<T>,
+    ): Promise<T> => {
+      try {
+        return await run();
+      } catch (error) {
+        throw new MastraError({ id, domain: ErrorDomain.MCP, category: ErrorCategory.THIRD_PARTY, details }, error);
+      }
+    };
+    return {
+      /**
+       * Lists the event types a server offers. Changes are not announced yet; call it again to refresh.
+       *
+       * @throws {MastraError} `MCP_CLIENT_LIST_EVENTS_FAILED`; the cause is `MCP_EVENTS_NOT_SUPPORTED`
+       * when the server does not advertise the events extension.
+       */
+      list: (serverName: string): Promise<MCPEventDescriptor[]> =>
+        wrap('MCP_CLIENT_LIST_EVENTS_FAILED', { serverName }, async () =>
+          (await this.getConnectedClientForServer(serverName)).events.list(),
+        ),
+      /**
+       * Subscribes to an event type on a server. Resolves once the server accepted the subscription.
+       *
+       * @throws {MastraError} `MCP_CLIENT_SUBSCRIBE_EVENT_FAILED`; the cause carries the events error id.
+       */
+      subscribe: (
+        serverName: string,
+        eventName: string,
+        args?: Record<string, unknown>,
+        options?: MCPEventSubscribeOptions,
+      ): Promise<MCPEventSubscription> =>
+        wrap('MCP_CLIENT_SUBSCRIBE_EVENT_FAILED', { serverName, eventName }, async () =>
+          (await this.getConnectedClientForServer(serverName)).events.subscribe(eventName, args, options),
+        ),
     };
   }
 
