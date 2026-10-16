@@ -899,14 +899,21 @@ export class SessionThread {
   }
 
   /**
-   * Transfer the active thread to a new owner.
+   * Transfer a thread to a new owner. Defaults to the active thread; pass
+   * `threadId` to transfer another thread of this resource without switching to it.
    *
    * Transfers are serialized within this process. Hosts needing strict durable
    * compare-and-set semantics should commit that change in their own store before
    * mirroring it here.
    */
-  async transferOwnership({ toOwnerId }: { toOwnerId: string }): Promise<void> {
-    const threadId = this.requireId();
+  async transferOwnership({
+    toOwnerId,
+    threadId: requestedThreadId,
+  }: {
+    toOwnerId: string;
+    threadId?: string;
+  }): Promise<void> {
+    const threadId = requestedThreadId ?? this.requireId();
 
     await withThreadOwnershipMutex(threadId, async () => {
       const store = this.#store;

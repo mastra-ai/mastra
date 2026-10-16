@@ -254,3 +254,19 @@ export function getEntityTypeForSpan(span: {
       return undefined;
   }
 }
+
+/**
+ * Time to first chunk in milliseconds for any span whose attributes carry
+ * `completionStartTime`, measured from that span's own start. Undefined when
+ * the span never saw a chunk.
+ */
+export function getTimeToFirstChunkMs(span: {
+  startTime: Date | string;
+  attributes?: object | undefined;
+}): number | undefined {
+  const completionStartTime = (span.attributes as { completionStartTime?: Date | string } | undefined)
+    ?.completionStartTime;
+  if (!completionStartTime) return undefined;
+  const ms = new Date(completionStartTime).getTime() - new Date(span.startTime).getTime();
+  return Number.isNaN(ms) ? undefined : ms;
+}

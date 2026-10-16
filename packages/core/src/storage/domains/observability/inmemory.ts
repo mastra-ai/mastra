@@ -1323,6 +1323,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.threadId !== undefined && m.threadId !== filters.threadId) return false;
     if (filters.requestId !== undefined && m.requestId !== filters.requestId) return false;
     if (filters.experimentId !== undefined && m.experimentId !== filters.experimentId) return false;
+    if (Array.isArray(filters.experimentIds) && !filters.experimentIds.includes(m.experimentId)) return false;
     if (filters.serviceName !== undefined && m.serviceName !== filters.serviceName) return false;
     if (filters.environment !== undefined && m.environment !== filters.environment) return false;
     const metricExecutionSource = m.executionSource ?? m.source ?? null;

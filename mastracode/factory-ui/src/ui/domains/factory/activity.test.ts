@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   activityBlocks,
+  auditEntries,
   collapseRuns,
   dayHeading,
   factoryActivity,
@@ -176,6 +177,24 @@ describe('factoryDeeds', () => {
     ];
 
     expect(factoryDeeds(events, new Map())).toHaveLength(1);
+  });
+});
+
+describe('auditEntries', () => {
+  it('keeps every event, reading a placed stage move as a move and an orphaned one as a deed', () => {
+    const placed = makeEvent('factory.work_item.stage_moved', 1, { metadata: { from: 'execute', to: 'review' } });
+    const orphaned = makeEvent('factory.work_item.stage_moved', 2, {
+      targets: [{ type: 'work_item', id: 'gone', name: 'Deleted card' }],
+      metadata: { to: 'done' },
+    });
+    const run = makeEvent('factory.run.started', 3);
+    const cards = new Map<string, ActivityCard>([['item-1', { title: 'A card', board: 'work' }]]);
+
+    const entries = auditEntries([run, orphaned, placed], cards);
+
+    expect(entries.map(entry => entry.kind)).toEqual(['move', 'deed', 'deed']);
+    expect(entries[0]).toMatchObject({ id: 'item-1', board: 'work', stages: ['review'] });
+    expect(entries[1]).toMatchObject({ title: 'Deleted card', detail: '→ Done' });
   });
 });
 
