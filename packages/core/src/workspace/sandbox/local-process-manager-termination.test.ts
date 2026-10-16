@@ -29,7 +29,6 @@ async function waitForExit(pid: number, ms = 2_000): Promise<boolean> {
   return !isAlive(pid);
 }
 
-
 describe.skipIf(process.platform === 'win32')('LocalProcessManager timeout termination', () => {
   let workingDirectory: string;
   let sandbox: LocalSandbox;
