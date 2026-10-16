@@ -26,14 +26,13 @@ describe('createTraceGroupByFilterBarFields', () => {
     ]);
   });
 
-  it('offers the group filters only while grouped', () => {
+  it('offers Group by until grouped, then the group filters under their own heading', () => {
     const offered = (grouped: boolean) =>
       createTraceGroupByFilterBarFields({ dimensions, grouped })
         .filter(field => !field.hidden)
         .map(field => field.label);
     expect(offered(false)).toEqual(['Group by']);
     expect(offered(true)).toEqual([
-      'Group by',
       'Group trace count',
       'Group error rate (%)',
       'Group p50 duration (ms)',
@@ -42,6 +41,9 @@ describe('createTraceGroupByFilterBarFields', () => {
       'Group output tokens',
       'Group cost',
     ]);
+    const sections = createTraceGroupByFilterBarFields({ dimensions, grouped: true }).map(field => field.section);
+    expect(sections[0]).toBeUndefined();
+    expect(new Set(sections.slice(1))).toEqual(new Set(['Group by filters']));
   });
 
   it('offers group filters for the measures shown as columns', () => {

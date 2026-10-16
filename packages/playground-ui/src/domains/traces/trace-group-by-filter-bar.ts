@@ -69,8 +69,8 @@ export function createTraceGroupByFilterBarFields({
     operators: ['in'],
     suggestions: dimensions.map(dimension => ({ value: dimension, label: TRACE_GROUP_BY_DIMENSION_LABELS[dimension] })),
     strict: true,
-    hidden: disabled,
-    section: 'Group traces',
+    // Once grouped, dimensions are changed on the existing chip; a second Group by chip would conflict with it.
+    hidden: disabled || grouped,
   };
   const havingFields = TRACE_GROUP_BY_MEASURES.filter(measure => measures.includes(measure)).map<FilterBarField>(
     measure => ({
@@ -81,7 +81,7 @@ export function createTraceGroupByFilterBarFields({
       type: 'number',
       operators: [...TRACE_GROUP_HAVING_OPERATORS],
       hidden: disabled || !grouped,
-      section: 'Filter groups',
+      section: 'Group by filters',
     }),
   );
   return [groupByField, ...havingFields];
