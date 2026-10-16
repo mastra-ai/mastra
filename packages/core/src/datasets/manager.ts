@@ -199,7 +199,10 @@ export class DatasetsManager {
        * Filter to datasets whose `targetIds` intersect this list (any overlap matches).
        */
       targetIds?: string[];
-      /** Only return datasets with these IDs. An empty array matches no datasets. */
+      /**
+       * Only return datasets with these IDs. An empty array matches no datasets.
+       * Pass `perPage: false` to get every match; otherwise the page size still applies.
+       */
       datasetIds?: string[];
       /** Substring match on dataset `name`, case-insensitive. */
       name?: string;

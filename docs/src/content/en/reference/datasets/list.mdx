@@ -109,7 +109,8 @@ const byId = await mastra.datasets.list({
             name: 'datasetIds',
             type: 'string[]',
             isOptional: true,
-            description: 'Restrict to datasets with these IDs. Empty array matches no datasets.',
+            description:
+              'Restrict to datasets with these IDs. Empty array matches no datasets. Pass `perPage: false` to get every match on one page.',
           },
           {
             name: 'name',

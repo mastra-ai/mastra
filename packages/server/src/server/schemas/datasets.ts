@@ -325,11 +325,11 @@ export const listDatasetsQuerySchema = paginationQuerySchema.extend({
       // Repeated query params arrive as arrays; a single param arrives as a string.
       const list = typeof v === 'string' ? [v] : v;
       if (!Array.isArray(list)) return list;
-      const nonBlank = list.filter(id => id !== '');
-      return nonBlank.length > 0 ? nonBlank : undefined;
+      // Unlike targetIds, a blank list stays empty so it matches no datasets.
+      return list.filter(id => id !== '');
     }, z.array(z.string()).max(100).optional())
     .describe(
-      'Only return datasets with these IDs (up to 100). All matches come back on one page; page and perPage are ignored.',
+      'Only return datasets with these IDs (up to 100). All matches come back on one page; page and perPage are ignored. A blank value matches no datasets.',
     ),
   orderBy: createOrderByQuerySchema(['createdAt', 'updatedAt', 'name']),
 });

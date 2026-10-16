@@ -603,13 +603,10 @@ function buildWhereClause(
       conditions.push('1 = 0');
       return;
     }
-    const placeholders: string[] = [];
-    for (const v of values) {
-      const param = `f${i++}`;
-      placeholders.push(`@${param}`);
-      params[param] = v;
-    }
-    conditions.push(`${quoteIdent(col, 'column name')} IN (${placeholders.join(', ')})`);
+    // One ARRAY parameter keeps long ID lists under Spanner's 950-parameters-per-query limit.
+    const param = `f${i++}`;
+    params[param] = [...values];
+    conditions.push(`${quoteIdent(col, 'column name')} IN UNNEST(@${param})`);
   };
 
   // Timestamp range

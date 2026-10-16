@@ -19581,7 +19581,7 @@ export type GetDatasets_QueryParams = {
   targetType?: ('agent' | 'workflow' | 'scorer' | 'processor') | undefined;
   /** Only return datasets attached to at least one of these target IDs */
   targetIds?: string[] | undefined;
-  /** Only return datasets with these IDs (up to 100). All matches come back on one page; page and perPage are ignored. */
+  /** Only return datasets with these IDs (up to 100). All matches come back on one page; page and perPage are ignored. A blank value matches no datasets. */
   datasetIds?: string[] | undefined;
   orderBy?:
     | (

@@ -975,7 +975,21 @@ describe('Datasets Handlers', () => {
       it('accepts a single id or repeated ids from the query string', () => {
         expect(listDatasetsQuerySchema.parse({ datasetIds: 'ds-1' }).datasetIds).toEqual(['ds-1']);
         expect(listDatasetsQuerySchema.parse({ datasetIds: ['ds-1', 'ds-2'] }).datasetIds).toEqual(['ds-1', 'ds-2']);
-        expect(listDatasetsQuerySchema.parse({ datasetIds: [''] }).datasetIds).toBeUndefined();
+        expect(listDatasetsQuerySchema.parse({ datasetIds: [''] }).datasetIds).toEqual([]);
+        expect(listDatasetsQuerySchema.parse({}).datasetIds).toBeUndefined();
+      });
+
+      it('returns no datasets for a blank datasetIds value', async () => {
+        await mastra.datasets.create({ name: 'Dataset 1' });
+        const { datasetIds } = listDatasetsQuerySchema.parse({ datasetIds: '' });
+
+        const result = await LIST_DATASETS_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetIds,
+        } as any);
+
+        expect(result.datasets).toHaveLength(0);
+        expect(result.pagination.total).toBe(0);
       });
 
       it('rejects more than 100 ids', () => {
