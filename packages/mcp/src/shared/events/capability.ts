@@ -20,7 +20,14 @@ export function getEventsCapability(
   return parsed.success ? parsed.data : undefined;
 }
 
-/** Build the `extensions` entry a server advertises when it offers events. @experimental */
-export function eventsCapabilityEntry(settings: EventsCapability = {}): Record<string, EventsCapability> {
-  return { [EVENTS_EXTENSION_ID]: settings };
+/**
+ * Build the `extensions` entry a server advertises when it offers events. The value is plain JSON, so it
+ * can be spread into the SDK's `ServerCapabilities['extensions']`.
+ *
+ * @experimental
+ */
+export function eventsCapabilityEntry(
+  settings: { listChanged?: boolean } = {},
+): Record<string, { listChanged: boolean } | Record<string, never>> {
+  return { [EVENTS_EXTENSION_ID]: settings.listChanged === undefined ? {} : { listChanged: settings.listChanged } };
 }
