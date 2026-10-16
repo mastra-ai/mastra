@@ -19,6 +19,8 @@ const SLACK_SESSION = 'aaaaaaaa-0000-4000-8000-000000000003';
 const ORPHAN_SESSION = 'aaaaaaaa-0000-4000-8000-000000000004';
 /** Started by an agent from the user session, to work for the Factory. */
 const SIDE_SESSION = 'aaaaaaaa-0000-4000-8000-000000000005';
+/** A Slack DM: private to its sender. */
+const SLACK_DM_SESSION = 'aaaaaaaa-0000-4000-8000-000000000006';
 
 const OBSERVATION_INDEX = 'memory_observations_384';
 
@@ -57,7 +59,13 @@ async function seedLegacyFactory() {
   const ops = seed.storage.ops;
   const now = new Date('2026-09-01T00:00:00.000Z');
 
-  const sessionRow = (sessionId: string, branch: string, factoryProjectId: string | null, originSessionId?: string) =>
+  const sessionRow = (
+    sessionId: string,
+    branch: string,
+    factoryProjectId: string | null,
+    originSessionId?: string,
+    visibility: 'org' | 'private' = 'org',
+  ) =>
     ops.insertOne('source_control_sessions', {
       session_id: sessionId,
       project_repository_id: 'project-repository-1',
@@ -67,7 +75,7 @@ async function seedLegacyFactory() {
       branch,
       base_branch: 'main',
       title: null,
-      visibility: 'org',
+      visibility,
       sandbox_id: null,
       sandbox_workdir: null,
       materialized_at: null,
@@ -82,6 +90,7 @@ async function seedLegacyFactory() {
   await sessionRow(SLACK_SESSION, 'slack/1700-42', FACTORY_ID);
   await sessionRow(ORPHAN_SESSION, 'slack/1700-43', null);
   await sessionRow(SIDE_SESSION, `user/session-${SIDE_SESSION}`, FACTORY_ID, USER_SESSION);
+  await sessionRow(SLACK_DM_SESSION, 'slack/D-1-1700-44', FACTORY_ID, undefined, 'private');
 
   await ops.insertOne('factory_run_bindings', {
     org_id: 'org-1',
@@ -110,7 +119,7 @@ async function seedLegacyFactory() {
     updated_at: now,
   });
 
-  for (const sessionId of [USER_SESSION, RUN_SESSION, SLACK_SESSION, ORPHAN_SESSION, SIDE_SESSION]) {
+  for (const sessionId of [USER_SESSION, RUN_SESSION, SLACK_SESSION, ORPHAN_SESSION, SIDE_SESSION, SLACK_DM_SESSION]) {
     await memory.saveThread({
       thread: {
         id: sessionId,
@@ -177,12 +186,12 @@ describe('migrateSessionResources', () => {
     const report = await migrate();
 
     expect(report).toMatchObject({
-      sessions: 5,
+      sessions: 6,
       factorySessions: 3,
-      userSessions: 1,
+      userSessions: 2,
       skipped: [ORPHAN_SESSION],
       failed: [],
-      threads: 5,
+      threads: 6,
       runBindings: 1,
       subscriptions: 1,
       resourceObservationsLeft: [USER_SESSION],
@@ -240,7 +249,7 @@ describe('migrateSessionResources', () => {
     const byResource = async (resourceId: string) =>
       (await memory.listThreads({ filter: { resourceId }, perPage: false })).threads.map(t => t.id).sort();
     expect(await byResource(FACTORY_ID)).toEqual([RUN_SESSION, SLACK_SESSION, SIDE_SESSION].sort());
-    expect(await byResource('user-1')).toEqual([USER_SESSION, 'user-second-thread'].sort());
+    expect(await byResource('user-1')).toEqual([USER_SESSION, SLACK_DM_SESSION, 'user-second-thread'].sort());
   });
 
   it('changes nothing when it runs again', async () => {

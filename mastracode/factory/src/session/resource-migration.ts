@@ -48,7 +48,8 @@ export interface SessionResourceMigrationReport {
 
 /**
  * The memory resource a session belongs to: its Factory for runs, side
- * sessions and Slack sessions, its owner for sessions a person opened. `null` when a
+ * sessions and Slack channel threads, its owner for sessions a person opened
+ * and for Slack DMs. `null` when a
  * Factory-owned session has no Factory recorded — guessing would merge it
  * into the wrong resource.
  */
@@ -56,8 +57,9 @@ export function sessionMemoryResource(
   session: SourceControlSession,
   runBound: boolean,
 ): { owner: 'factory' | 'user'; resourceId: string | null } {
-  const factoryOwned =
-    runBound || session.originSessionId !== null || session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX);
+  // A Slack DM is private to its sender, so it belongs with their own sessions.
+  const slackChannelThread = session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX) && session.visibility !== 'private';
+  const factoryOwned = runBound || session.originSessionId !== null || slackChannelThread;
   return factoryOwned
     ? { owner: 'factory', resourceId: session.factoryProjectId }
     : { owner: 'user', resourceId: session.userId };
