@@ -396,9 +396,15 @@ function resolveMessageText(message: MastraDBMessage): string {
   return convertedMessage ? coreContentToString(convertedMessage.content) : '';
 }
 
+// Enumerable so processor object spreads preserve it; removed before the split response is coalesced.
+const stepPartIndex = Symbol('stepPartIndex');
+
+type StepIndexedPart = {
+  [stepPartIndex]?: number;
+};
+
 type StepPartBoundaries = {
   offsets: number[];
-  createdAtsByStep: number[][];
 };
 
 function findStepPartBoundaries<OUTPUT>(
@@ -425,13 +431,19 @@ function findStepPartBoundaries<OUTPUT>(
     offsets[stepIndex] = partIndex;
   }
 
-  const createdAtsByStep = steps.map((_, index) =>
-    parts
-      .slice(offsets[index], offsets[index + 1])
-      .flatMap(part => (part.type === 'text' && part.createdAt !== undefined ? [part.createdAt] : [])),
-  );
+  for (const [stepIndex] of steps.entries()) {
+    for (const part of parts.slice(offsets[stepIndex], offsets[stepIndex + 1])) {
+      if (part.type === 'text') (part as typeof part & StepIndexedPart)[stepPartIndex] = stepIndex;
+    }
+  }
 
-  return { offsets, createdAtsByStep };
+  return { offsets };
+}
+
+function clearStepPartIndexes(messages: MastraDBMessage[]): void {
+  for (const message of messages) {
+    for (const part of message.content.parts) delete (part as typeof part & StepIndexedPart)[stepPartIndex];
+  }
 }
 
 function reconcileBufferedStepTexts<OUTPUT>(
@@ -447,40 +459,24 @@ function reconcileBufferedStepTexts<OUTPUT>(
   let processedOffsets: number[] | undefined;
 
   if (processedParts && stepPartBoundaries) {
-    const stepByCreatedAt = new Map<number, number>();
-    let hasAmbiguousCreatedAt = false;
+    const processedStepTexts = steps.map(() => '');
+    let lastStepIndex = 0;
+    let hasUnknownPart = false;
 
-    for (const [stepIndex, createdAts] of stepPartBoundaries.createdAtsByStep.entries()) {
-      for (const createdAt of createdAts) {
-        const existingStep = stepByCreatedAt.get(createdAt);
-        if (existingStep !== undefined && existingStep !== stepIndex) {
-          hasAmbiguousCreatedAt = true;
-          break;
-        }
-        stepByCreatedAt.set(createdAt, stepIndex);
+    for (const part of processedParts) {
+      if (part.type !== 'text') continue;
+      const stepIndex = (part as typeof part & StepIndexedPart)[stepPartIndex];
+      if (stepIndex === undefined || stepIndex < lastStepIndex) {
+        hasUnknownPart = true;
+        break;
       }
+      processedStepTexts[stepIndex] += part.text;
+      lastStepIndex = stepIndex;
     }
 
-    if (!hasAmbiguousCreatedAt) {
-      const processedStepTexts = steps.map(() => '');
-      let lastStepIndex = 0;
-      let hasUnknownPart = false;
-
-      for (const part of processedParts) {
-        if (part.type !== 'text') continue;
-        const stepIndex = part.createdAt === undefined ? undefined : stepByCreatedAt.get(part.createdAt);
-        if (stepIndex === undefined || stepIndex < lastStepIndex) {
-          hasUnknownPart = true;
-          break;
-        }
-        processedStepTexts[stepIndex] += part.text;
-        lastStepIndex = stepIndex;
-      }
-
-      if (!hasUnknownPart) {
-        for (const [index, step] of steps.entries()) step.text = processedStepTexts[index]!;
-        return;
-      }
+    if (!hasUnknownPart) {
+      for (const [index, step] of steps.entries()) step.text = processedStepTexts[index]!;
+      return;
     }
 
     if (stepPartBoundaries.offsets.at(-1) === processedParts.length) {
@@ -1649,6 +1645,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                       );
                     }
                   } finally {
+                    clearStepPartIndexes(self.messageList.get.response.db());
                     if (separatedIteration) {
                       self.messageList.coalesceSplitResponseMessages(
                         separatedIteration.earlierMessageId,
