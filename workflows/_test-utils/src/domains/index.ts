@@ -68,7 +68,7 @@ export { createRecoveryTests } from './recovery';
 
 // FGA / actor-identity tests (actor threading, agents:execute enforcement)
 export { createFGATests } from './fga';
-export { createNetworkTests } from './network';
+export { createDelegationTests } from './delegation';
 export { createAgentIdContextTests } from './agent-id-context';
 export { createRequestContextSchemaTests } from './request-context-schema';
 export { createStreamUntilIdleTests } from './stream-until-idle';

@@ -250,9 +250,6 @@ export function mockAgentMethods(agent: Agent) {
     toolCallId: 'test-tool',
   } as any);
 
-  // Mock network method
-  vi.spyOn(agent, 'network').mockResolvedValue(createMockStream() as any);
-
   vi.spyOn(agent, 'sendSignal').mockImplementation((signal: any, target: any) => {
     const createdSignal = createSignal(signal);
     const runId = target?.runId ?? 'test-run';

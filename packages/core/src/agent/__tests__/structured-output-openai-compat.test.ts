@@ -2,7 +2,7 @@
  * Tests the OpenAI structured output compat layer in agent.ts against the
  * real Agent class with mock models.
  *
- * When modelId is undefined (e.g., agent networks), the compat layer must
+ * When modelId is undefined (e.g., a model inherited without an explicit modelId), the compat layer must
  * still run — otherwise strict mode rejects schemas with optional fields
  * missing from the `required` array.
  *
@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
 
-/** Routing-decision schema (formerly used by the removed agent network) */
+/** Routing-decision style schema with optional fields */
 const defaultCompletionSchema = z.object({
   isComplete: z.boolean().describe('Whether the task is complete'),
   completionReason: z.string().describe('Explanation of why the task is or is not complete'),
@@ -82,7 +82,7 @@ describe('OpenAI compat layer in agent.ts with structured output', () => {
 
   it('should not crash with undefined modelId', async () => {
     // OpenAI provider but modelId is undefined
-    // (happens in agent networks when model is inherited without explicit modelId)
+    // (happens when a model is inherited without an explicit modelId)
     const model = createMockOpenAIModel({ modelId: undefined });
     const agent = new Agent({ id: 'test', name: 'test', instructions: 'test', model });
     const result = await agent.generate('test', {

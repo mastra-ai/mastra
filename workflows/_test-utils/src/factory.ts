@@ -72,8 +72,8 @@ import {
   createRecoveryTests,
   // FGA / actor-identity tests (actor threading, agents:execute enforcement)
   createFGATests,
-  // Network-equivalent delegation tests (supervisor → sub-agent routing)
-  createNetworkTests,
+  // Delegation tests (supervisor → sub-agent routing)
+  createDelegationTests,
   // agentId propagation into tool execution context
   createAgentIdContextTests,
   // requestContextSchema validation at the stream() boundary
@@ -410,9 +410,9 @@ export function createDurableAgentTestSuite(config: DurableAgentTestConfig) {
       createFGATests(context);
     }
 
-    // Network-equivalent delegation (supervisor → sub-agent routing)
-    if (!skip.network) {
-      createNetworkTests(context);
+    // Delegation (supervisor → sub-agent routing)
+    if (!skip.delegation) {
+      createDelegationTests(context);
     }
 
     // agentId propagation into tool execution context

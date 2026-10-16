@@ -257,7 +257,6 @@ function ownerWorkflowIdFromRowId(rowId: string): string | undefined {
  * @template TVectors - Record of vector store instances
  * @template TTTS - Record of text-to-speech instances
  * @template TLogger - Logger implementation type
- * @template TVNextNetworks - Record of agent network instances
  * @template TMCPServers - Record of MCP server instances
  * @template TScorers - Record of scorer instances
  *
@@ -754,7 +753,6 @@ function serializableWorkerConfig<T extends object>(config: T | undefined): Reco
  * @template TVectors - Record of vector store instances for semantic search and RAG
  * @template TTTS - Record of text-to-speech provider instances
  * @template TLogger - Logger implementation type for application logging
- * @template TVNextNetworks - Record of next-generation agent network instances
  * @template TMCPServers - Record of Model Context Protocol server instances
  * @template TScorers - Record of evaluation scorer instances for measuring AI performance
  *

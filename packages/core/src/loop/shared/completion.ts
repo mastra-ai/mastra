@@ -35,7 +35,7 @@ export interface CompletionContext {
   /** Result from the primitive execution */
   primitiveResult: string;
   /** Name of the agent being scored */
-  networkName: string;
+  agentName: string;
   /** ID of the current run */
   runId: string;
   /** Current thread ID (if using memory) */
@@ -417,7 +417,7 @@ export async function runStreamCompletionScorers(
     },
     primitivePrompt: context.originalTask,
     primitiveResult: context.currentText,
-    networkName: context.agentName || context.agentId || 'stream',
+    agentName: context.agentName || context.agentId || 'stream',
     runId: context.runId,
     threadId: context.threadId,
     resourceId: context.resourceId,

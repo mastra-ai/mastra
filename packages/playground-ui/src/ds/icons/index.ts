@@ -44,7 +44,6 @@ export * from './FileIcon';
 export * from './TrashIcon';
 export * from './McpCoinIcon';
 export * from './ToolCoinIcon';
-export * from './AgentNetworkCoinIcon';
 export * from './ProcessorIcon';
 export * from './AmazonIcon';
 export * from './AnthropicChatIcon';

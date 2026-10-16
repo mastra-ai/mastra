@@ -77,9 +77,6 @@ test.describe('Agent detail page', () => {
       const streamRadio = page.getByRole('radio', { name: 'Stream', exact: true });
       await expect(streamRadio).toBeVisible();
       await expect(streamRadio).toHaveAttribute('aria-checked', 'false');
-
-      const networkRadio = page.getByRole('radio', { name: 'Network' });
-      await expect(networkRadio).toBeVisible();
     });
 
     test('persists model settings across a reload', async ({ page }) => {

@@ -207,7 +207,7 @@ export class MemoryInputFilter implements Processor {
 
     // A trailing assistant message with no new tool results is only a redundant echo
     // when it refers to a message that already exists in storage. Internal callers
-    // (for example the agent network) pass assistant-role instruction messages that
+    // may pass assistant-role instruction messages that
     // were never persisted; dropping those would delete the prompt, so keep them.
     if (retainedInput.length === 0) {
       const { messages: persisted } = lastMessage.id

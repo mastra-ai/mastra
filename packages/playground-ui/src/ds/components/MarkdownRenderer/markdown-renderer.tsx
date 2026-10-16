@@ -142,7 +142,7 @@ function countWords(text: string): number {
   return text.match(/\S+/g)?.length ?? 0;
 }
 
-// Agent networks emit their text with literal `\n`. Only unescape when the text
+// Some model output arrives with literal `\n`. Only unescape when the text
 // has no real newline, otherwise a `"a\nb"` inside a code fence gets shredded.
 function decodeEscapedNewlines(text: string): string {
   return text.includes('\n') ? text : text.replace(/\\n/g, '\n');

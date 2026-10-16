@@ -27,7 +27,7 @@ function createMockContext(overrides: Partial<CompletionContext> = {}): Completi
     selectedPrimitive: { id: 'test-agent', type: 'agent' },
     primitivePrompt: 'Do something',
     primitiveResult: 'Done',
-    networkName: 'test-network',
+    agentName: 'test-network',
     runId: 'test-run-id',
     ...overrides,
   };
@@ -539,7 +539,7 @@ describe('runStreamCompletionScorers', () => {
             originalTask: 'Custom stream task',
             primitiveResult: 'Stream output text',
             selectedPrimitive: { id: 'stream', type: 'agent' },
-            networkName: 'My Agent',
+            agentName: 'My Agent',
           }),
           output: 'Stream output text',
           requestContext: expect.objectContaining({
@@ -552,7 +552,7 @@ describe('runStreamCompletionScorers', () => {
       );
     });
 
-    it('uses agentId as networkName when agentName is not provided', async () => {
+    it('uses agentId as agentName when agentName is not provided', async () => {
       const scorer = createMockScorer('scorer-1', 1);
       const context = createMockStreamContext({
         agentId: 'my-agent-id',
@@ -564,13 +564,13 @@ describe('runStreamCompletionScorers', () => {
       expect(scorer.run).toHaveBeenCalledWith(
         expect.objectContaining({
           input: expect.objectContaining({
-            networkName: 'my-agent-id',
+            agentName: 'my-agent-id',
           }),
         }),
       );
     });
 
-    it('uses "stream" as default networkName when neither agentId nor agentName provided', async () => {
+    it('uses "stream" as default agentName when neither agentId nor agentName provided', async () => {
       const scorer = createMockScorer('scorer-1', 1);
       const context = createMockStreamContext({
         agentId: undefined,
@@ -582,7 +582,7 @@ describe('runStreamCompletionScorers', () => {
       expect(scorer.run).toHaveBeenCalledWith(
         expect.objectContaining({
           input: expect.objectContaining({
-            networkName: 'stream',
+            agentName: 'stream',
           }),
         }),
       );
