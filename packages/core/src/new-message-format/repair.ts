@@ -9,18 +9,10 @@ export const SUPERSEDED_APPROVAL_REASON = 'superseded by new input';
 const OUTCOMES = new Set(['tool-result', 'tool-error', 'tool-denied']);
 /**
  * Actions that mean a run is under way. One of these after a run's end means it was resumed; other rows a
- * run writes after its end (titles, memory and goal events, outcomes) leave it closed.
+ * run writes after its end (titles, memory and goal events, outcomes, approval answers) leave it closed. An
+ * approval answer is input: a run with another approval still unanswered records it and waits.
  */
-const OPENING = new Set([
-  'run-start',
-  'turn-start',
-  'text',
-  'reasoning',
-  'file',
-  'tool-call',
-  'tool-started',
-  'tool-approval-responded',
-]);
+const OPENING = new Set(['run-start', 'turn-start', 'text', 'reasoning', 'file', 'tool-call', 'tool-started']);
 
 export type RepairCloser = { runId: string | undefined; action: ActionDraft };
 

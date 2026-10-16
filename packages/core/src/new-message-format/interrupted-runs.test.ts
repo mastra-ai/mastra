@@ -245,7 +245,7 @@ describe('reading the log', () => {
 });
 
 describe('two pending approvals in one run', () => {
-  it('two resumes answer one each; each tool runs once and the other stays open in between', async () => {
+  it('the first answer waits for the second; both tools then run once and nothing is closed in between', async () => {
     const executed: string[] = [];
     const deleteFile = createTool({
       id: 'deleteFile',
@@ -276,8 +276,10 @@ describe('two pending approvals in one run', () => {
       await agent.approveToolCall({ runId, memory })
     ).result;
     const between = await store.listActions({ threadId: 'th1' });
-    expect(executed).toHaveLength(1);
+    // The run waits for the other answer: nothing ran, and the wait is not an interruption.
+    expect(executed).toHaveLength(0);
     expect(between.some(a => a.type === 'tool-denied' || a.type === 'tool-error')).toBe(false);
+    expect(between.filter(a => a.type === 'run-end').map(a => a.finishReason)).toEqual(['tool-calls']);
 
     await (
       await agent.approveToolCall({ runId, memory })

@@ -112,6 +112,30 @@ describe('repairOpenRun', () => {
     ]);
   });
 
+  it('leaves a run that is waiting on its other approval closed, with the approved call open for its resume', () => {
+    const log = [
+      ...crashedAtToolCall(false),
+      at('r1', { type: 'tool-approval-requested', toolCallId: 'c1', toolName: 'deleteFile', approvalId: 'ap1' }),
+      at('r1', { type: 'tool-call', toolCallId: 'c2', toolName: 'deleteFile', input: { path: '/b' } }),
+      at('r1', { type: 'tool-approval-requested', toolCallId: 'c2', toolName: 'deleteFile', approvalId: 'ap2' }),
+      at('r1', { type: 'turn-end', finishReason: 'tool-calls', usage: {} }),
+      at('r1', { type: 'run-end', finishReason: 'tool-calls', usage: {} }),
+      at('r1', {
+        type: 'tool-approval-responded',
+        toolCallId: 'c1',
+        toolName: 'deleteFile',
+        approvalId: 'ap1',
+        approved: true,
+      }),
+    ];
+    expect(repairOpenRun(log, { resumingRunId: 'r1', answeredCallIds: new Set(['c1', 'c2']) })).toEqual([]);
+    // New input instead: the unanswered call is superseded, the approved one never ran, and the run stays ended.
+    expect(repairOpenRun(log).map(c => [c.action.type, 'code' in c.action ? c.action.code : undefined])).toEqual([
+      ['tool-error', 'TOOL_NOT_STARTED'],
+      ['tool-denied', undefined],
+    ]);
+  });
+
   it('leaves a finished run closed when it writes rows after its run-end', () => {
     const log = [
       runStart('r1'),
