@@ -53,11 +53,14 @@ describe('AppSidebar More menu', () => {
   describe('when optional primitives are unused', () => {
     it('keeps them reachable in a menu without inserting navigation rows', async () => {
       renderSidebar();
+      // Wait for the permission-gated rows so the captured row text reflects
+      // the settled sidebar (Connections is ungated and renders More earlier).
+      await screen.findByRole('link', { name: 'Agents' });
       const more = await screen.findByRole('button', { name: 'More' });
       const list = more.closest('ul');
       const rows = list?.textContent;
       fireEvent.click(more);
-      for (const name of ['Processors', 'MCP Servers', 'Tools', 'Workspaces']) {
+      for (const name of ['Processors', 'MCP Servers', 'Tools', 'Workspaces', 'Connections']) {
         expect(await screen.findByRole('menuitem', { name })).toBeTruthy();
         expect(screen.queryByRole('link', { name })).toBeNull();
       }
