@@ -7,6 +7,7 @@ import type { PublicSchema } from '@mastra/schema-compat/schema';
 
 import { stringify } from 'superjson';
 import { MASTRA_RESOURCE_ID_KEY } from './constants';
+import { SERVER_ERROR_CODES } from './error-codes';
 import { HTTPException } from './http-exception';
 
 /**
@@ -84,7 +85,7 @@ export async function getStoredResourceScope(
     }
     throw new HTTPException(403, {
       message: 'Stored resource scope is required',
-      code: 'STORED_RESOURCE_SCOPE_REQUIRED',
+      code: SERVER_ERROR_CODES.STORED_RESOURCE_SCOPE_REQUIRED,
     });
   }
 
@@ -114,7 +115,10 @@ export function assertStoredResourceScope(
   }
 
   if (resource.metadata?.[scope.metadataKey] !== scope.value) {
-    throw new HTTPException(404, { message: 'Stored resource not found', code: 'STORED_RESOURCE_NOT_FOUND' });
+    throw new HTTPException(404, {
+      message: 'Stored resource not found',
+      code: SERVER_ERROR_CODES.STORED_RESOURCE_NOT_FOUND,
+    });
   }
 }
 

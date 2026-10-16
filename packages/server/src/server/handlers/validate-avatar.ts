@@ -1,3 +1,4 @@
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 
 const AVATAR_MAX_BYTES = 512 * 1024; // 512 KB
@@ -11,7 +12,10 @@ export function validateMetadataAvatarUrl(metadata: Record<string, unknown> | un
   if (!metadata || !('avatarUrl' in metadata) || metadata.avatarUrl === null || metadata.avatarUrl === undefined)
     return;
   if (typeof metadata.avatarUrl !== 'string') {
-    throw new HTTPException(400, { message: 'metadata.avatarUrl must be a string', code: 'AVATAR_URL_NOT_STRING' });
+    throw new HTTPException(400, {
+      message: 'metadata.avatarUrl must be a string',
+      code: SERVER_ERROR_CODES.AVATAR_URL_NOT_STRING,
+    });
   }
 
   const dataUrl = metadata.avatarUrl;
@@ -19,7 +23,7 @@ export function validateMetadataAvatarUrl(metadata: Record<string, unknown> | un
   if (!match) {
     throw new HTTPException(400, {
       message: 'metadata.avatarUrl must be a valid data URL (data:<mime>;base64,<data>)',
-      code: 'AVATAR_DATA_URL_INVALID',
+      code: SERVER_ERROR_CODES.AVATAR_DATA_URL_INVALID,
     });
   }
 
@@ -34,19 +38,19 @@ export function validateMetadataAvatarUrl(metadata: Record<string, unknown> | un
   if (!isStrictBase64) {
     throw new HTTPException(400, {
       message: 'metadata.avatarUrl contains invalid base64',
-      code: 'AVATAR_BASE64_INVALID',
+      code: SERVER_ERROR_CODES.AVATAR_BASE64_INVALID,
     });
   }
   const byteLength = Buffer.from(base64Payload, 'base64').byteLength;
 
   if (byteLength === 0) {
-    throw new HTTPException(400, { message: 'metadata.avatarUrl is empty', code: 'AVATAR_EMPTY' });
+    throw new HTTPException(400, { message: 'metadata.avatarUrl is empty', code: SERVER_ERROR_CODES.AVATAR_EMPTY });
   }
 
   if (byteLength > AVATAR_MAX_BYTES) {
     throw new HTTPException(413, {
       message: `metadata.avatarUrl exceeds ${AVATAR_MAX_BYTES}-byte limit (got ${byteLength})`,
-      code: 'AVATAR_TOO_LARGE',
+      code: SERVER_ERROR_CODES.AVATAR_TOO_LARGE,
       metadata: { maxBytes: AVATAR_MAX_BYTES, byteLength },
     });
   }

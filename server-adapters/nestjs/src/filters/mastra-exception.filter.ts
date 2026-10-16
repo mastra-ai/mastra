@@ -1,4 +1,4 @@
-import { isServerProblem } from '@mastra/server/error-codes';
+import { SERVER_ERROR_CODES, isServerProblem } from '@mastra/server/error-codes';
 import type { ServerProblem } from '@mastra/server/error-codes';
 import { formatZodError, isZodError } from '@mastra/server/handlers/error';
 import {
@@ -107,23 +107,23 @@ export class MastraExceptionFilter implements ExceptionFilter {
     if (exception instanceof HttpException) {
       const response = exception.getResponse();
       const problem = typeof response === 'object' && response !== null ? (response as any).problem : undefined;
-      return isServerProblem(problem) ? problem : { code: 'UNEXPECTED_ERROR' };
+      return isServerProblem(problem) ? problem : { code: SERVER_ERROR_CODES.UNEXPECTED_ERROR };
     }
 
     if (isZodError(exception)) {
-      return { code: 'REQUEST_VALIDATION_FAILED', metadata: { issues: normalized.issues } };
+      return { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues: normalized.issues } };
     }
 
     const bodyParserType = typeof exception === 'object' && exception !== null ? (exception as any).type : undefined;
     if (bodyParserType === 'entity.too.large') {
       const limit = (exception as any).limit;
       return {
-        code: 'REQUEST_BODY_TOO_LARGE',
+        code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE,
         ...(typeof limit === 'number' ? { metadata: { maxBodySize: limit } } : {}),
       };
     }
     if (bodyParserType === 'entity.parse.failed') {
-      return { code: 'REQUEST_BODY_INVALID_JSON' };
+      return { code: SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON };
     }
 
     return formatErrorResponse(exception).body.problem;

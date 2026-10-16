@@ -4,6 +4,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { findMatchingCustomRoute, isProtectedCustomRoute } from '@mastra/server/auth';
+import { SERVER_ERROR_CODES } from '@mastra/server/error-codes';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
@@ -444,11 +445,14 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         if ((contentLength && parseInt(contentLength, 10) > maxSize) || parsedLength > maxSize) {
           let errorResponse: unknown = {
             error: 'Request body too large',
-            problem: { code: 'REQUEST_BODY_TOO_LARGE', metadata: { maxBodySize: maxSize } },
+            problem: { code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE, metadata: { maxBodySize: maxSize } },
           };
           if (route.maxBodySize === undefined && this.bodyLimitOptions) {
             try {
-              errorResponse = ensureProblem(this.bodyLimitOptions.onError(errorResponse), 'REQUEST_BODY_TOO_LARGE');
+              errorResponse = ensureProblem(
+                this.bodyLimitOptions.onError(errorResponse),
+                SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE,
+              );
             } catch {
               // Fall back to the default response.
             }
@@ -498,7 +502,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           return res.status(400).json({
             error: 'Invalid request body',
             issues,
-            problem: { code: 'REQUEST_BODY_INVALID_JSON', metadata: { issues } },
+            problem: { code: SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON, metadata: { issues } },
           });
         }
 
@@ -517,7 +521,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
             return res.status(400).json({
               error: 'Invalid query parameters',
               issues,
-              problem: { code: 'REQUEST_VALIDATION_FAILED', metadata: { issues, location: 'query' } },
+              problem: { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues, location: 'query' } },
             });
           }
         }
@@ -537,7 +541,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
             return res.status(400).json({
               error: 'Invalid request body',
               issues,
-              problem: { code: 'REQUEST_VALIDATION_FAILED', metadata: { issues, location: 'body' } },
+              problem: { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues, location: 'body' } },
             });
           }
         }
@@ -558,7 +562,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
             return res.status(400).json({
               error: 'Invalid path parameters',
               issues,
-              problem: { code: 'REQUEST_VALIDATION_FAILED', metadata: { issues, location: 'path' } },
+              problem: { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues, location: 'path' } },
             });
           }
         }

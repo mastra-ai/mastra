@@ -1,3 +1,4 @@
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import {
   storedScorerIdPathParams,
@@ -51,14 +52,17 @@ export const LIST_STORED_SCORERS_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const scorerStore = await storage.getStore('scorerDefinitions');
       if (!scorerStore) {
         throw new HTTPException(500, {
           message: 'Scorer definitions storage domain is not available',
-          code: 'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -76,7 +80,7 @@ export const LIST_STORED_SCORERS_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'Error listing stored scorer definitions',
-        code: 'STORED_SCORERS_LIST_FAILED',
+        code: SERVER_ERROR_CODES.STORED_SCORERS_LIST_FAILED,
       });
     }
   },
@@ -102,14 +106,17 @@ export const GET_STORED_SCORER_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const scorerStore = await storage.getStore('scorerDefinitions');
       if (!scorerStore) {
         throw new HTTPException(500, {
           message: 'Scorer definitions storage domain is not available',
-          code: 'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -118,7 +125,7 @@ export const GET_STORED_SCORER_ROUTE = createRoute({
       if (!scorer) {
         throw new HTTPException(404, {
           message: `Stored scorer definition with id ${storedScorerId} not found`,
-          code: 'STORED_SCORER_NOT_FOUND',
+          code: SERVER_ERROR_CODES.STORED_SCORER_NOT_FOUND,
           metadata: { storedScorerId },
         });
       }
@@ -128,7 +135,7 @@ export const GET_STORED_SCORER_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'Error getting stored scorer definition',
-        code: 'STORED_SCORER_GET_FAILED',
+        code: SERVER_ERROR_CODES.STORED_SCORER_GET_FAILED,
       });
     }
   },
@@ -166,14 +173,17 @@ export const CREATE_STORED_SCORER_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const scorerStore = await storage.getStore('scorerDefinitions');
       if (!scorerStore) {
         throw new HTTPException(500, {
           message: 'Scorer definitions storage domain is not available',
-          code: 'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -183,7 +193,7 @@ export const CREATE_STORED_SCORER_ROUTE = createRoute({
       if (!id) {
         throw new HTTPException(400, {
           message: 'Could not derive scorer definition ID from name. Please provide an explicit id.',
-          code: 'STORED_SCORER_ID_DERIVATION_FAILED',
+          code: SERVER_ERROR_CODES.STORED_SCORER_ID_DERIVATION_FAILED,
         });
       }
 
@@ -192,7 +202,7 @@ export const CREATE_STORED_SCORER_ROUTE = createRoute({
       if (existing) {
         throw new HTTPException(409, {
           message: `Scorer definition with id ${id} already exists`,
-          code: 'STORED_SCORER_ALREADY_EXISTS',
+          code: SERVER_ERROR_CODES.STORED_SCORER_ALREADY_EXISTS,
           metadata: { storedScorerId: id },
         });
       }
@@ -219,7 +229,7 @@ export const CREATE_STORED_SCORER_ROUTE = createRoute({
       if (!resolved) {
         throw new HTTPException(500, {
           message: 'Failed to resolve created scorer definition',
-          code: 'STORED_SCORER_CREATED_RESOLVE_FAILED',
+          code: SERVER_ERROR_CODES.STORED_SCORER_CREATED_RESOLVE_FAILED,
         });
       }
 
@@ -227,7 +237,7 @@ export const CREATE_STORED_SCORER_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'Error creating stored scorer definition',
-        code: 'STORED_SCORER_CREATE_FAILED',
+        code: SERVER_ERROR_CODES.STORED_SCORER_CREATE_FAILED,
       });
     }
   },
@@ -268,14 +278,17 @@ export const UPDATE_STORED_SCORER_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const scorerStore = await storage.getStore('scorerDefinitions');
       if (!scorerStore) {
         throw new HTTPException(500, {
           message: 'Scorer definitions storage domain is not available',
-          code: 'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -284,7 +297,7 @@ export const UPDATE_STORED_SCORER_ROUTE = createRoute({
       if (!existing) {
         throw new HTTPException(404, {
           message: `Stored scorer definition with id ${storedScorerId} not found`,
-          code: 'STORED_SCORER_NOT_FOUND',
+          code: SERVER_ERROR_CODES.STORED_SCORER_NOT_FOUND,
           metadata: { storedScorerId },
         });
       }
@@ -349,7 +362,7 @@ export const UPDATE_STORED_SCORER_ROUTE = createRoute({
       if (!resolved) {
         throw new HTTPException(500, {
           message: 'Failed to resolve updated scorer definition',
-          code: 'STORED_SCORER_UPDATED_RESOLVE_FAILED',
+          code: SERVER_ERROR_CODES.STORED_SCORER_UPDATED_RESOLVE_FAILED,
         });
       }
 
@@ -357,7 +370,7 @@ export const UPDATE_STORED_SCORER_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'Error updating stored scorer definition',
-        code: 'STORED_SCORER_UPDATE_FAILED',
+        code: SERVER_ERROR_CODES.STORED_SCORER_UPDATE_FAILED,
       });
     }
   },
@@ -381,14 +394,17 @@ export const DELETE_STORED_SCORER_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const scorerStore = await storage.getStore('scorerDefinitions');
       if (!scorerStore) {
         throw new HTTPException(500, {
           message: 'Scorer definitions storage domain is not available',
-          code: 'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -397,7 +413,7 @@ export const DELETE_STORED_SCORER_ROUTE = createRoute({
       if (!existing) {
         throw new HTTPException(404, {
           message: `Stored scorer definition with id ${storedScorerId} not found`,
-          code: 'STORED_SCORER_NOT_FOUND',
+          code: SERVER_ERROR_CODES.STORED_SCORER_NOT_FOUND,
           metadata: { storedScorerId },
         });
       }
@@ -412,7 +428,7 @@ export const DELETE_STORED_SCORER_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'Error deleting stored scorer definition',
-        code: 'STORED_SCORER_DELETE_FAILED',
+        code: SERVER_ERROR_CODES.STORED_SCORER_DELETE_FAILED,
       });
     }
   },

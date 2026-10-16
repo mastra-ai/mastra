@@ -1,6 +1,7 @@
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/evals';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { StoragePagination } from '@mastra/core/storage';
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import { runIdSchema } from '../schemas/common';
 import {
@@ -193,7 +194,7 @@ export const LIST_SCORERS_ROUTE = createRoute({
       });
       return scorers;
     } catch (error) {
-      return handleError(error, { message: 'Error listing scorers', code: 'SCORERS_LIST_FAILED' });
+      return handleError(error, { message: 'Error listing scorers', code: SERVER_ERROR_CODES.SCORERS_LIST_FAILED });
     }
   }) as any,
 });
@@ -223,7 +224,7 @@ export const GET_SCORER_ROUTE = createRoute({
 
       return scorer;
     } catch (error) {
-      return handleError(error, { message: 'Error getting scorer', code: 'SCORER_GET_FAILED' });
+      return handleError(error, { message: 'Error getting scorer', code: SERVER_ERROR_CODES.SCORER_GET_FAILED });
     }
   }) as any,
 });
@@ -256,7 +257,10 @@ export const LIST_SCORES_BY_RUN_ID_ROUTE = createRoute({
         scores: scoreResults.scores.map((score: ScoreRowData) => ({ ...score, ...getTraceDetails(score.traceId) })),
       };
     } catch (error) {
-      return handleError(error, { message: 'Error getting scores by run id', code: 'SCORES_BY_RUN_LIST_FAILED' });
+      return handleError(error, {
+        message: 'Error getting scores by run id',
+        code: SERVER_ERROR_CODES.SCORES_BY_RUN_LIST_FAILED,
+      });
     }
   },
 });
@@ -287,7 +291,10 @@ export const LIST_SCORES_BY_SCORER_ID_ROUTE = createRoute({
         scores: scoreResults.scores.map((score: ScoreRowData) => ({ ...score, ...getTraceDetails(score.traceId) })),
       };
     } catch (error) {
-      return handleError(error, { message: 'Error getting scores by scorer id', code: 'SCORES_BY_SCORER_LIST_FAILED' });
+      return handleError(error, {
+        message: 'Error getting scores by scorer id',
+        code: SERVER_ERROR_CODES.SCORES_BY_SCORER_LIST_FAILED,
+      });
     }
   },
 });
@@ -333,7 +340,10 @@ export const LIST_SCORES_BY_ENTITY_ID_ROUTE = createRoute({
         scores: scoreResults.scores.map((score: ScoreRowData) => ({ ...score, ...getTraceDetails(score.traceId) })),
       };
     } catch (error) {
-      return handleError(error, { message: 'Error getting scores by entity id', code: 'SCORES_BY_ENTITY_LIST_FAILED' });
+      return handleError(error, {
+        message: 'Error getting scores by entity id',
+        code: SERVER_ERROR_CODES.SCORES_BY_ENTITY_LIST_FAILED,
+      });
     }
   },
 });
@@ -354,11 +364,14 @@ export const SAVE_SCORE_ROUTE = createRoute({
       const scoresStore = await mastra.getStorage()?.getStore('scores');
       const result = await scoresStore?.saveScore?.(score);
       if (!result) {
-        throw new HTTPException(500, { message: 'Storage not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
       return result;
     } catch (error) {
-      return handleError(error, { message: 'Error saving score', code: 'SCORE_SAVE_FAILED' });
+      return handleError(error, { message: 'Error saving score', code: SERVER_ERROR_CODES.SCORE_SAVE_FAILED });
     }
   },
 });

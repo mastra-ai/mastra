@@ -1,6 +1,7 @@
 import type { Mastra } from '@mastra/core';
 import type { ChannelProvider } from '@mastra/core/channels';
 
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import {
   agentFeaturesSchema,
@@ -48,7 +49,7 @@ export async function isBuilderFeatureEnabled(mastra: Mastra, feature: keyof Age
  */
 export async function requireBuilderFeature(mastra: Mastra, feature: keyof AgentFeatures): Promise<void> {
   if (!(await isBuilderFeatureEnabled(mastra, feature))) {
-    throw new HTTPException(404, { message: 'Not Found', code: 'AGENT_BUILDER_NOT_ENABLED' });
+    throw new HTTPException(404, { message: 'Not Found', code: SERVER_ERROR_CODES.AGENT_BUILDER_NOT_ENABLED });
   }
 }
 
@@ -172,7 +173,10 @@ export const GET_EDITOR_BUILDER_SETTINGS_ROUTE = createRoute({
         ...(modelPolicyWarnings.length > 0 ? { modelPolicyWarnings } : {}),
       };
     } catch (error) {
-      return handleError(error, { message: 'Error getting builder settings', code: 'BUILDER_SETTINGS_GET_FAILED' });
+      return handleError(error, {
+        message: 'Error getting builder settings',
+        code: SERVER_ERROR_CODES.BUILDER_SETTINGS_GET_FAILED,
+      });
     }
   },
 });
@@ -230,7 +234,10 @@ export const GET_EDITOR_BUILDER_AVAILABLE_MODELS_ROUTE = createRoute({
 
       return { providers: filtered };
     } catch (error) {
-      return handleError(error, { message: 'Error fetching available models', code: 'BUILDER_MODELS_FETCH_FAILED' });
+      return handleError(error, {
+        message: 'Error fetching available models',
+        code: SERVER_ERROR_CODES.BUILDER_MODELS_FETCH_FAILED,
+      });
     }
   },
 });
@@ -395,7 +402,7 @@ export const GET_INFRASTRUCTURE_STATUS_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'Error getting infrastructure status',
-        code: 'BUILDER_INFRASTRUCTURE_STATUS_GET_FAILED',
+        code: SERVER_ERROR_CODES.BUILDER_INFRASTRUCTURE_STATUS_GET_FAILED,
       });
     }
   },

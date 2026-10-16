@@ -1,3 +1,4 @@
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import {
   storedWorkspaceIdPathParams,
@@ -44,14 +45,17 @@ export const LIST_STORED_WORKSPACES_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const workspaceStore = await storage.getStore('workspaces');
       if (!workspaceStore) {
         throw new HTTPException(500, {
           message: 'Workspaces storage domain is not available',
-          code: 'STORED_WORKSPACE_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_WORKSPACE_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -89,7 +93,10 @@ export const LIST_STORED_WORKSPACES_ROUTE = createRoute({
 
       return { ...result, workspaces };
     } catch (error) {
-      return handleError(error, { message: 'Error listing stored workspaces', code: 'STORED_WORKSPACES_LIST_FAILED' });
+      return handleError(error, {
+        message: 'Error listing stored workspaces',
+        code: SERVER_ERROR_CODES.STORED_WORKSPACES_LIST_FAILED,
+      });
     }
   },
 });
@@ -113,14 +120,17 @@ export const GET_STORED_WORKSPACE_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const workspaceStore = await storage.getStore('workspaces');
       if (!workspaceStore) {
         throw new HTTPException(500, {
           message: 'Workspaces storage domain is not available',
-          code: 'STORED_WORKSPACE_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_WORKSPACE_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -129,7 +139,7 @@ export const GET_STORED_WORKSPACE_ROUTE = createRoute({
       if (!workspace) {
         throw new HTTPException(404, {
           message: `Stored workspace with id ${storedWorkspaceId} not found`,
-          code: 'STORED_WORKSPACE_NOT_FOUND',
+          code: SERVER_ERROR_CODES.STORED_WORKSPACE_NOT_FOUND,
           metadata: { storedWorkspaceId },
         });
       }
@@ -145,7 +155,10 @@ export const GET_STORED_WORKSPACE_ROUTE = createRoute({
 
       return workspace;
     } catch (error) {
-      return handleError(error, { message: 'Error getting stored workspace', code: 'STORED_WORKSPACE_GET_FAILED' });
+      return handleError(error, {
+        message: 'Error getting stored workspace',
+        code: SERVER_ERROR_CODES.STORED_WORKSPACE_GET_FAILED,
+      });
     }
   },
 });
@@ -183,14 +196,17 @@ export const CREATE_STORED_WORKSPACE_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const workspaceStore = await storage.getStore('workspaces');
       if (!workspaceStore) {
         throw new HTTPException(500, {
           message: 'Workspaces storage domain is not available',
-          code: 'STORED_WORKSPACE_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_WORKSPACE_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -200,7 +216,7 @@ export const CREATE_STORED_WORKSPACE_ROUTE = createRoute({
       if (!id) {
         throw new HTTPException(400, {
           message: 'Could not derive workspace ID from name. Please provide an explicit id.',
-          code: 'STORED_WORKSPACE_ID_DERIVATION_FAILED',
+          code: SERVER_ERROR_CODES.STORED_WORKSPACE_ID_DERIVATION_FAILED,
         });
       }
 
@@ -209,7 +225,7 @@ export const CREATE_STORED_WORKSPACE_ROUTE = createRoute({
       if (existing) {
         throw new HTTPException(409, {
           message: `Workspace with id ${id} already exists`,
-          code: 'STORED_WORKSPACE_ALREADY_EXISTS',
+          code: SERVER_ERROR_CODES.STORED_WORKSPACE_ALREADY_EXISTS,
           metadata: { storedWorkspaceId: id },
         });
       }
@@ -242,13 +258,16 @@ export const CREATE_STORED_WORKSPACE_ROUTE = createRoute({
       if (!resolved) {
         throw new HTTPException(500, {
           message: 'Failed to resolve created workspace',
-          code: 'STORED_WORKSPACE_CREATED_RESOLVE_FAILED',
+          code: SERVER_ERROR_CODES.STORED_WORKSPACE_CREATED_RESOLVE_FAILED,
         });
       }
 
       return resolved;
     } catch (error) {
-      return handleError(error, { message: 'Error creating stored workspace', code: 'STORED_WORKSPACE_CREATE_FAILED' });
+      return handleError(error, {
+        message: 'Error creating stored workspace',
+        code: SERVER_ERROR_CODES.STORED_WORKSPACE_CREATE_FAILED,
+      });
     }
   },
 });
@@ -289,14 +308,17 @@ export const UPDATE_STORED_WORKSPACE_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const workspaceStore = await storage.getStore('workspaces');
       if (!workspaceStore) {
         throw new HTTPException(500, {
           message: 'Workspaces storage domain is not available',
-          code: 'STORED_WORKSPACE_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_WORKSPACE_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -305,7 +327,7 @@ export const UPDATE_STORED_WORKSPACE_ROUTE = createRoute({
       if (!existing) {
         throw new HTTPException(404, {
           message: `Stored workspace with id ${storedWorkspaceId} not found`,
-          code: 'STORED_WORKSPACE_NOT_FOUND',
+          code: SERVER_ERROR_CODES.STORED_WORKSPACE_NOT_FOUND,
           metadata: { storedWorkspaceId },
         });
       }
@@ -357,13 +379,16 @@ export const UPDATE_STORED_WORKSPACE_ROUTE = createRoute({
       if (!resolved) {
         throw new HTTPException(500, {
           message: 'Failed to resolve updated workspace',
-          code: 'STORED_WORKSPACE_UPDATED_RESOLVE_FAILED',
+          code: SERVER_ERROR_CODES.STORED_WORKSPACE_UPDATED_RESOLVE_FAILED,
         });
       }
 
       return resolved;
     } catch (error) {
-      return handleError(error, { message: 'Error updating stored workspace', code: 'STORED_WORKSPACE_UPDATE_FAILED' });
+      return handleError(error, {
+        message: 'Error updating stored workspace',
+        code: SERVER_ERROR_CODES.STORED_WORKSPACE_UPDATE_FAILED,
+      });
     }
   },
 });
@@ -386,14 +411,17 @@ export const DELETE_STORED_WORKSPACE_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const workspaceStore = await storage.getStore('workspaces');
       if (!workspaceStore) {
         throw new HTTPException(500, {
           message: 'Workspaces storage domain is not available',
-          code: 'STORED_WORKSPACE_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_WORKSPACE_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -402,7 +430,7 @@ export const DELETE_STORED_WORKSPACE_ROUTE = createRoute({
       if (!existing) {
         throw new HTTPException(404, {
           message: `Stored workspace with id ${storedWorkspaceId} not found`,
-          code: 'STORED_WORKSPACE_NOT_FOUND',
+          code: SERVER_ERROR_CODES.STORED_WORKSPACE_NOT_FOUND,
           metadata: { storedWorkspaceId },
         });
       }
@@ -424,7 +452,10 @@ export const DELETE_STORED_WORKSPACE_ROUTE = createRoute({
         message: `Workspace ${storedWorkspaceId} deleted successfully`,
       };
     } catch (error) {
-      return handleError(error, { message: 'Error deleting stored workspace', code: 'STORED_WORKSPACE_DELETE_FAILED' });
+      return handleError(error, {
+        message: 'Error deleting stored workspace',
+        code: SERVER_ERROR_CODES.STORED_WORKSPACE_DELETE_FAILED,
+      });
     }
   },
 });

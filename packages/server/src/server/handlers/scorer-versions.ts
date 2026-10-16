@@ -1,3 +1,4 @@
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import {
   scorerVersionPathParams,
@@ -56,14 +57,17 @@ export const LIST_SCORER_VERSIONS_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const scorerStore = await storage.getStore('scorerDefinitions');
       if (!scorerStore) {
         throw new HTTPException(500, {
           message: 'Scorer definitions storage domain is not available',
-          code: 'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -71,7 +75,7 @@ export const LIST_SCORER_VERSIONS_ROUTE = createRoute({
       if (!scorer) {
         throw new HTTPException(404, {
           message: `Scorer with id ${scorerId} not found`,
-          code: 'STORED_SCORER_NOT_FOUND',
+          code: SERVER_ERROR_CODES.STORED_SCORER_NOT_FOUND,
           metadata: { scorerId },
         });
       }
@@ -86,7 +90,10 @@ export const LIST_SCORER_VERSIONS_ROUTE = createRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, { message: 'Error listing scorer versions', code: 'SCORER_VERSIONS_LIST_FAILED' });
+      return handleError(error, {
+        message: 'Error listing scorer versions',
+        code: SERVER_ERROR_CODES.SCORER_VERSIONS_LIST_FAILED,
+      });
     }
   },
 });
@@ -110,14 +117,17 @@ export const CREATE_SCORER_VERSION_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const scorerStore = await storage.getStore('scorerDefinitions');
       if (!scorerStore) {
         throw new HTTPException(500, {
           message: 'Scorer definitions storage domain is not available',
-          code: 'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -125,7 +135,7 @@ export const CREATE_SCORER_VERSION_ROUTE = createRoute({
       if (!scorer) {
         throw new HTTPException(404, {
           message: `Scorer with id ${scorerId} not found`,
-          code: 'STORED_SCORER_NOT_FOUND',
+          code: SERVER_ERROR_CODES.STORED_SCORER_NOT_FOUND,
           metadata: { scorerId },
         });
       }
@@ -170,7 +180,7 @@ export const CREATE_SCORER_VERSION_ROUTE = createRoute({
       if (!version) {
         throw new HTTPException(500, {
           message: 'Failed to retrieve created version',
-          code: 'SCORER_VERSION_CREATED_RESOLVE_FAILED',
+          code: SERVER_ERROR_CODES.SCORER_VERSION_CREATED_RESOLVE_FAILED,
         });
       }
 
@@ -183,7 +193,10 @@ export const CREATE_SCORER_VERSION_ROUTE = createRoute({
 
       return version;
     } catch (error) {
-      return handleError(error, { message: 'Error creating scorer version', code: 'SCORER_VERSION_CREATE_FAILED' });
+      return handleError(error, {
+        message: 'Error creating scorer version',
+        code: SERVER_ERROR_CODES.SCORER_VERSION_CREATE_FAILED,
+      });
     }
   },
 });
@@ -206,14 +219,17 @@ export const GET_SCORER_VERSION_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const scorerStore = await storage.getStore('scorerDefinitions');
       if (!scorerStore) {
         throw new HTTPException(500, {
           message: 'Scorer definitions storage domain is not available',
-          code: 'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -222,7 +238,7 @@ export const GET_SCORER_VERSION_ROUTE = createRoute({
       if (!version) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found`,
-          code: 'SCORER_VERSION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.SCORER_VERSION_NOT_FOUND,
           metadata: { versionId },
         });
       }
@@ -230,7 +246,7 @@ export const GET_SCORER_VERSION_ROUTE = createRoute({
       if (version.scorerDefinitionId !== scorerId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for scorer ${scorerId}`,
-          code: 'SCORER_VERSION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.SCORER_VERSION_NOT_FOUND,
           metadata: { versionId, scorerId },
         });
       }
@@ -239,7 +255,10 @@ export const GET_SCORER_VERSION_ROUTE = createRoute({
 
       return version;
     } catch (error) {
-      return handleError(error, { message: 'Error getting scorer version', code: 'SCORER_VERSION_GET_FAILED' });
+      return handleError(error, {
+        message: 'Error getting scorer version',
+        code: SERVER_ERROR_CODES.SCORER_VERSION_GET_FAILED,
+      });
     }
   },
 });
@@ -262,14 +281,17 @@ export const ACTIVATE_SCORER_VERSION_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const scorerStore = await storage.getStore('scorerDefinitions');
       if (!scorerStore) {
         throw new HTTPException(500, {
           message: 'Scorer definitions storage domain is not available',
-          code: 'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -277,7 +299,7 @@ export const ACTIVATE_SCORER_VERSION_ROUTE = createRoute({
       if (!scorer) {
         throw new HTTPException(404, {
           message: `Scorer with id ${scorerId} not found`,
-          code: 'STORED_SCORER_NOT_FOUND',
+          code: SERVER_ERROR_CODES.STORED_SCORER_NOT_FOUND,
           metadata: { scorerId },
         });
       }
@@ -287,14 +309,14 @@ export const ACTIVATE_SCORER_VERSION_ROUTE = createRoute({
       if (!version) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found`,
-          code: 'SCORER_VERSION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.SCORER_VERSION_NOT_FOUND,
           metadata: { versionId },
         });
       }
       if (version.scorerDefinitionId !== scorerId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for scorer ${scorerId}`,
-          code: 'SCORER_VERSION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.SCORER_VERSION_NOT_FOUND,
           metadata: { versionId, scorerId },
         });
       }
@@ -314,7 +336,10 @@ export const ACTIVATE_SCORER_VERSION_ROUTE = createRoute({
         activeVersionId: versionId,
       };
     } catch (error) {
-      return handleError(error, { message: 'Error activating scorer version', code: 'SCORER_VERSION_ACTIVATE_FAILED' });
+      return handleError(error, {
+        message: 'Error activating scorer version',
+        code: SERVER_ERROR_CODES.SCORER_VERSION_ACTIVATE_FAILED,
+      });
     }
   },
 });
@@ -337,14 +362,17 @@ export const RESTORE_SCORER_VERSION_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const scorerStore = await storage.getStore('scorerDefinitions');
       if (!scorerStore) {
         throw new HTTPException(500, {
           message: 'Scorer definitions storage domain is not available',
-          code: 'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -352,7 +380,7 @@ export const RESTORE_SCORER_VERSION_ROUTE = createRoute({
       if (!scorer) {
         throw new HTTPException(404, {
           message: `Scorer with id ${scorerId} not found`,
-          code: 'STORED_SCORER_NOT_FOUND',
+          code: SERVER_ERROR_CODES.STORED_SCORER_NOT_FOUND,
           metadata: { scorerId },
         });
       }
@@ -362,14 +390,14 @@ export const RESTORE_SCORER_VERSION_ROUTE = createRoute({
       if (!versionToRestore) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found`,
-          code: 'SCORER_VERSION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.SCORER_VERSION_NOT_FOUND,
           metadata: { versionId },
         });
       }
       if (versionToRestore.scorerDefinitionId !== scorerId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for scorer ${scorerId}`,
-          code: 'SCORER_VERSION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.SCORER_VERSION_NOT_FOUND,
           metadata: { versionId, scorerId },
         });
       }
@@ -406,7 +434,7 @@ export const RESTORE_SCORER_VERSION_ROUTE = createRoute({
       if (!newVersion) {
         throw new HTTPException(500, {
           message: 'Failed to retrieve created version',
-          code: 'SCORER_VERSION_CREATED_RESOLVE_FAILED',
+          code: SERVER_ERROR_CODES.SCORER_VERSION_CREATED_RESOLVE_FAILED,
         });
       }
 
@@ -422,7 +450,10 @@ export const RESTORE_SCORER_VERSION_ROUTE = createRoute({
 
       return newVersion;
     } catch (error) {
-      return handleError(error, { message: 'Error restoring scorer version', code: 'SCORER_VERSION_RESTORE_FAILED' });
+      return handleError(error, {
+        message: 'Error restoring scorer version',
+        code: SERVER_ERROR_CODES.SCORER_VERSION_RESTORE_FAILED,
+      });
     }
   },
 });
@@ -445,14 +476,17 @@ export const DELETE_SCORER_VERSION_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const scorerStore = await storage.getStore('scorerDefinitions');
       if (!scorerStore) {
         throw new HTTPException(500, {
           message: 'Scorer definitions storage domain is not available',
-          code: 'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -460,7 +494,7 @@ export const DELETE_SCORER_VERSION_ROUTE = createRoute({
       if (!scorer) {
         throw new HTTPException(404, {
           message: `Scorer with id ${scorerId} not found`,
-          code: 'STORED_SCORER_NOT_FOUND',
+          code: SERVER_ERROR_CODES.STORED_SCORER_NOT_FOUND,
           metadata: { scorerId },
         });
       }
@@ -470,14 +504,14 @@ export const DELETE_SCORER_VERSION_ROUTE = createRoute({
       if (!version) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found`,
-          code: 'SCORER_VERSION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.SCORER_VERSION_NOT_FOUND,
           metadata: { versionId },
         });
       }
       if (version.scorerDefinitionId !== scorerId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for scorer ${scorerId}`,
-          code: 'SCORER_VERSION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.SCORER_VERSION_NOT_FOUND,
           metadata: { versionId, scorerId },
         });
       }
@@ -485,7 +519,7 @@ export const DELETE_SCORER_VERSION_ROUTE = createRoute({
       if (scorer.activeVersionId === versionId) {
         throw new HTTPException(400, {
           message: 'Cannot delete the active version. Activate a different version first.',
-          code: 'SCORER_VERSION_ACTIVE_DELETE_FORBIDDEN',
+          code: SERVER_ERROR_CODES.SCORER_VERSION_ACTIVE_DELETE_FORBIDDEN,
         });
       }
 
@@ -499,7 +533,10 @@ export const DELETE_SCORER_VERSION_ROUTE = createRoute({
         message: `Version ${version.versionNumber} deleted successfully`,
       };
     } catch (error) {
-      return handleError(error, { message: 'Error deleting scorer version', code: 'SCORER_VERSION_DELETE_FAILED' });
+      return handleError(error, {
+        message: 'Error deleting scorer version',
+        code: SERVER_ERROR_CODES.SCORER_VERSION_DELETE_FAILED,
+      });
     }
   },
 });
@@ -523,14 +560,17 @@ export const COMPARE_SCORER_VERSIONS_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const scorerStore = await storage.getStore('scorerDefinitions');
       if (!scorerStore) {
         throw new HTTPException(500, {
           message: 'Scorer definitions storage domain is not available',
-          code: 'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
       const scorer = await scorerStore.getById(scorerId);
@@ -540,14 +580,14 @@ export const COMPARE_SCORER_VERSIONS_ROUTE = createRoute({
       if (!fromVersion) {
         throw new HTTPException(404, {
           message: `Version with id ${from} not found`,
-          code: 'SCORER_VERSION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.SCORER_VERSION_NOT_FOUND,
           metadata: { fromVersionId: from },
         });
       }
       if (fromVersion.scorerDefinitionId !== scorerId) {
         throw new HTTPException(404, {
           message: `Version with id ${from} not found for scorer ${scorerId}`,
-          code: 'SCORER_VERSION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.SCORER_VERSION_NOT_FOUND,
           metadata: { fromVersionId: from, scorerId },
         });
       }
@@ -556,14 +596,14 @@ export const COMPARE_SCORER_VERSIONS_ROUTE = createRoute({
       if (!toVersion) {
         throw new HTTPException(404, {
           message: `Version with id ${to} not found`,
-          code: 'SCORER_VERSION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.SCORER_VERSION_NOT_FOUND,
           metadata: { toVersionId: to },
         });
       }
       if (toVersion.scorerDefinitionId !== scorerId) {
         throw new HTTPException(404, {
           message: `Version with id ${to} not found for scorer ${scorerId}`,
-          code: 'SCORER_VERSION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.SCORER_VERSION_NOT_FOUND,
           metadata: { toVersionId: to, scorerId },
         });
       }
@@ -585,7 +625,10 @@ export const COMPARE_SCORER_VERSIONS_ROUTE = createRoute({
         toVersion,
       };
     } catch (error) {
-      return handleError(error, { message: 'Error comparing scorer versions', code: 'SCORER_VERSIONS_COMPARE_FAILED' });
+      return handleError(error, {
+        message: 'Error comparing scorer versions',
+        code: SERVER_ERROR_CODES.SCORER_VERSIONS_COMPARE_FAILED,
+      });
     }
   },
 });

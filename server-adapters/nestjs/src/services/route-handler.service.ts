@@ -1,5 +1,6 @@
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
+import { SERVER_ERROR_CODES } from '@mastra/server/error-codes';
 import { formatZodError } from '@mastra/server/handlers/error';
 import { ensureProblem, isZodError, SERVER_ROUTES } from '@mastra/server/server-adapter';
 import type { ServerRoute, ServerContext, ZodErrorLike } from '@mastra/server/server-adapter';
@@ -198,7 +199,10 @@ export class RouteHandlerService {
           // Invalid percent encoding - throw a proper 400 error
           throw new BadRequestException({
             message: `Invalid URL encoding in path parameter: ${paramName}`,
-            problem: { code: 'REQUEST_VALIDATION_FAILED', metadata: { location: 'path', param: paramName } },
+            problem: {
+              code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+              metadata: { location: 'path', param: paramName },
+            },
           });
         }
       } else if (patternPart !== pathPart) {
@@ -318,7 +322,7 @@ export class RouteHandlerService {
             `Invalid ${VALIDATION_CONTEXT_LABELS[context]}`,
             error,
             result.status,
-            ensureProblem(result.body, 'REQUEST_VALIDATION_FAILED'),
+            ensureProblem(result.body, SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED),
           );
         }
       } catch (hookError) {

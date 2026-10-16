@@ -1,3 +1,4 @@
+import { SERVER_ERROR_CODES } from '@mastra/server/error-codes';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { normalizeQueryParams } from '@mastra/server/server-adapter';
 import {
@@ -78,7 +79,7 @@ export class MastraController {
     if (!routePath) {
       throw new NotFoundException({
         message: `Route not found: ${method} ${path}`,
-        problem: { code: 'ROUTE_NOT_FOUND', metadata: { method, path } },
+        problem: { code: SERVER_ERROR_CODES.ROUTE_NOT_FOUND, metadata: { method, path } },
       });
     }
 
@@ -86,7 +87,7 @@ export class MastraController {
     if (routePath.includes('//')) {
       throw new NotFoundException({
         message: `Route not found: ${method} ${path}`,
-        problem: { code: 'ROUTE_NOT_FOUND', metadata: { method, path } },
+        problem: { code: SERVER_ERROR_CODES.ROUTE_NOT_FOUND, metadata: { method, path } },
       });
     }
 
@@ -96,7 +97,7 @@ export class MastraController {
     if (!matchResult) {
       throw new NotFoundException({
         message: `Route not found: ${method} ${path}`,
-        problem: { code: 'ROUTE_NOT_FOUND', metadata: { method, path } },
+        problem: { code: SERVER_ERROR_CODES.ROUTE_NOT_FOUND, metadata: { method, path } },
       });
     }
 

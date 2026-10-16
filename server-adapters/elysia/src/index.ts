@@ -3,6 +3,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { findMatchingCustomRoute, isProtectedCustomRoute } from '@mastra/server/auth';
+import { SERVER_ERROR_CODES } from '@mastra/server/error-codes';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
@@ -580,11 +581,14 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         if (exceedsDeclaredLimit || exceedsStreamedJsonLimit) {
           let errorResponse: unknown = {
             error: 'Request body too large',
-            problem: { code: 'REQUEST_BODY_TOO_LARGE', metadata: { maxBodySize: maxSize } },
+            problem: { code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE, metadata: { maxBodySize: maxSize } },
           };
           if (route.maxBodySize === undefined && this.bodyLimitOptions) {
             try {
-              errorResponse = ensureProblem(this.bodyLimitOptions.onError(errorResponse), 'REQUEST_BODY_TOO_LARGE');
+              errorResponse = ensureProblem(
+                this.bodyLimitOptions.onError(errorResponse),
+                SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE,
+              );
             } catch {
               // Fall back to the default error response.
             }
@@ -642,7 +646,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
             error: 'Invalid request body',
             issues: [{ field: 'body', message: params.bodyParseError.message }],
             problem: {
-              code: 'REQUEST_BODY_INVALID_JSON',
+              code: SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON,
               metadata: { issues: [{ field: 'body', message: params.bodyParseError.message }] },
             },
           }),
@@ -672,7 +676,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
             JSON.stringify({
               error: 'Invalid query parameters',
               issues,
-              problem: { code: 'REQUEST_VALIDATION_FAILED', metadata: { issues, location: 'query' } },
+              problem: { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues, location: 'query' } },
             }),
             {
               status: 400,
@@ -701,7 +705,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
             JSON.stringify({
               error: 'Invalid request body',
               issues,
-              problem: { code: 'REQUEST_VALIDATION_FAILED', metadata: { issues, location: 'body' } },
+              problem: { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues, location: 'body' } },
             }),
             {
               status: 400,
@@ -731,7 +735,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
             JSON.stringify({
               error: 'Invalid path parameters',
               issues,
-              problem: { code: 'REQUEST_VALIDATION_FAILED', metadata: { issues, location: 'path' } },
+              problem: { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues, location: 'path' } },
             }),
             {
               status: 400,
@@ -939,9 +943,9 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
           ...(httpStatus < 500 ? { issues: [] } : {}),
           problem:
             ctx.code === 'PARSE'
-              ? { code: 'REQUEST_BODY_INVALID_JSON' }
+              ? { code: SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON }
               : ctx.code === 'VALIDATION'
-                ? { code: 'REQUEST_VALIDATION_FAILED' }
+                ? { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED }
                 : formatErrorResponse(error).body.problem,
         }),
         {

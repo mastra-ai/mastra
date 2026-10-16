@@ -1,3 +1,4 @@
+import { SERVER_ERROR_CODES } from '@mastra/server/error-codes';
 import { Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import type { CallHandler, ExecutionContext, NestInterceptor } from '@nestjs/common';
 import type { Request } from 'express';
@@ -18,7 +19,7 @@ export class RequestTrackingInterceptor implements NestInterceptor {
     if (this.shutdownService.shuttingDown) {
       throw new ServiceUnavailableException({
         message: 'Server is shutting down',
-        problem: { code: 'SERVER_SHUTTING_DOWN' },
+        problem: { code: SERVER_ERROR_CODES.SERVER_SHUTTING_DOWN },
       });
     }
 

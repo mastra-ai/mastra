@@ -12,7 +12,7 @@ import {
   MASTRA_AUTH_TOKEN_KEY,
   MASTRA_AUTH_MODE_KEY,
 } from '../constants';
-import { isServerProblem } from '../error-codes';
+import { SERVER_ERROR_CODES, isServerProblem } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import { defaultAuthConfig } from './defaults';
 import { parse } from './path-pattern';
@@ -478,7 +478,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
       return {
         action: 'error',
         status: 401,
-        body: { error: 'Invalid or expired token', problem: { code: 'AUTHENTICATION_TOKEN_INVALID' } },
+        body: { error: 'Invalid or expired token', problem: { code: SERVER_ERROR_CODES.AUTHENTICATION_TOKEN_INVALID } },
         headers: refreshHeaders,
       };
     }
@@ -528,7 +528,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
           status: 500,
           body: {
             error: 'Failed to map authenticated user to a resource ID',
-            problem: { code: 'AUTHENTICATED_USER_RESOURCE_MAPPING_FAILED' },
+            problem: { code: SERVER_ERROR_CODES.AUTHENTICATED_USER_RESOURCE_MAPPING_FAILED },
           },
           headers: refreshHeaders,
         };
@@ -579,7 +579,12 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
           error: err.message,
           problem: isServerProblem(err.problem)
             ? err.problem
-            : { code: err.status === 401 ? 'AUTHENTICATION_REQUIRED' : 'AUTHENTICATION_FAILED' },
+            : {
+                code:
+                  err.status === 401
+                    ? SERVER_ERROR_CODES.AUTHENTICATION_REQUIRED
+                    : SERVER_ERROR_CODES.AUTHENTICATION_FAILED,
+              },
         },
         headers: refreshHeaders,
       };
@@ -587,7 +592,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     return {
       action: 'error',
       status: 401,
-      body: { error: 'Invalid or expired token', problem: { code: 'AUTHENTICATION_TOKEN_INVALID' } },
+      body: { error: 'Invalid or expired token', problem: { code: SERVER_ERROR_CODES.AUTHENTICATION_TOKEN_INVALID } },
       headers: refreshHeaders,
     };
   }
@@ -602,7 +607,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
         return {
           action: 'error',
           status: 403,
-          body: { error: 'Access denied', problem: { code: 'RESOURCE_ACCESS_DENIED' } },
+          body: { error: 'Access denied', problem: { code: SERVER_ERROR_CODES.RESOURCE_ACCESS_DENIED } },
           headers: refreshHeaders,
         };
       }
@@ -613,7 +618,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
       return {
         action: 'error',
         status: 500,
-        body: { error: 'Authorization error', problem: { code: 'AUTHORIZATION_CHECK_FAILED' } },
+        body: { error: 'Authorization error', problem: { code: SERVER_ERROR_CODES.AUTHORIZATION_CHECK_FAILED } },
         headers: refreshHeaders,
       };
     }
@@ -626,7 +631,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
         return {
           action: 'error',
           status: 403,
-          body: { error: 'Access denied', problem: { code: 'RESOURCE_ACCESS_DENIED' } },
+          body: { error: 'Access denied', problem: { code: SERVER_ERROR_CODES.RESOURCE_ACCESS_DENIED } },
           headers: refreshHeaders,
         };
       }
@@ -639,7 +644,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
       return {
         action: 'error',
         status: 500,
-        body: { error: 'Authorization error', problem: { code: 'AUTHORIZATION_CHECK_FAILED' } },
+        body: { error: 'Authorization error', problem: { code: SERVER_ERROR_CODES.AUTHORIZATION_CHECK_FAILED } },
         headers: refreshHeaders,
       };
     }
@@ -650,7 +655,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
       return {
         action: 'error',
         status: 403,
-        body: { error: 'Access denied', problem: { code: 'RESOURCE_ACCESS_DENIED' } },
+        body: { error: 'Access denied', problem: { code: SERVER_ERROR_CODES.RESOURCE_ACCESS_DENIED } },
         headers: refreshHeaders,
       };
     }
@@ -667,7 +672,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
           return {
             action: 'error',
             status: 403,
-            body: { error: 'Access denied', problem: { code: 'RESOURCE_ACCESS_DENIED' } },
+            body: { error: 'Access denied', problem: { code: SERVER_ERROR_CODES.RESOURCE_ACCESS_DENIED } },
             headers: refreshHeaders,
           };
         }
@@ -675,7 +680,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
         return {
           action: 'error',
           status: 403,
-          body: { error: 'Access denied', problem: { code: 'RESOURCE_ACCESS_DENIED' } },
+          body: { error: 'Access denied', problem: { code: SERVER_ERROR_CODES.RESOURCE_ACCESS_DENIED } },
           headers: refreshHeaders,
         };
       }

@@ -1,3 +1,4 @@
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import {
@@ -57,7 +58,7 @@ export const CREATE_CONVERSATION_ROUTE = createRoute({
       if (!mastra) {
         throw new HTTPException(500, {
           message: 'Mastra instance is required for conversations',
-          code: 'MASTRA_INSTANCE_REQUIRED',
+          code: SERVER_ERROR_CODES.MASTRA_INSTANCE_REQUIRED,
         });
       }
 
@@ -66,14 +67,14 @@ export const CREATE_CONVERSATION_ROUTE = createRoute({
       if (!memory) {
         throw new HTTPException(400, {
           message: `Agent "${agent.id}" does not have memory configured`,
-          code: 'CONVERSATION_MEMORY_NOT_CONFIGURED',
+          code: SERVER_ERROR_CODES.CONVERSATION_MEMORY_NOT_CONFIGURED,
           metadata: { agentId: agent.id },
         });
       }
       if (!(await getAgentMemoryStore({ agent, requestContext }))) {
         throw new HTTPException(400, {
           message: `Memory storage is not configured for agent "${agent.id}"`,
-          code: 'MEMORY_STORAGE_NOT_INITIALIZED',
+          code: SERVER_ERROR_CODES.MEMORY_STORAGE_NOT_INITIALIZED,
           metadata: { agentId: agent.id },
         });
       }
@@ -96,7 +97,10 @@ export const CREATE_CONVERSATION_ROUTE = createRoute({
 
       return buildConversationObject({ thread });
     } catch (error) {
-      return handleError(error, { message: 'Error creating conversation', code: 'CONVERSATION_CREATE_FAILED' });
+      return handleError(error, {
+        message: 'Error creating conversation',
+        code: SERVER_ERROR_CODES.CONVERSATION_CREATE_FAILED,
+      });
     }
   },
 });
@@ -118,14 +122,17 @@ export const GET_CONVERSATION_ROUTE = createRoute({
       if (!match) {
         throw new HTTPException(404, {
           message: `Conversation ${conversationId} was not found`,
-          code: 'CONVERSATION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.CONVERSATION_NOT_FOUND,
           metadata: { conversationId },
         });
       }
 
       return buildConversationObject({ thread: match.thread });
     } catch (error) {
-      return handleError(error, { message: 'Error retrieving conversation', code: 'CONVERSATION_GET_FAILED' });
+      return handleError(error, {
+        message: 'Error retrieving conversation',
+        code: SERVER_ERROR_CODES.CONVERSATION_GET_FAILED,
+      });
     }
   },
 });
@@ -147,7 +154,7 @@ export const GET_CONVERSATION_ITEMS_ROUTE = createRoute({
       if (!match) {
         throw new HTTPException(404, {
           message: `Conversation ${conversationId} was not found`,
-          code: 'CONVERSATION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.CONVERSATION_NOT_FOUND,
           metadata: { conversationId },
         });
       }
@@ -160,7 +167,10 @@ export const GET_CONVERSATION_ITEMS_ROUTE = createRoute({
 
       return buildConversationItemsList(mapMastraMessagesToConversationItems(messages));
     } catch (error) {
-      return handleError(error, { message: 'Error retrieving conversation', code: 'CONVERSATION_GET_FAILED' });
+      return handleError(error, {
+        message: 'Error retrieving conversation',
+        code: SERVER_ERROR_CODES.CONVERSATION_GET_FAILED,
+      });
     }
   },
 });
@@ -182,7 +192,7 @@ export const DELETE_CONVERSATION_ROUTE = createRoute({
       if (!match) {
         throw new HTTPException(404, {
           message: `Conversation ${conversationId} was not found`,
-          code: 'CONVERSATION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.CONVERSATION_NOT_FOUND,
           metadata: { conversationId },
         });
       }
@@ -191,7 +201,10 @@ export const DELETE_CONVERSATION_ROUTE = createRoute({
 
       return buildConversationDeleted(conversationId);
     } catch (error) {
-      return handleError(error, { message: 'Error deleting conversation', code: 'CONVERSATION_DELETE_FAILED' });
+      return handleError(error, {
+        message: 'Error deleting conversation',
+        code: SERVER_ERROR_CODES.CONVERSATION_DELETE_FAILED,
+      });
     }
   },
 });

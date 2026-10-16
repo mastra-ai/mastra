@@ -6,6 +6,7 @@ import type * as ToolProviderModule from '@mastra/core/tool-provider';
 import type { ToolProvider } from '@mastra/core/tool-provider';
 
 import { MASTRA_USER_KEY } from '../constants';
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import {
   authorizeToolProviderBodySchema,
@@ -71,7 +72,10 @@ async function loadToolProviderModule() {
 
 function requireEditor(editor: IMastraEditor | undefined): IMastraEditor {
   if (!editor) {
-    throw new HTTPException(500, { message: 'Editor is not configured', code: 'EDITOR_NOT_CONFIGURED' });
+    throw new HTTPException(500, {
+      message: 'Editor is not configured',
+      code: SERVER_ERROR_CODES.EDITOR_NOT_CONFIGURED,
+    });
   }
   return editor;
 }
@@ -84,7 +88,7 @@ async function resolveProvider(editor: IMastraEditor, providerId: string): Promi
     if (error instanceof UnknownToolProviderError) {
       throw new HTTPException(404, {
         message: error.message,
-        code: 'TOOL_PROVIDER_NOT_FOUND',
+        code: SERVER_ERROR_CODES.TOOL_PROVIDER_NOT_FOUND,
         metadata: { providerId },
       });
     }
@@ -158,7 +162,10 @@ export const LIST_TOOL_PROVIDERS_ROUTE = createRoute({
         })),
       };
     } catch (error) {
-      return handleError(error, { message: 'Error listing tool providers', code: 'TOOL_PROVIDERS_LIST_FAILED' });
+      return handleError(error, {
+        message: 'Error listing tool providers',
+        code: SERVER_ERROR_CODES.TOOL_PROVIDERS_LIST_FAILED,
+      });
     }
   },
 });
@@ -190,7 +197,7 @@ export const LIST_TOOL_PROVIDER_TOOLKITS_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'Error listing tool provider toolkits',
-        code: 'TOOL_PROVIDER_TOOLKITS_LIST_FAILED',
+        code: SERVER_ERROR_CODES.TOOL_PROVIDER_TOOLKITS_LIST_FAILED,
       });
     }
   },
@@ -226,7 +233,7 @@ export const LIST_TOOL_PROVIDER_TOOLS_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'Error listing tool provider tools',
-        code: 'TOOL_PROVIDER_TOOLS_LIST_FAILED',
+        code: SERVER_ERROR_CODES.TOOL_PROVIDER_TOOLS_LIST_FAILED,
       });
     }
   },
@@ -252,7 +259,7 @@ export const GET_TOOL_PROVIDER_TOOL_SCHEMA_ROUTE = createRoute({
       if (!provider.getToolSchema) {
         throw new HTTPException(404, {
           message: `Tool provider ${providerId} does not support getToolSchema`,
-          code: 'TOOL_PROVIDER_OPERATION_UNSUPPORTED',
+          code: SERVER_ERROR_CODES.TOOL_PROVIDER_OPERATION_UNSUPPORTED,
           metadata: { providerId },
         });
       }
@@ -260,7 +267,7 @@ export const GET_TOOL_PROVIDER_TOOL_SCHEMA_ROUTE = createRoute({
       if (!schema) {
         throw new HTTPException(404, {
           message: `Schema for tool ${toolSlug} not found in provider ${providerId}`,
-          code: 'TOOL_PROVIDER_TOOL_SCHEMA_NOT_FOUND',
+          code: SERVER_ERROR_CODES.TOOL_PROVIDER_TOOL_SCHEMA_NOT_FOUND,
           metadata: { toolSlug, providerId },
         });
       }
@@ -268,7 +275,7 @@ export const GET_TOOL_PROVIDER_TOOL_SCHEMA_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'Error getting tool provider tool schema',
-        code: 'TOOL_PROVIDER_TOOL_SCHEMA_GET_FAILED',
+        code: SERVER_ERROR_CODES.TOOL_PROVIDER_TOOL_SCHEMA_GET_FAILED,
       });
     }
   },
@@ -296,7 +303,7 @@ export const AUTHORIZE_TOOL_PROVIDER_ROUTE = createRoute({
       if (!provider.authorize) {
         throw new HTTPException(400, {
           message: `Tool provider ${providerId} does not support authorize`,
-          code: 'TOOL_PROVIDER_OPERATION_UNSUPPORTED',
+          code: SERVER_ERROR_CODES.TOOL_PROVIDER_OPERATION_UNSUPPORTED,
           metadata: { providerId },
         });
       }
@@ -318,7 +325,7 @@ export const AUTHORIZE_TOOL_PROVIDER_ROUTE = createRoute({
         if (typeof callerResourceId !== 'string' || callerResourceId.length === 0) {
           throw new HTTPException(400, {
             message: `Cannot authorize caller-supplied connection: request context has no '${MASTRA_RESOURCE_ID_KEY}'. Set requestContext.set('${MASTRA_RESOURCE_ID_KEY}', <userId>) before calling /authorize.`,
-            code: 'TOOL_PROVIDER_CONNECTION_RESOURCE_ID_REQUIRED',
+            code: SERVER_ERROR_CODES.TOOL_PROVIDER_CONNECTION_RESOURCE_ID_REQUIRED,
           });
         }
       }
@@ -370,7 +377,10 @@ export const AUTHORIZE_TOOL_PROVIDER_ROUTE = createRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, { message: 'Error authorizing tool provider', code: 'TOOL_PROVIDER_AUTHORIZE_FAILED' });
+      return handleError(error, {
+        message: 'Error authorizing tool provider',
+        code: SERVER_ERROR_CODES.TOOL_PROVIDER_AUTHORIZE_FAILED,
+      });
     }
   },
 });
@@ -395,7 +405,7 @@ export const GET_TOOL_PROVIDER_AUTH_STATUS_ROUTE = createRoute({
       if (!provider.getAuthStatus) {
         throw new HTTPException(400, {
           message: `Tool provider ${providerId} does not support getAuthStatus`,
-          code: 'TOOL_PROVIDER_OPERATION_UNSUPPORTED',
+          code: SERVER_ERROR_CODES.TOOL_PROVIDER_OPERATION_UNSUPPORTED,
           metadata: { providerId },
         });
       }
@@ -404,7 +414,7 @@ export const GET_TOOL_PROVIDER_AUTH_STATUS_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'Error getting tool provider auth status',
-        code: 'TOOL_PROVIDER_AUTH_STATUS_GET_FAILED',
+        code: SERVER_ERROR_CODES.TOOL_PROVIDER_AUTH_STATUS_GET_FAILED,
       });
     }
   },
@@ -431,7 +441,7 @@ export const TOOL_PROVIDER_CONNECTION_STATUS_ROUTE = createRoute({
       if (!provider.getConnectionStatus) {
         throw new HTTPException(400, {
           message: `Tool provider ${providerId} does not support getConnectionStatus`,
-          code: 'TOOL_PROVIDER_OPERATION_UNSUPPORTED',
+          code: SERVER_ERROR_CODES.TOOL_PROVIDER_OPERATION_UNSUPPORTED,
           metadata: { providerId },
         });
       }
@@ -440,7 +450,7 @@ export const TOOL_PROVIDER_CONNECTION_STATUS_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'Error getting connection status',
-        code: 'TOOL_PROVIDER_CONNECTION_STATUS_GET_FAILED',
+        code: SERVER_ERROR_CODES.TOOL_PROVIDER_CONNECTION_STATUS_GET_FAILED,
       });
     }
   },
@@ -479,7 +489,7 @@ export const LIST_TOOL_PROVIDER_CONNECTIONS_ROUTE = createRoute({
       if (!provider.listConnections) {
         throw new HTTPException(400, {
           message: `Tool provider ${providerId} does not support listConnections`,
-          code: 'TOOL_PROVIDER_OPERATION_UNSUPPORTED',
+          code: SERVER_ERROR_CODES.TOOL_PROVIDER_OPERATION_UNSUPPORTED,
           metadata: { providerId },
         });
       }
@@ -579,7 +589,7 @@ export const LIST_TOOL_PROVIDER_CONNECTIONS_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'Error listing tool provider connections',
-        code: 'TOOL_PROVIDER_CONNECTIONS_LIST_FAILED',
+        code: SERVER_ERROR_CODES.TOOL_PROVIDER_CONNECTIONS_LIST_FAILED,
       });
     }
   },
@@ -612,7 +622,7 @@ export const LIST_TOOL_PROVIDER_CONNECTION_FIELDS_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'Error listing tool provider connection fields',
-        code: 'TOOL_PROVIDER_CONNECTION_FIELDS_LIST_FAILED',
+        code: SERVER_ERROR_CODES.TOOL_PROVIDER_CONNECTION_FIELDS_LIST_FAILED,
       });
     }
   },
@@ -667,7 +677,7 @@ export const DISCONNECT_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
       if (store && !matched && !isAdmin) {
         throw new HTTPException(403, {
           message: 'You do not have permission to disconnect this connection',
-          code: 'TOOL_PROVIDER_CONNECTION_PERMISSION_DENIED',
+          code: SERVER_ERROR_CODES.TOOL_PROVIDER_CONNECTION_PERMISSION_DENIED,
         });
       }
 
@@ -676,7 +686,7 @@ export const DISCONNECT_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
       if (!isShared && effectiveOwner !== callerAuthorId && !isAdmin) {
         throw new HTTPException(403, {
           message: 'You do not have permission to disconnect this connection',
-          code: 'TOOL_PROVIDER_CONNECTION_PERMISSION_DENIED',
+          code: SERVER_ERROR_CODES.TOOL_PROVIDER_CONNECTION_PERMISSION_DENIED,
         });
       }
 
@@ -685,7 +695,7 @@ export const DISCONNECT_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
         if (usage > 0) {
           throw new HTTPException(409, {
             message: `Connection ${connectionId} is still pinned by ${usage} agent(s). Pass ?force=true to disconnect anyway.`,
-            code: 'TOOL_PROVIDER_CONNECTION_PINNED_BY_AGENTS',
+            code: SERVER_ERROR_CODES.TOOL_PROVIDER_CONNECTION_PINNED_BY_AGENTS,
             metadata: { connectionId, agentCount: usage },
           });
         }
@@ -709,7 +719,7 @@ export const DISCONNECT_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'Error disconnecting tool provider connection',
-        code: 'TOOL_PROVIDER_CONNECTION_DISCONNECT_FAILED',
+        code: SERVER_ERROR_CODES.TOOL_PROVIDER_CONNECTION_DISCONNECT_FAILED,
       });
     }
   },
@@ -747,7 +757,7 @@ export const UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
       if (!store) {
         throw new HTTPException(500, {
           message: 'Tool provider connections storage is not configured',
-          code: 'TOOL_PROVIDER_CONNECTIONS_STORAGE_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.TOOL_PROVIDER_CONNECTIONS_STORAGE_UNAVAILABLE,
         });
       }
 
@@ -756,7 +766,7 @@ export const UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
       if (!match) {
         throw new HTTPException(404, {
           message: `Connection ${connectionId} not found for provider ${providerId}`,
-          code: 'TOOL_PROVIDER_CONNECTION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.TOOL_PROVIDER_CONNECTION_NOT_FOUND,
           metadata: { connectionId, providerId },
         });
       }
@@ -765,7 +775,7 @@ export const UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
       if (!isShared && match.authorId !== callerAuthorId && !isAdmin) {
         throw new HTTPException(403, {
           message: 'You do not have permission to update this connection',
-          code: 'TOOL_PROVIDER_CONNECTION_PERMISSION_DENIED',
+          code: SERVER_ERROR_CODES.TOOL_PROVIDER_CONNECTION_PERMISSION_DENIED,
         });
       }
 
@@ -785,7 +795,7 @@ export const UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'Error updating tool provider connection',
-        code: 'TOOL_PROVIDER_CONNECTION_UPDATE_FAILED',
+        code: SERVER_ERROR_CODES.TOOL_PROVIDER_CONNECTION_UPDATE_FAILED,
       });
     }
   },
@@ -834,7 +844,7 @@ export const GET_TOOL_PROVIDER_CONNECTION_USAGE_ROUTE = createRoute({
       if (store && !matched && !isAdmin) {
         throw new HTTPException(403, {
           message: 'You do not have permission to view usage for this connection',
-          code: 'TOOL_PROVIDER_CONNECTION_PERMISSION_DENIED',
+          code: SERVER_ERROR_CODES.TOOL_PROVIDER_CONNECTION_PERMISSION_DENIED,
         });
       }
 
@@ -843,7 +853,7 @@ export const GET_TOOL_PROVIDER_CONNECTION_USAGE_ROUTE = createRoute({
       if (!isShared && effectiveOwner !== callerAuthorId && !isAdmin) {
         throw new HTTPException(403, {
           message: 'You do not have permission to view usage for this connection',
-          code: 'TOOL_PROVIDER_CONNECTION_PERMISSION_DENIED',
+          code: SERVER_ERROR_CODES.TOOL_PROVIDER_CONNECTION_PERMISSION_DENIED,
         });
       }
 
@@ -852,7 +862,7 @@ export const GET_TOOL_PROVIDER_CONNECTION_USAGE_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'Error listing tool provider connection usage',
-        code: 'TOOL_PROVIDER_CONNECTION_USAGE_LIST_FAILED',
+        code: SERVER_ERROR_CODES.TOOL_PROVIDER_CONNECTION_USAGE_LIST_FAILED,
       });
     }
   },
@@ -882,7 +892,7 @@ export const GET_TOOL_PROVIDER_HEALTH_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'Error getting tool provider health',
-        code: 'TOOL_PROVIDER_HEALTH_GET_FAILED',
+        code: SERVER_ERROR_CODES.TOOL_PROVIDER_HEALTH_GET_FAILED,
       });
     }
   },

@@ -16,10 +16,11 @@ import {
   toTraceSpans,
   traceSpanSchema,
 } from '@mastra/core/storage';
+import { z } from 'zod/v4';
+import { SERVER_ERROR_CODES } from '../error-codes';
 // `branches*`, `listBranches*`, and `getBranch*` schemas are new in
 // @mastra/core@1.32.0; route them through a shim that tolerates older cores
 // (see ./observability-storage-schemas.ts for full rationale).
-import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import type { ServerRoute } from '../server-adapter/routes';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
@@ -151,7 +152,7 @@ export const LIST_TRACES_ROUTE: ServerRoute = createRoute({
       const orderBy = pickParams(tracesOrderBySchema, transformedParams);
       return await observabilityStore.listTraces({ filters, pagination, orderBy });
     } catch (error) {
-      return handleError(error, { message: 'Error listing traces', code: 'TRACES_LIST_FAILED' });
+      return handleError(error, { message: 'Error listing traces', code: SERVER_ERROR_CODES.TRACES_LIST_FAILED });
     }
   },
 });
@@ -204,7 +205,10 @@ export const LIST_TRACES_LIGHT_ROUTE = createRoute({
       }
       return await observabilityStore.listTracesLight({ filters, pagination, orderBy });
     } catch (error) {
-      return handleError(error, { message: 'Error listing lightweight traces', code: 'TRACES_LIGHT_LIST_FAILED' });
+      return handleError(error, {
+        message: 'Error listing lightweight traces',
+        code: SERVER_ERROR_CODES.TRACES_LIGHT_LIST_FAILED,
+      });
     }
   },
 });
@@ -239,7 +243,10 @@ export const LIST_BRANCHES_ROUTE = createRoute({
       const orderBy = pickParams(branchesOrderBySchema, params);
       return await observabilityStore.listBranches({ filters, pagination, orderBy });
     } catch (error) {
-      return handleError(error, { message: 'Error listing branches', code: 'TRACE_BRANCHES_LIST_FAILED' });
+      return handleError(error, {
+        message: 'Error listing branches',
+        code: SERVER_ERROR_CODES.TRACE_BRANCHES_LIST_FAILED,
+      });
     }
   },
 });
@@ -265,14 +272,14 @@ export const GET_BRANCH_ROUTE = createRoute({
       if (!branch) {
         throw new HTTPException(404, {
           message: `Branch not found for span '${spanId}' in trace '${traceId}'`,
-          code: 'TRACE_BRANCH_NOT_FOUND',
+          code: SERVER_ERROR_CODES.TRACE_BRANCH_NOT_FOUND,
           metadata: { spanId, traceId },
         });
       }
 
       return branch;
     } catch (error) {
-      return handleError(error, { message: 'Error getting branch', code: 'TRACE_BRANCH_GET_FAILED' });
+      return handleError(error, { message: 'Error getting branch', code: SERVER_ERROR_CODES.TRACE_BRANCH_GET_FAILED });
     }
   },
 });
@@ -295,7 +302,7 @@ export const GET_TRACE_ROUTE: ServerRoute = createRoute({
       if (!trace) {
         throw new HTTPException(404, {
           message: `Trace with ID '${traceId}' not found`,
-          code: 'TRACE_NOT_FOUND',
+          code: SERVER_ERROR_CODES.TRACE_NOT_FOUND,
           metadata: { traceId },
         });
       }
@@ -304,7 +311,7 @@ export const GET_TRACE_ROUTE: ServerRoute = createRoute({
       // trace-detail spans match the status shown in trace list rows.
       return { ...trace, spans: toTraceSpans(trace.spans) };
     } catch (error) {
-      return handleError(error, { message: 'Error getting trace', code: 'TRACE_GET_FAILED' });
+      return handleError(error, { message: 'Error getting trace', code: SERVER_ERROR_CODES.TRACE_GET_FAILED });
     }
   },
 });
@@ -329,14 +336,17 @@ export const GET_TRACE_LIGHT_ROUTE: ServerRoute = createRoute({
       if (!trace) {
         throw new HTTPException(404, {
           message: `Trace with ID '${traceId}' not found`,
-          code: 'TRACE_NOT_FOUND',
+          code: SERVER_ERROR_CODES.TRACE_NOT_FOUND,
           metadata: { traceId },
         });
       }
 
       return trace;
     } catch (error) {
-      return handleError(error, { message: 'Error getting lightweight trace', code: 'TRACE_LIGHT_GET_FAILED' });
+      return handleError(error, {
+        message: 'Error getting lightweight trace',
+        code: SERVER_ERROR_CODES.TRACE_LIGHT_GET_FAILED,
+      });
     }
   },
 });
@@ -358,12 +368,12 @@ export const GET_SPAN_ROUTE: ServerRoute = createRoute({
       const span = await observabilityStore.getSpan({ traceId, spanId });
 
       if (!span) {
-        throw new HTTPException(404, { message: `Span not found`, code: 'SPAN_NOT_FOUND' });
+        throw new HTTPException(404, { message: `Span not found`, code: SERVER_ERROR_CODES.SPAN_NOT_FOUND });
       }
 
       return span;
     } catch (error) {
-      return handleError(error, { message: 'Error getting span', code: 'SPAN_GET_FAILED' });
+      return handleError(error, { message: 'Error getting span', code: SERVER_ERROR_CODES.SPAN_GET_FAILED });
     }
   },
 });
@@ -392,7 +402,7 @@ export const GET_TRACE_TRAJECTORY_ROUTE = createRoute({
       if (!trace) {
         throw new HTTPException(404, {
           message: `Trace with ID '${traceId}' not found`,
-          code: 'TRACE_NOT_FOUND',
+          code: SERVER_ERROR_CODES.TRACE_NOT_FOUND,
           metadata: { traceId },
         });
       }
@@ -402,7 +412,7 @@ export const GET_TRACE_TRAJECTORY_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'Error extracting trajectory from trace',
-        code: 'TRACE_TRAJECTORY_GET_FAILED',
+        code: SERVER_ERROR_CODES.TRACE_TRAJECTORY_GET_FAILED,
       });
     }
   },
@@ -427,7 +437,7 @@ export const DELETE_TRACES_ROUTE: ServerRoute = createRoute({
       await observabilityStore.batchDeleteTraces({ traceIds });
       return { success: true as const };
     } catch (error) {
-      return handleError(error, { message: 'Error deleting traces', code: 'TRACES_DELETE_FAILED' });
+      return handleError(error, { message: 'Error deleting traces', code: SERVER_ERROR_CODES.TRACES_DELETE_FAILED });
     }
   },
 });
@@ -454,7 +464,7 @@ export const SCORE_TRACES_ROUTE = createRoute({
       if (!scorer) {
         throw new HTTPException(404, {
           message: `Scorer '${scorerName}' not found`,
-          code: 'SCORER_NOT_FOUND',
+          code: SERVER_ERROR_CODES.SCORER_NOT_FOUND,
           metadata: { scorerName },
         });
       }
@@ -474,7 +484,10 @@ export const SCORE_TRACES_ROUTE = createRoute({
         traceCount: targets.length,
       };
     } catch (error) {
-      return handleError(error, { message: 'Error processing trace scoring', code: 'TRACES_SCORE_FAILED' });
+      return handleError(error, {
+        message: 'Error processing trace scoring',
+        code: SERVER_ERROR_CODES.TRACES_SCORE_FAILED,
+      });
     }
   },
 });
@@ -503,7 +516,10 @@ export const LIST_SCORES_BY_SPAN_ROUTE = createRoute({
         pagination,
       });
     } catch (error) {
-      return handleError(error, { message: 'Error getting scores by span', code: 'SPAN_SCORES_LIST_FAILED' });
+      return handleError(error, {
+        message: 'Error getting scores by span',
+        code: SERVER_ERROR_CODES.SPAN_SCORES_LIST_FAILED,
+      });
     }
   },
 });

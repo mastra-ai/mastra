@@ -14,6 +14,7 @@ import { MastraServer, setupBrowserStream, skipIfFrameworkPublic } from '@mastra
 import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { findMatchingCustomRoute } from '@mastra/server/auth';
+import { SERVER_ERROR_CODES } from '@mastra/server/error-codes';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import type { MiddlewareHandler as HonoMiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
@@ -202,7 +203,7 @@ export async function createHonoServer(
     maxSize: bodyLimitMaxSize,
     onError: () => ({
       error: 'Request body too large',
-      problem: { code: 'REQUEST_BODY_TOO_LARGE', metadata: { maxBodySize: bodyLimitMaxSize } },
+      problem: { code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE, metadata: { maxBodySize: bodyLimitMaxSize } },
     }),
   };
 

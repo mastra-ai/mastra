@@ -1,6 +1,7 @@
 import type { StorageSkillFileNode } from '@mastra/core/storage';
 import { LocalSkillSource } from '@mastra/core/workspace';
 
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import {
   storedSkillIdPathParams,
@@ -135,14 +136,17 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const skillStore = await storage.getStore('skills');
       if (!skillStore) {
         throw new HTTPException(500, {
           message: 'Skills storage domain is not available',
-          code: 'STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -173,7 +177,7 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
         if (!favoritesStore) {
           throw new HTTPException(500, {
             message: 'Favorites storage domain is not available',
-            code: 'FAVORITES_STORAGE_DOMAIN_UNAVAILABLE',
+            code: SERVER_ERROR_CODES.FAVORITES_STORAGE_DOMAIN_UNAVAILABLE,
           });
         }
         const starredIds = await favoritesStore.listFavoritedIds({ userId: favoriteSubjectId, entityType: 'skill' });
@@ -239,7 +243,10 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
 
       return { ...result, skills: annotated };
     } catch (error) {
-      return handleError(error, { message: 'Error listing stored skills', code: 'STORED_SKILLS_LIST_FAILED' });
+      return handleError(error, {
+        message: 'Error listing stored skills',
+        code: SERVER_ERROR_CODES.STORED_SKILLS_LIST_FAILED,
+      });
     }
   },
 });
@@ -262,14 +269,17 @@ export const GET_STORED_SKILL_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const skillStore = await storage.getStore('skills');
       if (!skillStore) {
         throw new HTTPException(500, {
           message: 'Skills storage domain is not available',
-          code: 'STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -278,7 +288,7 @@ export const GET_STORED_SKILL_ROUTE = createRoute({
       if (!skill) {
         throw new HTTPException(404, {
           message: `Stored skill with id ${storedSkillId} not found`,
-          code: 'STORED_SKILL_NOT_FOUND',
+          code: SERVER_ERROR_CODES.STORED_SKILL_NOT_FOUND,
           metadata: { storedSkillId },
         });
       }
@@ -288,7 +298,10 @@ export const GET_STORED_SKILL_ROUTE = createRoute({
 
       return enrichOrStripFavorites(mastra, requestContext, 'skill', skill);
     } catch (error) {
-      return handleError(error, { message: 'Error getting stored skill', code: 'STORED_SKILL_GET_FAILED' });
+      return handleError(error, {
+        message: 'Error getting stored skill',
+        code: SERVER_ERROR_CODES.STORED_SKILL_GET_FAILED,
+      });
     }
   },
 });
@@ -327,14 +340,17 @@ export const CREATE_STORED_SKILL_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const skillStore = await storage.getStore('skills');
       if (!skillStore) {
         throw new HTTPException(500, {
           message: 'Skills storage domain is not available',
-          code: 'STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -344,7 +360,7 @@ export const CREATE_STORED_SKILL_ROUTE = createRoute({
       if (!id) {
         throw new HTTPException(400, {
           message: 'Could not derive skill ID from name. Please provide an explicit id.',
-          code: 'STORED_SKILL_ID_DERIVATION_FAILED',
+          code: SERVER_ERROR_CODES.STORED_SKILL_ID_DERIVATION_FAILED,
         });
       }
 
@@ -353,7 +369,7 @@ export const CREATE_STORED_SKILL_ROUTE = createRoute({
       if (existing) {
         throw new HTTPException(409, {
           message: `Skill with id ${id} already exists`,
-          code: 'STORED_SKILL_ALREADY_EXISTS',
+          code: SERVER_ERROR_CODES.STORED_SKILL_ALREADY_EXISTS,
           metadata: { storedSkillId: id },
         });
       }
@@ -392,13 +408,16 @@ export const CREATE_STORED_SKILL_ROUTE = createRoute({
       if (!resolved) {
         throw new HTTPException(500, {
           message: 'Failed to resolve created skill',
-          code: 'STORED_SKILL_CREATED_RESOLVE_FAILED',
+          code: SERVER_ERROR_CODES.STORED_SKILL_CREATED_RESOLVE_FAILED,
         });
       }
 
       return enrichOrStripFavorites(mastra, requestContext, 'skill', resolved);
     } catch (error) {
-      return handleError(error, { message: 'Error creating stored skill', code: 'STORED_SKILL_CREATE_FAILED' });
+      return handleError(error, {
+        message: 'Error creating stored skill',
+        code: SERVER_ERROR_CODES.STORED_SKILL_CREATE_FAILED,
+      });
     }
   },
 });
@@ -441,14 +460,17 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const skillStore = await storage.getStore('skills');
       if (!skillStore) {
         throw new HTTPException(500, {
           message: 'Skills storage domain is not available',
-          code: 'STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -457,7 +479,7 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
       if (!existing) {
         throw new HTTPException(404, {
           message: `Stored skill with id ${storedSkillId} not found`,
-          code: 'STORED_SKILL_NOT_FOUND',
+          code: SERVER_ERROR_CODES.STORED_SKILL_NOT_FOUND,
           metadata: { storedSkillId },
         });
       }
@@ -513,13 +535,16 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
       if (!resolved) {
         throw new HTTPException(500, {
           message: 'Failed to resolve updated skill',
-          code: 'STORED_SKILL_UPDATED_RESOLVE_FAILED',
+          code: SERVER_ERROR_CODES.STORED_SKILL_UPDATED_RESOLVE_FAILED,
         });
       }
 
       return enrichOrStripFavorites(mastra, requestContext, 'skill', resolved);
     } catch (error) {
-      return handleError(error, { message: 'Error updating stored skill', code: 'STORED_SKILL_UPDATE_FAILED' });
+      return handleError(error, {
+        message: 'Error updating stored skill',
+        code: SERVER_ERROR_CODES.STORED_SKILL_UPDATE_FAILED,
+      });
     }
   },
 });
@@ -542,14 +567,17 @@ export const DELETE_STORED_SKILL_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const skillStore = await storage.getStore('skills');
       if (!skillStore) {
         throw new HTTPException(500, {
           message: 'Skills storage domain is not available',
-          code: 'STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -558,7 +586,7 @@ export const DELETE_STORED_SKILL_ROUTE = createRoute({
       if (!existing) {
         throw new HTTPException(404, {
           message: `Stored skill with id ${storedSkillId} not found`,
-          code: 'STORED_SKILL_NOT_FOUND',
+          code: SERVER_ERROR_CODES.STORED_SKILL_NOT_FOUND,
           metadata: { storedSkillId },
         });
       }
@@ -591,7 +619,10 @@ export const DELETE_STORED_SKILL_ROUTE = createRoute({
         message: `Skill ${storedSkillId} deleted successfully`,
       };
     } catch (error) {
-      return handleError(error, { message: 'Error deleting stored skill', code: 'STORED_SKILL_DELETE_FAILED' });
+      return handleError(error, {
+        message: 'Error deleting stored skill',
+        code: SERVER_ERROR_CODES.STORED_SKILL_DELETE_FAILED,
+      });
     }
   },
 });
@@ -618,14 +649,17 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const skillStore = await storage.getStore('skills');
       if (!skillStore) {
         throw new HTTPException(500, {
           message: 'Skills storage domain is not available',
-          code: 'STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -633,7 +667,7 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
       if (!blobStore) {
         throw new HTTPException(500, {
           message: 'Blob storage domain is not available',
-          code: 'BLOB_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.BLOB_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -642,7 +676,7 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
       if (!existing) {
         throw new HTTPException(404, {
           message: `Stored skill with id ${storedSkillId} not found`,
-          code: 'STORED_SKILL_NOT_FOUND',
+          code: SERVER_ERROR_CODES.STORED_SKILL_NOT_FOUND,
           metadata: { storedSkillId },
         });
       }
@@ -665,7 +699,7 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
       if (!resolvedPath.startsWith(allowedBase + path.default.sep) && resolvedPath !== allowedBase) {
         throw new HTTPException(400, {
           message: `skillPath must be within the allowed directory: ${allowedBase}`,
-          code: 'SKILL_PATH_OUTSIDE_ALLOWED_DIRECTORY',
+          code: SERVER_ERROR_CODES.SKILL_PATH_OUTSIDE_ALLOWED_DIRECTORY,
           metadata: { allowedBase },
         });
       }
@@ -677,7 +711,7 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
         if (!stat.isDirectory()) {
           throw new HTTPException(400, {
             message: `skillPath is not a directory: ${resolvedPath}`,
-            code: 'SKILL_PATH_NOT_DIRECTORY',
+            code: SERVER_ERROR_CODES.SKILL_PATH_NOT_DIRECTORY,
             metadata: { skillPath: resolvedPath },
           });
         }
@@ -686,7 +720,7 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
         if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
           throw new HTTPException(400, {
             message: `skillPath does not exist on the server filesystem: ${resolvedPath}. Create the skill directory (with a SKILL.md) before publishing, or use a skill that was materialized to disk.`,
-            code: 'SKILL_PATH_NOT_FOUND',
+            code: SERVER_ERROR_CODES.SKILL_PATH_NOT_FOUND,
             metadata: { skillPath: resolvedPath },
           });
         }
@@ -698,7 +732,7 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
         if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
           throw new HTTPException(400, {
             message: `skillPath is missing SKILL.md: ${resolvedPath}`,
-            code: 'SKILL_PATH_MISSING_SKILL_FILE',
+            code: SERVER_ERROR_CODES.SKILL_PATH_MISSING_SKILL_FILE,
             metadata: { skillPath: resolvedPath },
           });
         }
@@ -745,13 +779,16 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
       if (!resolved) {
         throw new HTTPException(500, {
           message: 'Failed to resolve skill after publish',
-          code: 'STORED_SKILL_PUBLISH_FAILED',
+          code: SERVER_ERROR_CODES.STORED_SKILL_PUBLISH_FAILED,
         });
       }
 
       return enrichOrStripFavorites(mastra, requestContext, 'skill', resolved);
     } catch (error) {
-      return handleError(error, { message: 'Error publishing stored skill', code: 'STORED_SKILL_PUBLISH_FAILED' });
+      return handleError(error, {
+        message: 'Error publishing stored skill',
+        code: SERVER_ERROR_CODES.STORED_SKILL_PUBLISH_FAILED,
+      });
     }
   },
 });

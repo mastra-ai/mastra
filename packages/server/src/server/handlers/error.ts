@@ -1,6 +1,6 @@
 import type { ZodError } from 'zod';
 
-import { isServerErrorCode } from '../error-codes';
+import { SERVER_ERROR_CODES, isServerErrorCode } from '../error-codes';
 import type { ServerErrorCode, ServerProblem } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import type { StatusCode } from '../http-exception';
@@ -132,7 +132,7 @@ export function formatZodError(
     error: `Invalid ${context}`,
     issues,
     problem: {
-      code: 'REQUEST_VALIDATION_FAILED',
+      code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
       metadata: location ? { issues, location } : { issues },
     },
   };
@@ -180,7 +180,9 @@ export function handleError(error: unknown, fallback: HandleErrorFallback): neve
       offendingLabel: error.offendingLabel,
     };
     const metadata = mergeMetadata(fallback.metadata, modelPolicy);
-    const problem: ServerProblem = metadata ? { code: 'MODEL_NOT_ALLOWED', metadata } : { code: 'MODEL_NOT_ALLOWED' };
+    const problem: ServerProblem = metadata
+      ? { code: SERVER_ERROR_CODES.MODEL_NOT_ALLOWED, metadata }
+      : { code: SERVER_ERROR_CODES.MODEL_NOT_ALLOWED };
     const body = {
       error: {
         code: error.code,
@@ -197,7 +199,7 @@ export function handleError(error: unknown, fallback: HandleErrorFallback): neve
       res,
       message: error.message,
       cause: error,
-      code: 'MODEL_NOT_ALLOWED',
+      code: SERVER_ERROR_CODES.MODEL_NOT_ALLOWED,
       metadata,
     });
   }
@@ -224,7 +226,7 @@ export function handleError(error: unknown, fallback: HandleErrorFallback): neve
       message: error.message,
       stack: error.stack,
       cause: error,
-      code: 'OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_CONFLICT',
+      code: SERVER_ERROR_CODES.OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_CONFLICT,
       metadata: mergeMetadata(fallback.metadata, getErrorDetails(error)),
     });
   }
@@ -234,7 +236,7 @@ export function handleError(error: unknown, fallback: HandleErrorFallback): neve
       message: error.message,
       stack: error.stack,
       cause: error,
-      code: 'WORKFLOW_SCHEMA_VALIDATION_FAILED',
+      code: SERVER_ERROR_CODES.WORKFLOW_SCHEMA_VALIDATION_FAILED,
       metadata: mergeMetadata(fallback.metadata, getErrorDetails(error)),
     });
   }
@@ -250,7 +252,7 @@ export function handleError(error: unknown, fallback: HandleErrorFallback): neve
       message: error.message,
       stack: error.stack,
       cause: error,
-      code: 'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+      code: SERVER_ERROR_CODES.OBSERVABILITY_OPERATION_NOT_SUPPORTED,
       metadata: fallback.metadata,
     });
   }

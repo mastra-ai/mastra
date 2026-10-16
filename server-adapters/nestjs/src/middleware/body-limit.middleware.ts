@@ -1,3 +1,4 @@
+import { SERVER_ERROR_CODES } from '@mastra/server/error-codes';
 import { Inject, Injectable, Logger, PayloadTooLargeException } from '@nestjs/common';
 import type { NestMiddleware } from '@nestjs/common';
 import type { Request, Response, NextFunction } from 'express';
@@ -44,7 +45,7 @@ export class BodyLimitMiddleware implements NestMiddleware {
         this.logger.warn(`Request body too large: ${length} bytes exceeds ${this.maxSize} bytes limit`);
         throw new PayloadTooLargeException({
           message: `Request body too large. Maximum size is ${formatBytes(this.maxSize)}.`,
-          problem: { code: 'REQUEST_BODY_TOO_LARGE', metadata: { maxBodySize: this.maxSize } },
+          problem: { code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE, metadata: { maxBodySize: this.maxSize } },
         });
       }
     }

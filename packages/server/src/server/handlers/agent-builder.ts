@@ -1,4 +1,5 @@
 import type { agentBuilderWorkflows as agentBuilderWorkflowsType } from '@mastra/agent-builder';
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import {
   actionIdPathParams,
@@ -67,7 +68,7 @@ export const LIST_AGENT_BUILDER_ACTIONS_ROUTE = createRoute({
       logger.error('Error listing agent builder actions', { error });
       return handleError(error, {
         message: 'Error getting agent builder workflows',
-        code: 'AGENT_BUILDER_ACTIONS_LIST_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTIONS_LIST_FAILED,
       });
     } finally {
       WorkflowRegistry.cleanup();
@@ -94,7 +95,7 @@ export const GET_AGENT_BUILDER_ACTION_BY_ID_ROUTE = createRoute({
       if (actionId && !WorkflowRegistry.isAgentBuilderWorkflow(actionId)) {
         throw new HTTPException(400, {
           message: `Invalid agent-builder action: ${actionId}. Valid actions are: ${Object.keys(agentBuilderWorkflows).join(', ')}`,
-          code: 'AGENT_BUILDER_ACTION_INVALID',
+          code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_INVALID,
           metadata: { actionId },
         });
       }
@@ -106,7 +107,7 @@ export const GET_AGENT_BUILDER_ACTION_BY_ID_ROUTE = createRoute({
       logger.error('Error getting agent builder action by ID', { error, actionId });
       return handleError(error, {
         message: 'Error getting agent builder action',
-        code: 'AGENT_BUILDER_ACTION_GET_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_GET_FAILED,
       });
     } finally {
       WorkflowRegistry.cleanup();
@@ -134,7 +135,7 @@ export const LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE = createRoute({
       if (actionId && !WorkflowRegistry.isAgentBuilderWorkflow(actionId)) {
         throw new HTTPException(400, {
           message: `Invalid agent-builder action: ${actionId}`,
-          code: 'AGENT_BUILDER_ACTION_INVALID',
+          code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_INVALID,
           metadata: { actionId },
         });
       }
@@ -149,7 +150,7 @@ export const LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE = createRoute({
       logger.error('Error listing agent builder action runs', { error, actionId });
       return handleError(error, {
         message: 'Error getting agent builder action runs',
-        code: 'AGENT_BUILDER_ACTION_RUNS_LIST_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_RUNS_LIST_FAILED,
       });
     } finally {
       WorkflowRegistry.cleanup();
@@ -178,7 +179,7 @@ export const GET_AGENT_BUILDER_ACTION_RUN_BY_ID_ROUTE = createRoute({
       if (actionId && !WorkflowRegistry.isAgentBuilderWorkflow(actionId)) {
         throw new HTTPException(400, {
           message: `Invalid agent-builder action: ${actionId}`,
-          code: 'AGENT_BUILDER_ACTION_INVALID',
+          code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_INVALID,
           metadata: { actionId },
         });
       }
@@ -193,7 +194,7 @@ export const GET_AGENT_BUILDER_ACTION_RUN_BY_ID_ROUTE = createRoute({
       logger.error('Error getting agent builder action run', { error, actionId, runId });
       return handleError(error, {
         message: 'Error getting agent builder action run',
-        code: 'AGENT_BUILDER_ACTION_RUN_GET_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_RUN_GET_FAILED,
       });
     } finally {
       WorkflowRegistry.cleanup();
@@ -221,7 +222,7 @@ export const CREATE_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
       if (actionId && !WorkflowRegistry.isAgentBuilderWorkflow(actionId)) {
         throw new HTTPException(400, {
           message: `Invalid agent-builder action: ${actionId}`,
-          code: 'AGENT_BUILDER_ACTION_INVALID',
+          code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_INVALID,
           metadata: { actionId },
         });
       }
@@ -236,7 +237,7 @@ export const CREATE_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
       logger.error('Error creating agent builder action run', { error, actionId });
       return handleError(error, {
         message: 'Error creating agent builder action run',
-        code: 'AGENT_BUILDER_ACTION_RUN_CREATE_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_RUN_CREATE_FAILED,
       });
     } finally {
       WorkflowRegistry.cleanup();
@@ -265,7 +266,7 @@ export const STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
       if (actionId && !WorkflowRegistry.isAgentBuilderWorkflow(actionId)) {
         throw new HTTPException(400, {
           message: `Invalid agent-builder action: ${actionId}`,
-          code: 'AGENT_BUILDER_ACTION_INVALID',
+          code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_INVALID,
           metadata: { actionId },
         });
       }
@@ -281,7 +282,7 @@ export const STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
       logger.error('Error streaming agent builder action', { error, actionId });
       return handleError(error, {
         message: 'Error streaming agent builder action',
-        code: 'AGENT_BUILDER_ACTION_STREAM_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_STREAM_FAILED,
       });
     } finally {
       WorkflowRegistry.cleanup();
@@ -310,7 +311,7 @@ export const START_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
       if (actionId && !WorkflowRegistry.isAgentBuilderWorkflow(actionId)) {
         throw new HTTPException(400, {
           message: `Invalid agent-builder action: ${actionId}`,
-          code: 'AGENT_BUILDER_ACTION_INVALID',
+          code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_INVALID,
           metadata: { actionId },
         });
       }
@@ -326,7 +327,7 @@ export const START_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
       logger.error('Error starting agent builder action asynchronously', { error, actionId });
       return handleError(error, {
         message: 'Error starting agent builder action',
-        code: 'AGENT_BUILDER_ACTION_START_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_START_FAILED,
       });
     } finally {
       WorkflowRegistry.cleanup();
@@ -355,7 +356,7 @@ export const START_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
       if (actionId && !WorkflowRegistry.isAgentBuilderWorkflow(actionId)) {
         throw new HTTPException(400, {
           message: `Invalid agent-builder action: ${actionId}`,
-          code: 'AGENT_BUILDER_ACTION_INVALID',
+          code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_INVALID,
           metadata: { actionId },
         });
       }
@@ -371,7 +372,7 @@ export const START_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
       logger.error('Error starting agent builder action run', { error, actionId });
       return handleError(error, {
         message: 'Error starting agent builder action run',
-        code: 'AGENT_BUILDER_ACTION_RUN_START_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_RUN_START_FAILED,
       });
     } finally {
       WorkflowRegistry.cleanup();
@@ -399,7 +400,7 @@ export const OBSERVE_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
       if (actionId && !WorkflowRegistry.isAgentBuilderWorkflow(actionId)) {
         throw new HTTPException(400, {
           message: `Invalid agent-builder action: ${actionId}`,
-          code: 'AGENT_BUILDER_ACTION_INVALID',
+          code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_INVALID,
           metadata: { actionId },
         });
       }
@@ -414,7 +415,7 @@ export const OBSERVE_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
       logger.error('Error observing agent builder action stream', { error, actionId });
       return handleError(error, {
         message: 'Error observing agent builder action stream',
-        code: 'AGENT_BUILDER_ACTION_STREAM_OBSERVE_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_STREAM_OBSERVE_FAILED,
       });
     } finally {
       WorkflowRegistry.cleanup();
@@ -443,7 +444,7 @@ export const RESUME_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
       if (actionId && !WorkflowRegistry.isAgentBuilderWorkflow(actionId)) {
         throw new HTTPException(400, {
           message: `Invalid agent-builder action: ${actionId}`,
-          code: 'AGENT_BUILDER_ACTION_INVALID',
+          code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_INVALID,
           metadata: { actionId },
         });
       }
@@ -459,7 +460,7 @@ export const RESUME_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
       logger.error('Error resuming agent builder action asynchronously', { error, actionId });
       return handleError(error, {
         message: 'Error resuming agent builder action',
-        code: 'AGENT_BUILDER_ACTION_RESUME_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_RESUME_FAILED,
       });
     } finally {
       WorkflowRegistry.cleanup();
@@ -496,7 +497,7 @@ export const RESUME_NO_WAIT_AGENT_BUILDER_ACTION_ROUTE = createRoute({
       if (actionId && !WorkflowRegistry.isAgentBuilderWorkflow(actionId)) {
         throw new HTTPException(400, {
           message: `Invalid agent-builder action: ${actionId}`,
-          code: 'AGENT_BUILDER_ACTION_INVALID',
+          code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_INVALID,
           metadata: { actionId },
         });
       }
@@ -512,7 +513,7 @@ export const RESUME_NO_WAIT_AGENT_BUILDER_ACTION_ROUTE = createRoute({
       logger.error('Error resuming agent builder action without waiting', { error, actionId });
       return handleError(error, {
         message: 'Error resuming agent builder action',
-        code: 'AGENT_BUILDER_ACTION_RESUME_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_RESUME_FAILED,
       });
     } finally {
       WorkflowRegistry.cleanup();
@@ -541,7 +542,7 @@ export const RESUME_AGENT_BUILDER_ACTION_ROUTE = createRoute({
       if (actionId && !WorkflowRegistry.isAgentBuilderWorkflow(actionId)) {
         throw new HTTPException(400, {
           message: `Invalid agent-builder action: ${actionId}`,
-          code: 'AGENT_BUILDER_ACTION_INVALID',
+          code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_INVALID,
           metadata: { actionId },
         });
       }
@@ -557,7 +558,7 @@ export const RESUME_AGENT_BUILDER_ACTION_ROUTE = createRoute({
       logger.error('Error resuming agent builder action', { error, actionId });
       return handleError(error, {
         message: 'Error resuming agent builder action',
-        code: 'AGENT_BUILDER_ACTION_RESUME_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_RESUME_FAILED,
       });
     } finally {
       WorkflowRegistry.cleanup();
@@ -586,7 +587,7 @@ export const RESUME_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
       if (actionId && !WorkflowRegistry.isAgentBuilderWorkflow(actionId)) {
         throw new HTTPException(400, {
           message: `Invalid agent-builder action: ${actionId}`,
-          code: 'AGENT_BUILDER_ACTION_INVALID',
+          code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_INVALID,
           metadata: { actionId },
         });
       }
@@ -602,7 +603,7 @@ export const RESUME_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
       logger.error('Error resuming agent builder action stream', { error, actionId });
       return handleError(error, {
         message: 'Error resuming agent builder action stream',
-        code: 'AGENT_BUILDER_ACTION_RESUME_STREAM_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_RESUME_STREAM_FAILED,
       });
     } finally {
       WorkflowRegistry.cleanup();
@@ -629,7 +630,7 @@ export const CANCEL_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
       if (actionId && !WorkflowRegistry.isAgentBuilderWorkflow(actionId)) {
         throw new HTTPException(400, {
           message: `Invalid agent-builder action: ${actionId}`,
-          code: 'AGENT_BUILDER_ACTION_INVALID',
+          code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_INVALID,
           metadata: { actionId },
         });
       }
@@ -644,7 +645,7 @@ export const CANCEL_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
       logger.error('Error cancelling agent builder action run', { error, actionId });
       return handleError(error, {
         message: 'Error cancelling agent builder action run',
-        code: 'AGENT_BUILDER_ACTION_RUN_CANCEL_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_RUN_CANCEL_FAILED,
       });
     } finally {
       WorkflowRegistry.cleanup();
@@ -675,7 +676,7 @@ export const STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE = createRoute({
       if (actionId && !WorkflowRegistry.isAgentBuilderWorkflow(actionId)) {
         throw new HTTPException(400, {
           message: `Invalid agent-builder action: ${actionId}`,
-          code: 'AGENT_BUILDER_ACTION_INVALID',
+          code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_INVALID,
           metadata: { actionId },
         });
       }
@@ -691,7 +692,7 @@ export const STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE = createRoute({
       logger.error('Error streaming agent builder action (legacy)', { error, actionId });
       return handleError(error, {
         message: 'Error streaming agent builder action',
-        code: 'AGENT_BUILDER_ACTION_STREAM_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_STREAM_FAILED,
       });
     } finally {
       WorkflowRegistry.cleanup();
@@ -720,7 +721,7 @@ export const OBSERVE_STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE = createRoute({
       if (actionId && !WorkflowRegistry.isAgentBuilderWorkflow(actionId)) {
         throw new HTTPException(400, {
           message: `Invalid agent-builder action: ${actionId}`,
-          code: 'AGENT_BUILDER_ACTION_INVALID',
+          code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_INVALID,
           metadata: { actionId },
         });
       }
@@ -735,7 +736,7 @@ export const OBSERVE_STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE = createRoute({
       logger.error('Error observing agent builder action stream (legacy)', { error, actionId });
       return handleError(error, {
         message: 'Error observing agent builder action stream',
-        code: 'AGENT_BUILDER_ACTION_STREAM_OBSERVE_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_BUILDER_ACTION_STREAM_OBSERVE_FAILED,
       });
     } finally {
       WorkflowRegistry.cleanup();

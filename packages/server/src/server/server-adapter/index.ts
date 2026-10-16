@@ -21,7 +21,7 @@ import {
   isStudioClientTypeHeader,
 } from '../constants';
 import type { MastraAuthMode } from '../constants';
-import { isServerErrorCode, isServerProblem } from '../error-codes';
+import { SERVER_ERROR_CODES, isServerErrorCode, isServerProblem } from '../error-codes';
 import type { ServerErrorBody, ServerErrorCode, ServerProblem } from '../error-codes';
 import { formatZodError } from '../handlers/error';
 import { HTTPException } from '../http-exception';
@@ -140,7 +140,7 @@ export function formatErrorResponse(error: unknown): { status: number; body: Err
   } else if (error && typeof error === 'object' && isServerErrorCode((error as { id?: unknown }).id)) {
     problem = { code: (error as { id: ServerErrorCode }).id };
   } else {
-    problem = { code: 'UNEXPECTED_ERROR' };
+    problem = { code: SERVER_ERROR_CODES.UNEXPECTED_ERROR };
   }
 
   const failingItems = getSafeFailingItems(error);
@@ -850,10 +850,10 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       : {
           code:
             result.status === 401
-              ? 'AUTHENTICATION_REQUIRED'
+              ? SERVER_ERROR_CODES.AUTHENTICATION_REQUIRED
               : result.status === 403
-                ? 'PERMISSION_DENIED'
-                : 'AUTHORIZATION_CHECK_FAILED',
+                ? SERVER_ERROR_CODES.PERMISSION_DENIED
+                : SERVER_ERROR_CODES.AUTHORIZATION_CHECK_FAILED,
         };
     return { status: result.status, error: errorBody?.error ?? 'Access denied', problem, headers: result.headers };
   }
@@ -922,7 +922,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
         status: 403,
         error: 'Forbidden',
         message: `Missing required permission: ${permissions.join(' or ')}`,
-        problem: { code: 'PERMISSION_DENIED', metadata: { requiredPermissions: permissions } },
+        problem: { code: SERVER_ERROR_CODES.PERMISSION_DENIED, metadata: { requiredPermissions: permissions } },
       };
     }
 
@@ -1244,7 +1244,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
         path: c.req.path,
         error: err instanceof Error ? (err.stack ?? err.message) : String(err),
       });
-      return c.json({ error: 'Internal Server Error', problem: { code: 'UNEXPECTED_ERROR' } }, 500);
+      return c.json({ error: 'Internal Server Error', problem: { code: SERVER_ERROR_CODES.UNEXPECTED_ERROR } }, 500);
     });
 
     // Register each custom route
@@ -1520,7 +1520,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       try {
         const result = hook(error, context);
         if (result) {
-          return { ...result, body: ensureProblem(result.body, 'REQUEST_VALIDATION_FAILED') };
+          return { ...result, body: ensureProblem(result.body, SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED) };
         }
       } catch (hookError) {
         this.mastra.getLogger()?.error('Error in custom onValidationError hook', {
@@ -1557,7 +1557,7 @@ export async function checkRouteFGA(
         status: 403,
         error: 'Forbidden',
         message: 'FGA authorization denied: route FGA metadata is required',
-        problem: { code: 'FGA_ROUTE_METADATA_REQUIRED' },
+        problem: { code: SERVER_ERROR_CODES.FGA_ROUTE_METADATA_REQUIRED },
       };
     }
     return null;
@@ -1569,7 +1569,7 @@ export async function checkRouteFGA(
       status: 403,
       error: 'Forbidden',
       message: 'FGA authorization denied: authenticated user is required',
-      problem: { code: 'FGA_USER_REQUIRED' },
+      problem: { code: SERVER_ERROR_CODES.FGA_USER_REQUIRED },
     };
   }
 
@@ -1582,7 +1582,7 @@ export async function checkRouteFGA(
       status: 403,
       error: 'Forbidden',
       message: 'FGA authorization denied: route FGA metadata is incomplete',
-      problem: { code: 'FGA_ROUTE_METADATA_INCOMPLETE' },
+      problem: { code: SERVER_ERROR_CODES.FGA_ROUTE_METADATA_INCOMPLETE },
     };
   }
   const effectivePermission = route.path ? getEffectivePermission(route) : null;
@@ -1603,7 +1603,7 @@ export async function checkRouteFGA(
       error: 'Forbidden',
       message: `FGA authorization denied: cannot ${permission} on ${fgaConfig.resourceType}:${resourceId}`,
       problem: {
-        code: 'FGA_AUTHORIZATION_DENIED',
+        code: SERVER_ERROR_CODES.FGA_AUTHORIZATION_DENIED,
         metadata: { permission, resourceType: fgaConfig.resourceType, resourceId },
       },
     };

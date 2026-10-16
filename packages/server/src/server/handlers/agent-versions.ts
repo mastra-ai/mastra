@@ -1,5 +1,6 @@
 import type { z } from 'zod/v4';
 
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import {
   agentVersionPathParams,
@@ -75,14 +76,17 @@ export const LIST_AGENT_VERSIONS_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const agentsStore = await storage.getStore('agents');
       if (!agentsStore) {
         throw new HTTPException(500, {
           message: 'Agents storage domain is not available',
-          code: 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -99,7 +103,7 @@ export const LIST_AGENT_VERSIONS_ROUTE = createRoute({
       if (!storedAgent && !codeAgentExists) {
         throw new HTTPException(404, {
           message: `Agent with id ${agentId} not found`,
-          code: 'STORED_AGENT_NOT_FOUND',
+          code: SERVER_ERROR_CODES.STORED_AGENT_NOT_FOUND,
           metadata: { agentId },
         });
       }
@@ -114,7 +118,10 @@ export const LIST_AGENT_VERSIONS_ROUTE = createRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, { message: 'Error listing agent versions', code: 'AGENT_VERSIONS_LIST_FAILED' });
+      return handleError(error, {
+        message: 'Error listing agent versions',
+        code: SERVER_ERROR_CODES.AGENT_VERSIONS_LIST_FAILED,
+      });
     }
   },
 });
@@ -138,14 +145,17 @@ export const CREATE_AGENT_VERSION_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const agentsStore = await storage.getStore('agents');
       if (!agentsStore) {
         throw new HTTPException(500, {
           message: 'Agents storage domain is not available',
-          code: 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -154,7 +164,7 @@ export const CREATE_AGENT_VERSION_ROUTE = createRoute({
       if (!agent) {
         throw new HTTPException(404, {
           message: `Agent with id ${agentId} not found`,
-          code: 'STORED_AGENT_NOT_FOUND',
+          code: SERVER_ERROR_CODES.STORED_AGENT_NOT_FOUND,
           metadata: { agentId },
         });
       }
@@ -204,7 +214,7 @@ export const CREATE_AGENT_VERSION_ROUTE = createRoute({
       if (!version) {
         throw new HTTPException(500, {
           message: 'Failed to retrieve created version',
-          code: 'AGENT_VERSION_CREATED_RESOLVE_FAILED',
+          code: SERVER_ERROR_CODES.AGENT_VERSION_CREATED_RESOLVE_FAILED,
         });
       }
 
@@ -218,7 +228,10 @@ export const CREATE_AGENT_VERSION_ROUTE = createRoute({
 
       return version;
     } catch (error) {
-      return handleError(error, { message: 'Error creating agent version', code: 'AGENT_VERSION_CREATE_FAILED' });
+      return handleError(error, {
+        message: 'Error creating agent version',
+        code: SERVER_ERROR_CODES.AGENT_VERSION_CREATE_FAILED,
+      });
     }
   },
 });
@@ -241,14 +254,17 @@ export const GET_AGENT_VERSION_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const agentsStore = await storage.getStore('agents');
       if (!agentsStore) {
         throw new HTTPException(500, {
           message: 'Agents storage domain is not available',
-          code: 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -257,7 +273,7 @@ export const GET_AGENT_VERSION_ROUTE = createRoute({
       if (!version) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found`,
-          code: 'AGENT_VERSION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
           metadata: { versionId },
         });
       }
@@ -266,7 +282,7 @@ export const GET_AGENT_VERSION_ROUTE = createRoute({
       if (version.agentId !== agentId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for agent ${agentId}`,
-          code: 'AGENT_VERSION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
           metadata: { versionId, agentId },
         });
       }
@@ -275,7 +291,10 @@ export const GET_AGENT_VERSION_ROUTE = createRoute({
 
       return version;
     } catch (error) {
-      return handleError(error, { message: 'Error getting agent version', code: 'AGENT_VERSION_GET_FAILED' });
+      return handleError(error, {
+        message: 'Error getting agent version',
+        code: SERVER_ERROR_CODES.AGENT_VERSION_GET_FAILED,
+      });
     }
   },
 });
@@ -298,14 +317,17 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const agentsStore = await storage.getStore('agents');
       if (!agentsStore) {
         throw new HTTPException(500, {
           message: 'Agents storage domain is not available',
-          code: 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -314,7 +336,7 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
       if (!agent) {
         throw new HTTPException(404, {
           message: `Agent with id ${agentId} not found`,
-          code: 'STORED_AGENT_NOT_FOUND',
+          code: SERVER_ERROR_CODES.STORED_AGENT_NOT_FOUND,
           metadata: { agentId },
         });
       }
@@ -325,14 +347,14 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
       if (!version) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found`,
-          code: 'AGENT_VERSION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
           metadata: { versionId },
         });
       }
       if (version.agentId !== agentId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for agent ${agentId}`,
-          code: 'AGENT_VERSION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
           metadata: { versionId, agentId },
         });
       }
@@ -359,7 +381,10 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
         activeVersionId: versionId,
       };
     } catch (error) {
-      return handleError(error, { message: 'Error activating agent version', code: 'AGENT_VERSION_ACTIVATE_FAILED' });
+      return handleError(error, {
+        message: 'Error activating agent version',
+        code: SERVER_ERROR_CODES.AGENT_VERSION_ACTIVATE_FAILED,
+      });
     }
   },
 });
@@ -382,14 +407,17 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const agentsStore = await storage.getStore('agents');
       if (!agentsStore) {
         throw new HTTPException(500, {
           message: 'Agents storage domain is not available',
-          code: 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -398,7 +426,7 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
       if (!agent) {
         throw new HTTPException(404, {
           message: `Agent with id ${agentId} not found`,
-          code: 'STORED_AGENT_NOT_FOUND',
+          code: SERVER_ERROR_CODES.STORED_AGENT_NOT_FOUND,
           metadata: { agentId },
         });
       }
@@ -409,14 +437,14 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
       if (!versionToRestore) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found`,
-          code: 'AGENT_VERSION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
           metadata: { versionId },
         });
       }
       if (versionToRestore.agentId !== agentId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for agent ${agentId}`,
-          code: 'AGENT_VERSION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
           metadata: { versionId, agentId },
         });
       }
@@ -461,7 +489,7 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
       if (!newVersion) {
         throw new HTTPException(500, {
           message: 'Failed to retrieve created version',
-          code: 'AGENT_VERSION_CREATED_RESOLVE_FAILED',
+          code: SERVER_ERROR_CODES.AGENT_VERSION_CREATED_RESOLVE_FAILED,
         });
       }
 
@@ -479,7 +507,10 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
 
       return newVersion;
     } catch (error) {
-      return handleError(error, { message: 'Error restoring agent version', code: 'AGENT_VERSION_RESTORE_FAILED' });
+      return handleError(error, {
+        message: 'Error restoring agent version',
+        code: SERVER_ERROR_CODES.AGENT_VERSION_RESTORE_FAILED,
+      });
     }
   },
 });
@@ -502,14 +533,17 @@ export const DELETE_AGENT_VERSION_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const agentsStore = await storage.getStore('agents');
       if (!agentsStore) {
         throw new HTTPException(500, {
           message: 'Agents storage domain is not available',
-          code: 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -518,7 +552,7 @@ export const DELETE_AGENT_VERSION_ROUTE = createRoute({
       if (!agent) {
         throw new HTTPException(404, {
           message: `Agent with id ${agentId} not found`,
-          code: 'STORED_AGENT_NOT_FOUND',
+          code: SERVER_ERROR_CODES.STORED_AGENT_NOT_FOUND,
           metadata: { agentId },
         });
       }
@@ -529,14 +563,14 @@ export const DELETE_AGENT_VERSION_ROUTE = createRoute({
       if (!version) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found`,
-          code: 'AGENT_VERSION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
           metadata: { versionId },
         });
       }
       if (version.agentId !== agentId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for agent ${agentId}`,
-          code: 'AGENT_VERSION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
           metadata: { versionId, agentId },
         });
       }
@@ -545,7 +579,7 @@ export const DELETE_AGENT_VERSION_ROUTE = createRoute({
       if (agent.activeVersionId === versionId) {
         throw new HTTPException(400, {
           message: 'Cannot delete the active version. Activate a different version first.',
-          code: 'AGENT_VERSION_ACTIVE_DELETE_FORBIDDEN',
+          code: SERVER_ERROR_CODES.AGENT_VERSION_ACTIVE_DELETE_FORBIDDEN,
         });
       }
 
@@ -559,7 +593,10 @@ export const DELETE_AGENT_VERSION_ROUTE = createRoute({
         message: `Version ${version.versionNumber} deleted successfully`,
       };
     } catch (error) {
-      return handleError(error, { message: 'Error deleting agent version', code: 'AGENT_VERSION_DELETE_FAILED' });
+      return handleError(error, {
+        message: 'Error deleting agent version',
+        code: SERVER_ERROR_CODES.AGENT_VERSION_DELETE_FAILED,
+      });
     }
   },
 });
@@ -595,14 +632,17 @@ export const COMPARE_AGENT_VERSIONS_ROUTE: ServerRoute<
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const agentsStore = await storage.getStore('agents');
       if (!agentsStore) {
         throw new HTTPException(500, {
           message: 'Agents storage domain is not available',
-          code: 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
       const agent = await agentsStore.getById(agentId);
@@ -613,14 +653,14 @@ export const COMPARE_AGENT_VERSIONS_ROUTE: ServerRoute<
       if (!fromVersion) {
         throw new HTTPException(404, {
           message: `Version with id ${from} not found`,
-          code: 'AGENT_VERSION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
           metadata: { fromVersionId: from },
         });
       }
       if (fromVersion.agentId !== agentId) {
         throw new HTTPException(404, {
           message: `Version with id ${from} not found for agent ${agentId}`,
-          code: 'AGENT_VERSION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
           metadata: { fromVersionId: from, agentId },
         });
       }
@@ -629,14 +669,14 @@ export const COMPARE_AGENT_VERSIONS_ROUTE: ServerRoute<
       if (!toVersion) {
         throw new HTTPException(404, {
           message: `Version with id ${to} not found`,
-          code: 'AGENT_VERSION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
           metadata: { toVersionId: to },
         });
       }
       if (toVersion.agentId !== agentId) {
         throw new HTTPException(404, {
           message: `Version with id ${to} not found for agent ${agentId}`,
-          code: 'AGENT_VERSION_NOT_FOUND',
+          code: SERVER_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
           metadata: { toVersionId: to, agentId },
         });
       }
@@ -660,7 +700,10 @@ export const COMPARE_AGENT_VERSIONS_ROUTE: ServerRoute<
         toVersion,
       };
     } catch (error) {
-      return handleError(error, { message: 'Error comparing agent versions', code: 'AGENT_VERSIONS_COMPARE_FAILED' });
+      return handleError(error, {
+        message: 'Error comparing agent versions',
+        code: SERVER_ERROR_CODES.AGENT_VERSIONS_COMPARE_FAILED,
+      });
     }
   },
 });

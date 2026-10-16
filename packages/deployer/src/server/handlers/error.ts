@@ -1,4 +1,4 @@
-import { isServerProblem } from '@mastra/server/error-codes';
+import { SERVER_ERROR_CODES, isServerProblem } from '@mastra/server/error-codes';
 import type { ServerErrorCode, ServerProblem } from '@mastra/server/error-codes';
 import { HTTPException as ServerHTTPException } from '@mastra/server/server-adapter';
 import type { Context } from 'hono';
@@ -22,7 +22,7 @@ export function handleError(error: unknown, fallback: { message: string; code: S
 
 function getProblem(err: Error): ServerProblem {
   const problem = (err as { problem?: unknown }).problem;
-  return isServerProblem(problem) ? problem : { code: 'UNEXPECTED_ERROR' };
+  return isServerProblem(problem) ? problem : { code: SERVER_ERROR_CODES.UNEXPECTED_ERROR };
 }
 
 export function errorHandler(err: Error, c: Context, isDev?: boolean): Response {
@@ -36,5 +36,8 @@ export function errorHandler(err: Error, c: Context, isDev?: boolean): Response 
   }
 
   c.get('mastra').getLogger().error(err);
-  return c.json({ error: 'Internal Server Error', problem: { code: 'UNEXPECTED_ERROR' } satisfies ServerProblem }, 500);
+  return c.json(
+    { error: 'Internal Server Error', problem: { code: SERVER_ERROR_CODES.UNEXPECTED_ERROR } satisfies ServerProblem },
+    500,
+  );
 }

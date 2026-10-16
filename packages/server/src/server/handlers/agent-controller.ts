@@ -18,6 +18,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { z } from 'zod/v4';
 
 import { MASTRA_USER_KEY } from '../constants';
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import { filterSchema, includeSchema, messageOrderBySchema } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -88,7 +89,7 @@ function getAgentControllerOrThrow(
   if (!controller) {
     throw new HTTPException(404, {
       message: `agent controller "${controllerId}" not found`,
-      code: 'AGENT_CONTROLLER_NOT_FOUND',
+      code: SERVER_ERROR_CODES.AGENT_CONTROLLER_NOT_FOUND,
       metadata: { controllerId },
     });
   }
@@ -502,7 +503,10 @@ export const LIST_AGENT_CONTROLLERS_ROUTE = createRoute({
       }
       return { agentControllers: Array.from(ids).map(id => ({ id })) };
     } catch (error) {
-      return handleError(error, { message: 'error listing agent controllers', code: 'AGENT_CONTROLLER_LIST_FAILED' });
+      return handleError(error, {
+        message: 'error listing agent controllers',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_LIST_FAILED,
+      });
     }
   },
 });
@@ -532,7 +536,7 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error creating controller session',
-        code: 'AGENT_CONTROLLER_SESSION_CREATE_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_SESSION_CREATE_FAILED,
       });
     }
   },
@@ -671,7 +675,7 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error streaming controller session',
-        code: 'AGENT_CONTROLLER_SESSION_STREAM_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_SESSION_STREAM_FAILED,
       });
     }
   },
@@ -713,7 +717,7 @@ export const SEND_AGENT_CONTROLLER_MESSAGE_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error sending controller message',
-        code: 'AGENT_CONTROLLER_MESSAGE_SEND_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_MESSAGE_SEND_FAILED,
       });
     }
   },
@@ -740,7 +744,7 @@ export const ABORT_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error aborting controller session',
-        code: 'AGENT_CONTROLLER_SESSION_ABORT_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_SESSION_ABORT_FAILED,
       });
     }
   },
@@ -801,7 +805,7 @@ export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error responding to controller tool approval',
-        code: 'AGENT_CONTROLLER_TOOL_APPROVAL_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_TOOL_APPROVAL_FAILED,
       });
     }
   },
@@ -853,7 +857,7 @@ export const AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error responding to controller tool suspension',
-        code: 'AGENT_CONTROLLER_TOOL_SUSPENSION_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_TOOL_SUSPENSION_FAILED,
       });
     }
   },
@@ -887,7 +891,7 @@ export const STEER_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error steering controller session',
-        code: 'AGENT_CONTROLLER_SESSION_STEER_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_SESSION_STEER_FAILED,
       });
     }
   },
@@ -915,7 +919,7 @@ export const SWITCH_AGENT_CONTROLLER_MODE_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error switching controller mode',
-        code: 'AGENT_CONTROLLER_MODE_SWITCH_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_MODE_SWITCH_FAILED,
       });
     }
   },
@@ -944,7 +948,7 @@ export const SWITCH_AGENT_CONTROLLER_MODEL_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error switching controller model',
-        code: 'AGENT_CONTROLLER_MODEL_SWITCH_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_MODEL_SWITCH_FAILED,
       });
     }
   },
@@ -974,7 +978,7 @@ export const SWITCH_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error switching controller thread',
-        code: 'AGENT_CONTROLLER_THREAD_SWITCH_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_THREAD_SWITCH_FAILED,
       });
     }
   },
@@ -1005,7 +1009,7 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
         if (!thread)
           throw new HTTPException(404, {
             message: `thread "${requestedThreadId}" not found`,
-            code: 'AGENT_CONTROLLER_THREAD_NOT_FOUND',
+            code: SERVER_ERROR_CODES.AGENT_CONTROLLER_THREAD_NOT_FOUND,
             metadata: { threadId: requestedThreadId },
           });
       }
@@ -1053,7 +1057,7 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error reading controller session state',
-        code: 'AGENT_CONTROLLER_SESSION_STATE_GET_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_SESSION_STATE_GET_FAILED,
       });
     }
   },
@@ -1079,7 +1083,7 @@ export const LIST_AGENT_CONTROLLER_MODES_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error listing controller modes',
-        code: 'AGENT_CONTROLLER_MODES_LIST_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_MODES_LIST_FAILED,
       });
     }
   },
@@ -1114,7 +1118,7 @@ export const LIST_AGENT_CONTROLLER_ACTIVE_RUNS_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error listing active controller runs',
-        code: 'AGENT_CONTROLLER_ACTIVE_RUNS_LIST_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_ACTIVE_RUNS_LIST_FAILED,
       });
     }
   },
@@ -1202,7 +1206,7 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error listing controller threads',
-        code: 'AGENT_CONTROLLER_THREADS_LIST_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_THREADS_LIST_FAILED,
       });
     }
   },
@@ -1271,7 +1275,7 @@ export const SEND_AGENT_CONTROLLER_NOTIFICATION_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error sending controller notification',
-        code: 'AGENT_CONTROLLER_NOTIFICATION_SEND_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_NOTIFICATION_SEND_FAILED,
       });
     }
   },
@@ -1309,7 +1313,7 @@ export const CREATE_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error creating controller thread',
-        code: 'AGENT_CONTROLLER_THREAD_CREATE_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_THREAD_CREATE_FAILED,
       });
     }
   },
@@ -1336,7 +1340,7 @@ export const DELETE_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error deleting controller thread',
-        code: 'AGENT_CONTROLLER_THREAD_DELETE_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_THREAD_DELETE_FAILED,
       });
     }
   },
@@ -1368,7 +1372,7 @@ export const RENAME_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error renaming controller thread',
-        code: 'AGENT_CONTROLLER_THREAD_RENAME_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_THREAD_RENAME_FAILED,
       });
     }
   },
@@ -1402,7 +1406,7 @@ export const CLONE_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error cloning controller thread',
-        code: 'AGENT_CONTROLLER_THREAD_CLONE_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_THREAD_CLONE_FAILED,
       });
     }
   },
@@ -1441,14 +1445,17 @@ export const LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE = createRoute({
       ) {
         throw new HTTPException(400, {
           message: 'limit can only be combined with page; use perPage instead',
-          code: 'AGENT_CONTROLLER_LIMIT_REQUIRES_PAGE',
+          code: SERVER_ERROR_CODES.AGENT_CONTROLLER_LIMIT_REQUIRES_PAGE,
         });
       }
 
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const thread = await controller.queryThreadById({ threadId });
       if (!thread || (resourceId && thread.resourceId && thread.resourceId !== resourceId)) {
-        throw new HTTPException(404, { message: 'Thread not found', code: 'AGENT_CONTROLLER_THREAD_NOT_FOUND' });
+        throw new HTTPException(404, {
+          message: 'Thread not found',
+          code: SERVER_ERROR_CODES.AGENT_CONTROLLER_THREAD_NOT_FOUND,
+        });
       }
       await enforceThreadAccess({
         mastra,
@@ -1497,7 +1504,7 @@ export const LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error listing controller thread messages',
-        code: 'AGENT_CONTROLLER_THREAD_MESSAGES_LIST_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_THREAD_MESSAGES_LIST_FAILED,
       });
     }
   },
@@ -1535,7 +1542,7 @@ export const FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error queuing controller follow-up',
-        code: 'AGENT_CONTROLLER_FOLLOW_UP_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_FOLLOW_UP_FAILED,
       });
     }
   },
@@ -1573,7 +1580,7 @@ export const LIST_AGENT_CONTROLLER_MODELS_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error listing controller models',
-        code: 'AGENT_CONTROLLER_MODELS_LIST_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_MODELS_LIST_FAILED,
       });
     }
   },
@@ -1605,7 +1612,7 @@ export const GET_AGENT_CONTROLLER_WORKSPACE_STATUS_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error reading controller workspace status',
-        code: 'AGENT_CONTROLLER_WORKSPACE_STATUS_GET_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_WORKSPACE_STATUS_GET_FAILED,
       });
     }
   },
@@ -1636,7 +1643,7 @@ export const GET_AGENT_CONTROLLER_OM_RECORD_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error reading controller OM record',
-        code: 'AGENT_CONTROLLER_OM_RECORD_GET_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_OM_RECORD_GET_FAILED,
       });
     }
   },
@@ -1668,7 +1675,7 @@ export const SET_AGENT_CONTROLLER_RESOURCE_ID_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error setting controller resource ID',
-        code: 'AGENT_CONTROLLER_RESOURCE_ID_SET_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_RESOURCE_ID_SET_FAILED,
       });
     }
   },
@@ -1695,7 +1702,7 @@ export const GET_AGENT_CONTROLLER_RESOURCE_IDS_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error listing controller resource IDs',
-        code: 'AGENT_CONTROLLER_RESOURCE_IDS_LIST_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_RESOURCE_IDS_LIST_FAILED,
       });
     }
   },
@@ -1754,7 +1761,10 @@ export const GET_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
       const record = await agent.getObjective({ threadId });
       return { goal: record ?? undefined };
     } catch (error) {
-      return handleError(error, { message: 'error reading controller goal', code: 'AGENT_CONTROLLER_GOAL_GET_FAILED' });
+      return handleError(error, {
+        message: 'error reading controller goal',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_GOAL_GET_FAILED,
+      });
     }
   },
 });
@@ -1790,7 +1800,7 @@ export const SET_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
       if (!threadId)
         throw new HTTPException(400, {
           message: 'session has no active thread',
-          code: 'AGENT_CONTROLLER_NO_ACTIVE_THREAD',
+          code: SERVER_ERROR_CODES.AGENT_CONTROLLER_NO_ACTIVE_THREAD,
         });
       const agent = getAgentForSession(controller, session);
       const record = await agent.setObjective(objective, {
@@ -1801,7 +1811,10 @@ export const SET_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
       });
       return { goal: record ?? undefined };
     } catch (error) {
-      return handleError(error, { message: 'error setting controller goal', code: 'AGENT_CONTROLLER_GOAL_SET_FAILED' });
+      return handleError(error, {
+        message: 'error setting controller goal',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_GOAL_SET_FAILED,
+      });
     }
   },
 });
@@ -1836,7 +1849,7 @@ export const UPDATE_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
       if (!threadId)
         throw new HTTPException(400, {
           message: 'session has no active thread',
-          code: 'AGENT_CONTROLLER_NO_ACTIVE_THREAD',
+          code: SERVER_ERROR_CODES.AGENT_CONTROLLER_NO_ACTIVE_THREAD,
         });
       const agent = getAgentForSession(controller, session);
       const record = await agent.updateObjectiveOptions({
@@ -1849,7 +1862,7 @@ export const UPDATE_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error updating controller goal',
-        code: 'AGENT_CONTROLLER_GOAL_UPDATE_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_GOAL_UPDATE_FAILED,
       });
     }
   },
@@ -1875,7 +1888,7 @@ export const CLEAR_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
       if (!threadId)
         throw new HTTPException(400, {
           message: 'session has no active thread',
-          code: 'AGENT_CONTROLLER_NO_ACTIVE_THREAD',
+          code: SERVER_ERROR_CODES.AGENT_CONTROLLER_NO_ACTIVE_THREAD,
         });
       const agent = getAgentForSession(controller, session);
       await agent.clearObjective({ threadId });
@@ -1883,7 +1896,7 @@ export const CLEAR_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error clearing controller goal',
-        code: 'AGENT_CONTROLLER_GOAL_CLEAR_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_GOAL_CLEAR_FAILED,
       });
     }
   },
@@ -1917,7 +1930,7 @@ export const GET_AGENT_CONTROLLER_PERMISSIONS_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error getting controller permissions',
-        code: 'AGENT_CONTROLLER_PERMISSIONS_GET_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_PERMISSIONS_GET_FAILED,
       });
     }
   },
@@ -1945,7 +1958,7 @@ export const SET_AGENT_CONTROLLER_CATEGORY_PERMISSION_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error setting controller category permission',
-        code: 'AGENT_CONTROLLER_CATEGORY_PERMISSION_SET_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_CATEGORY_PERMISSION_SET_FAILED,
       });
     }
   },
@@ -1974,7 +1987,7 @@ export const SET_AGENT_CONTROLLER_TOOL_PERMISSION_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error setting controller tool permission',
-        code: 'AGENT_CONTROLLER_TOOL_PERMISSION_SET_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_TOOL_PERMISSION_SET_FAILED,
       });
     }
   },
@@ -2009,7 +2022,7 @@ export const SET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'error setting controller session state',
-        code: 'AGENT_CONTROLLER_SESSION_STATE_SET_FAILED',
+        code: SERVER_ERROR_CODES.AGENT_CONTROLLER_SESSION_STATE_SET_FAILED,
       });
     }
   },

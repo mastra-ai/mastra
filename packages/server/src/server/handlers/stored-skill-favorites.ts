@@ -1,3 +1,4 @@
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import { favoriteToggleResponseSchema } from '../schemas/favorites';
 import { storedSkillIdPathParams } from '../schemas/stored-skills';
@@ -14,20 +15,23 @@ import { handleError } from './error';
 async function getFavoritesContext(mastra: Parameters<typeof requireBuilderFeature>[0]) {
   const storage = mastra.getStorage();
   if (!storage) {
-    throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+    throw new HTTPException(500, {
+      message: 'Storage is not configured',
+      code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+    });
   }
   const skillStore = await storage.getStore('skills');
   if (!skillStore) {
     throw new HTTPException(500, {
       message: 'Skills storage domain is not available',
-      code: 'STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE',
+      code: SERVER_ERROR_CODES.STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE,
     });
   }
   const favoritesStore = await storage.getStore('favorites');
   if (!favoritesStore) {
     throw new HTTPException(500, {
       message: 'Favorites storage domain is not available',
-      code: 'FAVORITES_STORAGE_DOMAIN_UNAVAILABLE',
+      code: SERVER_ERROR_CODES.FAVORITES_STORAGE_DOMAIN_UNAVAILABLE,
     });
   }
   return { skillStore, favoritesStore };
@@ -53,7 +57,10 @@ export const FAVORITE_STORED_SKILL_ROUTE = createRoute({
 
       const callerId = getCallerAuthorId(requestContext);
       if (!callerId) {
-        throw new HTTPException(401, { message: 'Authentication required', code: 'AUTHENTICATION_REQUIRED' });
+        throw new HTTPException(401, {
+          message: 'Authentication required',
+          code: SERVER_ERROR_CODES.AUTHENTICATION_REQUIRED,
+        });
       }
 
       const { skillStore, favoritesStore } = await getFavoritesContext(mastra);
@@ -62,7 +69,7 @@ export const FAVORITE_STORED_SKILL_ROUTE = createRoute({
       if (!skill) {
         throw new HTTPException(404, {
           message: `Stored skill with id ${storedSkillId} not found`,
-          code: 'STORED_SKILL_NOT_FOUND',
+          code: SERVER_ERROR_CODES.STORED_SKILL_NOT_FOUND,
           metadata: { storedSkillId },
         });
       }
@@ -78,7 +85,10 @@ export const FAVORITE_STORED_SKILL_ROUTE = createRoute({
       });
       return result;
     } catch (error) {
-      return handleError(error, { message: 'Error favoriting stored skill', code: 'STORED_SKILL_FAVORITE_FAILED' });
+      return handleError(error, {
+        message: 'Error favoriting stored skill',
+        code: SERVER_ERROR_CODES.STORED_SKILL_FAVORITE_FAILED,
+      });
     }
   },
 });
@@ -103,7 +113,10 @@ export const UNFAVORITE_STORED_SKILL_ROUTE = createRoute({
 
       const callerId = getCallerAuthorId(requestContext);
       if (!callerId) {
-        throw new HTTPException(401, { message: 'Authentication required', code: 'AUTHENTICATION_REQUIRED' });
+        throw new HTTPException(401, {
+          message: 'Authentication required',
+          code: SERVER_ERROR_CODES.AUTHENTICATION_REQUIRED,
+        });
       }
 
       const { skillStore, favoritesStore } = await getFavoritesContext(mastra);
@@ -112,7 +125,7 @@ export const UNFAVORITE_STORED_SKILL_ROUTE = createRoute({
       if (!skill) {
         throw new HTTPException(404, {
           message: `Stored skill with id ${storedSkillId} not found`,
-          code: 'STORED_SKILL_NOT_FOUND',
+          code: SERVER_ERROR_CODES.STORED_SKILL_NOT_FOUND,
           metadata: { storedSkillId },
         });
       }
@@ -127,7 +140,10 @@ export const UNFAVORITE_STORED_SKILL_ROUTE = createRoute({
       });
       return result;
     } catch (error) {
-      return handleError(error, { message: 'Error unfavoriting stored skill', code: 'STORED_SKILL_UNFAVORITE_FAILED' });
+      return handleError(error, {
+        message: 'Error unfavoriting stored skill',
+        code: SERVER_ERROR_CODES.STORED_SKILL_UNFAVORITE_FAILED,
+      });
     }
   },
 });

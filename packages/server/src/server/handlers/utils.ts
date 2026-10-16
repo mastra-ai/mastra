@@ -4,6 +4,7 @@ import type { RequestContext } from '@mastra/core/di';
 import { MastraMemory } from '@mastra/core/memory';
 import type { Workflow } from '@mastra/core/workflows';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, isReservedRequestContextKey } from '../constants';
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 
@@ -28,7 +29,7 @@ export function validateBody(body: Record<string, unknown>) {
   if (missingArgument !== undefined) {
     throw new HTTPException(400, {
       message: `Argument "${missingArgument}" is required`,
-      code: 'REQUEST_ARGUMENT_REQUIRED',
+      code: SERVER_ERROR_CODES.REQUEST_ARGUMENT_REQUIRED,
       metadata: { argument: missingArgument },
     });
   }
@@ -161,7 +162,7 @@ export function requireEffectiveResourceId(
     throw new HTTPException(400, {
       message:
         'A resource ID is required when using memory. Provide memory.resource in the request body, or configure server auth with mapUserToResourceId to derive it from the authenticated user.',
-      code: 'RESOURCE_ID_REQUIRED',
+      code: SERVER_ERROR_CODES.RESOURCE_ID_REQUIRED,
     });
   }
 }
@@ -190,7 +191,7 @@ export async function validateThreadOwnership(
   if (thread && effectiveResourceId && thread.resourceId && thread.resourceId !== effectiveResourceId) {
     throw new HTTPException(403, {
       message: 'Access denied: thread belongs to a different resource',
-      code: 'THREAD_ACCESS_DENIED',
+      code: SERVER_ERROR_CODES.THREAD_ACCESS_DENIED,
     });
   }
 }
@@ -225,7 +226,7 @@ export async function enforceThreadAccess({
   if (!user || typeof user !== 'object') {
     throw new HTTPException(403, {
       message: 'FGA authorization denied: authenticated user is required',
-      code: 'FGA_USER_REQUIRED',
+      code: SERVER_ERROR_CODES.FGA_USER_REQUIRED,
     });
   }
 
@@ -262,7 +263,7 @@ export async function validateRunOwnership(
     if (effectiveResourceId && run.resourceId && run.resourceId !== effectiveResourceId) {
       throw new HTTPException(403, {
         message: 'Access denied: workflow run belongs to a different resource',
-        code: 'WORKFLOW_RUN_ACCESS_DENIED',
+        code: SERVER_ERROR_CODES.WORKFLOW_RUN_ACCESS_DENIED,
       });
     }
     return;
@@ -271,7 +272,7 @@ export async function validateRunOwnership(
     if (run.resourceId !== effectiveResourceId) {
       throw new HTTPException(403, {
         message: 'Access denied: workflow run belongs to a different resource',
-        code: 'WORKFLOW_RUN_ACCESS_DENIED',
+        code: SERVER_ERROR_CODES.WORKFLOW_RUN_ACCESS_DENIED,
       });
     }
     return;
@@ -280,7 +281,7 @@ export async function validateRunOwnership(
     throw new HTTPException(403, {
       message:
         'Access denied: unscoped workflow run access requires explicit authorization. Configure an FGA provider to authorize privileged run access.',
-      code: 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+      code: SERVER_ERROR_CODES.WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED,
     });
   }
 }

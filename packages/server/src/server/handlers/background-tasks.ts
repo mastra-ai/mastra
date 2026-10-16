@@ -1,3 +1,4 @@
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import {
   backgroundTaskResponseSchema,
@@ -27,13 +28,13 @@ function resolveResourceScope(
   if (contextResourceId === '') {
     throw new HTTPException(403, {
       message: 'Access denied: authenticated resourceId is empty',
-      code: 'THREAD_ACCESS_DENIED',
+      code: SERVER_ERROR_CODES.THREAD_ACCESS_DENIED,
     });
   }
   if (clientResourceId !== undefined && clientResourceId !== contextResourceId) {
     throw new HTTPException(403, {
       message: 'Access denied: resourceId does not match the authenticated resource',
-      code: 'THREAD_ACCESS_DENIED',
+      code: SERVER_ERROR_CODES.THREAD_ACCESS_DENIED,
     });
   }
   return { resourceId: contextResourceId, scoped: true };
@@ -105,7 +106,10 @@ export const LIST_BACKGROUND_TASKS_ROUTE = createRoute({
 
       return bgManager.listTasks({ ...params, resourceId });
     } catch (error) {
-      return handleError(error, { message: 'Error listing background tasks', code: 'BACKGROUND_TASKS_LIST_FAILED' });
+      return handleError(error, {
+        message: 'Error listing background tasks',
+        code: SERVER_ERROR_CODES.BACKGROUND_TASKS_LIST_FAILED,
+      });
     }
   },
 });
@@ -126,17 +130,26 @@ export const GET_BACKGROUND_TASK_ROUTE = createRoute({
       const bgManager = mastra.backgroundTaskManager;
       if (!bgManager) {
         // Background tasks not enabled — the task can't exist.
-        throw new HTTPException(404, { message: 'Background task not found', code: 'BACKGROUND_TASK_NOT_FOUND' });
+        throw new HTTPException(404, {
+          message: 'Background task not found',
+          code: SERVER_ERROR_CODES.BACKGROUND_TASK_NOT_FOUND,
+        });
       }
 
       const task = await bgManager.getTask(backgroundTaskId);
       // Report another resource's task as missing so its existence is not disclosed.
       if (!task || (scoped && task.resourceId !== resourceId)) {
-        throw new HTTPException(404, { message: 'Background task not found', code: 'BACKGROUND_TASK_NOT_FOUND' });
+        throw new HTTPException(404, {
+          message: 'Background task not found',
+          code: SERVER_ERROR_CODES.BACKGROUND_TASK_NOT_FOUND,
+        });
       }
       return task;
     } catch (error) {
-      return handleError(error, { message: 'Error getting background task', code: 'BACKGROUND_TASK_GET_FAILED' });
+      return handleError(error, {
+        message: 'Error getting background task',
+        code: SERVER_ERROR_CODES.BACKGROUND_TASK_GET_FAILED,
+      });
     }
   },
 });

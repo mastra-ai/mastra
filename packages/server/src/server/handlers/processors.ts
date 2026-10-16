@@ -3,6 +3,7 @@ import type { MessageInput } from '@mastra/core/agent/message-list';
 import { isProcessorWorkflow } from '@mastra/core/processors';
 import type { Processor, ProcessorWorkflow } from '@mastra/core/processors';
 
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import {
   listProcessorsResponseSchema,
@@ -140,7 +141,10 @@ export const LIST_PROCESSORS_ROUTE = createRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, { message: 'Error getting processors', code: 'PROCESSORS_LIST_FAILED' });
+      return handleError(error, {
+        message: 'Error getting processors',
+        code: SERVER_ERROR_CODES.PROCESSORS_LIST_FAILED,
+      });
     }
   },
 });
@@ -168,7 +172,7 @@ export const GET_PROCESSOR_BY_ID_ROUTE = createRoute({
       }
 
       if (!processorEntry) {
-        throw new HTTPException(404, { message: 'Processor not found', code: 'PROCESSOR_NOT_FOUND' });
+        throw new HTTPException(404, { message: 'Processor not found', code: SERVER_ERROR_CODES.PROCESSOR_NOT_FOUND });
       }
 
       // Check if it's a workflow processor
@@ -195,7 +199,7 @@ export const GET_PROCESSOR_BY_ID_ROUTE = createRoute({
         isWorkflow,
       };
     } catch (error) {
-      return handleError(error, { message: 'Error getting processor', code: 'PROCESSOR_GET_FAILED' });
+      return handleError(error, { message: 'Error getting processor', code: SERVER_ERROR_CODES.PROCESSOR_GET_FAILED });
     }
   },
 });
@@ -216,23 +220,32 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
       const { phase, messages } = bodyParams;
 
       if (!processorId) {
-        throw new HTTPException(400, { message: 'Processor ID is required', code: 'PROCESSOR_ID_REQUIRED' });
+        throw new HTTPException(400, {
+          message: 'Processor ID is required',
+          code: SERVER_ERROR_CODES.PROCESSOR_ID_REQUIRED,
+        });
       }
 
       if (!phase) {
-        throw new HTTPException(400, { message: 'Phase is required', code: 'PROCESSOR_PHASE_REQUIRED' });
+        throw new HTTPException(400, {
+          message: 'Phase is required',
+          code: SERVER_ERROR_CODES.PROCESSOR_PHASE_REQUIRED,
+        });
       }
 
       if (phase === 'llmRequest') {
         // processLLMRequest operates on the provider prompt, not on messages
         throw new HTTPException(400, {
           message: 'llmRequest phase cannot be executed directly. It runs on the provider prompt during an agent call.',
-          code: 'PROCESSOR_PHASE_UNSUPPORTED',
+          code: SERVER_ERROR_CODES.PROCESSOR_PHASE_UNSUPPORTED,
         });
       }
 
       if (!messages || !Array.isArray(messages)) {
-        throw new HTTPException(400, { message: 'Messages array is required', code: 'PROCESSOR_MESSAGES_REQUIRED' });
+        throw new HTTPException(400, {
+          message: 'Messages array is required',
+          code: SERVER_ERROR_CODES.PROCESSOR_MESSAGES_REQUIRED,
+        });
       }
 
       // Get the processor from Mastra's registered processors
@@ -246,7 +259,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
       }
 
       if (!processor) {
-        throw new HTTPException(404, { message: 'Processor not found', code: 'PROCESSOR_NOT_FOUND' });
+        throw new HTTPException(404, { message: 'Processor not found', code: SERVER_ERROR_CODES.PROCESSOR_NOT_FOUND });
       }
 
       const messageList = new MessageList();
@@ -360,7 +373,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
           if (result.status !== 'success') {
             throw new HTTPException(500, {
               message: `Processor workflow ${processor.id} failed with status: ${result.status}`,
-              code: 'PROCESSOR_WORKFLOW_FAILED',
+              code: SERVER_ERROR_CODES.PROCESSOR_WORKFLOW_FAILED,
               metadata: { processorId: processor.id, status: result.status },
             });
           }
@@ -392,7 +405,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
           }
           throw new HTTPException(500, {
             message: `Error executing processor workflow: ${error.message}`,
-            code: 'PROCESSOR_WORKFLOW_FAILED',
+            code: SERVER_ERROR_CODES.PROCESSOR_WORKFLOW_FAILED,
           });
         }
       }
@@ -428,7 +441,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
             if (!processor.processInput) {
               throw new HTTPException(400, {
                 message: 'Processor does not support input phase',
-                code: 'PROCESSOR_PHASE_UNSUPPORTED',
+                code: SERVER_ERROR_CODES.PROCESSOR_PHASE_UNSUPPORTED,
               });
             }
             result = await processor.processInput({
@@ -441,7 +454,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
             if (!processor.processInputStep) {
               throw new HTTPException(400, {
                 message: 'Processor does not support inputStep phase',
-                code: 'PROCESSOR_PHASE_UNSUPPORTED',
+                code: SERVER_ERROR_CODES.PROCESSOR_PHASE_UNSUPPORTED,
               });
             }
             result = await processor.processInputStep({
@@ -464,7 +477,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
             if (!processor.processOutputResult) {
               throw new HTTPException(400, {
                 message: 'Processor does not support outputResult phase',
-                code: 'PROCESSOR_PHASE_UNSUPPORTED',
+                code: SERVER_ERROR_CODES.PROCESSOR_PHASE_UNSUPPORTED,
               });
             }
             result = await processor.processOutputResult({
@@ -483,7 +496,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
             if (!processor.processOutputStep) {
               throw new HTTPException(400, {
                 message: 'Processor does not support outputStep phase',
-                code: 'PROCESSOR_PHASE_UNSUPPORTED',
+                code: SERVER_ERROR_CODES.PROCESSOR_PHASE_UNSUPPORTED,
               });
             }
             result = await processor.processOutputStep({
@@ -502,13 +515,13 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
             // outputStream is for streaming chunks, not a simple execute
             throw new HTTPException(400, {
               message: 'outputStream phase cannot be executed directly. Use streaming instead.',
-              code: 'PROCESSOR_PHASE_UNSUPPORTED',
+              code: SERVER_ERROR_CODES.PROCESSOR_PHASE_UNSUPPORTED,
             });
 
           default:
             throw new HTTPException(400, {
               message: `Unknown phase: ${phase}`,
-              code: 'PROCESSOR_PHASE_UNSUPPORTED',
+              code: SERVER_ERROR_CODES.PROCESSOR_PHASE_UNSUPPORTED,
               metadata: { phase },
             });
         }
@@ -554,7 +567,10 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
         throw error;
       }
     } catch (error) {
-      return handleError(error, { message: 'Error executing processor', code: 'PROCESSOR_EXECUTE_FAILED' });
+      return handleError(error, {
+        message: 'Error executing processor',
+        code: SERVER_ERROR_CODES.PROCESSOR_EXECUTE_FAILED,
+      });
     }
   },
 });

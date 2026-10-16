@@ -1,3 +1,4 @@
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import { agentExecutionBodySchema, streamResponseSchema } from '../schemas/agents';
 import { workflowBuilderSettingsResponseSchema } from '../schemas/workflow-builder';
@@ -36,7 +37,7 @@ export const GET_WORKFLOW_BUILDER_SETTINGS_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'Error getting workflow builder settings',
-        code: 'WORKFLOW_BUILDER_SETTINGS_GET_FAILED',
+        code: SERVER_ERROR_CODES.WORKFLOW_BUILDER_SETTINGS_GET_FAILED,
       });
     }
   },
@@ -60,7 +61,7 @@ export const STREAM_WORKFLOW_BUILDER_ROUTE = createRoute({
       if (!editor?.hasEnabledWorkflowBuilderConfig?.() || typeof editor.resolveWorkflowBuilder !== 'function') {
         throw new HTTPException(404, {
           message: 'Workflow builder is not enabled',
-          code: 'WORKFLOW_BUILDER_NOT_ENABLED',
+          code: SERVER_ERROR_CODES.WORKFLOW_BUILDER_NOT_ENABLED,
         });
       }
 
@@ -68,7 +69,7 @@ export const STREAM_WORKFLOW_BUILDER_ROUTE = createRoute({
       if (!builder?.enabled)
         throw new HTTPException(404, {
           message: 'Workflow builder is not enabled',
-          code: 'WORKFLOW_BUILDER_NOT_ENABLED',
+          code: SERVER_ERROR_CODES.WORKFLOW_BUILDER_NOT_ENABLED,
         });
       const agent = builder.getAgent();
 
@@ -120,7 +121,7 @@ export const STREAM_WORKFLOW_BUILDER_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'Error streaming workflow builder response',
-        code: 'WORKFLOW_BUILDER_STREAM_FAILED',
+        code: SERVER_ERROR_CODES.WORKFLOW_BUILDER_STREAM_FAILED,
       });
     }
   },

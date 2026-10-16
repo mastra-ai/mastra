@@ -2,6 +2,7 @@ import type { Agent, MastraDBMessage } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import {
@@ -177,7 +178,7 @@ async function resolveThreadExecutionContext({
     throw new HTTPException(400, {
       message:
         'conversation_id and previous_response_id must reference the same conversation thread when both are provided',
-      code: 'RESPONSE_CONVERSATION_MISMATCH',
+      code: SERVER_ERROR_CODES.RESPONSE_CONVERSATION_MISMATCH,
     });
   }
 
@@ -200,7 +201,7 @@ async function resolveThreadExecutionContext({
     if (conversationId) {
       throw new HTTPException(400, {
         message: 'conversation_id requires the target agent to have memory configured',
-        code: 'CONVERSATION_MEMORY_NOT_CONFIGURED',
+        code: SERVER_ERROR_CODES.CONVERSATION_MEMORY_NOT_CONFIGURED,
       });
     }
 
@@ -212,7 +213,7 @@ async function resolveThreadExecutionContext({
     if (!existingThread) {
       throw new HTTPException(404, {
         message: `Conversation ${conversationId} was not found`,
-        code: 'CONVERSATION_NOT_FOUND',
+        code: SERVER_ERROR_CODES.CONVERSATION_NOT_FOUND,
         metadata: { conversationId },
       });
     }
@@ -305,14 +306,14 @@ async function resolveResponseAgent({
   if (!agentId) {
     throw new HTTPException(400, {
       message: 'Responses requests require an agent_id',
-      code: 'AGENT_ID_REQUIRED',
+      code: SERVER_ERROR_CODES.AGENT_ID_REQUIRED,
     });
   }
 
   if (!mastra) {
     throw new HTTPException(500, {
       message: 'Mastra instance is required for agent-backed responses',
-      code: 'MASTRA_INSTANCE_REQUIRED',
+      code: SERVER_ERROR_CODES.MASTRA_INSTANCE_REQUIRED,
     });
   }
 
@@ -330,7 +331,10 @@ async function resolveAgentMemoryStore({
 }): Promise<MemoryStorage> {
   const agentMemoryStore = await getAgentMemoryStore({ agent, requestContext });
   if (!agentMemoryStore) {
-    throw new HTTPException(400, { message: errorMessage, code: 'RESPONSES_MEMORY_STORAGE_UNAVAILABLE' });
+    throw new HTTPException(400, {
+      message: errorMessage,
+      code: SERVER_ERROR_CODES.RESPONSES_MEMORY_STORAGE_UNAVAILABLE,
+    });
   }
 
   return agentMemoryStore;
@@ -670,7 +674,7 @@ async function prepareCreateResponseRequest({
           } else {
             throw new HTTPException(400, {
               message: `Stored response ${body.previous_response_id} belongs to agent ${owningResponseTurnRecord.metadata.agentId}, not ${body.agent_id}`,
-              code: 'RESPONSE_AGENT_MISMATCH',
+              code: SERVER_ERROR_CODES.RESPONSE_AGENT_MISMATCH,
               metadata: { responseId: body.previous_response_id, agentId: body.agent_id },
             });
           }
@@ -679,7 +683,7 @@ async function prepareCreateResponseRequest({
         if (!previousResponseTurnRecord) {
           throw new HTTPException(404, {
             message: `Stored response ${body.previous_response_id} was not found`,
-            code: 'RESPONSE_NOT_FOUND',
+            code: SERVER_ERROR_CODES.RESPONSE_NOT_FOUND,
             metadata: { responseId: body.previous_response_id },
           });
         }
@@ -688,7 +692,7 @@ async function prepareCreateResponseRequest({
       if (!mastra) {
         throw new HTTPException(500, {
           message: 'Mastra instance is required for agent-backed responses',
-          code: 'MASTRA_INSTANCE_REQUIRED',
+          code: SERVER_ERROR_CODES.MASTRA_INSTANCE_REQUIRED,
         });
       }
 
@@ -701,7 +705,7 @@ async function prepareCreateResponseRequest({
       if (!previousResponseTurnRecord) {
         throw new HTTPException(404, {
           message: `Stored response ${body.previous_response_id} was not found`,
-          code: 'RESPONSE_NOT_FOUND',
+          code: SERVER_ERROR_CODES.RESPONSE_NOT_FOUND,
           metadata: { responseId: body.previous_response_id },
         });
       }
@@ -734,7 +738,7 @@ async function prepareCreateResponseRequest({
 
       throw new HTTPException(500, {
         message: 'Responses route could not determine the effective model for this request',
-        code: 'RESPONSE_MODEL_UNRESOLVED',
+        code: SERVER_ERROR_CODES.RESPONSE_MODEL_UNRESOLVED,
       });
     })();
   const shouldStore = body.store ?? false;
@@ -767,7 +771,7 @@ async function prepareCreateResponseRequest({
   if (shouldStore && !threadContext) {
     throw new HTTPException(400, {
       message: 'Stored responses require the target agent to have memory configured',
-      code: 'RESPONSES_MEMORY_NOT_CONFIGURED',
+      code: SERVER_ERROR_CODES.RESPONSES_MEMORY_NOT_CONFIGURED,
     });
   }
 
@@ -1030,7 +1034,10 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
         },
       });
     } catch (error) {
-      return handleError(error, { message: 'Error creating response', code: 'RESPONSE_CREATE_FAILED' });
+      return handleError(error, {
+        message: 'Error creating response',
+        code: SERVER_ERROR_CODES.RESPONSE_CREATE_FAILED,
+      });
     }
   },
 });
@@ -1052,14 +1059,14 @@ export const GET_RESPONSE_ROUTE = createRoute({
       if (!responseTurnRecord) {
         throw new HTTPException(404, {
           message: `Stored response ${responseId} was not found`,
-          code: 'RESPONSE_NOT_FOUND',
+          code: SERVER_ERROR_CODES.RESPONSE_NOT_FOUND,
           metadata: { responseId },
         });
       }
 
       return mapResponseTurnRecordToResponse(responseTurnRecord);
     } catch (error) {
-      return handleError(error, { message: 'Error retrieving response', code: 'RESPONSE_GET_FAILED' });
+      return handleError(error, { message: 'Error retrieving response', code: SERVER_ERROR_CODES.RESPONSE_GET_FAILED });
     }
   },
 });
@@ -1081,7 +1088,7 @@ export const DELETE_RESPONSE_ROUTE = createRoute({
       if (!responseTurnRecord) {
         throw new HTTPException(404, {
           message: `Stored response ${responseId} was not found`,
-          code: 'RESPONSE_NOT_FOUND',
+          code: SERVER_ERROR_CODES.RESPONSE_NOT_FOUND,
           metadata: { responseId },
         });
       }
@@ -1096,7 +1103,10 @@ export const DELETE_RESPONSE_ROUTE = createRoute({
 
       return response;
     } catch (error) {
-      return handleError(error, { message: 'Error deleting response', code: 'RESPONSE_DELETE_FAILED' });
+      return handleError(error, {
+        message: 'Error deleting response',
+        code: SERVER_ERROR_CODES.RESPONSE_DELETE_FAILED,
+      });
     }
   },
 });

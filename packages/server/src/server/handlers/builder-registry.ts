@@ -14,6 +14,7 @@
 import type { Mastra } from '@mastra/core';
 import type { StorageSkillFileNode } from '@mastra/core/storage';
 
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import {
   builderRegistriesResponseSchema,
@@ -87,7 +88,10 @@ async function requireEnabledRegistry(mastra: Mastra, registryId: string): Promi
   const list = await resolveRegistries(mastra);
   const match = list.find(r => r.id === registryId);
   if (!match || !match.enabled) {
-    throw new HTTPException(404, { message: 'Registry not found', code: 'BUILDER_REGISTRY_NOT_FOUND' });
+    throw new HTTPException(404, {
+      message: 'Registry not found',
+      code: SERVER_ERROR_CODES.BUILDER_REGISTRY_NOT_FOUND,
+    });
   }
 }
 
@@ -214,7 +218,7 @@ export const LIST_BUILDER_REGISTRIES_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, {
         message: 'Error listing builder registries',
-        code: 'BUILDER_REGISTRIES_LIST_FAILED',
+        code: SERVER_ERROR_CODES.BUILDER_REGISTRIES_LIST_FAILED,
       });
     }
   },
@@ -244,7 +248,10 @@ export const BUILDER_REGISTRY_SEARCH_ROUTE = createRoute({
       return await searchSkillsSh({ q, limit });
     } catch (error) {
       if (error instanceof HTTPException) throw error;
-      return handleError(error, { message: 'Error searching registry', code: 'REGISTRY_SEARCH_FAILED' });
+      return handleError(error, {
+        message: 'Error searching registry',
+        code: SERVER_ERROR_CODES.REGISTRY_SEARCH_FAILED,
+      });
     }
   },
 });
@@ -274,7 +281,7 @@ export const BUILDER_REGISTRY_POPULAR_ROUTE = createRoute({
       if (error instanceof HTTPException) throw error;
       return handleError(error, {
         message: 'Error fetching popular skills',
-        code: 'REGISTRY_POPULAR_SKILLS_FETCH_FAILED',
+        code: SERVER_ERROR_CODES.REGISTRY_POPULAR_SKILLS_FETCH_FAILED,
       });
     }
   },
@@ -305,7 +312,7 @@ export const BUILDER_REGISTRY_PREVIEW_ROUTE = createRoute({
       if (error instanceof HTTPException) throw error;
       return handleError(error, {
         message: 'Error fetching skill preview',
-        code: 'REGISTRY_SKILL_PREVIEW_FETCH_FAILED',
+        code: SERVER_ERROR_CODES.REGISTRY_SKILL_PREVIEW_FETCH_FAILED,
       });
     }
   },
@@ -342,13 +349,16 @@ export const BUILDER_REGISTRY_INSTALL_ROUTE = createRoute({
 
       const storage = mastra.getStorage();
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: SERVER_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
       const skillStore = await storage.getStore('skills');
       if (!skillStore) {
         throw new HTTPException(500, {
           message: 'Skills storage domain is not available',
-          code: 'STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -357,7 +367,7 @@ export const BUILDER_REGISTRY_INSTALL_ROUTE = createRoute({
       if (!result || result.files.length === 0) {
         throw new HTTPException(404, {
           message: `Could not find skill "${skillName}" in ${owner}/${repo}.`,
-          code: 'SKILLS_REGISTRY_SKILL_NOT_FOUND',
+          code: SERVER_ERROR_CODES.SKILLS_REGISTRY_SKILL_NOT_FOUND,
           metadata: { skillName, owner, repo },
         });
       }
@@ -379,7 +389,7 @@ export const BUILDER_REGISTRY_INSTALL_ROUTE = createRoute({
       if (!id) {
         throw new HTTPException(400, {
           message: 'Could not derive skill ID from registry skill metadata.',
-          code: 'REGISTRY_SKILL_ID_DERIVATION_FAILED',
+          code: SERVER_ERROR_CODES.REGISTRY_SKILL_ID_DERIVATION_FAILED,
         });
       }
 
@@ -390,7 +400,7 @@ export const BUILDER_REGISTRY_INSTALL_ROUTE = createRoute({
           message: `Skill with id "${id}" already exists.`,
           // Surface the existing id so the client can deep-link.
           cause: { storedSkillId: id },
-          code: 'STORED_SKILL_ALREADY_EXISTS',
+          code: SERVER_ERROR_CODES.STORED_SKILL_ALREADY_EXISTS,
           metadata: { storedSkillId: id },
         });
       }
@@ -433,7 +443,10 @@ export const BUILDER_REGISTRY_INSTALL_ROUTE = createRoute({
       };
     } catch (error) {
       if (error instanceof HTTPException) throw error;
-      return handleError(error, { message: 'Error installing registry skill', code: 'REGISTRY_SKILL_INSTALL_FAILED' });
+      return handleError(error, {
+        message: 'Error installing registry skill',
+        code: SERVER_ERROR_CODES.REGISTRY_SKILL_INSTALL_FAILED,
+      });
     }
   },
 });

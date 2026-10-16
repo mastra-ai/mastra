@@ -1,6 +1,7 @@
 import type { Mastra } from '@mastra/core';
 import type { AgentSchedule, AnySchedule, WorkflowSchedule } from '@mastra/core/schedules';
 import type { WorkflowRunState } from '@mastra/core/workflows';
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import {
   createScheduleBodySchema,
@@ -84,7 +85,7 @@ async function hydrateScheduleResponse(
 async function loadSchedule(mastra: Mastra, scheduleId: string): Promise<AnySchedule> {
   const schedule = await mastra.schedules.get(scheduleId);
   if (!schedule) {
-    throw new HTTPException(404, { message: 'Schedule not found', code: 'SCHEDULE_NOT_FOUND' });
+    throw new HTTPException(404, { message: 'Schedule not found', code: SERVER_ERROR_CODES.SCHEDULE_NOT_FOUND });
   }
   return schedule;
 }
@@ -111,7 +112,7 @@ export const LIST_SCHEDULES_ROUTE = createRoute({
       const hydrated = await Promise.all(schedules.map(schedule => hydrateScheduleResponse(mastra, schedule)));
       return { schedules: hydrated };
     } catch (error) {
-      return handleError(error, { message: 'Error listing schedules', code: 'SCHEDULES_LIST_FAILED' });
+      return handleError(error, { message: 'Error listing schedules', code: SERVER_ERROR_CODES.SCHEDULES_LIST_FAILED });
     }
   },
 });
@@ -131,7 +132,7 @@ export const GET_SCHEDULE_ROUTE = createRoute({
       const schedule = await loadSchedule(mastra, scheduleId);
       return hydrateScheduleResponse(mastra, schedule);
     } catch (error) {
-      return handleError(error, { message: 'Error getting schedule', code: 'SCHEDULE_GET_FAILED' });
+      return handleError(error, { message: 'Error getting schedule', code: SERVER_ERROR_CODES.SCHEDULE_GET_FAILED });
     }
   },
 });
@@ -166,7 +167,7 @@ export const CREATE_SCHEDULE_ROUTE = createRoute({
         if (!workflow || resolved !== workflow) {
           throw new HTTPException(404, {
             message: `Workflow "${body.workflowId}" not found`,
-            code: 'WORKFLOW_NOT_FOUND',
+            code: SERVER_ERROR_CODES.WORKFLOW_NOT_FOUND,
             metadata: { workflowId: body.workflowId },
           });
         }
@@ -188,7 +189,7 @@ export const CREATE_SCHEDULE_ROUTE = createRoute({
       } catch {
         throw new HTTPException(404, {
           message: `Agent "${agentBody.agentId}" not found`,
-          code: 'AGENT_NOT_FOUND',
+          code: SERVER_ERROR_CODES.AGENT_NOT_FOUND,
           metadata: { agentId: agentBody.agentId },
         });
       }
@@ -210,7 +211,10 @@ export const CREATE_SCHEDULE_ROUTE = createRoute({
         ...(agentBody.metadata ? { metadata: agentBody.metadata } : {}),
       });
     } catch (error) {
-      return handleError(error, { message: 'Error creating schedule', code: 'SCHEDULE_CREATE_FAILED' });
+      return handleError(error, {
+        message: 'Error creating schedule',
+        code: SERVER_ERROR_CODES.SCHEDULE_CREATE_FAILED,
+      });
     }
   },
 });
@@ -249,7 +253,10 @@ export const UPDATE_SCHEDULE_ROUTE = createRoute({
         ...(body.resourceId !== undefined ? { resourceId: body.resourceId } : {}),
       });
     } catch (error) {
-      return handleError(error, { message: 'Error updating schedule', code: 'SCHEDULE_UPDATE_FAILED' });
+      return handleError(error, {
+        message: 'Error updating schedule',
+        code: SERVER_ERROR_CODES.SCHEDULE_UPDATE_FAILED,
+      });
     }
   },
 });
@@ -270,7 +277,10 @@ export const DELETE_SCHEDULE_ROUTE = createRoute({
       await mastra.schedules.delete(scheduleId);
       return { message: 'Schedule deleted' };
     } catch (error) {
-      return handleError(error, { message: 'Error deleting schedule', code: 'SCHEDULE_DELETE_FAILED' });
+      return handleError(error, {
+        message: 'Error deleting schedule',
+        code: SERVER_ERROR_CODES.SCHEDULE_DELETE_FAILED,
+      });
     }
   },
 });
@@ -292,7 +302,7 @@ export const PAUSE_SCHEDULE_ROUTE = createRoute({
       const updated = await mastra.schedules.pause(scheduleId);
       return hydrateScheduleResponse(mastra, updated);
     } catch (error) {
-      return handleError(error, { message: 'Error pausing schedule', code: 'SCHEDULE_PAUSE_FAILED' });
+      return handleError(error, { message: 'Error pausing schedule', code: SERVER_ERROR_CODES.SCHEDULE_PAUSE_FAILED });
     }
   },
 });
@@ -314,7 +324,10 @@ export const RESUME_SCHEDULE_ROUTE = createRoute({
       const updated = await mastra.schedules.resume(scheduleId);
       return hydrateScheduleResponse(mastra, updated);
     } catch (error) {
-      return handleError(error, { message: 'Error resuming schedule', code: 'SCHEDULE_RESUME_FAILED' });
+      return handleError(error, {
+        message: 'Error resuming schedule',
+        code: SERVER_ERROR_CODES.SCHEDULE_RESUME_FAILED,
+      });
     }
   },
 });
@@ -335,7 +348,7 @@ export const RUN_SCHEDULE_ROUTE = createRoute({
       await loadSchedule(mastra, scheduleId);
       return await mastra.schedules.run(scheduleId);
     } catch (error) {
-      return handleError(error, { message: 'Error running schedule', code: 'SCHEDULE_RUN_FAILED' });
+      return handleError(error, { message: 'Error running schedule', code: SERVER_ERROR_CODES.SCHEDULE_RUN_FAILED });
     }
   },
 });
@@ -376,7 +389,10 @@ export const LIST_SCHEDULE_TRIGGERS_ROUTE = createRoute({
       );
       return { triggers: hydrated };
     } catch (error) {
-      return handleError(error, { message: 'Error listing schedule triggers', code: 'SCHEDULE_TRIGGERS_LIST_FAILED' });
+      return handleError(error, {
+        message: 'Error listing schedule triggers',
+        code: SERVER_ERROR_CODES.SCHEDULE_TRIGGERS_LIST_FAILED,
+      });
     }
   },
 });

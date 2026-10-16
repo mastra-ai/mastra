@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 
+import { SERVER_ERROR_CODES } from '../error-codes';
 import type { MastraPackage } from '../schemas/system';
 import { apiSchemaManifestResponseSchema, systemPackagesResponseSchema } from '../schemas/system';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -202,7 +203,10 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
         observabilityRuntimeStrategy,
       };
     } catch (error) {
-      return handleError(error, { message: 'Error getting system packages', code: 'SYSTEM_PACKAGES_GET_FAILED' });
+      return handleError(error, {
+        message: 'Error getting system packages',
+        code: SERVER_ERROR_CODES.SYSTEM_PACKAGES_GET_FAILED,
+      });
     }
   },
 });

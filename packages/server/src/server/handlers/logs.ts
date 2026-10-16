@@ -1,3 +1,4 @@
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { runIdSchema } from '../schemas/common';
 import { listLogsQuerySchema, listLogsResponseSchema, listLogTransportsResponseSchema } from '../schemas/logs';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -26,7 +27,10 @@ export const LIST_LOG_TRANSPORTS_ROUTE = createRoute({
         transports: transports ? [...transports.keys()] : [],
       };
     } catch (error) {
-      return handleError(error, { message: 'Error getting log Transports', code: 'LOG_TRANSPORTS_LIST_FAILED' });
+      return handleError(error, {
+        message: 'Error getting log Transports',
+        code: SERVER_ERROR_CODES.LOG_TRANSPORTS_LIST_FAILED,
+      });
     }
   },
 });
@@ -61,7 +65,7 @@ export const LIST_LOGS_ROUTE = createRoute({
       });
       return logs;
     } catch (error) {
-      return handleError(error, { message: 'Error getting logs', code: 'LOGS_LIST_FAILED' });
+      return handleError(error, { message: 'Error getting logs', code: SERVER_ERROR_CODES.LOGS_LIST_FAILED });
     }
   },
 });
@@ -98,7 +102,10 @@ export const LIST_LOGS_BY_RUN_ID_ROUTE = createRoute({
       });
       return logs;
     } catch (error) {
-      return handleError(error, { message: 'Error getting logs by run ID', code: 'LOGS_BY_RUN_LIST_FAILED' });
+      return handleError(error, {
+        message: 'Error getting logs by run ID',
+        code: SERVER_ERROR_CODES.LOGS_BY_RUN_LIST_FAILED,
+      });
     }
   },
 });

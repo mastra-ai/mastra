@@ -26,6 +26,7 @@ import {
   MASTRA_PUBLIC_HOST_HEADER,
   isStudioClientTypeHeader,
 } from '../constants';
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import {
   capabilitiesResponseSchema,
@@ -267,7 +268,10 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createPublicRoute({
 
       return capabilities;
     } catch (error) {
-      return handleError(error, { message: 'Error getting auth capabilities', code: 'AUTH_CAPABILITIES_GET_FAILED' });
+      return handleError(error, {
+        message: 'Error getting auth capabilities',
+        code: SERVER_ERROR_CODES.AUTH_CAPABILITIES_GET_FAILED,
+      });
     }
   },
 });
@@ -345,7 +349,10 @@ export const GET_CURRENT_USER_ROUTE = createPublicRoute({
 
       return result;
     } catch (error) {
-      return handleError(error, { message: 'Error getting current user', code: 'AUTH_CURRENT_USER_GET_FAILED' });
+      return handleError(error, {
+        message: 'Error getting current user',
+        code: SERVER_ERROR_CODES.AUTH_CURRENT_USER_GET_FAILED,
+      });
     }
   },
 });
@@ -369,7 +376,7 @@ export const GET_SSO_LOGIN_ROUTE = createPublicRoute({
       const auth = getAuthProvider(mastra, isStudio);
 
       if (!auth || !implementsInterface<ISSOProvider>(auth, 'getLoginUrl')) {
-        throw new HTTPException(404, { message: 'SSO not configured', code: 'SSO_NOT_CONFIGURED' });
+        throw new HTTPException(404, { message: 'SSO not configured', code: SERVER_ERROR_CODES.SSO_NOT_CONFIGURED });
       }
 
       // Build OAuth callback URI using the configured route prefix
@@ -428,7 +435,10 @@ export const GET_SSO_LOGIN_ROUTE = createPublicRoute({
 
       return new Response(JSON.stringify({ url: loginUrl }), { status: 200, headers });
     } catch (error) {
-      return handleError(error, { message: 'Error initiating SSO login', code: 'AUTH_SSO_LOGIN_FAILED' });
+      return handleError(error, {
+        message: 'Error initiating SSO login',
+        code: SERVER_ERROR_CODES.AUTH_SSO_LOGIN_FAILED,
+      });
     }
   },
 });
@@ -575,7 +585,10 @@ export const POST_LOGOUT_ROUTE = createPublicRoute({
           implementsInterface<ISSOProvider>(auth, 'getLogoutUrl'));
 
       if (!canLogout) {
-        throw new HTTPException(404, { message: 'Logout not configured', code: 'LOGOUT_NOT_CONFIGURED' });
+        throw new HTTPException(404, {
+          message: 'Logout not configured',
+          code: SERVER_ERROR_CODES.LOGOUT_NOT_CONFIGURED,
+        });
       }
 
       // Get session ID and destroy it
@@ -611,7 +624,7 @@ export const POST_LOGOUT_ROUTE = createPublicRoute({
         headers,
       });
     } catch (error) {
-      return handleError(error, { message: 'Error logging out', code: 'AUTH_LOGOUT_FAILED' });
+      return handleError(error, { message: 'Error logging out', code: SERVER_ERROR_CODES.AUTH_LOGOUT_FAILED });
     }
   },
 });
@@ -642,20 +655,20 @@ export const POST_REFRESH_ROUTE = createPublicRoute({
       ) {
         throw new HTTPException(404, {
           message: 'Session refresh not configured',
-          code: 'SESSION_REFRESH_NOT_CONFIGURED',
+          code: SERVER_ERROR_CODES.SESSION_REFRESH_NOT_CONFIGURED,
         });
       }
 
       // Get session ID from request
       const sessionId = auth.getSessionIdFromRequest(request);
       if (!sessionId) {
-        throw new HTTPException(401, { message: 'No session', code: 'SESSION_NOT_FOUND' });
+        throw new HTTPException(401, { message: 'No session', code: SERVER_ERROR_CODES.SESSION_NOT_FOUND });
       }
 
       // Refresh the session
       const newSession = await auth.refreshSession(sessionId);
       if (!newSession) {
-        throw new HTTPException(401, { message: 'Session expired', code: 'SESSION_EXPIRED' });
+        throw new HTTPException(401, { message: 'Session expired', code: SERVER_ERROR_CODES.SESSION_EXPIRED });
       }
 
       // Build response with new session headers
@@ -673,7 +686,10 @@ export const POST_REFRESH_ROUTE = createPublicRoute({
       });
     } catch (error) {
       if (error instanceof HTTPException) throw error;
-      return handleError(error, { message: 'Error refreshing session', code: 'AUTH_SESSION_REFRESH_FAILED' });
+      return handleError(error, {
+        message: 'Error refreshing session',
+        code: SERVER_ERROR_CODES.AUTH_SESSION_REFRESH_FAILED,
+      });
     }
   },
 });
@@ -700,7 +716,7 @@ export const POST_CREDENTIALS_SIGN_IN_ROUTE = createPublicRoute({
       if (!auth || !implementsInterface<ICredentialsProvider>(auth, 'signIn')) {
         throw new HTTPException(404, {
           message: 'Credentials authentication not configured',
-          code: 'CREDENTIALS_AUTH_NOT_CONFIGURED',
+          code: SERVER_ERROR_CODES.CREDENTIALS_AUTH_NOT_CONFIGURED,
         });
       }
 
@@ -733,7 +749,10 @@ export const POST_CREDENTIALS_SIGN_IN_ROUTE = createPublicRoute({
     } catch (error) {
       if (error instanceof HTTPException) throw error;
       // Return a generic error for auth failures to avoid leaking info
-      throw new HTTPException(401, { message: 'Invalid email or password', code: 'CREDENTIALS_INVALID' });
+      throw new HTTPException(401, {
+        message: 'Invalid email or password',
+        code: SERVER_ERROR_CODES.CREDENTIALS_INVALID,
+      });
     }
   },
 });
@@ -760,7 +779,7 @@ export const POST_CREDENTIALS_SIGN_UP_ROUTE = createPublicRoute({
       if (!auth || !implementsInterface<ICredentialsProvider>(auth, 'signUp')) {
         throw new HTTPException(404, {
           message: 'Credentials authentication not configured',
-          code: 'CREDENTIALS_AUTH_NOT_CONFIGURED',
+          code: SERVER_ERROR_CODES.CREDENTIALS_AUTH_NOT_CONFIGURED,
         });
       }
 
@@ -796,7 +815,10 @@ export const POST_CREDENTIALS_SIGN_UP_ROUTE = createPublicRoute({
       mastra?.getLogger?.()?.error('Sign-up error', {
         error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
       });
-      throw new HTTPException(400, { message: 'Failed to create account', code: 'ACCOUNT_CREATE_FAILED' });
+      throw new HTTPException(400, {
+        message: 'Failed to create account',
+        code: SERVER_ERROR_CODES.ACCOUNT_CREATE_FAILED,
+      });
     }
   },
 });
@@ -827,14 +849,17 @@ export const GET_ROLE_PERMISSIONS_ROUTE = createRoute({
       const callerPermissions: string[] = requestContext?.get(MASTRA_USER_PERMISSIONS_KEY) ?? [];
       const isAdmin = callerPermissions.some((p: string) => p === '*' || p === '*:*');
       if (!isAdmin) {
-        throw new HTTPException(403, { message: 'Admin access required', code: 'ADMIN_ACCESS_REQUIRED' });
+        throw new HTTPException(403, {
+          message: 'Admin access required',
+          code: SERVER_ERROR_CODES.ADMIN_ACCESS_REQUIRED,
+        });
       }
 
       const rbac = getRBACProvider(mastra);
       if (!rbac?.getPermissionsForRole) {
         throw new HTTPException(404, {
           message: 'RBAC provider does not support role permission resolution',
-          code: 'ROLE_PERMISSIONS_RESOLUTION_UNAVAILABLE',
+          code: SERVER_ERROR_CODES.ROLE_PERMISSIONS_RESOLUTION_UNAVAILABLE,
         });
       }
 
@@ -844,7 +869,7 @@ export const GET_ROLE_PERMISSIONS_ROUTE = createRoute({
       if (error instanceof HTTPException) throw error;
       return handleError(error, {
         message: 'Error getting role permissions',
-        code: 'AUTH_ROLE_PERMISSIONS_GET_FAILED',
+        code: SERVER_ERROR_CODES.AUTH_ROLE_PERMISSIONS_GET_FAILED,
       });
     }
   },

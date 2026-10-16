@@ -1,4 +1,5 @@
 import { submitPlanTool } from '@mastra/core/tools';
+import { SERVER_ERROR_CODES } from '../error-codes';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import { agentIdPathParams, agentPlanQuerySchema, agentPlanResponseSchema } from '../schemas/agents';
@@ -41,10 +42,13 @@ export const READ_AGENT_PLAN_ROUTE = createRoute({
       );
 
       if (!hasSubmitPlan) {
-        throw new HTTPException(404, { message: 'Plan capability not found', code: 'PLAN_CAPABILITY_NOT_FOUND' });
+        throw new HTTPException(404, {
+          message: 'Plan capability not found',
+          code: SERVER_ERROR_CODES.PLAN_CAPABILITY_NOT_FOUND,
+        });
       }
       if (!isPlanPath(path)) {
-        throw new HTTPException(400, { message: 'Invalid plan path', code: 'PLAN_PATH_INVALID' });
+        throw new HTTPException(400, { message: 'Invalid plan path', code: SERVER_ERROR_CODES.PLAN_PATH_INVALID });
       }
 
       const workspace = await agent.getWorkspace({ requestContext });
@@ -52,13 +56,13 @@ export const READ_AGENT_PLAN_ROUTE = createRoute({
       if (!filesystem) {
         throw new HTTPException(404, {
           message: 'No workspace filesystem configured',
-          code: 'WORKSPACE_FILESYSTEM_NOT_CONFIGURED',
+          code: SERVER_ERROR_CODES.WORKSPACE_FILESYSTEM_NOT_CONFIGURED,
         });
       }
       if (!(await filesystem.exists(path))) {
         throw new HTTPException(404, {
           message: `Plan file "${path}" not found`,
-          code: 'PLAN_NOT_FOUND',
+          code: SERVER_ERROR_CODES.PLAN_NOT_FOUND,
           metadata: { path },
         });
       }
@@ -69,7 +73,7 @@ export const READ_AGENT_PLAN_ROUTE = createRoute({
         content: typeof content === 'string' ? content : content.toString('utf-8'),
       };
     } catch (error) {
-      return handleError(error, { message: 'Error reading submitted plan', code: 'PLAN_READ_FAILED' });
+      return handleError(error, { message: 'Error reading submitted plan', code: SERVER_ERROR_CODES.PLAN_READ_FAILED });
     }
   },
 });

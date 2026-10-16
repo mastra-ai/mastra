@@ -3,6 +3,7 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import { SERVER_ERROR_CODES } from '@mastra/server/error-codes';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
@@ -593,7 +594,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         return reply.status(400).send({
           error: 'Invalid request body',
           issues,
-          problem: { code: 'REQUEST_BODY_INVALID_JSON', metadata: { issues } },
+          problem: { code: SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON, metadata: { issues } },
         });
       }
 
@@ -612,7 +613,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           return reply.status(400).send({
             error: 'Invalid query parameters',
             issues,
-            problem: { code: 'REQUEST_VALIDATION_FAILED', metadata: { issues, location: 'query' } },
+            problem: { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues, location: 'query' } },
           });
         }
       }
@@ -632,7 +633,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           return reply.status(400).send({
             error: 'Invalid request body',
             issues,
-            problem: { code: 'REQUEST_VALIDATION_FAILED', metadata: { issues, location: 'body' } },
+            problem: { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues, location: 'body' } },
           });
         }
       }
@@ -653,7 +654,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           return reply.status(400).send({
             error: 'Invalid path parameters',
             issues,
-            problem: { code: 'REQUEST_VALIDATION_FAILED', metadata: { issues, location: 'path' } },
+            problem: { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues, location: 'path' } },
           });
         }
       }
@@ -747,7 +748,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             if (error.code === 'FST_ERR_CTP_BODY_TOO_LARGE') {
               return reply.status(413).send({
                 error: 'Request body too large',
-                problem: { code: 'REQUEST_BODY_TOO_LARGE', metadata: { maxBodySize: maxSize } },
+                problem: { code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE, metadata: { maxBodySize: maxSize } },
               });
             }
             throw error;

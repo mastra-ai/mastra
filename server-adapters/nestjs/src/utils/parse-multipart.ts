@@ -1,4 +1,5 @@
 import { Busboy } from '@fastify/busboy';
+import { SERVER_ERROR_CODES } from '@mastra/server/error-codes';
 import { isSafeObjectKey } from '@mastra/server/server-adapter';
 import { BadRequestException, PayloadTooLargeException } from '@nestjs/common';
 import type { Request } from 'express';
@@ -33,7 +34,7 @@ export function parseMultipartFormData(
       reject(
         new BadRequestException({
           message: 'Content-Type header is required for multipart requests',
-          problem: { code: 'REQUEST_MULTIPART_INVALID' },
+          problem: { code: SERVER_ERROR_CODES.REQUEST_MULTIPART_INVALID },
         }),
       );
       return;
@@ -57,7 +58,7 @@ export function parseMultipartFormData(
               new BadRequestException({
                 message: `Invalid file type: ${mimetype}. Allowed types: ${options.allowedMimeTypes.join(', ')}`,
                 problem: {
-                  code: 'REQUEST_FILE_TYPE_NOT_ALLOWED',
+                  code: SERVER_ERROR_CODES.REQUEST_FILE_TYPE_NOT_ALLOWED,
                   metadata: { mimetype, allowedMimeTypes: options.allowedMimeTypes },
                 },
               }),
@@ -79,7 +80,10 @@ export function parseMultipartFormData(
           reject(
             new PayloadTooLargeException({
               message: `File size limit exceeded${maxSize ? ` (max: ${formatBytes(maxSize)})` : ''}`,
-              problem: { code: 'REQUEST_FILE_TOO_LARGE', ...(maxSize ? { metadata: { maxFileSize: maxSize } } : {}) },
+              problem: {
+                code: SERVER_ERROR_CODES.REQUEST_FILE_TOO_LARGE,
+                ...(maxSize ? { metadata: { maxFileSize: maxSize } } : {}),
+              },
             }),
           );
         });
@@ -112,7 +116,7 @@ export function parseMultipartFormData(
       reject(
         new BadRequestException({
           message: `Failed to parse multipart form data: ${error.message}`,
-          problem: { code: 'REQUEST_MULTIPART_INVALID' },
+          problem: { code: SERVER_ERROR_CODES.REQUEST_MULTIPART_INVALID },
         }),
       );
     });
