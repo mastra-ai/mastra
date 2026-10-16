@@ -79,6 +79,27 @@ describe('DataList fluid hover', () => {
     expect(activeRows().map(r => r.textContent)).toEqual(['b']);
   });
 
+  it("gives the highlight the hovered row's own corners", async () => {
+    await setup(
+      <>
+        <DataList.RowButton style={{ borderRadius: '8px 8px 0px 0px' }}>a</DataList.RowButton>
+        <DataList.RowButton style={{ borderRadius: '0px' }}>b</DataList.RowButton>
+      </>,
+    );
+    const highlightRadius = () =>
+      grid()
+        .querySelector<HTMLElement>('[data-slot=fluid-hover-highlight]')
+        ?.style.getPropertyValue('--fluid-hover-item-radius');
+
+    hoverAt(5);
+    await flushFrames();
+    expect(highlightRadius()).toBe('8px 8px 0px 0px');
+
+    hoverAt(ROW_HEIGHT + 5);
+    await flushFrames();
+    expect(highlightRadius()).toBe('0px');
+  });
+
   it('lights the RowWrapper, never the nested RowButton', async () => {
     await setup(
       <>

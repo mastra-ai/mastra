@@ -1,5 +1,57 @@
 # @mastra/factory
 
+## 0.24.0-alpha.1
+
+### Patch Changes
+
+- Factory's Jira, GitLab, and incident.io platform integrations now send the configured project id as an `x-mastra-project-id` header on requests to the Mastra platform connection proxy, so intake activity is attributed to the right project. Direct (non-proxy) Jira and incident.io requests never send the header. ([#26932](https://github.com/mastra-ai/mastra/pull/26932))
+
+  Set `MASTRA_PROJECT_ID` alongside the existing platform credentials and the header is sent automatically:
+
+  ```sh
+  MASTRA_PLATFORM_ACCESS_TOKEN=<token>
+  MASTRA_PROJECT_ID=<projectId>
+  ```
+
+- Updated dependencies [[`48bee02`](https://github.com/mastra-ai/mastra/commit/48bee02e1a5cef20f4da67720191d5e85cdca13c), [`d93662b`](https://github.com/mastra-ai/mastra/commit/d93662bfee9313c376cff90e910e05ec9b0634ea), [`1874bf2`](https://github.com/mastra-ai/mastra/commit/1874bf2a5ba304f22ffb93f9ec5a9afea000a5a1), [`8c2d516`](https://github.com/mastra-ai/mastra/commit/8c2d5164714a27e720d898da612da6054a88ef91), [`14b2a7c`](https://github.com/mastra-ai/mastra/commit/14b2a7c56da4329f7fd17738056a081663deed46), [`eb0b702`](https://github.com/mastra-ai/mastra/commit/eb0b702e9939f02073fb1c4dfd7eaa51fde59e0b), [`d93662b`](https://github.com/mastra-ai/mastra/commit/d93662bfee9313c376cff90e910e05ec9b0634ea), [`425d383`](https://github.com/mastra-ai/mastra/commit/425d383d4fb15e55e9491b6bdaebb57f2de7cdc8), [`5d8f8b7`](https://github.com/mastra-ai/mastra/commit/5d8f8b78460350d581e8a92412cdfe88b4ce76bc), [`8c90438`](https://github.com/mastra-ai/mastra/commit/8c90438b404d27593927eccc47616aab4a35006e)]:
+  - @mastra/core@1.79.0-alpha.1
+  - @mastra/code-sdk@1.15.0-alpha.1
+
+## 0.24.0-alpha.0
+
+### Minor Changes
+
+- Moved the thinking level default onto each Factory. Organization admins set it under Settings → Models → Factory defaults, and every session and work-item run in that Factory uses it until it picks its own level. Every Factory, including existing ones, starts at medium after upgrading. ([#27216](https://github.com/mastra-ai/mastra/pull/27216))
+
+  **Why:** the old default lived in the server's settings.json, so one value was shared by every Factory on the server, and with sign-in turned on it could only be changed after setting `MASTRACODE_DEPLOYMENT_ORGANIZATION_ID`.
+
+  **Removed:** the `GET /web/config/thinking` and `PUT /web/config/thinking` routes and the `MASTRACODE_DEPLOYMENT_ORGANIZATION_ID` variable. Set the level on the Factory instead:
+
+  ```bash
+  # Before
+  curl -X PUT "$FACTORY_URL/web/config/thinking" -H 'Content-Type: application/json' -d '{ "globalDefault": "high" }'
+
+  # After
+  curl -X PATCH "$FACTORY_URL/web/factory/projects/$FACTORY_ID" -H 'Content-Type: application/json' -d '{ "defaultThinkingLevel": "high" }'
+  ```
+
+  A level saved in settings.json (global or per mode) is no longer read by Factory sessions, so if you set one there, set it again on each Factory. The per-chat "Chat defaults" row is also gone; a level picked there still overrides the Factory default for the chats that used it, so run `/think default` in those chats to follow the Factory default.
+
+- Removed the Factory Supervisor. The supervisor chat session and its tools, the scheduled health check, the `POST /web/factory/projects/:id/supervisor/session` and `GET /web/factory/projects/:id/supervisor/health` routes, and the `supervisor-finding` attention kind no longer exist. Existing databases keep working: stored supervisor findings and their attention receipts are left in place and ignored. ([#27070](https://github.com/mastra-ai/mastra/pull/27070))
+
+### Patch Changes
+
+- Fixed Auto memory failing for accounts without a Google credential when the server has a Google key. Auto now picks a model from a provider the account connected, and the memory settings preview shows the model that runs use. ([#26666](https://github.com/mastra-ai/mastra/pull/26666))
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+- Updated dependencies [[`9b60f12`](https://github.com/mastra-ai/mastra/commit/9b60f12b13b28c9664a839aef435e6d10898644d), [`f885386`](https://github.com/mastra-ai/mastra/commit/f885386b79be0e4d784067b0e26608971e0cc788), [`f6a9762`](https://github.com/mastra-ai/mastra/commit/f6a9762b12ae9dad6a154f73ed3099a2ee472d0c), [`9a012c2`](https://github.com/mastra-ai/mastra/commit/9a012c28a66406610e903c15423d5f6c94b62581), [`12a8a89`](https://github.com/mastra-ai/mastra/commit/12a8a89938ee5dbad91edb5b4da26cd68c95fabd), [`fae54c5`](https://github.com/mastra-ai/mastra/commit/fae54c57917cd1f527937ca42b5ab7dfe1d55a2a)]:
+  - @mastra/core@1.78.1-alpha.0
+  - @mastra/code-sdk@1.15.0-alpha.0
+  - @mastra/auth-studio@1.3.10-alpha.0
+  - @mastra/auth-workos@1.6.7-alpha.0
+  - @mastra/slack@1.7.3-alpha.0
+
 ## 0.23.0
 
 ### Minor Changes

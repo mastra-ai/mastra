@@ -49,6 +49,7 @@ import {
   getRunRegistryEntry,
   deleteRunRegistryEntry,
   publishAbortRequest,
+  normalizeResumeGenerateArgs,
 } from '@mastra/core/agent/durable';
 import type { AgentStepFinishEventData, AgentSuspendedEventData } from '@mastra/core/agent/durable';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
@@ -556,6 +557,11 @@ export interface InngestAgent<TOutput = undefined> {
    * {@link FullOutput}. Mirrors {@link DurableAgent.resumeGenerate} on top
    * of {@link InngestAgent.resume}.
    */
+  resumeGenerate(
+    resumeData: unknown,
+    options: InngestAgentResumeOptions<TOutput> & { runId: string },
+  ): Promise<FullOutput<TOutput>>;
+  /** @deprecated Use `resumeGenerate(resumeData, { runId, ...options })`, matching `Agent.resumeGenerate`. */
   resumeGenerate(
     runId: string,
     resumeData: unknown,
@@ -1639,10 +1645,15 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       }
     },
 
-    async resumeGenerate(runId, resumeData, resumeOptions): Promise<FullOutput<TOutput>> {
+    async resumeGenerate(...args: unknown[]): Promise<FullOutput<TOutput>> {
+      const {
+        runId,
+        resumeData,
+        options: resumeOptions,
+      } = normalizeResumeGenerateArgs<InngestAgentResumeOptions<TOutput>>(args);
       // `resumeGenerate` is a one-shot drain; strip `untilIdle` so the
       // underlying resume() never delegates to the idle-loop wrapper.
-      const { untilIdle, ...rest } = resumeOptions ?? {};
+      const { untilIdle, ...rest } = resumeOptions;
       void untilIdle;
       const result = await proxyRef!.resume(runId, resumeData, {
         ...rest,
@@ -1896,7 +1907,13 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       if (!runId) {
         throw new Error('approveToolCallGenerate() on InngestAgent requires a runId.');
       }
-      return proxyRef!.resumeGenerate(runId, { approved: true }, resumeOptions as InngestAgentResumeOptions<TOutput>);
+      return proxyRef!.resumeGenerate(
+        { approved: true },
+        {
+          ...(resumeOptions as InngestAgentResumeOptions<TOutput>),
+          runId,
+        },
+      );
     },
 
     async declineToolCallGenerate(options) {
@@ -1905,9 +1922,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         throw new Error('declineToolCallGenerate() on InngestAgent requires a runId.');
       }
       return proxyRef!.resumeGenerate(
-        runId,
         { approved: false, ...(reason !== undefined ? { reason } : {}) },
-        resumeOptions as InngestAgentResumeOptions<TOutput>,
+        { ...(resumeOptions as InngestAgentResumeOptions<TOutput>), runId },
       );
     },
 

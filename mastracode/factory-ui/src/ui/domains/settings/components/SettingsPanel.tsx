@@ -87,9 +87,7 @@ export function SettingsPanel() {
       {section === 'repositories' && <RepositoriesSection />}
       {section === 'environment' && <EnvironmentSection />}
       {section === 'intake' && <IntakeSection />}
-      {section === 'models' && (
-        <FactoryModelsSettings models={models} settings={settings} onBehaviorChange={onBehaviorChange} />
-      )}
+      {section === 'models' && <FactoryModelsSettings models={models} modelsLoaded={modelsQuery.isSuccess} />}
       {section === 'personal-models' && <PersonalModelsSettings />}
       {(section === 'memory' || section === 'factory-memory') && (
         <MemorySettings
