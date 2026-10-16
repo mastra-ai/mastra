@@ -141,6 +141,7 @@ import { timedPhase } from './timing.js';
 import { deliverFactorySessionNotification } from './tools/deliver.js';
 import { applyFactoryToolPermissions, createFactoryTools, resolveFactoryToolScope } from './tools/index.js';
 import {
+  createSessionApprovalNotifier,
   createSessionRunEndReporter,
   createStageChangeNotifier,
   createWorkItemRunEndReporter,
@@ -1556,11 +1557,13 @@ export class MastraFactory {
       }),
     );
 
-    const reportSessionRunEnd = createSessionRunEndReporter({
+    const sessionReports = {
       sessions: sourceControlSessions,
       workItems: storage.getDomain<WorkItemsStorage>('work-items'),
       reporting: factoryReporting,
-    });
+    };
+    const reportSessionRunEnd = createSessionRunEndReporter(sessionReports);
+    const notifyApprovalRequested = createSessionApprovalNotifier(sessionReports);
     prepared.base.controller.onSessionCreated(session => {
       observeSessionFilesystem(session, {
         filesystem: filesystemStorage,
@@ -1576,15 +1579,26 @@ export class MastraFactory {
         sourceControl: { sessions: sourceControlSessions },
       });
       observeSessionRunEnd(session, { audit: auditDomain });
-      // Every run end of a work or side session reaches whoever follows it,
-      // however the run started; re-attached when a session is created again.
-      observeSessionRunReports(session, (outcome, since) =>
-        reportSessionRunEnd({
-          sessionId: session.identity.getResourceId(),
-          threadId: session.thread.getId(),
-          outcome,
-          since,
-        }),
+      // Every run end of a work or side session, and every tool call it holds for
+      // approval, reaches whoever follows it, however the run started;
+      // re-attached when a session is created again.
+      observeSessionRunReports(
+        session,
+        (outcome, since) =>
+          reportSessionRunEnd({
+            sessionId: session.identity.getResourceId(),
+            threadId: session.thread.getId(),
+            outcome,
+            since,
+          }),
+        {
+          onApprovalRequested: request =>
+            notifyApprovalRequested({
+              sessionId: session.identity.getResourceId(),
+              threadId: session.thread.getId(),
+              ...request,
+            }),
+        },
       );
     });
 

@@ -362,50 +362,159 @@ export type FactorySessionRunEndReporter = (input: {
   since: Date;
 }) => Promise<void>;
 
-/**
- * Who hears about a session's run end: a work session (one with an active run
- * binding) reports to its item's followers, a side session to the session that
- * started it. Any other session (a person's own) reports to nobody.
- */
-export function createSessionRunEndReporter({
-  sessions,
-  workItems,
-  reporting,
-}: {
+/** A tool call a session's run is holding until someone approves or declines it. */
+export interface FactoryApprovalRequest {
+  sessionId: string;
+  threadId: string | null;
+  toolName: string;
+  toolCallId: string;
+  args: unknown;
+}
+
+export type FactoryApprovalNotifier = (request: FactoryApprovalRequest) => Promise<void>;
+
+interface SessionReportDependencies {
   sessions: Pick<SourceControlSessionLookup, 'getBySessionId'>;
-  workItems: Pick<WorkItemsStorage, 'findActiveRunBindingForSession' | 'listWorkItemSubscribers' | 'getForProject'>;
+  workItems: Pick<
+    WorkItemsStorage,
+    'findActiveRunBindingForSession' | 'findRunBindingBySession' | 'listWorkItemSubscribers' | 'getForProject'
+  >;
   reporting: () => Promise<FactoryReporting | null>;
-}): FactorySessionRunEndReporter {
-  const workItemRunEnd = createWorkItemRunEndReporter({ workItems, reporting });
-  return async ({ sessionId, threadId, outcome, since }) => {
-    const row = await sessions.getBySessionId(sessionId);
-    if (!row?.factoryProjectId) return;
-    const binding = await workItems.findActiveRunBindingForSession({
-      orgId: row.orgId,
+}
+
+/** How much of a gated call's arguments an approval notice quotes. */
+const APPROVAL_ARGS_LENGTH = 3000;
+
+/**
+ * Who hears from a session: a work session (one with an active run binding)
+ * reports to its item's followers, a side session to the session that started
+ * it. Any other session (a person's own) has nobody to tell.
+ */
+async function sessionAudience(
+  { sessions, workItems }: Omit<SessionReportDependencies, 'reporting'>,
+  sessionId: string,
+  threadId: string | null,
+  /** When the run started: a binding revoked since then (the run moved its card to a finished stage) still counts. */
+  since?: Date,
+): Promise<
+  | {
+      kind: 'work-item';
+      binding: NonNullable<Awaited<ReturnType<WorkItemsStorage['findActiveRunBindingForSession']>>>;
+      sender: FactoryReportSender;
+    }
+  | { kind: 'origin'; sender: FactoryReportSender; recipient: FactoryDeliveryTarget; subject: string }
+  | null
+> {
+  const row = await sessions.getBySessionId(sessionId);
+  if (!row?.factoryProjectId) return null;
+  let binding = await workItems.findActiveRunBindingForSession({
+    orgId: row.orgId,
+    factoryProjectId: row.factoryProjectId,
+    sessionId: row.sessionId,
+  });
+  if (!binding && since && threadId) {
+    const latest = await workItems.findRunBindingBySession({
       factoryProjectId: row.factoryProjectId,
+      threadId,
+      resourceId: row.sessionId,
       sessionId: row.sessionId,
     });
-    if (binding) {
+    if (latest?.orgId === row.orgId && latest.revokedAt && latest.revokedAt >= since) binding = latest;
+  }
+  if (binding) {
+    return {
+      kind: 'work-item',
+      binding,
+      sender: { sessionId: row.sessionId, threadId: binding.threadId, userId: row.userId },
+    };
+  }
+  if (!row.originSessionId || !row.originThreadId || !threadId) return null;
+  return {
+    kind: 'origin',
+    sender: { sessionId: row.sessionId, threadId, userId: row.userId },
+    recipient: { sessionId: row.originSessionId, threadId: row.originThreadId },
+    subject: `The side session "${row.title ?? row.sessionId}"`,
+  };
+}
+
+/** Reports each run end of a work or side session to whoever follows it. */
+export function createSessionRunEndReporter(deps: SessionReportDependencies): FactorySessionRunEndReporter {
+  const workItemRunEnd = createWorkItemRunEndReporter(deps);
+  return async ({ sessionId, threadId, outcome, since }) => {
+    const audience = await sessionAudience(deps, sessionId, threadId, since);
+    if (!audience) return;
+    if (audience.kind === 'work-item') {
+      const { binding, sender } = audience;
       await workItemRunEnd({
         orgId: binding.orgId,
         factoryProjectId: binding.factoryProjectId,
         workItemId: binding.workItemId,
         role: binding.role,
-        sender: { sessionId: row.sessionId, threadId: binding.threadId, userId: row.userId },
+        sender,
         since,
         outcome,
       });
       return;
     }
-    if (!row.originSessionId || !row.originThreadId || !threadId) return;
-    const resolved = await reporting();
+    const resolved = await deps.reporting();
     if (!resolved) return;
     await sendRunEndReport(resolved, {
-      sender: { sessionId: row.sessionId, threadId, userId: row.userId },
-      recipients: [{ sessionId: row.originSessionId, threadId: row.originThreadId }],
+      sender: audience.sender,
+      recipients: [audience.recipient],
       since,
       outcome,
-      subject: `The side session "${row.title ?? row.sessionId}"`,
+      subject: audience.subject,
     });
+  };
+}
+
+/**
+ * Tells whoever follows a session, urgently, the moment its run holds a tool
+ * call for approval. The run stays open on the gate, so no run end would say
+ * so; the notice names the session and call so a follower can answer it with
+ * `factory_answer_approval`.
+ */
+export function createSessionApprovalNotifier(deps: SessionReportDependencies): FactoryApprovalNotifier {
+  return async ({ sessionId, threadId, toolName, toolCallId, args }) => {
+    const audience = await sessionAudience(deps, sessionId, threadId);
+    if (!audience) return;
+    const resolved = await deps.reporting();
+    if (!resolved) return;
+    let subject: string;
+    let recipients: FactoryDeliveryTarget[];
+    let attributes: Record<string, string> = {};
+    if (audience.kind === 'work-item') {
+      const { binding } = audience;
+      recipients = await workItemReportRecipients(deps.workItems, {
+        orgId: binding.orgId,
+        workItemId: binding.workItemId,
+        senderSessionId: audience.sender.sessionId,
+      });
+      const named = await workItemReportAttributes(deps.workItems, binding);
+      subject = `The ${binding.role} session for ${named.label}`;
+      attributes = named.attributes;
+    } else {
+      recipients = [audience.recipient];
+      subject = audience.subject;
+    }
+    if (recipients.length === 0) return;
+    const argsText = JSON.stringify(args ?? {}) ?? '{}';
+    const quoted = argsText.length > APPROVAL_ARGS_LENGTH ? `${argsText.slice(0, APPROVAL_ARGS_LENGTH)}…` : argsText;
+    const message = [
+      `${subject} is waiting for approval to run ${toolName} with ${quoted}.`,
+      `Answer it with factory_answer_approval (sessionId "${audience.sender.sessionId}", toolCallId "${toolCallId}"), or open that session to approve or decline it there.`,
+    ].join(' ');
+    const notification = {
+      ...reportNotification({
+        sender: audience.sender,
+        message,
+        attributes: { ...attributes, 'waiting-for': 'approval', 'tool-name': toolName, 'tool-call-id': toolCallId },
+      }),
+      kind: 'approval',
+      priority: 'urgent' as const,
+      // One notice per held call, even if the gate is announced again.
+      dedupeKey: `factory-approval:${toolCallId}`,
+    };
+    for (const recipient of recipients) await resolved.deliver(recipient, notification);
   };
 }

@@ -131,7 +131,7 @@ export class FactorySessionsStateProcessor implements Processor<'factory-session
       const contents = await this.#workerLine(scope);
       if (!contents) {
         return cleared()
-          ? this.#signal(EMPTY_CACHE_KEY, 'Nobody follows this work now.', {}, { entries: 0 })
+          ? this.#signal(EMPTY_CACHE_KEY, 'This session is not reporting on any work now.', {}, { entries: 0 })
           : undefined;
       }
       const cacheKey = cacheKeyFor(contents);

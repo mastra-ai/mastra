@@ -22,6 +22,7 @@ export const FACTORY_TOOLS_WITHOUT_APPROVAL: readonly string[] = [
   'factory_signal_session',
   'factory_message_origin',
   'factory_start_session',
+  'factory_answer_approval',
 ];
 
 export interface FactoryToolPermissionsSession {

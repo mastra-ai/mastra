@@ -348,7 +348,7 @@ describe('FactorySessionsStateProcessor', () => {
     });
     await expect(env.step(worker)).resolves.toMatchObject({
       cacheKey: 'empty',
-      contents: 'Nobody follows this work now.',
+      contents: 'This session is not reporting on any work now.',
     });
     await expect(env.step(worker)).resolves.toBeUndefined();
   });
