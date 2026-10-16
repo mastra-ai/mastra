@@ -2,7 +2,11 @@
 '@mastra/factory': patch
 ---
 
-Factory now records which credential answered each assistant reply in the message's `content.metadata`: `credentialLabel` names the subscription or API key, and `credentialOwnerId` is the user whose personal credential it was. A reply answered by the organization's credential has no `credentialOwnerId`.
+Added the answering credential to each assistant reply's `content.metadata`.
+
+- `credentialLabel` names the subscription or API key, such as "Claude Pro/Max" or "Anthropic API key".
+- `credentialOwnerId` is the user whose personal credential answered. Replies answered by the organization's credential have none.
+- Replies written before this change have neither field.
 
 ```json
 {
