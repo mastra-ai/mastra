@@ -81,6 +81,7 @@ export const SPAN_EVENT_COLUMNS = [
   { name: 'isPending', type: 'boolean', defaultSql: 'false' },
   { name: 'startedAt', type: 'timestamptz' },
   { name: 'endedAt', type: 'timestamptz' },
+  { name: 'timeToFirstChunkMs', type: 'double precision', nullable: true },
   { name: 'tags', type: 'text[]', defaultSql: "'{}'" },
   { name: 'metadataSearch', type: 'jsonb', defaultSql: "'{}'::jsonb" },
   { name: 'attributes', type: 'jsonb', nullable: true },

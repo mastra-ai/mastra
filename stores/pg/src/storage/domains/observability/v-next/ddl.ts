@@ -386,6 +386,11 @@ export function additiveColumns(schema: string): { table: string; column: string
       ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} ADD COLUMN IF NOT EXISTS "${column}" text`,
     })),
     {
+      table: TABLE_SPAN_EVENTS,
+      column: 'timeToFirstChunkMs',
+      ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} ADD COLUMN IF NOT EXISTS "timeToFirstChunkMs" double precision`,
+    },
+    {
       table: TABLE_FEEDBACK_EVENTS,
       column: 'reviewStatus',
       ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_FEEDBACK_EVENTS)} ADD COLUMN IF NOT EXISTS "reviewStatus" text NOT NULL DEFAULT 'needs-review'`,
