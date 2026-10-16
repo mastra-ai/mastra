@@ -15,8 +15,6 @@ import { X } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { createNameSuffix } from '../utils/default-names';
-import { DEFAULT_SCORERS_HELPER_TEXT, DEFAULT_SCORERS_LABEL } from './default-scorers-copy';
-import { ScorerSelector } from './experiment-trigger/scorer-selector';
 import { SchemaConfigSection } from './schema-config-section';
 import type { DatasetTargetType } from './target-type-options';
 
@@ -29,8 +27,6 @@ export interface CreateDatasetFormProps {
 
 interface CreateDatasetFormValues {
   name: string;
-  description: string;
-  scorerIds: string[];
   inputSchema?: Record<string, unknown>;
   groundTruthSchema?: Record<string, unknown>;
   requestContextSchema?: Record<string, unknown>;
@@ -38,11 +34,10 @@ interface CreateDatasetFormValues {
 
 export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }: CreateDatasetFormProps) {
   const { register, handleSubmit, setValue, watch } = useForm<CreateDatasetFormValues>({
-    defaultValues: { name: `Dataset ${createNameSuffix()}`, description: '', scorerIds: [] },
+    defaultValues: { name: `Dataset ${createNameSuffix()}` },
   });
-  const [name, scorerIds, inputSchema, groundTruthSchema, requestContextSchema] = watch([
+  const [name, inputSchema, groundTruthSchema, requestContextSchema] = watch([
     'name',
-    'scorerIds',
     'inputSchema',
     'groundTruthSchema',
     'requestContextSchema',
@@ -69,13 +64,11 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
     try {
       const result = await createDataset.mutateAsync({
         name: values.name.trim(),
-        description: values.description.trim() || undefined,
         inputSchema: values.inputSchema,
         groundTruthSchema: values.groundTruthSchema,
         requestContextSchema: values.requestContextSchema,
         targetType,
         targetIds,
-        scorerIds: values.scorerIds.length > 0 ? values.scorerIds : undefined,
       });
 
       toast.success('Dataset created successfully');
@@ -92,19 +85,6 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
         <FieldLabel required>Name</FieldLabel>
         <Input required {...register('name')} placeholder="Enter dataset name" autoFocus />
       </Field>
-
-      <Field>
-        <FieldLabel>Description</FieldLabel>
-        <Input {...register('description')} placeholder="Enter dataset description (optional)" />
-      </Field>
-
-      <ScorerSelector
-        selectedScorers={scorerIds}
-        setSelectedScorers={nextScorerIds => setValue('scorerIds', nextScorerIds)}
-        disabled={createDataset.isPending}
-        label={DEFAULT_SCORERS_LABEL}
-        helperText={DEFAULT_SCORERS_HELPER_TEXT}
-      />
 
       {targetType && !showCustomSchema ? (
         <button

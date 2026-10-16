@@ -176,7 +176,7 @@ function DatasetPage() {
             <DatasetItemsView
               datasetId={datasetId}
               onAddItemClick={() => setAddItemDialogOpen(true)}
-              belowToolbarSlot={showTagsEditor ? <DatasetTagsEditor datasetId={datasetId} /> : undefined}
+              toolbarActionsSlot={showTagsEditor ? <DatasetTagsEditor datasetId={datasetId} /> : undefined}
             />
           </div>
         </PageLayout>

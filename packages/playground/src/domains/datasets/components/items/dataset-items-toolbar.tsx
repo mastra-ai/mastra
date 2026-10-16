@@ -33,6 +33,9 @@ export type DatasetItemsToolbarProps = {
   isViewingOldVersion?: boolean;
   activeDatasetVersion?: number | null;
   onReturnToLatestVersion?: () => void;
+
+  /** Extra actions rendered before the "New item" action. */
+  actionsSlot?: React.ReactNode;
 };
 
 export function DatasetItemsToolbar({
@@ -52,6 +55,7 @@ export function DatasetItemsToolbar({
   isViewingOldVersion,
   activeDatasetVersion,
   onReturnToLatestVersion,
+  actionsSlot,
 }: DatasetItemsToolbarProps) {
   const oldVersionNotice = isViewingOldVersion && activeDatasetVersion != null && (
     <div className="flex min-w-0 items-center gap-3 text-warning-foreground">
@@ -143,6 +147,7 @@ export function DatasetItemsToolbar({
 
       <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
         {selectionDropdown}
+        {actionsSlot}
         {showItemActions && !isItemPanelOpen && !isViewingOldVersion && (
           <ButtonsGroup>
             <CreateButton onClick={onAddClick} tooltip="Add an item">
