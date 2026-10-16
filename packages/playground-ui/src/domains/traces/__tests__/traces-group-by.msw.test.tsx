@@ -366,6 +366,19 @@ describe('Traces group by', () => {
       expect(locationParams().get('groupBy')).toBeNull();
     });
 
+    it('keeps one "(not set)" group, without an error, when the server rejects the split', async () => {
+      serveAggregate(body =>
+        body.groupBy?.includes('entityId')
+          ? HttpResponse.json({ code: 'TRACE_QUERY_INVALID' }, { status: 422 })
+          : groupedByEntityName,
+      );
+      renderHarness('?groupBy=entityName', { entityIdFallback: true });
+
+      await waitFor(() => expect(onAggregate).toHaveBeenCalledTimes(2));
+      expect(await screen.findByText('(not set)')).not.toBeNull();
+      expect(lastError).toBeNull();
+    });
+
     it('keeps one "(not set)" group when the server cannot group by entity ID', async () => {
       serveWithSplit();
       renderHarness('?groupBy=entityName');

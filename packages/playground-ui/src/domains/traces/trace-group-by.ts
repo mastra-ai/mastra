@@ -196,9 +196,12 @@ export type TraceGroupRow = AggregateTracesResponse['rows'][number];
 export const getTraceGroupValue = (row: TraceGroupRow, dimension: TraceGroupByDimension): string | undefined =>
   row.dimensions?.[dimension] || (dimension === 'entityName' ? row.dimensions?.entityId : undefined) || undefined;
 
-/** Whether the server can group by `entityId`, which the entityId fallback needs. */
+/**
+ * Whether to split unnamed groups by `entityId`. Like the offered dimensions, a server that doesn't describe its
+ * aggregate dimensions is assumed to support it; if it rejects the split, the "(not set)" group stays.
+ */
 export const supportsTraceGroupEntityIdFallback = (discovery: TraceAggregateDiscovery | undefined): boolean =>
-  discovery?.dimensions.some(dimension => dimension.path === 'entityId') ?? false;
+  discovery?.dimensions.some(dimension => dimension.path === 'entityId') ?? true;
 
 const UNNAMED = { op: 'notExists', path: 'entityName' } as const;
 

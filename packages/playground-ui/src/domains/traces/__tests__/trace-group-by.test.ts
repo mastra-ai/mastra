@@ -346,10 +346,10 @@ describe('entityId fallback', () => {
   });
 
   describe('when the server reports an entityId dimension', () => {
-    it('enables the fallback', () => {
+    it('enables the fallback only when discovery lists entityId, or does not describe dimensions', () => {
       expect(supportsTraceGroupEntityIdFallback(discovery(['entityName', 'entityId']))).toBe(true);
       expect(supportsTraceGroupEntityIdFallback(discovery(['entityName']))).toBe(false);
-      expect(supportsTraceGroupEntityIdFallback(undefined)).toBe(false);
+      expect(supportsTraceGroupEntityIdFallback(undefined)).toBe(true);
     });
   });
 
