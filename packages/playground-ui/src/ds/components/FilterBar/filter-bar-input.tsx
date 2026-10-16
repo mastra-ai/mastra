@@ -376,8 +376,8 @@ function FilterBarInputImpl({
             positionMethod={FLOATING_POSITION_METHOD}
             className={comboboxStyles.positioner}
           >
-            <ComboboxPrimitive.Popup // The input stretches across the bar, so drop the anchor-width floor: size to content.
-              className={cn(comboboxStyles.popup, 'min-w-56')}
+            <ComboboxPrimitive.Popup // Match the pill, with the same 11rem floor as the DS Combobox for when it is narrow.
+              className={cn(comboboxStyles.popup, 'w-[max(11rem,var(--anchor-width))]')}
               data-slot="filter-bar-editor"
             >
               {step === 'field' && (
