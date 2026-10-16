@@ -20,6 +20,7 @@ export function WorkspaceFilesContent() {
         visible={open}
         workItem={workItem.data}
         factoryProjectId={factoryId}
+        sessionId={sessionId}
       />
     </div>
   );
