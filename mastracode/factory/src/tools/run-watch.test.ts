@@ -148,6 +148,7 @@ describe('createSessionRunEndReporter', () => {
       },
       workItems: {
         findActiveRunBindingForSession: async () => null,
+        findRunBindingBySession: async () => null,
         listWorkItemSubscribers: vi.fn(),
         getForProject: vi.fn(),
       } as never,
@@ -157,6 +158,59 @@ describe('createSessionRunEndReporter', () => {
     await reporter({ sessionId: 'mine', threadId: 'thread', outcome: { status: 'done' }, since: new Date() });
 
     expect(reporting).not.toHaveBeenCalled();
+  });
+});
+
+describe('createSessionRunEndReporter for the run that finishes its card', () => {
+  const since = new Date('2026-10-15T12:00:00Z');
+  function reporter(revokedAt: Date) {
+    const deliver = vi.fn(async () => ({ delivered: 'woken' as const, notificationId: 'n-1' }));
+    const report = createSessionRunEndReporter({
+      sessions: {
+        getBySessionId: async () =>
+          ({
+            sessionId: 'worker',
+            orgId: 'org-1',
+            factoryProjectId: 'project-1',
+            userId: 'user-1',
+            originSessionId: null,
+            originThreadId: null,
+            title: null,
+          }) as never,
+      },
+      workItems: {
+        // Moving the card to a finished stage revoked the binding before the run ended.
+        findActiveRunBindingForSession: async () => null,
+        findRunBindingBySession: async () =>
+          ({
+            orgId: 'org-1',
+            factoryProjectId: 'project-1',
+            workItemId: 'item-1',
+            role: 'triage',
+            threadId: 'worker',
+            revokedAt,
+          }) as never,
+        listWorkItemSubscribers: async () => [{ sessionId: 'follower', threadId: 'follower-thread' }] as never,
+        getForProject: async () => ({ title: 'Fix it', externalSource: null, metadata: {} }) as never,
+      },
+      reporting: async () => ({ deliver, notifications: { listNotifications: async () => [] } as never }),
+    });
+    return { report, deliver };
+  }
+
+  it("still reports to the item's followers when the run's own move revoked its binding", async () => {
+    const { report, deliver } = reporter(new Date('2026-10-15T12:05:00Z'));
+    await report({ sessionId: 'worker', threadId: 'worker', outcome: { status: 'done' }, since });
+    expect(deliver).toHaveBeenCalledWith(
+      { sessionId: 'follower', threadId: 'follower-thread' },
+      expect.objectContaining({ kind: 'done', summary: 'The triage session for "Fix it" finished.' }),
+    );
+  });
+
+  it('reports nothing for a later run of a session whose binding ended before it', async () => {
+    const { report, deliver } = reporter(new Date('2026-10-15T11:59:00Z'));
+    await report({ sessionId: 'worker', threadId: 'worker', outcome: { status: 'done' }, since });
+    expect(deliver).not.toHaveBeenCalled();
   });
 });
 

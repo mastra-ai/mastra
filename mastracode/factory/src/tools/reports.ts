@@ -375,7 +375,10 @@ export type FactoryApprovalNotifier = (request: FactoryApprovalRequest) => Promi
 
 interface SessionReportDependencies {
   sessions: Pick<SourceControlSessionLookup, 'getBySessionId'>;
-  workItems: Pick<WorkItemsStorage, 'findActiveRunBindingForSession' | 'listWorkItemSubscribers' | 'getForProject'>;
+  workItems: Pick<
+    WorkItemsStorage,
+    'findActiveRunBindingForSession' | 'findRunBindingBySession' | 'listWorkItemSubscribers' | 'getForProject'
+  >;
   reporting: () => Promise<FactoryReporting | null>;
 }
 
@@ -391,6 +394,8 @@ async function sessionAudience(
   { sessions, workItems }: Omit<SessionReportDependencies, 'reporting'>,
   sessionId: string,
   threadId: string | null,
+  /** When the run started: a binding revoked since then (the run moved its card to a finished stage) still counts. */
+  since?: Date,
 ): Promise<
   | {
       kind: 'work-item';
@@ -402,11 +407,20 @@ async function sessionAudience(
 > {
   const row = await sessions.getBySessionId(sessionId);
   if (!row?.factoryProjectId) return null;
-  const binding = await workItems.findActiveRunBindingForSession({
+  let binding = await workItems.findActiveRunBindingForSession({
     orgId: row.orgId,
     factoryProjectId: row.factoryProjectId,
     sessionId: row.sessionId,
   });
+  if (!binding && since && threadId) {
+    const latest = await workItems.findRunBindingBySession({
+      factoryProjectId: row.factoryProjectId,
+      threadId,
+      resourceId: row.sessionId,
+      sessionId: row.sessionId,
+    });
+    if (latest?.orgId === row.orgId && latest.revokedAt && latest.revokedAt >= since) binding = latest;
+  }
   if (binding) {
     return {
       kind: 'work-item',
@@ -427,7 +441,7 @@ async function sessionAudience(
 export function createSessionRunEndReporter(deps: SessionReportDependencies): FactorySessionRunEndReporter {
   const workItemRunEnd = createWorkItemRunEndReporter(deps);
   return async ({ sessionId, threadId, outcome, since }) => {
-    const audience = await sessionAudience(deps, sessionId, threadId);
+    const audience = await sessionAudience(deps, sessionId, threadId, since);
     if (!audience) return;
     if (audience.kind === 'work-item') {
       const { binding, sender } = audience;
