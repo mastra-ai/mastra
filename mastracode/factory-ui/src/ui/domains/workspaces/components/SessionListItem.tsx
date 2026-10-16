@@ -23,7 +23,7 @@ export function SessionListItem({
   const navigate = useNavigate();
   const location = useLocation();
   const { regenerate, regenerating } = useRegenerateSessionTitle(factoryId, row.session.sessionId);
-  const { changeVisibility } = useSessionVisibility(factoryId, row.session.sessionId);
+  const { changeVisibility, changing } = useSessionVisibility(factoryId, row.session.sessionId);
   const ownUserSession = row.origin === 'user' && row.ownedByViewer;
 
   return (
@@ -54,6 +54,7 @@ export function SessionListItem({
       visibility={row.origin === 'user' ? row.session.visibility : undefined}
       // Slack threads keep the visibility they were created with; the server refuses a change.
       onVisibilityChange={ownUserSession && !row.session.branch.startsWith('slack/') ? changeVisibility : undefined}
+      changingVisibility={changing}
     />
   );
 }
