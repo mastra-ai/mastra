@@ -35,12 +35,11 @@ const SESSION_OWNER_PROFILE_TTL_MS = 5 * 60_000;
 
 interface SessionOwnerProfile {
   id: string;
-  name?: string;
-  email?: string;
+  name: string;
   avatarUrl?: string;
 }
 
-export type SessionOwnerUserProvider = Pick<IUserProvider, 'getUser'> & Partial<Pick<IUserProvider, 'getUsers'>>;
+type SessionOwnerUserProvider = Pick<IUserProvider, 'getUser'> & Partial<Pick<IUserProvider, 'getUsers'>>;
 
 export interface SourceControlSessionRoutesOptions {
   auth: RouteAuth;
@@ -149,7 +148,7 @@ function titleModel(modelId: string) {
     resolveModel(modelId, { remapForCodexOAuth: true, requestContext });
 }
 
-export function createSessionOwnerProfileResolver(users: SessionOwnerUserProvider | undefined) {
+function createSessionOwnerProfileResolver(users: SessionOwnerUserProvider | undefined) {
   const cache = new Map<string, { profile?: SessionOwnerProfile; expiresAt: number }>();
   const cacheProfile = (userId: string, profile: SessionOwnerProfile | undefined, expiresAt: number) => {
     cache.delete(userId);
@@ -198,12 +197,11 @@ export function createSessionOwnerProfileResolver(users: SessionOwnerUserProvide
 
     for (const user of resolvedUsers) {
       if (!user) continue;
-      const name = user.name?.trim();
-      const email = user.email?.trim();
+      const name = user.name?.trim() || user.email?.trim();
+      if (!name) continue;
       profiles.set(user.id, {
         id: user.id,
-        ...(name ? { name } : {}),
-        ...(email ? { email } : {}),
+        name,
         ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
       });
     }
@@ -214,13 +212,8 @@ export function createSessionOwnerProfileResolver(users: SessionOwnerUserProvide
 }
 
 function withOwnerProfile(session: SourceControlSession, owners: Map<string, SessionOwnerProfile>) {
-  const profile = owners.get(session.userId);
-  const name = profile?.name ?? profile?.email;
-  if (!profile || !name) return session;
-  return {
-    ...session,
-    owner: { id: profile.id, name, ...(profile.avatarUrl ? { avatarUrl: profile.avatarUrl } : {}) },
-  };
+  const owner = owners.get(session.userId);
+  return owner ? { ...session, owner } : session;
 }
 
 function projectSessionRoutes(

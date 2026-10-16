@@ -49,8 +49,6 @@ import { Route } from './route.js';
 import type { RouteAuth, RouteDependencies } from './route.js';
 import { ownerCredentialsByModelProvider } from './session-owner.js';
 import type { SessionOwner } from './session-owner.js';
-import { createSessionOwnerProfileResolver } from './source-control-sessions.js';
-import type { SessionOwnerUserProvider } from './source-control-sessions.js';
 
 /** Widen a route-local Hono context to the plain `Context` the auth helpers take. */
 function loose(c: unknown): Context {
@@ -613,8 +611,6 @@ export interface ConfigRoutesDeps extends RouteDependencies {
   memorySettings?: MemorySettingsStorage;
   /** Factory projects domain, used to derive OM fallbacks from a factory's default model. */
   factoryProjects?: FactoryProjectsStorage;
-  /** Resolves who pays for a teammate's thread to a display name. */
-  users?: SessionOwnerUserProvider;
   /** Custom-providers domain handle; absent when the app database is missing. */
   customProviders?: CustomProvidersStorage;
   /** Notifies the host after tenant credentials change so caches can be dropped. */
@@ -662,7 +658,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
     const { controller, authStorage, auth, deploymentProviders } = options;
     const onCredentialsChanged = options.onCredentialsChanged ?? (() => {});
     const onCustomProvidersChanged = options.onCustomProvidersChanged ?? (() => {});
-    const resolvePayerProfiles = createSessionOwnerProfileResolver(options.users);
 
     const resolveOMResponseContext = async (c: Context) => {
       const tenantCredentials = await listTenantCredentialsForRequest({
@@ -969,7 +964,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             const tenant = auth.tenant(c);
             let tenantCredentials = allTenantCredentials;
             let sessionPolicy: { modelScope: 'factory' | 'user'; defaultModelId: string | null } | undefined;
-            let paidBy: Pick<SessionOwner, 'user'> | undefined;
+            let threadOwnerKnown = false;
             const resourceId = c.req.query('resourceId');
             const threadId = c.req.query('threadId');
             if (resourceId !== undefined || threadId !== undefined) {
@@ -1015,13 +1010,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 }
                 sessionPolicy = { modelScope, defaultModelId };
                 // Without a Factory project the policy fell back to the caller, who may not be the one paying.
-                if (policy.factoryProjectId && modelScope === 'factory') {
-                  paidBy = {};
-                } else if (policy.factoryProjectId) {
-                  const payerUserId = policy.tenant.userId;
-                  const payerName = (await resolvePayerProfiles([payerUserId])).get(payerUserId)?.name;
-                  paidBy = { user: { id: payerUserId, ...(payerName ? { name: payerName } : {}) } };
-                }
+                threadOwnerKnown = Boolean(policy.factoryProjectId);
               }
             } else if (allTenantCredentials && c.req.query('scope') === 'user') {
               // Settings still list the caller's own models; live threads resolve their owner above.
@@ -1081,9 +1070,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               }
             }
             const owner: SessionOwner | undefined =
-              paidBy && tenantCredentials
+              threadOwnerKnown && tenantCredentials
                 ? {
-                    ...paidBy,
                     credentials: ownerCredentialsByModelProvider(
                       models.map(model => model.provider),
                       tenantCredentials,

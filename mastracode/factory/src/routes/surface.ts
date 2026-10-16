@@ -744,7 +744,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       workItems: deps.domains.workItems,
       memorySettings: deps.domains.memorySettings,
       factoryProjects: deps.domains.projects,
-      users: deps.users,
       customProviders: deps.domains.customProviders,
       features: { knowledge: deps.knowledgeEnabled },
       deploymentOrganizationId: deps.deploymentOrganizationId,
