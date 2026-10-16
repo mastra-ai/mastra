@@ -1,7 +1,9 @@
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { UserEvent } from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import type { PathParams } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
@@ -34,6 +36,7 @@ function renderSection() {
       <Routes>
         <Route path="/factories/:factoryId/settings/models" element={<FactoryDefaultModelSection models={models} />} />
       </Routes>
+      <Toaster position="bottom-right" />
     </MemoryRouter>,
   );
 }
@@ -51,8 +54,8 @@ function stubProject(
   let saved = defaultModelId;
   server.use(
     http.get(FACTORY_URL, () => HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', defaultModelId: saved } })),
-    http.patch(FACTORY_URL, async ({ request }) => {
-      const body = (await request.json()) as { defaultModelId: string | null };
+    http.patch<PathParams, { defaultModelId: string | null }>(FACTORY_URL, async ({ request }) => {
+      const body = await request.json();
       patchedBodies.push(body);
       saved = body.defaultModelId;
       return HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', defaultModelId: saved } });
@@ -65,11 +68,17 @@ function stubProject(
   return { patchedBodies, postRequests };
 }
 
-async function pickModel(user: UserEvent, modelName: string) {
-  const trigger = screen.getByRole('button', { name: 'Factory default model' });
+function modelTrigger() {
+  return screen.getByRole('combobox', { name: 'Factory default model' });
+}
+
+async function pickModel(user: UserEvent, modelId: string) {
+  const trigger = modelTrigger();
   await waitFor(() => expect(trigger).toBeEnabled());
   await user.click(trigger);
-  await user.click(await screen.findByRole('option', { name: modelName }));
+  const option = await screen.findByRole('option', { name: new RegExp(modelId.replace('/', '\\/')) });
+  fireEvent.pointerDown(option, { pointerType: 'mouse' });
+  fireEvent.click(option, { detail: 1 });
   return trigger;
 }
 
@@ -90,7 +99,7 @@ describe('FactoryDefaultModelSection model', () => {
         "Work items (triage, board runs) start on this model and run on organization credentials. Interactive sessions start on each owner's personal default instead.",
       ),
     ).toBeInTheDocument();
-    const trigger = screen.getByRole('button', { name: 'Factory default model' });
+    const trigger = modelTrigger();
     await waitFor(() => expect(trigger).toBeEnabled());
     expect(trigger).toHaveTextContent('GPT-5');
   });
@@ -113,13 +122,16 @@ describe('FactoryDefaultModelSection model', () => {
 
     renderSection();
 
-    const trigger = screen.getByRole('button', { name: 'Factory default model' });
+    const trigger = modelTrigger();
     await waitFor(() => expect(trigger).toBeEnabled());
     expect(trigger).toHaveTextContent('Claude Sonnet 4.5');
 
     await user.click(trigger);
     const options = await screen.findAllByRole('option');
-    expect(options.map(option => option.textContent)).toEqual(['claude-sonnet-4-5', 'gpt-5']);
+    expect(options.map(option => option.textContent)).toEqual([
+      expect.stringContaining('anthropic/claude-sonnet-4-5'),
+      expect.stringContaining('openai/gpt-5'),
+    ]);
   });
 
   it('saves the new default before asking whether to switch running sessions', async () => {
@@ -127,7 +139,7 @@ describe('FactoryDefaultModelSection model', () => {
     const user = userEvent.setup();
     const { client } = renderSection();
 
-    const trigger = await pickModel(user, 'gpt-5');
+    const trigger = await pickModel(user, 'openai/gpt-5');
 
     expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
     expect(screen.getByText('Also switch running sessions to GPT-5?')).toBeInTheDocument();
@@ -161,7 +173,7 @@ describe('FactoryDefaultModelSection model', () => {
     const user = userEvent.setup();
     const { client } = renderSection();
 
-    await pickModel(user, 'gpt-5');
+    await pickModel(user, 'openai/gpt-5');
     const action = await screen.findByRole('button', { name: 'Switch running sessions' });
     await user.click(action);
 
@@ -182,7 +194,7 @@ describe('FactoryDefaultModelSection model', () => {
     const user = userEvent.setup();
 
     renderSection();
-    await pickModel(user, 'claude-sonnet-4-5');
+    await pickModel(user, 'anthropic/claude-sonnet-4-5');
 
     await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
     expect(patchedBodies).toEqual([]);
@@ -208,7 +220,7 @@ describe('FactoryDefaultModelSection model', () => {
 
     renderSection();
 
-    const trigger = await pickModel(user, 'gpt-5');
+    const trigger = await pickModel(user, 'openai/gpt-5');
 
     expect(await screen.findByLabelText('Saving default model')).toBeInTheDocument();
     expect(trigger).toBeDisabled();

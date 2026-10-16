@@ -1,8 +1,6 @@
-import { runThinkingLevel } from '@mastra/code-sdk/thinking';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { ThinkingLevelPicker, ThinkingLevelUnavailable } from '@mastra/playground-ui/components/ThinkingLevel';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
@@ -11,15 +9,14 @@ import { useRef, useState } from 'react';
 import { useParams } from 'react-router';
 
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
-import { useFactoryThinkingDefaultQuery, useSetFactoryThinkingDefaultMutation } from '../../../../hooks/use-thinking';
 import {
   useApplyFactoryDefaultModelMutation,
   useFactoryProjectQuery,
   useSetFactoryDefaultModelMutation,
 } from '../../../../hooks/useFactoryDefaultModel';
-import { ModelMenu } from '../../../ui/ModelMenu';
-import { thinkingLevelOptionsForModel } from '../../chat/services/thinkingLevels';
 
+import { FactoryThinkingControl } from './FactoryThinkingControl';
+import { ModelCombobox } from './ModelCombobox';
 import { SharedCredentialNotice } from './SharedCredentialNotice';
 
 function skippedReasonSummary(reasons: Array<{ reason: string }>) {
@@ -28,33 +25,21 @@ function skippedReasonSummary(reasons: Array<{ reason: string }>) {
   return [...counts.entries()].map(([reason, count]) => `${reason.replaceAll('-', ' ')} (${count})`).join(', ');
 }
 
-function thinkingWriteErrorMessage(error: Error) {
-  if ('status' in error && error.status === 403) return 'Only organization admins can change the thinking level';
-  return error.message;
-}
-
 export function FactoryDefaultModelSection({ models }: { models: AvailableModelOption[] }) {
   const { factoryId } = useParams<{ factoryId: string }>();
   const projectQuery = useFactoryProjectQuery(factoryId);
   const setDefaultModel = useSetFactoryDefaultModelMutation(factoryId);
   const applyToSessions = useApplyFactoryDefaultModelMutation(factoryId ?? '');
-  const thinkingQuery = useFactoryThinkingDefaultQuery(factoryId);
-  const setThinking = useSetFactoryThinkingDefaultMutation(factoryId);
-  const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [confirmModelId, setConfirmModelId] = useState<string>();
   const applyRequested = useRef(false);
 
   if (!factoryId) return null;
 
   const defaultModelId = projectQuery.data?.defaultModelId ?? '';
-  const reasoningOptions = models.find(model => model.id === defaultModelId)?.reasoningOptions;
-  const thinkingOptions = thinkingLevelOptionsForModel(defaultModelId, reasoningOptions);
-  const modelError = applyToSessions.error ?? setDefaultModel.error ?? projectQuery.error;
-  const errorText = setThinking.error ? thinkingWriteErrorMessage(setThinking.error) : modelError?.message;
+  const errorText = (applyToSessions.error ?? setDefaultModel.error ?? projectQuery.error)?.message;
   const applyResult = applyToSessions.data;
 
   const saveDefaultModel = (value: string) => {
-    setModelMenuOpen(false);
     if (value === defaultModelId) return;
     applyToSessions.reset();
     setDefaultModel.mutate(value, { onSuccess: () => setConfirmModelId(value) });
@@ -101,31 +86,17 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
               <Spinner size="sm" aria-label="Saving default model" className="text-muted-foreground shrink-0" />
             )}
             <ButtonsGroup size="sm" aria-label="Model and thinking">
-              <ModelMenu
+              <ModelCombobox
                 models={models}
-                selectedModelId={defaultModelId || undefined}
+                value={defaultModelId}
+                onValueChange={saveDefaultModel}
                 placeholder="Select a model"
-                ariaLabel="Factory default model"
-                open={modelMenuOpen}
-                onOpenChange={setModelMenuOpen}
-                onSelect={saveDefaultModel}
-                locked={projectQuery.isPending || setDefaultModel.isPending}
+                aria-label="Factory default model"
+                variant="ghost"
+                size="sm"
+                disabled={projectQuery.isPending || setDefaultModel.isPending}
               />
-              {thinkingQuery.data === undefined ? (
-                <ThinkingLevelUnavailable
-                  options={thinkingOptions}
-                  label="Thinking"
-                  reason="The thinking level isn't loaded yet."
-                />
-              ) : (
-                <ThinkingLevelPicker
-                  options={thinkingOptions}
-                  value={runThinkingLevel(defaultModelId, thinkingQuery.data, reasoningOptions)}
-                  label="Thinking"
-                  description="Used by every session and work-item run in this Factory until it picks its own level."
-                  onChange={level => setThinking.mutateAsync(level).catch(() => {})}
-                />
-              )}
+              <FactoryThinkingControl factoryId={factoryId} modelId={defaultModelId} models={models} />
             </ButtonsGroup>
           </div>
           {applyResult && (
