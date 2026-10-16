@@ -446,11 +446,39 @@ describe('proxyRequest', () => {
     });
   });
 
-  it('explains the Graph workbook 401 on consumer OneDrive instead of implying a credential failure', async () => {
-    // Live capture from a personal-account Excel connection: Graph misreports
-    // "workbook API does not exist for personal accounts" as a 401
-    // UnknownError with an EMPTY message. The message must tell the agent the
-    // connection is fine and which tools still work.
+  it('explains that tenant user discovery requires a work or school account', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(Response.json({ error: { code: 'UnknownError', message: '' } }, { status: 403 }));
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    await expect(proxyRequest(client, 'c_1', { method: 'GET', path: 'v1.0/users' })).rejects.toMatchObject({
+      code: 'proxy_error',
+      status: 403,
+      message: expect.stringContaining('personal Microsoft accounts do not have an Entra tenant directory'),
+    });
+  });
+
+  it('explains that SharePoint site discovery requires a work or school account', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json(
+        {
+          error: {
+            code: 'UnknownError',
+            message: 'This API is not supported for MSA accounts (no addressUrl for Microsoft.FileServices,False).',
+          },
+        },
+        { status: 400 },
+      ),
+    );
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    await expect(proxyRequest(client, 'c_1', { method: 'GET', path: 'v1.0/sites' })).rejects.toMatchObject({
+      code: 'proxy_error',
+      status: 400,
+      message: expect.stringContaining('personal Microsoft accounts do not have SharePoint sites'),
+    });
+  });
+
+  it('adds conditional account guidance to an opaque Graph workbook failure', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       Response.json(
         {
@@ -476,39 +504,11 @@ describe('proxyRequest', () => {
     ).rejects.toMatchObject({
       code: 'proxy_error',
       status: 401,
-      message: expect.stringContaining('only supports OneDrive for Business and SharePoint'),
+      message: expect.stringContaining('Use a Microsoft work or school account'),
     });
   });
 
-  it('explains the FileOpenUserUnauthorized workbook 401 variant', async () => {
-    // Variant of the same failure reported on Microsoft Q&A.
-    const fetchMock = vi.fn().mockResolvedValue(
-      Response.json(
-        {
-          error: {
-            code: 'FileOpenUserUnauthorized',
-            message: 'You do not have permission to open this file in the browser.',
-          },
-        },
-        { status: 401 },
-      ),
-    );
-    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
-    await expect(
-      proxyRequest(client, 'c_1', {
-        method: 'GET',
-        path: 'v1.0/drives/d1/items/i1/workbook/worksheets',
-      }),
-    ).rejects.toMatchObject({
-      code: 'proxy_error',
-      status: 401,
-      message: expect.stringContaining('only supports OneDrive for Business and SharePoint'),
-    });
-  });
-
-  it('does not append the workbook hint to Graph 401s outside workbook paths', async () => {
-    // UnknownError is generic; outside a /workbook path it must stay a plain
-    // provider error so genuine credential failures keep today's shape.
+  it('does not append Microsoft account guidance to opaque errors outside the scoped paths', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValue(Response.json({ error: { code: 'UnknownError', message: '' } }, { status: 401 }));
@@ -522,7 +522,7 @@ describe('proxyRequest', () => {
     });
   });
 
-  it('does not append the workbook hint to workbook 401s with unrelated error codes', async () => {
+  it('does not mask an explicit workbook authentication failure with account guidance', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValue(

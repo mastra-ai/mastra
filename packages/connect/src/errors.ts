@@ -155,24 +155,9 @@ export async function extractProblemDetail(
 }
 
 /**
- * Codes Microsoft Graph returns for workbook calls that fail because the
- * Excel workbook API does not exist for the account, not because the
- * credential is bad. Live captures show `UnknownError` with an empty message
- * for personal (consumer OneDrive) accounts; `FileOpenUserUnauthorized` is
- * the variant reported on Microsoft Q&A for the same failure.
- */
-const GRAPH_WORKBOOK_UNSUPPORTED_CODES = new Set(['UnknownError', 'FileOpenUserUnauthorized']);
-
-/**
- * Clarifies provider errors that are known to misreport their cause, so the
- * message an agent sees explains the real problem instead of inviting the
- * wrong recovery.
- *
- * Microsoft Graph's Excel workbook API does not exist for personal Microsoft
- * accounts (workbooks on consumer OneDrive), but Graph reports that gap as a
- * 401 — often with an empty message — indistinguishable in shape from a dead
- * credential or a file-sharing problem. Without the hint, agents respond by
- * reconnecting or chasing file permissions, neither of which can work.
+ * Adds account-type guidance to opaque Microsoft Graph errors without
+ * replacing the provider's status, code, or message. The path scopes each hint
+ * to the Graph API family whose personal-vs-work distinction is relevant.
  */
 export function providerErrorHint(options: {
   status: number;
@@ -180,20 +165,41 @@ export function providerErrorHint(options: {
   code?: string;
   detail?: string;
 }): string | undefined {
-  const { status, path, code } = options;
-  if (
-    status === 401 &&
-    /\/workbook(\/|\b)/.test(path) &&
-    code !== undefined &&
-    GRAPH_WORKBOOK_UNSUPPORTED_CODES.has(code)
-  ) {
+  const { status, path, code, detail } = options;
+  const normalizedPath = `/${path.replace(/^\/+/, '')}`;
+
+  if ((status === 400 || status === 403) && /^\/v1\.0\/users(?:\/|$)/.test(normalizedPath)) {
     return (
-      "This usually means the workbook is stored on a personal Microsoft account: Microsoft Graph's Excel " +
-      'workbook API only supports OneDrive for Business and SharePoint, not consumer OneDrive. ' +
-      'If so, the connection and its credentials are still valid — do not reconnect. ' +
-      'File-level tools (list/create/copy/delete workbook) still work on personal accounts; ' +
-      'worksheet, range, table, and chart tools require a work or school Microsoft account.'
+      'Microsoft Graph tenant-directory operations require a Microsoft work or school account; personal ' +
+      'Microsoft accounts do not have an Entra tenant directory. If this is already a work or school account, ' +
+      'verify that the connection can read tenant users.'
     );
   }
+
+  if ((status === 400 || status === 403) && /^\/v1\.0\/sites(?:\/|$)/.test(normalizedPath)) {
+    return (
+      'Microsoft Graph SharePoint operations require a Microsoft work or school account; personal Microsoft ' +
+      'accounts do not have SharePoint sites. If this is already a work or school account, verify the site access ' +
+      'and granted Sites permissions.'
+    );
+  }
+
+  const isOpaqueWorkbookFailure =
+    code === 'UnknownError' ||
+    code === 'FileOpenUserUnauthorized' ||
+    /(?:personal|consumer|MSA account|not supported)/i.test(detail ?? '');
+  if (
+    (status === 400 || status === 401 || status === 403) &&
+    /\/workbook(?:\/|$)/.test(normalizedPath) &&
+    isOpaqueWorkbookFailure
+  ) {
+    return (
+      "Microsoft Graph's Excel workbook-content operations target workbooks in OneDrive for Business or " +
+      'SharePoint rather than personal OneDrive. Use a Microsoft work or school account for worksheet, range, ' +
+      'table, and chart operations. If this is already a work or school account, verify the workbook permissions ' +
+      'and file format.'
+    );
+  }
+
   return undefined;
 }

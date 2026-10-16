@@ -497,9 +497,9 @@ export async function proxyRequestWithResponse(
         },
       );
     }
-    // Provider-originated error passed through the proxy. Some providers
-    // misreport the cause (e.g. Graph's workbook-on-consumer-OneDrive 401);
-    // append the clarifying hint so tool callers see the real problem.
+    // Provider-originated error passed through the proxy. Append narrowly
+    // scoped provider guidance where an opaque error hides an account or API
+    // capability boundary; preserve the original status and detail.
     const hint = providerErrorHint({ status: response.status, path: cleanPath, code, detail });
     throw new MastraConnectError(
       'proxy_error',
