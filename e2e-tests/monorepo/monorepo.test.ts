@@ -411,9 +411,12 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         const mastraIndex = originalMastraIndex
           .replace(
             "import { testRoute } from '@/api/route/test';",
-            "import { testRoute } from '@/api/route/test';\nimport { environmentRoute } from '@/api/route/environment';\nimport { versionlessRoute } from '@/api/route/versionless';",
+            "import { testRoute } from '@/api/route/test';\nimport { environmentRoute } from '@/api/route/environment';\nimport { versionlessRoute } from '@/api/route/versionless';\nimport { rawTsRoute } from '@/api/route/raw-ts';",
           )
-          .replace(/apiRoutes: \[\s*testRoute,/, 'apiRoutes: [testRoute, environmentRoute, versionlessRoute,');
+          .replace(
+            /apiRoutes: \[\s*testRoute,/,
+            'apiRoutes: [testRoute, environmentRoute, versionlessRoute, rawTsRoute,',
+          );
         await Promise.all([
           writeFile(mastraIndexPath, mastraIndex),
           writeFile(
@@ -424,6 +427,17 @@ import { versionlessValue } from '@inner/versionless';
 export const versionlessRoute = registerApiRoute('/versionless', {
   method: 'GET',
   handler: async c => c.json({ value: versionlessValue }),
+});
+`,
+          ),
+          writeFile(
+            join(inputFile, 'src', 'mastra', 'api', 'route', 'raw-ts.ts'),
+            `import { registerApiRoute } from '@mastra/core/server';
+import { greet } from '@inner/raw-ts';
+
+export const rawTsRoute = registerApiRoute('/raw-ts', {
+  method: 'GET',
+  handler: async c => c.json({ value: greet('workspace') }),
 });
 `,
           ),
@@ -516,6 +530,12 @@ export const environmentRoute = registerApiRoute('/environment', {
       const res = await fetch(`http://localhost:${port}/versionless`);
       expect(res.status).toBe(200);
       await expect(res.json()).resolves.toEqual({ value: 'versionless-workspace-package' });
+    });
+
+    it('should load an api route that imports a raw TypeScript workspace package (#26540)', async () => {
+      const res = await fetch(`http://localhost:${port}/raw-ts`);
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({ value: 'hello workspace' });
     });
 
     it('layers development dotenv files without overriding the shell environment', async () => {
