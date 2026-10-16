@@ -281,6 +281,7 @@ export class PlatformIncidentioIntegration implements FactoryIntegration {
       api: new IncidentioApiClient({
         baseUrl: proxyBaseUrl,
         accessToken: this.#clientConfig.accessToken,
+        ...(this.#clientConfig.projectId ? { projectId: this.#clientConfig.projectId } : {}),
         ...(this.#clientConfig.fetchImpl ? { fetchImpl: this.#clientConfig.fetchImpl } : {}),
       }),
       connection: incidentioConnection(connectionId),
