@@ -897,20 +897,6 @@ describe('KnowledgePage', () => {
       http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/${FACTORY_ID}/permissions`, () =>
         HttpResponse.json({ categories: {}, tools: {} }),
       ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/supervisor/health`, () =>
-        HttpResponse.json({
-          checkedAt: '2026-09-03T00:00:00.000Z',
-          findings: [],
-          counts: {
-            'decision-stuck': 0,
-            'start-stalled': 0,
-            'seat-orphaned': 0,
-            'seat-missing': 0,
-            'held-waiting': 0,
-            'label-drift': 0,
-          },
-        }),
-      ),
     );
 
     const { router } = renderRoute();

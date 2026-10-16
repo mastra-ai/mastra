@@ -40,7 +40,7 @@ describe('FactoryProjectsStorage', () => {
     expect((await seed.projects.get({ orgId: 'org-1', id: user.id }))?.modelScope).toBe('user');
   });
 
-  it('round-trips the hybrid scope and reads unknown stored scopes as factory', async () => {
+  it('round-trips the hybrid scope and reads unknown stored scopes as hybrid', async () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({
       orgId: 'org-1',
@@ -53,8 +53,9 @@ describe('FactoryProjectsStorage', () => {
     expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('hybrid');
 
     // A value written by an older or newer build must not leak through as an unknown scope.
+    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { modelScope: 'factory' } });
     await seed.projects.update({ orgId: 'org-1', id: project.id, input: { modelScope: 'org' as never } });
-    expect((await seed.projects.get({ orgId: 'org-1', id: project.id }))?.modelScope).toBe('factory');
+    expect((await seed.projects.get({ orgId: 'org-1', id: project.id }))?.modelScope).toBe('hybrid');
   });
 
   it('lists, updates, and deletes projects within their organization', async () => {

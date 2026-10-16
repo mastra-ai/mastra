@@ -242,12 +242,12 @@ type InputShared_Auxiliary_766 = {
   children?: InputShared_Auxiliary_766[] | undefined;
 };
 
-type Shared_Auxiliary_764 = {
+type Shared_Auxiliary_767 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_764[] | undefined;
+  children?: Shared_Auxiliary_767[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -3717,6 +3717,8 @@ type Shared_Type_67 = {
   traceQueryDiscovery: boolean;
   /** Trusted tenant scoping of trace and thread queries */
   traceQueryTenantScope: boolean;
+  /** Trace aggregation (POST /observability/traces/aggregate). Unlike `traceQuery`, clients should treat a missing value as unavailable. */
+  traceAggregate: boolean;
   /** Advanced thread queries (POST /observability/threads/query) */
   threadQuery: boolean;
   /** Span queries (POST /observability/spans/query) */
@@ -4232,7 +4234,7 @@ type Shared_Type_83 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_764[] | undefined;
+  files?: Shared_Auxiliary_767[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -10833,6 +10835,22 @@ export type PostObservabilityTracesQueryFields_Response = {
     occurrences: number;
   }[];
   observedFieldsTruncated: boolean;
+  /** What `aggregateTraces()` accepts. Present only for `predicateScope: "trace"` when the store supports aggregation. Every observed field is also a groupable dimension, and `countDistinct.<field>` accepts any dimension or `traceId`. */
+  aggregate?:
+    | {
+        dimensions: {
+          path: string;
+          valueKind: 'string';
+        }[];
+        measures: {
+          name: string;
+          kind: 'count' | 'duration' | 'error' | 'tokens' | 'cost';
+          statistic?: ('avg' | 'min' | 'max' | 'p50' | 'p90' | 'p95' | 'p99' | 'sum') | undefined;
+          unit: 'count' | 'milliseconds' | 'ratio' | 'tokens' | 'currency';
+          approximate: boolean;
+        }[];
+      }
+    | undefined;
 };
 
 export type PostObservabilityTracesQueryFields_Request = Simplify<
