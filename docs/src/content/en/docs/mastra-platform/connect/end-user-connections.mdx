@@ -68,6 +68,8 @@ Scoping by an identifier is only as strong as the binding between the signed-in 
 - The platform verifies it at execution time. Every call made under a resource ID carries an assertion, and the platform compares it to the connection's stored resource ID before serving tool calls, credentials, or proxy traffic. A mismatch is rejected as if the connection didn't exist, so one user's connection can never serve another user's request.
 - Ownership is checked before OAuth begins. Creating a connection returns a launch URL that re-verifies the caller owns the pending session before redirecting into the provider's flow. See [the authorization link never leaves the server](#the-authorization-link-never-leaves-the-server).
 
+The inverse is deliberate: a connection without a resource ID is global. It belongs to the project, ignores the assertion, and serves every user's requests. Only create a global connection for an account meant to be shared by everyone, such as a team Slack workspace. Anything a single user should own belongs in an end-user connection.
+
 ## Let users connect their accounts
 
 [`userConnectRoutes()`](/reference/connect/user-connect-routes) mounts the API your frontend needs: a provider catalog, the caller's connections, connect-session creation, status polling, disconnect, and a hosted connect page. Register it on the server:
