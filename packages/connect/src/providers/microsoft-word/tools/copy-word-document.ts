@@ -1,10 +1,10 @@
 // AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
-import { randomUUID } from 'node:crypto';
-
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+
+const randomUUID = () => globalThis.crypto.randomUUID();
 
 export const copyWordDocumentInputSchema = z.object({
   driveId: z
