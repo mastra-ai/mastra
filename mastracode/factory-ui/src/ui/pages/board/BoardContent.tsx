@@ -309,10 +309,9 @@ export function BoardContent({
             items={stageWorkItems}
             itemKey={item => item.id}
             layout={layout}
-            pinned={item => item.id === targetItemId}
+            pinnedKey={targetItemId}
             renderItem={item => (
               <WorkItemCard
-                key={`${item.id}:${stage.id}`}
                 layout={layout}
                 item={item}
                 deepLinkRef={registerDeepLinkedCard(item.id)}

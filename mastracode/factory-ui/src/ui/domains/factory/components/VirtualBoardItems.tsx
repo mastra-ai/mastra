@@ -3,16 +3,18 @@ import type { ReactNode } from 'react';
 import type { BoardLayout } from '../boardLayout';
 import { VirtualBoardWindow } from './VirtualBoardWindow';
 
+const MAX_UNVIRTUALIZED_ITEMS = 30;
+
 export function VirtualBoardItems<T>({
   items,
   itemKey,
-  pinned,
+  pinnedKey,
   layout,
   renderItem,
 }: {
   items: readonly T[];
   itemKey: (item: T) => string;
-  pinned?: (item: T) => boolean;
+  pinnedKey?: string;
   layout: BoardLayout;
   renderItem: (item: T) => ReactNode;
 }) {
@@ -22,12 +24,12 @@ export function VirtualBoardItems<T>({
 
   return (
     <VirtualBoardWindow
-      key={layout}
       count={items.length}
+      virtualized={items.length > MAX_UNVIRTUALIZED_ITEMS}
       layout={layout}
-      pinnedIndex={pinned ? items.findIndex(pinned) : -1}
+      pinnedKey={pinnedKey}
       getItemKey={index => itemKey(items[index]!)}
-      getItemIndex={key => itemIndexes.get(key)}
+      itemIndexes={itemIndexes}
       renderItem={index => renderItem(items[index]!)}
     />
   );

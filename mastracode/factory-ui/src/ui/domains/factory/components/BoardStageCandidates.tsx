@@ -39,7 +39,6 @@ export function BoardStageCandidates({
         layout={layout}
         renderItem={candidate => (
           <CandidateCard
-            key={candidate.sourceKey}
             layout={layout}
             candidate={candidate}
             projectRepositoryId={projectRepositoryId(candidate)}

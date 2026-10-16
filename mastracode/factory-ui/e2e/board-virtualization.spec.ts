@@ -17,7 +17,7 @@ test.describe('Factory board virtualization', () => {
   test.afterAll(() => server.close());
   test.afterEach(() => server.resetHandlers());
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page, baseURL }) => {
     server.use(
       http.get('*/auth/me', () => HttpResponse.json({ authenticated: true, authEnabled: false })),
       http.get('*/web/factory/projects', () =>
@@ -55,7 +55,7 @@ test.describe('Factory board virtualization', () => {
       http.get('*/api/agent-controller/code/sessions/fp-1/permissions', () => HttpResponse.json({ permissions: [] })),
     );
     await page.route(
-      url => /^\/(web|auth|api)\//.test(url.pathname),
+      url => url.origin === baseURL && /^\/(web|auth|api)\//.test(url.pathname),
       async route => {
         const request = route.request();
         if (request.url().endsWith('/feed-events')) {
@@ -253,4 +253,24 @@ test.describe('Factory board virtualization', () => {
       });
     }
   }
+
+  test.describe('when a card with open details is sorted out of the rendered range', () => {
+    test.use(viewports[0]!.use);
+    test('keeps the card mounted so its draft is there when the user scrolls back', async ({ page }) => {
+      await page.goto('/factories/fp-1/work');
+      await page.getByRole('button', { name: 'Details for Large task 1999', exact: true }).click();
+      const details = page.getByRole('dialog', { name: 'Large task 1999' });
+      await details.getByRole('textbox', { name: 'Comment' }).fill('Keep this draft');
+
+      await page.evaluate(() => {
+        history.pushState(null, '', '?sort=created-oldest');
+        dispatchEvent(new PopStateEvent('popstate'));
+      });
+      await expect(page.getByRole('article', { name: 'Large task 0', exact: true })).toBeVisible();
+      expect(await page.getByTestId('work-item-card').count()).toBeLessThan(40);
+
+      await page.getByRole('article', { name: 'Large task 1999', exact: true }).scrollIntoViewIfNeeded();
+      await expect(details.getByRole('textbox', { name: 'Comment' })).toHaveValue('Keep this draft');
+    });
+  });
 });

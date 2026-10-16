@@ -1,105 +1,109 @@
-import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import type { VirtualItem, Virtualizer } from '@tanstack/react-virtual';
 import type { ReactNode } from 'react';
-import { Fragment, useContext, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { Fragment, useRef, useState } from 'react';
+
+import { cn } from '@mastra/playground-ui/utils/cn';
 
 import type { BoardLayout } from '../boardLayout';
-import { BoardScrollContext } from '../context/BoardScrollContext';
-import { boardRetainedRows } from '../services/boardRetainedRows';
+import { BoardRowDetailsContext } from '../context/BoardRowDetailsContext';
+import { useBoardScrollRef } from '../context/useBoardScrollRef';
 import { boardVirtualScroll } from '../services/boardVirtualScroll';
+import { SPANS_LIST_GRID } from './BoardList';
 
-const estimateListRow = () => 44;
-const estimateBoardCard = () => 154;
+const estimateListRowHeight = () => 44;
+const estimateBoardCardHeight = () => 154;
 
-/** Own scroll updates here: scrolling must not repeat the board's filtering,
- * sorting, or per-item key construction. The parent supplies stable callbacks
- * until its data changes, so TanStack can reuse its measurement cache. */
+type BoardRow = Pick<VirtualItem, 'index' | 'start' | 'end'>;
+
+/** Index-based so scroll re-renders stay here, away from the board's filtering and sorting. */
 export function VirtualBoardWindow({
   count,
+  virtualized,
   layout,
-  pinnedIndex,
+  pinnedKey,
   getItemKey,
-  getItemIndex,
+  itemIndexes,
   renderItem,
 }: {
   count: number;
+  virtualized: boolean;
   layout: BoardLayout;
-  pinnedIndex: number;
+  pinnedKey: string | undefined;
   getItemKey: (index: number) => string;
-  getItemIndex: (key: string) => number | undefined;
+  itemIndexes: ReadonlyMap<string, number>;
   renderItem: (index: number) => ReactNode;
 }) {
-  const scrollRef = useContext(BoardScrollContext);
+  const scrollRef = useBoardScrollRef();
   const contentRef = useRef<HTMLDivElement>(null);
-  const [retainedRows] = useState(() => boardRetainedRows(contentRef));
-  const retainedKeys = useSyncExternalStore(retainedRows.subscribe, retainedRows.getSnapshot);
+  const [focusedKey, setFocusedKey] = useState<string>();
+  const [draggingKey, setDraggingKey] = useState<string>();
+  const [detailsOpenKeys, setDetailsOpenKeys] = useState<ReadonlySet<string>>(() => new Set());
   const [scrollOptions] = useState(() => boardVirtualScroll(scrollRef, contentRef));
-  const virtualized = count > 30;
   const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
     ...scrollOptions,
     count,
     getItemKey,
-    estimateSize: layout === 'list' ? estimateListRow : estimateBoardCard,
+    estimateSize: layout === 'list' ? estimateListRowHeight : estimateBoardCardHeight,
     overscan: 4,
-    // Batch all visible columns in one React update instead of flushing each
-    // column synchronously inside the shared viewport's scroll event.
+    // Batch all visible groups into one update instead of flushing each inside the shared scroll event.
     useFlushSync: false,
-    rangeExtractor: range => {
-      const indexes = new Set(defaultRangeExtractor(range));
-      if (pinnedIndex >= 0) indexes.add(pinnedIndex);
-      for (const key of retainedKeys) {
-        const index = getItemIndex(key);
-        if (index !== undefined) indexes.add(index);
-      }
-      return [...indexes].filter(index => index < count).toSorted((a, b) => a - b);
-    },
   });
-  useLayoutEffect(() => {
-    // Several columns share a viewport. Let normal-flow browser anchoring handle
-    // resizing; independent virtualizers must not each adjust that same scrollTop.
-    virtualizer.shouldAdjustScrollPositionOnItemSizeChange = () => false;
-    return () => {
-      virtualizer.shouldAdjustScrollPositionOnItemSizeChange = undefined;
-    };
-  }, [virtualizer]);
-  // Keep the viewport observer and keyed row tree across page appends. Disabling
-  // the observer for small groups would leave an empty range on the first render
-  // above the threshold, unmounting cards before the viewport is measured again.
-  // Measure the initial rows too: mobile heights can exceed the estimates, and
-  // switching to estimated positions would otherwise jump past the visible card.
-  const rows = virtualized
-    ? virtualizer.getVirtualItems()
-    : Array.from({ length: count }, (_, index) => ({ index, key: getItemKey(index), start: 0, end: 0 }));
-  const scrollElement = virtualizer.scrollElement;
-  useLayoutEffect(() => {
-    if (!virtualized || pinnedIndex < 0 || !scrollElement) return;
-    // Reconcile the target as nearby rows are measured. On mobile those rows
-    // can grow after the card's initial scrollIntoView and push it offscreen.
-    virtualizer.scrollToIndex(pinnedIndex, { align: 'center' });
-  }, [virtualized, pinnedIndex, scrollElement, virtualizer]);
-  const listGrid = layout === 'list' ? 'col-span-full grid grid-cols-subgrid' : undefined;
-  const rowGap = layout === 'list' ? 1 : 10;
+
+  const retainedIndexes = [focusedKey, draggingKey, pinnedKey, ...detailsOpenKeys].flatMap(key =>
+    key === undefined ? [] : (itemIndexes.get(key) ?? []),
+  );
+  const setRowDetailsOpen = (key: string, open: boolean) =>
+    setDetailsOpenKeys(keys => {
+      const next = new Set(keys);
+      if (open) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  const rows: BoardRow[] = virtualized
+    ? windowedRows(virtualizer, retainedIndexes)
+    : Array.from({ length: count }, (_, index) => ({ index, start: 0, end: 0 }));
+  const spaceAfterPx = virtualized ? virtualizer.getTotalSize() - (rows.at(-1)?.end ?? 0) : 0;
+  const listGrid = layout === 'list' ? SPANS_LIST_GRID : undefined;
 
   return (
     <div ref={contentRef} className={listGrid}>
-      {rows.map((row, position) => (
-        <Fragment key={row.key}>
-          <div aria-hidden className="col-span-full" style={{ height: row.start - (rows[position - 1]?.end ?? 0) }} />
-          <div
-            ref={virtualizer.measureElement}
-            data-index={row.index}
-            data-item-key={row.key}
-            className={listGrid}
-            style={{ paddingBottom: row.index === count - 1 ? 0 : rowGap }}
-          >
-            {renderItem(row.index)}
-          </div>
-        </Fragment>
-      ))}
-      <div
-        aria-hidden
-        className="col-span-full"
-        style={{ height: virtualized ? Math.max(0, virtualizer.getTotalSize() - (rows.at(-1)?.end ?? 0)) : 0 }}
-      />
+      {rows.map((row, position) => {
+        const key = getItemKey(row.index);
+        const spaceBeforePx = row.start - (rows[position - 1]?.end ?? 0);
+        return (
+          <Fragment key={key}>
+            {spaceBeforePx > 0 && <div aria-hidden className="col-span-full" style={{ height: spaceBeforePx }} />}
+            <div
+              ref={virtualizer.measureElement}
+              data-index={row.index}
+              className={cn(listGrid, row.index < count - 1 && (layout === 'list' ? 'pb-px' : 'pb-2.5'))}
+              onFocus={() => setFocusedKey(key)}
+              onBlur={event => {
+                if (event.currentTarget.contains(event.relatedTarget)) return;
+                setFocusedKey(current => (current === key ? undefined : current));
+              }}
+              onDragStart={() => setDraggingKey(key)}
+              onDragEnd={() => setDraggingKey(undefined)}
+            >
+              <BoardRowDetailsContext value={open => setRowDetailsOpen(key, open)}>
+                {renderItem(row.index)}
+              </BoardRowDetailsContext>
+            </div>
+          </Fragment>
+        );
+      })}
+      {spaceAfterPx > 0 && <div aria-hidden className="col-span-full" style={{ height: spaceAfterPx }} />}
     </div>
   );
+}
+
+/** Retained rows join the range here, not in `rangeExtractor`: before the virtualizer reaches the viewport its range is empty. */
+function windowedRows(
+  virtualizer: Virtualizer<HTMLDivElement, HTMLDivElement>,
+  retainedIndexes: readonly number[],
+): BoardRow[] {
+  return [...new Set([...virtualizer.getVirtualIndexes(), ...retainedIndexes])]
+    .toSorted((a, b) => a - b)
+    .flatMap(index => virtualizer.measurementsCache[index] ?? []);
 }
