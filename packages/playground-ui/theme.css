@@ -10,6 +10,7 @@
  *   colors      raw ramps — background, gray, gray-alpha, chromatic hues, Mastra brand
  *   status      status, badge, and product roles
  *   data-viz    chart series and span-type hues
+ *   code        syntax highlight roles
  *   surfaces    fill ladder, boundary ladder, elevation, scrim
  *   typography  text roles and font families
  *   scale       spacing multiplier, named rungs, radii, breakpoints
@@ -23,6 +24,7 @@
 @import './theme/colors.css';
 @import './theme/status.css';
 @import './theme/data-viz.css';
+@import './theme/code.css';
 @import './theme/surfaces.css';
 @import './theme/typography.css';
 @import './theme/scale.css';

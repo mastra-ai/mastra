@@ -40,6 +40,35 @@ export const WithError: Story = {
   ),
 };
 
+export const WithInfo: Story = {
+  render: () => (
+    <Field>
+      <FieldLabel info="Shown to people who pick this agent. Keep it short.">Display name</FieldLabel>
+      <Input placeholder="Support agent" />
+    </Field>
+  ),
+};
+
+export const RequiredWithInfo: Story = {
+  render: () => (
+    <Field>
+      <FieldLabel required info="Runs before every reply. Max 4,000 characters.">
+        Instructions
+      </FieldLabel>
+      <Textarea placeholder="You are a helpful assistant." />
+    </Field>
+  ),
+};
+
+export const DisabledWithInfo: Story = {
+  render: () => (
+    <Field disabled>
+      <FieldLabel info="Set by the agent's code, so it can't be edited here.">Model</FieldLabel>
+      <Input defaultValue="openai/gpt-5.6-sol" />
+    </Field>
+  ),
+};
+
 export const HiddenLabel: Story = {
   render: () => (
     <Field>

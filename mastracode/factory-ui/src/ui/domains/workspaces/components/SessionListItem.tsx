@@ -22,7 +22,6 @@ export function SessionListItem({
   const navigate = useNavigate();
   const location = useLocation();
   const { regenerate, regenerating } = useRegenerateSessionTitle(factoryId, row.session.sessionId);
-  const canRegenerateTitle = row.origin === 'user' && row.ownedByViewer;
 
   return (
     <SessionNavRow
@@ -46,7 +45,7 @@ export function SessionListItem({
       onSelect={() => void navigate(row.openPath, row.origin === 'factory' ? { state: { from: location } } : undefined)}
       onPinChange={pinned => setSessionPinned(row.session.sessionId, pinned)}
       onDelete={row.ownedByViewer ? () => onDelete(row) : undefined}
-      onRegenerateTitle={canRegenerateTitle ? regenerate : undefined}
+      onRegenerateTitle={row.canRegenerateTitle ? regenerate : undefined}
       regeneratingTitle={regenerating}
     />
   );

@@ -49,7 +49,6 @@ import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
-import { buildSupervisorRoutes } from './supervisor.js';
 
 export interface WorkItemRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
@@ -469,12 +468,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         boards: this.#boards,
         comments: this.deps.comments,
         liveSessions,
-        resolveProject: context => this.#resolveProject(loose(context)),
-      }),
-
-      ...buildSupervisorRoutes({
-        workItems,
-        boards: this.#boards,
         resolveProject: context => this.#resolveProject(loose(context)),
       }),
 

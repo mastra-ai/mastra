@@ -630,6 +630,25 @@ describe('createMastraCode', () => {
     }
   });
 
+  it('skips the host thinking default when the session picked its own level', async () => {
+    const { getDynamicModel } = await import('../agents/model.js');
+    const { createMastraCodeAgentController } = await import('../index.js');
+    const resolveDefaultThinkingLevel = vi.fn(async () => 'high' as const);
+    vi.mocked(getDynamicModel).mockClear();
+    await createMastraCodeAgentController({ resolveDefaultThinkingLevel });
+    const agentConfig = agentConstructorMock.mock.calls.at(-1)![0];
+
+    const withSessionLevel = new RequestContext();
+    withSessionLevel.set('controller', { state: { thinkingLevel: 'low' } });
+    await agentConfig.model({ requestContext: withSessionLevel });
+    expect(resolveDefaultThinkingLevel).not.toHaveBeenCalled();
+    expect(vi.mocked(getDynamicModel).mock.calls.at(-1)![2]).toMatchObject({ defaultThinkingLevel: undefined });
+
+    await agentConfig.model({ requestContext: new RequestContext() });
+    expect(resolveDefaultThinkingLevel).toHaveBeenCalledOnce();
+    expect(vi.mocked(getDynamicModel).mock.calls.at(-1)![2]).toMatchObject({ defaultThinkingLevel: 'high' });
+  });
+
   it.each([
     ['durable', createDurableAgentMock, durableAgentMock],
     ['evented', createEventedAgentMock, eventedAgentMock],

@@ -73,6 +73,16 @@ export function isProviderConnected(
   return method && scope ? saved === method : saved !== undefined;
 }
 
+export function companyAccountNeedsAdmin(connection: ProviderConnection): boolean {
+  return (
+    !connection.isPending &&
+    !connection.catalogError &&
+    connection.authEnabled &&
+    !connection.orgKeyAdmin &&
+    !connection.hasConfiguredProvider
+  );
+}
+
 export function matchesProviderQuery(provider: ProviderInfo, query: string): boolean {
   const normalized = query.trim().toLowerCase();
   if (!normalized) return true;

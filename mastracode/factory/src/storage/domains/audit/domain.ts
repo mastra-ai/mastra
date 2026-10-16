@@ -46,7 +46,7 @@ export interface AuditAgentEmitter {
   emitAgent(args: { requestContext: RequestContext; input: EmitAgentAuditInput }): Promise<void>;
 }
 
-/** Records with an explicit actor, for the paths that have no request: rule transitions, run starts, run ends, supervisor tools. */
+/** Records with an explicit actor, for the paths that have no request: rule transitions, run starts, run ends. */
 export type AuditRecorder = Pick<AuditDomain, 'record'>;
 
 /** Best-effort destination for locally persisted audit events (e.g. an integration's audit log). */
