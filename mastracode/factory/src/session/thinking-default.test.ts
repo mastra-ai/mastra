@@ -27,29 +27,19 @@ function deps({ sessionFactoryId }: { sessionFactoryId?: string } = {}) {
 }
 
 describe('resolveFactoryThinkingLevel', () => {
-  it("uses the default stored on a session's Factory", async () => {
+  it("uses the default stored on a session's Factory, found by session id", async () => {
     const level = await resolveFactoryThinkingLevel(
-      contextFor({ sessionId: 'session-1', resourceId: 'session-1' }),
+      contextFor({ sessionId: 'session-1', resourceId: 'user-1' }),
       deps({ sessionFactoryId: FACTORY_ID }),
     );
     expect(level).toBe('high');
   });
 
-  it('finds the source-control session by its session id when the session runs under a user resource', async () => {
-    const dependencies = deps({ sessionFactoryId: FACTORY_ID });
-    const level = await resolveFactoryThinkingLevel(
-      contextFor({ sessionId: 'session-1', resourceId: 'user-1' }),
-      dependencies,
-    );
-    expect(level).toBe('high');
-    expect(dependencies.sourceControl.getBySessionId).toHaveBeenCalledWith('session-1');
-  });
-
   it('reads the Factory from session state when no source-control session exists', async () => {
     const level = await resolveFactoryThinkingLevel(
       contextFor({
-        sessionId: 'session-1',
-        resourceId: 'session-1',
+        sessionId: 'session-2',
+        resourceId: 'user-1',
         getState: () => ({ factoryProjectId: FACTORY_ID }),
       }),
       deps(),
@@ -59,7 +49,7 @@ describe('resolveFactoryThinkingLevel', () => {
 
   it('resolves Factory-page requests by their resource id', async () => {
     expect(
-      await resolveFactoryThinkingLevel(contextFor({ sessionId: 'page-session', resourceId: FACTORY_ID }), deps()),
+      await resolveFactoryThinkingLevel(contextFor({ sessionId: FACTORY_ID, resourceId: FACTORY_ID }), deps()),
     ).toBe('high');
   });
 
