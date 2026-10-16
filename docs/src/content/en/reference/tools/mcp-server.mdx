@@ -1692,14 +1692,14 @@ A client that subscribed with `{ project: 'web' }` receives this occurrence. A c
     type: '(context) => Promise<MCPServerEventPollResult>',
     isOptional: true,
     description:
-      'Pull source for `events/poll`. Receives `arguments`, `cursor` (`null` means start from now), `maxEvents`, `maxAgeMs`, `requestContext` and `signal`. Returns `{ events, cursor, hasMore?, nextPollMs?, truncated? }`. The server fills in a missing `eventId` and `timestamp`.',
+      'Pull source for `events/poll`. Receives `arguments`, `cursor` (`null` means start from now), `maxEvents`, `maxAgeMs`, `requestContext` and `signal`. Returns `{ events, cursor, hasMore?, nextPollMs?, truncated? }`. Each event needs `data` and a stable `eventId` (clients dedupe by it, so return the same id whenever the same occurrence is polled); a missing `timestamp` defaults to now. If `poll` or `match` throws, the client gets a generic `-32603` error and the details are logged on the server.',
   },
   {
     name: 'delivery',
     type: "Array<'poll' | 'push'>",
     isOptional: true,
     description:
-      "Delivery modes to advertise. Narrows the default modes. A type with a `poll` source streams emitted events only when `delivery` includes `'push'`.",
+      'Restricts the advertised delivery modes to this list. It only narrows the modes from the table below, and a definition left with no mode throws when the server is constructed.',
   },
   {
     name: 'bufferSize',
@@ -1725,9 +1725,8 @@ How a type is served depends on where its events come from:
 | - | - | - |
 | No `poll` | `['push', 'poll']` | `server.events.emit()`. Polls read the in-memory buffer. |
 | `poll` | `['poll']` | Your `poll` function, called for each `events/poll`. |
-| `poll` with `delivery: ['poll', 'push']` | `['poll', 'push']` | Polls call `poll`. Streams carry `server.events.emit()`. |
 
-Cursors from `poll` and cursors from the buffer are separate, so a client can't resume a stream from a cursor your `poll` function returned.
+A type with a `poll` source can't also be pushed: `delivery` can't add `'push'` to it, and `server.events.emit()` throws for it. The advertised modes never change after the server starts, because clients only learn them from `events/list`. To push events, define a type without `poll` and emit to it.
 
 A request for a mode the type doesn't advertise fails with `-32026`. An unknown event name fails with `-32023`.
 
@@ -1760,7 +1759,7 @@ When no other message has been sent for `heartbeatIntervalMs`, the stream sends 
 
 ### `server.events.emit(name, data, options?)`
 
-Records an occurrence, delivers it to matching push streams, and returns it with its `eventId`, `timestamp` and `cursor`. `options.eventId` and `options.timestamp` override the defaults (a random UUID and the current time). It throws when `name` isn't configured, when `data` fails `payloadSchema`, or when the type is served only by its `poll` source.
+Records an occurrence, delivers it to matching push streams, and returns it with its `eventId`, `timestamp` and `cursor`. `options.eventId` and `options.timestamp` override the defaults (a random UUID and the current time). It throws when `name` isn't configured, when `data` fails `payloadSchema`, or when the type has a `poll` source.
 
 `server.events.list()` returns the descriptors `events/list` serves.
 

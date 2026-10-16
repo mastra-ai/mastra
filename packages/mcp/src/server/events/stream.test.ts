@@ -6,13 +6,20 @@ import type { StreamNotification } from './stream';
 
 const SUBSCRIPTION = 'io.modelcontextprotocol/subscriptionId';
 
-function setup(options: { heartbeatIntervalMs?: number; match?: (data: Record<string, unknown>) => boolean } = {}) {
+function setup(
+  options: {
+    heartbeatIntervalMs?: number;
+    match?: (data: Record<string, unknown>) => boolean;
+    onError?: (error: unknown) => void;
+  } = {},
+) {
   const sent: StreamNotification[] = [];
   const stream = new EventStream({
     subscriptionId: 7,
     notify: async notification => void sent.push(notification),
     heartbeatIntervalMs: options.heartbeatIntervalMs ?? 30_000,
     match: options.match,
+    onError: options.onError,
   });
   const buffer = new EventRingBuffer('boot/test', 10);
   const emit = (data: Record<string, unknown>) =>
@@ -92,9 +99,11 @@ describe('EventStream', () => {
     stream.close();
   });
 
-  it('reports a throwing match as a recoverable error and keeps streaming', async () => {
+  it('reports a throwing match as a generic recoverable error and keeps streaming', async () => {
     let fail = true;
-    const { stream, emit, methods } = setup({
+    const onError = vi.fn();
+    const { stream, emit, methods, sent } = setup({
+      onError,
       match: () => {
         if (fail) throw new Error('boom');
         return true;
@@ -106,6 +115,8 @@ describe('EventStream', () => {
     emit({});
     await vi.advanceTimersByTimeAsync(0);
     expect(methods()).toEqual(['active', 'error', 'event']);
+    expect(sent[1]!.params.error).toEqual({ code: -32603, message: 'Event filter failed' });
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'boom' }));
     stream.close();
   });
 

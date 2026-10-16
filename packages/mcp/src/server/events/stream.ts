@@ -74,7 +74,7 @@ export class EventStream {
     }
   }
 
-  /** `match` for replay and live delivery. A throwing `match` is reported on the stream as a recoverable error. */
+  /** `match` for replay and live delivery. A throwing `match` is reported on the stream as a recoverable error; the details go only to `onError`. */
   matches(data: Record<string, unknown>): boolean {
     if (!this.options.match) return true;
     try {
@@ -84,7 +84,7 @@ export class EventStream {
       this.send(EVENTS_NOTIFICATIONS.error, {
         error: {
           code: -32603,
-          message: `Event filter failed: ${error instanceof Error ? error.message : String(error)}`,
+          message: 'Event filter failed',
         },
       });
       return false;
