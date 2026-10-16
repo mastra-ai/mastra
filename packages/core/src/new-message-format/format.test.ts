@@ -153,6 +153,34 @@ describe('action format', () => {
     ]);
   });
 
+  it('keeps a deferred provider-executed call that has no result yet', () => {
+    const user = { ...base(), type: 'text', role: 'user', text: 'search it' } as PersistableAction;
+    const call = {
+      ...base(),
+      type: 'tool-call',
+      role: 'assistant',
+      toolCallId: 'srv1',
+      toolName: 'web_search',
+      input: { query: 'x' },
+      providerExecuted: true,
+    } as PersistableAction;
+    expect(toModelMessages([user, call])).toEqual([
+      { role: 'user', content: [{ type: 'text', text: 'search it' }] },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'srv1',
+            toolName: 'web_search',
+            input: { query: 'x' },
+            providerExecuted: true,
+          },
+        ],
+      },
+    ]);
+  });
+
   it('keeps a call waiting on approval, with its request and any answer', () => {
     const user = { ...base(), type: 'text', role: 'user', text: 'delete it' } as PersistableAction;
     const actions = [
