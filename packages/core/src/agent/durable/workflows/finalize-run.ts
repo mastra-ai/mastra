@@ -3,6 +3,7 @@ import type { IMastraLogger } from '../../../logger';
 import { noopLogger } from '../../../logger/noop-logger';
 import type { Mastra } from '../../../mastra';
 import type { MastraMemory } from '../../../memory/memory';
+import { needsThreadTitle } from '../../../memory/thread-title';
 import { createObservabilityContext } from '../../../observability';
 import type { TracingContext } from '../../../observability';
 import type { OutputResult } from '../../../processors';
@@ -509,7 +510,7 @@ export async function generateDurableThreadTitle({
   const { shouldGenerate, model, instructions, minMessages } = agent.resolveTitleGenerationConfig(
     mergedConfig.generateTitle,
   );
-  if (!shouldGenerate || thread?.title) return;
+  if (!shouldGenerate || (thread && !needsThreadTitle(thread))) return;
 
   const titleMessageList = new MessageList().deserialize(messageListState);
   const uiMessages = agent.filterUiMessagesByThread(titleMessageList, threadId, titleMessageList.get.all.ui());
@@ -531,7 +532,10 @@ export async function generateDurableThreadTitle({
   // genTitle is a model round trip, so another writer may have created the thread in the
   // meantime. Re-read before falling back to createThread, which upserts the whole row and
   // would drop metadata that writer stored.
-  const currentThread = thread ?? (await memory.getThreadById({ threadId }));
+  const currentThread = await memory.getThreadById({ threadId });
+  if (currentThread && !needsThreadTitle(currentThread)) return;
+  // Do not recreate a thread deleted while the title model was running.
+  if (thread && !currentThread) return;
 
   if (currentThread) {
     await memory.updateThread({

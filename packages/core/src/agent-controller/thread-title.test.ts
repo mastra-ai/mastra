@@ -2,6 +2,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 import { MockMemory } from '../memory/mock';
+import type { StorageThreadType } from '../memory/types';
 import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
@@ -41,7 +42,10 @@ function createBrokenModel() {
 }
 
 /** A controller that has taken its first turn, with `titleModel` naming the thread. */
-async function startThread(titleModel: MockLanguageModelV2) {
+async function startThread(
+  titleModel: MockLanguageModelV2,
+  initialThread?: Pick<StorageThreadType, 'title' | 'metadata'>,
+) {
   const storage = new InMemoryStore();
   const memory = new MockMemory({
     storage,
@@ -66,6 +70,11 @@ async function startThread(titleModel: MockLanguageModelV2) {
   const events: AgentControllerEvent[] = [];
   session.subscribe(event => events.push(event));
 
+  if (initialThread) {
+    const thread = await session.thread.create({ title: initialThread.title });
+    await memory.updateThread({ id: thread.id, ...initialThread });
+  }
+
   await session.sendMessage({ content: 'Rewrite the log parser' });
   await vi.waitFor(() => expect(events.some(event => event.type === 'agent_end')).toBe(true), { timeout: 10_000 });
 
@@ -86,6 +95,71 @@ async function startNamedThread() {
 }
 
 describe('AgentController thread titles', () => {
+  it('replaces a legacy channel placeholder through the normal namer', async () => {
+    const { session, memory, events } = await startThread(createTextStreamModel('Log parser rewrite'), {
+      title: 'slack conversation',
+      metadata: { channel_platform: 'slack', channel_externalThreadId: 'C123:456', customSetting: 'preserved' },
+    });
+    const threadId = session.thread.getId()!;
+    await vi.waitFor(async () => expect((await memory.getThreadById({ threadId }))?.title).toBe('Log parser rewrite'));
+    expect((await memory.getThreadById({ threadId }))?.metadata).toMatchObject({
+      channel_platform: 'slack',
+      channel_externalThreadId: 'C123:456',
+      customSetting: 'preserved',
+    });
+    expect(events).toContainEqual({ type: 'thread_title_updated', threadId, title: 'Log parser rewrite' });
+  });
+
+  it.each([
+    { title: 'My Slack investigation', metadata: { channel_platform: 'slack' } },
+    { title: 'slack conversation', metadata: { channel_platform: 'slack', titlePinned: true } },
+    { title: 'slack conversation', metadata: {} },
+    { title: 'discord conversation', metadata: { channel_platform: 'slack' } },
+  ])('preserves an existing title: $title, $metadata', async initialThread => {
+    const titleModel = createTextStreamModel('Should not replace the title');
+    const generate = vi.spyOn(titleModel, 'doGenerate');
+    const { session, memory } = await startThread(titleModel, initialThread);
+    expect((await memory.getThreadById({ threadId: session.thread.getId()! }))?.title).toBe(initialThread.title);
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it('keeps the legacy label and the conversation usable when naming fails', async () => {
+    const { session, memory, events } = await startThread(createBrokenModel(), {
+      title: 'slack conversation',
+      metadata: { channel_platform: 'slack' },
+    });
+    expect((await memory.getThreadById({ threadId: session.thread.getId()! }))?.title).toBe('slack conversation');
+    expect(events.some(event => event.type === 'error')).toBe(false);
+    expect(events.some(event => event.type === 'thread_title_updated')).toBe(false);
+  });
+
+  it('preserves a manual rename while automatic naming is in flight', async () => {
+    const titleModel = createTextStreamModel('Generated title');
+    const generate = titleModel.doGenerate.bind(titleModel);
+    let release = () => {};
+    const pending = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    vi.spyOn(titleModel, 'doGenerate').mockImplementation(async options => {
+      await pending;
+      return generate(options);
+    });
+    const { session, memory, events } = await startThread(titleModel, {
+      title: 'slack conversation',
+      metadata: { channel_platform: 'slack' },
+    });
+    await session.thread.rename({ title: 'My custom title' });
+    const read = vi.spyOn(memory, 'getThreadById');
+    release();
+    await vi.waitFor(() => expect(read).toHaveBeenCalled());
+    expect((await memory.getThreadById({ threadId: session.thread.getId()! }))?.title).toBe('My custom title');
+    expect(events).not.toContainEqual({
+      type: 'thread_title_updated',
+      threadId: session.thread.getId(),
+      title: 'Generated title',
+    });
+  });
+
   it('names the thread on its first turn and emits thread_title_updated', async () => {
     const { session, events } = await startNamedThread();
 

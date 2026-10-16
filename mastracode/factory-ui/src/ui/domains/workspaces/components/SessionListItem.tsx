@@ -22,7 +22,7 @@ export function SessionListItem({
   const navigate = useNavigate();
   const location = useLocation();
   const { regenerate, regenerating } = useRegenerateSessionTitle(factoryId, row.session.sessionId);
-  const canRegenerateTitle = row.origin === 'user' && row.ownedByViewer;
+  const canRegenerateTitle = row.ownedByViewer && (row.origin === 'user' || row.session.branch.startsWith('slack/'));
 
   return (
     <SessionNavRow

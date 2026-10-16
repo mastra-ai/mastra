@@ -52,6 +52,37 @@ function titleGenerationTests(version: 'v1' | 'v2') {
   });
 
   describe(`${version} - title generation`, () => {
+    it.each([
+      { enabled: true, pinned: false, expected: 'Dummy response' },
+      { enabled: false, pinned: false, expected: 'slack conversation' },
+      { enabled: true, pinned: true, expected: 'slack conversation' },
+    ])(
+      'handles legacy channel titles with naming enabled=$enabled and pinned=$pinned',
+      async ({ enabled, pinned, expected }) => {
+        const memory = new MockMemory({ options: { generateTitle: enabled } });
+        await memory.createThread({
+          threadId: 'legacy-channel-title',
+          resourceId: 'channel-session',
+          title: 'slack conversation',
+          metadata: { channel_platform: 'slack', titlePinned: pinned },
+        });
+        const agent = new Agent({
+          id: 'channel-title',
+          name: 'Channel title',
+          instructions: 'Help the user',
+          model: dummyModel,
+          memory,
+        });
+        const options = { memory: { thread: 'legacy-channel-title', resource: 'channel-session' } };
+        if (version === 'v1') await agent.generateLegacy('Investigate checkout timeouts', options);
+        else await agent.generate('Investigate checkout timeouts', options);
+
+        await vi.waitFor(async () =>
+          expect((await memory.getThreadById({ threadId: 'legacy-channel-title' }))?.title).toBe(expected),
+        );
+      },
+    );
+
     it('should use custom model for title generation when provided in generateTitle config', async () => {
       // Track which model was used for title generation
       let titleModelUsed = false;

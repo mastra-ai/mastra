@@ -21,6 +21,7 @@ import type { Mastra } from '../mastra';
 import { createRunScope, createRunScopeKey } from '../mastra/run-scope';
 import type { MastraMemory } from '../memory/memory';
 import { getMemoryRunState, MemoryRunState } from '../memory/run-state';
+import { needsThreadTitle } from '../memory/thread-title';
 import type { MemoryConfigInternal, StorageThreadType } from '../memory/types';
 import type { Span, TracingOptions, TracingProperties, ObservabilityContext } from '../observability';
 import {
@@ -649,7 +650,7 @@ export class AgentLegacyHandler {
             const messages = messageList.get.all.core();
             const requiredMessages = minMessages ?? 1;
 
-            if (shouldGenerate && !thread.title && messages.length >= requiredMessages) {
+            if (shouldGenerate && needsThreadTitle(thread) && messages.length >= requiredMessages) {
               const userMessage = this.capabilities.getMostRecentUserMessage(uiMessages);
 
               if (userMessage) {
@@ -661,7 +662,8 @@ export class AgentLegacyHandler {
                     .then(async title => {
                       if (!title) return;
                       // Update-only: the thread may have been deleted while the title was generating (#25203).
-                      if (!(await memory.getThreadById({ threadId: thread.id }))) return;
+                      const currentThread = await memory.getThreadById({ threadId: thread.id });
+                      if (!currentThread || !needsThreadTitle(currentThread)) return;
                       try {
                         await memory.updateThread({ id: thread.id, title, memoryConfig });
                       } catch (error) {
