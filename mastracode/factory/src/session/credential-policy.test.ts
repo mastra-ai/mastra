@@ -271,7 +271,7 @@ describe('trusted Factory credential policy', () => {
   });
 
   it('refuses orphaned Factory sessions instead of falling back to the sender', async () => {
-    const { sourceControl, sourceSession, context } = await setup();
+    const { sourceControl, sourceSession, project, context } = await setup();
     const ctx = context();
     await prepareCredentialTenant(ctx);
     const stored = await sourceControl.sessions.getBySessionId(sourceSession.sessionId);
@@ -279,6 +279,9 @@ describe('trusted Factory credential policy', () => {
     await sourceControl.sessions.delete(stored.id);
     await expect(prepareCredentialTenant(ctx)).rejects.toThrow('ownership is unavailable');
     expect(resolveTenantFromRequestContext(ctx)).toBeUndefined();
+    // A run session under its Factory's resource is not a Factory page once its row is gone.
+    const underFactory = context(sourceSession.sessionId, 'sender', ORG, project.id);
+    await expect(prepareCredentialTenant(underFactory)).rejects.toThrow('ownership is unavailable');
     await expect(prepareCredentialTenant(context('sender'))).resolves.toBeUndefined();
   });
 
