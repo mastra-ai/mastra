@@ -233,11 +233,15 @@ function createTransientFailingObserverModel(onAttempt: () => void) {
   };
 }
 
-function createEmptyObserverModel(text: string, onAttempt: () => void) {
+function createEmptyObserverModel(texts: string | readonly string[], onAttempt: () => void) {
+  const outputs = typeof texts === 'string' ? [texts] : texts;
+  let call = 0;
+  const nextText = () => outputs[Math.min(call++, outputs.length - 1)]!;
   return {
     ...createFailingObserverModel(),
     async doGenerate() {
       onAttempt();
+      const text = nextText();
       return {
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -248,6 +252,7 @@ function createEmptyObserverModel(text: string, onAttempt: () => void) {
     },
     async doStream() {
       onAttempt();
+      const text = nextText();
       const stream = new ReadableStream({
         start(controller) {
           controller.enqueue({ type: 'stream-start', warnings: [] });
@@ -482,13 +487,23 @@ describe('OM Error State', { timeout: 30_000 }, () => {
     expect(pendingUserMessage).toBeDefined();
   });
 
+  const degenerateObserverText = Array(20)
+    .fill(
+      Array.from({ length: 5 }, (_, i) => `- 🟡 Looping observation number ${i} about the same repeated topic`).join(
+        '\n',
+      ),
+    )
+    .join('\n');
+
   it.each([
-    ['thread', 'no text', ''],
-    ['thread', 'whitespace-only text', '  \n'],
-    ['resource', 'no text', ''],
+    ['thread', 'no text', [''], 1],
+    ['thread', 'whitespace-only text', ['  \n'], 1],
+    ['resource', 'no text', [''], 1],
+    ['thread', 'degenerate output then no text on retry', [degenerateObserverText, ''], 2],
+    ['resource', 'degenerate output then no text on retry', [degenerateObserverText, ''], 2],
   ] as const)(
     'does not advance lastObservedAt for %s scope when the observer returns %s',
-    async (scope, _label, observerText) => {
+    async (scope, _label, observerTexts, minAttempts) => {
       let attempts = 0;
       const emptyMemory = new Memory({
         storage: store,
@@ -497,7 +512,7 @@ describe('OM Error State', { timeout: 30_000 }, () => {
             enabled: true,
             scope,
             observation: {
-              model: createEmptyObserverModel(observerText, () => attempts++) as any,
+              model: createEmptyObserverModel(observerTexts, () => attempts++) as any,
               messageTokens: 20,
               bufferTokens: false,
               maxRetries: 0,
@@ -523,7 +538,7 @@ describe('OM Error State', { timeout: 30_000 }, () => {
         memory: { thread: 'test-empty-observer-thread', resource: 'test-resource' },
       });
 
-      expect(attempts).toBeGreaterThan(0);
+      expect(attempts).toBeGreaterThanOrEqual(minAttempts);
       expect(result.tripwire).toBeUndefined();
 
       const memoryStore = await store.getStore('memory');
