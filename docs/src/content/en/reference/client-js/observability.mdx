@@ -108,8 +108,6 @@ Combine predicates with `and`, `or` and `not`. Membership uses `{ op: 'in', valu
 
 Each summary includes identity, context, entity lineage, status, timestamps, `durationMs`, model/provider and input/output/error previews. Model/provider are available in returned rows but aren't filterable.
 
-DuckDB currently returns null for parent/root entity type, ID and name, and for `executionSource`. Filters on those fields use null semantics. Parent/root version IDs remain available. Fields unavailable in older storage adapters are returned as null.
-
 ## Querying traces
 
 `queryTraces()` finds completed logical traces using trace fields and conditions over related spans. Every query requires an ISO timestamp range.
