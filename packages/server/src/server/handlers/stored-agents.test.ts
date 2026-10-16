@@ -263,6 +263,7 @@ interface MockMastra {
   getEditor: ReturnType<typeof vi.fn>;
   getServer: ReturnType<typeof vi.fn>;
   getAgentById: ReturnType<typeof vi.fn>;
+  getAvatarStore: ReturnType<typeof vi.fn>;
 }
 
 function createMockMastra(
@@ -271,12 +272,14 @@ function createMockMastra(
     editor?: MockEditor;
     server?: Record<string, unknown>;
     agents?: Record<string, unknown>;
+    avatarStore?: { delete: ReturnType<typeof vi.fn> };
   } = {},
 ): MockMastra {
   return {
     getStorage: vi.fn().mockReturnValue(options.storage),
     getEditor: vi.fn().mockReturnValue(options.editor),
     getServer: vi.fn().mockReturnValue(options.server ?? {}),
+    getAvatarStore: vi.fn().mockReturnValue(options.avatarStore),
     getAgentById: vi.fn().mockImplementation((agentId: string) => {
       const agent = options.agents?.[agentId];
       if (!agent) {
@@ -1802,6 +1805,50 @@ describe('Stored Agents Handlers', () => {
       expect(mockAgentsStore.delete).toHaveBeenCalledWith('delete-test');
       expect(mockAgentsData.has('delete-test')).toBe(false);
       expect(mockEditor.agent.clearCache).toHaveBeenCalledWith('delete-test');
+    });
+
+    it('should cascade-delete the stored avatar when an avatar store is configured', async () => {
+      const avatarDelete = vi.fn().mockResolvedValue(undefined);
+      mockMastra = createMockMastra({
+        storage: mockStorage,
+        editor: mockEditor,
+        avatarStore: { delete: avatarDelete },
+      });
+      mockAgentsData.set('delete-test', {
+        id: 'delete-test',
+        name: 'To Be Deleted',
+        model: { name: 'gpt-4', provider: 'openai' },
+      });
+
+      await DELETE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'delete-test',
+      });
+
+      expect(avatarDelete).toHaveBeenCalledWith('delete-test');
+    });
+
+    it('should still delete the agent when the avatar cascade fails', async () => {
+      const avatarDelete = vi.fn().mockRejectedValue(new Error('avatar backend down'));
+      mockMastra = createMockMastra({
+        storage: mockStorage,
+        editor: mockEditor,
+        avatarStore: { delete: avatarDelete },
+      });
+      mockAgentsData.set('delete-test', {
+        id: 'delete-test',
+        name: 'To Be Deleted',
+        model: { name: 'gpt-4', provider: 'openai' },
+      });
+
+      const result = await DELETE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'delete-test',
+      });
+
+      expect(result).toEqual({ success: true, message: 'Agent delete-test deleted successfully' });
+      expect(avatarDelete).toHaveBeenCalledWith('delete-test');
+      expect(mockAgentsData.has('delete-test')).toBe(false);
     });
 
     it('should throw 404 when agent does not exist', async () => {

@@ -2,6 +2,7 @@ import { MastraBase } from '../base';
 
 import type {
   AgentsStorage,
+  AgentAvatarsStorage,
   PromptBlocksStorage,
   ScorerDefinitionsStorage,
   MCPClientsStorage,
@@ -41,6 +42,7 @@ export type StorageDomains = {
   notifications?: NotificationsStorage;
   observability?: ObservabilityStorage;
   agents?: AgentsStorage;
+  agentAvatars?: AgentAvatarsStorage;
   datasets?: DatasetsStorage;
   experiments?: ExperimentsStorage;
   promptBlocks?: PromptBlocksStorage;
@@ -89,6 +91,7 @@ export const DOMAIN_KEYS = [
   'scores',
   'observability',
   'agents',
+  'agentAvatars',
   'datasets',
   'experiments',
   'promptBlocks',

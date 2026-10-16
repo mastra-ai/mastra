@@ -18,6 +18,7 @@ export { resolveWaitUntil } from './wait-until';
 export type { WaitUntilFn, WaitUntilResolver } from './wait-until';
 export { formatToolApproval } from './formatting';
 export { renderBuiltInToolEvent } from './stream-helpers';
+export { isAvatarSyncCapable, type AvatarSyncCapableAdapter } from './types';
 export type {
   ActionChannelHandler,
   ActionChannelHandlerConfig,

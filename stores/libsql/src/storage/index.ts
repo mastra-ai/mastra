@@ -7,6 +7,7 @@ import { resetConnectionsAfterBusy } from '../shared/reset-after-busy-client';
 import { gateSingleConnectionClient, isSingleConnectionDatabase } from '../shared/single-connection-client';
 import { DEFAULT_CONNECTION_TIMEOUT_MS } from './db';
 import type { SqliteClient as Client } from './db/client';
+import { AgentAvatarsLibSQL } from './domains/agent-avatars';
 import { AgentsLibSQL } from './domains/agents';
 import { BackgroundTasksLibSQL } from './domains/background-tasks';
 import { BlobsLibSQL } from './domains/blobs';
@@ -34,6 +35,7 @@ import { WorkspacesLibSQL } from './domains/workspaces';
 
 // Export domain classes for direct use with MastraStorage composition
 export {
+  AgentAvatarsLibSQL,
   AgentsLibSQL,
   BackgroundTasksLibSQL,
   BlobsLibSQL,
@@ -272,6 +274,7 @@ export class LibSQLStore extends MastraCompositeStore {
     });
     const observability = new ObservabilityLibSQL(domainConfig);
     const agents = new AgentsLibSQL(domainConfig);
+    const agentAvatars = new AgentAvatarsLibSQL(domainConfig);
     const channels = new ChannelsLibSQL(domainConfig);
     const datasets = new DatasetsLibSQL(domainConfig);
     const experiments = new ExperimentsLibSQL(domainConfig);
@@ -298,6 +301,7 @@ export class LibSQLStore extends MastraCompositeStore {
       knowledge,
       observability,
       agents,
+      agentAvatars,
       channels,
       datasets,
       experiments,
