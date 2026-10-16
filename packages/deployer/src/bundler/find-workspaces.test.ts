@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -109,5 +109,48 @@ describe('findWorkspaces', () => {
 
     expect(second).toBe(first);
     expect(second?.map(w => w.package.name)).toEqual(['a']);
+  });
+
+  it('honors negated globs', async () => {
+    await writePackage(root, 'r', { workspaces: ['packages/*', '!packages/skip'] });
+    await writePackage(join(root, 'packages', 'keep'), 'keep');
+    await writePackage(join(root, 'packages', 'skip'), 'skip');
+
+    const found = await findWorkspaces(root, { stopDir: tmpdir() });
+    expect(found?.map(w => w.package.name)).toEqual(['keep']);
+  });
+
+  it('finds nested packages with a ** glob without listing the root itself', async () => {
+    await writeFile(join(root, 'pnpm-workspace.yaml'), '');
+    await writePackage(root, 'root');
+    await writePackage(join(root, 'packages', 'a'), 'a');
+    await writePackage(join(root, 'packages', 'a', 'nested'), 'nested');
+    await writePackage(join(root, 'packages', 'a', 'node_modules', 'dep'), 'dep');
+
+    const found = await findWorkspaces(root, { stopDir: tmpdir() });
+    expect(found?.map(w => w.package.name).sort()).toEqual(['a', 'nested']);
+  });
+
+  it('finds a workspace package that is a symlink to a directory', async () => {
+    await writePackage(root, 'r', { workspaces: ['packages/*'] });
+    await writePackage(join(root, 'packages', 'a'), 'a');
+    await writePackage(join(root, 'linked'), 'linked');
+    await symlink(join('..', 'linked'), join(root, 'packages', 'link'), 'dir');
+
+    const found = await findWorkspaces(root, { stopDir: tmpdir() });
+    const byName = Object.fromEntries((found ?? []).map(w => [w.package.name, w]));
+    expect(Object.keys(byName).sort()).toEqual(['a', 'linked']);
+    expect(byName['linked']!.location).toBe(join(root, 'packages', 'link').split('\\').join('/'));
+  });
+
+  it('accepts ./-prefixed, trailing-slash and brace globs', async () => {
+    await writePackage(root, 'r', { workspaces: ['./apps/*/', '{libs,tools}/*'] });
+    await writePackage(join(root, 'apps', 'web'), 'web');
+    await writePackage(join(root, 'libs', 'ui'), 'ui');
+    await writePackage(join(root, 'tools', 'cli'), 'cli');
+    await writePackage(join(root, 'other', 'x'), 'x');
+
+    const found = await findWorkspaces(root, { stopDir: tmpdir() });
+    expect(found?.map(w => w.package.name).sort()).toEqual(['cli', 'ui', 'web']);
   });
 });

@@ -13,7 +13,7 @@
 
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, posix, resolve, sep } from 'node:path';
+import { dirname as parentDirectory, join, posix, resolve, sep } from 'node:path';
 import { glob } from 'tinyglobby';
 import { parse as parseYaml } from 'yaml';
 
@@ -93,23 +93,40 @@ export async function findWorkspaces(
   const cached = options.cache?.workspaces.get(root.location);
   if (cached) return cached;
 
-  const locations = await glob(root.globs, {
+  const manifests = await glob(toManifestGlobs(root.globs), {
     cwd: root.location,
-    onlyDirectories: true,
     absolute: true,
     ignore: ['**/node_modules/**'],
   });
 
   const workspaces: Workspace[] = [];
-  for (const location of locations) {
+  for (const manifest of manifests) {
+    const location = toPosix(parentDirectory(manifest));
+    // A `**` glob also matches the root manifest; the root itself is not a workspace package.
+    if (location === root.location) continue;
     const pkg = readJsonFile(location, 'package.json');
     if (isObject(pkg) && typeof pkg.name === 'string') {
-      workspaces.push({ location: toPosix(location.replace(/[\\/]+$/, '')), package: pkg as WorkspacePackageJson });
+      workspaces.push({ location, package: pkg as WorkspacePackageJson });
     }
   }
 
   options.cache?.workspaces.set(root.location, workspaces);
   return workspaces;
+}
+
+/**
+ * Glob for each pattern's `package.json` instead of for the directory itself. A
+ * directory-only glob does not match a symlink to a directory, so a linked workspace
+ * package would be dropped and never packed into the build output. Matching the
+ * manifest inside it does, and is also how pnpm resolves its workspaces. Negated
+ * patterns are mapped the same way so they keep excluding whole packages.
+ */
+function toManifestGlobs(globs: string[]): string[] {
+  return globs.map(pattern => {
+    const negated = pattern.startsWith('!');
+    const base = (negated ? pattern.slice(1) : pattern).replace(/[\\/]+$/, '');
+    return `${negated ? '!' : ''}${base}/package.json`;
+  });
 }
 
 function findRoot(dir: string, stopDir: string, cache?: WorkspacesCache): WorkspacesRoot | null {
