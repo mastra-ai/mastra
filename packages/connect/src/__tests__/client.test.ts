@@ -447,9 +447,41 @@ describe('proxyRequest', () => {
   });
 
   it('explains the Graph workbook 401 on consumer OneDrive instead of implying a credential failure', async () => {
-    // Graph misreports "workbook API does not exist for personal accounts" as
-    // a 401 FileOpenUserUnauthorized. The message must tell the agent the
+    // Live capture from a personal-account Excel connection: Graph misreports
+    // "workbook API does not exist for personal accounts" as a 401
+    // UnknownError with an EMPTY message. The message must tell the agent the
     // connection is fine and which tools still work.
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json(
+        {
+          error: {
+            code: 'UnknownError',
+            innerError: {
+              date: '2026-10-14T18:34:45',
+              'client-request-id': '7068e9ec-14d3-4617-abc4-cf6654e8e125',
+              'request-id': '7068e9ec-14d3-4617-abc4-cf6654e8e125',
+            },
+            message: '',
+          },
+        },
+        { status: 401 },
+      ),
+    );
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    await expect(
+      proxyRequest(client, 'c_1', {
+        method: 'GET',
+        path: 'v1.0/drives/d1/items/i1/workbook/worksheets',
+      }),
+    ).rejects.toMatchObject({
+      code: 'proxy_error',
+      status: 401,
+      message: expect.stringContaining('only supports OneDrive for Business and SharePoint'),
+    });
+  });
+
+  it('explains the FileOpenUserUnauthorized workbook 401 variant', async () => {
+    // Variant of the same failure reported on Microsoft Q&A.
     const fetchMock = vi.fn().mockResolvedValue(
       Response.json(
         {
@@ -470,26 +502,23 @@ describe('proxyRequest', () => {
     ).rejects.toMatchObject({
       code: 'proxy_error',
       status: 401,
-      message: expect.stringContaining('not available for personal Microsoft accounts'),
+      message: expect.stringContaining('only supports OneDrive for Business and SharePoint'),
     });
   });
 
   it('does not append the workbook hint to Graph 401s outside workbook paths', async () => {
+    // UnknownError is generic; outside a /workbook path it must stay a plain
+    // provider error so genuine credential failures keep today's shape.
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(
-        Response.json(
-          { error: { code: 'InvalidAuthenticationToken', message: 'Access token has expired.' } },
-          { status: 401 },
-        ),
-      );
+      .mockResolvedValue(Response.json({ error: { code: 'UnknownError', message: '' } }, { status: 401 }));
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
     await expect(
       proxyRequest(client, 'c_1', { method: 'GET', path: 'v1.0/me/drive/root/children' }),
     ).rejects.toMatchObject({
       code: 'proxy_error',
       status: 401,
-      message: 'Provider request failed (401): Access token has expired.',
+      message: 'Provider request failed (401).',
     });
   });
 

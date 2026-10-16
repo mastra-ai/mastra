@@ -110,11 +110,16 @@ export async function extractProblemDetail(
   try {
     const data = (await response.clone().json()) as ProblemJson;
     if (data && typeof data === 'object') {
-      const code = typeof data.code === 'string' ? data.code : undefined;
+      const topLevelCode = typeof data.code === 'string' ? data.code : undefined;
+      // Graph can return `{ error: { code, message: "" } }` — an empty message
+      // with the only diagnostic in the nested code — so the nested code must
+      // survive even when no message is found.
+      let nestedCode: string | undefined;
+      const code = () => topLevelCode ?? nestedCode;
       for (const field of ['detail', 'title', 'error', 'message'] as const) {
         const value = data[field];
         if (typeof value === 'string' && value) {
-          return { detail: truncate(value), code, isProblemJson };
+          return { detail: truncate(value), code: code(), isProblemJson };
         }
         // OpenAI and Microsoft Graph nest both fields:
         // `{ "error": { "code": "...", "message": "..." } }`. The nested code
@@ -122,26 +127,26 @@ export async function extractProblemDetail(
         // none), so surface it when no top-level `code` exists.
         if (field === 'error' && value && typeof value === 'object') {
           const message = value.message;
-          const nestedCode = typeof value.code === 'string' ? value.code : undefined;
+          if (typeof value.code === 'string') nestedCode = value.code;
           if (typeof message === 'string' && message) {
-            return { detail: truncate(message), code: code ?? nestedCode, isProblemJson };
+            return { detail: truncate(message), code: code(), isProblemJson };
           }
         }
       }
       // Jira: `{ errorMessages: ["..."], errors: {} }`.
       if (Array.isArray(data.errorMessages)) {
         const message = data.errorMessages.find(entry => typeof entry === 'string' && entry);
-        if (typeof message === 'string') return { detail: truncate(message), code, isProblemJson };
+        if (typeof message === 'string') return { detail: truncate(message), code: code(), isProblemJson };
       }
       if (Array.isArray(data.errors)) {
         const message = extractFirstArrayMessage(data.errors);
-        if (message) return { detail: truncate(message), code, isProblemJson };
+        if (message) return { detail: truncate(message), code: code(), isProblemJson };
       } else if (data.errors && typeof data.errors === 'object') {
         // Jira: `{ errorMessages: [], errors: { summary: "Field required" } }`.
         const entry = Object.entries(data.errors).find(([, value]) => typeof value === 'string' && value);
-        if (entry) return { detail: truncate(`${entry[0]}: ${entry[1]}`), code, isProblemJson };
+        if (entry) return { detail: truncate(`${entry[0]}: ${entry[1]}`), code: code(), isProblemJson };
       }
-      return { code, isProblemJson };
+      return { code: code(), isProblemJson };
     }
   } catch {
     // Non-JSON body: fall through without echoing it.
@@ -150,13 +155,22 @@ export async function extractProblemDetail(
 }
 
 /**
+ * Codes Microsoft Graph returns for workbook calls that fail because the
+ * Excel workbook API does not exist for the account, not because the
+ * credential is bad. Live captures show `UnknownError` with an empty message
+ * for personal (consumer OneDrive) accounts; `FileOpenUserUnauthorized` is
+ * the variant reported on Microsoft Q&A for the same failure.
+ */
+const GRAPH_WORKBOOK_UNSUPPORTED_CODES = new Set(['UnknownError', 'FileOpenUserUnauthorized']);
+
+/**
  * Clarifies provider errors that are known to misreport their cause, so the
  * message an agent sees explains the real problem instead of inviting the
  * wrong recovery.
  *
  * Microsoft Graph's Excel workbook API does not exist for personal Microsoft
  * accounts (workbooks on consumer OneDrive), but Graph reports that gap as a
- * 401 `FileOpenUserUnauthorized` — indistinguishable in shape from a dead
+ * 401 — often with an empty message — indistinguishable in shape from a dead
  * credential or a file-sharing problem. Without the hint, agents respond by
  * reconnecting or chasing file permissions, neither of which can work.
  */
@@ -166,17 +180,18 @@ export function providerErrorHint(options: {
   code?: string;
   detail?: string;
 }): string | undefined {
-  const { status, path, code, detail } = options;
+  const { status, path, code } = options;
   if (
     status === 401 &&
     /\/workbook(\/|\b)/.test(path) &&
-    (code === 'FileOpenUserUnauthorized' || (detail?.includes('permission to open this file') ?? false))
+    code !== undefined &&
+    GRAPH_WORKBOOK_UNSUPPORTED_CODES.has(code)
   ) {
     return (
-      "Microsoft Graph's Excel workbook API is not available for personal Microsoft accounts: " +
-      'workbooks stored on consumer OneDrive are unsupported (only OneDrive for Business and SharePoint are). ' +
-      'The connection and its credentials are still valid, so do not reconnect. ' +
-      'File-level tools (list/create/copy/delete workbook) still work on this account; ' +
+      "This usually means the workbook is stored on a personal Microsoft account: Microsoft Graph's Excel " +
+      'workbook API only supports OneDrive for Business and SharePoint, not consumer OneDrive. ' +
+      'If so, the connection and its credentials are still valid — do not reconnect. ' +
+      'File-level tools (list/create/copy/delete workbook) still work on personal accounts; ' +
       'worksheet, range, table, and chart tools require a work or school Microsoft account.'
     );
   }
